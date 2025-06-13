@@ -66,27 +66,6 @@ func TestGenerateAPIKeyToken(t *testing.T) {
 	assert.Empty(t, claims.Email)
 }
 
-func TestGenerateEndUserToken(t *testing.T) {
-	jwtService := NewJWTService("test-secret", "test-issuer")
-
-	token, err := jwtService.GenerateEndUserToken(3, 15, "compute-xyz")
-
-	require.NoError(t, err)
-	assert.NotEmpty(t, token)
-
-	claims, err := jwtService.ValidateToken(token)
-	require.NoError(t, err)
-	assert.Equal(t, uint(3), claims.SessionID)
-	assert.Equal(t, uint(15), claims.OrganizationID)
-	assert.Equal(t, "end_user", claims.AuthType)
-	assert.Equal(t, "test-issuer", claims.Issuer)
-	assert.Equal(t, uint(0), claims.UserID)
-	assert.Empty(t, claims.Email)
-	assert.Nil(t, claims.Scopes)
-
-	assert.True(t, claims.ExpiresAt.After(time.Now()))
-	assert.True(t, claims.ExpiresAt.Before(time.Now().Add(25*time.Hour)))
-}
 
 func TestValidateTokenSuccess(t *testing.T) {
 	jwtService := NewJWTService("test-secret", "test-issuer")
@@ -166,7 +145,6 @@ func TestJWTClaimsStructure(t *testing.T) {
 		UserID:         1,
 		OrganizationID: 2,
 		APIKeyID:       3,
-		SessionID:      4,
 		Email:          "test@example.com",
 		AuthType:       "user",
 		Scopes:         []string{"read", "write"},
@@ -175,7 +153,6 @@ func TestJWTClaimsStructure(t *testing.T) {
 	assert.Equal(t, uint(1), claims.UserID)
 	assert.Equal(t, uint(2), claims.OrganizationID)
 	assert.Equal(t, uint(3), claims.APIKeyID)
-	assert.Equal(t, uint(4), claims.SessionID)
 	assert.Equal(t, "test@example.com", claims.Email)
 	assert.Equal(t, "user", claims.AuthType)
 	assert.Equal(t, []string{"read", "write"}, claims.Scopes)
@@ -187,7 +164,7 @@ func TestTokenUniqueness(t *testing.T) {
 	token1, _, err := jwtService.GenerateUserTokens(1, "test@example.com", 1)
 	require.NoError(t, err)
 
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	token2, _, err := jwtService.GenerateUserTokens(1, "test@example.com", 1)
 	require.NoError(t, err)

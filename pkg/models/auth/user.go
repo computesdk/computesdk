@@ -56,14 +56,28 @@ type APIKey struct {
 	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 }
 
-type EndUserSession struct {
-	ID             uint           `gorm:"primarykey" json:"id"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	SessionToken   string         `gorm:"uniqueIndex;not null" json:"session_token"`
-	OrganizationID uint           `gorm:"not null" json:"organization_id"`
-	ComputeID      string         `json:"compute_id"`
-	Metadata       string         `gorm:"type:jsonb" json:"metadata"`
-	ExpiresAt      time.Time      `gorm:"not null" json:"expires_at"`
-	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+type ClaimableSession struct {
+	ID             uint                  `gorm:"primarykey" json:"id"`
+	CreatedAt      time.Time             `json:"created_at"`
+	UpdatedAt      time.Time             `json:"updated_at"`
+	SessionToken   string                `gorm:"uniqueIndex;not null" json:"session_token"`
+	OrganizationID uint                  `gorm:"not null" json:"organization_id"`
+	Email          string                `gorm:"index" json:"email,omitempty"`
+	UserID         *uint                 `gorm:"index" json:"user_id,omitempty"`
+	Metadata       string                `gorm:"type:jsonb" json:"metadata"`
+	ExpiresAt      time.Time             `gorm:"not null" json:"expires_at"`
+	ClaimedAt      *time.Time            `json:"claimed_at,omitempty"`
+	Organization   Organization          `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	User           *User                 `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Resources      []ClaimableResource   `gorm:"foreignKey:SessionID" json:"resources,omitempty"`
+}
+
+type ClaimableResource struct {
+	ID           uint             `gorm:"primarykey" json:"id"`
+	CreatedAt    time.Time        `json:"created_at"`
+	SessionID    uint             `gorm:"not null;index" json:"session_id"`
+	ResourceType string           `gorm:"not null" json:"resource_type"` // "Compute", "Filesystem", etc.
+	ResourceID   string           `gorm:"not null" json:"resource_id"`   // "compute_123", "fs_abc", etc.
+	Permissions  string           `gorm:"type:jsonb" json:"permissions"` // JSON array of permissions
+	Session      ClaimableSession `gorm:"foreignKey:SessionID" json:"session,omitempty"`
 }

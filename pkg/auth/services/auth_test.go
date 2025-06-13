@@ -26,7 +26,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&auth.Organization{},
 		&auth.OrganizationMember{},
 		&auth.APIKey{},
-		&auth.EndUserSession{},
+		&auth.ClaimableSession{},
+		&auth.ClaimableResource{},
 	)
 	require.NoError(t, err)
 
@@ -188,65 +189,64 @@ func TestValidateAPIKeyExpired(t *testing.T) {
 	assert.Contains(t, err.Error(), "API key expired")
 }
 
-func TestCreateEndUserSession(t *testing.T) {
+func TestCreateClaimableSession(t *testing.T) {
 	db := setupTestDB(t)
 	jwtService := NewJWTService("test-secret", "test")
 	authService := NewAuthService(db, jwtService)
 
 	metadata := map[string]interface{}{"user": "test", "environment": "dev"}
-	session, token, err := authService.CreateEndUserSession(1, "compute-123", metadata)
+	session, err := authService.CreateClaimableSession(1, "test@example.com", metadata)
 
 	require.NoError(t, err)
 	assert.NotNil(t, session)
 	assert.Equal(t, uint(1), session.OrganizationID)
-	assert.Equal(t, "compute-123", session.ComputeID)
+	assert.Equal(t, "test@example.com", session.Email)
 	assert.NotEmpty(t, session.SessionToken)
-	assert.NotEmpty(t, token)
 	assert.True(t, session.ExpiresAt.After(time.Now()))
 
-	var dbSession auth.EndUserSession
+	var dbSession auth.ClaimableSession
 	err = db.First(&dbSession, session.ID).Error
 	require.NoError(t, err)
 	assert.Equal(t, session.SessionToken, dbSession.SessionToken)
 }
 
-func TestValidateEndUserSessionSuccess(t *testing.T) {
+func TestValidateSessionTokenSuccess(t *testing.T) {
 	db := setupTestDB(t)
 	jwtService := NewJWTService("test-secret", "test")
 	authService := NewAuthService(db, jwtService)
 
-	session, _, err := authService.CreateEndUserSession(1, "compute-123", nil)
+	session, err := authService.CreateClaimableSession(1, "", nil)
 	require.NoError(t, err)
 
-	validatedSession, err := authService.ValidateEndUserSession(session.SessionToken)
+	validatedSession, err := authService.ValidateSessionToken(session.SessionToken)
 	require.NoError(t, err)
 	assert.NotNil(t, validatedSession)
 	assert.Equal(t, session.ID, validatedSession.ID)
 	assert.Equal(t, session.SessionToken, validatedSession.SessionToken)
 }
 
-func TestValidateEndUserSessionInvalid(t *testing.T) {
+func TestValidateSessionTokenInvalid(t *testing.T) {
 	db := setupTestDB(t)
 	jwtService := NewJWTService("test-secret", "test")
 	authService := NewAuthService(db, jwtService)
 
-	_, err := authService.ValidateEndUserSession("invalid-token")
+	_, err := authService.ValidateSessionToken("invalid-token")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid or expired session")
 }
 
-func TestValidateEndUserSessionExpired(t *testing.T) {
+func TestValidateSessionTokenExpired(t *testing.T) {
 	db := setupTestDB(t)
 	jwtService := NewJWTService("test-secret", "test")
 	authService := NewAuthService(db, jwtService)
 
-	session, _, err := authService.CreateEndUserSession(1, "compute-123", nil)
+	session, err := authService.CreateClaimableSession(1, "", nil)
 	require.NoError(t, err)
 
 	expiredTime := time.Now().Add(-1 * time.Hour)
 	db.Model(&session).Update("expires_at", expiredTime)
 
-	_, err = authService.ValidateEndUserSession(session.SessionToken)
+	_, err = authService.ValidateSessionToken(session.SessionToken)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid or expired session")
 }
@@ -320,4 +320,119 @@ func TestGenerateSessionToken(t *testing.T) {
 	assert.NotEqual(t, token1, token2)
 	assert.True(t, len(token1) > 10)
 	assert.True(t, len(token2) > 10)
+}
+
+func TestClaimSession(t *testing.T) {
+	db := setupTestDB(t)
+	jwtService := NewJWTService("test-secret", "test")
+	authService := NewAuthService(db, jwtService)
+
+	// Create a user
+	user, err := authService.RegisterUser("test@example.com", "password123", "Test", "User")
+	require.NoError(t, err)
+
+	// Create a claimable session
+	session, err := authService.CreateClaimableSession(1, "test@example.com", nil)
+	require.NoError(t, err)
+
+	// Claim the session
+	err = authService.ClaimSession(session.ID, user.ID)
+	require.NoError(t, err)
+
+	// Verify the session is now linked to the user
+	var updatedSession auth.ClaimableSession
+	err = db.First(&updatedSession, session.ID).Error
+	require.NoError(t, err)
+	assert.Equal(t, user.ID, *updatedSession.UserID)
+	assert.NotNil(t, updatedSession.ClaimedAt)
+}
+
+func TestClaimAllSessionsByEmail(t *testing.T) {
+	db := setupTestDB(t)
+	jwtService := NewJWTService("test-secret", "test")
+	authService := NewAuthService(db, jwtService)
+
+	// Create a user
+	user, err := authService.RegisterUser("test@example.com", "password123", "Test", "User")
+	require.NoError(t, err)
+
+	// Create multiple sessions with the same email
+	session1, err := authService.CreateClaimableSession(1, "test@example.com", nil)
+	require.NoError(t, err)
+	
+	session2, err := authService.CreateClaimableSession(1, "test@example.com", nil)
+	require.NoError(t, err)
+
+	// Create a session with a different email (should not be claimed)
+	session3, err := authService.CreateClaimableSession(1, "other@example.com", nil)
+	require.NoError(t, err)
+
+	// Claim all sessions for the email
+	claimedCount, err := authService.ClaimAllSessionsByEmail("test@example.com", user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), claimedCount)
+
+	// Verify the correct sessions were claimed
+	var updatedSession1 auth.ClaimableSession
+	err = db.First(&updatedSession1, session1.ID).Error
+	require.NoError(t, err)
+	assert.Equal(t, user.ID, *updatedSession1.UserID)
+
+	var updatedSession2 auth.ClaimableSession
+	err = db.First(&updatedSession2, session2.ID).Error
+	require.NoError(t, err)
+	assert.Equal(t, user.ID, *updatedSession2.UserID)
+
+	// Verify the other session was not claimed
+	var updatedSession3 auth.ClaimableSession
+	err = db.First(&updatedSession3, session3.ID).Error
+	require.NoError(t, err)
+	assert.Nil(t, updatedSession3.UserID)
+}
+
+func TestAddResourceToSession(t *testing.T) {
+	db := setupTestDB(t)
+	jwtService := NewJWTService("test-secret", "test")
+	authService := NewAuthService(db, jwtService)
+
+	// Create a session
+	session, err := authService.CreateClaimableSession(1, "test@example.com", nil)
+	require.NoError(t, err)
+
+	// Add a resource to the session
+	resource, err := authService.AddResourceToSession(session.ID, "Compute", "compute-123", []string{"read", "write"})
+	require.NoError(t, err)
+	assert.NotNil(t, resource)
+	assert.Equal(t, session.ID, resource.SessionID)
+	assert.Equal(t, "Compute", resource.ResourceType)
+	assert.Equal(t, "compute-123", resource.ResourceID)
+	assert.Contains(t, resource.Permissions, "read")
+
+	// Verify it's in the database
+	var dbResource auth.ClaimableResource
+	err = db.First(&dbResource, resource.ID).Error
+	require.NoError(t, err)
+	assert.Equal(t, resource.SessionID, dbResource.SessionID)
+}
+
+func TestGetClaimableSession(t *testing.T) {
+	db := setupTestDB(t)
+	jwtService := NewJWTService("test-secret", "test")
+	authService := NewAuthService(db, jwtService)
+
+	// Create a session with resources
+	session, err := authService.CreateClaimableSession(1, "test@example.com", nil)
+	require.NoError(t, err)
+
+	// Add a resource
+	_, err = authService.AddResourceToSession(session.ID, "Compute", "compute-123", []string{"read"})
+	require.NoError(t, err)
+
+	// Get the session with resources
+	retrievedSession, err := authService.GetClaimableSession(session.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, retrievedSession)
+	assert.Equal(t, session.ID, retrievedSession.ID)
+	assert.Len(t, retrievedSession.Resources, 1)
+	assert.Equal(t, "Compute", retrievedSession.Resources[0].ResourceType)
 }

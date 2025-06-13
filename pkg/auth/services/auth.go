@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -109,7 +110,7 @@ func (s *AuthService) ValidateAPIKey(rawKey string) (*auth.APIKey, error) {
 	return &apiKey, nil
 }
 
-func (s *AuthService) CreateEndUserSession(orgID uint, computeID string, metadata map[string]interface{}) (*auth.EndUserSession, string, error) {
+func (s *AuthService) CreateClaimableSession(orgID uint, email string, metadata map[string]interface{}) (*auth.ClaimableSession, error) {
 	sessionToken := s.generateSessionToken()
 	
 	metadataJSON := "{}"
@@ -117,33 +118,65 @@ func (s *AuthService) CreateEndUserSession(orgID uint, computeID string, metadat
 		metadataJSON = fmt.Sprintf("%v", metadata)
 	}
 
-	session := &auth.EndUserSession{
+	session := &auth.ClaimableSession{
 		SessionToken:   sessionToken,
 		OrganizationID: orgID,
-		ComputeID:      computeID,
+		Email:          email,
 		Metadata:       metadataJSON,
 		ExpiresAt:      time.Now().Add(24 * time.Hour),
 	}
 
 	if err := s.db.Create(session).Error; err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	token, err := s.jwtService.GenerateEndUserToken(session.ID, orgID, computeID)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return session, token, nil
+	return session, nil
 }
 
-func (s *AuthService) ValidateEndUserSession(sessionToken string) (*auth.EndUserSession, error) {
-	var session auth.EndUserSession
-	if err := s.db.Where("session_token = ? AND expires_at > ?", sessionToken, time.Now()).First(&session).Error; err != nil {
+func (s *AuthService) ValidateSessionToken(sessionToken string) (*auth.ClaimableSession, error) {
+	var session auth.ClaimableSession
+	if err := s.db.Preload("Resources").Where("session_token = ? AND expires_at > ?", sessionToken, time.Now()).First(&session).Error; err != nil {
 		return nil, errors.New("invalid or expired session")
 	}
 
 	return &session, nil
+}
+
+func (s *AuthService) GetClaimableSession(sessionID uint) (*auth.ClaimableSession, error) {
+	var session auth.ClaimableSession
+	if err := s.db.Preload("Resources").Where("id = ? AND expires_at > ?", sessionID, time.Now()).First(&session).Error; err != nil {
+		return nil, errors.New("session not found or expired")
+	}
+
+	return &session, nil
+}
+
+func (s *AuthService) AddResourceToSession(sessionID uint, resourceType, resourceID string, permissions []string) (*auth.ClaimableResource, error) {
+	// Verify session exists and is not expired
+	var session auth.ClaimableSession
+	if err := s.db.Where("id = ? AND expires_at > ?", sessionID, time.Now()).First(&session).Error; err != nil {
+		return nil, errors.New("session not found or expired")
+	}
+
+	permissionsJSON := "[]"
+	if permissions != nil {
+		if permBytes, err := json.Marshal(permissions); err == nil {
+			permissionsJSON = string(permBytes)
+		}
+	}
+
+	resource := &auth.ClaimableResource{
+		SessionID:    sessionID,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Permissions:  permissionsJSON,
+	}
+
+	if err := s.db.Create(resource).Error; err != nil {
+		return nil, err
+	}
+
+	return resource, nil
 }
 
 func (s *AuthService) generateAPIKey() string {
@@ -163,6 +196,7 @@ func (s *AuthService) generateSessionToken() string {
 	return hex.EncodeToString(b)
 }
 
+
 // GetUserByID retrieves a user by their ID
 func (s *AuthService) GetUserByID(userID uint) (*auth.User, error) {
 	var user auth.User
@@ -170,4 +204,42 @@ func (s *AuthService) GetUserByID(userID uint) (*auth.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+// ClaimSession links a claimable session to a user account
+func (s *AuthService) ClaimSession(sessionID uint, userID uint) error {
+	now := time.Now()
+	result := s.db.Model(&auth.ClaimableSession{}).
+		Where("id = ? AND expires_at > ?", sessionID, time.Now()).
+		Updates(map[string]interface{}{
+			"user_id": userID,
+			"claimed_at": &now,
+		})
+	
+	if result.Error != nil {
+		return result.Error
+	}
+	
+	if result.RowsAffected == 0 {
+		return errors.New("session not found or expired")
+	}
+	
+	return nil
+}
+
+// ClaimAllSessionsByEmail links all sessions with a given email to a user
+func (s *AuthService) ClaimAllSessionsByEmail(email string, userID uint) (int64, error) {
+	now := time.Now()
+	result := s.db.Model(&auth.ClaimableSession{}).
+		Where("email = ? AND user_id IS NULL", email).
+		Updates(map[string]interface{}{
+			"user_id": userID,
+			"claimed_at": &now,
+		})
+	
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	
+	return result.RowsAffected, nil
 }

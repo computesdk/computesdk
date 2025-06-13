@@ -31,8 +31,10 @@ func NewRouter(db *gorm.DB, authInstance *auth.Auth) *gin.Engine {
 		// Public API routes
 		publicAPI := apiGroup.Group("")
 		{
-			// End-user session creation (for compute sessions)
-			publicAPI.POST("/sessions", authInstance.Handler.CreateEndUserSession)
+			// Session creation (claimable sessions)
+			publicAPI.POST("/sessions", authInstance.Handler.CreateSession)
+			publicAPI.GET("/sessions/:id", authInstance.Handler.GetSession)
+			publicAPI.POST("/sessions/:id/resources", authInstance.Handler.AddResourceToSession)
 		}
 
 		// Protected API routes (require user or API key auth)

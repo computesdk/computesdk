@@ -41,7 +41,8 @@ func MigrateModels(db *gorm.DB) error {
 		&auth.Organization{},
 		&auth.OrganizationMember{},
 		&auth.APIKey{},
-		&auth.EndUserSession{},
+		&auth.ClaimableSession{},
+		&auth.ClaimableResource{},
 	)
 }
 

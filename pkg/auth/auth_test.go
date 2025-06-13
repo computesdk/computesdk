@@ -61,7 +61,8 @@ func TestMigrateModels(t *testing.T) {
 		"organizations",
 		"organization_members",
 		"api_keys",
-		"end_user_sessions",
+		"claimable_sessions",
+		"claimable_resources",
 	}
 
 	for _, table := range tables {
@@ -81,7 +82,10 @@ func TestMigrateModels(t *testing.T) {
 	err = db.First(&auth.APIKey{}).Error
 	assert.Equal(t, gorm.ErrRecordNotFound, err)
 
-	err = db.First(&auth.EndUserSession{}).Error
+	err = db.First(&auth.ClaimableSession{}).Error
+	assert.Equal(t, gorm.ErrRecordNotFound, err)
+
+	err = db.First(&auth.ClaimableResource{}).Error
 	assert.Equal(t, gorm.ErrRecordNotFound, err)
 }
 

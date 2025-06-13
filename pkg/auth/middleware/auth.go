@@ -87,38 +87,41 @@ func (m *AuthMiddleware) RequireAPIKey() gin.HandlerFunc {
 	}
 }
 
-func (m *AuthMiddleware) RequireEndUser() gin.HandlerFunc {
+func (m *AuthMiddleware) RequireSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Try session token first
 		sessionToken := c.GetHeader("X-Session-Token")
-		if sessionToken == "" {
-			token := m.extractToken(c)
-			if token != "" {
-				claims, err := m.jwtService.ValidateToken(token)
-				if err == nil && claims.AuthType == "end_user" {
-					c.Set("session_id", claims.SessionID)
-					c.Set("org_id", claims.OrganizationID)
-					c.Set("auth_type", "end_user")
-					c.Next()
-					return
-				}
+		if sessionToken != "" {
+			session, err := m.authService.ValidateSessionToken(sessionToken)
+			if err == nil {
+				c.Set("session_id", session.ID)
+				c.Set("org_id", session.OrganizationID)
+				c.Set("auth_type", "session")
+				c.Next()
+				return
 			}
-			
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing session token"})
+		}
+
+		// Fall back to Bearer token
+		token := m.extractToken(c)
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication token"})
 			c.Abort()
 			return
 		}
 
-		session, err := m.authService.ValidateEndUserSession(sessionToken)
+		// For now, we'll validate this as a session token too
+		// In the future, this could be JWT tokens
+		session, err := m.authService.ValidateSessionToken(token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid session token"})
 			c.Abort()
 			return
 		}
 
 		c.Set("session_id", session.ID)
 		c.Set("org_id", session.OrganizationID)
-		c.Set("compute_id", session.ComputeID)
-		c.Set("auth_type", "end_user")
+		c.Set("auth_type", "session")
 		c.Next()
 	}
 }
@@ -129,6 +132,7 @@ func (m *AuthMiddleware) RequireAny() gin.HandlerFunc {
 		apiKey := c.GetHeader("X-API-Key")
 		sessionToken := c.GetHeader("X-Session-Token")
 
+		// Try JWT tokens first
 		if token != "" {
 			if claims, err := m.jwtService.ValidateToken(token); err == nil {
 				switch claims.AuthType {
@@ -146,16 +150,11 @@ func (m *AuthMiddleware) RequireAny() gin.HandlerFunc {
 					c.Set("auth_type", "api_key")
 					c.Next()
 					return
-				case "end_user":
-					c.Set("session_id", claims.SessionID)
-					c.Set("org_id", claims.OrganizationID)
-					c.Set("auth_type", "end_user")
-					c.Next()
-					return
 				}
 			}
 		}
 
+		// Try API key
 		if apiKey != "" {
 			if apiKeyModel, err := m.authService.ValidateAPIKey(apiKey); err == nil {
 				c.Set("api_key_id", apiKeyModel.ID)
@@ -167,12 +166,12 @@ func (m *AuthMiddleware) RequireAny() gin.HandlerFunc {
 			}
 		}
 
+		// Try session token
 		if sessionToken != "" {
-			if session, err := m.authService.ValidateEndUserSession(sessionToken); err == nil {
+			if session, err := m.authService.ValidateSessionToken(sessionToken); err == nil {
 				c.Set("session_id", session.ID)
 				c.Set("org_id", session.OrganizationID)
-				c.Set("compute_id", session.ComputeID)
-				c.Set("auth_type", "end_user")
+				c.Set("auth_type", "session")
 				c.Next()
 				return
 			}

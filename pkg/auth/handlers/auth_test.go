@@ -31,7 +31,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&auth.Organization{},
 		&auth.OrganizationMember{},
 		&auth.APIKey{},
-		&auth.EndUserSession{},
+		&auth.ClaimableSession{},
+		&auth.ClaimableResource{},
 	)
 	require.NoError(t, err)
 
@@ -246,7 +247,7 @@ func TestCreateAPIKey(t *testing.T) {
 	assert.NotNil(t, response["api_key"])
 }
 
-func TestCreateEndUserSession(t *testing.T) {
+func TestCreateSession(t *testing.T) {
 	db := setupTestDB(t)
 	jwtService := services.NewJWTService("test-secret", "test")
 	authService := services.NewAuthService(db, jwtService)
@@ -256,14 +257,14 @@ func TestCreateEndUserSession(t *testing.T) {
 	router := gin.New()
 	router.POST("/sessions", func(c *gin.Context) {
 		c.Set("org_id", uint(1))
-		handler.CreateEndUserSession(c)
+		handler.CreateSession(c)
 	})
 
 	metadata := map[string]interface{}{"user": "test"}
 
-	reqBody := CreateEndUserSessionRequest{
-		ComputeID: "compute-123",
-		Metadata:  metadata,
+	reqBody := CreateSessionRequest{
+		Email:    "test@example.com",
+		Metadata: metadata,
 	}
 
 	body, _ := json.Marshal(reqBody)
@@ -279,8 +280,7 @@ func TestCreateEndUserSession(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, response["token"])
-	assert.Equal(t, "Bearer", response["token_type"])
+	assert.NotEmpty(t, response["session_token"])
 	assert.NotNil(t, response["session"])
 }
 
@@ -360,4 +360,44 @@ func TestAuthMissingOrgID(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "organization not found", response["error"])
+}
+
+func TestClaimSession(t *testing.T) {
+	db := setupTestDB(t)
+	jwtService := services.NewJWTService("test-secret", "test")
+	authService := services.NewAuthService(db, jwtService)
+	handler := NewAuthHandler(authService)
+	
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/auth/claim", handler.ClaimSession)
+
+	// First create a claimable session
+	session, err := authService.CreateClaimableSession(1, "test@example.com", nil)
+	require.NoError(t, err)
+
+	reqBody := ClaimSessionRequest{
+		SessionID: session.ID,
+		Email:     "test@example.com",
+		Password:  "password123",
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", "/auth/claim", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.NotNil(t, response["user"])
+	assert.NotEmpty(t, response["access_token"])
+	assert.NotEmpty(t, response["refresh_token"])
+	assert.Equal(t, "Bearer", response["token_type"])
+	assert.Equal(t, float64(1), response["sessions_claimed"])
 }

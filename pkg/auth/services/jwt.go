@@ -8,12 +8,11 @@ import (
 )
 
 type JWTClaims struct {
-	UserID         uint   `json:"user_id,omitempty"`
-	OrganizationID uint   `json:"org_id,omitempty"`
-	APIKeyID       uint   `json:"api_key_id,omitempty"`
-	SessionID      uint   `json:"session_id,omitempty"`
-	Email          string `json:"email,omitempty"`
-	AuthType       string `json:"auth_type"`
+	UserID         uint     `json:"user_id,omitempty"`
+	OrganizationID uint     `json:"org_id,omitempty"`
+	APIKeyID       uint     `json:"api_key_id,omitempty"`
+	Email          string   `json:"email,omitempty"`
+	AuthType       string   `json:"auth_type"`
 	Scopes         []string `json:"scopes,omitempty"`
 	jwt.RegisteredClaims
 }
@@ -85,21 +84,6 @@ func (s *JWTService) GenerateAPIKeyToken(apiKeyID uint, orgID uint, scopes []str
 	return token.SignedString(s.secretKey)
 }
 
-func (s *JWTService) GenerateEndUserToken(sessionID uint, orgID uint, computeID string) (string, error) {
-	claims := JWTClaims{
-		SessionID:      sessionID,
-		OrganizationID: orgID,
-		AuthType:       "end_user",
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    s.issuer,
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.secretKey)
-}
 
 func (s *JWTService) ValidateToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {

@@ -30,7 +30,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&auth.Organization{},
 		&auth.OrganizationMember{},
 		&auth.APIKey{},
-		&auth.EndUserSession{},
+		&auth.ClaimableSession{},
+		&auth.ClaimableResource{},
 	)
 	require.NoError(t, err)
 
@@ -262,18 +263,18 @@ func TestRequireAPIKeyJWTToken(t *testing.T) {
 	assert.Equal(t, "api_key", response["auth_type"])
 }
 
-func TestRequireEndUserSuccess(t *testing.T) {
+func TestRequireSessionSuccess(t *testing.T) {
 	db := setupTestDB(t)
 	jwtService := services.NewJWTService("test-secret", "test")
 	authService := services.NewAuthService(db, jwtService)
 	middleware := NewAuthMiddleware(authService, jwtService)
 
-	session, sessionToken, err := authService.CreateEndUserSession(1, "compute-123", nil)
+	session, err := authService.CreateClaimableSession(1, "", nil)
 	require.NoError(t, err)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(middleware.RequireEndUser())
+	router.Use(middleware.RequireSession())
 	router.GET("/protected", func(c *gin.Context) {
 		sessionID := c.GetUint("session_id")
 		orgID := c.GetUint("org_id")
@@ -300,49 +301,9 @@ func TestRequireEndUserSuccess(t *testing.T) {
 
 	assert.Equal(t, float64(session.ID), response["session_id"])
 	assert.Equal(t, float64(session.OrganizationID), response["org_id"])
-	assert.Equal(t, "end_user", response["auth_type"])
-
-	_ = sessionToken
+	assert.Equal(t, "session", response["auth_type"])
 }
 
-func TestRequireEndUserJWTToken(t *testing.T) {
-	jwtService := services.NewJWTService("test-secret", "test")
-	middleware := NewAuthMiddleware(nil, jwtService)
-
-	token, err := jwtService.GenerateEndUserToken(1, 1, "compute-123")
-	require.NoError(t, err)
-
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.Use(middleware.RequireEndUser())
-	router.GET("/protected", func(c *gin.Context) {
-		sessionID := c.GetUint("session_id")
-		orgID := c.GetUint("org_id")
-		authType := c.GetString("auth_type")
-		
-		c.JSON(http.StatusOK, gin.H{
-			"session_id": sessionID,
-			"org_id": orgID,
-			"auth_type": authType,
-		})
-	})
-
-	req, _ := http.NewRequest("GET", "/protected", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.Equal(t, float64(1), response["session_id"])
-	assert.Equal(t, float64(1), response["org_id"])
-	assert.Equal(t, "end_user", response["auth_type"])
-}
 
 func TestRequireAnyWithUserToken(t *testing.T) {
 	db := setupTestDB(t)
