@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: computesdk-api
+  namespace: computesdk-system
+  labels:
+    app: computesdk-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: computesdk-api
+  template:
+    metadata:
+      labels:
+        app: computesdk-api
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.28
+          command: ['sh', '-c', 'until nc -z computesdk-postgres.computesdk-system 5432; do echo waiting for postgres; sleep 2; done;']
+        - name: wait-for-seaweedfs
+          image: busybox:1.28
+          command: ['sh', '-c', 'until nc -z seaweedfs-filer.operators 8888 || nc -z seaweedfs-filer.operators 8333; do echo waiting for seaweedfs; sleep 2; done;']
+      containers:
+        - name: computesdk-api
+          image: computesdk-api
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            # PostgreSQL Configuration
+            - name: DATABASE_TYPE
+              value: "postgres"
+            - name: POSTGRES_HOST
+              value: "computesdk-postgres.computesdk-system"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "api-service"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: api-service.computesdk-postgres.credentials.postgresql.acid.zalan.do
+                  key: password
+            - name: POSTGRES_DATABASE
+              value: "computesdk"
+            # SeaweedFS S3 Configuration
+            - name: S3_ENDPOINT
+              value: "http://seaweedfs-filer.operators:8888"
+            - name: S3_USE_PATH_STYLE
+              value: "true"
+            - name: S3_ACCESS_KEY_ID
+              value: "computesdk"
+            - name: S3_SECRET_ACCESS_KEY
+              value: "computesdk-secret"
+          resources:

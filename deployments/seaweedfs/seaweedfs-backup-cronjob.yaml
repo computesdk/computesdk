@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seaweedfs-backup
+  namespace: computesdk-system
+spec:
+  schedule: "0 2 * * *"  # Every day at 2 AM
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup-job
+            image: minio/mc:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Configure MinIO client to point to external backup storage
+              mc alias set backup https://backup-storage.example.com ACCESS_KEY SECRET_KEY
+              
+              # Configure MinIO client to point to SeaweedFS
+              mc alias set seaweedfs http://seaweedfs-s3:8333 computesdk computesdk-secret
+              
+              # Mirror all buckets to backup destination
+              mc mirror --overwrite seaweedfs/ backup/seaweedfs-backup/$(date +%Y-%m-%d)/
+            env:
+            - name: TZ
+              value: UTC
+          restartPolicy: OnFailure

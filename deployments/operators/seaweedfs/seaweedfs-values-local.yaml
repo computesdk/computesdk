@@ -1,0 +1,38 @@
+master:
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistentVolume:
+    enabled: true
+    storageClass: "standard"  # Change to "hostpath" if that's your local default
+    size: 1Gi
+
+volume:
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistentVolume:
+    enabled: true
+    storageClass: "standard"
+    size: 1Gi
+
+filer:
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistentVolume:
+    enabled: true
+    storageClass: "standard"
+    size: 1Gi
+
+s3:
+  enabled: false
+
+global:
+  imagePullPolicy: IfNotPresent

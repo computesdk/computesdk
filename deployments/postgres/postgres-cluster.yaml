@@ -1,0 +1,43 @@
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: computesdk-postgres
+  namespace: computesdk-system
+spec:
+  teamId: "computesdk"
+  numberOfInstances: 1
+  patroni:
+    pg_hba:
+      - local all postgres trust
+      - local all all md5
+      - host all all 0.0.0.0/0 md5
+      - host all all ::/0 md5
+      # If you also need local access for maintenance/debugging directly on the pod:
+      # - local all postgres trust
+      # - local all all md5  numberOfInstances: 1
+  volume:
+    size: 1Gi
+  users:
+    computesdk:  # database owner role
+      - superuser
+      - createdb
+    api-service: # application user
+      - createdb
+  databases:
+    computesdk: "api-service"  # dbname: owner
+  preparedDatabases:
+    computesdk: {}
+  postgresql:
+    version: "15"
+    parameters:
+      shared_preload_libraries: "bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit,wal2json"
+      log_statement: "ddl" # Or "none" if you prefer
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # For development environments, disable high availability features
+  enableConnectionPooler: false

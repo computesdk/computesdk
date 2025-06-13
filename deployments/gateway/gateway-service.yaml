@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-service
+  namespace: computesdk-system
+  labels:
+    app: gateway-service
+spec:
+  type: ClusterIP
+  selector:
+    app: computesdk-gateway
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080 
+      name: http

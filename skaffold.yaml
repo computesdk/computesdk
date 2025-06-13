@@ -1,0 +1,79 @@
+apiVersion: skaffold/v4beta7
+metadata:
+  name: computesdk
+kind: Config
+build:
+  artifacts:
+    - image: computesdk-gateway
+      context: .
+      docker:
+        dockerfile: cmd/gateway/Dockerfile
+      sync:
+        manual:
+          - src: 'cmd/**/*.go'
+            dest: '.'
+          - src: 'pkg/**/*.go'
+            dest: '.'
+          - src: 'go.mod'
+            dest: '.'
+          - src: 'go.sum'
+            dest: '.'
+    - image: computesdk-api
+      context: .
+      docker:
+        dockerfile: cmd/api/Dockerfile
+      sync:
+        manual:
+          - src: 'cmd/**/*.go'
+            dest: '.'
+          - src: 'pkg/**/*.go'
+            dest: '.'
+          - src: 'go.mod'
+            dest: '.'
+          - src: 'go.sum'
+            dest: '.'
+  local:
+    push: false
+
+deploy:
+  # Deploy operators using Helm
+  helm:
+    releases:
+      # Redis operator
+        
+      # SeaweedFS operator
+      - name: seaweedfs-operator
+        repo: https://seaweedfs.github.io/seaweedfs/helm
+        remoteChart: seaweedfs
+        namespace: operators
+        valuesFiles:
+          - deployments/operators/seaweedfs/seaweedfs-values-local.yaml
+
+      # Postgres operator
+      - name: zalando-postgres-operator
+        repo: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+        remoteChart: postgres-operator
+        namespace: operators
+        valuesFiles:
+          - deployments/operators/postgres-operator/zalando-values-local.yaml
+
+      # Prometheus operator
+      - name: prometheus-operator
+        repo: https://prometheus-community.github.io/helm-charts
+        remoteChart: kube-prometheus-stack
+        namespace: operators
+        valuesFiles:
+          - deployments/operators/prometheus-operator/prometheus-operator-values-local.yaml
+
+  # Core services using kubectl
+  kubectl:
+
+# Define the raw YAML manifests to be rendered
+manifests:
+  rawYaml:
+    - deployments/namespaces.yaml
+    - deployments/ingress.yaml
+    - deployments/rbac/*.yaml
+    - deployments/gateway/*.yaml
+    - deployments/api/*.yaml
+    - deployments/postgres/*.yaml

@@ -1,0 +1,31 @@
+node_modules
+
+# Bolt.diy development directory
+
+fixtures/bolt-diy
+fixtures/ai-chatbot
+# But keep the directory
+!fixtures/**/.gitkeep
+!fixtures/**/
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfstate.*.backup
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+# Exclude tfvars files that might contain sensitive data
+*.auto.tfvars
+*.auto.tfvars.json
+# Include lock file
+!.terraform.lock.hcl
+
+**/.claude/settings.local.json
+**/.claude
+

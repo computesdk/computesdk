@@ -1,0 +1,27 @@
+configGeneral:
+  # Use the default namespace for simplicity
+  watched_namespace: "*"
+
+# Disable pod anti-affinity rules for local clusters with few nodes
+podAntiAffinity:
+  enable: false
+
+# Minimal resources to avoid scheduling issues on small clusters
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+# Disable RBAC creation if your cluster already has the necessary permissions
+rbac:
+  create: true
+
+# Disable webhooks for local development to avoid cert issues
+webhook:
+  enabled: false
+
+# Optionally, reduce the number of workers for low-resource environments
+workers: 1
