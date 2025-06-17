@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	
-	"github.com/heysnelling/computesdk/pkg/ui/css"
+	"github.com/heysnelling/computesdk/pkg/ui/css/internal"
 )
 
 func main() {
 	fmt.Println("🚀 Generating CSS utilities from YAML configs...")
 	
-	code, err := css.GenerateUtilitiesCode()
+	code, err := internal.GenerateUtilitiesCode()
 	if err != nil {
 		fmt.Printf("❌ Error generating utilities: %v\n", err)
 		os.Exit(1)
@@ -36,7 +36,7 @@ func main() {
 	fmt.Printf("📊 Generated %d lines of Go code from YAML configs\n", len(code))
 	
 	// Count utilities generated
-	spacing, colors, _, _, _, _ := css.LoadConfig()
+	spacing, colors, _, _, _, _ := internal.LoadConfig()
 	if spacing != nil && colors != nil {
 		colorCount := len(colors.Colors)
 		spacingCount := len(spacing.Spacing.Properties)

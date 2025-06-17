@@ -94,30 +94,6 @@ func Ml(size int) Class {
 }
 
 
-// BgCyan applies bg-cyan-shade utility
-func BgCyan(shade int) Class {
-	return Class(fmt.Sprintf("bg-cyan-%d", shade))
-}
-
-
-// TextCyan applies text-cyan-shade utility  
-func TextCyan(shade int) Class {
-	return Class(fmt.Sprintf("text-cyan-%d", shade))
-}
-
-
-// BgPurple applies bg-purple-shade utility
-func BgPurple(shade int) Class {
-	return Class(fmt.Sprintf("bg-purple-%d", shade))
-}
-
-
-// TextPurple applies text-purple-shade utility  
-func TextPurple(shade int) Class {
-	return Class(fmt.Sprintf("text-purple-%d", shade))
-}
-
-
 // BgNeutral applies bg-neutral-shade utility
 func BgNeutral(shade int) Class {
 	return Class(fmt.Sprintf("bg-neutral-%d", shade))
@@ -142,27 +118,51 @@ func TextLime(shade int) Class {
 }
 
 
-// BgGreen applies bg-green-shade utility
-func BgGreen(shade int) Class {
-	return Class(fmt.Sprintf("bg-green-%d", shade))
+// BgCyan applies bg-cyan-shade utility
+func BgCyan(shade int) Class {
+	return Class(fmt.Sprintf("bg-cyan-%d", shade))
 }
 
 
-// TextGreen applies text-green-shade utility  
-func TextGreen(shade int) Class {
-	return Class(fmt.Sprintf("text-green-%d", shade))
+// TextCyan applies text-cyan-shade utility  
+func TextCyan(shade int) Class {
+	return Class(fmt.Sprintf("text-cyan-%d", shade))
 }
 
 
-// BgEmerald applies bg-emerald-shade utility
-func BgEmerald(shade int) Class {
-	return Class(fmt.Sprintf("bg-emerald-%d", shade))
+// BgIndigo applies bg-indigo-shade utility
+func BgIndigo(shade int) Class {
+	return Class(fmt.Sprintf("bg-indigo-%d", shade))
 }
 
 
-// TextEmerald applies text-emerald-shade utility  
-func TextEmerald(shade int) Class {
-	return Class(fmt.Sprintf("text-emerald-%d", shade))
+// TextIndigo applies text-indigo-shade utility  
+func TextIndigo(shade int) Class {
+	return Class(fmt.Sprintf("text-indigo-%d", shade))
+}
+
+
+// BgGray applies bg-gray-shade utility
+func BgGray(shade int) Class {
+	return Class(fmt.Sprintf("bg-gray-%d", shade))
+}
+
+
+// TextGray applies text-gray-shade utility  
+func TextGray(shade int) Class {
+	return Class(fmt.Sprintf("text-gray-%d", shade))
+}
+
+
+// BgYellow applies bg-yellow-shade utility
+func BgYellow(shade int) Class {
+	return Class(fmt.Sprintf("bg-yellow-%d", shade))
+}
+
+
+// TextYellow applies text-yellow-shade utility  
+func TextYellow(shade int) Class {
+	return Class(fmt.Sprintf("text-yellow-%d", shade))
 }
 
 
@@ -190,78 +190,6 @@ func TextBlue(shade int) Class {
 }
 
 
-// BgGray applies bg-gray-shade utility
-func BgGray(shade int) Class {
-	return Class(fmt.Sprintf("bg-gray-%d", shade))
-}
-
-
-// TextGray applies text-gray-shade utility  
-func TextGray(shade int) Class {
-	return Class(fmt.Sprintf("text-gray-%d", shade))
-}
-
-
-// BgZinc applies bg-zinc-shade utility
-func BgZinc(shade int) Class {
-	return Class(fmt.Sprintf("bg-zinc-%d", shade))
-}
-
-
-// TextZinc applies text-zinc-shade utility  
-func TextZinc(shade int) Class {
-	return Class(fmt.Sprintf("text-zinc-%d", shade))
-}
-
-
-// BgStone applies bg-stone-shade utility
-func BgStone(shade int) Class {
-	return Class(fmt.Sprintf("bg-stone-%d", shade))
-}
-
-
-// TextStone applies text-stone-shade utility  
-func TextStone(shade int) Class {
-	return Class(fmt.Sprintf("text-stone-%d", shade))
-}
-
-
-// BgRed applies bg-red-shade utility
-func BgRed(shade int) Class {
-	return Class(fmt.Sprintf("bg-red-%d", shade))
-}
-
-
-// TextRed applies text-red-shade utility  
-func TextRed(shade int) Class {
-	return Class(fmt.Sprintf("text-red-%d", shade))
-}
-
-
-// BgIndigo applies bg-indigo-shade utility
-func BgIndigo(shade int) Class {
-	return Class(fmt.Sprintf("bg-indigo-%d", shade))
-}
-
-
-// TextIndigo applies text-indigo-shade utility  
-func TextIndigo(shade int) Class {
-	return Class(fmt.Sprintf("text-indigo-%d", shade))
-}
-
-
-// BgViolet applies bg-violet-shade utility
-func BgViolet(shade int) Class {
-	return Class(fmt.Sprintf("bg-violet-%d", shade))
-}
-
-
-// TextViolet applies text-violet-shade utility  
-func TextViolet(shade int) Class {
-	return Class(fmt.Sprintf("text-violet-%d", shade))
-}
-
-
 // BgPink applies bg-pink-shade utility
 func BgPink(shade int) Class {
 	return Class(fmt.Sprintf("bg-pink-%d", shade))
@@ -271,42 +199,6 @@ func BgPink(shade int) Class {
 // TextPink applies text-pink-shade utility  
 func TextPink(shade int) Class {
 	return Class(fmt.Sprintf("text-pink-%d", shade))
-}
-
-
-// BgAmber applies bg-amber-shade utility
-func BgAmber(shade int) Class {
-	return Class(fmt.Sprintf("bg-amber-%d", shade))
-}
-
-
-// TextAmber applies text-amber-shade utility  
-func TextAmber(shade int) Class {
-	return Class(fmt.Sprintf("text-amber-%d", shade))
-}
-
-
-// BgTeal applies bg-teal-shade utility
-func BgTeal(shade int) Class {
-	return Class(fmt.Sprintf("bg-teal-%d", shade))
-}
-
-
-// TextTeal applies text-teal-shade utility  
-func TextTeal(shade int) Class {
-	return Class(fmt.Sprintf("text-teal-%d", shade))
-}
-
-
-// BgFuchsia applies bg-fuchsia-shade utility
-func BgFuchsia(shade int) Class {
-	return Class(fmt.Sprintf("bg-fuchsia-%d", shade))
-}
-
-
-// TextFuchsia applies text-fuchsia-shade utility  
-func TextFuchsia(shade int) Class {
-	return Class(fmt.Sprintf("text-fuchsia-%d", shade))
 }
 
 
@@ -334,6 +226,78 @@ func TextSlate(shade int) Class {
 }
 
 
+// BgStone applies bg-stone-shade utility
+func BgStone(shade int) Class {
+	return Class(fmt.Sprintf("bg-stone-%d", shade))
+}
+
+
+// TextStone applies text-stone-shade utility  
+func TextStone(shade int) Class {
+	return Class(fmt.Sprintf("text-stone-%d", shade))
+}
+
+
+// BgAmber applies bg-amber-shade utility
+func BgAmber(shade int) Class {
+	return Class(fmt.Sprintf("bg-amber-%d", shade))
+}
+
+
+// TextAmber applies text-amber-shade utility  
+func TextAmber(shade int) Class {
+	return Class(fmt.Sprintf("text-amber-%d", shade))
+}
+
+
+// BgGreen applies bg-green-shade utility
+func BgGreen(shade int) Class {
+	return Class(fmt.Sprintf("bg-green-%d", shade))
+}
+
+
+// TextGreen applies text-green-shade utility  
+func TextGreen(shade int) Class {
+	return Class(fmt.Sprintf("text-green-%d", shade))
+}
+
+
+// BgEmerald applies bg-emerald-shade utility
+func BgEmerald(shade int) Class {
+	return Class(fmt.Sprintf("bg-emerald-%d", shade))
+}
+
+
+// TextEmerald applies text-emerald-shade utility  
+func TextEmerald(shade int) Class {
+	return Class(fmt.Sprintf("text-emerald-%d", shade))
+}
+
+
+// BgViolet applies bg-violet-shade utility
+func BgViolet(shade int) Class {
+	return Class(fmt.Sprintf("bg-violet-%d", shade))
+}
+
+
+// TextViolet applies text-violet-shade utility  
+func TextViolet(shade int) Class {
+	return Class(fmt.Sprintf("text-violet-%d", shade))
+}
+
+
+// BgRed applies bg-red-shade utility
+func BgRed(shade int) Class {
+	return Class(fmt.Sprintf("bg-red-%d", shade))
+}
+
+
+// TextRed applies text-red-shade utility  
+func TextRed(shade int) Class {
+	return Class(fmt.Sprintf("text-red-%d", shade))
+}
+
+
 // BgOrange applies bg-orange-shade utility
 func BgOrange(shade int) Class {
 	return Class(fmt.Sprintf("bg-orange-%d", shade))
@@ -346,15 +310,51 @@ func TextOrange(shade int) Class {
 }
 
 
-// BgYellow applies bg-yellow-shade utility
-func BgYellow(shade int) Class {
-	return Class(fmt.Sprintf("bg-yellow-%d", shade))
+// BgTeal applies bg-teal-shade utility
+func BgTeal(shade int) Class {
+	return Class(fmt.Sprintf("bg-teal-%d", shade))
 }
 
 
-// TextYellow applies text-yellow-shade utility  
-func TextYellow(shade int) Class {
-	return Class(fmt.Sprintf("text-yellow-%d", shade))
+// TextTeal applies text-teal-shade utility  
+func TextTeal(shade int) Class {
+	return Class(fmt.Sprintf("text-teal-%d", shade))
+}
+
+
+// BgPurple applies bg-purple-shade utility
+func BgPurple(shade int) Class {
+	return Class(fmt.Sprintf("bg-purple-%d", shade))
+}
+
+
+// TextPurple applies text-purple-shade utility  
+func TextPurple(shade int) Class {
+	return Class(fmt.Sprintf("text-purple-%d", shade))
+}
+
+
+// BgFuchsia applies bg-fuchsia-shade utility
+func BgFuchsia(shade int) Class {
+	return Class(fmt.Sprintf("bg-fuchsia-%d", shade))
+}
+
+
+// TextFuchsia applies text-fuchsia-shade utility  
+func TextFuchsia(shade int) Class {
+	return Class(fmt.Sprintf("text-fuchsia-%d", shade))
+}
+
+
+// BgZinc applies bg-zinc-shade utility
+func BgZinc(shade int) Class {
+	return Class(fmt.Sprintf("bg-zinc-%d", shade))
+}
+
+
+// TextZinc applies text-zinc-shade utility  
+func TextZinc(shade int) Class {
+	return Class(fmt.Sprintf("text-zinc-%d", shade))
 }
 
 
@@ -496,9 +496,45 @@ func FlexColReverse() Class {
 }
 
 
-// TextXs applies text-xs utility
-func TextXs() Class {
-	return "text-xs"
+// Text2XL applies text-2xl utility
+func Text2XL() Class {
+	return "text-2xl"
+}
+
+
+// Text3XL applies text-3xl utility
+func Text3XL() Class {
+	return "text-3xl"
+}
+
+
+// Text4xl applies text-4xl utility
+func Text4xl() Class {
+	return "text-4xl"
+}
+
+
+// Text5xl applies text-5xl utility
+func Text5xl() Class {
+	return "text-5xl"
+}
+
+
+// Text7xl applies text-7xl utility
+func Text7xl() Class {
+	return "text-7xl"
+}
+
+
+// Text8xl applies text-8xl utility
+func Text8xl() Class {
+	return "text-8xl"
+}
+
+
+// TextSm applies text-sm utility
+func TextSm() Class {
+	return "text-sm"
 }
 
 
@@ -520,57 +556,21 @@ func TextXl() Class {
 }
 
 
-// Text4xl applies text-4xl utility
-func Text4xl() Class {
-	return "text-4xl"
-}
-
-
-// Text5xl applies text-5xl utility
-func Text5xl() Class {
-	return "text-5xl"
-}
-
-
 // Text6xl applies text-6xl utility
 func Text6xl() Class {
 	return "text-6xl"
 }
 
 
-// Text7xl applies text-7xl utility
-func Text7xl() Class {
-	return "text-7xl"
-}
-
-
-// TextSm applies text-sm utility
-func TextSm() Class {
-	return "text-sm"
-}
-
-
-// Text2XL applies text-2xl utility
-func Text2XL() Class {
-	return "text-2xl"
-}
-
-
-// Text3XL applies text-3xl utility
-func Text3XL() Class {
-	return "text-3xl"
-}
-
-
-// Text8xl applies text-8xl utility
-func Text8xl() Class {
-	return "text-8xl"
-}
-
-
 // Text9xl applies text-9xl utility
 func Text9xl() Class {
 	return "text-9xl"
+}
+
+
+// TextXs applies text-xs utility
+func TextXs() Class {
+	return "text-xs"
 }
 
 

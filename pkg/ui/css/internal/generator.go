@@ -1,6 +1,4 @@
-package css
-
-//go:generate go run ./internal/generator
+package internal
 
 import (
 	"fmt"

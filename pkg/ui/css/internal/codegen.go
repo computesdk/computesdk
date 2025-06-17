@@ -1,4 +1,4 @@
-package css
+package internal
 
 import (
 	"fmt"
