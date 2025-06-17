@@ -43,29 +43,26 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 
 	// Build the UI using utility classes
 
-	body := html.Body().Class(css.BgGray(100), css.MinH("screen"), css.Flex(), css.JustifyCenter(), css.ItemsCenter())
-
 	page := html.Html(
 		html.Head(
 			html.Title("ComputeSDK Client"),
 		),
 
-		body.AddChildren(
-			html.Div().Class(css.BgGray(50), css.P(8), css.Rounded(8), css.M(6), css.MaxW("4xl"), css.Mx(0), css.Shadow("lg")).AddChildren(html.H1("ComputeSDK Client").
-				Class(css.TextGray(800), css.My(0), css.Text4xl(), css.W("full")),
-				html.Div().
-					SetContent("✓ Server is online").
-					Class(css.P(4), css.BgGreen(100), css.TextGreen(800), css.Rounded(4), css.My(5), css.Shadow("md")),
-				html.Div(
+		html.Body().Class(css.BgGray(100), css.MinH("screen"), css.Flex(), css.JustifyCenter(), css.ItemsCenter()).AddChildren(
+			html.Div().Class(css.BgGray(50), css.P(8), css.Rounded(8), css.M(6), css.MaxW("4xl"), css.Mx(0), css.Shadow("lg")).AddChildren(
+				html.H1("ComputeSDK Client").Class(css.TextGray(800), css.My(0), css.Text4xl(), css.W("full")),
+				html.Div().SetContent("✓ Server is online").Class(css.P(4), css.BgGreen(100), css.TextGreen(800), css.Rounded(4), css.My(5), css.Shadow("md")),
+				html.Div().Class(css.TextGray(600)).AddChildren(
 					html.P("Welcome to the ComputeSDK Client interface.").Class(css.TextLg()),
 					html.P("This UI is built using the ComputeSDK UI framework and served over HTTP."),
 					html.H2("Features").Class(css.TextGray(700), css.Text2XL(), css.Mt(6), css.Mb(3)),
-					html.Ul(
+					html.Ul().Class(css.Ml(6)).AddChildren(
 						html.Li("Dynamic HTML generation"),
 						html.Li("Component-based UI building"),
 						html.Li("Built-in HTTP server"),
-					).Class(css.Ml(6)),
-				).Class(css.TextGray(600))),
+					),
+				),
+			),
 		),
 	)
 
