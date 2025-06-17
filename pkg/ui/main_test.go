@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/heysnelling/computesdk/pkg/ui"
-	"github.com/heysnelling/computesdk/pkg/ui/elements"
+	"github.com/heysnelling/computesdk/pkg/ui/html"
 )
 
 func TestBasicRendering(t *testing.T) {
-	// Test simple div
-	div := elements.Div("Hello World")
+	// Test simple div with content
+	div := html.Div().SetContent("Hello World")
 	myUI := ui.NewUI(div)
 	result := myUI.Render()
 	expected := "<div>Hello World</div>"
@@ -20,11 +20,8 @@ func TestBasicRendering(t *testing.T) {
 }
 
 func TestWithAttributes(t *testing.T) {
-	// Test div with attributes
-	div := elements.Div("Styled content", map[string]string{
-		"class": "container",
-		"id":    "main",
-	})
+	// Test div with attributes using fluent API
+	div := html.Div().SetContent("Styled content").Class("container").ID("main")
 	myUI := ui.NewUI(div)
 	result := myUI.Render()
 
@@ -36,7 +33,7 @@ func TestWithAttributes(t *testing.T) {
 
 func TestSelfClosingTags(t *testing.T) {
 	// Test self-closing img tag
-	img := elements.Img("/path/to/image.jpg", map[string]string{"alt": "Test image"})
+	img := html.Img("/path/to/image.jpg").Attr("alt", "Test image")
 	myUI := ui.NewUI(img)
 	result := myUI.Render()
 
@@ -50,12 +47,11 @@ func TestSelfClosingTags(t *testing.T) {
 }
 
 func TestNestedElements(t *testing.T) {
-	// Test nested structure
-	header := elements.H1("Welcome")
-	paragraph := elements.P("This is a test paragraph")
-
-	div := elements.Div("")
-	div.Children = []elements.Element{header, paragraph}
+	// Test nested structure using fluent API
+	div := html.Div(
+		html.H1("Welcome"),
+		html.P("This is a test paragraph"),
+	)
 
 	myUI := ui.NewUI(div)
 	result := myUI.Render()
@@ -67,27 +63,56 @@ func TestNestedElements(t *testing.T) {
 }
 
 func TestCompleteDocument(t *testing.T) {
-	// Test a complete HTML document structure
-	title := elements.Title("Test Page")
-	head := elements.Head("")
-	head.Children = []elements.Element{title}
+	// Test a complete HTML document structure using fluent API
+	document := html.Html(
+		html.Head(
+			html.Title("Test Page"),
+		),
+		html.Body(
+			html.H1("Welcome to Test Page"),
+			html.P("This is a test paragraph with some content."),
+		),
+	)
 
-	h1 := elements.H1("Welcome to Test Page")
-	p := elements.P("This is a test paragraph with some content.")
-
-	body := elements.Body("")
-	body.Children = []elements.Element{h1, p}
-
-	html := elements.Html("")
-	html.Children = []elements.Element{head, body}
-
-	myUI := ui.NewUI(html)
+	myUI := ui.NewUI(document)
 	result := myUI.Render()
 
 	expected := "<html><head><title>Test Page</title></head><body><h1>Welcome to Test Page</h1><p>This is a test paragraph with some content.</p></body></html>"
 
 	if result != expected {
 		t.Errorf("Expected %s, got %s", expected, result)
+	}
+}
+
+func TestMethodChaining(t *testing.T) {
+	// Test method chaining
+	div := html.Div().
+		Class("container").
+		ID("main").
+		Attr("data-test", "value").
+		AddChildren(
+			html.H1("Title").Class("header"),
+			html.P("Content").ID("content"),
+		)
+
+	myUI := ui.NewUI(div)
+	result := myUI.Render()
+
+	// Check all attributes are present
+	if !contains(result, `class="container"`) {
+		t.Errorf("Expected class attribute not found in: %s", result)
+	}
+	if !contains(result, `id="main"`) {
+		t.Errorf("Expected id attribute not found in: %s", result)
+	}
+	if !contains(result, `data-test="value"`) {
+		t.Errorf("Expected data-test attribute not found in: %s", result)
+	}
+	if !contains(result, `<h1 class="header">Title</h1>`) {
+		t.Errorf("Expected h1 with class not found in: %s", result)
+	}
+	if !contains(result, `<p id="content">Content</p>`) {
+		t.Errorf("Expected p with id not found in: %s", result)
 	}
 }
 

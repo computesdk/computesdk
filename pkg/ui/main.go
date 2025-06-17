@@ -5,14 +5,14 @@ import (
 	"slices"
 	"strings"
 	
-	"github.com/heysnelling/computesdk/pkg/ui/elements"
+	"github.com/heysnelling/computesdk/pkg/ui/html"
 )
 
 type UI struct {
-	Root elements.Element
+	Root *html.Element
 }
 
-func NewUI(root elements.Element) *UI {
+func NewUI(root *html.Element) *UI {
 	return &UI{Root: root}
 }
 
@@ -20,7 +20,15 @@ func (ui *UI) Render() string {
 	return renderElement(ui.Root)
 }
 
-func renderElement(el elements.Element) string {
+func renderElement(el *html.Element) string {
+	if el == nil {
+		return ""
+	}
+	
+	// Handle text-only elements (no tag)
+	if el.Tag == "" {
+		return el.Content
+	}
 	html := fmt.Sprintf("<%s", el.Tag)
 
 	for key, value := range el.Attributes {
@@ -39,7 +47,7 @@ func renderElement(el elements.Element) string {
 	}
 
 	for _, child := range el.Children {
-		html += renderElement(child)
+		html += renderElement(&child)
 	}
 
 	html += fmt.Sprintf("</%s>", el.Tag)

@@ -1,0 +1,72 @@
+layout:
+  display:
+    - name: block
+      css_property: "display: block"
+    - name: flex
+      css_property: "display: flex"
+    - name: grid
+      css_property: "display: grid"
+    - name: hidden
+      css_property: "display: none"
+    - name: inline
+      css_property: "display: inline"
+    - name: inline-block
+      css_property: "display: inline-block"
+    - name: inline-flex
+      css_property: "display: inline-flex"
+    - name: inline-grid
+      css_property: "display: inline-grid"
+
+flexbox:
+  justify:
+    - name: justify-start
+      css_property: "justify-content: flex-start"
+    - name: justify-center
+      css_property: "justify-content: center"
+    - name: justify-end
+      css_property: "justify-content: flex-end"
+    - name: justify-between
+      css_property: "justify-content: space-between"
+    - name: justify-around
+      css_property: "justify-content: space-around"
+    - name: justify-evenly
+      css_property: "justify-content: space-evenly"
+  align:
+    - name: items-start
+      css_property: "align-items: flex-start"
+    - name: items-center
+      css_property: "align-items: center"
+    - name: items-end
+      css_property: "align-items: flex-end"
+    - name: items-stretch
+      css_property: "align-items: stretch"
+    - name: items-baseline
+      css_property: "align-items: baseline"
+  direction:
+    - name: flex-row
+      css_property: "flex-direction: row"
+    - name: flex-col
+      css_property: "flex-direction: column"
+    - name: flex-row-reverse
+      css_property: "flex-direction: row-reverse"
+    - name: flex-col-reverse
+      css_property: "flex-direction: column-reverse"
+  wrap:
+    - name: flex-wrap
+      css_property: "flex-wrap: wrap"
+    - name: flex-nowrap
+      css_property: "flex-wrap: nowrap"
+    - name: flex-wrap-reverse
+      css_property: "flex-wrap: wrap-reverse"
+
+grid:
+  cols:
+    scale: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    css_template: "grid-template-columns: repeat({value}, minmax(0, 1fr))"
+  rows:
+    scale: [1, 2, 3, 4, 5, 6]
+    css_template: "grid-template-rows: repeat({value}, minmax(0, 1fr))"
+  gap:
+    scale: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96]
+    rem_multiplier: 0.25
+    css_template: "gap: {value}rem"

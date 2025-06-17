@@ -1,0 +1,68 @@
+borders:
+  width: 
+    scale: [0, 1, 2, 4, 8]
+    properties:
+      - name: border
+        prefix: border
+        css_property: "border-width: {value}px"
+      - name: border-t
+        prefix: border-t
+        css_property: "border-top-width: {value}px"
+      - name: border-r
+        prefix: border-r
+        css_property: "border-right-width: {value}px"
+      - name: border-b
+        prefix: border-b
+        css_property: "border-bottom-width: {value}px"
+      - name: border-l
+        prefix: border-l
+        css_property: "border-left-width: {value}px"
+  
+  radius:
+    scale: [0, 1, 2, 3, 4, 6, 8, 12, 16, 20, 24]
+    rem_multiplier: 0.25
+    properties:
+      - name: rounded
+        prefix: rounded
+        css_property: "border-radius: {value}rem"
+      - name: rounded-t
+        prefix: rounded-t
+        css_property: "border-top-left-radius: {value}rem; border-top-right-radius: {value}rem"
+      - name: rounded-r
+        prefix: rounded-r
+        css_property: "border-top-right-radius: {value}rem; border-bottom-right-radius: {value}rem"
+      - name: rounded-b
+        prefix: rounded-b
+        css_property: "border-bottom-right-radius: {value}rem; border-bottom-left-radius: {value}rem"
+      - name: rounded-l
+        prefix: rounded-l
+        css_property: "border-top-left-radius: {value}rem; border-bottom-left-radius: {value}rem"
+      - name: rounded-tl
+        prefix: rounded-tl
+        css_property: "border-top-left-radius: {value}rem"
+      - name: rounded-tr
+        prefix: rounded-tr
+        css_property: "border-top-right-radius: {value}rem"
+      - name: rounded-br
+        prefix: rounded-br
+        css_property: "border-bottom-right-radius: {value}rem"
+      - name: rounded-bl
+        prefix: rounded-bl
+        css_property: "border-bottom-left-radius: {value}rem"
+    special:
+      - name: rounded-full
+        css_property: "border-radius: 9999px"
+      - name: rounded-none
+        css_property: "border-radius: 0"
+
+  style:
+    - name: border-solid
+      css_property: "border-style: solid"
+    - name: border-dashed
+      css_property: "border-style: dashed"
+    - name: border-dotted
+      css_property: "border-style: dotted"
+    - name: border-double
+      css_property: "border-style: double"
+    - name: border-none
+      css_property: "border-style: none"
