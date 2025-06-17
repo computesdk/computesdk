@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/heysnelling/computesdk/pkg/ui/css"
-	"github.com/heysnelling/computesdk/pkg/ui/html"
+	"github.com/computesdk/zforge/css"
+	"github.com/computesdk/zforge/html"
 )
 
 type Server struct {
