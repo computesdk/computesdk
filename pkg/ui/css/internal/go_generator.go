@@ -173,17 +173,41 @@ func %s() Class {
 	}
 }
 
-// Generate creates the complete utilities.go file content
-func (cg *CodeGenerator) Generate() string {
+// GenerateGoCode creates the complete utilities.go file content
+func (cg *CodeGenerator) GenerateGoCode() string {
 	tmpl := `// Code generated from YAML configs. DO NOT EDIT.
 package css
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/heysnelling/computesdk/pkg/ui/css/internal"
+)
 
 type Class string
 
 func (c Class) String() string {
 	return string(c)
+}
+
+// Stylesheet wraps the internal stylesheet type
+type Stylesheet struct {
+	internal interface{ GenerateCSS() string }
+}
+
+// Generate returns the CSS string
+func (s *Stylesheet) Generate() string {
+	if s.internal == nil {
+		return ""
+	}
+	if gen, ok := s.internal.(interface{ GenerateCSS() string }); ok {
+		return gen.GenerateCSS()
+	}
+	return ""
+}
+
+// GenerateUtilities creates CSS rules using the config-driven approach
+func GenerateUtilities() *Stylesheet {
+	return &Stylesheet{internal: internal.GenerateUtilities()}
 }
 
 {{range .Functions}}
@@ -233,5 +257,5 @@ func GenerateUtilitiesCode() (string, error) {
 	cg.GenerateTypographyFunctions(typography)
 	cg.GenerateBorderFunctions(borders)
 	
-	return cg.Generate(), nil
+	return cg.GenerateGoCode(), nil
 }

@@ -2,4 +2,4 @@
 // The utilities are generated from YAML configuration files.
 package css
 
-//go:generate go run ./internal/generator
+//go:generate go run ./internal/tool
