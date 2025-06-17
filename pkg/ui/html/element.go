@@ -1,6 +1,8 @@
 package html
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	
 	"github.com/heysnelling/computesdk/pkg/ui/css"
@@ -65,4 +67,84 @@ func (e *Element) AddChildren(children ...*Element) *Element {
 func (e *Element) SetContent(content string) *Element {
 	e.Content = content
 	return e
+}
+
+// Render processes the element tree and returns the final HTML string
+func (e *Element) Render() string {
+	// Inject minimal CSS if a head element exists and CSS classes were used
+	head := e.findHead()
+	if head != nil {
+		usedClasses := css.GetUsedClasses()
+		if len(usedClasses) > 0 {
+			stylesheet := css.GenerateMinimalCSS()
+			head.Children = append(head.Children, *Style(stylesheet.Generate()))
+		}
+	}
+	
+	// Generate and return HTML string
+	return e.toHTML()
+}
+
+
+// findHead recursively searches for the first head element in the document tree
+func (e *Element) findHead() *Element {
+	// Check if this element is a head
+	if e.Tag == "head" {
+		return e
+	}
+	
+	// Recursively search children
+	for i := range e.Children {
+		if found := e.Children[i].findHead(); found != nil {
+			return found
+		}
+	}
+	
+	return nil
+}
+
+// toHTML converts the element and its children to an HTML string
+func (e *Element) toHTML() string {
+	if e == nil {
+		return ""
+	}
+	
+	// Handle text-only elements (no tag)
+	if e.Tag == "" {
+		return e.Content
+	}
+	
+	html := fmt.Sprintf("<%s", e.Tag)
+
+	for key, value := range e.Attributes {
+		html += fmt.Sprintf(` %s="%s"`, key, value)
+	}
+
+	if isSelfClosing(e.Tag) {
+		html += " />"
+		return html
+	}
+
+	html += ">"
+
+	if e.Content != "" {
+		html += e.Content
+	}
+
+	for _, child := range e.Children {
+		html += child.toHTML()
+	}
+
+	html += fmt.Sprintf("</%s>", e.Tag)
+	return html
+}
+
+// isSelfClosing checks if an HTML tag is self-closing
+func isSelfClosing(tag string) bool {
+	selfClosingTags := []string{
+		"area", "base", "br", "col", "embed", "hr", "img", "input",
+		"link", "meta", "param", "source", "track", "wbr",
+	}
+	
+	return slices.Contains(selfClosingTags, strings.ToLower(tag))
 }

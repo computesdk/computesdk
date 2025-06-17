@@ -1,18 +1,19 @@
-package ui_test
+package html_test
 
 import (
 	"testing"
 
-	"github.com/heysnelling/computesdk/pkg/ui"
 	"github.com/heysnelling/computesdk/pkg/ui/css"
 	"github.com/heysnelling/computesdk/pkg/ui/html"
 )
 
 func TestBasicRendering(t *testing.T) {
+	// Reset CSS tracking for clean test
+	css.ResetTracking()
+	
 	// Test simple div with content
 	div := html.Div().SetContent("Hello World")
-	myUI := ui.NewUI(div)
-	result := myUI.Render()
+	result := div.Render()
 	expected := "<div>Hello World</div>"
 
 	if result != expected {
@@ -21,10 +22,12 @@ func TestBasicRendering(t *testing.T) {
 }
 
 func TestWithAttributes(t *testing.T) {
+	// Reset CSS tracking for clean test
+	css.ResetTracking()
+	
 	// Test div with attributes using fluent API
 	div := html.Div().SetContent("Styled content").Class(css.P(4), css.BgBlue(100)).ID("main")
-	myUI := ui.NewUI(div)
-	result := myUI.Render()
+	result := div.Render()
 
 	// Should contain both attributes (order may vary)
 	if !contains(result, `class="p-4 bg-blue-100"`) || !contains(result, `id="main"`) {
@@ -33,10 +36,12 @@ func TestWithAttributes(t *testing.T) {
 }
 
 func TestSelfClosingTags(t *testing.T) {
+	// Reset CSS tracking for clean test
+	css.ResetTracking()
+	
 	// Test self-closing img tag
 	img := html.Img("/path/to/image.jpg").Attr("alt", "Test image")
-	myUI := ui.NewUI(img)
-	result := myUI.Render()
+	result := img.Render()
 
 	// Check that it's a self-closing img tag with the correct attributes
 	if !contains(result, `<img`) || !contains(result, `/>`) {
@@ -48,14 +53,16 @@ func TestSelfClosingTags(t *testing.T) {
 }
 
 func TestNestedElements(t *testing.T) {
+	// Reset CSS tracking for clean test
+	css.ResetTracking()
+	
 	// Test nested structure using fluent API
 	div := html.Div(
 		html.H1("Welcome"),
 		html.P("This is a test paragraph"),
 	)
 
-	myUI := ui.NewUI(div)
-	result := myUI.Render()
+	result := div.Render()
 	expected := "<div><h1>Welcome</h1><p>This is a test paragraph</p></div>"
 
 	if result != expected {
@@ -64,6 +71,9 @@ func TestNestedElements(t *testing.T) {
 }
 
 func TestCompleteDocument(t *testing.T) {
+	// Reset CSS tracking for clean test
+	css.ResetTracking()
+	
 	// Test a complete HTML document structure using fluent API
 	document := html.Html(
 		html.Head(
@@ -75,8 +85,7 @@ func TestCompleteDocument(t *testing.T) {
 		),
 	)
 
-	myUI := ui.NewUI(document)
-	result := myUI.Render()
+	result := document.Render()
 
 	expected := "<html><head><title>Test Page</title></head><body><h1>Welcome to Test Page</h1><p>This is a test paragraph with some content.</p></body></html>"
 
@@ -86,6 +95,9 @@ func TestCompleteDocument(t *testing.T) {
 }
 
 func TestMethodChaining(t *testing.T) {
+	// Reset CSS tracking for clean test
+	css.ResetTracking()
+	
 	// Test method chaining
 	div := html.Div().
 		Class("container").
@@ -96,8 +108,7 @@ func TestMethodChaining(t *testing.T) {
 			html.P("Content").ID("content"),
 		)
 
-	myUI := ui.NewUI(div)
-	result := myUI.Render()
+	result := div.Render()
 
 	// Check all attributes are present
 	if !contains(result, `class="container"`) {
@@ -117,6 +128,51 @@ func TestMethodChaining(t *testing.T) {
 	}
 }
 
+func TestCSSIntegration(t *testing.T) {
+	// Reset CSS tracking for clean test
+	css.ResetTracking()
+	
+	// Test CSS utility integration
+	div := html.Div().
+		SetContent("Styled with CSS utilities").
+		Class(css.P(4), css.M(2), css.BgGray(100), css.TextGray(800), css.Rounded(8))
+	
+	result := div.Render()
+	
+	expected := `class="p-4 m-2 bg-gray-100 text-gray-800 rounded-8"`
+	if !contains(result, expected) {
+		t.Errorf("Expected CSS classes not found. Got: %s", result)
+	}
+}
+
+func TestRenderWithCSSInjection(t *testing.T) {
+	// Reset CSS tracking
+	css.ResetTracking()
+	
+	// Create a document with CSS classes
+	document := html.Html(
+		html.Head(
+			html.Title("CSS Test"),
+		),
+		html.Body(
+			html.Div().SetContent("Test content").Class(css.P(4), css.BgRed(100)),
+		),
+	)
+	
+	result := document.Render()
+	
+	// Should contain CSS styles in head
+	if !contains(result, "<style>") {
+		t.Errorf("Expected CSS styles to be injected, got: %s", result)
+	}
+	if !contains(result, ".p-4") {
+		t.Errorf("Expected .p-4 CSS rule, got: %s", result)
+	}
+	if !contains(result, ".bg-red-100") {
+		t.Errorf("Expected .bg-red-100 CSS rule, got: %s", result)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
@@ -131,19 +187,4 @@ func containsAt(s, substr string, start int) bool {
 		return true
 	}
 	return containsAt(s, substr, start+1)
-}
-
-func TestCSSIntegration(t *testing.T) {
-	// Test CSS utility integration
-	div := html.Div().
-		SetContent("Styled with CSS utilities").
-		Class(css.P(4), css.M(2), css.BgGray(100), css.TextGray(800), css.Rounded(8))
-	
-	myUI := ui.NewUI(div)
-	result := myUI.Render()
-	
-	expected := `class="p-4 m-2 bg-gray-100 text-gray-800 rounded-8"`
-	if !contains(result, expected) {
-		t.Errorf("Expected CSS classes not found. Got: %s", result)
-	}
 }

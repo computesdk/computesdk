@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/heysnelling/computesdk/pkg/ui"
 	"github.com/heysnelling/computesdk/pkg/ui/css"
 	"github.com/heysnelling/computesdk/pkg/ui/html"
 )
@@ -22,12 +21,12 @@ func NewServer(addr string) *Server {
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleHome)
-	
+
 	s.server = &http.Server{
 		Addr:    s.addr,
 		Handler: mux,
 	}
-	
+
 	return s.server.ListenAndServe()
 }
 
@@ -41,45 +40,39 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	// Reset tracking for this request
 	css.ResetTracking()
-	
-	// Build the UI using utility classes (this tracks used classes)
+
+	// Build the UI using utility classes
+
+	body := html.Body().Class(css.BgGray(100), css.MinH("screen"), css.Flex(), css.JustifyCenter(), css.ItemsCenter())
+
 	page := html.Html(
 		html.Head(
 			html.Title("ComputeSDK Client"),
-			// CSS will be injected here after we know what classes are used
 		),
-		html.Body(
-			html.Div(
-				html.H1("ComputeSDK Client").
-					Class(css.TextGray(800), css.My(0)),
+
+		body.AddChildren(
+			html.Div().Class(css.BgGray(50), css.P(8), css.Rounded(8), css.M(6), css.MaxW("4xl"), css.Mx(0), css.Shadow("lg")).AddChildren(html.H1("ComputeSDK Client").
+				Class(css.TextGray(800), css.My(0), css.Text4xl(), css.W("full")),
 				html.Div().
 					SetContent("✓ Server is online").
-					Class(css.P(4), css.BgGreen(100), css.TextGreen(800), css.Rounded(4), css.My(5)),
+					Class(css.P(4), css.BgGreen(100), css.TextGreen(800), css.Rounded(4), css.My(5), css.Shadow("md")),
 				html.Div(
-					html.P("Welcome to the ComputeSDK Client interface."),
+					html.P("Welcome to the ComputeSDK Client interface.").Class(css.TextLg()),
 					html.P("This UI is built using the ComputeSDK UI framework and served over HTTP."),
-					html.H2("Features").Class(css.TextGray(700)),
+					html.H2("Features").Class(css.TextGray(700), css.Text2XL(), css.Mt(6), css.Mb(3)),
 					html.Ul(
 						html.Li("Dynamic HTML generation"),
-						html.Li("Component-based UI building"),  
+						html.Li("Component-based UI building"),
 						html.Li("Built-in HTTP server"),
-					),
-				).Class(css.TextGray(600)),
-			).Class(css.BgGray(50), css.P(8), css.Rounded(8), css.M(6)),
-		).Class(css.BgGray(100), css.P(5)),
+					).Class(css.Ml(6)),
+				).Class(css.TextGray(600))),
+		),
 	)
 
-	// Generate minimal CSS based on tracked classes
-	stylesheet := css.GenerateMinimalCSS()
-	
-	// Inject the minimal CSS into the page head
-	if len(page.Children) > 0 { // Head element exists
-		head := &page.Children[0]
-		head.Children = append(head.Children, *html.Style(stylesheet.Generate()))
-	}
+	// Render the page (includes CSS injection and HTML generation)
+	rendered := page.Render()
 
-	// Render and serve
-	myUI := ui.NewUI(page)
+	// Serve the rendered HTML
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, myUI.Render())
+	fmt.Fprint(w, rendered)
 }
