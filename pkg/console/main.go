@@ -1,4 +1,4 @@
-package client
+package console
 
 import (
 	"context"
@@ -45,12 +45,12 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 
 	page := html.Html(
 		html.Head(
-			html.Title("ComputeSDK Client"),
+			html.Title("hello goodbye"),
 		),
 
 		html.Body().Class(css.BgGray(100), css.MinH("screen"), css.Flex(), css.JustifyCenter(), css.ItemsCenter()).AddChildren(
 			html.Div().Class(css.BgGray(50), css.P(8), css.Rounded(8), css.M(6), css.MaxW("4xl"), css.Mx(0), css.Shadow("lg")).AddChildren(
-				html.H1("ComputeSDK Client").Class(css.TextGray(800), css.My(0), css.Text4xl(), css.W("full")),
+				html.H1("ComputeSDK Console").Class(css.TextGray(800), css.My(0), css.Text4xl(), css.W("full")),
 				html.Div().SetContent("✓ Server is online").Class(css.P(4), css.BgGreen(100), css.TextGreen(800), css.Rounded(4), css.My(5), css.Shadow("md")),
 				html.Div().Class(css.TextGray(600)).AddChildren(
 					html.P("Welcome to the ComputeSDK Client interface.").Class(css.TextLg()),
