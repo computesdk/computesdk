@@ -242,3 +242,89 @@ func TestMultipleClasses(t *testing.T) {
 	expected := "flex items-center justify-between p-4 bg-blue-500 text-blue-100"
 	assert.Equal(t, expected, result)
 }
+
+func TestClassTracking(t *testing.T) {
+	// Reset tracking before test
+	css.ResetTracking()
+	
+	// Initially should have no tracked classes
+	assert.Empty(t, css.GetUsedClasses())
+	
+	// Use some classes
+	css.P(4)
+	css.BgRed(500)
+	css.Flex()
+	css.Rounded(8)
+	
+	// Should now have tracked classes
+	usedClasses := css.GetUsedClasses()
+	assert.Len(t, usedClasses, 4)
+	
+	// Check that all expected classes are tracked
+	expectedClasses := map[string]bool{
+		"p-4": true,
+		"bg-red-500": true,
+		"flex": true,
+		"rounded-8": true,
+	}
+	
+	for _, class := range usedClasses {
+		assert.True(t, expectedClasses[class], "Unexpected class tracked: %s", class)
+	}
+}
+
+func TestResetTracking(t *testing.T) {
+	// Use some classes
+	css.P(2)
+	css.BgBlue(300)
+	
+	// Should have tracked classes
+	assert.NotEmpty(t, css.GetUsedClasses())
+	
+	// Reset tracking
+	css.ResetTracking()
+	
+	// Should now be empty
+	assert.Empty(t, css.GetUsedClasses())
+}
+
+func TestGenerateMinimalCSS(t *testing.T) {
+	// Reset tracking
+	css.ResetTracking()
+	
+	// Use only a few specific classes
+	css.P(4)
+	css.BgGreen(100)
+	css.TextGreen(800)
+	css.Rounded(4)
+	
+	// Generate minimal CSS
+	stylesheet := css.GenerateMinimalCSS()
+	assert.NotNil(t, stylesheet)
+	
+	cssContent := stylesheet.Generate()
+	assert.NotEmpty(t, cssContent)
+	
+	// Should contain CSS for the classes we used
+	expectedRules := []string{
+		".p-4",
+		".bg-green-100",
+		".text-green-800", 
+		".rounded-4",
+	}
+	
+	for _, rule := range expectedRules {
+		assert.True(t, strings.Contains(cssContent, rule), "Expected minimal CSS to contain %s", rule)
+	}
+	
+	// Should NOT contain CSS for classes we didn't use
+	unexpectedRules := []string{
+		".p-8",      // Different padding
+		".bg-red-500", // Different color
+		".rounded-full", // Different border radius
+	}
+	
+	for _, rule := range unexpectedRules {
+		assert.False(t, strings.Contains(cssContent, rule), "Expected minimal CSS NOT to contain %s", rule)
+	}
+}

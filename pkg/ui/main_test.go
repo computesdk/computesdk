@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/heysnelling/computesdk/pkg/ui"
+	"github.com/heysnelling/computesdk/pkg/ui/css"
 	"github.com/heysnelling/computesdk/pkg/ui/html"
 )
 
@@ -21,12 +22,12 @@ func TestBasicRendering(t *testing.T) {
 
 func TestWithAttributes(t *testing.T) {
 	// Test div with attributes using fluent API
-	div := html.Div().SetContent("Styled content").Class("container").ID("main")
+	div := html.Div().SetContent("Styled content").Class(css.P(4), css.BgBlue(100)).ID("main")
 	myUI := ui.NewUI(div)
 	result := myUI.Render()
 
 	// Should contain both attributes (order may vary)
-	if !contains(result, `class="container"`) || !contains(result, `id="main"`) {
+	if !contains(result, `class="p-4 bg-blue-100"`) || !contains(result, `id="main"`) {
 		t.Errorf("Expected attributes not found in: %s", result)
 	}
 }
@@ -130,4 +131,19 @@ func containsAt(s, substr string, start int) bool {
 		return true
 	}
 	return containsAt(s, substr, start+1)
+}
+
+func TestCSSIntegration(t *testing.T) {
+	// Test CSS utility integration
+	div := html.Div().
+		SetContent("Styled with CSS utilities").
+		Class(css.P(4), css.M(2), css.BgGray(100), css.TextGray(800), css.Rounded(8))
+	
+	myUI := ui.NewUI(div)
+	result := myUI.Render()
+	
+	expected := `class="p-4 m-2 bg-gray-100 text-gray-800 rounded-8"`
+	if !contains(result, expected) {
+		t.Errorf("Expected CSS classes not found. Got: %s", result)
+	}
 }

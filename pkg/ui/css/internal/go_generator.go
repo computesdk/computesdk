@@ -34,7 +34,9 @@ func (cg *CodeGenerator) GenerateSpacingFunctions(spacing *SpacingConfig) {
 		
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s(size int) Class {
-	return Class(fmt.Sprintf("%s-%%d", size))
+	className := fmt.Sprintf("%s-%%d", size)
+	trackClass(className)
+	return Class(className)
 }`, prop.Name, prop.Name, funcName, prop.Prefix)
 		
 		cg.AddFunction(funcCode)
@@ -50,12 +52,16 @@ func (cg *CodeGenerator) GenerateColorFunctions(colors *ColorsConfig) {
 		
 		bgFunc := fmt.Sprintf(`// %s applies bg-%s-shade utility
 func %s(shade int) Class {
-	return Class(fmt.Sprintf("bg-%s-%%d", shade))
+	className := fmt.Sprintf("bg-%s-%%d", shade)
+	trackClass(className)
+	return Class(className)
 }`, bgFuncName, colorName, bgFuncName, colorName)
 
 		textFunc := fmt.Sprintf(`// %s applies text-%s-shade utility  
 func %s(shade int) Class {
-	return Class(fmt.Sprintf("text-%s-%%d", shade))
+	className := fmt.Sprintf("text-%s-%%d", shade)
+	trackClass(className)
+	return Class(className)
 }`, textFuncName, colorName, textFuncName, colorName)
 
 		cg.AddFunction(bgFunc)
@@ -70,8 +76,9 @@ func (cg *CodeGenerator) GenerateLayoutFunctions(layout *LayoutConfig) {
 		funcName := toCamelCase(display.Name)
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s() Class {
+	trackClass("%s")
 	return "%s"
-}`, funcName, display.Name, funcName, display.Name)
+}`, funcName, display.Name, funcName, display.Name, display.Name)
 		cg.AddFunction(funcCode)
 	}
 	
@@ -80,8 +87,9 @@ func %s() Class {
 		funcName := toCamelCase(justify.Name)
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s() Class {
+	trackClass("%s")
 	return "%s"
-}`, funcName, justify.Name, funcName, justify.Name)
+}`, funcName, justify.Name, funcName, justify.Name, justify.Name)
 		cg.AddFunction(funcCode)
 	}
 	
@@ -89,8 +97,9 @@ func %s() Class {
 		funcName := toCamelCase(align.Name)
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s() Class {
+	trackClass("%s")
 	return "%s"
-}`, funcName, align.Name, funcName, align.Name)
+}`, funcName, align.Name, funcName, align.Name, align.Name)
 		cg.AddFunction(funcCode)
 	}
 	
@@ -98,8 +107,9 @@ func %s() Class {
 		funcName := toCamelCase(direction.Name)
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s() Class {
+	trackClass("%s")
 	return "%s"
-}`, funcName, direction.Name, funcName, direction.Name)
+}`, funcName, direction.Name, funcName, direction.Name, direction.Name)
 		cg.AddFunction(funcCode)
 	}
 }
@@ -147,7 +157,9 @@ func (cg *CodeGenerator) GenerateBorderFunctions(borders *BordersConfig) {
 		funcName := toCamelCase(prop.Name)
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s(width int) Class {
-	return Class(fmt.Sprintf("%s-%%d", width))
+	className := fmt.Sprintf("%s-%%d", width)
+	trackClass(className)
+	return Class(className)
 }`, funcName, prop.Name, funcName, prop.Prefix)
 		cg.AddFunction(funcCode)
 	}
@@ -157,7 +169,9 @@ func %s(width int) Class {
 		funcName := toCamelCase(prop.Name)
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s(radius int) Class {
-	return Class(fmt.Sprintf("%s-%%d", radius))
+	className := fmt.Sprintf("%s-%%d", radius)
+	trackClass(className)
+	return Class(className)
 }`, funcName, prop.Name, funcName, prop.Prefix)
 		cg.AddFunction(funcCode)
 	}
@@ -167,8 +181,9 @@ func %s(radius int) Class {
 		funcName := toCamelCase(special.Name)
 		funcCode := fmt.Sprintf(`// %s applies %s utility
 func %s() Class {
+	trackClass("%s")
 	return "%s"
-}`, funcName, special.Name, funcName, special.Name)
+}`, funcName, special.Name, funcName, special.Name, special.Name)
 		cg.AddFunction(funcCode)
 	}
 }
@@ -180,6 +195,7 @@ package css
 
 import (
 	"fmt"
+	"sync"
 	"github.com/heysnelling/computesdk/pkg/ui/css/internal"
 )
 
@@ -187,6 +203,38 @@ type Class string
 
 func (c Class) String() string {
 	return string(c)
+}
+
+// Global class tracker
+var (
+	usedClasses = make(map[string]bool)
+	classMutex  sync.RWMutex
+)
+
+// trackClass registers a class as being used
+func trackClass(className string) {
+	classMutex.Lock()
+	defer classMutex.Unlock()
+	usedClasses[className] = true
+}
+
+// GetUsedClasses returns a slice of all tracked classes
+func GetUsedClasses() []string {
+	classMutex.RLock()
+	defer classMutex.RUnlock()
+	
+	classes := make([]string, 0, len(usedClasses))
+	for class := range usedClasses {
+		classes = append(classes, class)
+	}
+	return classes
+}
+
+// ResetTracking clears all tracked classes
+func ResetTracking() {
+	classMutex.Lock()
+	defer classMutex.Unlock()
+	usedClasses = make(map[string]bool)
 }
 
 // Stylesheet wraps the internal stylesheet type
@@ -208,6 +256,11 @@ func (s *Stylesheet) Generate() string {
 // GenerateUtilities creates CSS rules using the config-driven approach
 func GenerateUtilities() *Stylesheet {
 	return &Stylesheet{internal: internal.GenerateUtilities()}
+}
+
+// GenerateMinimalCSS generates CSS only for tracked classes
+func GenerateMinimalCSS() *Stylesheet {
+	return &Stylesheet{internal: internal.GenerateMinimalCSS(GetUsedClasses())}
 }
 
 {{range .Functions}}

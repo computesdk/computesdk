@@ -39,14 +39,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
-	// Generate CSS utilities
-	stylesheet := css.GenerateUtilities()
+	// Reset tracking for this request
+	css.ResetTracking()
 	
-	// Build the UI using utility classes
+	// Build the UI using utility classes (this tracks used classes)
 	page := html.Html(
 		html.Head(
 			html.Title("ComputeSDK Client"),
-			html.Style(stylesheet.Generate()),
+			// CSS will be injected here after we know what classes are used
 		),
 		html.Body(
 			html.Div(
@@ -68,6 +68,15 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 			).Class(css.BgGray(50), css.P(8), css.Rounded(8), css.M(6)),
 		).Class(css.BgGray(100), css.P(5)),
 	)
+
+	// Generate minimal CSS based on tracked classes
+	stylesheet := css.GenerateMinimalCSS()
+	
+	// Inject the minimal CSS into the page head
+	if len(page.Children) > 0 { // Head element exists
+		head := &page.Children[0]
+		head.Children = append(head.Children, *html.Style(stylesheet.Generate()))
+	}
 
 	// Render and serve
 	myUI := ui.NewUI(page)

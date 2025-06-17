@@ -4,7 +4,7 @@ spacing:
   properties:
     - name: padding
       prefix: p
-      css_property: padding
+      css_property: "padding: {value}"
     - name: padding-x
       prefix: px  
       css_property: "padding-left: {value}; padding-right: {value}"
@@ -13,19 +13,19 @@ spacing:
       css_property: "padding-top: {value}; padding-bottom: {value}"
     - name: padding-top
       prefix: pt
-      css_property: padding-top
+      css_property: "padding-top: {value}"
     - name: padding-right
       prefix: pr
-      css_property: padding-right
+      css_property: "padding-right: {value}"
     - name: padding-bottom
       prefix: pb
-      css_property: padding-bottom
+      css_property: "padding-bottom: {value}"
     - name: padding-left
       prefix: pl
-      css_property: padding-left
+      css_property: "padding-left: {value}"
     - name: margin
       prefix: m
-      css_property: margin
+      css_property: "margin: {value}"
     - name: margin-x
       prefix: mx
       css_property: "margin-left: {value}; margin-right: {value}"
@@ -34,13 +34,13 @@ spacing:
       css_property: "margin-top: {value}; margin-bottom: {value}"
     - name: margin-top
       prefix: mt
-      css_property: margin-top
+      css_property: "margin-top: {value}"
     - name: margin-right
       prefix: mr
-      css_property: margin-right
+      css_property: "margin-right: {value}"
     - name: margin-bottom
       prefix: mb
-      css_property: margin-bottom
+      css_property: "margin-bottom: {value}"
     - name: margin-left
       prefix: ml
-      css_property: margin-left
+      css_property: "margin-left: {value}"

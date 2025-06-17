@@ -162,6 +162,37 @@ func GenerateUtilitiesFromConfig() (*Stylesheet, error) {
 	return s, nil
 }
 
+// GenerateMinimalCSS creates CSS rules only for the specified classes
+func GenerateMinimalCSS(usedClasses []string) *Stylesheet {
+	if len(usedClasses) == 0 {
+		return NewStylesheet()
+	}
+	
+	// Convert slice to map for faster lookup
+	usedClassMap := make(map[string]bool)
+	for _, class := range usedClasses {
+		usedClassMap[class] = true
+	}
+	
+	// Generate full stylesheet
+	fullStylesheet, err := GenerateUtilitiesFromConfig()
+	if err != nil {
+		return generateBasicUtilities()
+	}
+	
+	// Create minimal stylesheet with only used classes
+	minimalStylesheet := NewStylesheet()
+	for selector, properties := range fullStylesheet.rules {
+		// Remove the leading dot from selector to match class names
+		className := strings.TrimPrefix(selector, ".")
+		if usedClassMap[className] {
+			minimalStylesheet.AddRule(selector, properties)
+		}
+	}
+	
+	return minimalStylesheet
+}
+
 // generateBasicUtilities provides a fallback with basic utilities
 func generateBasicUtilities() *Stylesheet {
 	s := NewStylesheet()
