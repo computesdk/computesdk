@@ -12,6 +12,20 @@ import (
 	_ "github.com/heysnelling/computesdk/pkg/auth"
 )
 
+
+func main() {
+	router := api.NewRouter()
+
+	port := ":8080"
+	log.Printf("Starting API server on port %s", port)
+
+	err = router.Run(port)
+	if err != nil {
+		log.Fatalf("Could not start server: %s\n", err)
+	}
+}
+
+/*
 func main() {
 	// Initialize Database
 	config := database.GetConfigFromEnv()
@@ -51,3 +65,4 @@ func getEnvOrDefault(key, defaultValue string) string {
 	}
 	return defaultValue
 }
+*/

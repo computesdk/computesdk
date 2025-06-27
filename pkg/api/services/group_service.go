@@ -42,6 +42,8 @@ func (s *GroupService) GetGroup(ctx context.Context, id string) (*projections.Gr
 }
 
 func (s *GroupService) CreateGroup(ctx context.Context, creates map[string]any) (*projections.Group, error) {
+	//TODO: add validation based on file system Struct
+
 	// Create new group chronicle
 	group := chronicle.NewChronicle("group", s.repository)
 
@@ -76,6 +78,8 @@ func (s *GroupService) CreateGroup(ctx context.Context, creates map[string]any) 
 }
 
 func (s *GroupService) UpdateGroup(ctx context.Context, id string, updates map[string]any) (*projections.Group, error) {
+	//TODO: add validation based on file system Struct
+
 	// Load existing group from chronicle
 	group, err := chronicle.LoadByStringID(ctx, s.repository, id, "group")
 	if err != nil {

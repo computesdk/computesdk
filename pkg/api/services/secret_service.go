@@ -38,12 +38,18 @@ func (s *SecretService) GetSecret(ctx context.Context, id string) (*projections.
 		return nil, err
 	}
 
+	//TODO: add a decrypt method of the secret here
+
 	return &secretProjection, nil
 }
 
 func (s *SecretService) CreateSecret(ctx context.Context, creates map[string]any) (*projections.Secret, error) {
+	//TODO: add validation based on file system Struct
+
 	// Create new secret chronicle
 	secret := chronicle.NewChronicle("secret", s.repository)
+
+	//TODO: add a encrypt method of the secret
 
 	// Track creation with initial data
 	err := secret.TrackCreate(creates)
@@ -76,6 +82,8 @@ func (s *SecretService) CreateSecret(ctx context.Context, creates map[string]any
 }
 
 func (s *SecretService) UpdateSecret(ctx context.Context, id string, updates map[string]any) (*projections.Secret, error) {
+	//TODO: add validation based on file system Struct
+
 	// Load existing secret from chronicle
 	secret, err := chronicle.LoadByStringID(ctx, s.repository, id, "secret")
 	if err != nil {
@@ -86,6 +94,8 @@ func (s *SecretService) UpdateSecret(ctx context.Context, id string, updates map
 	if secret.IsDeleted() {
 		return nil, fmt.Errorf("secret not found")
 	}
+
+	//TODO: add a encrypt method of the secret
 
 	// Track changes in chronicle
 	if err := secret.TrackChange("Updated", updates); err != nil {

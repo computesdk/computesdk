@@ -42,6 +42,8 @@ func (s *FilesystemService) GetFilesystem(ctx context.Context, id string) (*proj
 }
 
 func (s *FilesystemService) CreateFilesystem(ctx context.Context, creates map[string]any) (*projections.FileSystem, error) {
+	//TODO: add validation based on file system Struct
+
 	// Create new filesystem chronicle
 	filesystem := chronicle.NewChronicle("filesystem", s.repository)
 
@@ -76,6 +78,8 @@ func (s *FilesystemService) CreateFilesystem(ctx context.Context, creates map[st
 }
 
 func (s *FilesystemService) UpdateFilesystem(ctx context.Context, id string, updates map[string]any) (*projections.FileSystem, error) {
+	//TODO: add validation based on file system Struct
+
 	// Load existing filesystem from chronicle
 	filesystem, err := chronicle.LoadByStringID(ctx, s.repository, id, "filesystem")
 	if err != nil {
