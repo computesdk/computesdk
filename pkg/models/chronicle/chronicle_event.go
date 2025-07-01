@@ -2,10 +2,13 @@ package chronicle
 
 import (
 	"time"
+
+	"github.com/heysnelling/computesdk/pkg/database"
+	"gorm.io/gorm"
 )
 
 // EventRecord is the database model for storing events
-type EventRecord struct {
+type ChronicleEvent struct {
 	ID            string `gorm:"primaryKey"`
 	AggregateID   string `gorm:"index"`
 	AggregateType string `gorm:"index"`
@@ -15,7 +18,8 @@ type EventRecord struct {
 	CreatedAt     time.Time `gorm:"index"`
 }
 
-// TableName specifies the table name for the EventRecord
-func (EventRecord) TableName() string {
-	return "chronicle_events"
+func init() {
+	database.RegisterMigrations(func(db *gorm.DB) error {
+		return database.AutoMigrateModels(db, &ChronicleEvent{})
+	})
 }

@@ -5,6 +5,8 @@ go 1.24.0
 toolchain go1.24.3
 
 // Add replace directive to use local path
+replace github.com/computesdk/computesdk => ./
+
 replace github.com/heysnelling/computesdk => ./
 
 require (

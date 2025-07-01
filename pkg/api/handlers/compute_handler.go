@@ -1,17 +1,18 @@
+// Package handlers are the handlers for thehandlers for the api pkg
 package handlers
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/heysnelling/computesdk/pkg/api/services"
+	"github.com/heysnelling/computesdk/pkg/api/compute"
 )
 
 type ComputeHandler struct {
-	service *services.ComputeService
+	service *compute.ComputeService
 }
 
-func NewComputeHandler(service *services.ComputeService) *ComputeHandler {
+func NewComputeHandler(service *compute.ComputeService) *ComputeHandler {
 	return &ComputeHandler{
 		service: service,
 	}
@@ -21,8 +22,7 @@ func (h *ComputeHandler) RegisterRoutes(group *gin.RouterGroup) {
 	group.GET("", h.List)
 	group.POST("", h.Create)
 	group.GET("/:id", h.Get)
-	group.PUT("/:id", h.Update)
-	group.DELETE("/:id", h.Delete)
+	group.POST("/:id/terminate", h.Terminate)
 }
 
 func (h *ComputeHandler) List(c *gin.Context) {
@@ -37,9 +37,14 @@ func (h *ComputeHandler) List(c *gin.Context) {
 }
 
 func (h *ComputeHandler) Create(c *gin.Context) {
-	ctx := c.Request.Context()
+	var req compute.CreateComputeRequest
 
-	result, err := h.service.CreateCompute(ctx, nil)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+		return
+	}
+
+	result, err := h.service.CreateCompute(c.Request.Context(), &req)
 	if err != nil {
 		c.Error(err) // Add to Gin's error stack for logging
 		return
@@ -59,22 +64,18 @@ func (h *ComputeHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-func (h *ComputeHandler) Update(c *gin.Context) {
+func (h *ComputeHandler) Terminate(c *gin.Context) {
+	var req compute.TerminateComputeRequest
 	ctx := c.Request.Context()
-	id := c.Param("id")
 
-	result, err := h.service.UpdateCompute(ctx, id, nil)
-	if err != nil {
-		c.Error(err)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
 		return
 	}
-	c.JSON(http.StatusOK, result)
-}
 
-func (h *ComputeHandler) Delete(c *gin.Context) {
-	ctx := c.Request.Context()
-	id := c.Param("id")
-	result, err := h.service.DeleteCompute(ctx, id, "API delete")
+	req.ComputeID = c.Param("id")
+
+	result, err := h.service.TerminateCompute(ctx, &req)
 	if err != nil {
 		c.Error(err)
 		return

@@ -12,7 +12,7 @@ import (
 
 func TestHealthCheckEndpoint(t *testing.T) {
 	// Passing nil for both DB and Auth, as HealthCheckHandler doesn't use them.
-	router := api.NewRouter(nil, nil)
+	router := api.NewRouter(nil)
 
 	req, _ := http.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
