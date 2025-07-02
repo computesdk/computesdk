@@ -3,6 +3,7 @@ package compute
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/heysnelling/computesdk/pkg/api/events"
@@ -39,24 +40,13 @@ func (s *ComputeService) CreateCompute(ctx context.Context, req *CreateComputeRe
 		return nil, err
 	}
 
-	compute, err := s.GetCompute(ctx, computeID)
+	compute, err := s.GetAggregateCompute(ctx, event.ComputeID)
 	if err != nil {
 		return nil, err
 	}
 
 	summary := compute.ToSummary("123")
-	return s.summaryRepo.Create(summary)
-}
-
-func (s *ComputeService) GetCompute(ctx context.Context, computeID string) (*Compute, error) {
-	events, err := s.eventStore.GetEvents(ctx, computeID)
-	if err != nil {
-		return nil, err
-	}
-
-	compute := &Compute{}
-	compute.Apply(events)
-	return compute, nil
+	return s.summaryRepo.Create(ctx, summary)
 }
 
 func (s *ComputeService) TerminateCompute(ctx context.Context, req *TerminateComputeRequest) (*ComputeSummary, error) {
@@ -70,15 +60,38 @@ func (s *ComputeService) TerminateCompute(ctx context.Context, req *TerminateCom
 		return nil, err
 	}
 
-	compute, err := s.GetCompute(ctx, event.ComputeID)
+	compute, err := s.GetAggregateCompute(ctx, event.ComputeID)
 	if err != nil {
 		return nil, err
 	}
 
 	summary := compute.ToSummary("123")
-	return s.summaryRepo.Update(summary)
+	return s.summaryRepo.Update(ctx, summary)
 }
 
 func (s *ComputeService) ListComputes(ctx context.Context, ownerID *string) ([]ComputeSummary, error) {
-	return s.summaryRepo.List(ownerID, 25, 0)
+	return s.summaryRepo.List(ctx, ownerID, 25, 0)
+}
+
+func (s *ComputeService) GetCompute(ctx context.Context, computeID string) (*ComputeSummary, error) {
+	return s.summaryRepo.Get(ctx, computeID)
+}
+
+func (s *ComputeService) GetAggregateCompute(ctx context.Context, computeID string) (*ComputeAggregate, error) {
+	events, err := s.eventStore.GetEvents(ctx, computeID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(events) == 0 {
+		return nil, fmt.Errorf("compute not found: %s", computeID)
+	}
+
+	computeAggregate := &ComputeAggregate{}
+
+	if err := computeAggregate.Apply(events); err != nil {
+		return nil, err
+	}
+
+	return computeAggregate, nil
 }

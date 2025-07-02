@@ -27,8 +27,8 @@ func (h *ComputeHandler) RegisterRoutes(group *gin.RouterGroup) {
 
 func (h *ComputeHandler) List(c *gin.Context) {
 	ctx := c.Request.Context()
-	ownerID := "123"
-	result, err := h.service.ListComputes(ctx, &ownerID)
+	sessionID := "123"
+	result, err := h.service.ListComputes(ctx, &sessionID)
 	if err != nil {
 		c.Error(err) // Add to Gin's error stack for logging
 		return

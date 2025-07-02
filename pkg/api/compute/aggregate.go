@@ -7,7 +7,7 @@ import (
 	"github.com/heysnelling/computesdk/pkg/api/events"
 )
 
-type Compute struct {
+type ComputeAggregate struct {
 	ID          string     `json:"id"`
 	Status      string     `json:"status"`
 	Environment string     `json:"environment"`
@@ -20,7 +20,7 @@ type Compute struct {
 	LastActive  *time.Time `json:"last_active,omitempty"`
 }
 
-func (c *Compute) Apply(events []events.Event) error {
+func (c *ComputeAggregate) Apply(events []events.Event) error {
 	for _, event := range events {
 		var data map[string]any
 		event.UnmarshalData(&data)
@@ -44,10 +44,10 @@ func (c *Compute) Apply(events []events.Event) error {
 }
 
 // ToSummary converts the aggregate to a summary projection
-func (c *Compute) ToSummary(ownerID string) *ComputeSummary {
+func (c *ComputeAggregate) ToSummary(sessionID string) *ComputeSummary {
 	return &ComputeSummary{
 		ID:          c.ID,
-		OwnerID:     ownerID,
+		SessionID:   sessionID,
 		Status:      c.Status,
 		Environment: c.Environment,
 		IPAddress:   c.IPAddress,

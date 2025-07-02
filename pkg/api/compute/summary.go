@@ -1,6 +1,7 @@
 package compute
 
 import (
+	"context"
 	"time"
 
 	"github.com/heysnelling/computesdk/pkg/api/database"
@@ -9,7 +10,7 @@ import (
 
 type ComputeSummary struct {
 	ID          string     `json:"id" gorm:"primaryKey;type:varchar(255)"`
-	OwnerID     string     `json:"owner_id" gorm:"index;type:varchar(255);not null"`
+	SessionID   string     `json:"session_id" gorm:"index;type:varchar(255);not null"`
 	Status      string     `json:"status" gorm:"type:varchar(50);not null"`
 	Environment string     `json:"environment" gorm:"type:varchar(50);not null"`
 	IPAddress   string     `json:"ip_address,omitempty" gorm:"type:varchar(255)"`
@@ -43,8 +44,8 @@ func NewSummaryRepository(db *gorm.DB) *SummaryRepository {
 }
 
 // Create inserts a new compute summary
-func (r *SummaryRepository) Create(summary *ComputeSummary) (*ComputeSummary, error) {
-	if err := r.db.Create(summary).Error; err != nil {
+func (r *SummaryRepository) Create(ctx context.Context, summary *ComputeSummary) (*ComputeSummary, error) {
+	if err := r.db.WithContext(ctx).Create(summary).Error; err != nil {
 		return nil, err
 	}
 
@@ -52,30 +53,30 @@ func (r *SummaryRepository) Create(summary *ComputeSummary) (*ComputeSummary, er
 }
 
 // Update updates an existing compute summary
-func (r *SummaryRepository) Update(summary *ComputeSummary) (*ComputeSummary, error) {
-	if err := r.db.Save(summary).Error; err != nil {
+func (r *SummaryRepository) Update(ctx context.Context, summary *ComputeSummary) (*ComputeSummary, error) {
+	if err := r.db.WithContext(ctx).Save(summary).Error; err != nil {
 		return nil, err
 	}
 
 	return summary, nil
 }
 
-func (r *SummaryRepository) Get(computeID string) (*ComputeSummary, error) {
+func (r *SummaryRepository) Get(ctx context.Context, computeID string) (*ComputeSummary, error) {
 	computeSummary := ComputeSummary{ID: computeID}
 
-	if err := r.db.First(&computeSummary).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&computeSummary).Error; err != nil {
 		return nil, err
 	}
 
 	return &computeSummary, nil
 }
 
-func (r *SummaryRepository) List(ownerID *string, limit, offset int) ([]ComputeSummary, error) {
+func (r *SummaryRepository) List(ctx context.Context, sessionID *string, limit, offset int) ([]ComputeSummary, error) {
 	var summaries []ComputeSummary
-	query := r.db.Order("created_at desc")
+	query := r.db.WithContext(ctx).Order("created_at desc")
 
-	if ownerID != nil {
-		query = query.Where(ComputeSummary{OwnerID: *ownerID})
+	if sessionID != nil {
+		query = query.Where(ComputeSummary{SessionID: *sessionID})
 	}
 
 	if err := query.Limit(limit).Offset(offset).Find(&summaries).Error; err != nil {
