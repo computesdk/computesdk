@@ -9,8 +9,12 @@ RUN go mod download
 
 # Copy the rest of the application source code
 # Assuming your gateway code is in cmd/gateway and shared packages in pkg/
-COPY cmd/gateway/ cmd/gateway/
-COPY pkg/ pkg/
+COPY . .
+
+# Run tests first - fail fast if tests don't pass
+RUN go test -v ./pkg/gateway/...
+RUN go test -v ./pkg/gateway/...
+
 
 # Build the Go application
 # Output to /app/gateway inside the container

@@ -6,37 +6,46 @@ import (
 	"time"
 
 	"github.com/heysnelling/computesdk/pkg/api/events"
-	"github.com/matoous/go-nanoid/v2"
+	"github.com/heysnelling/computesdk/pkg/common"
+	"gorm.io/gorm"
 )
 
 type ComputeService struct {
-	eventStore events.EventStore
+	eventStore  events.EventStore
+	summaryRepo *SummaryRepository
 }
 
-func NewService(eventStore events.EventStore) *ComputeService {
+func NewService(db *gorm.DB) *ComputeService {
 	return &ComputeService{
-		eventStore: eventStore,
+		eventStore:  events.NewGormEventStore(db),
+		summaryRepo: NewSummaryRepository(db),
 	}
 }
 
-func (s *ComputeService) CreateCompute(ctx context.Context, req *CreateComputeRequest) (*Compute, error) {
-	id, err := gonanoid.New()
+func (s *ComputeService) CreateCompute(ctx context.Context, req *CreateComputeRequest) (*ComputeSummary, error) {
+	computeID, err := common.GeneratePrefixedID("compute_")
 	if err != nil {
 		return nil, err
 	}
 
 	event := ComputeCreated{
 		Environment: req.Environment,
-		ComputeID:   "compute_" + id,
+		ComputeID:   computeID,
 		CreatedAt:   time.Now(),
 	}
 
-	err = s.eventStore.Append(ctx, "compute_"+id, event)
+	err = s.eventStore.Append(ctx, computeID, event)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.GetCompute(ctx, id)
+	compute, err := s.GetCompute(ctx, computeID)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := compute.ToSummary("123")
+	return s.summaryRepo.Create(summary)
 }
 
 func (s *ComputeService) GetCompute(ctx context.Context, computeID string) (*Compute, error) {
@@ -50,7 +59,7 @@ func (s *ComputeService) GetCompute(ctx context.Context, computeID string) (*Com
 	return compute, nil
 }
 
-func (s *ComputeService) TerminateCompute(ctx context.Context, req *TerminateComputeRequest) (*Compute, error) {
+func (s *ComputeService) TerminateCompute(ctx context.Context, req *TerminateComputeRequest) (*ComputeSummary, error) {
 	event := ComputeTerminated{
 		ComputeID: req.ComputeID,
 		Reason:    req.Reason,
@@ -61,9 +70,15 @@ func (s *ComputeService) TerminateCompute(ctx context.Context, req *TerminateCom
 		return nil, err
 	}
 
-	return s.GetCompute(ctx, event.ComputeID)
+	compute, err := s.GetCompute(ctx, event.ComputeID)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := compute.ToSummary("123")
+	return s.summaryRepo.Update(summary)
 }
 
-func (s *ComputeService) ListComputes(ctx context.Context) ([]*Compute, error) {
-	return nil, nil
+func (s *ComputeService) ListComputes(ctx context.Context, ownerID *string) ([]ComputeSummary, error) {
+	return s.summaryRepo.List(ownerID, 25, 0)
 }

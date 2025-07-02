@@ -4,7 +4,6 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/heysnelling/computesdk/pkg/api/compute"
-	"github.com/heysnelling/computesdk/pkg/api/events"
 	"github.com/heysnelling/computesdk/pkg/api/handlers"
 	"github.com/heysnelling/computesdk/pkg/common"
 	"gorm.io/gorm"
@@ -21,10 +20,8 @@ func NewRouter(db *gorm.DB) *gin.Engine {
 		// API routes group
 		apiGroup := router.Group("/api")
 
-		eventStore := events.NewGormEventStore(db)
-
 		// Initialize services
-		computeService := compute.NewService(eventStore)
+		computeService := compute.NewService(db)
 
 		// Initialize handlers
 		computeHandler := handlers.NewComputeHandler(computeService)

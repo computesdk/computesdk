@@ -1,3 +1,4 @@
+// Package database is the primary package for data connectivity
 package database
 
 import (
@@ -21,21 +22,24 @@ func RegisterMigrations(fn MigrationFunc) {
 // RunMigrations executes all registered migrations
 func RunMigrations(db *gorm.DB) error {
 	log.Println("Starting database migrations...")
-	
+
 	for i, migrationFunc := range migrationRegistry {
 		if err := migrationFunc(db); err != nil {
 			return fmt.Errorf("migration %d failed: %w", i+1, err)
 		}
 	}
-	
+
 	log.Printf("Successfully completed %d migrations", len(migrationRegistry))
+
 	return nil
 }
 
 // AutoMigrateModels is a helper function for migrating models
-func AutoMigrateModels(db *gorm.DB, models ...interface{}) error {
+func AutoMigrateModels(db *gorm.DB, models ...any) error {
 	if err := db.AutoMigrate(models...); err != nil {
 		return fmt.Errorf("auto migration failed: %w", err)
 	}
+
 	return nil
 }
+

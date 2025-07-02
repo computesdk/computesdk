@@ -10,8 +10,11 @@ RUN go mod download
 
 # Copy the rest of the application source code
 # Assuming your API code is in cmd/api and shared packages in pkg/
-COPY cmd/api/ cmd/api/
-COPY pkg/ pkg/
+COPY . .
+
+# Run tests first - fail fast if tests don't pass
+RUN go test -v ./pkg/api/...
+RUN go test -v ./pkg/api/...
 
 # Build the Go application
 # Output to /app/api-server inside the container

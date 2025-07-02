@@ -42,3 +42,20 @@ func (c *Compute) Apply(events []events.Event) error {
 
 	return nil
 }
+
+// ToSummary converts the aggregate to a summary projection
+func (c *Compute) ToSummary(ownerID string) *ComputeSummary {
+	return &ComputeSummary{
+		ID:          c.ID,
+		OwnerID:     ownerID,
+		Status:      c.Status,
+		Environment: c.Environment,
+		IPAddress:   c.IPAddress,
+		PodName:     c.PodName,
+		PodURL:      c.PodURL,
+		CreatedAt:   c.CreatedAt,
+		UpdatedAt:   c.UpdatedAt,
+		StartedAt:   c.StartedAt,
+		LastActive:  c.LastActive,
+	}
+}

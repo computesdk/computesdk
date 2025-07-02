@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/heysnelling/computesdk/pkg/gateway/config"
-	k8s "github.com/heysnelling/computesdk/pkg/k8s"
 	"github.com/heysnelling/computesdk/pkg/gateway/proxy"
+	k8s "github.com/heysnelling/computesdk/pkg/k8s"
 )
 
 // Helper error functions to match the ones used in the k8s package
@@ -18,9 +18,9 @@ func errPodNotFound(computeID string) error {
 	return fmt.Errorf("pod not found for compute ID: %s", computeID)
 }
 
-func errPodNotReady(podName string) error {
-	return fmt.Errorf("pod %s is not ready", podName)
-}
+// func errPodNotReady(podName string) error {
+// return fmt.Errorf("pod %s is not ready", podName)
+// }
 
 // Mock PodManager for testing
 type mockPodManager struct {
@@ -185,6 +185,7 @@ func TestLoadConfig(t *testing.T) {
 
 	if cfg == nil {
 		t.Errorf("Expected config to be loaded, got nil")
+		return
 	}
 
 	// Make sure default port is set

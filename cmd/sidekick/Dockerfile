@@ -18,6 +18,8 @@ COPY . .
 
 # Run tests first - fail fast if tests don't pass
 RUN go test -v ./pkg/sidekick/...
+RUN go test -v ./cmd/sidekick/...
+
 
 # Build the binary with version information
 ARG VERSION=dev

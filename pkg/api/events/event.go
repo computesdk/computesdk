@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/heysnelling/computesdk/pkg/api/database"
 	"gorm.io/gorm"
 )
 
@@ -17,6 +18,12 @@ type Event struct {
 	Timestamp   time.Time      `json:"timestamp" gorm:"not null"`
 	CreatedAt   time.Time      `json:"created_at" gorm:"autoCreateTime"`
 	DeletedAt   gorm.DeletedAt `gorm:"index"`
+}
+
+func init() {
+	database.RegisterMigrations(func(db *gorm.DB) error {
+		return database.AutoMigrateModels(db, &Event{})
+	})
 }
 
 func (Event) TableName() string {

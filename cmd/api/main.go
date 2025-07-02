@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/heysnelling/computesdk/pkg/api"
-	"github.com/heysnelling/computesdk/pkg/database"
+	"github.com/heysnelling/computesdk/pkg/api/database"
 	// Import to register auth migrations
 )
 
