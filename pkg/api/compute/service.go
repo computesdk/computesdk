@@ -24,10 +24,7 @@ func NewService(db *gorm.DB) *ComputeService {
 }
 
 func (s *ComputeService) CreateCompute(ctx context.Context, req *CreateComputeRequest) (*ComputeSummary, error) {
-	computeID, err := common.GeneratePrefixedID("compute_")
-	if err != nil {
-		return nil, err
-	}
+	computeID := common.GeneratePrefixedID("compute_")
 
 	event := ComputeCreated{
 		Environment: req.Environment,
@@ -35,7 +32,7 @@ func (s *ComputeService) CreateCompute(ctx context.Context, req *CreateComputeRe
 		CreatedAt:   time.Now(),
 	}
 
-	err = s.eventStore.Append(ctx, computeID, event)
+	err := s.eventStore.Append(ctx, computeID, event)
 	if err != nil {
 		return nil, err
 	}

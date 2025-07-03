@@ -25,7 +25,7 @@ func (s *SessionAggregate) Apply(events []events.Event) error {
 		switch event.Type {
 		case "SessionStarted":
 			s.ID = data["session_id"].(string)
-			s.Config = data["config"].(map[string]interface{})
+			s.Config = data["config"].(map[string]any)
 			s.Status = "active"
 			s.CreatedAt = event.Timestamp
 			if expiresAt, ok := data["expires_at"].(string); ok {
