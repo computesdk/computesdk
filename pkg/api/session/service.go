@@ -20,11 +20,11 @@ type SessionService struct {
 	defaultSessionTTL time.Duration
 }
 
-func NewService(db *gorm.DB) *SessionService {
+func NewService(db *gorm.DB, jwtService *auth.JWTService) *SessionService {
 	return &SessionService{
 		eventStore:        events.NewGormEventStore(db),
 		summaryRepo:       NewSummaryRepository(db),
-		jwtService:        auth.NewJWTService("your-seceret"),
+		jwtService:        jwtService,
 		defaultTokenTTL:   4 * time.Hour,  // Short for security
 		defaultSessionTTL: 24 * time.Hour, // Long for compute work
 	}
@@ -206,3 +206,4 @@ func (s *SessionService) GetAggregateSession(ctx context.Context, sessionID stri
 
 	return sessionAggregate, nil
 }
+
