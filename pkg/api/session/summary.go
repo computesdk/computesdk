@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/heysnelling/computesdk/pkg/api/compute"
 	"github.com/heysnelling/computesdk/pkg/api/database"
 	"gorm.io/gorm"
 )
@@ -18,9 +17,6 @@ type SessionSummary struct {
 	ExpiresAt    *time.Time     `json:"expires_at,omitempty" gorm:"type:timestamp"`
 	TerminatedAt *time.Time     `json:"terminated_at,omitempty" gorm:"type:timestamp"`
 	ComputeCount int            `json:"compute_count" gorm:"default:0"`
-
-	// Relationship
-	Computes []compute.ComputeSummary `json:"computes,omitempty" gorm:"foreignKey:SessionID"`
 }
 
 func init() {

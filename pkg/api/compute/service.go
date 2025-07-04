@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/heysnelling/computesdk/pkg/api/events"
+	"github.com/heysnelling/computesdk/pkg/api/middleware"
 	"github.com/heysnelling/computesdk/pkg/common"
 	"gorm.io/gorm"
 )
@@ -23,7 +25,13 @@ func NewService(db *gorm.DB) *ComputeService {
 	}
 }
 
-func (s *ComputeService) CreateCompute(ctx context.Context, req *CreateComputeRequest) (*ComputeSummary, error) {
+func (s *ComputeService) CreateCompute(c *gin.Context, req *CreateComputeRequest) (*ComputeSummary, error) {
+	ctx := c.Request.Context()
+	sessionID := middleware.GetSessionID(c)
+	if sessionID == "" {
+		return nil, fmt.Errorf("session ID not found in context")
+	}
+
 	computeID := common.GeneratePrefixedID("compute_")
 
 	event := ComputeCreated{
@@ -42,11 +50,17 @@ func (s *ComputeService) CreateCompute(ctx context.Context, req *CreateComputeRe
 		return nil, err
 	}
 
-	summary := compute.ToSummary("123")
+	summary := compute.ToSummary(sessionID)
 	return s.summaryRepo.Create(ctx, summary)
 }
 
-func (s *ComputeService) TerminateCompute(ctx context.Context, req *TerminateComputeRequest) (*ComputeSummary, error) {
+func (s *ComputeService) TerminateCompute(c *gin.Context, req *TerminateComputeRequest) (*ComputeSummary, error) {
+	ctx := c.Request.Context()
+	sessionID := middleware.GetSessionID(c)
+	if sessionID == "" {
+		return nil, fmt.Errorf("session ID not found in context")
+	}
+
 	event := ComputeTerminated{
 		ComputeID: req.ComputeID,
 		Reason:    req.Reason,
@@ -62,15 +76,22 @@ func (s *ComputeService) TerminateCompute(ctx context.Context, req *TerminateCom
 		return nil, err
 	}
 
-	summary := compute.ToSummary("123")
+	summary := compute.ToSummary(sessionID)
 	return s.summaryRepo.Update(ctx, summary)
 }
 
-func (s *ComputeService) ListComputes(ctx context.Context, ownerID *string) ([]ComputeSummary, error) {
-	return s.summaryRepo.List(ctx, ownerID, 25, 0)
+func (s *ComputeService) ListComputes(c *gin.Context) ([]ComputeSummary, error) {
+	ctx := c.Request.Context()
+	sessionID := middleware.GetSessionID(c)
+	if sessionID == "" {
+		return nil, fmt.Errorf("session ID not found in context")
+	}
+
+	return s.summaryRepo.List(ctx, &sessionID, 25, 0)
 }
 
-func (s *ComputeService) GetCompute(ctx context.Context, computeID string) (*ComputeSummary, error) {
+func (s *ComputeService) GetCompute(c *gin.Context, computeID string) (*ComputeSummary, error) {
+	ctx := c.Request.Context()
 	return s.summaryRepo.Get(ctx, computeID)
 }
 

@@ -26,9 +26,7 @@ func (h *ComputeHandler) RegisterRoutes(group *gin.RouterGroup) {
 }
 
 func (h *ComputeHandler) List(c *gin.Context) {
-	ctx := c.Request.Context()
-	sessionID := "123"
-	result, err := h.service.ListComputes(ctx, &sessionID)
+	result, err := h.service.ListComputes(c)
 	if err != nil {
 		c.Error(err) // Add to Gin's error stack for logging
 		return
@@ -45,7 +43,7 @@ func (h *ComputeHandler) Create(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.CreateCompute(c.Request.Context(), &req)
+	result, err := h.service.CreateCompute(c, &req)
 	if err != nil {
 		c.Error(err) // Add to Gin's error stack for logging
 		return
@@ -54,9 +52,8 @@ func (h *ComputeHandler) Create(c *gin.Context) {
 }
 
 func (h *ComputeHandler) Get(c *gin.Context) {
-	ctx := c.Request.Context()
 	id := c.Param("id")
-	result, err := h.service.GetCompute(ctx, id)
+	result, err := h.service.GetCompute(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -67,7 +64,6 @@ func (h *ComputeHandler) Get(c *gin.Context) {
 
 func (h *ComputeHandler) Terminate(c *gin.Context) {
 	var req compute.TerminateComputeRequest
-	ctx := c.Request.Context()
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
@@ -76,7 +72,7 @@ func (h *ComputeHandler) Terminate(c *gin.Context) {
 
 	req.ComputeID = c.Param("id")
 
-	result, err := h.service.TerminateCompute(ctx, &req)
+	result, err := h.service.TerminateCompute(c, &req)
 	if err != nil {
 		c.Error(err)
 		return
