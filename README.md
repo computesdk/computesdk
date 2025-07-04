@@ -173,6 +173,7 @@ computesdk/
 ├── go.sum                        # Go dependencies
 ├── skaffold.yaml                 # Skaffold configuration
 └── README.md                     # This file
+```
 
 ## Getting Started
 
