@@ -1,22 +1,19 @@
-# ComputeSDK - On-Premise Code Generation Platform
+# ComputeSDK Operator
 
-ComputeSDK is a Kubernetes-native platform for running isolated code execution environments on-premise. It provides secure, dynamically-provisioned compute instances with features like persistent file systems, secret management, and real-time terminal access.
+ComputeSDK Operator is a kubernetes native system for running isolated code execution environments in kubernetes. It provides secure, dynamically-provisioned compute instances with features like real-time terminal access, millisecond boot times, and more coming soon!.
 
 ## Features
 
 - **Dynamic Compute Provisioning**: Create isolated containers on-demand for code execution
-- **File System Management**: Archive and mount persistent file systems across compute instances
-- **Secret Management**: Secure storage and injection of credentials via WorkOS Vault
-- **Group-Based Organization**: Organize resources into logical groups with shared access
 - **Real-Time Operations**: WebSocket-based terminal access, file editing, and live updates
-- **Event Auditing**: Complete audit trail of all resource changes and operations
+- **Urls for the world**: Every compute instance is given a dedicated URL.
 
 ## Architecture
 
 The platform consists of three main services:
 
 ### API Service
-- RESTful API for managing compute instances, filesystems, secrets, and groups
+- RESTful API for managing compute instances (filesystems, secrets, and groups coming soon).
 - JWT-based authentication with API key support
 - Event sourcing for audit logging
 - PostgreSQL backend with GORM ORM
@@ -50,26 +47,132 @@ The platform consists of three main services:
 ## Project Structure
 
 ```
-.
-├── cmd/                    # Service entry points
-│   ├── api/               # API service
-│   ├── gateway/           # Gateway proxy service
-│   └── sidekick/          # Compute pod sidecar
-├── pkg/                   # Shared packages
-│   ├── api/              # API handlers and routes
-│   ├── auth/             # Authentication logic
-│   ├── database/         # Database connection and migrations
-│   ├── gateway/          # Gateway proxy logic
-│   ├── k8s/              # Kubernetes client and operations
-│   ├── models/           # Domain models
-│   ├── sidekick/         # Sidekick handlers and services
-│   └── vault/            # Secret storage integration
-├── deployments/          # Kubernetes manifests
-│   ├── api/             # API service deployment
-│   ├── gateway/         # Gateway service deployment
-│   ├── operators/       # Infrastructure operators
-│   └── rbac/            # Role-based access control
-└── notes/               # Additional documentation
+computesdk/
+├── cmd/                           # Service entry points
+│   ├── api/                      # API service
+│   │   ├── Dockerfile
+│   │   └── main.go
+│   ├── gateway/                  # Gateway proxy service
+│   │   ├── Dockerfile
+│   │   ├── main.go
+│   │   └── main_test.go
+│   └── sidekick/                 # Compute pod sidecar
+│       ├── Dockerfile
+│       └── main.go
+├── deployments/                  # Kubernetes manifests
+│   ├── api/                      # API service deployment
+│   │   ├── api-deployment.yaml
+│   │   └── api-service.yaml
+│   ├── gateway/                  # Gateway service deployment
+│   │   ├── gateway-deployment.yaml
+│   │   └── gateway-service.yaml
+│   ├── operators/                # Infrastructure operators
+│   │   ├── postgres-operator/
+│   │   │   └── zalando-values-local.yaml
+│   │   ├── prometheus-operator/
+│   │   │   └── prometheus-operator-values-local.yaml
+│   │   └── seaweedfs/
+│   │       └── seaweedfs-values-local.yaml
+│   ├── postgres/                 # PostgreSQL configs
+│   │   └── postgres-cluster.yaml
+│   ├── rbac/                     # Role-based access control
+│   │   ├── pod-reader-workloads-role.yaml
+│   │   └── pod-reader-workloads-rolebinding.yaml
+│   ├── seaweedfs/                # SeaweedFS configs
+│   │   └── seaweedfs-backup-cronjob.yaml
+│   ├── ingress.yaml
+│   └── namespaces.yaml
+├── pkg/                          # Shared packages
+│   ├── api/                      # API packages
+│   │   ├── compute/              # Compute instance management
+│   │   │   ├── aggregate.go
+│   │   │   ├── events.go
+│   │   │   ├── requests.go
+│   │   │   ├── service.go
+│   │   │   └── summary.go
+│   │   ├── database/             # Database connection and migrations
+│   │   │   ├── connection.go
+│   │   │   └── migrations.go
+│   │   ├── events/               # Event sourcing
+│   │   │   ├── event.go
+│   │   │   └── store.go
+│   │   ├── handlers/             # HTTP handlers
+│   │   │   ├── compute_handler.go
+│   │   │   └── session_handler.go
+│   │   ├── middleware/           # Middleware
+│   │   │   └── auth.go
+│   │   ├── session/              # Session management
+│   │   │   ├── aggregate.go
+│   │   │   ├── events.go
+│   │   │   ├── requests.go
+│   │   │   ├── service.go
+│   │   │   └── summary.go
+│   │   ├── router.go
+│   │   └── router_test.go
+│   ├── auth/                     # Authentication logic
+│   │   └── jwt.go
+│   ├── common/                   # Common utilities
+│   │   ├── config/
+│   │   │   └── dataservices.go
+│   │   ├── health_handler.go
+│   │   ├── id_generator.go
+│   │   └── id_generator_test.go
+│   ├── gateway/                  # Gateway proxy logic
+│   │   ├── config/
+│   │   │   ├── config.go
+│   │   │   └── config_test.go
+│   │   ├── proxy/
+│   │   │   ├── compute_id.go
+│   │   │   ├── compute_id_test.go
+│   │   │   ├── http.go
+│   │   │   ├── http_test.go
+│   │   │   ├── websocket.go
+│   │   │   └── websocket_test.go
+│   │   └── Dockerfile
+│   ├── k8s/                      # Kubernetes client and operations
+│   │   ├── client.go
+│   │   ├── client_test.go
+│   │   ├── compute.go
+│   │   ├── compute_test.go
+│   │   ├── deployments.go
+│   │   ├── deployments_test.go
+│   │   ├── fixtures.go
+│   │   ├── pods.go
+│   │   └── pods_test.go
+│   └── sidekick/                 # Sidekick handlers and services
+│       ├── handlers/
+│       │   ├── base.go
+│       │   ├── files.go
+│       │   ├── files_test.go
+│       │   ├── filewatcher.go
+│       │   ├── filewatcher_test.go
+│       │   ├── signal.go
+│       │   ├── signal_test.go
+│       │   ├── terminal.go
+│       │   └── terminal_test.go
+│       ├── services/
+│       │   ├── filesystem.go
+│       │   ├── filesystem_test.go
+│       │   ├── filewatcher.go
+│       │   ├── filewatcher_test.go
+│       │   ├── signal.go
+│       │   ├── signal_test.go
+│       │   ├── terminal.go
+│       │   └── terminal_test.go
+│       ├── testutil/
+│       │   ├── wait.go
+│       │   └── websocket_client.go
+│       ├── websocket/
+│       │   ├── hub.go
+│       │   ├── hub_test.go
+│       │   ├── manager.go
+│       │   └── manager_test.go
+│       ├── router.go
+│       └── router_test.go
+├── go.mod                        # Go module definition
+├── go.sum                        # Go dependencies
+├── skaffold.yaml                 # Skaffold configuration
+└── README.md                     # This file
 
 ## Getting Started
 
@@ -80,24 +183,6 @@ The platform consists of three main services:
 - Kubernetes cluster (local or remote)
 - Skaffold (for local development)
 
-### Local Development
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd onpremise-codegen
-   ```
-
-2. Start the local development environment:
-   ```bash
-   skaffold dev
-   ```
-
-This will:
-- Build Docker images for all services
-- Deploy to your local Kubernetes cluster
-- Set up hot reloading for code changes
-- Forward ports for local access
 
 ### Configuration
 
@@ -106,110 +191,6 @@ Services are configured through environment variables. Key configurations includ
 - Database connection strings
 - S3/SeaweedFS credentials
 - JWT signing keys
-- Kubernetes namespace settings
-
-## API Overview
-
-### Authentication
-
-```bash
-# Login
-POST /auth/login
-{
-  "username": "user@example.com",
-  "password": "password"
-}
-
-# Create API Key
-POST /auth/api-keys
-Authorization: Bearer <jwt-token>
-```
-
-### Compute Instances
-
-```bash
-# Create compute instance
-POST /api/computes
-{
-  "name": "my-instance",
-  "group_id": "grp_xxx",
-  "image_name": "python:3.9",
-  "filesystem_id": "fs_xxx"
-}
-
-# List compute instances
-GET /api/computes
-
-# Connect to compute instance
-WebSocket: ws://gateway/compute/<instance-id>/terminal
-```
-
-### File Systems
-
-```bash
-# Create filesystem
-POST /api/filesystems
-{
-  "name": "project-files",
-  "description": "Project source code"
-}
-
-# List filesystems
-GET /api/filesystems
-```
-
-### Groups
-
-```bash
-# Create group
-POST /api/groups
-{
-  "name": "development",
-  "description": "Development environment"
-}
-
-# List groups
-GET /api/groups
-```
-
-## Deployment
-
-### Kubernetes Deployment
-
-The platform deploys into two namespaces:
-
-- `computesdk-system`: Core services (API, Gateway, databases)
-- `computesdk-workloads`: User compute pods
-
-Deploy using kubectl:
-
-```bash
-# Create namespaces
-kubectl apply -f deployments/namespaces.yaml
-
-# Deploy operators (PostgreSQL, SeaweedFS, Prometheus)
-helm install <operator-charts>
-
-# Deploy core services
-kubectl apply -f deployments/
-```
-
-### Production Considerations
-
-- **High Availability**: Deploy services across multiple availability zones
-- **Security**: Enable network policies and pod security standards
-- **Monitoring**: Prometheus metrics are exposed on `/metrics` endpoints
-- **Scaling**: Use HPA for API and Gateway services
-- **Storage**: Configure appropriate PVC storage classes
-
-## Security
-
-- JWT-based authentication with refresh tokens
-- API key support for automation
-- Compute pods run with limited RBAC permissions
-- gVisor runtime for additional container isolation
-- Network policies for pod-to-pod communication
-- Secrets stored externally in WorkOS Vault
 
 ## Development
 
@@ -236,15 +217,3 @@ make build
 go build -o bin/api ./cmd/api
 ```
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-## License
-
-[License information here]
