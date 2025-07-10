@@ -1,53 +1,57 @@
-import type { 
-  ComputeSpecification, 
-  ExecutionResult, 
-  Runtime, 
+import { Sandbox } from '@vercel/sandbox';
+import ms from 'ms';
+import type {
+  ComputeSpecification,
+  ExecutionResult,
+  Runtime,
   SandboxInfo,
   SandboxConfig
 } from 'computesdk';
-
-// Vercel Sandbox API types
-interface VercelSandboxAPI {
-  createSandbox(config: {
-    token: string;
-    runtime: string;
-  }): Promise<{
-    id: string;
-    execute: (code: string) => Promise<{
-      stdout: string;
-      stderr: string;
-      exitCode: number;
-    }>;
-    close: () => Promise<void>;
-  }>;
-}
 
 export class VercelProvider implements ComputeSpecification {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'vercel';
   public readonly sandboxId: string;
-  
+
   private sandbox: any = null;
   private readonly token: string;
+  private readonly teamId: string;
+  private readonly projectId: string;
   private readonly runtime: Runtime;
   private readonly timeout: number;
 
   constructor(config: SandboxConfig) {
     this.sandboxId = `vercel-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     this.timeout = config.timeout || 300000;
-    
-    // Get token from environment
+
+    // Get authentication from environment
     this.token = process.env.VERCEL_TOKEN || '';
-    
+    this.teamId = process.env.VERCEL_TEAM_ID || '';
+    this.projectId = process.env.VERCEL_PROJECT_ID || '';
+
     if (!this.token) {
-      throw new Error(`Missing Vercel token. Set VERCEL_TOKEN environment variable.`);
+      throw new Error(
+        `Missing Vercel token. Set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
+      );
     }
-    
+
+    if (!this.teamId) {
+      throw new Error(
+        `Missing Vercel team ID. Set VERCEL_TEAM_ID environment variable.`
+      );
+    }
+
+    if (!this.projectId) {
+      throw new Error(
+        `Missing Vercel project ID. Set VERCEL_PROJECT_ID environment variable.`
+      );
+    }
+
     // Validate runtime - Vercel supports Node.js and Python
     if (config.runtime && !['node', 'python'].includes(config.runtime)) {
       throw new Error('Vercel provider only supports Node.js and Python runtimes');
     }
-    
+
     this.runtime = config.runtime || 'node';
   }
 
@@ -57,25 +61,39 @@ export class VercelProvider implements ComputeSpecification {
     }
 
     try {
-      // TODO: Replace with actual Vercel Sandbox SDK when available
-      // For now, this is a placeholder implementation
-      this.sandbox = {
-        id: this.sandboxId,
-        execute: async (code: string) => {
-          // Mock implementation
-          return {
-            stdout: `Executed in Vercel sandbox: ${code}`,
-            stderr: '',
-            exitCode: 0
-          };
-        },
-        close: async () => {
-          // Mock implementation
-        }
-      };
-      
+      // Create Vercel Sandbox with appropriate runtime
+      const runtimeImage = this.runtime === 'node' ? 'node22' : 'python3.13';
+
+      this.sandbox = await Sandbox.create({
+        runtime: runtimeImage,
+        timeout: ms(`${this.timeout}ms`),
+        resources: { vcpus: 2 }, // Default to 2 vCPUs
+      });
+
       return this.sandbox;
     } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('unauthorized') || error.message.includes('token')) {
+          throw new Error(
+            `Vercel authentication failed. Please check your VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
+          );
+        }
+        if (error.message.includes('team') || error.message.includes('project')) {
+          throw new Error(
+            `Vercel team/project configuration error. Please check your VERCEL_TEAM_ID and VERCEL_PROJECT_ID environment variables.`
+          );
+        }
+        if (error.message.includes('Memory limit exceeded')) {
+          throw new Error(
+            `Vercel execution failed due to memory limits. Consider optimizing your code or using smaller data sets.`
+          );
+        }
+        if (error.message.includes('quota') || error.message.includes('limit')) {
+          throw new Error(
+            `Vercel quota exceeded. Please check your usage in the Vercel dashboard.`
+          );
+        }
+      }
       throw new Error(
         `Failed to initialize Vercel sandbox: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -90,29 +108,93 @@ export class VercelProvider implements ComputeSpecification {
 
     const startTime = Date.now();
     const actualRuntime = runtime || this.runtime;
-    
+
     try {
       const sandbox = await this.ensureSandbox();
-      
-      // Wrap code based on runtime
-      let wrappedCode = code;
+
+      // Execute code based on runtime
+      let command: string;
+      let args: string[] = [];
+
       if (actualRuntime === 'node') {
-        wrappedCode = code;
+        // For Node.js, use node -e to execute code directly
+        command = 'node';
+        args = ['-e', code];
       } else if (actualRuntime === 'python') {
-        wrappedCode = `python -c "${code.replace(/"/g, '\\"')}"`;
+        // For Python, use python -c to execute code directly
+        command = 'python';
+        args = ['-c', code];
+      } else {
+        throw new Error(`Unsupported runtime: ${actualRuntime}`);
       }
-      
-      const result = await sandbox.execute(wrappedCode);
-      
+
+      // Execute the command in the sandbox
+      const result = await sandbox.runCommand({
+        cmd: command,
+        args: args,
+      });
+
+      // Collect stdout and stderr streams
+      let stdout = '';
+      let stderr = '';
+      let exitCode = 0;
+
+      // Set up stream listeners
+      const stdoutPromise = new Promise<void>((resolve) => {
+        if (result.stdout) {
+          result.stdout.on('data', (data: Buffer) => {
+            stdout += data.toString();
+          });
+          result.stdout.on('end', resolve);
+        } else {
+          resolve();
+        }
+      });
+
+      const stderrPromise = new Promise<void>((resolve) => {
+        if (result.stderr) {
+          result.stderr.on('data', (data: Buffer) => {
+            stderr += data.toString();
+          });
+          result.stderr.on('end', resolve);
+        } else {
+          resolve();
+        }
+      });
+
+      // Wait for the process to complete
+      const exitPromise = new Promise<number>((resolve, reject) => {
+        result.on('exit', (code: number) => {
+          exitCode = code;
+          resolve(code);
+        });
+        result.on('error', reject);
+      });
+
+      // Wait for all streams to complete
+      await Promise.all([stdoutPromise, stderrPromise, exitPromise]);
+
       return {
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        exitCode: exitCode,
         executionTime: Date.now() - startTime,
         sandboxId: this.sandboxId,
         provider: this.provider
       };
     } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          throw new Error(
+            `Vercel execution timeout (${this.timeout}ms). Consider increasing the timeout or optimizing your code.`
+          );
+        }
+        if (error.message.includes('memory') || error.message.includes('Memory')) {
+          throw new Error(
+            `Vercel execution failed due to memory limits. Consider optimizing your code or using smaller data sets.`
+          );
+        }
+      }
       throw new Error(
         `Vercel execution failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -125,7 +207,7 @@ export class VercelProvider implements ComputeSpecification {
     }
 
     try {
-      await this.sandbox.close();
+      await this.sandbox.stop();
       this.sandbox = null;
     } catch (error) {
       throw new Error(
@@ -135,8 +217,8 @@ export class VercelProvider implements ComputeSpecification {
   }
 
   async doGetInfo(): Promise<SandboxInfo> {
-    const sandbox = await this.ensureSandbox();
-    
+    await this.ensureSandbox();
+
     return {
       id: this.sandboxId,
       provider: this.provider,
@@ -145,8 +227,11 @@ export class VercelProvider implements ComputeSpecification {
       createdAt: new Date(),
       timeout: this.timeout,
       metadata: {
-        vercelSandboxId: sandbox.id,
-        region: 'iad1' // Vercel sandboxes are currently only in iad1
+        vercelSandboxId: this.sandboxId,
+        teamId: this.teamId,
+        projectId: this.projectId,
+        vcpus: 2, // Default vCPUs
+        region: 'global' // Vercel sandboxes can run globally
       }
     };
   }
@@ -159,6 +244,6 @@ export function vercel(config?: Partial<SandboxConfig>): VercelProvider {
     timeout: 300000,
     ...config
   };
-  
+
   return new VercelProvider(fullConfig);
 }

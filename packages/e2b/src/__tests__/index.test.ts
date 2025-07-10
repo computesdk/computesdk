@@ -38,10 +38,9 @@ describe('E2BProvider', () => {
       )
     })
 
-    it('should throw error for unsupported runtime', () => {
-      expect(() => new E2BProvider({ runtime: 'node' })).toThrow(
-        'E2B provider currently only supports Python runtime'
-      )
+    it('should accept different runtimes', () => {
+      const provider = new E2BProvider({ runtime: 'node' })
+      expect(provider).toBeDefined()
     })
 
     it('should accept python runtime', () => {
@@ -76,11 +75,27 @@ describe('E2BProvider', () => {
       expect(result.executionTime).toBeGreaterThanOrEqual(0)
     })
 
-    it('should throw error for non-python runtime', async () => {
+    it('should execute code with different runtimes', async () => {
+      const mockExecution = {
+        logs: {
+          stdout: ['Hello World'],
+          stderr: []
+        },
+        error: null
+      }
+
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.create).mockResolvedValue({
+        ...mockSandbox,
+        runCode: vi.fn().mockResolvedValue(mockExecution)
+      })
+
       const provider = new E2BProvider({})
+      const result = await provider.doExecute('console.log("test")', 'node')
       
-      await expect(provider.doExecute('console.log("test")', 'node'))
-        .rejects.toThrow('E2B provider currently only supports Python runtime')
+      expect(result.stdout).toBe('Hello World')
+      expect(result.stderr).toBe('')
+      expect(result.exitCode).toBe(0)
     })
 
     it('should handle E2B execution errors', async () => {

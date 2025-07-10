@@ -1,35 +1,40 @@
 /**
  * Vercel Sandbox Provider Example
  * 
- * ⚠️  MOCK IMPLEMENTATION - This provider is not yet fully implemented.
- * This example shows the intended API for the Vercel provider.
- * Currently returns mock responses instead of executing real code.
+ * This example shows how to use the Vercel provider for Node.js and Python code execution.
  * 
- * TODO: Implement real Vercel Sandbox API integration
+ * Prerequisites:
+ * - VERCEL_TOKEN environment variable
+ * - VERCEL_TEAM_ID environment variable  
+ * - VERCEL_PROJECT_ID environment variable
  */
 
 import { vercel } from '@computesdk/vercel';
 import { executeSandbox } from 'computesdk';
 
 async function main() {
-  console.log('⚠️  Note: This is a MOCK implementation!');
-  console.log('The Vercel provider is not yet fully implemented.');
-  console.log('This example shows the intended API and returns mock responses.\n');
-  
-  // Make sure VERCEL_TOKEN is set in environment variables (for future implementation)
+  // Check required environment variables
   if (!process.env.VERCEL_TOKEN) {
-    console.log('💡 For the real implementation, you will need:');
-    console.log('export VERCEL_TOKEN=your_vercel_token_here\n');
-    
-    // Continue with mock for demonstration
-    process.env.VERCEL_TOKEN = 'mock_token_for_demo';
+    console.error('Please set VERCEL_TOKEN environment variable');
+    console.error('Get your token from https://vercel.com/account/tokens');
+    process.exit(1);
+  }
+  
+  if (!process.env.VERCEL_TEAM_ID) {
+    console.error('Please set VERCEL_TEAM_ID environment variable');
+    process.exit(1);
+  }
+  
+  if (!process.env.VERCEL_PROJECT_ID) {
+    console.error('Please set VERCEL_PROJECT_ID environment variable');
+    process.exit(1);
   }
   
   try {
     // Create Vercel sandbox (defaults to Node.js)
     const nodeSandbox = vercel();
     
-    console.log('Created Vercel sandbox (MOCK):', nodeSandbox.sandboxId);
+    console.log('Created Vercel sandbox:', nodeSandbox.sandboxId);
     
     // Execute Node.js code
     const nodeResult = await executeSandbox({
@@ -66,7 +71,7 @@ fetchData().then(result => console.log('\\n' + result));
     console.log('Node.js Output:', nodeResult.stdout);
     
     // Create Python sandbox
-    const pythonSandbox = vercel('python');
+    const pythonSandbox = vercel({ runtime: 'python' });
     
     // Execute Python code
     const pythonResult = await executeSandbox({

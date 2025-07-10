@@ -1,18 +1,17 @@
 import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
-import type { 
-  ComputeSpecification, 
-  ExecutionResult, 
-  Runtime, 
+import type {
+  ComputeSpecification,
+  ExecutionResult,
+  Runtime,
   SandboxInfo,
   SandboxConfig,
-  ComputeError
 } from 'computesdk';
 
 export class E2BProvider implements ComputeSpecification {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'e2b';
   public readonly sandboxId: string;
-  
+
   private session: E2BSandbox | null = null;
   private readonly apiKey: string;
   private readonly runtime: Runtime;
@@ -21,28 +20,23 @@ export class E2BProvider implements ComputeSpecification {
   constructor(config: SandboxConfig) {
     this.sandboxId = `e2b-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     this.timeout = config.timeout || 300000;
-    
+
     // Get API key from environment
     this.apiKey = process.env.E2B_API_KEY || '';
-    
+
     if (!this.apiKey) {
       throw new Error(
         `Missing E2B API key. Set E2B_API_KEY environment variable. Get your API key from https://e2b.dev/`
       );
     }
-    
+
     // Validate API key format
     if (!this.apiKey.startsWith('e2b_')) {
       throw new Error(
         `Invalid E2B API key format. E2B API keys should start with 'e2b_'. Check your E2B_API_KEY environment variable.`
       );
     }
-    
-    // Validate runtime - E2B primarily supports Python
-    if (config.runtime && config.runtime !== 'python') {
-      throw new Error('E2B provider currently only supports Python runtime');
-    }
-    
+
     this.runtime = config.runtime || 'python';
   }
 
@@ -52,9 +46,12 @@ export class E2BProvider implements ComputeSpecification {
     }
 
     try {
-      // Create new E2B session - new API doesn't need explicit config
-      this.session = await E2BSandbox.create();
-      
+      // Create new E2B session with configuration
+      this.session = await E2BSandbox.create({
+        apiKey: this.apiKey,
+        timeoutMs: this.timeout,
+      });
+
       return this.session;
     } catch (error) {
       if (error instanceof Error) {
@@ -76,19 +73,14 @@ export class E2BProvider implements ComputeSpecification {
   }
 
   async doExecute(code: string, runtime?: Runtime): Promise<ExecutionResult> {
-    // Validate runtime
-    if (runtime && runtime !== 'python') {
-      throw new Error('E2B provider currently only supports Python runtime');
-    }
-
     const startTime = Date.now();
-    
+
     try {
       const session = await this.ensureSession();
-      
+
       // Execute code using E2B's runCode API
       const execution = await session.runCode(code);
-      
+
       return {
         stdout: execution.logs.stdout.join('\n'),
         stderr: execution.logs.stderr.join('\n'),
@@ -132,8 +124,8 @@ export class E2BProvider implements ComputeSpecification {
   }
 
   async doGetInfo(): Promise<SandboxInfo> {
-    const session = await this.ensureSession();
-    
+    await this.ensureSession();
+
     return {
       id: this.sandboxId,
       provider: this.provider,
@@ -155,6 +147,6 @@ export function e2b(config?: Partial<SandboxConfig>): E2BProvider {
     timeout: 300000,
     ...config
   };
-  
+
   return new E2BProvider(fullConfig);
 }
