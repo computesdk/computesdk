@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/fly",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Fly.io Machines provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
@@ -24,8 +24,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },
-  "dependencies": {
-  },
+  "dependencies": {},
   "peerDependencies": {
     "computesdk": "workspace:*"
   },

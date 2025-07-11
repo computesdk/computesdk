@@ -1,6 +1,6 @@
 {
   "name": "computesdk",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "description": "Unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
   "author": "Garrison",
   "license": "MIT",
@@ -15,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",

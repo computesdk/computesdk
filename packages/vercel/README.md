@@ -27,11 +27,11 @@ import { vercel } from '@computesdk/vercel';
 const sandbox = vercel();
 
 // Execute Node.js code
-const result = await sandbox.execute('console.log("Hello from Vercel!");');
+const result = await sandbox.doExecute('console.log("Hello from Vercel!");');
 console.log(result.stdout); // "Hello from Vercel!"
 
 // Clean up
-await sandbox.kill();
+await sandbox.doKill();
 ```
 
 ### Python Runtime
@@ -43,10 +43,10 @@ import { vercel } from '@computesdk/vercel';
 const sandbox = vercel({ runtime: 'python' });
 
 // Execute Python code
-const result = await sandbox.execute('print("Hello from Python on Vercel!")');
+const result = await sandbox.doExecute('print("Hello from Python on Vercel!")');
 console.log(result.stdout); // "Hello from Python on Vercel!"
 
-await sandbox.kill();
+await sandbox.doKill();
 ```
 
 ### With ComputeSDK
@@ -128,7 +128,7 @@ Creates a new Vercel sandbox provider.
 
 **Returns:** `VercelProvider` instance
 
-### `sandbox.execute(code, runtime?)`
+### `sandbox.doExecute(code, runtime?)`
 
 Executes code in the sandbox.
 
@@ -149,7 +149,7 @@ interface ExecutionResult {
 }
 ```
 
-### `sandbox.getInfo()`
+### `sandbox.doGetInfo()`
 
 Gets information about the sandbox.
 
@@ -173,7 +173,7 @@ interface SandboxInfo {
 }
 ```
 
-### `sandbox.kill()`
+### `sandbox.doKill()`
 
 Terminates the sandbox.
 
@@ -188,7 +188,7 @@ import { vercel } from '@computesdk/vercel';
 
 const sandbox = vercel({ runtime: 'node' });
 
-const result = await sandbox.execute(`
+const result = await sandbox.doExecute(`
 const http = require('http');
 const url = require('url');
 
@@ -220,7 +220,7 @@ import { vercel } from '@computesdk/vercel';
 
 const sandbox = vercel({ runtime: 'python' });
 
-const result = await sandbox.execute(`
+const result = await sandbox.doExecute(`
 import json
 import statistics
 from collections import Counter
@@ -265,7 +265,7 @@ import { vercel } from '@computesdk/vercel';
 
 try {
   const sandbox = vercel();
-  const result = await sandbox.execute('invalid syntax here');
+  const result = await sandbox.doExecute('invalid syntax here');
 } catch (error) {
   if (error.message.includes('timeout')) {
     console.error('Execution timed out');

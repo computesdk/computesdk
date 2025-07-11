@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/vercel",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Vercel Sandbox provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
@@ -30,6 +30,24 @@
   },
   "peerDependencies": {
     "computesdk": "workspace:*"
+  },
+  "keywords": [
+    "vercel",
+    "sandbox",
+    "code-execution",
+    "nodejs",
+    "python",
+    "cloud",
+    "compute"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/vercel"
+  },
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/vercel",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

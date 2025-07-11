@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/e2b",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "E2B provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
@@ -32,6 +32,23 @@
   },
   "peerDependencies": {
     "computesdk": "workspace:*"
+  },
+  "keywords": [
+    "e2b",
+    "sandbox",
+    "code-execution",
+    "python",
+    "cloud",
+    "compute"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/e2b"
+  },
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/e2b",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
