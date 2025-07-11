@@ -9,11 +9,27 @@ vi.mock('@e2b/code-interpreter', () => ({
   }
 }))
 
-const mockSandbox = {
+// Create a more complete mock that matches the E2B Sandbox interface
+const createMockSandbox = () => ({
   id: 'e2b-session-123',
+  sandboxId: 'e2b-session-123',
   runCode: vi.fn(),
-  kill: vi.fn()
-}
+  kill: vi.fn(),
+  close: vi.fn(),
+  files: {},
+  commands: {},
+  pty: {},
+  isRunning: true,
+  template: 'base',
+  metadata: {},
+  envVars: {},
+  cwd: '/code',
+  onStdout: vi.fn(),
+  onStderr: vi.fn(),
+  onExit: vi.fn(),
+  filesystem: {},
+  process: {}
+})
 
 describe('E2BProvider', () => {
   beforeEach(() => {
@@ -59,11 +75,11 @@ describe('E2BProvider', () => {
         error: null
       }
 
+      const mockSandbox = createMockSandbox()
+      mockSandbox.runCode.mockResolvedValue(mockExecution)
+      
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue({
-        ...mockSandbox,
-        runCode: vi.fn().mockResolvedValue(mockExecution)
-      })
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
 
       const provider = new E2BProvider({})
       const result = await provider.doExecute('print("Hello World")')
@@ -84,11 +100,11 @@ describe('E2BProvider', () => {
         error: null
       }
 
+      const mockSandbox = createMockSandbox()
+      mockSandbox.runCode.mockResolvedValue(mockExecution)
+      
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue({
-        ...mockSandbox,
-        runCode: vi.fn().mockResolvedValue(mockExecution)
-      })
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
 
       const provider = new E2BProvider({})
       const result = await provider.doExecute('console.log("test")', 'node')
@@ -119,11 +135,11 @@ describe('E2BProvider', () => {
         error: null
       }
 
+      const mockSandbox = createMockSandbox()
+      mockSandbox.runCode.mockResolvedValue(mockExecution)
+      
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue({
-        ...mockSandbox,
-        runCode: vi.fn().mockResolvedValue(mockExecution)
-      })
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
 
       const provider = new E2BProvider({})
       
@@ -144,8 +160,10 @@ describe('E2BProvider', () => {
 
   describe('doGetInfo', () => {
     it('should return sandbox information', async () => {
+      const mockSandbox = createMockSandbox()
+      
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox)
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
 
       const provider = new E2BProvider({})
       const info = await provider.doGetInfo()
