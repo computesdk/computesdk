@@ -66,6 +66,9 @@ importers:
 
   packages/cloudflare:
     dependencies:
+      '@cloudflare/sandbox':
+        specifier: ^0.0.8
+        version: 0.0.8
       cloudflare:
         specifier: ^3.0.0
         version: 3.5.0
@@ -306,6 +309,12 @@ packages:
 
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
+
+  '@cloudflare/containers@0.0.19':
+    resolution: {integrity: sha512-3Atns+EiKk9xW3aHG3KdTMbkCz4vkf71314CDJpc/h6MiCIUW8Ub5tPbCcdR3NxpZe2sgD1v1zEVPQjgZ5bKXw==}
+
+  '@cloudflare/sandbox@0.0.8':
+    resolution: {integrity: sha512-8/3cv7QdwjDg7p/6LacT9AnW0wsJ5rlRnuiFQZ04YDtqTcSuJjc7P6HUxct8Kr4BsyISn/TBPkmrmrVrhTtpmg==}
 
   '@connectrpc/connect-web@2.0.0-rc.3':
     resolution: {integrity: sha512-w88P8Lsn5CCsA7MFRl2e6oLY4J/5toiNtJns/YJrlyQaWOy3RO8pDgkz+iIkG98RPMhj2thuBvsd3Cn4DKKCkw==}
@@ -2407,6 +2416,12 @@ snapshots:
       fs-extra: 7.0.1
       human-id: 4.1.1
       prettier: 2.8.8
+
+  '@cloudflare/containers@0.0.19': {}
+
+  '@cloudflare/sandbox@0.0.8':
+    dependencies:
+      '@cloudflare/containers': 0.0.19
 
   '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.6.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.6.0))':
     dependencies:

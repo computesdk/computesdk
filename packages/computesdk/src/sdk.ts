@@ -42,7 +42,15 @@ export class ComputeSDK {
       }
       
       // Create the sandbox based on provider type
-      if (providerName === 'cloudflare' || providerName === 'fly') {
+      if (providerName === 'cloudflare') {
+        // Cloudflare requires env parameter with Durable Object namespace
+        // This would need to be passed in from the Worker context
+        throw new ConfigurationError(
+          'Cloudflare provider requires env parameter with Sandbox namespace. ' +
+          'Use createSandbox({ provider: "cloudflare", env: yourEnv }) from within a Worker.',
+          'sdk'
+        );
+      } else if (providerName === 'fly') {
         if (!normalizedConfig.container) {
           throw new ConfigurationError(
             `${providerName} provider requires container configuration`,

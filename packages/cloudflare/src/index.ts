@@ -6,71 +6,76 @@ import type {
   SandboxConfig,
   ContainerConfig
 } from 'computesdk';
+import { ExecutionError, TimeoutError } from 'computesdk';
+
+// Cloudflare environment interface
+export interface CloudflareEnv {
+  Sandbox: DurableObjectNamespace;
+}
+
+// Type declarations for Cloudflare Workers
+interface DurableObjectId {}
+interface DurableObjectNamespace<T = any> {
+  get(id: DurableObjectId): DurableObjectStub<T>;
+}
+interface DurableObjectStub<T = any> {
+  fetch(request: Request): Promise<Response>;
+  [key: string]: any;
+}
+
+// Platform detection
+function isCloudflareWorker(): boolean {
+  return typeof DurableObject !== 'undefined' && 
+         typeof WebSocketPair !== 'undefined' &&
+         typeof caches !== 'undefined';
+}
 
 export class CloudflareProvider implements ComputeSpecification {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'cloudflare';
   public readonly sandboxId: string;
   
-  private container: any = null;
-  private readonly apiToken: string;
-  private readonly accountId: string;
-  private readonly containerConfig: ContainerConfig;
+  private sandbox: DurableObjectStub | null = null;
+  private readonly env: CloudflareEnv;
   private readonly timeout: number;
 
-  constructor(config: SandboxConfig) {
+  constructor(config: SandboxConfig & { env: CloudflareEnv }) {
+    // Platform check
+    if (!isCloudflareWorker()) {
+      throw new Error(
+        'Cloudflare provider can only be used within Cloudflare Workers environment. ' +
+        'Deploy your code to Cloudflare Workers or use a universal provider like E2B or Vercel.'
+      );
+    }
+    
+    if (!config.env?.Sandbox) {
+      throw new Error(
+        'Cloudflare provider requires env.Sandbox (Durable Object namespace). ' +
+        'Make sure your wrangler.toml includes the Sandbox durable object binding.'
+      );
+    }
+    
     this.sandboxId = `cloudflare-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     this.timeout = config.timeout || 300000;
-    
-    // Get credentials from environment
-    this.apiToken = process.env.CLOUDFLARE_API_TOKEN || '';
-    this.accountId = process.env.CLOUDFLARE_ACCOUNT_ID || '';
-    
-    if (!this.apiToken) {
-      throw new Error(`Missing Cloudflare API token. Set CLOUDFLARE_API_TOKEN environment variable.`);
-    }
-    
-    if (!this.accountId) {
-      throw new Error(`Missing Cloudflare account ID. Set CLOUDFLARE_ACCOUNT_ID environment variable.`);
-    }
-    
-    // Cloudflare requires container configuration
-    if (!config.container) {
-      throw new Error('Cloudflare provider requires container configuration');
-    }
-    
-    this.containerConfig = typeof config.container === 'string' 
-      ? { image: config.container }
-      : config.container;
+    this.env = config.env;
   }
 
-  private async ensureContainer(): Promise<any> {
-    if (this.container) {
-      return this.container;
+  private async ensureSandbox(): Promise<DurableObjectStub> {
+    if (this.sandbox) {
+      return this.sandbox;
     }
 
     try {
-      // TODO: Replace with actual Cloudflare Containers API
-      // For now, this is a placeholder implementation
-      this.container = {
-        id: this.sandboxId,
-        execute: async (command: string) => {
-          // Mock implementation
-          return {
-            stdout: `Executed in Cloudflare container: ${command}`,
-            stderr: '',
-            exitCode: 0
-          };
-        },
-        stop: async () => {
-          // Mock implementation
-        }
-      };
-      
-      return this.container;
+      const { getSandbox } = await import('@cloudflare/sandbox');
+      const sandbox = getSandbox(this.env.Sandbox, this.sandboxId);
+      this.sandbox = sandbox;
+      return sandbox;
     } catch (error) {
-      throw new Error(
-        `Failed to initialize Cloudflare container: ${error instanceof Error ? error.message : String(error)}`
+      throw new ExecutionError(
+        `Failed to initialize Cloudflare sandbox: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        1,
+        this.sandboxId
       );
     }
   }
@@ -79,71 +84,107 @@ export class CloudflareProvider implements ComputeSpecification {
     const startTime = Date.now();
     
     try {
-      const container = await this.ensureContainer();
+      const sandbox = await this.ensureSandbox();
       
-      // Build command based on runtime hint or container config
-      let command = code;
-      if (this.containerConfig.command) {
-        command = `${this.containerConfig.command.join(' ')} -c "${code.replace(/"/g, '\\"')}"`;
-      } else if (runtime === 'python') {
-        command = `python -c "${code.replace(/"/g, '\\"')}"`;
+      // Determine the command based on runtime
+      let command: string;
+      let args: string[];
+      
+      if (runtime === 'python' || runtime === undefined) {
+        command = 'python3';
+        args = ['-c', code];
       } else if (runtime === 'node') {
-        command = `node -e "${code.replace(/"/g, '\\"')}"`;
+        command = 'node';
+        args = ['-e', code];
+      } else {
+        throw new ExecutionError(
+          `Unsupported runtime: ${runtime}. Cloudflare sandbox supports python and node.`,
+          this.provider,
+          1,
+          this.sandboxId
+        );
       }
       
-      const result = await container.execute(command);
+      // Set up timeout
+      let timeoutReached = false;
+      const timeoutId = setTimeout(() => {
+        timeoutReached = true;
+      }, this.timeout);
       
-      return {
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-        executionTime: Date.now() - startTime,
-        sandboxId: this.sandboxId,
-        provider: this.provider
-      };
+      try {
+        // Execute without streaming to get ExecuteResponse
+        const result = await sandbox.exec(command, args);
+        clearTimeout(timeoutId);
+        
+        if (timeoutReached) {
+          throw new TimeoutError(
+            `Execution timed out after ${this.timeout}ms`,
+            this.provider,
+            this.timeout,
+            this.sandboxId
+          );
+        }
+        
+        // Type assertion since we know exec returns ExecuteResponse when not streaming
+        const execResult = result as any;
+        
+        return {
+          stdout: execResult.stdout || '',
+          stderr: execResult.stderr || '',
+          exitCode: execResult.exitCode || 0,
+          executionTime: Date.now() - startTime,
+          sandboxId: this.sandboxId,
+          provider: this.provider
+        };
+      } catch (execError) {
+        clearTimeout(timeoutId);
+        if (timeoutReached) {
+          throw new TimeoutError(
+            `Execution timed out after ${this.timeout}ms`,
+            this.provider,
+            this.timeout,
+            this.sandboxId
+          );
+        }
+        throw execError;
+      }
     } catch (error) {
-      throw new Error(
-        `Cloudflare execution failed: ${error instanceof Error ? error.message : String(error)}`
+      if (error instanceof ExecutionError || error instanceof TimeoutError) {
+        throw error;
+      }
+      throw new ExecutionError(
+        `Cloudflare execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        1,
+        this.sandboxId
       );
     }
   }
 
   async doKill(): Promise<void> {
-    if (!this.container) {
-      return;
-    }
-
-    try {
-      await this.container.stop();
-      this.container = null;
-    } catch (error) {
-      throw new Error(
-        `Failed to kill Cloudflare container: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    // Cloudflare sandboxes are ephemeral and managed by the platform
+    // They automatically clean up after the Worker request completes
+    this.sandbox = null;
   }
 
   async doGetInfo(): Promise<SandboxInfo> {
-    const container = await this.ensureContainer();
-    
     return {
       id: this.sandboxId,
       provider: this.provider,
-      runtime: 'container' as Runtime,
-      status: this.container ? 'running' : 'stopped',
+      runtime: 'python' as Runtime, // Default runtime
+      status: this.sandbox ? 'running' : 'stopped',
       createdAt: new Date(),
       timeout: this.timeout,
       metadata: {
-        cloudflareContainerId: container.id,
-        image: this.containerConfig.image,
-        accountId: this.accountId
+        platform: 'cloudflare-workers',
+        sandboxType: 'durable-object'
       }
     };
   }
 }
 
-export function cloudflare(config: Partial<SandboxConfig> & { container: string | ContainerConfig }): CloudflareProvider {
-  const fullConfig: SandboxConfig = {
+export function cloudflare(config: Partial<SandboxConfig> & { env: CloudflareEnv }): CloudflareProvider {
+  const fullConfig: SandboxConfig & { env: CloudflareEnv } = {
     provider: 'cloudflare',
     timeout: 300000,
     ...config

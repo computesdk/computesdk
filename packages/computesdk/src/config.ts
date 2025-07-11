@@ -7,6 +7,12 @@
 import { SandboxConfig, ProviderType, Runtime, ContainerConfig } from './types';
 import { ConfigurationError } from './errors';
 
+// Global type declarations for platform detection
+declare global {
+  var DurableObject: any;
+  var WebSocketPair: any;
+}
+
 // Default configuration values
 export const DEFAULT_TIMEOUT = 300000; // 5 minutes in milliseconds
 
@@ -19,6 +25,17 @@ export const ENV_KEYS = {
   CLOUDFLARE: 'CLOUDFLARE_API_TOKEN',
   FLY: 'FLY_API_TOKEN',
 };
+
+/**
+ * Detect if running in Cloudflare Workers environment
+ * 
+ * @returns True if running in Cloudflare Workers
+ */
+export function isCloudflareWorkers(): boolean {
+  return typeof DurableObject !== 'undefined' && 
+         typeof WebSocketPair !== 'undefined' &&
+         typeof caches !== 'undefined';
+}
 
 /**
  * Detect available providers based on environment variables
@@ -36,7 +53,8 @@ export function detectAvailableProviders(): ProviderType[] {
     available.push('vercel');
   }
 
-  if (process.env[ENV_KEYS.CLOUDFLARE]) {
+  // Cloudflare can be detected by environment OR API key
+  if (isCloudflareWorkers() || process.env[ENV_KEYS.CLOUDFLARE]) {
     available.push('cloudflare');
   }
 
@@ -125,6 +143,10 @@ export function validateProviderApiKey(provider: ProviderType): void {
       envKey = ENV_KEYS.VERCEL;
       break;
     case 'cloudflare':
+      // Cloudflare can work without API key if in Workers environment
+      if (isCloudflareWorkers()) {
+        return;
+      }
       envKey = ENV_KEYS.CLOUDFLARE;
       break;
     case 'fly':

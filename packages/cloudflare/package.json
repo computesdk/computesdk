@@ -25,6 +25,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@cloudflare/sandbox": "^0.0.8",
     "cloudflare": "^3.0.0"
   },
   "peerDependencies": {
