@@ -10,7 +10,7 @@
  */
 
 import { vercel } from '@computesdk/vercel';
-import { executeSandbox } from 'computesdk';
+import { executeSandbox, BaseComputeSandbox } from 'computesdk';
 
 async function main() {
   // Check required environment variables
@@ -32,9 +32,11 @@ async function main() {
   
   try {
     // Create Vercel sandbox (defaults to Node.js)
-    const nodeSandbox = vercel();
+    // Vercel returns a BaseComputeSandbox (no filesystem/terminal support yet)
+    const nodeSandbox: BaseComputeSandbox = vercel();
     
     console.log('Created Vercel sandbox:', nodeSandbox.sandboxId);
+    console.log('Provider:', nodeSandbox.provider);
     
     // Execute Node.js code
     const nodeResult = await executeSandbox({
@@ -69,9 +71,23 @@ fetchData().then(result => console.log('\\n' + result));
     });
     
     console.log('Node.js Output:', nodeResult.stdout);
+    console.log('Exit Code:', nodeResult.exitCode);
+    console.log('Execution Time:', nodeResult.executionTime, 'ms');
+    
+    // Get sandbox info
+    const nodeInfo = await nodeSandbox.getInfo();
+    console.log('\nSandbox Info:', {
+      id: nodeInfo.id,
+      runtime: nodeInfo.runtime,
+      status: nodeInfo.status,
+      timeout: nodeInfo.timeout
+    });
     
     // Create Python sandbox
-    const pythonSandbox = vercel({ runtime: 'python' });
+    const pythonSandbox: BaseComputeSandbox = vercel({ runtime: 'python' });
+    
+    console.log('\n--- Python Execution ---');
+    console.log('Created Python sandbox:', pythonSandbox.sandboxId);
     
     // Execute Python code
     const pythonResult = await executeSandbox({
@@ -98,10 +114,18 @@ print(json.dumps(data, indent=2))
 ages = [user["age"] for user in data["users"]]
 avg_age = sum(ages) / len(ages)
 print(f"\\nAverage age: {avg_age:.1f}")
-      `.trim()
+      `.trim(),
+      runtime: 'python'
     });
     
-    console.log('\nPython Output:', pythonResult.stdout);
+    console.log('Python Output:', pythonResult.stdout);
+    console.log('Provider:', pythonResult.provider);
+    
+    // Note: Vercel sandboxes don't currently support filesystem/terminal operations
+    console.log('\n--- Note on Advanced Features ---');
+    console.log('Vercel sandboxes currently provide BaseComputeSandbox functionality.');
+    console.log('Filesystem and terminal operations are not yet available.');
+    console.log('Use E2B provider for full filesystem/terminal support.');
     
     // Clean up
     await nodeSandbox.kill();
@@ -110,6 +134,9 @@ print(f"\\nAverage age: {avg_age:.1f}")
     
   } catch (error) {
     console.error('Error:', error.message);
+    if (error.name === 'AuthenticationError') {
+      console.error('Please check your Vercel credentials');
+    }
   }
 }
 

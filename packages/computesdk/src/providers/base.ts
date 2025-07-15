@@ -7,11 +7,13 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import {
-  ComputeSpecification,
-  ComputeSandbox,
+  BaseComputeSpecification,
+  BaseComputeSandbox,
   Runtime,
   ExecutionResult,
-  SandboxInfo
+  SandboxInfo,
+  SandboxFileSystem,
+  SandboxTerminal
 } from '../types';
 import { ProviderError, TimeoutError } from '../errors';
 
@@ -20,7 +22,7 @@ import { ProviderError, TimeoutError } from '../errors';
  * 
  * Provides common functionality and wraps provider-specific implementations.
  */
-export abstract class BaseProvider implements ComputeSandbox, ComputeSpecification {
+export abstract class BaseProvider implements BaseComputeSandbox, BaseComputeSpecification {
   /** Specification version */
   public readonly specificationVersion = 'v1';
 
@@ -157,4 +159,133 @@ export abstract class BaseProvider implements ComputeSandbox, ComputeSpecificati
    * @returns Sandbox information
    */
   public abstract doGetInfo(): Promise<SandboxInfo>;
+}
+
+/**
+ * Helper class for implementing FileSystem with error handling
+ */
+export abstract class BaseFileSystem implements SandboxFileSystem {
+  constructor(
+    protected provider: string,
+    protected sandboxId: string
+  ) {}
+
+  async readFile(path: string): Promise<string> {
+    try {
+      return await this.doReadFile(path);
+    } catch (error) {
+      throw new ProviderError(
+        `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  async writeFile(path: string, content: string): Promise<void> {
+    try {
+      await this.doWriteFile(path, content);
+    } catch (error) {
+      throw new ProviderError(
+        `Failed to write file: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  async mkdir(path: string): Promise<void> {
+    try {
+      await this.doMkdir(path);
+    } catch (error) {
+      throw new ProviderError(
+        `Failed to create directory: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  async readdir(path: string): Promise<import('../types').FileEntry[]> {
+    try {
+      return await this.doReaddir(path);
+    } catch (error) {
+      throw new ProviderError(
+        `Failed to read directory: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  async exists(path: string): Promise<boolean> {
+    try {
+      return await this.doExists(path);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async remove(path: string): Promise<void> {
+    try {
+      await this.doRemove(path);
+    } catch (error) {
+      throw new ProviderError(
+        `Failed to remove: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  protected abstract doReadFile(path: string): Promise<string>;
+  protected abstract doWriteFile(path: string, content: string): Promise<void>;
+  protected abstract doMkdir(path: string): Promise<void>;
+  protected abstract doReaddir(path: string): Promise<import('../types').FileEntry[]>;
+  protected abstract doExists(path: string): Promise<boolean>;
+  protected abstract doRemove(path: string): Promise<void>;
+}
+
+/**
+ * Helper class for implementing Terminal with error handling
+ */
+export abstract class BaseTerminal implements SandboxTerminal {
+  constructor(
+    protected provider: string,
+    protected sandboxId: string
+  ) {}
+
+  async create(options?: import('../types').TerminalCreateOptions): Promise<import('../types').InteractiveTerminalSession> {
+    try {
+      return await this.doCreate(options);
+    } catch (error) {
+      throw new ProviderError(
+        `Failed to create terminal: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  async list(): Promise<import('../types').InteractiveTerminalSession[]> {
+    try {
+      return await this.doList();
+    } catch (error) {
+      throw new ProviderError(
+        `Failed to list terminals: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  protected abstract doCreate(options?: import('../types').TerminalCreateOptions): Promise<import('../types').InteractiveTerminalSession>;
+  protected abstract doList(): Promise<import('../types').InteractiveTerminalSession[]>;
 }

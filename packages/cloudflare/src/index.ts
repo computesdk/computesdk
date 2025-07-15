@@ -1,5 +1,6 @@
 import type { 
-  ComputeSpecification, 
+  BaseComputeSpecification,
+  BaseComputeSandbox,
   ExecutionResult, 
   Runtime, 
   SandboxInfo,
@@ -30,7 +31,7 @@ function isCloudflareWorker(): boolean {
          typeof caches !== 'undefined';
 }
 
-export class CloudflareProvider implements ComputeSpecification {
+export class CloudflareProvider implements BaseComputeSpecification, BaseComputeSandbox {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'cloudflare';
   public readonly sandboxId: string;
@@ -180,6 +181,19 @@ export class CloudflareProvider implements ComputeSpecification {
         sandboxType: 'durable-object'
       }
     };
+  }
+
+  // Public methods for BaseComputeSandbox interface
+  async execute(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    return this.doExecute(code, runtime);
+  }
+
+  async kill(): Promise<void> {
+    return this.doKill();
+  }
+
+  async getInfo(): Promise<SandboxInfo> {
+    return this.doGetInfo();
   }
 }
 

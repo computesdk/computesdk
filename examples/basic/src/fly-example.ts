@@ -9,7 +9,7 @@
  */
 
 import { fly } from '@computesdk/fly';
-import { executeSandbox, createComputeRegistry } from 'computesdk';
+import { executeSandbox, createComputeRegistry, BaseComputeSandbox, ContainerConfig } from 'computesdk';
 
 async function main() {
   console.log('⚠️  Note: This is a MOCK implementation!');
@@ -27,11 +27,12 @@ async function main() {
   
   try {
     // Example 1: Basic Python container
-    const pythonSandbox = fly({
+    const pythonSandbox: BaseComputeSandbox = fly({
       container: 'python:3.11-slim'
     });
     
     console.log('Created Fly.io Python machine:', pythonSandbox.sandboxId);
+    console.log('Provider:', pythonSandbox.provider);
     
     const pythonResult = await executeSandbox({
       sandbox: pythonSandbox,
@@ -47,17 +48,32 @@ print(f"Running Python {__import__('sys').version.split()[0]}")
     
     console.log('Python Output:', pythonResult.stdout);
     console.log('Total execution time:', pythonResult.executionTime, 'ms');
+    console.log('Exit code:', pythonResult.exitCode);
+    
+    // Get sandbox info
+    const pythonInfo = await pythonSandbox.getInfo();
+    console.log('\nSandbox Info:', {
+      id: pythonInfo.id,
+      runtime: pythonInfo.runtime,
+      status: pythonInfo.status,
+      provider: pythonInfo.provider
+    });
     
     // Example 2: High-performance Node.js container
-    const nodeSandbox = fly({
-      container: {
-        image: 'node:20-alpine',
-        env: {
-          NODE_ENV: 'production',
-          FLY_REGION: process.env.FLY_REGION || 'iad'
-        }
+    const containerConfig: ContainerConfig = {
+      image: 'node:20-alpine',
+      env: {
+        NODE_ENV: 'production',
+        FLY_REGION: process.env.FLY_REGION || 'iad'
       }
+    };
+    
+    const nodeSandbox: BaseComputeSandbox = fly({
+      container: containerConfig
     });
+    
+    console.log('\n--- Node.js Execution ---');
+    console.log('Created Node.js machine:', nodeSandbox.sandboxId);
     
     const nodeResult = await executeSandbox({
       sandbox: nodeSandbox,
@@ -81,7 +97,9 @@ console.log('Result:', result);
       runtime: 'node'
     });
     
-    console.log('\nNode.js Output:', nodeResult.stdout);
+    console.log('Node.js Output:', nodeResult.stdout);
+    console.log('Provider:', nodeResult.provider);
+    console.log('Sandbox ID:', nodeResult.sandboxId);
     
     // Example 3: Using registry for multiple providers
     const registry = createComputeRegistry({
@@ -98,6 +116,29 @@ console.log('Result:', result);
     });
     
     console.log('\nRegistry Output:', registryResult.stdout);
+    
+    // Note about Fly.io capabilities (when implemented)
+    console.log('\n--- Fly.io Machines Features (Future) ---');
+    console.log('When fully implemented, Fly.io will provide:');
+    console.log('- Fast container boot times (< 1s)');
+    console.log('- Global deployment across regions');
+    console.log('- Custom Docker images support');
+    console.log('- Persistent volumes (optional)');
+    console.log('- Currently provides BaseComputeSandbox functionality');
+    
+    // Example of advanced container config
+    console.log('\n--- Advanced Container Configuration ---');
+    const advancedConfig: ContainerConfig = {
+      image: 'custom-app:latest',
+      command: ['python', 'app.py'],
+      env: {
+        DATABASE_URL: 'postgresql://...',
+        REDIS_URL: 'redis://...'
+      },
+      ports: [8080, 9090],
+      workdir: '/app'
+    };
+    console.log('Advanced config example:', advancedConfig);
     
     // Clean up all sandboxes
     await pythonSandbox.kill();

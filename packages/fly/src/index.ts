@@ -1,5 +1,6 @@
 import type { 
-  ComputeSpecification, 
+  BaseComputeSpecification,
+  BaseComputeSandbox, 
   ExecutionResult, 
   Runtime, 
   SandboxInfo,
@@ -7,7 +8,7 @@ import type {
   ContainerConfig
 } from 'computesdk';
 
-export class FlyProvider implements ComputeSpecification {
+export class FlyProvider implements BaseComputeSpecification, BaseComputeSandbox {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'fly';
   public readonly sandboxId: string;
@@ -140,6 +141,19 @@ export class FlyProvider implements ComputeSpecification {
         region: this.containerConfig.env?.FLY_REGION || 'auto'
       }
     };
+  }
+
+  // Public methods for BaseComputeSandbox interface
+  async execute(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    return this.doExecute(code, runtime);
+  }
+
+  async kill(): Promise<void> {
+    return this.doKill();
+  }
+
+  async getInfo(): Promise<SandboxInfo> {
+    return this.doGetInfo();
   }
 }
 

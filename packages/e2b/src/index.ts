@@ -1,25 +1,192 @@
 import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
 import type {
-  ComputeSpecification,
   ExecutionResult,
   Runtime,
   SandboxInfo,
   SandboxConfig,
+  FileEntry,
+  TerminalSession,
+  InteractiveTerminalSession,
+  TerminalCreateOptions,
+  SandboxFileSystem,
+  SandboxTerminal,
+  FullComputeSpecification,
+  FullComputeSandbox,
 } from 'computesdk';
+import { BaseProvider, BaseFileSystem, BaseTerminal } from 'computesdk';
 
-export class E2BProvider implements ComputeSpecification {
-  public readonly specificationVersion = 'v1' as const;
-  public readonly provider = 'e2b';
-  public readonly sandboxId: string;
+/**
+ * E2B FileSystem implementation
+ */
+class E2BFileSystem extends BaseFileSystem {
+  constructor(
+    provider: string,
+    sandboxId: string,
+    private getSession: () => Promise<E2BSandbox>
+  ) {
+    super(provider, sandboxId);
+  }
 
+  protected async doReadFile(path: string): Promise<string> {
+    const session = await this.getSession();
+    return await session.files.read(path, { format: 'text' });
+  }
+
+  protected async doWriteFile(path: string, content: string): Promise<void> {
+    const session = await this.getSession();
+    await session.files.write(path, content);
+  }
+
+  protected async doMkdir(path: string): Promise<void> {
+    const session = await this.getSession();
+    await session.files.makeDir(path);
+  }
+
+  protected async doReaddir(path: string): Promise<FileEntry[]> {
+    const session = await this.getSession();
+    const entries = await session.files.list(path);
+
+    return entries.map((entry: any) => ({
+      name: entry.name,
+      path: entry.path,
+      isDirectory: Boolean(entry.isDir || entry.isDirectory),
+      size: entry.size || 0,
+      lastModified: new Date(entry.lastModified || Date.now())
+    }));
+  }
+
+  protected async doExists(path: string): Promise<boolean> {
+    const session = await this.getSession();
+    return await session.files.exists(path);
+  }
+
+  protected async doRemove(path: string): Promise<void> {
+    const session = await this.getSession();
+    await session.files.remove(path);
+  }
+}
+
+/**
+ * E2B Terminal implementation with PTY support
+ */
+class E2BTerminal extends BaseTerminal {
+  private activePtys: Map<number, { command: string; cols: number; rows: number }> = new Map();
+
+  constructor(
+    provider: string,
+    sandboxId: string,
+    private getSession: () => Promise<E2BSandbox>
+  ) {
+    super(provider, sandboxId);
+  }
+
+  async create(options: TerminalCreateOptions = {}): Promise<InteractiveTerminalSession> {
+    const session = await this.getSession();
+    const command = options.command || 'bash';
+    const cols = options.cols || 80;
+    const rows = options.rows || 24;
+
+    // Create PTY session using E2B's pty.create
+    const ptyHandle = await session.pty.create({ 
+      cols: cols, 
+      rows: rows,
+      onData: (data: Uint8Array) => {
+        // PTY output handler - applications can subscribe to this
+        if (terminalSession.onData) {
+          terminalSession.onData(data);
+        }
+      }
+    });
+
+    // Store PTY info for management
+    this.activePtys.set(ptyHandle.pid, { command, cols, rows });
+
+    // Create terminal session with methods
+    const terminalSession: InteractiveTerminalSession = {
+      pid: ptyHandle.pid,
+      command,
+      status: 'running',
+      cols,
+      rows,
+      write: async (data: Uint8Array | string) => {
+        const inputData = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+        await session.pty.sendInput(ptyHandle.pid, inputData);
+      },
+      resize: async (newCols: number, newRows: number) => {
+        await session.pty.resize(ptyHandle.pid, { cols: newCols, rows: newRows });
+        terminalSession.cols = newCols;
+        terminalSession.rows = newRows;
+        // Update stored dimensions
+        const ptyInfo = this.activePtys.get(ptyHandle.pid);
+        if (ptyInfo) {
+          ptyInfo.cols = newCols;
+          ptyInfo.rows = newRows;
+        }
+      },
+      kill: async () => {
+        await session.pty.kill(ptyHandle.pid);
+        this.activePtys.delete(ptyHandle.pid);
+        terminalSession.status = 'exited';
+      }
+    };
+
+    return terminalSession;
+  }
+
+
+  async list(): Promise<InteractiveTerminalSession[]> {
+    const session = await this.getSession();
+    const terminals: InteractiveTerminalSession[] = [];
+
+    for (const [pid, info] of this.activePtys) {
+      terminals.push({
+        pid,
+        command: info.command,
+        status: 'running',
+        cols: info.cols,
+        rows: info.rows,
+        write: async (data: Uint8Array | string) => {
+          const inputData = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+          await session.pty.sendInput(pid, inputData);
+        },
+        resize: async (newCols: number, newRows: number) => {
+          await session.pty.resize(pid, { cols: newCols, rows: newRows });
+          // Update stored dimensions
+          const ptyInfo = this.activePtys.get(pid);
+          if (ptyInfo) {
+            ptyInfo.cols = newCols;
+            ptyInfo.rows = newRows;
+          }
+        },
+        kill: async () => {
+          await session.pty.kill(pid);
+          this.activePtys.delete(pid);
+        }
+      });
+    }
+
+    return terminals;
+  }
+
+  // Protected methods for BaseTerminal compatibility
+  protected async doCreate(options?: TerminalCreateOptions): Promise<InteractiveTerminalSession> {
+    return await this.create(options);
+  }
+
+  protected async doList(): Promise<InteractiveTerminalSession[]> {
+    return await this.list();
+  }
+}
+
+export class E2BProvider extends BaseProvider implements FullComputeSandbox, FullComputeSpecification {
   private session: E2BSandbox | null = null;
   private readonly apiKey: string;
   private readonly runtime: Runtime;
-  private readonly timeout: number;
+  public readonly filesystem: SandboxFileSystem;
+  public readonly terminal: SandboxTerminal;
 
   constructor(config: SandboxConfig) {
-    this.sandboxId = `e2b-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    this.timeout = config.timeout || 300000;
+    super('e2b', config.timeout || 300000);
 
     // Get API key from environment
     this.apiKey = process.env.E2B_API_KEY || '';
@@ -38,6 +205,10 @@ export class E2BProvider implements ComputeSpecification {
     }
 
     this.runtime = config.runtime || 'python';
+
+    // Initialize filesystem and terminal
+    this.filesystem = new E2BFileSystem(this.provider, this.sandboxId, () => this.ensureSession());
+    this.terminal = new E2BTerminal(this.provider, this.sandboxId, () => this.ensureSession());
   }
 
   private async ensureSession(): Promise<E2BSandbox> {
@@ -138,6 +309,7 @@ export class E2BProvider implements ComputeSpecification {
       }
     };
   }
+
 }
 
 export function e2b(config?: Partial<SandboxConfig>): E2BProvider {

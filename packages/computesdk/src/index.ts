@@ -21,7 +21,7 @@ export { executeSandbox, retry } from './utils';
 export { createComputeRegistry } from './registry';
 
 // Export base provider for extension
-export { BaseProvider } from './providers/base';
+export { BaseProvider, BaseFileSystem, BaseTerminal } from './providers/base';
 
 // Export main SDK class
 export { ComputeSDK } from './sdk';

@@ -1,14 +1,15 @@
 import { Sandbox } from '@vercel/sandbox';
 import ms from 'ms';
 import type {
-  ComputeSpecification,
+  BaseComputeSpecification,
+  BaseComputeSandbox,
   ExecutionResult,
   Runtime,
   SandboxInfo,
   SandboxConfig
 } from 'computesdk';
 
-export class VercelProvider implements ComputeSpecification {
+export class VercelProvider implements BaseComputeSpecification, BaseComputeSandbox {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'vercel';
   public readonly sandboxId: string;
@@ -234,6 +235,19 @@ export class VercelProvider implements ComputeSpecification {
         region: 'global' // Vercel sandboxes can run globally
       }
     };
+  }
+
+  // Public methods for BaseComputeSandbox interface
+  async execute(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    return this.doExecute(code, runtime);
+  }
+
+  async kill(): Promise<void> {
+    return this.doKill();
+  }
+
+  async getInfo(): Promise<SandboxInfo> {
+    return this.doGetInfo();
   }
 }
 
