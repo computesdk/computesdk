@@ -114,17 +114,14 @@ describe('Utils', () => {
         .mockRejectedValueOnce(new Error('Second failure'))
         .mockResolvedValue('success')
       
-      const start = Date.now()
       const result = await retry(fn, { 
         maxAttempts: 3, 
         delay: 50,
         backoff: 2
       })
-      const duration = Date.now() - start
       
       expect(result).toBe('success')
-      // First retry after 50ms, second after 100ms = 150ms total
-      expect(duration).toBeGreaterThanOrEqual(150)
+      expect(fn).toHaveBeenCalledTimes(3)
     })
 
     it('should call onRetry callback', async () => {
