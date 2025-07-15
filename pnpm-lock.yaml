@@ -76,6 +76,9 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
     devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20250715.0
+        version: 4.20250715.0
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
@@ -355,6 +358,9 @@ packages:
 
   '@cloudflare/sandbox@0.0.8':
     resolution: {integrity: sha512-8/3cv7QdwjDg7p/6LacT9AnW0wsJ5rlRnuiFQZ04YDtqTcSuJjc7P6HUxct8Kr4BsyISn/TBPkmrmrVrhTtpmg==}
+
+  '@cloudflare/workers-types@4.20250715.0':
+    resolution: {integrity: sha512-uMp+ClvvhNlk3ojIgWuIB5Zteq4YVmZcyX16hpJ8eCeCX3izagfEZwXe/vETlv4cc5vtM3xAOMdV//0BD0E98g==}
 
   '@connectrpc/connect-web@2.0.0-rc.3':
     resolution: {integrity: sha512-w88P8Lsn5CCsA7MFRl2e6oLY4J/5toiNtJns/YJrlyQaWOy3RO8pDgkz+iIkG98RPMhj2thuBvsd3Cn4DKKCkw==}
@@ -2632,6 +2638,8 @@ snapshots:
   '@cloudflare/sandbox@0.0.8':
     dependencies:
       '@cloudflare/containers': 0.0.19
+
+  '@cloudflare/workers-types@4.20250715.0': {}
 
   '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.6.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.6.0))':
     dependencies:

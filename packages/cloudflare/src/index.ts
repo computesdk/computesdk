@@ -18,6 +18,10 @@ export interface CloudflareEnv {
 interface DurableObjectId {}
 interface DurableObjectNamespace<T = any> {
   get(id: DurableObjectId): DurableObjectStub<T>;
+  newUniqueId(): DurableObjectId;
+  idFromName(name: string): DurableObjectId;
+  idFromString(id: string): DurableObjectId;
+  jurisdiction?: string;
 }
 interface DurableObjectStub<T = any> {
   fetch(request: Request): Promise<Response>;
@@ -26,9 +30,9 @@ interface DurableObjectStub<T = any> {
 
 // Platform detection
 function isCloudflareWorker(): boolean {
-  return typeof DurableObject !== 'undefined' && 
-         typeof WebSocketPair !== 'undefined' &&
-         typeof caches !== 'undefined';
+  return typeof globalThis !== 'undefined' && 
+         'WebSocketPair' in globalThis &&
+         'caches' in globalThis;
 }
 
 export class CloudflareProvider implements BaseComputeSpecification, BaseComputeSandbox {
@@ -68,7 +72,7 @@ export class CloudflareProvider implements BaseComputeSpecification, BaseCompute
 
     try {
       const { getSandbox } = await import('@cloudflare/sandbox');
-      const sandbox = getSandbox(this.env.Sandbox, this.sandboxId);
+      const sandbox = getSandbox(this.env.Sandbox as any, this.sandboxId);
       this.sandbox = sandbox;
       return sandbox;
     } catch (error) {

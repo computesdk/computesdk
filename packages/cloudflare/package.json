@@ -53,6 +53,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250715.0",
     "@types/node": "^20.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
