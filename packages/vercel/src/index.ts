@@ -237,6 +237,89 @@ export class VercelProvider implements BaseComputeSpecification, BaseComputeSand
     };
   }
 
+  async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    return this.doExecute(code, runtime);
+  }
+
+  async runCommand(command: string, args: string[] = []): Promise<ExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      const sandbox = await this.ensureSandbox();
+
+      // Execute command directly using Vercel's runCommand
+      const result = await sandbox.runCommand({
+        cmd: command,
+        args: args,
+      });
+
+      // Collect stdout and stderr streams
+      let stdout = '';
+      let stderr = '';
+      let exitCode = 0;
+
+      // Set up stream listeners
+      const stdoutPromise = new Promise<void>((resolve) => {
+        if (result.stdout) {
+          result.stdout.on('data', (data: Buffer) => {
+            stdout += data.toString();
+          });
+          result.stdout.on('end', resolve);
+        } else {
+          resolve();
+        }
+      });
+
+      const stderrPromise = new Promise<void>((resolve) => {
+        if (result.stderr) {
+          result.stderr.on('data', (data: Buffer) => {
+            stderr += data.toString();
+          });
+          result.stderr.on('end', resolve);
+        } else {
+          resolve();
+        }
+      });
+
+      // Wait for the process to complete
+      const exitPromise = new Promise<number>((resolve, reject) => {
+        result.on('exit', (code: number) => {
+          exitCode = code;
+          resolve(code);
+        });
+        result.on('error', reject);
+      });
+
+      // Wait for all streams to complete
+      await Promise.all([stdoutPromise, stderrPromise, exitPromise]);
+
+      return {
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        exitCode: exitCode,
+        executionTime: Date.now() - startTime,
+        sandboxId: this.sandboxId,
+        provider: this.provider
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          throw new Error(
+            `Vercel command timeout (${this.timeout}ms). Consider increasing the timeout or optimizing your command.`
+          );
+        }
+        if (error.message.includes('memory') || error.message.includes('Memory')) {
+          throw new Error(
+            `Vercel command failed due to memory limits. Consider optimizing your command.`
+          );
+        }
+      }
+      throw new Error(
+        `Vercel command execution failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
   // Public methods for BaseComputeSandbox interface
   async execute(code: string, runtime?: Runtime): Promise<ExecutionResult> {
     return this.doExecute(code, runtime);

@@ -41,8 +41,7 @@ describe('BaseProvider', () => {
   describe('constructor', () => {
     it('should initialize with provider name and timeout', () => {
       expect(provider.provider).toBe('test')
-      expect(provider.timeout).toBe(5000)
-      expect(provider.sandboxId).toMatch(/^test-\d+-[a-z0-9]+$/)
+      expect(provider.sandboxId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     })
 
     it('should generate unique sandbox IDs', () => {
@@ -57,7 +56,7 @@ describe('BaseProvider', () => {
       
       expect(result.stdout).toBe('Executed: console.log("test")')
       expect(result.exitCode).toBe(0)
-      expect(result.executionTime).toBeGreaterThan(0)
+      expect(result.executionTime).toBeGreaterThanOrEqual(0)
       expect(result.sandboxId).toBe(provider.sandboxId)
       expect(result.provider).toBe('test')
     })

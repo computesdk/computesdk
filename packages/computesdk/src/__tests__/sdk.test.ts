@@ -31,7 +31,7 @@ describe('ComputeSDK', () => {
 
   describe('createSandbox', () => {
     it('should create sandbox with auto-detection', () => {
-      vi.stubEnv('E2B_API_KEY', 'test-key')
+      vi.stubEnv('E2B_API_KEY', 'e2b_test-key')
       
       const sandbox = ComputeSDK.createSandbox()
       
@@ -39,6 +39,10 @@ describe('ComputeSDK', () => {
     })
 
     it('should create sandbox with explicit provider', () => {
+      vi.stubEnv('VERCEL_TOKEN', 'test-token')
+      vi.stubEnv('VERCEL_TEAM_ID', 'test-team')
+      vi.stubEnv('VERCEL_PROJECT_ID', 'test-project')
+      
       const sandbox = ComputeSDK.createSandbox({ provider: 'vercel' })
       
       expect(sandbox.provider).toBe('vercel')
@@ -46,16 +50,18 @@ describe('ComputeSDK', () => {
 
     it('should throw error when no provider available for auto', () => {
       expect(() => ComputeSDK.createSandbox()).toThrow(
-        'No providers available. Please set one of the following environment variables'
+        'No provider API keys found. Set one of the following environment variables'
       )
     })
 
     it('should throw error for unknown provider', () => {
       expect(() => ComputeSDK.createSandbox({ provider: 'unknown' as any }))
-        .toThrow("Provider 'unknown' not installed")
+        .toThrow("Unknown provider: unknown")
     })
 
     it('should pass configuration to provider', () => {
+      vi.stubEnv('E2B_API_KEY', 'e2b_test-key')
+      
       const sandbox = ComputeSDK.createSandbox({ 
         provider: 'e2b',
         runtime: 'python',

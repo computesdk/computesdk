@@ -158,6 +158,10 @@ export interface BaseComputeSpecification {
 
   /** Execute code in the sandbox */
   doExecute(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+  /** Execute code in a runtime environment */
+  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+  /** Execute shell commands */
+  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
   /** Kill the sandbox */
   doKill(): Promise<void>;
   /** Get information about the sandbox */
@@ -201,6 +205,10 @@ export interface BaseComputeSandbox {
 
   /** Execute code in the sandbox */
   execute(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+  /** Execute code in a runtime environment */
+  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+  /** Execute shell commands */
+  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
   /** Kill the sandbox */
   kill(): Promise<void>;
   /** Get information about the sandbox */

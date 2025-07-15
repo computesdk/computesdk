@@ -18,6 +18,8 @@ describe('Utils', () => {
         provider: 'mock',
         sandboxId: 'test-sandbox',
         execute: vi.fn().mockResolvedValue(mockResult),
+        runCode: vi.fn(),
+        runCommand: vi.fn(),
         kill: vi.fn(),
         getInfo: vi.fn()
       }
@@ -43,6 +45,8 @@ describe('Utils', () => {
           sandboxId: 'test-sandbox',
           provider: 'mock'
         }),
+        runCode: vi.fn(),
+        runCommand: vi.fn(),
         kill: vi.fn(),
         getInfo: vi.fn()
       }

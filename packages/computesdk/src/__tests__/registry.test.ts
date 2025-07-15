@@ -7,6 +7,8 @@ describe('Registry', () => {
     provider,
     sandboxId: `${provider}-123`,
     execute: vi.fn(),
+    runCode: vi.fn(),
+    runCommand: vi.fn(),
     kill: vi.fn(),
     getInfo: vi.fn()
   })
@@ -27,7 +29,7 @@ describe('Registry', () => {
     })
 
     it('should throw error for empty providers', () => {
-      expect(() => createComputeRegistry({})).toThrow('No providers registered')
+      expect(() => createComputeRegistry({})).toThrow('Provider registry requires at least one provider')
     })
   })
 
@@ -38,7 +40,7 @@ describe('Registry', () => {
       const sandbox = registry.sandbox('e2b')
       
       expect(sandbox.provider).toBe('e2b')
-      expect(mockProviders.e2b).toHaveBeenCalledWith(undefined)
+      expect(mockProviders.e2b).toHaveBeenCalledWith()
     })
 
     it('should create sandbox with provider and runtime', () => {
@@ -64,13 +66,13 @@ describe('Registry', () => {
     it('should throw error for unknown provider', () => {
       const registry = createComputeRegistry(mockProviders)
       
-      expect(() => registry.sandbox('unknown')).toThrow('Unknown provider: unknown')
+      expect(() => registry.sandbox('unknown')).toThrow('Provider \'unknown\' not found in registry')
     })
 
     it('should throw error for invalid sandbox ID format', () => {
       const registry = createComputeRegistry(mockProviders)
       
-      expect(() => registry.sandbox('')).toThrow('Invalid sandbox ID format')
+      expect(() => registry.sandbox('')).toThrow('Provider \'\' not found in registry')
     })
 
     it('should handle provider with multiple colons', () => {

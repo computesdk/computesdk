@@ -12,25 +12,28 @@ import {
 describe('Error Classes', () => {
   describe('ExecutionError', () => {
     it('should create execution error with correct properties', () => {
-      const error = new ExecutionError('Code execution failed', 'e2b', 'sandbox-123')
+      const error = new ExecutionError('Code execution failed', 'e2b', 1, 'sandbox-123')
       
       expect(error).toBeInstanceOf(ComputeError)
       expect(error.message).toBe('Code execution failed')
       expect(error.code).toBe('EXECUTION_ERROR')
       expect(error.provider).toBe('e2b')
       expect(error.sandboxId).toBe('sandbox-123')
+      expect(error.exitCode).toBe(1)
       expect(error.isRetryable).toBe(false)
     })
   })
 
   describe('TimeoutError', () => {
     it('should create timeout error with correct properties', () => {
-      const error = new TimeoutError('Execution timed out', 'vercel', 'sandbox-456')
+      const error = new TimeoutError('Execution timed out', 'vercel', 5000, 'sandbox-456')
       
       expect(error).toBeInstanceOf(ComputeError)
       expect(error.code).toBe('TIMEOUT_ERROR')
       expect(error.isRetryable).toBe(true)
       expect(error.provider).toBe('vercel')
+      expect(error.sandboxId).toBe('sandbox-456')
+      expect(error.timeoutMs).toBe(5000)
     })
   })
 
@@ -42,7 +45,8 @@ describe('Error Classes', () => {
       expect(error).toBeInstanceOf(ComputeError)
       expect(error.code).toBe('PROVIDER_ERROR')
       expect(error.isRetryable).toBe(true)
-      expect(error.cause).toBe(cause)
+      expect(error.sandboxId).toBe('sandbox-789')
+      expect(error.originalError).toBe(cause)
     })
   })
 
@@ -72,7 +76,7 @@ describe('Error Classes', () => {
       
       expect(error).toBeInstanceOf(ComputeError)
       expect(error.code).toBe('PROVIDER_UNAVAILABLE')
-      expect(error.isRetryable).toBe(false)
+      expect(error.isRetryable).toBe(true)
     })
   })
 })

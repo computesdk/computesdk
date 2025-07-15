@@ -183,6 +183,72 @@ export class CloudflareProvider implements BaseComputeSpecification, BaseCompute
     };
   }
 
+  async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    return this.doExecute(code, runtime);
+  }
+
+  async runCommand(command: string, args: string[] = []): Promise<ExecutionResult> {
+    const startTime = Date.now();
+    
+    try {
+      const sandbox = await this.ensureSandbox();
+      
+      // Set up timeout
+      let timeoutReached = false;
+      const timeoutId = setTimeout(() => {
+        timeoutReached = true;
+      }, this.timeout);
+      
+      try {
+        // Execute command directly using Cloudflare's exec
+        const result = await sandbox.exec(command, args);
+        clearTimeout(timeoutId);
+        
+        if (timeoutReached) {
+          throw new TimeoutError(
+            `Command execution timed out after ${this.timeout}ms`,
+            this.provider,
+            this.timeout,
+            this.sandboxId
+          );
+        }
+        
+        // Type assertion since we know exec returns ExecuteResponse when not streaming
+        const execResult = result as any;
+        
+        return {
+          stdout: execResult.stdout || '',
+          stderr: execResult.stderr || '',
+          exitCode: execResult.exitCode || 0,
+          executionTime: Date.now() - startTime,
+          sandboxId: this.sandboxId,
+          provider: this.provider
+        };
+      } catch (execError) {
+        clearTimeout(timeoutId);
+        if (timeoutReached) {
+          throw new TimeoutError(
+            `Command execution timed out after ${this.timeout}ms`,
+            this.provider,
+            this.timeout,
+            this.sandboxId
+          );
+        }
+        throw execError;
+      }
+    } catch (error) {
+      if (error instanceof ExecutionError || error instanceof TimeoutError) {
+        throw error;
+      }
+      throw new ExecutionError(
+        `Cloudflare command execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        1,
+        this.sandboxId
+      );
+    }
+  }
+
   // Public methods for BaseComputeSandbox interface
   async execute(code: string, runtime?: Runtime): Promise<ExecutionResult> {
     return this.doExecute(code, runtime);

@@ -155,6 +155,15 @@ export class FlyProvider implements BaseComputeSpecification, BaseComputeSandbox
   async getInfo(): Promise<SandboxInfo> {
     return this.doGetInfo();
   }
+
+  async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    return this.doExecute(code, runtime);
+  }
+
+  async runCommand(command: string, args: string[] = []): Promise<ExecutionResult> {
+    const fullCommand = `${command} ${args.join(' ')}`;
+    return this.doExecute(fullCommand, 'node');
+  }
 }
 
 export function fly(config: Partial<SandboxConfig> & { container: string | ContainerConfig }): FlyProvider {

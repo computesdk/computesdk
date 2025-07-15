@@ -15,7 +15,7 @@ export * from './errors';
 export * from './config';
 
 // Export utilities
-export { executeSandbox, retry } from './utils';
+export { executeSandbox, runCode, runCommand, retry } from './utils';
 
 // Export registry
 export { createComputeRegistry } from './registry';

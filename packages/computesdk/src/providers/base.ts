@@ -138,6 +138,114 @@ export abstract class BaseProvider implements BaseComputeSandbox, BaseComputeSpe
   }
 
   /**
+   * Execute code in a runtime environment
+   * 
+   * @param code Code to execute
+   * @param runtime Optional runtime to use
+   * @returns Execution result
+   */
+  public async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      // Create a timeout promise that rejects after the timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new TimeoutError(
+            `Code execution timed out after ${this.timeout}ms`,
+            this.provider,
+            this.timeout,
+            this.sandboxId
+          ));
+        }, this.timeout);
+      });
+
+      // Execute the code with a timeout
+      const result = await Promise.race([
+        this.doRunCode ? this.doRunCode(code, runtime) : this.doExecute(code, runtime),
+        timeoutPromise
+      ]);
+
+      // Calculate execution time
+      const executionTime = Date.now() - startTime;
+
+      return {
+        ...result,
+        executionTime,
+        sandboxId: this.sandboxId,
+        provider: this.provider
+      };
+    } catch (error) {
+      // If the error is already a ComputeError, rethrow it
+      if (error instanceof Error && error.name.includes('Error') && 'code' in error) {
+        throw error;
+      }
+
+      // Otherwise, wrap it in a ProviderError
+      throw new ProviderError(
+        `Code execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  /**
+   * Execute shell commands
+   * 
+   * @param command Command to execute
+   * @param args Command arguments
+   * @returns Execution result
+   */
+  public async runCommand(command: string, args: string[] = []): Promise<ExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      // Create a timeout promise that rejects after the timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new TimeoutError(
+            `Command execution timed out after ${this.timeout}ms`,
+            this.provider,
+            this.timeout,
+            this.sandboxId
+          ));
+        }, this.timeout);
+      });
+
+      // Execute the command with a timeout
+      const result = await Promise.race([
+        this.doRunCommand ? this.doRunCommand(command, args) : this.doExecute(`${command} ${args.join(' ')}`, 'node'),
+        timeoutPromise
+      ]);
+
+      // Calculate execution time
+      const executionTime = Date.now() - startTime;
+
+      return {
+        ...result,
+        executionTime,
+        sandboxId: this.sandboxId,
+        provider: this.provider
+      };
+    } catch (error) {
+      // If the error is already a ComputeError, rethrow it
+      if (error instanceof Error && error.name.includes('Error') && 'code' in error) {
+        throw error;
+      }
+
+      // Otherwise, wrap it in a ProviderError
+      throw new ProviderError(
+        `Command execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        this.provider,
+        error instanceof Error ? error : undefined,
+        this.sandboxId
+      );
+    }
+  }
+
+  /**
    * Provider-specific implementation of code execution
    * 
    * @param code Code to execute
@@ -159,6 +267,24 @@ export abstract class BaseProvider implements BaseComputeSandbox, BaseComputeSpe
    * @returns Sandbox information
    */
   public abstract doGetInfo(): Promise<SandboxInfo>;
+
+  /**
+   * Provider-specific implementation of code execution (optional)
+   * 
+   * @param code Code to execute
+   * @param runtime Optional runtime to use
+   * @returns Execution result
+   */
+  public doRunCode?(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+
+  /**
+   * Provider-specific implementation of command execution (optional)
+   * 
+   * @param command Command to execute
+   * @param args Command arguments
+   * @returns Execution result
+   */
+  public doRunCommand?(command: string, args: string[]): Promise<ExecutionResult>;
 }
 
 /**

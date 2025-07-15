@@ -279,6 +279,57 @@ export class E2BProvider extends BaseProvider implements FullComputeSandbox, Ful
     }
   }
 
+  async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+    return this.doExecute(code, runtime);
+  }
+
+  async runCommand(command: string, args: string[] = []): Promise<ExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      const session = await this.ensureSession();
+
+      // Construct full command with arguments
+      const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+
+      // Execute command using E2B's bash execution
+      const execution = await session.runCode(`import subprocess
+import sys
+
+result = subprocess.run(${JSON.stringify(fullCommand)}, shell=True, capture_output=True, text=True)
+print(result.stdout, end='')
+if result.stderr:
+    print(result.stderr, end='', file=sys.stderr)
+sys.exit(result.returncode)
+`);
+
+      return {
+        stdout: execution.logs.stdout.join('\n'),
+        stderr: execution.logs.stderr.join('\n'),
+        exitCode: execution.error ? 1 : 0,
+        executionTime: Date.now() - startTime,
+        sandboxId: this.sandboxId,
+        provider: this.provider
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          throw new Error(
+            `E2B command timeout (${this.timeout}ms). Consider increasing the timeout or optimizing your command.`
+          );
+        }
+        if (error.message.includes('memory') || error.message.includes('Memory')) {
+          throw new Error(
+            `E2B command failed due to memory limits. Consider optimizing your command.`
+          );
+        }
+      }
+      throw new Error(
+        `E2B command execution failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
   async doKill(): Promise<void> {
     if (!this.session) {
       return;

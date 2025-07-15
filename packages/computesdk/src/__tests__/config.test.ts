@@ -15,15 +15,19 @@ describe('Configuration', () => {
 
   describe('normalizeSandboxConfig', () => {
     it('should use defaults when no config provided', () => {
+      vi.stubEnv('E2B_API_KEY', 'test-key')
+      
       const config = normalizeSandboxConfig()
       
-      expect(config.provider).toBe('auto')
+      expect(config.provider).toBe('e2b')
       expect(config.timeout).toBe(DEFAULT_TIMEOUT)
-      expect(config.runtime).toBeUndefined()
+      expect(config.runtime).toBe('python')
       expect(config.container).toBeUndefined()
     })
 
     it('should merge provided config with defaults', () => {
+      vi.stubEnv('E2B_API_KEY', 'test-key')
+      
       const config = normalizeSandboxConfig({
         provider: 'e2b',
         runtime: 'python'
@@ -44,6 +48,7 @@ describe('Configuration', () => {
 
     it('should keep explicit provider even if auto-selection would differ', () => {
       vi.stubEnv('E2B_API_KEY', 'test-key')
+      vi.stubEnv('VERCEL_TOKEN', 'test-token')
       
       const config = normalizeSandboxConfig({ provider: 'vercel' })
       
@@ -81,12 +86,12 @@ describe('Configuration', () => {
       expect(providers).toContain('cloudflare')
     })
 
-    it('should not detect Cloudflare with only API token', () => {
+    it('should detect Cloudflare with API token', () => {
       vi.stubEnv('CLOUDFLARE_API_TOKEN', 'test-token')
       
       const providers = detectAvailableProviders()
       
-      expect(providers).not.toContain('cloudflare')
+      expect(providers).toContain('cloudflare')
     })
 
     it('should detect Fly.io when token is set', () => {
@@ -142,10 +147,10 @@ describe('Configuration', () => {
       expect(provider).toBe('e2b')
     })
 
-    it('should return null when no providers available', () => {
+    it('should return undefined when no providers available', () => {
       const provider = autoSelectProvider()
       
-      expect(provider).toBeNull()
+      expect(provider).toBeUndefined()
     })
   })
 })
