@@ -4,7 +4,7 @@
   "private": true,
   "description": "A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
   "scripts": {
-    "build": "pnpm -r run build",
+    "build": "pnpm --filter computesdk run build && pnpm --filter './packages/*' --filter '!computesdk' run build",
     "clean": "pnpm -r run clean",
     "dev": "pnpm -r --parallel run dev",
     "lint": "pnpm -r run lint",
