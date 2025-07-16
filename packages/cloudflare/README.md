@@ -153,6 +153,62 @@ const info = await provider.doGetInfo();
 // info.status: "running" | "stopped"
 ```
 
+### Filesystem Operations
+
+The Cloudflare provider supports comprehensive filesystem operations through the `filesystem` property:
+
+#### `filesystem.readFile(path: string): Promise<string>`
+
+Read the contents of a file.
+
+```typescript
+const content = await provider.filesystem.readFile('/path/to/file.txt');
+console.log(content);
+```
+
+#### `filesystem.writeFile(path: string, content: string): Promise<void>`
+
+Write content to a file.
+
+```typescript
+await provider.filesystem.writeFile('/path/to/file.txt', 'Hello World!');
+```
+
+#### `filesystem.mkdir(path: string): Promise<void>`
+
+Create a directory (and parent directories).
+
+```typescript
+await provider.filesystem.mkdir('/path/to/new/directory');
+```
+
+#### `filesystem.readdir(path: string): Promise<FileEntry[]>`
+
+List directory contents.
+
+```typescript
+const entries = await provider.filesystem.readdir('/path/to/directory');
+entries.forEach(entry => {
+  console.log(`${entry.name} (${entry.isDirectory ? 'dir' : 'file'}) - ${entry.size} bytes`);
+});
+```
+
+#### `filesystem.exists(path: string): Promise<boolean>`
+
+Check if a file or directory exists.
+
+```typescript
+const exists = await provider.filesystem.exists('/path/to/check');
+```
+
+#### `filesystem.remove(path: string): Promise<void>`
+
+Remove a file or directory.
+
+```typescript
+await provider.filesystem.remove('/path/to/delete');
+```
+
 ## Platform Requirements
 
 ### Cloudflare Workers Environment
@@ -272,6 +328,98 @@ console.log(JSON.stringify(summary, null, 2));
     return new Response(result.stdout, {
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+};
+```
+
+### Filesystem Operations Example
+
+```typescript
+import { cloudflare } from '@computesdk/cloudflare';
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const provider = cloudflare({ env });
+
+    try {
+      // Create a project structure
+      await provider.filesystem.mkdir('/project/data');
+      await provider.filesystem.mkdir('/project/output');
+
+      // Write configuration
+      const config = {
+        name: 'Cloudflare Data Processor',
+        version: '1.0.0',
+        settings: { debug: true }
+      };
+      await provider.filesystem.writeFile('/project/config.json', JSON.stringify(config, null, 2));
+
+      // Create and execute a data processing script
+      const script = `
+import json
+import os
+
+# Read configuration
+with open('/project/config.json', 'r') as f:
+    config = json.load(f)
+
+print(f"Running {config['name']} v{config['version']}")
+
+# Sample data processing
+data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+results = {
+    'count': len(data),
+    'sum': sum(data),
+    'average': sum(data) / len(data),
+    'max': max(data),
+    'min': min(data)
+}
+
+# Write results
+with open('/project/output/results.json', 'w') as f:
+    json.dump(results, f, indent=2)
+
+print("Processing complete!")
+print(f"Results: {results}")
+      `;
+
+      await provider.filesystem.writeFile('/project/process.py', script);
+
+      // Execute the script
+      const result = await provider.doExecute('python /project/process.py');
+
+      // Read the results
+      const resultsJson = await provider.filesystem.readFile('/project/output/results.json');
+      const results = JSON.parse(resultsJson);
+
+      // List all files created
+      const projectFiles = await provider.filesystem.readdir('/project');
+      const outputFiles = await provider.filesystem.readdir('/project/output');
+
+      return new Response(JSON.stringify({
+        success: true,
+        execution: {
+          stdout: result.stdout,
+          executionTime: result.executionTime
+        },
+        results,
+        files: {
+          project: projectFiles.map(f => ({ name: f.name, type: f.isDirectory ? 'dir' : 'file' })),
+          output: outputFiles.map(f => ({ name: f.name, size: f.size }))
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
   }
 };
 ```

@@ -9,6 +9,7 @@ ComputeSDK provides a consistent TypeScript interface for code execution across 
 ## Features
 
 - 🚀 **Multi-provider support** - E2B, Vercel, Cloudflare, Fly.io
+- 📁 **Filesystem operations** - Read, write, create directories across all providers
 - 🔄 **Auto-detection** - Automatically selects providers based on environment variables
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
 - 📦 **Modular** - Install only the providers you need
@@ -105,14 +106,30 @@ console.log('Hello from Vercel Sandbox!');
 `);
 ```
 
-### Cloudflare (Coming Soon)
+### Cloudflare (Fully Implemented)
 
 ```bash
-export CLOUDFLARE_API_TOKEN=your_cloudflare_token
-export CLOUDFLARE_ACCOUNT_ID=your_account_id
+# Cloudflare Workers environment required
+# Set up in wrangler.toml with Durable Object bindings
 ```
 
-### Fly.io (Coming Soon)
+```typescript
+import { cloudflare } from '@computesdk/cloudflare';
+
+const sandbox = cloudflare({
+  env: { Sandbox: env.Sandbox }, // Durable Object binding
+  runtime: 'python',             // 'python' or 'node'
+  timeout: 300000,               // optional, defaults to 5 minutes
+});
+
+const result = await sandbox.execute(`
+print('Hello from Cloudflare!')
+import sys
+print(f'Python version: {sys.version}')
+`);
+```
+
+### Fly.io (Community Target)
 
 ```bash
 export FLY_API_TOKEN=your_fly_token
@@ -169,6 +186,65 @@ const result = await executeSandbox({
   code: 'print("Hello")',
   runtime: 'python' // optional
 });
+```
+
+### Filesystem Operations
+
+All providers support comprehensive filesystem operations through the `sandbox.filesystem` interface:
+
+#### `sandbox.filesystem.readFile(path)`
+
+Reads the contents of a file.
+
+```typescript
+const content = await sandbox.filesystem.readFile('/path/to/file.txt');
+console.log(content); // File contents as string
+```
+
+#### `sandbox.filesystem.writeFile(path, content)`
+
+Writes content to a file, creating it if it doesn't exist.
+
+```typescript
+await sandbox.filesystem.writeFile('/path/to/file.txt', 'Hello World!');
+```
+
+#### `sandbox.filesystem.mkdir(path)`
+
+Creates a directory (and parent directories if needed).
+
+```typescript
+await sandbox.filesystem.mkdir('/path/to/new/directory');
+```
+
+#### `sandbox.filesystem.readdir(path)`
+
+Lists the contents of a directory.
+
+```typescript
+const entries = await sandbox.filesystem.readdir('/path/to/directory');
+entries.forEach(entry => {
+  console.log(`${entry.name} (${entry.isDirectory ? 'dir' : 'file'}) - ${entry.size} bytes`);
+});
+```
+
+#### `sandbox.filesystem.exists(path)`
+
+Checks if a file or directory exists.
+
+```typescript
+const exists = await sandbox.filesystem.exists('/path/to/check');
+if (exists) {
+  console.log('Path exists!');
+}
+```
+
+#### `sandbox.filesystem.remove(path)`
+
+Removes a file or directory.
+
+```typescript
+await sandbox.filesystem.remove('/path/to/delete');
 ```
 
 ## Error Handling
@@ -229,23 +305,121 @@ print("Plot saved as sine_wave.png")
 console.log(result.stdout);
 ```
 
-### File Operations
+### Filesystem Operations
 
 ```typescript
-const result = await sandbox.execute(`
-# Create a file
-with open('data.txt', 'w') as f:
-    f.write('Hello from ComputeSDK!')
+import { e2b } from '@computesdk/e2b';
 
-# Read it back
-with open('data.txt', 'r') as f:
-    content = f.read()
-    print(f"File content: {content}")
+const sandbox = e2b();
 
-# List files
+// Create a directory structure
+await sandbox.filesystem.mkdir('/project/data');
+await sandbox.filesystem.mkdir('/project/output');
+
+// Write configuration file
+const config = JSON.stringify({
+  name: 'My Project',
+  version: '1.0.0',
+  settings: { debug: true }
+}, null, 2);
+
+await sandbox.filesystem.writeFile('/project/config.json', config);
+
+// Create a Python script
+const script = `
+import json
 import os
-print(f"Files in current directory: {os.listdir('.')}")
-`);
+
+# Read configuration
+with open('/project/config.json', 'r') as f:
+    config = json.load(f)
+
+print(f"Project: {config['name']} v{config['version']}")
+
+# Process data
+data = [1, 2, 3, 4, 5]
+result = sum(data)
+
+# Write results
+with open('/project/output/results.txt', 'w') as f:
+    f.write(f"Sum: {result}\\n")
+    f.write(f"Count: {len(data)}\\n")
+
+print("Processing complete!")
+`;
+
+await sandbox.filesystem.writeFile('/project/process.py', script);
+
+// Execute the script
+const result = await sandbox.execute('python /project/process.py');
+console.log(result.stdout);
+
+// Read the results
+const results = await sandbox.filesystem.readFile('/project/output/results.txt');
+console.log('Results:', results);
+
+// List all files in the project
+const files = await sandbox.filesystem.readdir('/project');
+console.log('Project files:');
+files.forEach(file => {
+  console.log(`  ${file.name} (${file.isDirectory ? 'directory' : 'file'})`);
+});
+
+await sandbox.kill();
+```
+
+### Cross-Provider Filesystem Example
+
+```typescript
+import { vercel } from '@computesdk/vercel';
+import { cloudflare } from '@computesdk/cloudflare';
+
+// Works identically across providers
+async function processData(sandbox: any) {
+  // Create workspace
+  await sandbox.filesystem.mkdir('/workspace');
+  
+  // Write input data
+  await sandbox.filesystem.writeFile('/workspace/input.json', 
+    JSON.stringify({ numbers: [1, 2, 3, 4, 5] })
+  );
+  
+  // Process with code execution
+  const result = await sandbox.execute(`
+import json
+
+# Read input
+with open('/workspace/input.json', 'r') as f:
+    data = json.load(f)
+
+# Process
+numbers = data['numbers']
+result = {
+    'sum': sum(numbers),
+    'average': sum(numbers) / len(numbers),
+    'count': len(numbers)
+}
+
+# Write output
+with open('/workspace/output.json', 'w') as f:
+    json.dump(result, f, indent=2)
+
+print("Processing complete!")
+  `);
+  
+  // Read results
+  const output = await sandbox.filesystem.readFile('/workspace/output.json');
+  return JSON.parse(output);
+}
+
+// Use with any provider
+const vercelSandbox = vercel();
+const vercelResult = await processData(vercelSandbox);
+console.log('Vercel result:', vercelResult);
+
+const cloudflareSandbox = cloudflare({ env });
+const cloudflareResult = await processData(cloudflareSandbox);
+console.log('Cloudflare result:', cloudflareResult);
 ```
 
 ## Development
@@ -305,12 +479,18 @@ export function myProvider(options = {}) {
 
 ## Provider Status
 
-| Provider | Status | Features |
-|----------|--------|----------|
-| E2B | ✅ Complete | Python, data science libraries, file operations |
-| Vercel | ✅ Complete | Node.js, Python, global deployment, up to 45min runtime |
-| Cloudflare | 🚧 Coming Soon | Container-based, global edge |
-| Fly.io | 🚧 Coming Soon | Docker containers, regional deployment |
+| Provider | Status | Code Execution | Filesystem | Terminal | Features |
+|----------|--------|----------------|------------|----------|----------|
+| **E2B** | ✅ Complete | ✅ Python | ✅ Native | ✅ PTY | Data science libraries, interactive terminals |
+| **Vercel** | ✅ Complete | ✅ Node.js, Python | ✅ Shell-based | ❌ | Global deployment, up to 45min runtime |
+| **Cloudflare** | ✅ Complete | ✅ Python, Node.js | ✅ Hybrid | ❌ | Global edge, container-based |
+| **Fly.io** | 🎯 Community | ✅ Mock | ❌ | ❌ | Docker containers, regional deployment |
+
+### Feature Matrix
+
+- **✅ Complete**: Fully implemented and tested
+- **🎯 Community**: Available for community contribution
+- **❌ Not Available**: Not supported by the provider
 
 ## Contributing
 

@@ -179,6 +179,65 @@ Terminates the sandbox.
 
 **Returns:** `Promise<void>`
 
+### Filesystem Operations
+
+The Vercel provider supports comprehensive filesystem operations through the `filesystem` property:
+
+#### `sandbox.filesystem.readFile(path)`
+
+Reads the contents of a file.
+
+```typescript
+const content = await sandbox.filesystem.readFile('/vercel/sandbox/data.txt');
+console.log(content);
+```
+
+#### `sandbox.filesystem.writeFile(path, content)`
+
+Writes content to a file, creating directories as needed.
+
+```typescript
+await sandbox.filesystem.writeFile('/vercel/sandbox/output.txt', 'Hello World!');
+```
+
+#### `sandbox.filesystem.mkdir(path)`
+
+Creates a directory and any necessary parent directories.
+
+```typescript
+await sandbox.filesystem.mkdir('/vercel/sandbox/project/data');
+```
+
+#### `sandbox.filesystem.readdir(path)`
+
+Lists the contents of a directory.
+
+```typescript
+const entries = await sandbox.filesystem.readdir('/vercel/sandbox');
+entries.forEach(entry => {
+  console.log(`${entry.name} (${entry.isDirectory ? 'directory' : 'file'}) - ${entry.size} bytes`);
+});
+```
+
+#### `sandbox.filesystem.exists(path)`
+
+Checks if a file or directory exists.
+
+```typescript
+const exists = await sandbox.filesystem.exists('/vercel/sandbox/config.json');
+if (exists) {
+  console.log('Configuration file found!');
+}
+```
+
+#### `sandbox.filesystem.remove(path)`
+
+Removes a file or directory.
+
+```typescript
+await sandbox.filesystem.remove('/vercel/sandbox/temp.txt');
+```
+
 ## Examples
 
 ### Node.js Web Server Simulation
@@ -254,6 +313,137 @@ for product, revenue in sorted(product_sales.items(), key=lambda x: x[1], revers
 `);
 
 console.log(result.stdout);
+```
+
+### Filesystem Operations Example
+
+```typescript
+import { vercel } from '@computesdk/vercel';
+
+const sandbox = vercel({ runtime: 'python' });
+
+// Create a complete data processing pipeline using filesystem operations
+try {
+  // 1. Set up project structure
+  await sandbox.filesystem.mkdir('/vercel/sandbox/project');
+  await sandbox.filesystem.mkdir('/vercel/sandbox/project/data');
+  await sandbox.filesystem.mkdir('/vercel/sandbox/project/output');
+
+  // 2. Create configuration file
+  const config = {
+    project_name: "Vercel Data Pipeline",
+    version: "1.0.0",
+    settings: {
+      input_format: "json",
+      output_format: "csv",
+      debug: true
+    }
+  };
+  
+  await sandbox.filesystem.writeFile(
+    '/vercel/sandbox/project/config.json', 
+    JSON.stringify(config, null, 2)
+  );
+
+  // 3. Create sample data
+  const sampleData = [
+    { id: 1, name: "Alice", department: "Engineering", salary: 95000 },
+    { id: 2, name: "Bob", department: "Marketing", salary: 75000 },
+    { id: 3, name: "Charlie", department: "Engineering", salary: 105000 },
+    { id: 4, name: "Diana", department: "Sales", salary: 85000 }
+  ];
+
+  await sandbox.filesystem.writeFile(
+    '/vercel/sandbox/project/data/employees.json',
+    JSON.stringify(sampleData, null, 2)
+  );
+
+  // 4. Create and execute data processing script
+  const processingScript = `
+import json
+import csv
+import os
+from collections import defaultdict
+
+# Read configuration
+with open('/vercel/sandbox/project/config.json', 'r') as f:
+    config = json.load(f)
+
+print(f"Running {config['project_name']} v{config['version']}")
+
+# Read employee data
+with open('/vercel/sandbox/project/data/employees.json', 'r') as f:
+    employees = json.load(f)
+
+# Process data - calculate department statistics
+dept_stats = defaultdict(list)
+for emp in employees:
+    dept_stats[emp['department']].append(emp['salary'])
+
+# Calculate averages
+results = []
+for dept, salaries in dept_stats.items():
+    avg_salary = sum(salaries) / len(salaries)
+    results.append({
+        'department': dept,
+        'employee_count': len(salaries),
+        'average_salary': round(avg_salary, 2),
+        'total_salary': sum(salaries)
+    })
+
+# Sort by average salary
+results.sort(key=lambda x: x['average_salary'], reverse=True)
+
+# Write results as JSON
+with open('/vercel/sandbox/project/output/department_stats.json', 'w') as f:
+    json.dump(results, f, indent=2)
+
+# Write results as CSV
+with open('/vercel/sandbox/project/output/department_stats.csv', 'w', newline='') as f:
+    writer = csv.DictWriter(f, fieldnames=['department', 'employee_count', 'average_salary', 'total_salary'])
+    writer.writeheader()
+    writer.writerows(results)
+
+print("Processing complete!")
+print(f"Generated {len(results)} department statistics")
+
+# Print summary
+for result in results:
+    print(f"{result['department']}: {result['employee_count']} employees, avg salary ${result['average_salary']}")
+  `;
+
+  await sandbox.filesystem.writeFile('/vercel/sandbox/project/process.py', processingScript);
+
+  // 5. Execute the processing script
+  const result = await sandbox.doExecute('python /vercel/sandbox/project/process.py');
+  console.log('Execution Output:', result.stdout);
+
+  // 6. Read and display results
+  const jsonResults = await sandbox.filesystem.readFile('/vercel/sandbox/project/output/department_stats.json');
+  const csvResults = await sandbox.filesystem.readFile('/vercel/sandbox/project/output/department_stats.csv');
+
+  console.log('JSON Results:', jsonResults);
+  console.log('CSV Results:', csvResults);
+
+  // 7. List all generated files
+  const outputFiles = await sandbox.filesystem.readdir('/vercel/sandbox/project/output');
+  console.log('Generated files:');
+  outputFiles.forEach(file => {
+    console.log(`  ${file.name} (${file.size} bytes)`);
+  });
+
+  // 8. Verify file existence
+  const configExists = await sandbox.filesystem.exists('/vercel/sandbox/project/config.json');
+  const resultsExist = await sandbox.filesystem.exists('/vercel/sandbox/project/output/department_stats.json');
+  
+  console.log(`Configuration file exists: ${configExists}`);
+  console.log(`Results file exists: ${resultsExist}`);
+
+} catch (error) {
+  console.error('Pipeline failed:', error.message);
+} finally {
+  await sandbox.doKill();
+}
 ```
 
 ## Error Handling
