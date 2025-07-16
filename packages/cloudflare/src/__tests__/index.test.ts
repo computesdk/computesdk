@@ -38,8 +38,28 @@ vi.mock('@cloudflare/sandbox', () => ({
           success: true
         };
       }
+      if (command === 'ls' && args.includes('-la')) {
+        return {
+          stdout: 'total 8\n-rw-r--r-- 1 user user   13 2024-01-01 12:00:00 test.txt\ndrwxr-xr-x 2 user user 4096 2024-01-01 12:00:00 subdir',
+          stderr: '',
+          exitCode: 0,
+          success: true
+        };
+      }
+      if (command === 'test' && args[0] === '-e') {
+        return {
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          success: true
+        };
+      }
       throw new Error('Unknown command');
-    })
+    }),
+    readFile: vi.fn(async (path: string) => 'Hello World'),
+    writeFile: vi.fn(async (path: string, content: string) => {}),
+    mkdir: vi.fn(async (path: string) => {}),
+    deleteFile: vi.fn(async (path: string) => {})
   }))
 }));
 
@@ -185,6 +205,66 @@ describe('Cloudflare Provider', () => {
       
       await expect(provider.doExecute('print("Hello")')).rejects.toThrow(
         'Failed to initialize Cloudflare sandbox: Failed to get sandbox'
+      );
+    });
+  });
+
+  describe('Filesystem Operations', () => {
+    it('should have filesystem property', () => {
+      const provider = cloudflare({ env: mockEnv });
+      expect(provider.filesystem).toBeDefined();
+    });
+
+    it('should read file contents', async () => {
+      const provider = cloudflare({ env: mockEnv });
+      const content = await provider.filesystem.readFile('/test.txt');
+      expect(content).toBe('Hello World');
+    });
+
+    it('should write file contents', async () => {
+      const provider = cloudflare({ env: mockEnv });
+      await expect(provider.filesystem.writeFile('/test.txt', 'Hello World')).resolves.not.toThrow();
+    });
+
+    it('should create directories', async () => {
+      const provider = cloudflare({ env: mockEnv });
+      await expect(provider.filesystem.mkdir('/test/dir')).resolves.not.toThrow();
+    });
+
+    it('should list directory contents', async () => {
+      const provider = cloudflare({ env: mockEnv });
+      const entries = await provider.filesystem.readdir('/test');
+      
+      expect(entries).toHaveLength(2);
+      expect(entries[0].name).toBe('test.txt');
+      expect(entries[0].isDirectory).toBe(false);
+      expect(entries[0].size).toBe(13);
+      expect(entries[1].name).toBe('subdir');
+      expect(entries[1].isDirectory).toBe(true);
+    });
+
+    it('should check if file exists', async () => {
+      const provider = cloudflare({ env: mockEnv });
+      const exists = await provider.filesystem.exists('/test.txt');
+      expect(exists).toBe(true);
+    });
+
+    it('should remove files', async () => {
+      const provider = cloudflare({ env: mockEnv });
+      await expect(provider.filesystem.remove('/test.txt')).resolves.not.toThrow();
+    });
+
+    it('should handle filesystem errors gracefully', async () => {
+      const { getSandbox } = await import('@cloudflare/sandbox');
+      const mockSandbox = {
+        readFile: vi.fn().mockRejectedValue(new Error('File not found'))
+      };
+      (getSandbox as any).mockReturnValueOnce(mockSandbox);
+
+      const provider = cloudflare({ env: mockEnv });
+      
+      await expect(provider.filesystem.readFile('/nonexistent.txt')).rejects.toThrow(
+        'Failed to read file'
       );
     });
   });

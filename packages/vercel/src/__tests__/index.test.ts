@@ -42,8 +42,8 @@ describe('VercelProvider', () => {
       }),
     });
 
-    const createMockProcess = (exitCode = 0) => ({
-      stdout: createMockStream(''),
+    const createMockProcess = (exitCode = 0, stdoutData = '') => ({
+      stdout: createMockStream(stdoutData),
       stderr: createMockStream(''),
       on: vi.fn((event: string, callback: Function) => {
         if (event === 'exit') {
@@ -55,7 +55,23 @@ describe('VercelProvider', () => {
     });
 
     mockSandbox = {
-      runCommand: vi.fn().mockResolvedValue(createMockProcess()),
+      runCommand: vi.fn((options: any) => {
+        // Mock different commands for filesystem operations
+        if (options.cmd === 'cat') {
+          return Promise.resolve(createMockProcess(0, 'Hello World'));
+        }
+        if (options.cmd === 'ls' && options.args.includes('-la')) {
+          const lsOutput = 'total 8\n-rw-r--r-- 1 user user   13 2024-01-01 12:00:00 test.txt\ndrwxr-xr-x 2 user user 4096 2024-01-01 12:00:00 subdir';
+          return Promise.resolve(createMockProcess(0, lsOutput));
+        }
+        if (options.cmd === 'test') {
+          return Promise.resolve(createMockProcess(0));
+        }
+        if (options.cmd === 'mkdir' || options.cmd === 'rm' || options.cmd === 'sh') {
+          return Promise.resolve(createMockProcess(0));
+        }
+        return Promise.resolve(createMockProcess());
+      }),
       stop: vi.fn().mockResolvedValue(undefined),
       id: 'test-sandbox-id',
     };
@@ -374,6 +390,75 @@ describe('VercelProvider', () => {
       
       await expect(provider.doGetInfo()).rejects.toThrow(
         'Vercel quota exceeded'
+      );
+    });
+  });
+
+  describe('Filesystem Operations', () => {
+    it('should have filesystem property', () => {
+      const provider = vercel();
+      expect(provider.filesystem).toBeDefined();
+    });
+
+    it('should read file contents', async () => {
+      const provider = vercel();
+      const content = await provider.filesystem.readFile('/test.txt');
+      expect(content).toBe('Hello World');
+    });
+
+    it('should write file contents', async () => {
+      const provider = vercel();
+      await expect(provider.filesystem.writeFile('/test.txt', 'Hello World')).resolves.not.toThrow();
+    });
+
+    it('should create directories', async () => {
+      const provider = vercel();
+      await expect(provider.filesystem.mkdir('/test/dir')).resolves.not.toThrow();
+    });
+
+    it('should list directory contents', async () => {
+      const provider = vercel();
+      const entries = await provider.filesystem.readdir('/test');
+      
+      expect(entries).toHaveLength(2);
+      expect(entries[0].name).toBe('test.txt');
+      expect(entries[0].isDirectory).toBe(false);
+      expect(entries[0].size).toBe(13);
+      expect(entries[1].name).toBe('subdir');
+      expect(entries[1].isDirectory).toBe(true);
+    });
+
+    it('should check if file exists', async () => {
+      const provider = vercel();
+      const exists = await provider.filesystem.exists('/test.txt');
+      expect(exists).toBe(true);
+    });
+
+    it('should remove files', async () => {
+      const provider = vercel();
+      await expect(provider.filesystem.remove('/test.txt')).resolves.not.toThrow();
+    });
+
+    it('should handle filesystem errors gracefully', async () => {
+      const provider = vercel();
+      
+      // Mock a failing command
+      const failingProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event: string, callback: Function) => {
+          if (event === 'exit') {
+            setImmediate(() => callback(1)); // Exit code 1 = error
+          }
+        }),
+      };
+      
+      mockSandbox.runCommand.mockImplementationOnce(() => 
+        Promise.resolve(failingProcess)
+      );
+      
+      await expect(provider.filesystem.readFile('/nonexistent.txt')).rejects.toThrow(
+        'Failed to read file'
       );
     });
   });

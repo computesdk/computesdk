@@ -1,13 +1,14 @@
 import type { 
-  BaseComputeSpecification,
-  BaseComputeSandbox,
+  FilesystemComputeSpecification,
+  FilesystemComputeSandbox,
   ExecutionResult, 
   Runtime, 
   SandboxInfo,
   SandboxConfig,
-  ContainerConfig
+  FileEntry,
+  SandboxFileSystem
 } from 'computesdk';
-import { ExecutionError, TimeoutError } from 'computesdk';
+import { ExecutionError, TimeoutError, BaseFileSystem } from 'computesdk';
 
 // Cloudflare environment interface
 export interface CloudflareEnv {
@@ -16,14 +17,14 @@ export interface CloudflareEnv {
 
 // Type declarations for Cloudflare Workers
 interface DurableObjectId {}
-interface DurableObjectNamespace<T = any> {
-  get(id: DurableObjectId): DurableObjectStub<T>;
+interface DurableObjectNamespace {
+  get(id: DurableObjectId): DurableObjectStub;
   newUniqueId(): DurableObjectId;
   idFromName(name: string): DurableObjectId;
   idFromString(id: string): DurableObjectId;
   jurisdiction?: string;
 }
-interface DurableObjectStub<T = any> {
+interface DurableObjectStub {
   fetch(request: Request): Promise<Response>;
   [key: string]: any;
 }
@@ -35,10 +36,120 @@ function isCloudflareWorker(): boolean {
          'caches' in globalThis;
 }
 
-export class CloudflareProvider implements BaseComputeSpecification, BaseComputeSandbox {
+/**
+ * Cloudflare FileSystem implementation using native Cloudflare sandbox methods
+ */
+class CloudflareFileSystem extends BaseFileSystem {
+  constructor(
+    provider: string,
+    sandboxId: string,
+    private getSandbox: () => Promise<DurableObjectStub>
+  ) {
+    super(provider, sandboxId);
+  }
+
+  protected async doReadFile(path: string): Promise<string> {
+    const sandbox = await this.getSandbox();
+    const result = await (sandbox as any).readFile(path, { encoding: 'utf8' });
+    
+    // Handle both streaming and non-streaming responses
+    if (typeof result === 'string') {
+      return result;
+    }
+    
+    // If it's a streaming response, collect the data
+    let content = '';
+    const reader = result.getReader();
+    const decoder = new TextDecoder();
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        content += decoder.decode(value, { stream: true });
+      }
+      content += decoder.decode(); // Flush any remaining bytes
+      return content;
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  protected async doWriteFile(path: string, content: string): Promise<void> {
+    const sandbox = await this.getSandbox();
+    await (sandbox as any).writeFile(path, content, { encoding: 'utf8' });
+  }
+
+  protected async doMkdir(path: string): Promise<void> {
+    const sandbox = await this.getSandbox();
+    await (sandbox as any).mkdir(path, { recursive: true });
+  }
+
+  protected async doReaddir(path: string): Promise<FileEntry[]> {
+    const sandbox = await this.getSandbox();
+    
+    // Use ls command to list directory contents
+    const result = await (sandbox as any).exec('ls', ['-la', '--time-style=iso', path]);
+    
+    // Parse ls output to create FileEntry objects
+    const lines = result.stdout.split('\n').filter((line: string) => line.trim());
+    const entries: FileEntry[] = [];
+    
+    // Skip the first line (total) and process each file/directory
+    for (let i = 1; i < lines.length; i++) {
+      const line: string = lines[i].trim();
+      if (!line) continue;
+      
+      // Parse ls -la output: permissions links owner group size date time name
+      const parts = line.split(/\s+/);
+      if (parts.length < 8) continue;
+      
+      const permissions = parts[0];
+      const isDirectory = permissions.startsWith('d');
+      const size = parseInt(parts[4]) || 0;
+      const dateStr = parts[5] + ' ' + parts[6];
+      const name = parts.slice(7).join(' '); // Handle names with spaces
+      
+      // Skip current and parent directory entries
+      if (name === '.' || name === '..') continue;
+      
+      const fullPath = path.endsWith('/') ? path + name : path + '/' + name;
+      
+      entries.push({
+        name,
+        path: fullPath,
+        isDirectory,
+        size,
+        lastModified: new Date(dateStr)
+      });
+    }
+    
+    return entries;
+  }
+
+  protected async doExists(path: string): Promise<boolean> {
+    const sandbox = await this.getSandbox();
+    
+    try {
+      // Use test command to check if file/directory exists
+      const result = await (sandbox as any).exec('test', ['-e', path]);
+      return result.exitCode === 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  protected async doRemove(path: string): Promise<void> {
+    const sandbox = await this.getSandbox();
+    await (sandbox as any).deleteFile(path);
+  }
+}
+
+export class CloudflareProvider implements FilesystemComputeSpecification, FilesystemComputeSandbox {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'cloudflare';
   public readonly sandboxId: string;
+  public readonly filesystem: SandboxFileSystem;
   
   private sandbox: DurableObjectStub | null = null;
   private readonly env: CloudflareEnv;
@@ -63,6 +174,9 @@ export class CloudflareProvider implements BaseComputeSpecification, BaseCompute
     this.sandboxId = `cloudflare-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     this.timeout = config.timeout || 300000;
     this.env = config.env;
+    
+    // Initialize filesystem
+    this.filesystem = new CloudflareFileSystem(this.provider, this.sandboxId, () => this.ensureSandbox());
   }
 
   private async ensureSandbox(): Promise<DurableObjectStub> {

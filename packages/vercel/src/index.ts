@@ -1,18 +1,246 @@
 import { Sandbox } from '@vercel/sandbox';
 import ms from 'ms';
 import type {
-  BaseComputeSpecification,
-  BaseComputeSandbox,
+  FilesystemComputeSpecification,
+  FilesystemComputeSandbox,
   ExecutionResult,
   Runtime,
   SandboxInfo,
-  SandboxConfig
+  SandboxConfig,
+  FileEntry,
+  SandboxFileSystem
 } from 'computesdk';
+import { BaseFileSystem } from 'computesdk';
 
-export class VercelProvider implements BaseComputeSpecification, BaseComputeSandbox {
+/**
+ * Vercel FileSystem implementation using shell commands
+ */
+class VercelFileSystem extends BaseFileSystem {
+  constructor(
+    provider: string,
+    sandboxId: string,
+    private getSandbox: () => Promise<any>
+  ) {
+    super(provider, sandboxId);
+  }
+
+  protected async doReadFile(path: string): Promise<string> {
+    const sandbox = await this.getSandbox();
+    
+    // Use cat command to read file contents
+    const result = await sandbox.runCommand({
+      cmd: 'cat',
+      args: [path],
+    });
+
+    // Collect stdout from the stream
+    let content = '';
+    const stdoutPromise = new Promise<void>((resolve) => {
+      if (result.stdout) {
+        result.stdout.on('data', (data: Buffer) => {
+          content += data.toString();
+        });
+        result.stdout.on('end', resolve);
+      } else {
+        resolve();
+      }
+    });
+
+    // Wait for the process to complete
+    const exitPromise = new Promise<number>((resolve, reject) => {
+      result.on('exit', (code: number) => {
+        if (code !== 0) {
+          reject(new Error(`Failed to read file ${path}: exit code ${code}`));
+        } else {
+          resolve(code);
+        }
+      });
+      result.on('error', reject);
+    });
+
+    await Promise.all([stdoutPromise, exitPromise]);
+    return content;
+  }
+
+  protected async doWriteFile(path: string, content: string): Promise<void> {
+    const sandbox = await this.getSandbox();
+    
+    // Create directory if it doesn't exist
+    const dir = path.substring(0, path.lastIndexOf('/'));
+    if (dir) {
+      await this.doMkdir(dir);
+    }
+    
+    // Use echo to write file contents (escape content for shell)
+    const escapedContent = content.replace(/'/g, "'\"'\"'");
+    const result = await sandbox.runCommand({
+      cmd: 'sh',
+      args: ['-c', `echo '${escapedContent}' > '${path}'`],
+    });
+
+    // Wait for the process to complete
+    const exitPromise = new Promise<number>((resolve, reject) => {
+      result.on('exit', (code: number) => {
+        if (code !== 0) {
+          reject(new Error(`Failed to write file ${path}: exit code ${code}`));
+        } else {
+          resolve(code);
+        }
+      });
+      result.on('error', reject);
+    });
+
+    await exitPromise;
+  }
+
+  protected async doMkdir(path: string): Promise<void> {
+    const sandbox = await this.getSandbox();
+    
+    // Use mkdir -p to create directory and parents
+    const result = await sandbox.runCommand({
+      cmd: 'mkdir',
+      args: ['-p', path],
+    });
+
+    // Wait for the process to complete
+    const exitPromise = new Promise<number>((resolve, reject) => {
+      result.on('exit', (code: number) => {
+        if (code !== 0) {
+          reject(new Error(`Failed to create directory ${path}: exit code ${code}`));
+        } else {
+          resolve(code);
+        }
+      });
+      result.on('error', reject);
+    });
+
+    await exitPromise;
+  }
+
+  protected async doReaddir(path: string): Promise<FileEntry[]> {
+    const sandbox = await this.getSandbox();
+    
+    // Use ls -la to list directory contents with details
+    const result = await sandbox.runCommand({
+      cmd: 'ls',
+      args: ['-la', '--time-style=iso', path],
+    });
+
+    // Collect stdout from the stream
+    let output = '';
+    const stdoutPromise = new Promise<void>((resolve) => {
+      if (result.stdout) {
+        result.stdout.on('data', (data: Buffer) => {
+          output += data.toString();
+        });
+        result.stdout.on('end', resolve);
+      } else {
+        resolve();
+      }
+    });
+
+    // Wait for the process to complete
+    const exitPromise = new Promise<number>((resolve, reject) => {
+      result.on('exit', (code: number) => {
+        if (code !== 0) {
+          reject(new Error(`Failed to read directory ${path}: exit code ${code}`));
+        } else {
+          resolve(code);
+        }
+      });
+      result.on('error', reject);
+    });
+
+    await Promise.all([stdoutPromise, exitPromise]);
+
+    // Parse ls output to create FileEntry objects
+    const lines = output.split('\n').filter((line: string) => line.trim());
+    const entries: FileEntry[] = [];
+    
+    // Skip the first line (total) and process each file/directory
+    for (let i = 1; i < lines.length; i++) {
+      const line: string = lines[i].trim();
+      if (!line || line === '.' || line === '..') continue;
+      
+      // Parse ls -la output: permissions links owner group size date time name
+      const parts = line.split(/\s+/);
+      if (parts.length < 8) continue;
+      
+      const permissions = parts[0];
+      const isDirectory = permissions.startsWith('d');
+      const size = parseInt(parts[4]) || 0;
+      const dateStr = parts[5] + ' ' + parts[6];
+      const name = parts.slice(7).join(' '); // Handle names with spaces
+      const fullPath = path.endsWith('/') ? path + name : path + '/' + name;
+      
+      entries.push({
+        name,
+        path: fullPath,
+        isDirectory,
+        size,
+        lastModified: new Date(dateStr)
+      });
+    }
+    
+    return entries;
+  }
+
+  protected async doExists(path: string): Promise<boolean> {
+    const sandbox = await this.getSandbox();
+    
+    try {
+      // Use test command to check if file/directory exists
+      const result = await sandbox.runCommand({
+        cmd: 'test',
+        args: ['-e', path],
+      });
+
+      // Wait for the process to complete
+      const exitCode = await new Promise<number>((resolve) => {
+        result.on('exit', (code: number) => {
+          resolve(code);
+        });
+        result.on('error', () => {
+          resolve(1); // Error means file doesn't exist
+        });
+      });
+
+      return exitCode === 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  protected async doRemove(path: string): Promise<void> {
+    const sandbox = await this.getSandbox();
+    
+    // Use rm -rf to remove file or directory
+    const result = await sandbox.runCommand({
+      cmd: 'rm',
+      args: ['-rf', path],
+    });
+
+    // Wait for the process to complete
+    const exitPromise = new Promise<number>((resolve, reject) => {
+      result.on('exit', (code: number) => {
+        if (code !== 0) {
+          reject(new Error(`Failed to remove ${path}: exit code ${code}`));
+        } else {
+          resolve(code);
+        }
+      });
+      result.on('error', reject);
+    });
+
+    await exitPromise;
+  }
+}
+
+export class VercelProvider implements FilesystemComputeSpecification, FilesystemComputeSandbox {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'vercel';
   public readonly sandboxId: string;
+  public readonly filesystem: SandboxFileSystem;
 
   private sandbox: any = null;
   private readonly token: string;
@@ -54,6 +282,9 @@ export class VercelProvider implements BaseComputeSpecification, BaseComputeSand
     }
 
     this.runtime = config.runtime || 'node';
+    
+    // Initialize filesystem
+    this.filesystem = new VercelFileSystem(this.provider, this.sandboxId, () => this.ensureSandbox());
   }
 
   private async ensureSandbox(): Promise<any> {
