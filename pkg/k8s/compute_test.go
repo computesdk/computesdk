@@ -1,4 +1,4 @@
-package client_test
+package k8s_test
 
 import (
 	"context"
@@ -156,8 +156,8 @@ func TestPodManager_GetPod(t *testing.T) {
 		mockSetup      func(*mockPodOperations)
 		expectError    bool
 		expectedPod    *client.PodInfo
-		firstCall      bool // true for API call, false for cache hit check
-		secondCall     bool // true to make a second call to check cache
+		firstCall      bool           // true for API call, false for cache hit check
+		secondCall     bool           // true to make a second call to check cache
 		callCountCheck func(int) bool // Checks how many times GetPodByLabel was called
 	}{
 		{
@@ -198,10 +198,10 @@ func TestPodManager_GetPod(t *testing.T) {
 					return nil, fmt.Errorf("unexpected GetPodByLabel call in cache hit setup")
 				}
 			},
-			expectError: false,
-			expectedPod:   &client.PodInfo{Name: testPodName, ComputeID: testComputeID, IP: testPodIP, IsReady: true, Phase: corev1.PodRunning},
-			firstCall:    true,  // This call populates the cache
-			secondCall:   true,  // This call should hit the cache
+			expectError:    false,
+			expectedPod:    &client.PodInfo{Name: testPodName, ComputeID: testComputeID, IP: testPodIP, IsReady: true, Phase: corev1.PodRunning},
+			firstCall:      true,                                       // This call populates the cache
+			secondCall:     true,                                       // This call should hit the cache
 			callCountCheck: func(count int) bool { return count == 1 }, // GetPodByLabel should be called only once
 		},
 	}
@@ -271,35 +271,35 @@ func TestPodManager_ListPods(t *testing.T) {
 	namespace := "test-listpods-ns"
 
 	testPods := []struct {
-		name          string
-		computeID     string
-		ip            string
-		isReady       bool
-		labels        map[string]string
-		ports         []corev1.ContainerPort
+		name           string
+		computeID      string
+		ip             string
+		isReady        bool
+		labels         map[string]string
+		ports          []corev1.ContainerPort
 		expectedInList bool // Does this pod have the required 'app: compute' and 'computeId' labels?
 	}{
 		{
 			name: "pod1", computeID: "id1", ip: "10.0.0.1", isReady: true,
-			labels: map[string]string{"app": "compute", "computeId": "id1", "extra": "label1"},
-			ports:  []corev1.ContainerPort{{Name: "http", ContainerPort: 80}},
+			labels:         map[string]string{"app": "compute", "computeId": "id1", "extra": "label1"},
+			ports:          []corev1.ContainerPort{{Name: "http", ContainerPort: 80}},
 			expectedInList: true,
 		},
 		{
 			name: "pod2", computeID: "id2", ip: "10.0.0.2", isReady: false,
-			labels: map[string]string{"app": "compute", "computeId": "id2"},
-			ports:  []corev1.ContainerPort{{ContainerPort: 8080}}, // Nameless port
+			labels:         map[string]string{"app": "compute", "computeId": "id2"},
+			ports:          []corev1.ContainerPort{{ContainerPort: 8080}}, // Nameless port
 			expectedInList: true,
 		},
 		{
 			name: "pod3-no-computeid", computeID: "", ip: "10.0.0.3", isReady: true, // computeID will be missing from labels
-			labels: map[string]string{"app": "compute"}, // Missing computeId label
+			labels:         map[string]string{"app": "compute"}, // Missing computeId label
 			expectedInList: false,
 		},
 		{
 			name: "pod4-wrong-app", computeID: "id4", ip: "10.0.0.4", isReady: true,
-			labels: map[string]string{"app": "other", "computeId": "id4"}, // Wrong app label for ListPods selector
-			expectedInList: false, // Will be filtered out by the ListPods call to k8sClient itself
+			labels:         map[string]string{"app": "other", "computeId": "id4"}, // Wrong app label for ListPods selector
+			expectedInList: false,                                                 // Will be filtered out by the ListPods call to k8sClient itself
 		},
 	}
 
@@ -315,7 +315,7 @@ func TestPodManager_ListPods(t *testing.T) {
 		k8sPodList := &corev1.PodList{Items: []corev1.Pod{}}
 		for _, idx := range podsToInclude {
 			p := testPods[idx]
-				k8sPodList.Items = append(k8sPodList.Items, *createTestPod(p.name, p.computeID, p.ip, p.isReady, namespace, p.labels, p.ports))
+			k8sPodList.Items = append(k8sPodList.Items, *createTestPod(p.name, p.computeID, p.ip, p.isReady, namespace, p.labels, p.ports))
 		}
 		return k8sPodList
 	}
@@ -325,7 +325,7 @@ func TestPodManager_ListPods(t *testing.T) {
 			name: "Successful list with multiple pods",
 			mockSetup: func(mockOps *mockPodOperations) *corev1.PodList {
 				k8sPods := createK8sPodList(0, 1, 2) // pod1, pod2, pod3 (no-computeid)
-				// pod4 (wrong-app) would be filtered by the k8sClient.ListPods itself if real, 
+				// pod4 (wrong-app) would be filtered by the k8sClient.ListPods itself if real,
 				// so we only return pods that would match the 'app:compute' selector.
 				mockOps.ListPodsFunc = func(c context.Context, ns string, labelSelectorMap map[string]string) (*corev1.PodList, error) {
 					if ns == namespace && labelSelectorMap["app"] == "compute" {
@@ -448,7 +448,7 @@ func TestPodManager_DeletePod(t *testing.T) {
 
 	type testCase struct {
 		name              string
-		computeIDToDelete  string
+		computeIDToDelete string
 		mockSetup         func(mockOps *mockPodOperations, computeID string)
 		primeCache        func(pm *client.ComputeManager, mockOps *mockPodOperations, computeID string, podNameToPrime string) // For setting up initial cache state
 		expectError       bool
@@ -485,12 +485,16 @@ func TestPodManager_DeletePod(t *testing.T) {
 				// Prime cache with the pod to be deleted and another pod to keep
 				originalGetPodFunc := mockOps.GetPodByLabelFunc
 				mockOps.GetPodByLabelFunc = func(ctx context.Context, ns string, labelSelectorMap map[string]string) (*corev1.Pod, error) {
-					if labelSelectorMap["computeId"] == "id-delete-success" { return podToDelete, nil }
-					if labelSelectorMap["computeId"] == "id-keep" { return podToKeepInCache, nil }
+					if labelSelectorMap["computeId"] == "id-delete-success" {
+						return podToDelete, nil
+					}
+					if labelSelectorMap["computeId"] == "id-keep" {
+						return podToKeepInCache, nil
+					}
 					return nil, fmt.Errorf("[primeCache-success] GetPodByLabelFunc called for unexpected ID %s", labelSelectorMap["computeId"])
 				}
-				pm.GetPod(ctx, "id-delete-success") // Ensure it's in cache
-				pm.GetPod(ctx, "id-keep")         // Ensure this other pod is in cache
+				pm.GetPod(ctx, "id-delete-success")            // Ensure it's in cache
+				pm.GetPod(ctx, "id-keep")                      // Ensure this other pod is in cache
 				mockOps.GetPodByLabelFunc = originalGetPodFunc // Restore for the actual test
 			},
 			expectError: false,
@@ -563,7 +567,9 @@ func TestPodManager_DeletePod(t *testing.T) {
 				// Prime cache with the pod that will cause an API error during delete
 				originalGetPodFunc := mockOps.GetPodByLabelFunc
 				mockOps.GetPodByLabelFunc = func(ctx context.Context, ns string, labelSelectorMap map[string]string) (*corev1.Pod, error) {
-					if labelSelectorMap["computeId"] == "id-api-error" { return podApiError, nil }
+					if labelSelectorMap["computeId"] == "id-api-error" {
+						return podApiError, nil
+					}
 					return nil, fmt.Errorf("[primeCache-apierror] GetPodByLabelFunc called for unexpected ID %s", labelSelectorMap["computeId"])
 				}
 				pm.GetPod(ctx, "id-api-error")

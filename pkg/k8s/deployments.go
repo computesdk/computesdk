@@ -1,4 +1,4 @@
-package client
+package k8s
 
 import (
 	"context"
@@ -17,6 +17,7 @@ type DeploymentOperations interface {
 	CreateDeployment(ctx context.Context, namespace string, deployment *appsv1.Deployment) (*appsv1.Deployment, error)
 	UpdateDeployment(ctx context.Context, namespace string, deployment *appsv1.Deployment) (*appsv1.Deployment, error)
 	DeleteDeployment(ctx context.Context, namespace, name string) error
+	ScaleDeployment(ctx context.Context, namespace, name string, replicas int32) error
 	// Future methods: etc.
 }
 
@@ -146,6 +147,34 @@ func (c *DefaultKubernetesClient) DeleteDeployment(ctx context.Context, namespac
 	if err != nil {
 		return fmt.Errorf("error deleting deployment %s in namespace %s: %w", name, namespace, err)
 	}
+	return nil
+}
+
+// ScaleDeployment scales a deployment to the specified number of replicas
+func (c *DefaultKubernetesClient) ScaleDeployment(ctx context.Context, namespace, name string, replicas int32) error {
+	if namespace == "" {
+		namespace = c.namespace
+	}
+	ctx, cancel := c.ensureContextTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+
+	// Get the current deployment
+	deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("error getting deployment %s in namespace %s for scaling: %w", name, namespace, err)
+	}
+
+	// Update the replica count
+	deployment.Spec.Replicas = &replicas
+
+	// Update the deployment
+	_, err = c.clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("error scaling deployment %s in namespace %s to %d replicas: %w", name, namespace, replicas, err)
+	}
+
 	return nil
 }
 

@@ -2,13 +2,17 @@
 package api
 
 import (
+	"context"
+	"log"
+
 	"github.com/gin-gonic/gin"
+	"github.com/heysnelling/computesdk/pkg/api/apikey"
 	"github.com/heysnelling/computesdk/pkg/api/compute"
 	"github.com/heysnelling/computesdk/pkg/api/handlers"
 	"github.com/heysnelling/computesdk/pkg/api/middleware"
-	"github.com/heysnelling/computesdk/pkg/api/session"
-	"github.com/heysnelling/computesdk/pkg/auth"
 	"github.com/heysnelling/computesdk/pkg/common"
+	"github.com/heysnelling/computesdk/pkg/k8s"
+	"github.com/heysnelling/computesdk/pkg/managers"
 	"gorm.io/gorm"
 )
 
@@ -23,27 +27,59 @@ func NewRouter(db *gorm.DB) *gin.Engine {
 		// API routes group
 		apiGroup := router.Group("/api")
 
-		secret := "your-secret-key"
-		jwtService := auth.NewJWTService(secret)
+		// API key service for authentication
+		apiKeyService := apikey.NewService(db)
 
-		// Initialize services
-		computeService := compute.NewService(db)
-		sessionService := session.NewService(db, jwtService)
+		// Initialize Kubernetes client and managers
+		k8sClient, err := k8s.NewKubernetesClient(
+			k8s.WithNamespace("computesdk"),
+		)
+		if err != nil {
+			log.Printf("Warning: Failed to create Kubernetes client: %v", err)
+			log.Printf("Compute operations will not work properly")
+			// Continue without k8s client - service will handle gracefully
+		}
+
+		var computeService *compute.ComputeService
+		if k8sClient != nil {
+			// Create managers
+			factory := managers.NewManagerFactory(k8sClient, "computesdk")
+			presetMgr, computeMgr := factory.CreateManagers()
+
+			// Initialize default presets
+			log.Printf("Initializing default presets...")
+			err = managers.InitializeDefaultPresets(context.Background(), presetMgr)
+			if err != nil {
+				log.Printf("Warning: Failed to initialize default presets: %v", err)
+				log.Printf("Some compute operations may fail without default presets")
+			} else {
+				log.Printf("Default presets initialized successfully")
+			}
+
+			// Initialize compute service with managers
+			computeService = compute.NewService(db, computeMgr, presetMgr)
+		} else {
+			// Fallback: create service with nil managers (will need to handle this in service)
+			computeService = compute.NewService(db, nil, nil)
+		}
 
 		// Initialize handlers
 		computeHandler := handlers.NewComputeHandler(computeService)
-		sessionHandler := handlers.NewSessionHandler(sessionService)
+		apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService)
 
-		// Register protected routes with auth middleware
-		sessionGroup := apiGroup.Group("/sessions")
-		sessionHandler.RegisterRoutes(sessionGroup)
+		// Create API key authentication middleware
+		authMiddleware := middleware.NewAPIKeyAuthMiddleware(apiKeyService)
 
-		authMiddleware := middleware.NewAuthMiddleware(jwtService, sessionService)
+		// Protected routes with API key authentication
 		protectedGroup := apiGroup.Group("")
-		protectedGroup.Use(authMiddleware.SessionAuth())
+		protectedGroup.Use(authMiddleware.APIKeyAuth())
 
 		computeGroup := protectedGroup.Group("/computes")
 		computeHandler.RegisterRoutes(computeGroup)
+
+		// API key management routes (also protected)
+		apiKeyGroup := protectedGroup.Group("/keys")
+		apiKeyHandler.RegisterRoutes(apiKeyGroup)
 	}
 
 	return router

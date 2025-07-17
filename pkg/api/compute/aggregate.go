@@ -8,16 +8,15 @@ import (
 )
 
 type ComputeAggregate struct {
-	ID          string     `json:"id"`
-	Status      string     `json:"status"`
-	Environment string     `json:"environment"`
-	IPAddress   string     `json:"ip_address,omitempty"`
-	PodName     string     `json:"pod_name,omitempty"`
-	PodURL      string     `json:"pod_url,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	LastActive  *time.Time `json:"last_active,omitempty"`
+	ID         string     `json:"id"`
+	Status     string     `json:"status"`
+	IPAddress  string     `json:"ip_address,omitempty"`
+	PodName    string     `json:"pod_name,omitempty"`
+	PodURL     string     `json:"pod_url,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	StartedAt  *time.Time `json:"started_at,omitempty"`
+	LastActive *time.Time `json:"last_active,omitempty"`
 }
 
 func (c *ComputeAggregate) Apply(events []events.Event) error {
@@ -28,13 +27,21 @@ func (c *ComputeAggregate) Apply(events []events.Event) error {
 		switch event.Type {
 		case "ComputeCreated":
 			c.ID = data["compute_id"].(string)
-			c.Environment = data["environment"].(string)
 			c.Status = "initializing"
 			c.CreatedAt = event.Timestamp
 
 		case "ComputeStarted":
 			c.Status = "running"
 			c.IPAddress = data["ip_address"].(string)
+			c.PodName = data["pod_name"].(string)
+			if startedAt, ok := data["started_at"].(string); ok {
+				if parsed, err := time.Parse(time.RFC3339, startedAt); err == nil {
+					c.StartedAt = &parsed
+				}
+			}
+
+		case "ComputeTerminated":
+			c.Status = "terminated"
 		}
 
 		c.UpdatedAt = event.Timestamp
@@ -44,18 +51,17 @@ func (c *ComputeAggregate) Apply(events []events.Event) error {
 }
 
 // ToSummary converts the aggregate to a summary projection
-func (c *ComputeAggregate) ToSummary(sessionID string) *ComputeSummary {
+func (c *ComputeAggregate) ToSummary(apiKeyID string) *ComputeSummary {
 	return &ComputeSummary{
-		ID:          c.ID,
-		SessionID:   sessionID,
-		Status:      c.Status,
-		Environment: c.Environment,
-		IPAddress:   c.IPAddress,
-		PodName:     c.PodName,
-		PodURL:      c.PodURL,
-		CreatedAt:   c.CreatedAt,
-		UpdatedAt:   c.UpdatedAt,
-		StartedAt:   c.StartedAt,
-		LastActive:  c.LastActive,
+		ID:         c.ID,
+		APIKeyID:   apiKeyID,
+		Status:     c.Status,
+		IPAddress:  c.IPAddress,
+		PodName:    c.PodName,
+		PodURL:     c.PodURL,
+		CreatedAt:  c.CreatedAt,
+		UpdatedAt:  c.UpdatedAt,
+		StartedAt:  c.StartedAt,
+		LastActive: c.LastActive,
 	}
 }

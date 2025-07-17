@@ -5,121 +5,82 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/heysnelling/computesdk/pkg/api/session"
-	"github.com/heysnelling/computesdk/pkg/auth"
+	"github.com/heysnelling/computesdk/pkg/api/apikey"
 )
 
 type AuthMiddleware struct {
-	jwtService     *auth.JWTService
-	sessionService *session.SessionService
+	apiKeyService *apikey.APIKeyService
 }
 
-func NewAuthMiddleware(jwtService *auth.JWTService, sessionService *session.SessionService) *AuthMiddleware {
+func NewAPIKeyAuthMiddleware(apiKeyService *apikey.APIKeyService) *AuthMiddleware {
 	return &AuthMiddleware{
-		jwtService:     jwtService,
-		sessionService: sessionService,
+		apiKeyService: apiKeyService,
 	}
 }
 
-// SessionAuth validates JWT tokens and ensures sessions are active
-func (am *AuthMiddleware) SessionAuth() gin.HandlerFunc {
+// APIKeyAuth validates API keys
+func (am *AuthMiddleware) APIKeyAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid authorization header"})
+		if !strings.HasPrefix(authHeader, "Bearer csk_") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key format"})
 			c.Abort()
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		apiKey := strings.TrimPrefix(authHeader, "Bearer ")
 
-		// Validate JWT token
-		claims, err := am.jwtService.ValidateToken(tokenString)
+		// Validate API key
+		keySummary, err := am.apiKeyService.ValidateAPIKey(c.Request.Context(), apiKey)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
 			c.Abort()
 			return
 		}
 
-		// Verify session is still active
-		summary, err := am.sessionService.GetSession(c.Request.Context(), claims.SessionID)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Session not found"})
-			c.Abort()
-			return
-		}
-
-		if summary.Status != "active" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Session inactive"})
-			c.Abort()
-			return
-		}
-
-		// Check if session has expired
-		if summary.ExpiresAt != nil && time.Now().After(*summary.ExpiresAt) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired"})
-			c.Abort()
-			return
-		}
-
-		// Add session info to context
-		c.Set("session_id", claims.SessionID)
-		c.Set("permissions", claims.Permissions)
-		c.Set("session_claims", claims)
+		// Set context for downstream handlers
+		c.Set("api_key_id", keySummary.ID)
+		c.Set("permissions", keySummary.Permissions)
+		c.Set("api_key_metadata", keySummary.Metadata)
+		c.Set("api_key_name", keySummary.Name)
 
 		c.Next()
 	}
 }
 
-// OptionalSessionAuth is like SessionAuth but doesn't require authentication
-// Useful for endpoints that can work with or without authentication
-func (am *AuthMiddleware) OptionalSessionAuth() gin.HandlerFunc {
+// OptionalAPIKeyAuth is like APIKeyAuth but doesn't require authentication
+func (am *AuthMiddleware) OptionalAPIKeyAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			// No auth header, continue without setting session context
+		if !strings.HasPrefix(authHeader, "Bearer csk_") {
+			// No API key, continue without setting context
 			c.Next()
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		apiKey := strings.TrimPrefix(authHeader, "Bearer ")
 
-		// Try to validate token
-		claims, err := am.jwtService.ValidateToken(tokenString)
+		// Try to validate API key
+		keySummary, err := am.apiKeyService.ValidateAPIKey(c.Request.Context(), apiKey)
 		if err != nil {
-			// Invalid token, continue without setting session context
+			// Invalid API key, continue without setting context
 			c.Next()
 			return
 		}
 
-		// Try to get session
-		summary, err := am.sessionService.GetSession(c.Request.Context(), claims.SessionID)
-		if err != nil || summary.Status != "active" {
-			// Session not found or inactive, continue without setting session context
-			c.Next()
-			return
-		}
-
-		// Check expiry
-		if summary.ExpiresAt != nil && time.Now().After(*summary.ExpiresAt) {
-			// Session expired, continue without setting session context
-			c.Next()
-			return
-		}
-
-		// Valid session, add to context
-		c.Set("session_id", claims.SessionID)
-		c.Set("permissions", claims.Permissions)
-		c.Set("session_claims", claims)
+		// Valid API key, add to context
+		c.Set("api_key_id", keySummary.ID)
+		c.Set("permissions", keySummary.Permissions)
+		c.Set("api_key_metadata", keySummary.Metadata)
+		c.Set("api_key_name", keySummary.Name)
 
 		c.Next()
 	}
 }
 
-// RequirePermission checks if the authenticated session has a specific permission
+// RequirePermission checks if the authenticated API key has a specific permission
 func (am *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		permissions, exists := c.Get("permissions")
@@ -149,10 +110,10 @@ func (am *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 
 // Helper functions to extract values from Gin context
 
-// GetSessionID extracts session ID from Gin context
-func GetSessionID(c *gin.Context) string {
-	if sessionID, exists := c.Get("session_id"); exists {
-		if id, ok := sessionID.(string); ok {
+// GetAPIKeyID extracts API key ID from Gin context
+func GetAPIKeyID(c *gin.Context) string {
+	if keyID, exists := c.Get("api_key_id"); exists {
+		if id, ok := keyID.(string); ok {
 			return id
 		}
 	}
@@ -169,17 +130,27 @@ func GetPermissions(c *gin.Context) []string {
 	return []string{}
 }
 
-// GetSessionClaims extracts full session claims from Gin context
-func GetSessionClaims(c *gin.Context) *auth.SessionClaims {
-	if claims, exists := c.Get("session_claims"); exists {
-		if sessionClaims, ok := claims.(*auth.SessionClaims); ok {
-			return sessionClaims
+// GetAPIKeyMetadata extracts API key metadata from Gin context
+func GetAPIKeyMetadata(c *gin.Context) map[string]string {
+	if metadata, exists := c.Get("api_key_metadata"); exists {
+		if meta, ok := metadata.(map[string]string); ok {
+			return meta
 		}
 	}
-	return nil
+	return map[string]string{}
 }
 
-// HasPermission checks if the current session has a specific permission
+// GetAPIKeyName extracts API key name from Gin context
+func GetAPIKeyName(c *gin.Context) string {
+	if name, exists := c.Get("api_key_name"); exists {
+		if n, ok := name.(string); ok {
+			return n
+		}
+	}
+	return ""
+}
+
+// HasPermission checks if the current API key has a specific permission
 func HasPermission(c *gin.Context, permission string) bool {
 	permissions := GetPermissions(c)
 	return slices.Contains(permissions, permission)

@@ -1,17 +1,18 @@
-package client
+package k8s_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	"github.com/heysnelling/computesdk/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-func TestKubernetesClientWithFake(t *testing.T) {
-	// Fake client preloaded with a pod
+func TestKubernetesClient(t *testing.T) {
+	// Create a test pod
 	testPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -31,24 +32,49 @@ func TestKubernetesClientWithFake(t *testing.T) {
 		},
 	}
 
+	// Create a fake clientset with our test pod
 	fakeClientset := fake.NewSimpleClientset(testPod)
 
-	// Create client with the test namespace
-	k8sClient, err := NewKubernetesClient(fakeClientset, "default")
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
-
-	// Verify the namespace was set correctly
-	if ns := k8sClient.Namespace(); ns != "default" {
-		t.Errorf("expected namespace 'default', got %s", ns)
-	}
-
-	// Test 1: Basic API access via Clientset
-	t.Run("Clientset", func(t *testing.T) {
-		pod, err := k8sClient.Clientset().CoreV1().Pods("default").Get(context.TODO(), "test-pod", metav1.GetOptions{})
+	// Test 1: Create client with functional options
+	t.Run("Create client with functional options", func(t *testing.T) {
+		k8sClient, err := k8s.NewKubernetesClient(
+			k8s.WithClientset(fakeClientset),
+			k8s.WithNamespace("default"),
+			k8s.WithTimeout(30*time.Second),
+		)
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		// Verify the namespace was set correctly
+		if ns := k8sClient.Namespace(); ns != "default" {
+			t.Errorf("expected namespace 'default', got %s", ns)
+		}
+
+		// Verify we can access the clientset
+		if k8sClient.Clientset() == nil {
+			t.Error("expected non-nil clientset")
+		}
+	})
+
+	// Test 2: Test client operations through the clientset
+	t.Run("Test client operations", func(t *testing.T) {
+		k8sClient, err := k8s.NewKubernetesClient(
+			k8s.WithClientset(fakeClientset),
+			k8s.WithNamespace("default"),
+		)
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		// Get the pod through the clientset
+		pod, err := k8sClient.Clientset().CoreV1().Pods("default").Get(
+			context.Background(),
+			"test-pod",
+			metav1.GetOptions{},
+		)
+		if err != nil {
+			t.Fatalf("failed to get pod: %v", err)
 		}
 
 		if pod.Name != "test-pod" {
@@ -56,52 +82,16 @@ func TestKubernetesClientWithFake(t *testing.T) {
 		}
 	})
 
-	// Test 2: GetPod convenience method
-	t.Run("GetPod", func(t *testing.T) {
-		ctx := context.Background()
-		pod, err := k8sClient.GetPod(ctx, "default", "test-pod")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+	// Test 3: Test WithKubeConfig option (will use in-cluster config in test)
+	t.Run("Test WithKubeConfig", func(t *testing.T) {
+		// This will use in-cluster config since we don't provide a kubeconfig path
+		_, err := k8s.NewKubernetesClient(
+			k8s.WithNamespace("test-namespace"),
+		)
 
-		if pod.Name != "test-pod" {
-			t.Errorf("expected pod name 'test-pod', got %s", pod.Name)
-		}
-
-		// Test with empty namespace (should use default)
-		pod, err = k8sClient.GetPod(ctx, "", "test-pod")
-		if err != nil {
-			t.Fatalf("unexpected error with empty namespace: %v", err)
-		}
-
-		if pod.Name != "test-pod" {
-			t.Errorf("expected pod name 'test-pod' with empty namespace, got %s", pod.Name)
-		}
-	})
-
-	// Test 3: ListPods with label selector
-	t.Run("ListPods", func(t *testing.T) {
-		ctx := context.Background()
-		pods, err := k8sClient.ListPods(ctx, "default", map[string]string{"app": "test"})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if len(pods.Items) != 1 {
-			t.Errorf("expected 1 pod, got %d", len(pods.Items))
-		}
-
-		if len(pods.Items) > 0 && pods.Items[0].Name != "test-pod" {
-			t.Errorf("expected pod name 'test-pod', got %s", pods.Items[0].Name)
-		}
-	})
-
-	// Test 4: WaitForPodReady (should return immediately since pod is already ready)
-	t.Run("WaitForPodReady", func(t *testing.T) {
-		ctx := context.Background()
-		_, err := k8sClient.WaitForPodReady(ctx, "default", "test-pod", 1*time.Second)
-		if err != nil {
-			t.Errorf("unexpected error waiting for ready pod: %v", err)
+		// We expect an error because we're not running in a cluster
+		if err == nil {
+			t.Error("expected error when creating in-cluster config outside of cluster")
 		}
 	})
 }

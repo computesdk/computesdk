@@ -9,17 +9,16 @@ import (
 )
 
 type ComputeSummary struct {
-	ID          string     `json:"id" gorm:"primaryKey;type:varchar(255)"`
-	SessionID   string     `json:"session_id" gorm:"index;type:varchar(255);not null"`
-	Status      string     `json:"status" gorm:"type:varchar(50);not null"`
-	Environment string     `json:"environment" gorm:"type:varchar(50);not null"`
-	IPAddress   string     `json:"ip_address,omitempty" gorm:"type:varchar(255)"`
-	PodName     string     `json:"pod_name,omitempty" gorm:"type:varchar(255)"`
-	PodURL      string     `json:"pod_url,omitempty" gorm:"type:varchar(255)"`
-	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
-	StartedAt   *time.Time `json:"started_at,omitempty" gorm:"type:timestamp"`
-	LastActive  *time.Time `json:"last_active,omitempty" gorm:"type:timestamp"`
+	ID         string     `json:"id" gorm:"primaryKey;type:varchar(255)"`
+	APIKeyID   string     `json:"api_key_id" gorm:"index;type:varchar(255);not null"`
+	Status     string     `json:"status" gorm:"type:varchar(50);not null"`
+	IPAddress  string     `json:"ip_address,omitempty" gorm:"type:varchar(255)"`
+	PodName    string     `json:"pod_name,omitempty" gorm:"type:varchar(255)"`
+	PodURL     string     `json:"pod_url,omitempty" gorm:"type:varchar(255)"`
+	CreatedAt  time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt  time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+	StartedAt  *time.Time `json:"started_at,omitempty" gorm:"type:timestamp"`
+	LastActive *time.Time `json:"last_active,omitempty" gorm:"type:timestamp"`
 }
 
 func init() {
@@ -71,13 +70,11 @@ func (r *SummaryRepository) Get(ctx context.Context, computeID string) (*Compute
 	return &computeSummary, nil
 }
 
-func (r *SummaryRepository) List(ctx context.Context, sessionID *string, limit, offset int) ([]ComputeSummary, error) {
+func (r *SummaryRepository) ListByAPIKey(ctx context.Context, apiKeyID string, limit, offset int) ([]ComputeSummary, error) {
 	var summaries []ComputeSummary
 	query := r.db.WithContext(ctx).Order("created_at desc")
 
-	if sessionID != nil {
-		query = query.Where(ComputeSummary{SessionID: *sessionID})
-	}
+	query = query.Where(ComputeSummary{APIKeyID: apiKeyID})
 
 	if err := query.Limit(limit).Offset(offset).Find(&summaries).Error; err != nil {
 		return nil, err

@@ -2,7 +2,7 @@
 package compute
 
 type CreateComputeRequest struct {
-	Environment string `json:"environment" binding:"required,oneof=production staging development"`
+	PresetID string `json:"preset_id,omitempty"` // Optional - will use default if not provided
 }
 
 type TerminateComputeRequest struct {

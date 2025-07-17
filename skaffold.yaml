@@ -32,23 +32,19 @@ build:
             dest: '.'
           - src: 'go.sum'
             dest: '.'
+  # For local development (OrbStack/minikube)
   local:
     push: false
+  # For EKS/cloud deployment, uncomment and set your registry:
+  # tagPolicy:
+  #   gitCommit: {}
+  # To use with EKS, run:
+  # skaffold run --default-repo=YOUR_ECR_REPO
 
 deploy:
-  # Deploy operators using Helm
+  # Only deploy Postgres operator (essential for API keys)
   helm:
     releases:
-      # Redis operator
-        
-      # SeaweedFS operator
-      - name: seaweedfs-operator
-        repo: https://seaweedfs.github.io/seaweedfs/helm
-        remoteChart: seaweedfs
-        namespace: operators
-        valuesFiles:
-          - deployments/operators/seaweedfs/seaweedfs-values-local.yaml
-
       # Postgres operator
       - name: zalando-postgres-operator
         repo: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
@@ -57,16 +53,8 @@ deploy:
         valuesFiles:
           - deployments/operators/postgres-operator/zalando-values-local.yaml
 
-      # Prometheus operator
-      - name: prometheus-operator
-        repo: https://prometheus-community.github.io/helm-charts
-        remoteChart: kube-prometheus-stack
-        namespace: operators
-        valuesFiles:
-          - deployments/operators/prometheus-operator/prometheus-operator-values-local.yaml
-
   # Core services using kubectl
-  kubectl:
+  kubectl: {}
 
 # Define the raw YAML manifests to be rendered
 manifests:
@@ -75,5 +63,6 @@ manifests:
     - deployments/ingress.yaml
     - deployments/rbac/*.yaml
     - deployments/gateway/*.yaml
-    - deployments/api/*.yaml
+    - deployments/api/api-deployment.yaml
+    - deployments/api/api-service.yaml
     - deployments/postgres/*.yaml

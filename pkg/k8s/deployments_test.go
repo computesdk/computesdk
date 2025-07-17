@@ -1,9 +1,10 @@
-package client
+package k8s_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/heysnelling/computesdk/pkg/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/errors" // For checking "not found" errors
@@ -19,10 +20,10 @@ func TestGetDeployment(t *testing.T) {
 	podLabels := map[string]string{"app": "my-test-app"}
 
 	// 1. Create a test Deployment object using your fixture
-	testDeployment := CreateTestDeployment(deploymentName, testNamespace, replicas, podLabels)
+	testDeployment := k8s.CreateTestDeployment(deploymentName, testNamespace, replicas, podLabels)
 
 	// 2. Create a new test client using NewTestClients, preloading the fake clientset with our testDeployment
-	client, _, err := NewTestClients(testNamespace, testDeployment)
+	client, _, err := k8s.NewTestClients(testNamespace, testDeployment)
 	require.NoError(t, err, "NewTestClients should not return an error")
 	require.NotNil(t, client, "Client from NewTestClients should not be nil")
 
@@ -49,19 +50,19 @@ func TestListDeployments(t *testing.T) {
 	ctx := context.Background()
 	testNamespace := "list-deploy-ns"
 	otherNamespace := "other-ns"
-	
+
 	labelsMatch := map[string]string{"env": "test", "app": "service-a"}
 	labelsNoMatch := map[string]string{"env": "prod", "app": "service-b"}
 	labelsPartialMatch := map[string]string{"env": "test", "app": "service-c"} // Shares 'env' but not 'app'
 
 	// Create deployments
-	dep1 := CreateTestDeployment("deploy1", testNamespace, 1, labelsMatch)
-	dep2 := CreateTestDeployment("deploy2", testNamespace, 2, labelsMatch)
-	dep3NoMatch := CreateTestDeployment("deploy3", testNamespace, 1, labelsNoMatch)
-	dep4PartialMatch := CreateTestDeployment("deploy4", testNamespace, 1, labelsPartialMatch)
-	depInOtherNS := CreateTestDeployment("deploy5", otherNamespace, 1, labelsMatch)
+	dep1 := k8s.CreateTestDeployment("deploy1", testNamespace, 1, labelsMatch)
+	dep2 := k8s.CreateTestDeployment("deploy2", testNamespace, 2, labelsMatch)
+	dep3NoMatch := k8s.CreateTestDeployment("deploy3", testNamespace, 1, labelsNoMatch)
+	dep4PartialMatch := k8s.CreateTestDeployment("deploy4", testNamespace, 1, labelsPartialMatch)
+	depInOtherNS := k8s.CreateTestDeployment("deploy5", otherNamespace, 1, labelsMatch)
 
-	client, _, err := NewTestClients(testNamespace, dep1, dep2, dep3NoMatch, dep4PartialMatch, depInOtherNS)
+	client, _, err := k8s.NewTestClients(testNamespace, dep1, dep2, dep3NoMatch, dep4PartialMatch, depInOtherNS)
 	require.NoError(t, err)
 
 	t.Run("list with matching labels", func(t *testing.T) {
@@ -93,7 +94,7 @@ func TestListDeployments(t *testing.T) {
 		require.NotNil(t, deploymentList)
 		assert.Len(t, deploymentList.Items, 0, "Should list 0 deployments for non-existent labels")
 	})
-	
+
 	t.Run("list with nil labels (all in namespace)", func(t *testing.T) {
 		deploymentList, err := client.ListDeployments(ctx, testNamespace, nil)
 		require.NoError(t, err)
@@ -119,10 +120,10 @@ func TestCreateDeployment(t *testing.T) {
 
 	// 1. Define the deployment to be created using the fixture
 	// Note: The fixture sets the namespace, but CreateDeployment will also set/verify it.
-	deploymentToCreate := CreateTestDeployment(deploymentName, testNamespace, replicas, podLabels)
-	
+	deploymentToCreate := k8s.CreateTestDeployment(deploymentName, testNamespace, replicas, podLabels)
+
 	// 2. Create a new test client. No initial objects are needed for a create test.
-	client, _, err := NewTestClients(testNamespace) // No initial objects
+	client, _, err := k8s.NewTestClients(testNamespace) // No initial objects
 	require.NoError(t, err, "NewTestClients should not return an error")
 	require.NotNil(t, client, "Client from NewTestClients should not be nil")
 
@@ -157,10 +158,10 @@ func TestUpdateDeployment(t *testing.T) {
 	podLabels := map[string]string{"app": "app-to-update"}
 
 	// 1. Create and add an initial deployment
-	initialDeployment := CreateTestDeployment(deploymentName, testNamespace, initialReplicas, podLabels)
+	initialDeployment := k8s.CreateTestDeployment(deploymentName, testNamespace, initialReplicas, podLabels)
 	initialDeployment.Spec.Template.Spec.Containers[0].Image = initialImage // Assuming one container from fixture
 
-	client, _, err := NewTestClients(testNamespace, initialDeployment)
+	client, _, err := k8s.NewTestClients(testNamespace, initialDeployment)
 	require.NoError(t, err, "NewTestClients should not return an error")
 
 	// 2. Modify the deployment for update
@@ -202,9 +203,9 @@ func TestDeleteDeployment(t *testing.T) {
 	nonExistentDeploymentName := "i-do-not-exist"
 
 	// 1. Create and add an initial deployment
-	deploymentToDelete := CreateTestDeployment(deploymentName, testNamespace, 1, map[string]string{"app": "delete-me"})
+	deploymentToDelete := k8s.CreateTestDeployment(deploymentName, testNamespace, 1, map[string]string{"app": "delete-me"})
 
-	client, _, err := NewTestClients(testNamespace, deploymentToDelete)
+	client, _, err := k8s.NewTestClients(testNamespace, deploymentToDelete)
 	require.NoError(t, err, "NewTestClients should not return an error")
 
 	// 2. Delete the existing deployment

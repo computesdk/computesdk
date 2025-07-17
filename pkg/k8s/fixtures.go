@@ -1,4 +1,4 @@
-package client
+package k8s
 
 import (
 	// Though not directly used in fixtures, good practice if expanded
@@ -15,9 +15,16 @@ import (
 // This allows tests to inspect the fake clientset directly if needed.
 // Pass Kubernetes runtime objects (like Pods, Deployments) to preload the fake clientset.
 func NewTestClients(namespace string, initialObjects ...runtime.Object) (KubernetesClient, *fake.Clientset, error) {
+	if namespace == "" {
+		namespace = "default"
+	}
+
 	fakeClientset := fake.NewSimpleClientset(initialObjects...)
-	// Assuming NewKubernetesClient is defined in client.go and accepts kubernetes.Interface and namespace
-	client, err := NewKubernetesClient(fakeClientset, namespace)
+	
+	client, err := NewKubernetesClient(
+		WithClientset(fakeClientset),
+		WithNamespace(namespace),
+	)
 	if err != nil {
 		return nil, nil, err
 	}

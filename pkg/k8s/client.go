@@ -1,7 +1,5 @@
-// Package client provides a simplified interface for interacting with Kubernetes resources
-// like Pods and Deployments. It wraps the standard client-go library to offer
-// consistent context handling, error management, and default namespace logic.
-package client
+// Package k8s provides a simplified interface for interacting with Kubernetes resources
+package k8s
 
 import (
 	"context"
@@ -13,131 +11,131 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// KubernetesClient is the interface your app will use
+// KubernetesClient defines the interface you control
 type KubernetesClient interface {
-	// Base client access
 	Clientset() kubernetes.Interface
-
-	// Pod operations
-	PodOperations
-
-	// Deployment operations
-	DeploymentOperations
-
-	// Namespace for operations
 	Namespace() string
+	DeploymentOperations
+	PodOperations
 }
 
-// DefaultKubernetesClient is the concrete implementation
+// DefaultKubernetesClient implements KubernetesClient
 type DefaultKubernetesClient struct {
 	clientset kubernetes.Interface
-	namespace string        // Default namespace for operations
-	timeout   time.Duration // Default timeout for operations
+	namespace string
+	timeout   time.Duration
 }
 
-// Common errors
+func (c *DefaultKubernetesClient) Clientset() kubernetes.Interface {
+	return c.clientset
+}
+
+func (c *DefaultKubernetesClient) Namespace() string {
+	return c.namespace
+}
+
+// ensureContextTimeout ensures the context has a timeout set
+func (c *DefaultKubernetesClient) ensureContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		// Context already has a deadline
+		return ctx, nil
+	}
+	return context.WithTimeout(ctx, c.timeout)
+}
+
+// Ensure DefaultKubernetesClient implements all required interfaces
 var (
-	ErrPodNotFound = fmt.Errorf("pod not found")
-	ErrPodNotReady = fmt.Errorf("pod not ready")
-	ErrTimeout     = fmt.Errorf("operation timed out")
+	_ KubernetesClient     = (*DefaultKubernetesClient)(nil)
+	_ DeploymentOperations = (*DefaultKubernetesClient)(nil)
+	_ PodOperations        = (*DefaultKubernetesClient)(nil)
 )
 
-func (d *DefaultKubernetesClient) Clientset() kubernetes.Interface {
-	return d.clientset
+// --- Functional Options ---
+
+type Option func(*configOptions)
+
+type configOptions struct {
+	namespace      string
+	kubeConfigPath string
+	clientset      kubernetes.Interface
+	timeout        time.Duration
 }
 
-func (d *DefaultKubernetesClient) Namespace() string {
-	return d.namespace
+// WithNamespace sets the namespace (default: "default")
+func WithNamespace(ns string) Option {
+	return func(o *configOptions) {
+		o.namespace = ns
+	}
 }
 
-// ensureContextTimeout takes a context and returns a new context derived
-// from it with the client's default timeout, if the original context
-// was nil or did not have a deadline set. It also returns the cancel function
-// for the derived context, which the caller *must* defer. If the original
-// context already had a deadline, it's returned unmodified with a nil cancel func.
-func (c *DefaultKubernetesClient) ensureContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		// Create a new context with timeout if none provided
-		return context.WithTimeout(context.Background(), c.timeout)
+// WithKubeConfig sets the path to the kubeconfig file
+func WithKubeConfig(path string) Option {
+	return func(o *configOptions) {
+		o.kubeConfigPath = path
 	}
-	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		// Derive a context with timeout if the provided one lacks a deadline
-		return context.WithTimeout(ctx, c.timeout)
-	}
-	// Return the original context and nil cancel func if it already has a deadline
-	return ctx, nil
 }
 
-// NewKubernetesClient creates a KubernetesClient from either:
-// - A provided kubernetes.Interface (for testing)
-// - A kubeconfig file path
-// - In-cluster config if no path is provided
-func NewKubernetesClient(kubeConfigPathOrClientset interface{}, namespace string) (KubernetesClient, error) {
-	// Default namespace if not provided
-	if namespace == "" {
-		namespace = "default"
+// WithClientset injects a prebuilt clientset (typically for testing)
+func WithClientset(cs kubernetes.Interface) Option {
+	return func(o *configOptions) {
+		o.clientset = cs
+	}
+}
+
+// WithTimeout sets a timeout for client interactions (default: 30s)
+func WithTimeout(t time.Duration) Option {
+	return func(o *configOptions) {
+		o.timeout = t
+	}
+}
+
+// NewKubernetesClient creates a Kubernetes client with the provided options
+func NewKubernetesClient(opts ...Option) (KubernetesClient, error) {
+	// Default configuration
+	cfg := &configOptions{
+		namespace: "default",
+		timeout:   30 * time.Second,
 	}
 
-	// Default client with reasonable timeout
+	// Apply functional options
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	client := &DefaultKubernetesClient{
-		namespace: namespace,
-		timeout:   30 * time.Second, // Reasonable default timeout
+		namespace: cfg.namespace,
+		timeout:   cfg.timeout,
 	}
 
-	// If we're passed a clientset directly, use it (testing case)
-	if clientset, ok := kubeConfigPathOrClientset.(kubernetes.Interface); ok {
-		client.clientset = clientset
+	// Use injected clientset if provided
+	if cfg.clientset != nil {
+		client.clientset = cfg.clientset
 		return client, nil
 	}
 
-	// Otherwise, treat the input as a kubeconfig path
-	var kubeConfigPath string
-	if path, ok := kubeConfigPathOrClientset.(string); ok {
-		kubeConfigPath = path
-	}
-
-	// Create config from either kubeconfig or in-cluster
-	var config *rest.Config
+	// Build config
+	var restConfig *rest.Config
 	var err error
 
-	if kubeConfigPath == "" {
-		config, err = rest.InClusterConfig()
+	if cfg.kubeConfigPath != "" {
+		restConfig, err = clientcmd.BuildConfigFromFlags("", cfg.kubeConfigPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create in-cluster config: %v", err)
+			return nil, fmt.Errorf("failed to build config from kubeconfig: %w", err)
 		}
 	} else {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+		restConfig, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, fmt.Errorf("failed to build config from kubeconfig: %v", err)
+			return nil, fmt.Errorf("failed to create in-cluster config: %w", err)
 		}
 	}
 
-	// Create the clientset
-	clientset, err := kubernetes.NewForConfig(config)
+	restConfig.Timeout = cfg.timeout
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create clientset: %v", err)
+		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
 	client.clientset = clientset
 	return client, nil
 }
-
-// // GetPod retrieves a pod by name from the specified namespace
-// func (d *DefaultKubernetesClient) GetPod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
-// 	if namespace == "" {
-// 		namespace = d.namespace
-// 	}
-
-// 	// Use the provided context or create one with default timeout
-// 	if ctx == nil {
-// 		var cancel context.CancelFunc
-// 		ctx, cancel = context.WithTimeout(context.Background(), d.timeout)
-// 		defer cancel()
-// 	}
-
-// 	pod, err := d.clientset.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-// 	if err != nil {
-// 		return nil, fmt.Errorf("error getting pod %s in namespace %s: %w", name, namespace, err)
-// 	}
-// 	return pod, nil
-// }

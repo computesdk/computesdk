@@ -29,7 +29,7 @@ func main() {
 	// NewKubernetesClient doesn't directly accept it. It would need to be set as an env var before this call
 	// or NewKubernetesClient would need modification to accept it.
 	// For now, assuming standard kubeconfig resolution is sufficient.
-	k8sOps, err := k8sopsclient.NewKubernetesClient(nil, cfg.Namespace) // Pass nil for clientset to use default
+	k8sOps, err := k8sopsclient.NewKubernetesClient(k8sopsclient.WithNamespace(cfg.Namespace))
 	if err != nil {
 		log.Fatalf("Failed to create Kubernetes operations client: %v", err)
 	}

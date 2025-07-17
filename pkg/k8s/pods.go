@@ -1,4 +1,4 @@
-package client
+package k8s
 
 import (
 	"context"
@@ -96,10 +96,6 @@ func (c *DefaultKubernetesClient) WaitForPodReady(ctx context.Context, namespace
 		}
 		waitCtx, waitCancel = context.WithTimeout(ctx, timeout)
 		defer waitCancel()
-	} else {
-		// If the parent context already has a deadline, respect it.
-		// We might optionally want to check if the provided timeout param is shorter
-		// and create an even shorter deadline, but respecting the parent is usually safer.
 	}
 
 	// Poll every second until timeout

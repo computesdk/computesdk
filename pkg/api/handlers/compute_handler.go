@@ -23,6 +23,10 @@ func (h *ComputeHandler) RegisterRoutes(group *gin.RouterGroup) {
 	group.POST("", h.Create)
 	group.GET("/:id", h.Get)
 	group.POST("/:id/terminate", h.Terminate)
+
+	// Preset endpoints
+	group.GET("/presets", h.ListPresets)
+	group.GET("/presets/:id", h.GetPreset)
 }
 
 func (h *ComputeHandler) List(c *gin.Context) {
@@ -73,6 +77,25 @@ func (h *ComputeHandler) Terminate(c *gin.Context) {
 	req.ComputeID = c.Param("id")
 
 	result, err := h.service.TerminateCompute(c, &req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *ComputeHandler) ListPresets(c *gin.Context) {
+	result, err := h.service.ListPresets(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *ComputeHandler) GetPreset(c *gin.Context) {
+	presetID := c.Param("id")
+	result, err := h.service.GetPreset(c, presetID)
 	if err != nil {
 		c.Error(err)
 		return

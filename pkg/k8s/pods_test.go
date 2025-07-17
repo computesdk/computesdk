@@ -1,4 +1,4 @@
-package client
+package k8s_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/heysnelling/computesdk/pkg/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -41,7 +42,10 @@ func TestKubernetesPodsWithFake(t *testing.T) {
 	fakeClientset := fake.NewSimpleClientset(testPod)
 
 	// Create client with the test namespace
-	k8sClient, err := NewKubernetesClient(fakeClientset, "default")
+	k8sClient, err := k8s.NewKubernetesClient(
+		k8s.WithClientset(fakeClientset),
+		k8s.WithNamespace("default"),
+	)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -109,10 +113,10 @@ func TestCreatePod(t *testing.T) {
 
 	// 1. Define the pod to be created using the fixture
 	// Pass 'true' for the 'ready' parameter as the fixture expects a boolean.
-	podToCreate := CreateTestPod(podName, testNamespace, podLabels, true)
+	podToCreate := k8s.CreateTestPod(podName, testNamespace, podLabels, true)
 
 	// 2. Create a new test client using NewTestClients for consistency.
-	client, _, err := NewTestClients(testNamespace) // No initial objects
+	client, _, err := k8s.NewTestClients(testNamespace) // No initial objects
 	require.NoError(t, err, "NewTestClients should not return an error")
 	require.NotNil(t, client, "Client from NewTestClients should not be nil")
 
@@ -147,9 +151,9 @@ func TestUpdatePod(t *testing.T) {
 
 	// 1. Create and add an initial pod
 	// The 'ready' status doesn't significantly impact a label update test.
-	initialPod := CreateTestPod(podName, testNamespace, initialLabels, true)
+	initialPod := k8s.CreateTestPod(podName, testNamespace, initialLabels, true)
 
-	client, _, err := NewTestClients(testNamespace, initialPod)
+	client, _, err := k8s.NewTestClients(testNamespace, initialPod)
 	require.NoError(t, err, "NewTestClients should not return an error")
 
 	// 2. Modify the pod for update (e.g., change labels)
@@ -184,9 +188,9 @@ func TestDeletePod(t *testing.T) {
 	podLabels := map[string]string{"app": "delete-me"}
 
 	// 1. Create and add an initial pod
-	podToDelete := CreateTestPod(podName, testNamespace, podLabels, true)
+	podToDelete := k8s.CreateTestPod(podName, testNamespace, podLabels, true)
 
-	client, _, err := NewTestClients(testNamespace, podToDelete)
+	client, _, err := k8s.NewTestClients(testNamespace, podToDelete)
 	require.NoError(t, err, "NewTestClients should not return an error")
 
 	// 2. Delete the existing pod
@@ -211,13 +215,13 @@ func TestDeletePodsByLabel(t *testing.T) {
 	targetSelector := labels.SelectorFromSet(targetLabels) // Create selector for verification
 
 	// Pods to set up - fewer are needed now as we don't check complex deletion logic
-	podA := CreateTestPod("pod-a", testNamespace, targetLabels, true)
-	podE := CreateTestPod("pod-e", defaultNamespace, targetLabels, true) // Pod in default ns for default test
+	podA := k8s.CreateTestPod("pod-a", testNamespace, targetLabels, true)
+	podE := k8s.CreateTestPod("pod-e", defaultNamespace, targetLabels, true) // Pod in default ns for default test
 
 	// --- Test Case: Verify Successful Deletion Action ---
 	t.Run("Verify delete-collection action for matching labels", func(t *testing.T) {
 		// Setup client using helper which returns fake clientset
-		k8sClient, fakeClientset, err := NewTestClients(defaultNamespace, podA.DeepCopy()) // Need at least one pod
+		k8sClient, fakeClientset, err := k8s.NewTestClients(defaultNamespace, podA.DeepCopy()) // Need at least one pod
 		require.NoError(t, err)
 		fakeClientset.ClearActions() // Clear setup actions like create
 
@@ -240,7 +244,7 @@ func TestDeletePodsByLabel(t *testing.T) {
 	// --- Test Case: Empty Selector Error (No change needed here) ---
 	t.Run("Empty label selector error", func(t *testing.T) {
 		// Setup client
-		k8sClient, fakeClientset, err := NewTestClients(defaultNamespace, podA.DeepCopy()) // Need at least one pod to exist
+		k8sClient, fakeClientset, err := k8s.NewTestClients(defaultNamespace, podA.DeepCopy()) // Need at least one pod to exist
 		require.NoError(t, err)
 		fakeClientset.ClearActions() // Clear setup actions
 
@@ -259,7 +263,7 @@ func TestDeletePodsByLabel(t *testing.T) {
 	// --- Test Case: Verify Default Namespace Action ---
 	t.Run("Verify delete-collection action for default namespace", func(t *testing.T) {
 		// Setup client with pod in default namespace
-		k8sClient, fakeClientset, err := NewTestClients(defaultNamespace, podE.DeepCopy()) // Ensure default ns matches podE's ns
+		k8sClient, fakeClientset, err := k8s.NewTestClients(defaultNamespace, podE.DeepCopy()) // Ensure default ns matches podE's ns
 		require.NoError(t, err)
 		fakeClientset.ClearActions() // Clear setup actions
 
@@ -282,7 +286,7 @@ func TestDeletePodsByLabel(t *testing.T) {
 	// --- Test Case: Non-existent Namespace (No change needed here) ---
 	t.Run("Non-existent namespace", func(t *testing.T) {
 		// Setup client
-		k8sClient, fakeClientset, err := NewTestClients(defaultNamespace) // No objects needed
+		k8sClient, fakeClientset, err := k8s.NewTestClients(defaultNamespace) // No objects needed
 		require.NoError(t, err)
 		fakeClientset.ClearActions()
 
@@ -312,17 +316,17 @@ func TestGetPodByLabel(t *testing.T) {
 
 	// Common test pods
 	pod1Labels := map[string]string{"app": "billing", "env": "staging"}
-	pod1 := CreateTestPod("pod1-staging", ns, pod1Labels, true)
+	pod1 := k8s.CreateTestPod("pod1-staging", ns, pod1Labels, true)
 
 	pod2Labels := map[string]string{"app": "frontend", "env": "staging"}
-	pod2 := CreateTestPod("pod2-staging", ns, pod2Labels, true) 
+	pod2 := k8s.CreateTestPod("pod2-staging", ns, pod2Labels, true)
 
 	// Pod3 has the same labels as Pod1 to test returning the first match
 	pod3SameLabelsAs1 := map[string]string{"app": "billing", "env": "staging"}
-	pod3 := CreateTestPod("pod3-staging-duplicate", ns, pod3SameLabelsAs1, true)
+	pod3 := k8s.CreateTestPod("pod3-staging-duplicate", ns, pod3SameLabelsAs1, true)
 
 	t.Run("PodFound", func(t *testing.T) {
-		client, _, err := NewTestClients(ns, pod1, pod2)
+		client, _, err := k8s.NewTestClients(ns, pod1, pod2)
 		require.NoError(t, err)
 
 		ctx := context.Background()
@@ -339,7 +343,7 @@ func TestGetPodByLabel(t *testing.T) {
 		// Note: The fake client's List usually returns in order of addition for NewSimpleClientset,
 		// but this isn't a guaranteed contract for real API servers or more complex fake client setups.
 		// For this test, we'll assume pod1 is listed before pod3 if both are added.
-		client, _, err := NewTestClients(ns, pod1, pod3, pod2) // pod1 and pod3 match, pod2 does not
+		client, _, err := k8s.NewTestClients(ns, pod1, pod3, pod2) // pod1 and pod3 match, pod2 does not
 		require.NoError(t, err)
 
 		ctx := context.Background()
@@ -355,7 +359,7 @@ func TestGetPodByLabel(t *testing.T) {
 	})
 
 	t.Run("PodNotFound", func(t *testing.T) {
-		client, _, err := NewTestClients(ns, pod2) // Only pod2 exists
+		client, _, err := k8s.NewTestClients(ns, pod2) // Only pod2 exists
 		require.NoError(t, err)
 
 		ctx := context.Background()
@@ -368,7 +372,7 @@ func TestGetPodByLabel(t *testing.T) {
 	})
 
 	t.Run("EmptyLabelSelector", func(t *testing.T) {
-		client, _, err := NewTestClients(ns, pod1) // Content of client doesn't matter here
+		client, _, err := k8s.NewTestClients(ns, pod1) // Content of client doesn't matter here
 		require.NoError(t, err)
 
 		ctx := context.Background()
@@ -385,8 +389,11 @@ func TestGetPodByLabel(t *testing.T) {
 		fakeClientset.PrependReactor("list", "pods", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 			return true, nil, errors.New("simulated list pods error")
 		})
-		
-		k8sClient, err := NewKubernetesClient(fakeClientset, ns)
+
+		k8sClient, err := k8s.NewKubernetesClient(
+			k8s.WithClientset(fakeClientset),
+			k8s.WithNamespace(ns),
+		)
 		require.NoError(t, err)
 
 		ctx := context.Background()
@@ -400,7 +407,7 @@ func TestGetPodByLabel(t *testing.T) {
 	})
 
 	t.Run("ContextCancelled", func(t *testing.T) {
-		client, _, err := NewTestClients(ns, pod1)
+		client, _, err := k8s.NewTestClients(ns, pod1)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(context.Background())
