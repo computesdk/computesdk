@@ -1,0 +1,30 @@
+{
+  "name": "@computesdk/example-nuxt",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Nuxt 3 example using ComputeSDK for server-side code execution",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "type-check": "nuxt typecheck"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "latest",
+    "nuxt": "^3.8.0",
+    "vue": "^3.3.0",
+    "vue-router": "^4.2.0"
+  },
+  "dependencies": {
+    "computesdk": "workspace:*",
+    "@computesdk/e2b": "workspace:*",
+    "@computesdk/vercel": "workspace:*",
+    "@computesdk/cloudflare": "workspace:*",
+    "@computesdk/ui": "workspace:*"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

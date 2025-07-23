@@ -1,0 +1,32 @@
+---
+// No server-side logic needed for this page
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ComputeSDK + Astro Example</title>
+    <meta name="description" content="Example of using ComputeSDK with Astro for server-side code execution" />
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <main class="container mx-auto p-8 max-w-4xl">
+      <h1 class="text-3xl font-bold mb-8">ComputeSDK + Astro Example</h1>
+      
+      <div id="code-execution-container"></div>
+    </main>
+
+    <script type="module">
+      import { createCodeExecutionComponent } from '@computesdk/ui/vanilla';
+      
+      const container = document.getElementById('code-execution-container');
+      createCodeExecutionComponent(container, {
+        apiEndpoint: '/api/execute',
+        initialCode: 'print("Hello from ComputeSDK!")',
+        initialRuntime: 'python'
+      });
+    </script>
+  </body>
+</html>

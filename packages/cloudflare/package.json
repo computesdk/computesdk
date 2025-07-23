@@ -1,0 +1,61 @@
+{
+  "name": "@computesdk/cloudflare",
+  "version": "1.0.0",
+  "description": "Cloudflare Containers provider for ComputeSDK",
+  "author": "Garrison",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@cloudflare/sandbox": "^0.0.8",
+    "cloudflare": "^3.0.0",
+    "computesdk": "workspace:*"
+  },
+
+  "keywords": [
+    "cloudflare",
+    "sandbox",
+    "code-execution",
+    "edge",
+    "workers",
+    "durable-objects",
+    "python",
+    "nodejs",
+    "cloud",
+    "compute"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/cloudflare"
+  },
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cloudflare",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250715.0",
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

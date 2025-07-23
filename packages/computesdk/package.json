@@ -1,0 +1,65 @@
+{
+  "name": "computesdk",
+  "version": "1.0.2",
+  "description": "Unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
+  "author": "Garrison",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "sandbox",
+    "code-execution",
+    "cloud",
+    "e2b",
+    "vercel",
+    "cloudflare",
+    "fly.io",
+    "compute",
+    "containers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git"
+  },
+  "homepage": "https://github.com/computesdk/computesdk",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "dependencies": {
+    "zod": "^3.22.0",
+    "uuid": "^9.0.0"
+  },
+
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

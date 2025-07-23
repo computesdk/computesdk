@@ -1,0 +1,15 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Coverage
+coverage
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
