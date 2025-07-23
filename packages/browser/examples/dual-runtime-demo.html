@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComputeSDK Browser - Dual Runtime Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .runtime-section {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .runtime-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .javascript { border-left: 4px solid #f7df1e; }
+        .python { border-left: 4px solid #3776ab; }
+        textarea {
+            width: 100%;
+            height: 120px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px 5px 10px 0;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .run-js { background: #f7df1e; color: #000; }
+        .run-python { background: #3776ab; color: #fff; }
+        .output {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            min-height: 100px;
+            border: 1px solid #e9ecef;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        .runtime-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 ComputeSDK Browser - Dual Runtime Demo</h1>
+    <p>This demo shows JavaScript (QuickJS) and Python (Pyodide) running in the same browser sandbox with shared persistent filesystem!</p>
+    
+    <div class="status info" id="status">
+        Initializing dual runtime system...
+    </div>
+
+    <div id="runtime-info" class="runtime-info">
+        <strong>Available Runtimes:</strong> <span id="available-runtimes">Loading...</span><br>
+        <strong>Runtime Status:</strong> <span id="runtime-status">Loading...</span>
+    </div>
+
+    <div class="runtime-section javascript">
+        <h3>🟨 JavaScript Runtime (QuickJS)</h3>
+        <textarea id="js-code">// JavaScript with filesystem access
+console.log('Hello from QuickJS!');
+
+// Try filesystem operations
+console.log('Current working directory:', process.cwd());
+
+// Write a file
+fs.writeFileSync('/shared-data.txt', 'Hello from JavaScript!');
+console.log('File written to /shared-data.txt');
+
+// List files
+console.log('Files in root:', fs.readdirSync('/'));
+</textarea>
+        <button class="run-js" onclick="runJavaScript()">Run JavaScript</button>
+        <button onclick="clearOutput('js')">Clear Output</button>
+        <div class="output" id="js-output"></div>
+    </div>
+
+    <div class="runtime-section python">
+        <h3>🐍 Python Runtime (Pyodide)</h3>
+        <textarea id="python-code"># Python with filesystem access
+print('Hello from Pyodide!')
+
+# Try filesystem operations
+import os
+print('Current working directory:', os.getcwd())
+
+# Try to read the file created by JavaScript
+try:
+    content = fs.read_file('/shared-data.txt')
+    print('Read from JavaScript file:', content)
+except:
+    print('Could not read JavaScript file (filesystem sharing not yet implemented)')
+
+# Write a Python file
+fs.write_file('/python-data.txt', 'Hello from Python!')
+print('File written to /python-data.txt')
+
+# List files
+files = fs.list_dir('/')
+print('Files in root:', files)
+</textarea>
+        <button class="run-python" onclick="runPython()">Run Python</button>
+        <button onclick="clearOutput('python')">Clear Output</button>
+        <div class="output" id="python-output"></div>
+    </div>
+
+    <div class="runtime-section">
+        <h3>📁 Shared Filesystem</h3>
+        <p>Both runtimes share the same persistent filesystem. Files created in one runtime should be accessible from the other.</p>
+        <button onclick="listFiles()">List All Files</button>
+        <button onclick="testFilesystemSharing()">Test Filesystem Sharing</button>
+        <div class="output" id="filesystem-output"></div>
+    </div>
+
+    <script type="module">
+        import { browser } from '../src/index.js'
+
+        let sandbox = null
+
+        async function initializeSandbox() {
+            try {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = 'Initializing sandbox...'
+                statusEl.className = 'status info'
+
+                sandbox = browser({ resetPersistence: false })
+                await sandbox.initialize()
+
+                statusEl.textContent = '✅ Dual runtime system initialized successfully!'
+                statusEl.className = 'status success'
+
+                // Update runtime info
+                updateRuntimeInfo()
+                
+            } catch (error) {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = `❌ Failed to initialize: ${error.message}`
+                statusEl.className = 'status error'
+                console.error('Initialization error:', error)
+            }
+        }
+
+        function updateRuntimeInfo() {
+            const availableRuntimes = sandbox.getAvailableRuntimes()
+            document.getElementById('available-runtimes').textContent = availableRuntimes.join(', ')
+            
+            const statusInfo = availableRuntimes.map(runtime => {
+                const info = sandbox.getRuntimeInfo(runtime)
+                return `${runtime}: ${info ? (info.ready ? 'Ready' : 'Not Ready') : 'Unknown'}`
+            }).join(', ')
+            document.getElementById('runtime-status').textContent = statusInfo
+        }
+
+        window.runJavaScript = async function() {
+            if (!sandbox) {
+                alert('Sandbox not initialized')
+                return
+            }
+
+            const code = document.getElementById('js-code').value
+            const output = document.getElementById('js-output')
+            
+            try {
+                output.textContent = 'Executing JavaScript...'
+                const result = await sandbox.runCode(code, 'node')
+                
+                output.textContent = `Exit Code: ${result.exitCode}
+Execution Time: ${result.executionTime}ms
+
+STDOUT:
+${result.stdout}
+
+STDERR:
+${result.stderr}`
+                
+                updateRuntimeInfo()
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`
+            }
+        }
+
+        window.runPython = async function() {
+            if (!sandbox) {
+                alert('Sandbox not initialized')
+                return
+            }
+
+            const code = document.getElementById('python-code').value
+            const output = document.getElementById('python-output')
+            
+            try {
+                output.textContent = 'Executing Python...'
+                const result = await sandbox.runCode(code, 'python')
+                
+                output.textContent = `Exit Code: ${result.exitCode}
+Execution Time: ${result.executionTime}ms
+
+STDOUT:
+${result.stdout}
+
+STDERR:
+${result.stderr}`
+                
+                updateRuntimeInfo()
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`
+            }
+        }
+
+        window.clearOutput = function(runtime) {
+            document.getElementById(`${runtime === 'js' ? 'js' : 'python'}-output`).textContent = ''
+        }
+
+        window.listFiles = async function() {
+            if (!sandbox) {
+                alert('Sandbox not initialized')
+                return
+            }
+
+            try {
+                const files = await sandbox.filesystem.readdir('/')
+                const output = document.getElementById('filesystem-output')
+                
+                output.textContent = `Files in root directory:
+${files.map(f => `${f.isDirectory ? 'd' : '-'} ${f.name} (${f.size} bytes)`).join('\n')}`
+            } catch (error) {
+                document.getElementById('filesystem-output').textContent = `Error: ${error.message}`
+            }
+        }
+
+        window.testFilesystemSharing = async function() {
+            if (!sandbox) {
+                alert('Sandbox not initialized')
+                return
+            }
+
+            const output = document.getElementById('filesystem-output')
+            output.textContent = 'Testing filesystem sharing...\n'
+
+            try {
+                // Write from JavaScript runtime
+                await sandbox.runCode(`
+                    fs.writeFileSync('/test-sharing.txt', 'Created by JavaScript runtime');
+                    console.log('JavaScript: File created');
+                `, 'node')
+
+                // Try to read from Python runtime
+                const result = await sandbox.runCode(`
+                    try:
+                        content = fs.read_file('/test-sharing.txt')
+                        print('Python: Successfully read:', content)
+                    except Exception as e:
+                        print('Python: Could not read file:', str(e))
+                `, 'python')
+
+                output.textContent += `\nFilesystem sharing test completed:\n${result.stdout}`
+            } catch (error) {
+                output.textContent += `\nError during test: ${error.message}`
+            }
+        }
+
+        // Initialize on page load
+        initializeSandbox()
+    </script>
+</body>
+</html>

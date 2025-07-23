@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Runtime Integration Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .terminal { background: #000; color: #0f0; padding: 15px; border-radius: 5px; margin: 10px 0; min-height: 200px; white-space: pre-wrap; }
+        button { background: #007acc; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #005a9e; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #0d4f0d; border: 1px solid #0f0; }
+        .error { background: #4f0d0d; border: 1px solid #f00; }
+        .info { background: #0d2f4f; border: 1px solid #00f; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Runtime Integration Test</h1>
+        <p>Testing RuntimeManager integration with Shell system</p>
+        
+        <div class="status info" id="status">
+            Status: Initializing...
+        </div>
+
+        <h2>Test Controls</h2>
+        <button onclick="testJavaScriptExecution()">Test JavaScript (QuickJS)</button>
+        <button onclick="testPythonExecution()">Test Python (Pyodide)</button>
+        <button onclick="testShellCommands()">Test Shell Commands</button>
+        <button onclick="clearOutput()">Clear Output</button>
+
+        <h2>Output</h2>
+        <div class="terminal" id="output">Waiting for tests...</div>
+
+        <h2>Test Scripts</h2>
+        <p>The following scripts will be created and executed:</p>
+        <ul>
+            <li><strong>hello.js</strong>: <code>console.log("Hello from QuickJS!");</code></li>
+            <li><strong>hello.py</strong>: <code>print("Hello from Pyodide!")</code></li>
+        </ul>
+    </div>
+
+    <script type="module">
+        import { browser } from '../src/index.js'
+
+        let sandbox = null
+        let output = document.getElementById('output')
+        let status = document.getElementById('status')
+
+        function log(message) {
+            output.textContent += message + '\n'
+            output.scrollTop = output.scrollHeight
+        }
+
+        function setStatus(message, type = 'info') {
+            status.textContent = `Status: ${message}`
+            status.className = `status ${type}`
+        }
+
+        // Initialize sandbox
+        async function initializeSandbox() {
+            try {
+                setStatus('Initializing browser sandbox...', 'info')
+                sandbox = browser({ resetPersistence: true })
+                await sandbox.initialize()
+                setStatus('Sandbox initialized successfully!', 'success')
+                log('✅ Sandbox initialized')
+                log('✅ RuntimeManager connected to Shell')
+                log('✅ Ready for testing\n')
+            } catch (error) {
+                setStatus(`Initialization failed: ${error.message}`, 'error')
+                log(`❌ Initialization failed: ${error.message}`)
+            }
+        }
+
+        // Test JavaScript execution
+        window.testJavaScriptExecution = async function() {
+            if (!sandbox) {
+                log('❌ Sandbox not initialized')
+                return
+            }
+
+            try {
+                log('\n🧪 Testing JavaScript execution...')
+                
+                // Create a JavaScript file
+                const jsCode = 'console.log("Hello from QuickJS runtime!");'
+                await sandbox.filesystem.writeFile('/hello.js', jsCode)
+                log('📝 Created /hello.js')
+                
+                // Execute using shell
+                const process = sandbox.spawnShell('node', ['hello.js'])
+                
+                process.stdout.on('data', (data) => {
+                    log(`📤 stdout: ${data.trim()}`)
+                })
+                
+                process.stderr.on('data', (data) => {
+                    log(`📤 stderr: ${data.trim()}`)
+                })
+                
+                process.on('exit', (code) => {
+                    if (code === 0) {
+                        log('✅ JavaScript execution completed successfully')
+                    } else {
+                        log(`❌ JavaScript execution failed with code ${code}`)
+                    }
+                })
+                
+            } catch (error) {
+                log(`❌ JavaScript test failed: ${error.message}`)
+            }
+        }
+
+        // Test Python execution
+        window.testPythonExecution = async function() {
+            if (!sandbox) {
+                log('❌ Sandbox not initialized')
+                return
+            }
+
+            try {
+                log('\n🐍 Testing Python execution...')
+                
+                // Create a Python file
+                const pyCode = 'print("Hello from Pyodide runtime!")'
+                await sandbox.filesystem.writeFile('/hello.py', pyCode)
+                log('📝 Created /hello.py')
+                
+                // Execute using shell
+                const process = sandbox.spawnShell('python', ['hello.py'])
+                
+                process.stdout.on('data', (data) => {
+                    log(`📤 stdout: ${data.trim()}`)
+                })
+                
+                process.stderr.on('data', (data) => {
+                    log(`📤 stderr: ${data.trim()}`)
+                })
+                
+                process.on('exit', (code) => {
+                    if (code === 0) {
+                        log('✅ Python execution completed successfully')
+                    } else {
+                        log(`❌ Python execution failed with code ${code}`)
+                    }
+                })
+                
+            } catch (error) {
+                log(`❌ Python test failed: ${error.message}`)
+            }
+        }
+
+        // Test shell commands
+        window.testShellCommands = async function() {
+            if (!sandbox) {
+                log('❌ Sandbox not initialized')
+                return
+            }
+
+            try {
+                log('\n🐚 Testing shell commands...')
+                
+                // Test ls command
+                const lsProcess = sandbox.spawnShell('ls', ['-la'])
+                lsProcess.stdout.on('data', (data) => {
+                    log(`📁 ls output: ${data.trim()}`)
+                })
+                lsProcess.on('exit', (code) => {
+                    log(`✅ ls command completed with code ${code}`)
+                })
+                
+                // Test echo command
+                setTimeout(() => {
+                    const echoProcess = sandbox.spawnShell('echo', ['Shell integration working!'])
+                    echoProcess.stdout.on('data', (data) => {
+                        log(`💬 echo output: ${data.trim()}`)
+                    })
+                    echoProcess.on('exit', (code) => {
+                        log(`✅ echo command completed with code ${code}`)
+                    })
+                }, 1000)
+                
+            } catch (error) {
+                log(`❌ Shell commands test failed: ${error.message}`)
+            }
+        }
+
+        // Clear output
+        window.clearOutput = function() {
+            output.textContent = ''
+        }
+
+        // Initialize on page load
+        initializeSandbox()
+    </script>
+</body>
+</html>

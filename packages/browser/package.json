@@ -1,0 +1,60 @@
+{
+  "name": "@computesdk/browser",
+  "version": "0.1.0",
+  "description": "Browser provider for ComputeSDK with persistent filesystem and cross-tab sync",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@livestore/adapter-web": "^0.3.1",
+    "@livestore/livestore": "^0.3.1",
+    "ansi-escape-sequences": "^6.2.4",
+    "computesdk": "workspace:*",
+    "pyodide": "^0.28.0",
+    "quickjs-emscripten": "^0.31.0"
+  },
+  "devDependencies": {
+    "@types/ansi-escape-sequences": "^4.0.4",
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "keywords": [
+    "computesdk",
+    "browser",
+    "filesystem",
+    "persistent",
+    "sandbox",
+    "opfs"
+  ],
+  "author": "ComputeSDK Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/browser"
+  }
+}

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComputeSDK Browser - Clean Terminal API Demo</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .panel { background: #2d2d2d; border: 1px solid #444; padding: 20px; margin: 10px 0; border-radius: 5px; }
+        .terminal { background: #000; color: #0f0; padding: 15px; border-radius: 5px; margin: 10px 0; min-height: 200px; white-space: pre-wrap; font-family: 'Courier New', monospace; }
+        button { background: #007acc; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #005a9e; }
+        button.danger { background: #d73a49; }
+        button.danger:hover { background: #b31d28; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #0d4f0d; border: 1px solid #0f0; }
+        .error { background: #4f0d0d; border: 1px solid #f00; }
+        .info { background: #0d2f4f; border: 1px solid #00f; }
+        input { background: #333; color: #fff; border: 1px solid #555; padding: 8px; margin: 5px; border-radius: 3px; width: 300px; }
+        .api-section { border-left: 4px solid #007acc; padding-left: 15px; margin: 20px 0; }
+        .code { background: #333; padding: 10px; border-radius: 3px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Clean Terminal API Demo</h1>
+        <p>Demonstrating the new clean API: <code>runCommand()</code> vs <code>terminal.create()</code></p>
+        
+        <div class="status success" id="status">
+            Status: Ready to test
+        </div>
+
+        <div class="api-section">
+            <h2>📋 One-off Commands: <code>sandbox.runCommand()</code></h2>
+            <p>Fire-and-forget commands that return complete results (like Vercel's API)</p>
+            <div class="code">
+                const result = await sandbox.runCommand('ls -la')<br>
+                console.log(result.stdout) // Complete output
+            </div>
+            
+            <div class="panel">
+                <h3>Test runCommand</h3>
+                <input type="text" id="oneoff-command" placeholder="ls" value="ls">
+                <input type="text" id="oneoff-args" placeholder="-la" value="">
+                <button onclick="testRunCommand()">Execute Command</button>
+                <button onclick="clearOneOffOutput()">Clear</button>
+                <div class="terminal" id="oneoff-output">Ready for one-off commands...</div>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <h2>💻 Interactive Terminal: <code>sandbox.terminal.create()</code></h2>
+            <p>Persistent terminal session with state (cwd, env vars) and streaming I/O</p>
+            <div class="code">
+                const terminal = sandbox.terminal.create()<br>
+                terminal.on('data', chunk => console.log(chunk))<br>
+                terminal.write('ls -la')  // Sync - just queues command
+            </div>
+            
+            <div class="panel">
+                <h3>Interactive Terminal Session</h3>
+                <button onclick="createTerminal()">Create Terminal</button>
+                <button onclick="destroyTerminal()" class="danger">Destroy Terminal</button>
+                <br>
+                <input type="text" id="terminal-command" placeholder="ls -la" value="ls">
+                <button onclick="writeToTerminal()">Write Command</button>
+                <button onclick="clearTerminalOutput()">Clear</button>
+                
+                <h4>Quick Commands:</h4>
+                <button onclick="writeCommand('ls -la')">ls -la</button>
+                <button onclick="writeCommand('pwd')">pwd</button>
+                <button onclick="writeCommand('cd /')">cd /</button>
+                <button onclick="writeCommand('echo Hello Terminal!')">echo Hello</button>
+                <button onclick="writeCommand('node hello.js')">🧪 node hello.js</button>
+                <button onclick="writeCommand('python hello.py')">🐍 python hello.py</button>
+                
+                <div class="terminal" id="terminal-output">No terminal session active...</div>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <h2>🔄 API Comparison</h2>
+            <div class="panel">
+                <h3>Key Differences</h3>
+                <table style="width: 100%; color: #d4d4d4;">
+                    <tr style="background: #333;">
+                        <th style="padding: 10px; border: 1px solid #555;">Feature</th>
+                        <th style="padding: 10px; border: 1px solid #555;">runCommand()</th>
+                        <th style="padding: 10px; border: 1px solid #555;">terminal.create()</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #555;"><strong>Execution</strong></td>
+                        <td style="padding: 10px; border: 1px solid #555;">Async - returns Promise</td>
+                        <td style="padding: 10px; border: 1px solid #555;">Sync write() + events</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #555;"><strong>State</strong></td>
+                        <td style="padding: 10px; border: 1px solid #555;">Stateless</td>
+                        <td style="padding: 10px; border: 1px solid #555;">Stateful (cwd, env)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #555;"><strong>Output</strong></td>
+                        <td style="padding: 10px; border: 1px solid #555;">Complete result</td>
+                        <td style="padding: 10px; border: 1px solid #555;">Streaming chunks</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #555;"><strong>Use Case</strong></td>
+                        <td style="padding: 10px; border: 1px solid #555;">One-off commands</td>
+                        <td style="padding: 10px; border: 1px solid #555;">Interactive sessions</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { browser } from '../src/index.js'
+
+        let sandbox = null
+        let terminal = null
+        let output = document.getElementById('terminal-output')
+        let status = document.getElementById('status')
+
+        function log(message, elementId = 'terminal-output') {
+            const element = document.getElementById(elementId)
+            element.textContent += message + '\n'
+            element.scrollTop = element.scrollHeight
+        }
+
+        function setStatus(message, type = 'success') {
+            status.textContent = `Status: ${message}`
+            status.className = `status ${type}`
+        }
+
+        // Initialize sandbox
+        async function initializeSandbox() {
+            try {
+                setStatus('Initializing sandbox...', 'info')
+                sandbox = browser({ resetPersistence: true })
+                await sandbox.initialize()
+                
+                // Create test files
+                await sandbox.filesystem.writeFile('/hello.js', 'console.log("Hello from QuickJS runtime!");')
+                await sandbox.filesystem.writeFile('/hello.py', 'print("Hello from Pyodide runtime!")')
+                await sandbox.filesystem.writeFile('/test.txt', 'Hello from test file!')
+                
+                setStatus('Sandbox ready! Both APIs available.', 'success')
+            } catch (error) {
+                setStatus(`Initialization failed: ${error.message}`, 'error')
+            }
+        }
+
+        // One-off command execution
+        window.testRunCommand = async function() {
+            if (!sandbox) return
+            
+            const command = document.getElementById('oneoff-command').value
+            const argsInput = document.getElementById('oneoff-args').value
+            const commandLine = argsInput.trim() ? `${command} ${argsInput}` : command
+            
+            try {
+                log(`$ ${commandLine}`, 'oneoff-output')
+                
+                const result = await sandbox.runCommand(commandLine)
+                
+                if (result.stdout) {
+                    log(result.stdout, 'oneoff-output')
+                }
+                if (result.stderr) {
+                    log(`ERROR: ${result.stderr}`, 'oneoff-output')
+                }
+                log(`[Exit code: ${result.exitCode}, Time: ${result.executionTime}ms]`, 'oneoff-output')
+                
+            } catch (error) {
+                log(`ERROR: ${error.message}`, 'oneoff-output')
+            }
+        }
+
+        // Terminal session management
+        window.createTerminal = function() {
+            if (!sandbox) return
+            
+            if (terminal) {
+                terminal.destroy()
+            }
+            
+            terminal = sandbox.terminal.create()
+            
+            terminal.on('data', (data) => {
+                log(data, 'terminal-output')
+            })
+            
+            terminal.on('error', (error) => {
+                log(`ERROR: ${error}`, 'terminal-output')
+            })
+            
+            log('🚀 Terminal session created!', 'terminal-output')
+            setStatus('Interactive terminal active', 'success')
+        }
+
+        window.destroyTerminal = function() {
+            if (terminal) {
+                terminal.destroy()
+                terminal = null
+                log('💀 Terminal session destroyed.', 'terminal-output')
+                setStatus('Terminal destroyed', 'info')
+            }
+        }
+
+        window.writeToTerminal = function() {
+            if (!terminal) {
+                log('❌ No terminal session. Create one first!', 'terminal-output')
+                return
+            }
+            
+            const command = document.getElementById('terminal-command').value
+            if (command.trim()) {
+                log(`$ ${command}`, 'terminal-output')
+                terminal.write(command)
+                document.getElementById('terminal-command').value = ''
+            }
+        }
+
+        window.writeCommand = function(command) {
+            if (!terminal) {
+                log('❌ No terminal session. Create one first!', 'terminal-output')
+                return
+            }
+            
+            log(`$ ${command}`, 'terminal-output')
+            terminal.write(command)
+        }
+
+        // Clear functions
+        window.clearOneOffOutput = function() {
+            document.getElementById('oneoff-output').textContent = 'Ready for one-off commands...'
+        }
+
+        window.clearTerminalOutput = function() {
+            document.getElementById('terminal-output').textContent = terminal ? 
+                'Terminal session active. Write commands above.' : 
+                'No terminal session active...'
+        }
+
+        // Handle Enter key in terminal input
+        document.getElementById('terminal-command').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                writeToTerminal()
+            }
+        })
+
+        // Initialize on page load
+        initializeSandbox()
+    </script>
+</body>
+</html>

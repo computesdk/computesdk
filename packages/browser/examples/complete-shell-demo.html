@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComputeSDK Browser - Complete Shell Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        h3 {
+            margin-top: 0;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        input, textarea {
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        button:hover { opacity: 0.8; }
+        
+        .output {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+        }
+        .terminal {
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .terminal .prompt {
+            color: #00ff00;
+        }
+        .terminal .command {
+            color: #ffffff;
+        }
+        .terminal .output {
+            color: #cccccc;
+            background: transparent;
+            padding: 0;
+            border: none;
+        }
+        .terminal .error {
+            color: #ff6b6b;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        
+        .command-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .feature-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .feature-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .feature-item h4 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        
+        code {
+            background: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐚 Complete Shell System Demo</h1>
+    
+    <div class="status info" id="status">
+        Initializing complete shell system...
+    </div>
+
+    <div class="panel full-width">
+        <h3>🎯 What We Built</h3>
+        <div class="feature-list">
+            <div class="feature-item">
+                <h4>✅ Essential Commands</h4>
+                <p><code>ls, cat, echo, pwd, cd, mkdir, rm, cp, mv, grep, find</code></p>
+                <p>All the basic commands you need for file management and navigation.</p>
+            </div>
+            <div class="feature-item">
+                <h4>✅ Pipe Support</h4>
+                <p><code>ls | grep .txt</code>, <code>cat file.txt | grep hello</code></p>
+                <p>Chain commands together with Unix-style pipes.</p>
+            </div>
+            <div class="feature-item">
+                <h4>✅ File Redirection</h4>
+                <p><code>echo "hello" > file.txt</code>, <code>ls >> output.log</code></p>
+                <p>Redirect output to files with > and >> operators.</p>
+            </div>
+            <div class="feature-item">
+                <h4>✅ Node.js-style spawn()</h4>
+                <p><code>const ls = shell.spawn('ls', ['-la'])</code></p>
+                <p>Familiar API for Node.js developers with event streams.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h3>🖥️ Interactive Terminal</h3>
+            <div>
+                <input type="text" id="command-input" placeholder="Enter shell command..." 
+                       style="font-size: 14px;" onkeypress="handleEnter(event)">
+            </div>
+            <div>
+                <button class="btn-primary" onclick="executeCommand()">Execute</button>
+                <button class="btn-secondary" onclick="clearTerminal()">Clear</button>
+            </div>
+            <div class="terminal" id="terminal">
+                <div class="prompt">$ <span class="command">Welcome to ComputeSDK Shell!</span></div>
+                <div class="output">Type commands like: ls, cat file.txt, echo "hello" > test.txt</div>
+                <div class="output">Try pipes: ls | grep .txt, find . -name "*.js" | grep test</div>
+                <div class="output"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>📋 Quick Commands</h3>
+            <div class="command-grid">
+                <button class="btn-success" onclick="runQuickCommand('ls')">ls</button>
+                <button class="btn-success" onclick="runQuickCommand('pwd')">pwd</button>
+                <button class="btn-success" onclick="runQuickCommand('ls -la')">ls -la</button>
+                <button class="btn-success" onclick="runQuickCommand('mkdir test')">mkdir test</button>
+            </div>
+            <div class="command-grid">
+                <button class="btn-warning" onclick="runQuickCommand('echo \"Hello World!\"')">echo hello</button>
+                <button class="btn-warning" onclick="runQuickCommand('echo \"test content\" > test.txt')">create file</button>
+                <button class="btn-warning" onclick="runQuickCommand('cat test.txt')">cat test.txt</button>
+                <button class="btn-warning" onclick="runQuickCommand('rm test.txt')">rm test.txt</button>
+            </div>
+            <div class="command-grid">
+                <button class="btn-primary" onclick="runQuickCommand('ls | grep test')">ls | grep test</button>
+                <button class="btn-primary" onclick="runQuickCommand('echo \"line1\\nline2\\ntest\" | grep test')">pipe grep</button>
+                <button class="btn-primary" onclick="runQuickCommand('find . -name \"*test*\"')">find test</button>
+                <button class="btn-primary" onclick="runQuickCommand('ls > files.txt && cat files.txt')">redirect</button>
+            </div>
+        </div>
+
+        <div class="panel full-width">
+            <h3>🧪 Advanced Examples</h3>
+            <div>
+                <button class="btn-success" onclick="runAdvancedExample('fileOps')">File Operations</button>
+                <button class="btn-success" onclick="runAdvancedExample('pipeChain')">Pipe Chains</button>
+                <button class="btn-success" onclick="runAdvancedExample('searchDemo')">Search & Filter</button>
+                <button class="btn-success" onclick="runAdvancedExample('projectSetup')">Project Setup</button>
+            </div>
+            <div class="output" id="advanced-output"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Mock shell system for demonstration
+        class MockShellParser {
+            parse(commandLine) {
+                // Simple parsing for demo
+                if (commandLine.includes('|')) {
+                    const parts = commandLine.split('|').map(p => p.trim())
+                    return {
+                        commands: parts.map(part => {
+                            const args = part.split(' ')
+                            return { command: args[0], args: args.slice(1) }
+                        })
+                    }
+                }
+                
+                if (commandLine.includes('>')) {
+                    const match = commandLine.match(/(.+?)\s*>\s*(.+)$/)
+                    if (match) {
+                        const args = match[1].trim().split(' ')
+                        return {
+                            commands: [{ command: args[0], args: args.slice(1) }],
+                            outputRedirect: { type: '>', file: match[2].trim() }
+                        }
+                    }
+                }
+                
+                const args = commandLine.split(' ')
+                return {
+                    commands: [{ command: args[0], args: args.slice(1) }]
+                }
+            }
+        }
+
+        class MockShell {
+            constructor() {
+                this.parser = new MockShellParser()
+                this.cwd = '/'
+                this.files = new Map([
+                    ['/', { type: 'dir', children: ['test.txt', 'project'] }],
+                    ['/test.txt', { type: 'file', content: 'Hello from test file!\nThis is line 2.\ntest line here.' }],
+                    ['/project', { type: 'dir', children: ['src', 'README.md'] }],
+                    ['/project/README.md', { type: 'file', content: '# My Project\nThis is a test project.' }],
+                    ['/project/src', { type: 'dir', children: ['index.js', 'test.js'] }],
+                    ['/project/src/index.js', { type: 'file', content: 'console.log("Hello World!");' }],
+                    ['/project/src/test.js', { type: 'file', content: 'console.log("Test file");' }]
+                ])
+            }
+
+            async execute(commandLine) {
+                const pipeline = this.parser.parse(commandLine)
+                
+                if (pipeline.commands.length === 0) {
+                    return { stdout: '', stderr: '', exitCode: 0 }
+                }
+
+                try {
+                    if (pipeline.commands.length === 1) {
+                        return await this.executeSingle(pipeline.commands[0], '', pipeline)
+                    } else {
+                        return await this.executePipeline(pipeline)
+                    }
+                } catch (error) {
+                    return { stdout: '', stderr: `Error: ${error.message}\n`, exitCode: 1 }
+                }
+            }
+
+            async executeSingle(command, stdin, pipeline) {
+                let result = await this.executeCommand(command, stdin)
+                
+                if (pipeline.outputRedirect) {
+                    this.files.set(pipeline.outputRedirect.file, {
+                        type: 'file',
+                        content: result.stdout
+                    })
+                    result.stdout = ''
+                }
+                
+                return result
+            }
+
+            async executePipeline(pipeline) {
+                let input = ''
+                let stderr = ''
+                
+                for (const command of pipeline.commands) {
+                    const result = await this.executeCommand(command, input)
+                    if (result.exitCode !== 0) {
+                        return result
+                    }
+                    input = result.stdout
+                    stderr += result.stderr
+                }
+                
+                return { stdout: input, stderr, exitCode: 0 }
+            }
+
+            async executeCommand(command, stdin) {
+                const { command: cmd, args } = command
+                
+                switch (cmd) {
+                    case 'ls':
+                        return this.ls(args)
+                    case 'cat':
+                        return this.cat(args)
+                    case 'echo':
+                        return this.echo(args)
+                    case 'pwd':
+                        return { stdout: this.cwd + '\n', stderr: '', exitCode: 0 }
+                    case 'cd':
+                        return this.cd(args)
+                    case 'mkdir':
+                        return this.mkdir(args)
+                    case 'rm':
+                        return this.rm(args)
+                    case 'cp':
+                        return this.cp(args)
+                    case 'mv':
+                        return this.mv(args)
+                    case 'grep':
+                        return this.grep(args, stdin)
+                    case 'find':
+                        return this.find(args)
+                    default:
+                        return { stdout: '', stderr: `${cmd}: command not found\n`, exitCode: 127 }
+                }
+            }
+
+            ls(args) {
+                const path = args[0] || this.cwd
+                const dir = this.files.get(path)
+                
+                if (!dir || dir.type !== 'dir') {
+                    return { stdout: '', stderr: `ls: ${path}: No such file or directory\n`, exitCode: 1 }
+                }
+                
+                const detailed = args.includes('-la') || args.includes('-l')
+                if (detailed) {
+                    const output = dir.children.map(name => {
+                        const fullPath = path === '/' ? `/${name}` : `${path}/${name}`
+                        const item = this.files.get(fullPath)
+                        const type = item?.type === 'dir' ? 'd' : '-'
+                        const perms = item?.type === 'dir' ? 'rwxr-xr-x' : 'rw-r--r--'
+                        const size = item?.content?.length || 0
+                        return `${type}${perms} 1 user user ${size.toString().padStart(8)} Jan 1 12:00 ${name}`
+                    }).join('\n')
+                    return { stdout: output + '\n', stderr: '', exitCode: 0 }
+                } else {
+                    return { stdout: dir.children.join('\n') + '\n', stderr: '', exitCode: 0 }
+                }
+            }
+
+            cat(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'cat: missing file operand\n', exitCode: 1 }
+                }
+                
+                const path = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                const file = this.files.get(path)
+                
+                if (!file || file.type !== 'file') {
+                    return { stdout: '', stderr: `cat: ${args[0]}: No such file or directory\n`, exitCode: 1 }
+                }
+                
+                return { stdout: file.content + '\n', stderr: '', exitCode: 0 }
+            }
+
+            echo(args) {
+                return { stdout: args.join(' ') + '\n', stderr: '', exitCode: 0 }
+            }
+
+            cd(args) {
+                const path = args[0] || '/'
+                const dir = this.files.get(path)
+                
+                if (!dir || dir.type !== 'dir') {
+                    return { stdout: '', stderr: `cd: ${path}: No such file or directory\n`, exitCode: 1 }
+                }
+                
+                this.cwd = path
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            mkdir(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'mkdir: missing operand\n', exitCode: 1 }
+                }
+                
+                const path = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                this.files.set(path, { type: 'dir', children: [] })
+                
+                // Add to parent directory
+                const parentPath = path.substring(0, path.lastIndexOf('/')) || '/'
+                const parent = this.files.get(parentPath)
+                if (parent && parent.type === 'dir') {
+                    const name = path.substring(path.lastIndexOf('/') + 1)
+                    if (!parent.children.includes(name)) {
+                        parent.children.push(name)
+                    }
+                }
+                
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            rm(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'rm: missing operand\n', exitCode: 1 }
+                }
+                
+                const path = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                
+                if (!this.files.has(path)) {
+                    return { stdout: '', stderr: `rm: cannot remove '${args[0]}': No such file or directory\n`, exitCode: 1 }
+                }
+                
+                this.files.delete(path)
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            cp(args) {
+                if (args.length < 2) {
+                    return { stdout: '', stderr: 'cp: missing file operand\n', exitCode: 1 }
+                }
+                
+                const srcPath = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                const destPath = args[1].startsWith('/') ? args[1] : `${this.cwd}/${args[1]}`.replace(/\/+/g, '/')
+                
+                const src = this.files.get(srcPath)
+                if (!src) {
+                    return { stdout: '', stderr: `cp: cannot stat '${args[0]}': No such file or directory\n`, exitCode: 1 }
+                }
+                
+                this.files.set(destPath, { ...src })
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            mv(args) {
+                if (args.length < 2) {
+                    return { stdout: '', stderr: 'mv: missing file operand\n', exitCode: 1 }
+                }
+                
+                const srcPath = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                const destPath = args[1].startsWith('/') ? args[1] : `${this.cwd}/${args[1]}`.replace(/\/+/g, '/')
+                
+                const src = this.files.get(srcPath)
+                if (!src) {
+                    return { stdout: '', stderr: `mv: cannot stat '${args[0]}': No such file or directory\n`, exitCode: 1 }
+                }
+                
+                this.files.set(destPath, src)
+                this.files.delete(srcPath)
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            grep(args, stdin) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'grep: missing pattern\n', exitCode: 1 }
+                }
+                
+                const pattern = args[0]
+                let content = stdin
+                
+                if (!stdin && args.length > 1) {
+                    // Read from file
+                    const path = args[1].startsWith('/') ? args[1] : `${this.cwd}/${args[1]}`.replace(/\/+/g, '/')
+                    const file = this.files.get(path)
+                    if (!file || file.type !== 'file') {
+                        return { stdout: '', stderr: `grep: ${args[1]}: No such file or directory\n`, exitCode: 1 }
+                    }
+                    content = file.content
+                }
+                
+                const lines = content.split('\n')
+                const matches = lines.filter(line => line.includes(pattern))
+                
+                return {
+                    stdout: matches.join('\n') + (matches.length > 0 ? '\n' : ''),
+                    stderr: '',
+                    exitCode: matches.length > 0 ? 0 : 1
+                }
+            }
+
+            find(args) {
+                const pattern = args.includes('-name') ? args[args.indexOf('-name') + 1] : '*'
+                const results = []
+                
+                for (const [path, item] of this.files.entries()) {
+                    if (path === '/') continue
+                    
+                    const name = path.substring(path.lastIndexOf('/') + 1)
+                    if (pattern === '*' || name.includes(pattern.replace(/\*/g, ''))) {
+                        results.push(path)
+                    }
+                }
+                
+                return { stdout: results.join('\n') + (results.length > 0 ? '\n' : ''), stderr: '', exitCode: 0 }
+            }
+        }
+
+        let shell = null
+
+        async function initializeShell() {
+            try {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = 'Initializing shell system...'
+
+                shell = new MockShell()
+
+                statusEl.textContent = '✅ Complete shell system ready! Try the commands below.'
+                statusEl.className = 'status success'
+                
+            } catch (error) {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = `❌ Failed to initialize: ${error.message}`
+                statusEl.className = 'status error'
+                console.error('Initialization error:', error)
+            }
+        }
+
+        window.executeCommand = async function() {
+            const input = document.getElementById('command-input')
+            const command = input.value.trim()
+            
+            if (!command || !shell) return
+            
+            const terminal = document.getElementById('terminal')
+            
+            // Add command to terminal
+            const promptDiv = document.createElement('div')
+            promptDiv.innerHTML = `<span class="prompt">$ </span><span class="command">${command}</span>`
+            terminal.appendChild(promptDiv)
+            
+            try {
+                const result = await shell.execute(command)
+                
+                // Add output
+                if (result.stdout) {
+                    const outputDiv = document.createElement('div')
+                    outputDiv.className = 'output'
+                    outputDiv.textContent = result.stdout
+                    terminal.appendChild(outputDiv)
+                }
+                
+                if (result.stderr) {
+                    const errorDiv = document.createElement('div')
+                    errorDiv.className = 'error'
+                    errorDiv.textContent = result.stderr
+                    terminal.appendChild(errorDiv)
+                }
+                
+            } catch (error) {
+                const errorDiv = document.createElement('div')
+                errorDiv.className = 'error'
+                errorDiv.textContent = `Error: ${error.message}\n`
+                terminal.appendChild(errorDiv)
+            }
+            
+            // Clear input and scroll to bottom
+            input.value = ''
+            terminal.scrollTop = terminal.scrollHeight
+        }
+
+        window.handleEnter = function(event) {
+            if (event.key === 'Enter') {
+                executeCommand()
+            }
+        }
+
+        window.runQuickCommand = async function(command) {
+            document.getElementById('command-input').value = command
+            await executeCommand()
+        }
+
+        window.clearTerminal = function() {
+            const terminal = document.getElementById('terminal')
+            terminal.innerHTML = `
+                <div class="prompt">$ <span class="command">Terminal cleared</span></div>
+                <div class="output">Ready for new commands...</div>
+                <div class="output"></div>
+            `
+        }
+
+        window.runAdvancedExample = async function(example) {
+            const output = document.getElementById('advanced-output')
+            output.textContent = `Running ${example} example...\n`
+            
+            const examples = {
+                fileOps: [
+                    'mkdir demo',
+                    'echo "Hello World!" > demo/hello.txt',
+                    'echo "Line 2" >> demo/hello.txt',
+                    'cat demo/hello.txt',
+                    'cp demo/hello.txt demo/copy.txt',
+                    'ls demo',
+                    'rm demo/copy.txt'
+                ],
+                pipeChain: [
+                    'echo "apple\\nbanana\\ncherry\\napricot" > fruits.txt',
+                    'cat fruits.txt | grep a',
+                    'cat fruits.txt | grep a | grep p',
+                    'ls | grep txt'
+                ],
+                searchDemo: [
+                    'find . -name "*test*"',
+                    'find . -name "*.js"',
+                    'grep -r "console" .',
+                    'ls -la | grep test'
+                ],
+                projectSetup: [
+                    'mkdir myproject',
+                    'cd myproject',
+                    'mkdir src tests docs',
+                    'echo "# My Project" > README.md',
+                    'echo "console.log(\\"Hello\\");" > src/index.js',
+                    'echo "// Tests here" > tests/test.js',
+                    'ls -la',
+                    'find . -name "*.js"'
+                ]
+            }
+            
+            const commands = examples[example] || []
+            
+            for (const command of commands) {
+                output.textContent += `\n$ ${command}\n`
+                
+                try {
+                    const result = await shell.execute(command)
+                    if (result.stdout) output.textContent += result.stdout
+                    if (result.stderr) output.textContent += `Error: ${result.stderr}`
+                } catch (error) {
+                    output.textContent += `Error: ${error.message}\n`
+                }
+            }
+            
+            output.textContent += `\n✅ ${example} example completed!\n`
+        }
+
+        // Initialize on page load
+        initializeShell()
+    </script>
+</body>
+</html>

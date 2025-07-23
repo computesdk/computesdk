@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComputeSDK Browser - Persistent Filesystem Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .output {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            min-height: 100px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>ComputeSDK Browser - Persistent Filesystem Demo</h1>
+    
+    <div class="status info" id="status">
+        Initializing sandbox with persistent filesystem...
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h3>File Operations</h3>
+            <div>
+                <label>File Path:</label>
+                <input type="text" id="filePath" value="/demo.txt" style="width: 100%; margin: 5px 0;">
+            </div>
+            <div>
+                <label>File Content:</label>
+                <textarea id="fileContent" placeholder="Enter file content here...">Hello from LiveStore!
+This file persists across browser sessions and tabs.</textarea>
+            </div>
+            <div>
+                <button onclick="writeFile()">Write File</button>
+                <button onclick="readFile()">Read File</button>
+                <button onclick="listFiles()">List Files</button>
+                <button onclick="deleteFile()">Delete File</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Command Execution</h3>
+            <div>
+                <label>Command:</label>
+                <input type="text" id="command" value="ls /" style="width: 100%; margin: 5px 0;">
+            </div>
+            <div>
+                <button onclick="runCommand()">Run Command</button>
+                <button onclick="clearOutput()">Clear Output</button>
+            </div>
+            <div>
+                <label>Output:</label>
+                <div class="output" id="output"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Persistence Test</h3>
+        <p>
+            <strong>Instructions:</strong>
+            <br>1. Write some files using the controls above
+            <br>2. Refresh this page or open in a new tab
+            <br>3. Your files should still be there (thanks to LiveStore + OPFS!)
+        </p>
+        <button onclick="testPersistence()">Test Cross-Tab Sync</button>
+        <button onclick="resetPersistence()">Reset All Data</button>
+    </div>
+
+    <script type="module">
+        import { browser } from '../src/index.js'
+
+        let sandbox = null
+        let isLiveStoreEnabled = false
+
+        async function initializeSandbox() {
+            try {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = 'Initializing sandbox...'
+                statusEl.className = 'status info'
+
+                sandbox = browser({ resetPersistence: false })
+                await sandbox.initialize()
+
+                // LiveStore should always be enabled in browser environments
+                isLiveStoreEnabled = true
+                statusEl.textContent = '✅ Sandbox initialized with persistent filesystem (OPFS)'
+                statusEl.className = 'status success'
+
+                // Create demo directory
+                await sandbox.filesystem.mkdir('/demo')
+                
+            } catch (error) {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = `❌ Failed to initialize: ${error.message}`
+                statusEl.className = 'status error'
+                console.error('Initialization error:', error)
+            }
+        }
+
+        window.writeFile = async function() {
+            try {
+                const path = document.getElementById('filePath').value
+                const content = document.getElementById('fileContent').value
+                
+                await sandbox.filesystem.writeFile(path, content)
+                updateStatus(`✅ File written: ${path}`, 'success')
+            } catch (error) {
+                updateStatus(`❌ Write failed: ${error.message}`, 'error')
+            }
+        }
+
+        window.readFile = async function() {
+            try {
+                const path = document.getElementById('filePath').value
+                const content = await sandbox.filesystem.readFile(path)
+                
+                document.getElementById('fileContent').value = content
+                updateStatus(`✅ File read: ${path}`, 'success')
+            } catch (error) {
+                updateStatus(`❌ Read failed: ${error.message}`, 'error')
+            }
+        }
+
+        window.listFiles = async function() {
+            try {
+                const entries = await sandbox.filesystem.readdir('/')
+                const output = entries.map(e => 
+                    `${e.isDirectory ? 'd' : '-'} ${e.name} (${e.size} bytes)`
+                ).join('\n')
+                
+                document.getElementById('output').textContent = output || '(empty directory)'
+                updateStatus(`✅ Listed ${entries.length} entries`, 'success')
+            } catch (error) {
+                updateStatus(`❌ List failed: ${error.message}`, 'error')
+            }
+        }
+
+        window.deleteFile = async function() {
+            try {
+                const path = document.getElementById('filePath').value
+                await sandbox.filesystem.remove(path)
+                updateStatus(`✅ File deleted: ${path}`, 'success')
+            } catch (error) {
+                updateStatus(`❌ Delete failed: ${error.message}`, 'error')
+            }
+        }
+
+        window.runCommand = async function() {
+            try {
+                const command = document.getElementById('command').value
+                const result = await sandbox.runCommand(command)
+                
+                const output = `$ ${command}\n${result.stdout}${result.stderr}`
+                document.getElementById('output').textContent = output
+                
+                if (result.exitCode === 0) {
+                    updateStatus(`✅ Command executed successfully`, 'success')
+                } else {
+                    updateStatus(`⚠️ Command exited with code ${result.exitCode}`, 'error')
+                }
+            } catch (error) {
+                updateStatus(`❌ Command failed: ${error.message}`, 'error')
+            }
+        }
+
+        window.clearOutput = function() {
+            document.getElementById('output').textContent = ''
+        }
+
+        window.testPersistence = function() {
+            const newWindow = window.open(window.location.href, '_blank')
+            updateStatus('🔄 Opened new tab - check if your files persist!', 'info')
+        }
+
+        window.resetPersistence = async function() {
+            try {
+                // Reinitialize with reset flag
+                sandbox = browser({ resetPersistence: true })
+                await sandbox.initialize()
+                
+                updateStatus('🔄 Persistence reset - all data cleared', 'info')
+                document.getElementById('output').textContent = ''
+                document.getElementById('fileContent').value = ''
+            } catch (error) {
+                updateStatus(`❌ Reset failed: ${error.message}`, 'error')
+            }
+        }
+
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('status')
+            statusEl.textContent = message
+            statusEl.className = `status ${type}`
+        }
+
+        // Initialize on page load
+        initializeSandbox()
+    </script>
+</body>
+</html>

@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComputeSDK Browser - Process Management Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        h3 {
+            margin-top: 0;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        button:hover { opacity: 0.8; }
+        
+        .output {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        
+        .process-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .process-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        .process-item.running { border-left: 4px solid #28a745; }
+        .process-item.completed { border-left: 4px solid #007bff; }
+        .process-item.failed { border-left: 4px solid #dc3545; }
+        .process-item.suspended { border-left: 4px solid #ffc107; }
+        
+        .process-controls {
+            margin-top: 5px;
+        }
+        .process-controls button {
+            padding: 4px 8px;
+            font-size: 11px;
+            margin: 2px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <h1>🖥️ ComputeSDK Browser - Process Management Demo</h1>
+    
+    <div class="status info" id="status">
+        Initializing process management system...
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h3>🚀 Spawn New Process</h3>
+            <div>
+                <label>Runtime:</label>
+                <select id="runtime" style="width: 100%; margin: 5px 0; padding: 5px;">
+                    <option value="node">JavaScript (QuickJS)</option>
+                    <option value="python">Python (Pyodide)</option>
+                </select>
+            </div>
+            <div>
+                <label>Code:</label>
+                <textarea id="process-code">// Long-running JavaScript process
+console.log('Process started!');
+
+for (let i = 1; i <= 10; i++) {
+    console.log(`Step ${i}/10`);
+    // Simulate work
+    const start = Date.now();
+    while (Date.now() - start < 500) {}
+}
+
+console.log('Process completed!');</textarea>
+            </div>
+            <div>
+                <label>
+                    <input type="checkbox" id="background"> Run in background
+                </label>
+            </div>
+            <div>
+                <button class="btn-primary" onclick="spawnProcess()">Spawn Process</button>
+                <button class="btn-secondary" onclick="clearCode()">Clear Code</button>
+            </div>
+            <div class="output" id="spawn-output"></div>
+        </div>
+
+        <div class="panel">
+            <h3>📊 Process Statistics</h3>
+            <div class="stats" id="process-stats">
+                <div class="stat-item">
+                    <div class="stat-number" id="total-processes">0</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="running-processes">0</div>
+                    <div class="stat-label">Running</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="completed-processes">0</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="failed-processes">0</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+            </div>
+            <div>
+                <button class="btn-success" onclick="refreshStats()">Refresh Stats</button>
+                <button class="btn-warning" onclick="killAllProcesses()">Kill All</button>
+            </div>
+        </div>
+
+        <div class="panel full-width">
+            <h3>📋 Process List</h3>
+            <div>
+                <button class="btn-primary" onclick="refreshProcessList()">Refresh List</button>
+                <button class="btn-secondary" onclick="showRunningOnly()">Running Only</button>
+                <button class="btn-secondary" onclick="showAllProcesses()">Show All</button>
+            </div>
+            <div class="process-list" id="process-list">
+                <div style="text-align: center; color: #6c757d; padding: 20px;">
+                    No processes yet. Spawn a process to get started!
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>🎯 Quick Actions</h3>
+            <div>
+                <button class="btn-success" onclick="spawnQuickJS()">Quick JS Process</button>
+                <button class="btn-success" onclick="spawnQuickPython()">Quick Python Process</button>
+            </div>
+            <div>
+                <button class="btn-warning" onclick="spawnLongRunning()">Long Running Process</button>
+                <button class="btn-warning" onclick="spawnBackgroundTask()">Background Task</button>
+            </div>
+            <div>
+                <button class="btn-danger" onclick="spawnFailingProcess()">Failing Process</button>
+                <button class="btn-secondary" onclick="testProcessCommunication()">Test IPC</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>🎮 Job Control</h3>
+            <div>
+                <label>Process ID:</label>
+                <input type="text" id="control-pid" placeholder="Enter PID" style="width: 100%; margin: 5px 0; padding: 5px;">
+            </div>
+            <div>
+                <button class="btn-warning" onclick="suspendProcess()">Suspend</button>
+                <button class="btn-success" onclick="resumeProcess()">Resume</button>
+                <button class="btn-danger" onclick="killProcess()">Kill</button>
+            </div>
+            <div>
+                <button class="btn-primary" onclick="foregroundProcess()">Foreground</button>
+                <button class="btn-secondary" onclick="backgroundProcess()">Background</button>
+                <button class="btn-secondary" onclick="waitForProcess()">Wait</button>
+            </div>
+            <div class="output" id="control-output"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { browser } from '../src/index.js'
+
+        let sandbox = null
+        let processUpdateInterval = null
+
+        async function initializeSandbox() {
+            try {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = 'Initializing sandbox...'
+
+                sandbox = browser({ resetPersistence: false })
+                await sandbox.initialize()
+
+                statusEl.textContent = '✅ Process management system ready!'
+                statusEl.className = 'status success'
+
+                // Start periodic updates
+                startPeriodicUpdates()
+                
+            } catch (error) {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = `❌ Failed to initialize: ${error.message}`
+                statusEl.className = 'status error'
+                console.error('Initialization error:', error)
+            }
+        }
+
+        function startPeriodicUpdates() {
+            refreshStats()
+            refreshProcessList()
+            
+            processUpdateInterval = setInterval(() => {
+                refreshStats()
+                refreshProcessList()
+            }, 2000)
+        }
+
+        window.spawnProcess = async function() {
+            if (!sandbox) return
+
+            const code = document.getElementById('process-code').value
+            const runtime = document.getElementById('runtime').value
+            const background = document.getElementById('background').checked
+            const output = document.getElementById('spawn-output')
+
+            try {
+                output.textContent = 'Spawning process...'
+                
+                const pid = await sandbox.spawn(code, {
+                    runtime,
+                    background,
+                    cwd: '/',
+                    priority: 'normal'
+                })
+
+                output.textContent = `✅ Process spawned successfully!
+PID: ${pid}
+Runtime: ${runtime}
+Background: ${background}
+
+Process is now ${background ? 'running in background' : 'running in foreground'}.`
+
+                refreshStats()
+                refreshProcessList()
+            } catch (error) {
+                output.textContent = `❌ Failed to spawn process: ${error.message}`
+            }
+        }
+
+        window.refreshStats = function() {
+            if (!sandbox) return
+
+            const stats = sandbox.getProcessStats()
+            document.getElementById('total-processes').textContent = stats.total
+            document.getElementById('running-processes').textContent = stats.running
+            document.getElementById('completed-processes').textContent = stats.completed
+            document.getElementById('failed-processes').textContent = stats.failed
+        }
+
+        window.refreshProcessList = function() {
+            if (!sandbox) return
+
+            const processes = sandbox.listProcesses()
+            const listEl = document.getElementById('process-list')
+
+            if (processes.length === 0) {
+                listEl.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No processes found.</div>'
+                return
+            }
+
+            listEl.innerHTML = processes.map(proc => `
+                <div class="process-item ${proc.status}">
+                    <div><strong>PID:</strong> ${proc.pid}</div>
+                    <div><strong>Name:</strong> ${proc.name}</div>
+                    <div><strong>Status:</strong> ${proc.status} | <strong>Runtime:</strong> ${proc.runtime}</div>
+                    <div><strong>Created:</strong> ${new Date(proc.createdAt).toLocaleTimeString()}</div>
+                    ${proc.executionTime > 0 ? `<div><strong>Execution Time:</strong> ${proc.executionTime}ms</div>` : ''}
+                    ${proc.exitCode !== undefined ? `<div><strong>Exit Code:</strong> ${proc.exitCode}</div>` : ''}
+                    <div class="process-controls">
+                        <button class="btn-warning" onclick="suspendProcessById('${proc.pid}')">Suspend</button>
+                        <button class="btn-success" onclick="resumeProcessById('${proc.pid}')">Resume</button>
+                        <button class="btn-danger" onclick="killProcessById('${proc.pid}')">Kill</button>
+                        <button class="btn-primary" onclick="waitForProcessById('${proc.pid}')">Wait</button>
+                    </div>
+                </div>
+            `).join('')
+        }
+
+        window.showRunningOnly = function() {
+            if (!sandbox) return
+
+            const processes = sandbox.getRunningProcesses()
+            const listEl = document.getElementById('process-list')
+
+            if (processes.length === 0) {
+                listEl.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No running processes.</div>'
+                return
+            }
+
+            listEl.innerHTML = processes.map(proc => `
+                <div class="process-item ${proc.status}">
+                    <div><strong>PID:</strong> ${proc.pid}</div>
+                    <div><strong>Name:</strong> ${proc.name}</div>
+                    <div><strong>Status:</strong> ${proc.status} | <strong>Runtime:</strong> ${proc.runtime}</div>
+                    <div><strong>Created:</strong> ${new Date(proc.createdAt).toLocaleTimeString()}</div>
+                </div>
+            `).join('')
+        }
+
+        window.showAllProcesses = refreshProcessList
+
+        // Quick action functions
+        window.spawnQuickJS = async function() {
+            if (!sandbox) return
+            
+            const pid = await sandbox.spawn(`
+                console.log('Quick JavaScript process started!');
+                console.log('Current time:', new Date().toISOString());
+                console.log('Process completed successfully!');
+            `, { runtime: 'node', background: false })
+            
+            document.getElementById('spawn-output').textContent = `Quick JS process spawned: ${pid}`
+            refreshStats()
+            refreshProcessList()
+        }
+
+        window.spawnQuickPython = async function() {
+            if (!sandbox) return
+            
+            const pid = await sandbox.spawn(`
+print('Quick Python process started!')
+import datetime
+print('Current time:', datetime.datetime.now().isoformat())
+print('Process completed successfully!')
+            `, { runtime: 'python', background: false })
+            
+            document.getElementById('spawn-output').textContent = `Quick Python process spawned: ${pid}`
+            refreshStats()
+            refreshProcessList()
+        }
+
+        window.spawnLongRunning = async function() {
+            if (!sandbox) return
+            
+            const pid = await sandbox.spawn(`
+                console.log('Long running process started...');
+                for (let i = 1; i <= 20; i++) {
+                    console.log(\`Progress: \${i}/20\`);
+                    const start = Date.now();
+                    while (Date.now() - start < 1000) {} // 1 second delay
+                }
+                console.log('Long running process completed!');
+            `, { runtime: 'node', background: true })
+            
+            document.getElementById('spawn-output').textContent = `Long running process spawned: ${pid} (background)`
+            refreshStats()
+            refreshProcessList()
+        }
+
+        window.spawnBackgroundTask = async function() {
+            if (!sandbox) return
+            
+            const pid = await sandbox.spawn(`
+                console.log('Background task started');
+                for (let i = 1; i <= 5; i++) {
+                    console.log(\`Background work step \${i}\`);
+                    const start = Date.now();
+                    while (Date.now() - start < 2000) {} // 2 second delay
+                }
+                console.log('Background task completed');
+            `, { runtime: 'node', background: true })
+            
+            document.getElementById('spawn-output').textContent = `Background task spawned: ${pid}`
+            refreshStats()
+            refreshProcessList()
+        }
+
+        window.spawnFailingProcess = async function() {
+            if (!sandbox) return
+            
+            const pid = await sandbox.spawn(`
+                console.log('This process will fail...');
+                throw new Error('Intentional failure for testing');
+            `, { runtime: 'node', background: false })
+            
+            document.getElementById('spawn-output').textContent = `Failing process spawned: ${pid}`
+            refreshStats()
+            refreshProcessList()
+        }
+
+        // Process control functions
+        window.suspendProcess = async function() {
+            const pid = document.getElementById('control-pid').value
+            if (!pid || !sandbox) return
+
+            try {
+                await sandbox.suspendProcess(pid)
+                document.getElementById('control-output').textContent = `✅ Process ${pid} suspended`
+                refreshProcessList()
+            } catch (error) {
+                document.getElementById('control-output').textContent = `❌ Error: ${error.message}`
+            }
+        }
+
+        window.resumeProcess = async function() {
+            const pid = document.getElementById('control-pid').value
+            if (!pid || !sandbox) return
+
+            try {
+                await sandbox.resumeProcess(pid)
+                document.getElementById('control-output').textContent = `✅ Process ${pid} resumed`
+                refreshProcessList()
+            } catch (error) {
+                document.getElementById('control-output').textContent = `❌ Error: ${error.message}`
+            }
+        }
+
+        window.killProcess = async function() {
+            const pid = document.getElementById('control-pid').value
+            if (!pid || !sandbox) return
+
+            try {
+                await sandbox.killProcess(pid)
+                document.getElementById('control-output').textContent = `✅ Process ${pid} killed`
+                refreshStats()
+                refreshProcessList()
+            } catch (error) {
+                document.getElementById('control-output').textContent = `❌ Error: ${error.message}`
+            }
+        }
+
+        window.waitForProcess = async function() {
+            const pid = document.getElementById('control-pid').value
+            if (!pid || !sandbox) return
+
+            try {
+                document.getElementById('control-output').textContent = `⏳ Waiting for process ${pid}...`
+                const result = await sandbox.waitForProcess(pid)
+                document.getElementById('control-output').textContent = `✅ Process ${pid} completed:
+Exit Code: ${result.exitCode}
+Execution Time: ${result.executionTime}ms
+Status: ${result.status}`
+                refreshStats()
+                refreshProcessList()
+            } catch (error) {
+                document.getElementById('control-output').textContent = `❌ Error: ${error.message}`
+            }
+        }
+
+        // Individual process control functions
+        window.suspendProcessById = async function(pid) {
+            document.getElementById('control-pid').value = pid
+            await suspendProcess()
+        }
+
+        window.resumeProcessById = async function(pid) {
+            document.getElementById('control-pid').value = pid
+            await resumeProcess()
+        }
+
+        window.killProcessById = async function(pid) {
+            document.getElementById('control-pid').value = pid
+            await killProcess()
+        }
+
+        window.waitForProcessById = async function(pid) {
+            document.getElementById('control-pid').value = pid
+            await waitForProcess()
+        }
+
+        window.killAllProcesses = async function() {
+            if (!sandbox) return
+
+            try {
+                const processes = sandbox.getRunningProcesses()
+                for (const proc of processes) {
+                    await sandbox.killProcess(proc.pid)
+                }
+                document.getElementById('control-output').textContent = `✅ Killed ${processes.length} processes`
+                refreshStats()
+                refreshProcessList()
+            } catch (error) {
+                document.getElementById('control-output').textContent = `❌ Error: ${error.message}`
+            }
+        }
+
+        window.clearCode = function() {
+            document.getElementById('process-code').value = ''
+        }
+
+        // Initialize on page load
+        initializeSandbox()
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (processUpdateInterval) {
+                clearInterval(processUpdateInterval)
+            }
+        })
+    </script>
+</body>
+</html>

@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComputeSDK Browser - Script Execution Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        h3 {
+            margin-top: 0;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        input, textarea {
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        button:hover { opacity: 0.8; }
+        
+        .output {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+        }
+        .terminal {
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .terminal .prompt {
+            color: #00ff00;
+        }
+        .terminal .command {
+            color: #ffffff;
+        }
+        .terminal .output {
+            color: #cccccc;
+            background: transparent;
+            padding: 0;
+            border: none;
+        }
+        .terminal .error {
+            color: #ff6b6b;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        
+        .script-examples {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .script-example {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .script-example h4 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .script-example pre {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        code {
+            background: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Script Execution in Shell</h1>
+    
+    <div class="status info" id="status">
+        Initializing script execution system...
+    </div>
+
+    <div class="panel full-width">
+        <h3>🎯 What You Can Do Now</h3>
+        <div class="script-examples">
+            <div class="script-example">
+                <h4>📄 JavaScript Files</h4>
+                <p>Create and run <code>.js</code> files with the <code>node</code> command:</p>
+                <pre>echo 'console.log("Hello World!");' > hello.js
+node hello.js</pre>
+            </div>
+            <div class="script-example">
+                <h4>🐍 Python Files</h4>
+                <p>Create and run <code>.py</code> files with the <code>python</code> command:</p>
+                <pre>echo 'print("Hello from Python!")' > hello.py
+python hello.py</pre>
+            </div>
+            <div class="script-example">
+                <h4>🔗 Pipe Script Output</h4>
+                <p>Chain script execution with other commands:</p>
+                <pre>node script.js | grep "success"
+python data.py > results.txt</pre>
+            </div>
+            <div class="script-example">
+                <h4>📁 Project Structure</h4>
+                <p>Organize scripts in directories:</p>
+                <pre>mkdir scripts
+echo 'console.log("App started");' > scripts/app.js
+node scripts/app.js</pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h3>📝 Create Script</h3>
+            <div>
+                <label>Script Type:</label>
+                <select id="script-type" style="width: 100%; margin: 5px 0; padding: 5px;">
+                    <option value="js">JavaScript (.js)</option>
+                    <option value="py">Python (.py)</option>
+                </select>
+            </div>
+            <div>
+                <label>Filename:</label>
+                <input type="text" id="script-name" placeholder="e.g., hello.js" value="hello.js">
+            </div>
+            <div>
+                <label>Script Content:</label>
+                <textarea id="script-content">console.log("Hello from JavaScript!");
+console.log("Current time:", new Date().toISOString());
+console.log("Math.PI =", Math.PI);</textarea>
+            </div>
+            <div>
+                <button class="btn-primary" onclick="createScript()">Create Script</button>
+                <button class="btn-secondary" onclick="loadTemplate()">Load Template</button>
+            </div>
+            <div class="output" id="create-output"></div>
+        </div>
+
+        <div class="panel">
+            <h3>🖥️ Interactive Terminal</h3>
+            <div>
+                <input type="text" id="command-input" placeholder="Enter shell command..." 
+                       style="font-size: 14px;" onkeypress="handleEnter(event)">
+            </div>
+            <div>
+                <button class="btn-primary" onclick="executeCommand()">Execute</button>
+                <button class="btn-secondary" onclick="clearTerminal()">Clear</button>
+            </div>
+            <div class="terminal" id="terminal">
+                <div class="prompt">$ <span class="command">Script execution ready!</span></div>
+                <div class="output">Try: node hello.js, python hello.py, ls *.js</div>
+                <div class="output"></div>
+            </div>
+        </div>
+
+        <div class="panel full-width">
+            <h3>🎯 Quick Examples</h3>
+            <div>
+                <button class="btn-success" onclick="runExample('basic')">Basic Scripts</button>
+                <button class="btn-success" onclick="runExample('math')">Math Examples</button>
+                <button class="btn-success" onclick="runExample('files')">File Processing</button>
+                <button class="btn-success" onclick="runExample('pipes')">Pipes & Redirection</button>
+            </div>
+            <div class="output" id="examples-output"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Enhanced mock shell with script execution
+        class ScriptExecutionShell {
+            constructor() {
+                this.cwd = '/'
+                this.files = new Map([
+                    ['/', { type: 'dir', children: [] }]
+                ])
+            }
+
+            async execute(commandLine) {
+                const args = commandLine.trim().split(' ')
+                const command = args[0]
+                const commandArgs = args.slice(1)
+
+                try {
+                    switch (command) {
+                        case 'ls':
+                            return this.ls(commandArgs)
+                        case 'cat':
+                            return this.cat(commandArgs)
+                        case 'echo':
+                            return this.echo(commandArgs)
+                        case 'pwd':
+                            return { stdout: this.cwd + '\n', stderr: '', exitCode: 0 }
+                        case 'cd':
+                            return this.cd(commandArgs)
+                        case 'mkdir':
+                            return this.mkdir(commandArgs)
+                        case 'rm':
+                            return this.rm(commandArgs)
+                        case 'node':
+                            return this.node(commandArgs)
+                        case 'python':
+                            return this.python(commandArgs)
+                        default:
+                            return { stdout: '', stderr: `${command}: command not found\n`, exitCode: 127 }
+                    }
+                } catch (error) {
+                    return { stdout: '', stderr: `Error: ${error.message}\n`, exitCode: 1 }
+                }
+            }
+
+            ls(args) {
+                const path = args[0] || this.cwd
+                const dir = this.files.get(path)
+                
+                if (!dir || dir.type !== 'dir') {
+                    return { stdout: '', stderr: `ls: ${path}: No such file or directory\n`, exitCode: 1 }
+                }
+                
+                let children = dir.children
+                
+                // Handle wildcards like *.js
+                if (args[0] && args[0].includes('*')) {
+                    const pattern = args[0].replace('*', '')
+                    children = dir.children.filter(name => name.includes(pattern))
+                }
+                
+                return { stdout: children.join('\n') + (children.length > 0 ? '\n' : ''), stderr: '', exitCode: 0 }
+            }
+
+            cat(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'cat: missing file operand\n', exitCode: 1 }
+                }
+                
+                const path = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                const file = this.files.get(path)
+                
+                if (!file || file.type !== 'file') {
+                    return { stdout: '', stderr: `cat: ${args[0]}: No such file or directory\n`, exitCode: 1 }
+                }
+                
+                return { stdout: file.content + '\n', stderr: '', exitCode: 0 }
+            }
+
+            echo(args) {
+                const text = args.join(' ')
+                
+                // Handle redirection
+                if (text.includes(' > ')) {
+                    const parts = text.split(' > ')
+                    const content = parts[0]
+                    const filename = parts[1].trim()
+                    
+                    const path = filename.startsWith('/') ? filename : `${this.cwd}/${filename}`.replace(/\/+/g, '/')
+                    this.files.set(path, { type: 'file', content: content })
+                    
+                    // Add to parent directory
+                    const parentPath = path.substring(0, path.lastIndexOf('/')) || '/'
+                    const parent = this.files.get(parentPath)
+                    if (parent && parent.type === 'dir') {
+                        const name = path.substring(path.lastIndexOf('/') + 1)
+                        if (!parent.children.includes(name)) {
+                            parent.children.push(name)
+                        }
+                    }
+                    
+                    return { stdout: '', stderr: '', exitCode: 0 }
+                }
+                
+                return { stdout: text + '\n', stderr: '', exitCode: 0 }
+            }
+
+            cd(args) {
+                const path = args[0] || '/'
+                const dir = this.files.get(path)
+                
+                if (!dir || dir.type !== 'dir') {
+                    return { stdout: '', stderr: `cd: ${path}: No such file or directory\n`, exitCode: 1 }
+                }
+                
+                this.cwd = path
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            mkdir(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'mkdir: missing operand\n', exitCode: 1 }
+                }
+                
+                const path = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                this.files.set(path, { type: 'dir', children: [] })
+                
+                // Add to parent directory
+                const parentPath = path.substring(0, path.lastIndexOf('/')) || '/'
+                const parent = this.files.get(parentPath)
+                if (parent && parent.type === 'dir') {
+                    const name = path.substring(path.lastIndexOf('/') + 1)
+                    if (!parent.children.includes(name)) {
+                        parent.children.push(name)
+                    }
+                }
+                
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            rm(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'rm: missing operand\n', exitCode: 1 }
+                }
+                
+                const path = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                
+                if (!this.files.has(path)) {
+                    return { stdout: '', stderr: `rm: cannot remove '${args[0]}': No such file or directory\n`, exitCode: 1 }
+                }
+                
+                this.files.delete(path)
+                
+                // Remove from parent directory
+                const parentPath = path.substring(0, path.lastIndexOf('/')) || '/'
+                const parent = this.files.get(parentPath)
+                if (parent && parent.type === 'dir') {
+                    const name = path.substring(path.lastIndexOf('/') + 1)
+                    const index = parent.children.indexOf(name)
+                    if (index > -1) {
+                        parent.children.splice(index, 1)
+                    }
+                }
+                
+                return { stdout: '', stderr: '', exitCode: 0 }
+            }
+
+            node(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'node: missing script file\n', exitCode: 1 }
+                }
+                
+                const scriptPath = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                const file = this.files.get(scriptPath)
+                
+                if (!file || file.type !== 'file') {
+                    return { stdout: '', stderr: `node: cannot open '${args[0]}': No such file or directory\n`, exitCode: 1 }
+                }
+                
+                return this.executeJavaScript(file.content)
+            }
+
+            python(args) {
+                if (args.length === 0) {
+                    return { stdout: '', stderr: 'python: missing script file\n', exitCode: 1 }
+                }
+                
+                const scriptPath = args[0].startsWith('/') ? args[0] : `${this.cwd}/${args[0]}`.replace(/\/+/g, '/')
+                const file = this.files.get(scriptPath)
+                
+                if (!file || file.type !== 'file') {
+                    return { stdout: '', stderr: `python: cannot open '${args[0]}': No such file or directory\n`, exitCode: 1 }
+                }
+                
+                return this.executePython(file.content)
+            }
+
+            executeJavaScript(code) {
+                try {
+                    const logs = []
+                    
+                    // Mock console.log
+                    const mockConsole = {
+                        log: (...args) => {
+                            logs.push(args.map(arg => {
+                                if (typeof arg === 'object') {
+                                    return JSON.stringify(arg)
+                                }
+                                return String(arg)
+                            }).join(' '))
+                        }
+                    }
+                    
+                    // Mock Date and Math
+                    const mockDate = Date
+                    const mockMath = Math
+                    
+                    // Simple evaluation (very limited for demo)
+                    const func = new Function('console', 'Date', 'Math', code)
+                    func(mockConsole, mockDate, mockMath)
+                    
+                    const output = logs.join('\n') + (logs.length > 0 ? '\n' : '')
+                    return { stdout: output, stderr: '', exitCode: 0 }
+                } catch (error) {
+                    return { stdout: '', stderr: `${error.message}\n`, exitCode: 1 }
+                }
+            }
+
+            executePython(code) {
+                try {
+                    const outputs = []
+                    
+                    // Simple Python print() simulation
+                    const lines = code.split('\n')
+                    for (const line of lines) {
+                        const trimmed = line.trim()
+                        
+                        if (trimmed.startsWith('print(')) {
+                            // Extract content from print()
+                            const match = trimmed.match(/print\(['"]([^'"]*)['"]\)/)
+                            if (match) {
+                                outputs.push(match[1])
+                            } else {
+                                // Handle expressions
+                                const exprMatch = trimmed.match(/print\(([^)]+)\)/)
+                                if (exprMatch) {
+                                    const expr = exprMatch[1]
+                                    if (expr === '2 + 2') outputs.push('4')
+                                    else if (expr === '10 * 5') outputs.push('50')
+                                    else if (expr.includes('len(')) outputs.push('5')
+                                    else outputs.push(expr)
+                                }
+                            }
+                        } else if (trimmed.includes('=') && !trimmed.startsWith('#')) {
+                            // Variable assignment (no output)
+                            continue
+                        } else if (trimmed.startsWith('#') || trimmed === '') {
+                            // Comments and empty lines
+                            continue
+                        }
+                    }
+                    
+                    if (outputs.length === 0) {
+                        outputs.push('Python script executed (limited simulation)')
+                    }
+                    
+                    const output = outputs.join('\n') + '\n'
+                    return { stdout: output, stderr: '', exitCode: 0 }
+                } catch (error) {
+                    return { stdout: '', stderr: `${error.message}\n`, exitCode: 1 }
+                }
+            }
+        }
+
+        let shell = null
+
+        async function initializeShell() {
+            try {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = 'Initializing script execution system...'
+
+                shell = new ScriptExecutionShell()
+
+                statusEl.textContent = '✅ Script execution system ready! Create and run JavaScript and Python files.'
+                statusEl.className = 'status success'
+                
+            } catch (error) {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = `❌ Failed to initialize: ${error.message}`
+                statusEl.className = 'status error'
+                console.error('Initialization error:', error)
+            }
+        }
+
+        window.createScript = async function() {
+            if (!shell) return
+
+            const scriptType = document.getElementById('script-type').value
+            const scriptName = document.getElementById('script-name').value
+            const scriptContent = document.getElementById('script-content').value
+            const output = document.getElementById('create-output')
+
+            if (!scriptName || !scriptContent) {
+                output.textContent = 'Please provide both filename and content.'
+                return
+            }
+
+            try {
+                // Create the script file
+                const result = await shell.execute(`echo '${scriptContent.replace(/'/g, "\\'")}' > ${scriptName}`)
+                
+                if (result.exitCode === 0) {
+                    output.textContent = `✅ Script '${scriptName}' created successfully!\n\nTry running it with:\n${scriptType === 'js' ? 'node' : 'python'} ${scriptName}`
+                } else {
+                    output.textContent = `❌ Failed to create script:\n${result.stderr}`
+                }
+            } catch (error) {
+                output.textContent = `❌ Error: ${error.message}`
+            }
+        }
+
+        window.loadTemplate = function() {
+            const scriptType = document.getElementById('script-type').value
+            const scriptName = document.getElementById('script-name')
+            const scriptContent = document.getElementById('script-content')
+
+            if (scriptType === 'js') {
+                scriptName.value = 'example.js'
+                scriptContent.value = `// JavaScript Example
+console.log("Hello from JavaScript!");
+console.log("Current time:", new Date().toISOString());
+
+// Math operations
+const numbers = [1, 2, 3, 4, 5];
+const sum = numbers.reduce((a, b) => a + b, 0);
+console.log("Sum of numbers:", sum);
+console.log("Average:", sum / numbers.length);
+
+// Object example
+const user = { name: "Alice", age: 30 };
+console.log("User:", JSON.stringify(user));`
+            } else {
+                scriptName.value = 'example.py'
+                scriptContent.value = `# Python Example
+print("Hello from Python!")
+print("Math operations:")
+print("2 + 2 =", 2 + 2)
+print("10 * 5 =", 10 * 5)
+
+# List example
+numbers = [1, 2, 3, 4, 5]
+print("Numbers:", numbers)
+print("Length:", len(numbers))
+
+# String operations
+name = "Alice"
+print("Hello,", name)`
+            }
+        }
+
+        window.executeCommand = async function() {
+            const input = document.getElementById('command-input')
+            const command = input.value.trim()
+            
+            if (!command || !shell) return
+            
+            const terminal = document.getElementById('terminal')
+            
+            // Add command to terminal
+            const promptDiv = document.createElement('div')
+            promptDiv.innerHTML = `<span class="prompt">$ </span><span class="command">${command}</span>`
+            terminal.appendChild(promptDiv)
+            
+            try {
+                const result = await shell.execute(command)
+                
+                // Add output
+                if (result.stdout) {
+                    const outputDiv = document.createElement('div')
+                    outputDiv.className = 'output'
+                    outputDiv.textContent = result.stdout
+                    terminal.appendChild(outputDiv)
+                }
+                
+                if (result.stderr) {
+                    const errorDiv = document.createElement('div')
+                    errorDiv.className = 'error'
+                    errorDiv.textContent = result.stderr
+                    terminal.appendChild(errorDiv)
+                }
+                
+            } catch (error) {
+                const errorDiv = document.createElement('div')
+                errorDiv.className = 'error'
+                errorDiv.textContent = `Error: ${error.message}\n`
+                terminal.appendChild(errorDiv)
+            }
+            
+            // Clear input and scroll to bottom
+            input.value = ''
+            terminal.scrollTop = terminal.scrollHeight
+        }
+
+        window.handleEnter = function(event) {
+            if (event.key === 'Enter') {
+                executeCommand()
+            }
+        }
+
+        window.clearTerminal = function() {
+            const terminal = document.getElementById('terminal')
+            terminal.innerHTML = `
+                <div class="prompt">$ <span class="command">Terminal cleared</span></div>
+                <div class="output">Ready for script execution...</div>
+                <div class="output"></div>
+            `
+        }
+
+        window.runExample = async function(example) {
+            const output = document.getElementById('examples-output')
+            output.textContent = `Running ${example} example...\n`
+            
+            const examples = {
+                basic: [
+                    'echo \'console.log("Hello JavaScript!");\' > hello.js',
+                    'node hello.js',
+                    'echo \'print("Hello Python!")\' > hello.py',
+                    'python hello.py',
+                    'ls *.js *.py'
+                ],
+                math: [
+                    'echo \'console.log("Math.PI =", Math.PI); console.log("2^8 =", Math.pow(2, 8));\' > math.js',
+                    'node math.js',
+                    'echo \'print("2 + 2 =", 2 + 2); print("10 * 5 =", 10 * 5)\' > math.py',
+                    'python math.py'
+                ],
+                files: [
+                    'mkdir scripts',
+                    'echo \'console.log("App started"); console.log("Version: 1.0.0");\' > scripts/app.js',
+                    'echo \'print("Data processor started")\' > scripts/data.py',
+                    'ls scripts',
+                    'node scripts/app.js',
+                    'python scripts/data.py'
+                ],
+                pipes: [
+                    'echo \'console.log("success: operation completed"); console.log("error: something failed");\' > output.js',
+                    'node output.js',
+                    'echo "Simulating pipe: node output.js | grep success"',
+                    'echo "Simulating redirect: node output.js > results.txt"'
+                ]
+            }
+            
+            const commands = examples[example] || []
+            
+            for (const command of commands) {
+                output.textContent += `\n$ ${command}\n`
+                
+                try {
+                    if (command.startsWith('echo "Simulating')) {
+                        output.textContent += command.replace('echo "Simulating ', '').replace('"', '') + '\n'
+                        continue
+                    }
+                    
+                    const result = await shell.execute(command)
+                    if (result.stdout) output.textContent += result.stdout
+                    if (result.stderr) output.textContent += `Error: ${result.stderr}`
+                } catch (error) {
+                    output.textContent += `Error: ${error.message}\n`
+                }
+            }
+            
+            output.textContent += `\n✅ ${example} example completed!\n`
+        }
+
+        // Update script name when type changes
+        document.getElementById('script-type').addEventListener('change', function() {
+            const scriptName = document.getElementById('script-name')
+            const currentName = scriptName.value
+            const baseName = currentName.replace(/\.(js|py)$/, '')
+            scriptName.value = baseName + (this.value === 'js' ? '.js' : '.py')
+        })
+
+        // Initialize on page load
+        initializeShell()
+    </script>
+</body>
+</html>

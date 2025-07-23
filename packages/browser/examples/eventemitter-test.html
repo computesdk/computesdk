@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EventEmitter Browser Compatibility Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .terminal { background: #000; color: #0f0; padding: 15px; border-radius: 5px; margin: 10px 0; min-height: 200px; white-space: pre-wrap; }
+        button { background: #007acc; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #005a9e; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #0d4f0d; border: 1px solid #0f0; }
+        .error { background: #4f0d0d; border: 1px solid #f00; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 EventEmitter Browser Compatibility Test</h1>
+        <p>Testing our browser-compatible EventEmitter implementation</p>
+        
+        <div class="status success" id="status">
+            Status: Ready to test
+        </div>
+
+        <h2>Test Controls</h2>
+        <button onclick="testBasicEvents()">Test Basic Events</button>
+        <button onclick="testShellProcess()">Test Shell Process Events</button>
+        <button onclick="testShellStream()">Test Shell Stream Events</button>
+        <button onclick="clearOutput()">Clear Output</button>
+
+        <h2>Output</h2>
+        <div class="terminal" id="output">Waiting for tests...</div>
+    </div>
+
+    <script type="module">
+        import { browser } from '../src/index.js'
+
+        let output = document.getElementById('output')
+        let status = document.getElementById('status')
+
+        function log(message) {
+            output.textContent += message + '\n'
+            output.scrollTop = output.scrollHeight
+        }
+
+        function setStatus(message, type = 'success') {
+            status.textContent = `Status: ${message}`
+            status.className = `status ${type}`
+        }
+
+        // Test basic EventEmitter functionality
+        window.testBasicEvents = async function() {
+            log('\n🧪 Testing Basic EventEmitter...')
+            
+            try {
+                // Import our EventEmitter
+                const { EventEmitter } = await import('../src/utils/events.js')
+                
+                const emitter = new EventEmitter()
+                let eventReceived = false
+                let eventData = null
+                
+                // Test on/emit
+                emitter.on('test', (data) => {
+                    eventReceived = true
+                    eventData = data
+                    log('✅ Event received: ' + data)
+                })
+                
+                emitter.emit('test', 'Hello EventEmitter!')
+                
+                if (eventReceived && eventData === 'Hello EventEmitter!') {
+                    log('✅ Basic EventEmitter test passed')
+                } else {
+                    log('❌ Basic EventEmitter test failed')
+                }
+                
+                // Test multiple listeners
+                let count = 0
+                emitter.on('count', () => count++)
+                emitter.on('count', () => count++)
+                emitter.emit('count')
+                
+                if (count === 2) {
+                    log('✅ Multiple listeners test passed')
+                } else {
+                    log('❌ Multiple listeners test failed')
+                }
+                
+                setStatus('Basic EventEmitter tests completed')
+                
+            } catch (error) {
+                log('❌ EventEmitter test failed: ' + error.message)
+                setStatus('EventEmitter test failed', 'error')
+            }
+        }
+
+        // Test shell process events
+        window.testShellProcess = async function() {
+            log('\n🐚 Testing Shell Process Events...')
+            
+            try {
+                const sandbox = browser({ resetPersistence: true })
+                await sandbox.initialize()
+                
+                // Test shell process events
+                const process = sandbox.spawnShell('echo', ['Hello from shell!'])
+                
+                let stdoutReceived = false
+                let processExited = false
+                
+                process.stdout.on('data', (data) => {
+                    stdoutReceived = true
+                    log('📤 Process stdout: ' + data.trim())
+                })
+                
+                process.on('exit', (code) => {
+                    processExited = true
+                    log('🏁 Process exited with code: ' + code)
+                })
+                
+                // Wait a bit for events
+                setTimeout(() => {
+                    if (stdoutReceived && processExited) {
+                        log('✅ Shell process events test passed')
+                    } else {
+                        log('❌ Shell process events test failed')
+                        log(`   stdout received: ${stdoutReceived}, process exited: ${processExited}`)
+                    }
+                    setStatus('Shell process events test completed')
+                }, 1000)
+                
+            } catch (error) {
+                log('❌ Shell process test failed: ' + error.message)
+                setStatus('Shell process test failed', 'error')
+            }
+        }
+
+        // Test shell stream events
+        window.testShellStream = async function() {
+            log('\n📡 Testing Shell Stream Events...')
+            
+            try {
+                const sandbox = browser({ resetPersistence: true })
+                await sandbox.initialize()
+                
+                const process = sandbox.spawnShell('ls', [])
+                
+                let dataEvents = 0
+                let endEvents = 0
+                
+                process.stdout.on('data', (data) => {
+                    dataEvents++
+                    log('📊 Stream data event #' + dataEvents + ': ' + data.trim())
+                })
+                
+                process.stdout.on('end', () => {
+                    endEvents++
+                    log('🔚 Stream end event #' + endEvents)
+                })
+                
+                process.on('exit', (code) => {
+                    setTimeout(() => {
+                        log(`✅ Stream events: ${dataEvents} data, ${endEvents} end`)
+                        if (dataEvents > 0) {
+                            log('✅ Shell stream events test passed')
+                        } else {
+                            log('❌ Shell stream events test failed - no data events')
+                        }
+                        setStatus('Shell stream events test completed')
+                    }, 100)
+                })
+                
+            } catch (error) {
+                log('❌ Shell stream test failed: ' + error.message)
+                setStatus('Shell stream test failed', 'error')
+            }
+        }
+
+        // Clear output
+        window.clearOutput = function() {
+            output.textContent = ''
+        }
+
+        // Initialize
+        log('🚀 EventEmitter compatibility test ready')
+        log('Click buttons above to run tests')
+    </script>
+</body>
+</html>

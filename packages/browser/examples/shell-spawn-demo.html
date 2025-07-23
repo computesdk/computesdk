@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComputeSDK Browser - Shell + Runtime Integration Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        h3 {
+            margin-top: 0;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        input, select {
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        button:hover { opacity: 0.8; }
+        
+        .output {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .comparison-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .comparison-item.nodejs {
+            border-left-color: #28a745;
+        }
+        .comparison-item.browser {
+            border-left-color: #007bff;
+        }
+        
+        code {
+            background: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Shell + Runtime Integration Demo</h1>
+    
+    <div class="status info" id="status">
+        Initializing shell system...
+    </div>
+
+    <div class="panel full-width">
+        <h3>📋 API Comparison</h3>
+        <div class="comparison">
+            <div class="comparison-item nodejs">
+                <h4>Node.js spawn()</h4>
+                <pre><code>import { spawn } from 'child_process'
+
+const ls = spawn('ls', ['-la'])
+ls.stdout.on('data', (data) => {
+  console.log(data.toString())
+})
+ls.on('close', (code) => {
+  console.log(`Exit code: ${code}`)
+})</code></pre>
+            </div>
+            <div class="comparison-item browser">
+                <h4>Browser spawn() (Our Implementation)</h4>
+                <pre><code>const ls = sandbox.spawn('ls', ['-la'])
+ls.stdout.on('data', (data) => {
+  console.log(data)
+})
+ls.on('close', (code) => {
+  console.log(`Exit code: ${code}`)
+})</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h3>🖥️ Spawn Command</h3>
+            <div>
+                <label>Command:</label>
+                <select id="command">
+                    <option value="ls">ls</option>
+                    <option value="cat">cat</option>
+                    <option value="echo">echo</option>
+                    <option value="node">node (JavaScript)</option>
+                    <option value="python">python (Python)</option>
+                </select>
+            </div>
+            <div>
+                <label>Arguments (space-separated):</label>
+                <input type="text" id="args" placeholder="e.g., -la /home">
+            </div>
+            <div>
+                <button class="btn-primary" onclick="spawnCommand()">Spawn Process</button>
+                <button class="btn-secondary" onclick="clearOutput()">Clear Output</button>
+            </div>
+            <div class="output" id="spawn-output"></div>
+        </div>
+
+        <div class="panel">
+            <h3>📊 Process Info</h3>
+            <div id="process-info">
+                <p>No active process</p>
+            </div>
+            <div>
+                <button class="btn-danger" onclick="killCurrentProcess()">Kill Process</button>
+            </div>
+        </div>
+
+        <div class="panel full-width">
+            <h3>🎯 Quick Examples</h3>
+            <div>
+                <button class="btn-success" onclick="runExample('ls', [])">ls (list files)</button>
+                <button class="btn-success" onclick="runExample('ls', ['-la'])">ls -la (detailed)</button>
+                <button class="btn-success" onclick="runExample('echo', ['Hello', 'World'])">echo Hello World</button>
+                <button class="btn-success" onclick="runExample('cat', ['test.txt'])">cat test.txt</button>
+                <button class="btn-success" onclick="runExample('node', ['hello.js'])">🧪 node hello.js (QuickJS)</button>
+                <button class="btn-success" onclick="runExample('python', ['hello.py'])">🐍 python hello.py (Pyodide)</button>
+            </div>
+            <div class="output" id="examples-output"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { browser } from '../src/index.js'
+        
+        // Global variables
+        let sandbox = null
+        let currentProcess = null
+
+        
+        async function initializeShell() {
+            try {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = 'Initializing browser sandbox with RuntimeManager...'
+
+                // Initialize real BrowserSandbox
+                sandbox = browser({ resetPersistence: true })
+                await sandbox.initialize()
+
+                statusEl.textContent = '✅ Browser sandbox ready with RuntimeManager integration!'
+                statusEl.className = 'status success'
+                
+                // Create test files for demonstration
+                await sandbox.filesystem.writeFile('/test.txt', 'Hello from test.txt!\nThis is a sample file.\n')
+                await sandbox.filesystem.writeFile('/hello.js', 'console.log("Hello from QuickJS runtime!");')
+                await sandbox.filesystem.writeFile('/hello.py', 'print("Hello from Pyodide runtime!")')
+                
+                console.log('✅ Filesystem initialized with test files')
+                
+            } catch (error) {
+                const statusEl = document.getElementById('status')
+                statusEl.textContent = `❌ Failed to initialize: ${error.message}`
+                statusEl.className = 'status error'
+                console.error('Initialization error:', error)
+            }
+        }
+
+        window.spawnCommand = function() {
+            if (!sandbox) return
+
+            const command = document.getElementById('command').value
+            const argsInput = document.getElementById('args').value
+            const args = argsInput.trim() ? argsInput.trim().split(/\s+/) : []
+            const output = document.getElementById('spawn-output')
+
+            try {
+                output.textContent = `Spawning: ${command} ${args.join(' ')}\n`
+                
+                // Spawn the process using real Shell system with RuntimeManager!
+                currentProcess = sandbox.spawnShell(command, args)
+                
+                // Update process info
+                updateProcessInfo(currentProcess)
+                
+                // Set up event listeners (just like Node.js)
+                currentProcess.stdout.on('data', (data) => {
+                    output.textContent += `[stdout] ${data}`
+                })
+                
+                currentProcess.stderr.on('data', (data) => {
+                    output.textContent += `[stderr] ${data}`
+                })
+                
+                currentProcess.on('close', (code, signal) => {
+                    output.textContent += `\n[process] Exited with code ${code}${signal ? ` (${signal})` : ''}\n`
+                    updateProcessInfo(null)
+                })
+
+            } catch (error) {
+                output.textContent += `❌ Error: ${error.message}\n`
+            }
+        }
+
+        window.runExample = function(command, args) {
+            if (!sandbox) return
+
+            const output = document.getElementById('examples-output')
+            
+            try {
+                output.textContent += `\n$ ${command} ${args.join(' ')}\n`
+                
+                const process = sandbox.spawnShell(command, args)
+                
+                process.stdout.on('data', (data) => {
+                    output.textContent += data
+                })
+                
+                process.stderr.on('data', (data) => {
+                    output.textContent += `Error: ${data}`
+                })
+                
+                process.on('close', (code) => {
+                    output.textContent += `[Exit code: ${code}]\n`
+                })
+
+            } catch (error) {
+                output.textContent += `❌ Error: ${error.message}\n`
+            }
+        }
+
+        window.killCurrentProcess = function() {
+            if (currentProcess && !currentProcess.killed) {
+                currentProcess.kill('SIGTERM')
+                document.getElementById('spawn-output').textContent += '\n[process] Killed by user\n'
+            }
+        }
+
+        window.clearOutput = function() {
+            document.getElementById('spawn-output').textContent = ''
+        }
+
+        function updateProcessInfo(process) {
+            const infoEl = document.getElementById('process-info')
+            
+            if (!process) {
+                infoEl.innerHTML = '<p>No active process</p>'
+                return
+            }
+            
+            infoEl.innerHTML = `
+                <p><strong>PID:</strong> ${process.pid}</p>
+                <p><strong>Command:</strong> ${process.command} ${process.args.join(' ')}</p>
+                <p><strong>Status:</strong> ${process.killed ? 'Killed' : process.exitCode !== null ? 'Completed' : 'Running'}</p>
+                ${process.exitCode !== null ? `<p><strong>Exit Code:</strong> ${process.exitCode}</p>` : ''}
+            `
+        }
+
+        // Initialize on page load
+        initializeShell()
+    </script>
+</body>
+</html>
