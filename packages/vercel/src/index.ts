@@ -33,32 +33,24 @@ class VercelFileSystem extends BaseFileSystem {
       args: [path],
     });
 
-    // Collect stdout from the stream
+    // Handle the new Vercel Sandbox API format
     let content = '';
-    const stdoutPromise = new Promise<void>((resolve) => {
-      if (result.stdout) {
-        result.stdout.on('data', (data: Buffer) => {
-          content += data.toString();
-        });
-        result.stdout.on('end', resolve);
-      } else {
-        resolve();
+    let exitCode = result.exitCode ?? 0;
+
+    // Get stdout by calling the function
+    if (result.stdout && typeof result.stdout === 'function') {
+      try {
+        const stdoutResult = await result.stdout();
+        content = stdoutResult || '';
+      } catch (error) {
+        console.warn('Failed to get stdout:', error);
       }
-    });
+    }
 
-    // Wait for the process to complete
-    const exitPromise = new Promise<number>((resolve, reject) => {
-      result.on('exit', (code: number) => {
-        if (code !== 0) {
-          reject(new Error(`Failed to read file ${path}: exit code ${code}`));
-        } else {
-          resolve(code);
-        }
-      });
-      result.on('error', reject);
-    });
-
-    await Promise.all([stdoutPromise, exitPromise]);
+    // Check exit code
+    if (exitCode !== 0) {
+      throw new Error(`Failed to read file ${path}: exit code ${exitCode}`);
+    }
     return content;
   }
 
@@ -78,19 +70,11 @@ class VercelFileSystem extends BaseFileSystem {
       args: ['-c', `echo '${escapedContent}' > '${path}'`],
     });
 
-    // Wait for the process to complete
-    const exitPromise = new Promise<number>((resolve, reject) => {
-      result.on('exit', (code: number) => {
-        if (code !== 0) {
-          reject(new Error(`Failed to write file ${path}: exit code ${code}`));
-        } else {
-          resolve(code);
-        }
-      });
-      result.on('error', reject);
-    });
-
-    await exitPromise;
+    // Check exit code
+    const exitCode = result.exitCode ?? 0;
+    if (exitCode !== 0) {
+      throw new Error(`Failed to write file ${path}: exit code ${exitCode}`);
+    }
   }
 
   protected async doMkdir(path: string): Promise<void> {
@@ -102,19 +86,11 @@ class VercelFileSystem extends BaseFileSystem {
       args: ['-p', path],
     });
 
-    // Wait for the process to complete
-    const exitPromise = new Promise<number>((resolve, reject) => {
-      result.on('exit', (code: number) => {
-        if (code !== 0) {
-          reject(new Error(`Failed to create directory ${path}: exit code ${code}`));
-        } else {
-          resolve(code);
-        }
-      });
-      result.on('error', reject);
-    });
-
-    await exitPromise;
+    // Check exit code
+    const exitCode = result.exitCode ?? 0;
+    if (exitCode !== 0) {
+      throw new Error(`Failed to create directory ${path}: exit code ${exitCode}`);
+    }
   }
 
   protected async doReaddir(path: string): Promise<FileEntry[]> {
@@ -126,32 +102,24 @@ class VercelFileSystem extends BaseFileSystem {
       args: ['-la', '--time-style=iso', path],
     });
 
-    // Collect stdout from the stream
+    // Handle the new Vercel Sandbox API format
     let output = '';
-    const stdoutPromise = new Promise<void>((resolve) => {
-      if (result.stdout) {
-        result.stdout.on('data', (data: Buffer) => {
-          output += data.toString();
-        });
-        result.stdout.on('end', resolve);
-      } else {
-        resolve();
+    let exitCode = result.exitCode ?? 0;
+
+    // Get stdout by calling the function
+    if (result.stdout && typeof result.stdout === 'function') {
+      try {
+        const stdoutResult = await result.stdout();
+        output = stdoutResult || '';
+      } catch (error) {
+        console.warn('Failed to get stdout:', error);
       }
-    });
+    }
 
-    // Wait for the process to complete
-    const exitPromise = new Promise<number>((resolve, reject) => {
-      result.on('exit', (code: number) => {
-        if (code !== 0) {
-          reject(new Error(`Failed to read directory ${path}: exit code ${code}`));
-        } else {
-          resolve(code);
-        }
-      });
-      result.on('error', reject);
-    });
-
-    await Promise.all([stdoutPromise, exitPromise]);
+    // Check exit code
+    if (exitCode !== 0) {
+      throw new Error(`Failed to read directory ${path}: exit code ${exitCode}`);
+    }
 
     // Parse ls output to create FileEntry objects
     const lines = output.split('\n').filter((line: string) => line.trim());
@@ -195,15 +163,8 @@ class VercelFileSystem extends BaseFileSystem {
         args: ['-e', path],
       });
 
-      // Wait for the process to complete
-      const exitCode = await new Promise<number>((resolve) => {
-        result.on('exit', (code: number) => {
-          resolve(code);
-        });
-        result.on('error', () => {
-          resolve(1); // Error means file doesn't exist
-        });
-      });
+      // Get exit code from result
+      const exitCode = result.exitCode ?? 1;
 
       return exitCode === 0;
     } catch (error) {
@@ -220,19 +181,11 @@ class VercelFileSystem extends BaseFileSystem {
       args: ['-rf', path],
     });
 
-    // Wait for the process to complete
-    const exitPromise = new Promise<number>((resolve, reject) => {
-      result.on('exit', (code: number) => {
-        if (code !== 0) {
-          reject(new Error(`Failed to remove ${path}: exit code ${code}`));
-        } else {
-          resolve(code);
-        }
-      });
-      result.on('error', reject);
-    });
-
-    await exitPromise;
+    // Check exit code
+    const exitCode = result.exitCode ?? 0;
+    if (exitCode !== 0) {
+      throw new Error(`Failed to remove ${path}: exit code ${exitCode}`);
+    }
   }
 }
 
@@ -297,6 +250,9 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
       const runtimeImage = this.runtime === 'node' ? 'node22' : 'python3.13';
 
       this.sandbox = await Sandbox.create({
+        token: this.token,
+        teamId: this.teamId,
+        projectId: this.projectId,
         runtime: runtimeImage,
         timeout: ms(`${this.timeout}ms`),
         resources: { vcpus: 2 }, // Default to 2 vCPUs
@@ -366,45 +322,29 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
         args: args,
       });
 
-      // Collect stdout and stderr streams
+      // Handle the new Vercel Sandbox API format
       let stdout = '';
       let stderr = '';
-      let exitCode = 0;
+      let exitCode = result.exitCode ?? 0;
 
-      // Set up stream listeners
-      const stdoutPromise = new Promise<void>((resolve) => {
-        if (result.stdout) {
-          result.stdout.on('data', (data: Buffer) => {
-            stdout += data.toString();
-          });
-          result.stdout.on('end', resolve);
-        } else {
-          resolve();
+      // Get stdout and stderr by calling the functions
+      if (result.stdout && typeof result.stdout === 'function') {
+        try {
+          const stdoutResult = await result.stdout();
+          stdout = stdoutResult || '';
+        } catch (error) {
+          console.warn('Failed to get stdout:', error);
         }
-      });
+      }
 
-      const stderrPromise = new Promise<void>((resolve) => {
-        if (result.stderr) {
-          result.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString();
-          });
-          result.stderr.on('end', resolve);
-        } else {
-          resolve();
+      if (result.stderr && typeof result.stderr === 'function') {
+        try {
+          const stderrResult = await result.stderr();
+          stderr = stderrResult || '';
+        } catch (error) {
+          console.warn('Failed to get stderr:', error);
         }
-      });
-
-      // Wait for the process to complete
-      const exitPromise = new Promise<number>((resolve, reject) => {
-        result.on('exit', (code: number) => {
-          exitCode = code;
-          resolve(code);
-        });
-        result.on('error', reject);
-      });
-
-      // Wait for all streams to complete
-      await Promise.all([stdoutPromise, stderrPromise, exitPromise]);
+      }
 
       return {
         stdout: stdout.trim(),
@@ -484,45 +424,29 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
         args: args,
       });
 
-      // Collect stdout and stderr streams
+      // Handle the new Vercel Sandbox API format
       let stdout = '';
       let stderr = '';
-      let exitCode = 0;
+      let exitCode = result.exitCode ?? 0;
 
-      // Set up stream listeners
-      const stdoutPromise = new Promise<void>((resolve) => {
-        if (result.stdout) {
-          result.stdout.on('data', (data: Buffer) => {
-            stdout += data.toString();
-          });
-          result.stdout.on('end', resolve);
-        } else {
-          resolve();
+      // Get stdout and stderr by calling the functions
+      if (result.stdout && typeof result.stdout === 'function') {
+        try {
+          const stdoutResult = await result.stdout();
+          stdout = stdoutResult || '';
+        } catch (error) {
+          console.warn('Failed to get stdout:', error);
         }
-      });
+      }
 
-      const stderrPromise = new Promise<void>((resolve) => {
-        if (result.stderr) {
-          result.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString();
-          });
-          result.stderr.on('end', resolve);
-        } else {
-          resolve();
+      if (result.stderr && typeof result.stderr === 'function') {
+        try {
+          const stderrResult = await result.stderr();
+          stderr = stderrResult || '';
+        } catch (error) {
+          console.warn('Failed to get stderr:', error);
         }
-      });
-
-      // Wait for the process to complete
-      const exitPromise = new Promise<number>((resolve, reject) => {
-        result.on('exit', (code: number) => {
-          exitCode = code;
-          resolve(code);
-        });
-        result.on('error', reject);
-      });
-
-      // Wait for all streams to complete
-      await Promise.all([stdoutPromise, stderrPromise, exitPromise]);
+      }
 
       return {
         stdout: stdout.trim(),

@@ -6,26 +6,23 @@
  */
 
 import { e2b } from '@computesdk/e2b';
-import { executeSandbox, FullComputeSandbox } from 'computesdk';
+import { config } from 'dotenv';
+config(); // Load environment variables from .env file
 
 async function main() {
-  // Make sure E2B_API_KEY is set in environment variables
   if (!process.env.E2B_API_KEY) {
     console.error('Please set E2B_API_KEY environment variable');
     process.exit(1);
   }
-  
+
   try {
-    // Create E2B sandbox (defaults to Python)
-    // E2B returns a FullComputeSandbox with filesystem and terminal support
-    const sandbox = e2b() as FullComputeSandbox;
-    
+    // Create E2B sandbox with full capabilities
+    const sandbox = e2b();
+
     console.log('Created E2B sandbox:', sandbox.sandboxId);
-    
+
     // Execute Python code
-    const result1 = await executeSandbox({
-      sandbox,
-      code: `
+    const result = await sandbox.execute(`
 import sys
 print(f"Python version: {sys.version}")
 print("Hello from E2B!")
@@ -36,94 +33,76 @@ def fibonacci(n):
         return n
     return fibonacci(n-1) + fibonacci(n-2)
 
-for i in range(10):
+for i in range(5):
     print(f"fibonacci({i}) = {fibonacci(i)}")
-      `.trim()
-    });
-    
-    console.log('Output:', result1.stdout);
-    console.log('Execution time:', result1.executionTime, 'ms');
-    
-    // Demonstrate filesystem operations
+    `);
+
+    console.log('Output:', result.stdout);
+    console.log('Execution time:', result.executionTime, 'ms');
+
+    // Filesystem operations
     console.log('\n--- Filesystem Operations ---');
-    
-    // Write a Python script to a file
+
+    // Write and execute a Python script
     await sandbox.filesystem.writeFile('/tmp/script.py', `
 def greet(name):
     return f"Hello, {name}!"
 
-if __name__ == "__main__":
-    print(greet("E2B"))
-    print("This script was written via the filesystem API!")
-`.trim());
-    
-    // Read the file back
-    const scriptContent = await sandbox.filesystem.readFile('/tmp/script.py');
-    console.log('Script content:', scriptContent);
-    
-    // Execute the script from the filesystem
+print(greet("E2B"))
+print("This script was written via filesystem!")
+    `);
+
     const scriptResult = await sandbox.execute('python /tmp/script.py');
     console.log('Script output:', scriptResult.stdout);
-    
-    // Create a directory and list contents
+
+    // Create directory and list files
     await sandbox.filesystem.mkdir('/tmp/data');
-    await sandbox.filesystem.writeFile('/tmp/data/numbers.txt', '1\n2\n3\n4\n5');
-    
     const files = await sandbox.filesystem.readdir('/tmp');
-    console.log('\nFiles in /tmp:', files.map(f => f.name));
-    
-    // Demonstrate terminal operations
+    console.log('Files in /tmp:', files.map(f => f.name));
+
+    // Terminal operations
     console.log('\n--- Terminal Operations ---');
-    
-    // Create an interactive terminal session
-    const terminal = await sandbox.terminal.create({
-      cols: 80,
-      rows: 24
-    });
-    
+
+    // Create interactive terminal
+    const terminal = await sandbox.terminal.create();
     console.log('Created terminal with PID:', terminal.pid);
-    
-    // Send commands to the terminal
-    await terminal.write('python --version\n');
+
+    // Send commands
     await terminal.write('echo "Hello from terminal!"\n');
     
     // List active terminals
     const terminals = await sandbox.terminal.list();
     console.log('Active terminals:', terminals.length);
-    
-    // Kill the terminal
+
+    // Clean up terminal
     await terminal.kill();
+
+    // Data science example
+    console.log('\n--- Data Science ---');
     
-    // Execute with data science libraries
-    const result2 = await executeSandbox({
-      sandbox,
-      code: `
-import numpy as np
+    const dataResult = await sandbox.execute(`
 import pandas as pd
+import numpy as np
 
-# Create a simple dataset
-data = {
-    'A': np.random.randn(5),
-    'B': np.random.randn(5),
-    'C': np.random.randn(5)
-}
-
+# Create sample data
+data = {'A': [1, 2, 3], 'B': [4, 5, 6]}
 df = pd.DataFrame(data)
 print("DataFrame:")
 print(df)
-print("\nStatistics:")
-print(df.describe())
-      `.trim()
-    });
+print(f"Sum: {df.sum().sum()}")
+    `);
     
-    console.log('\nData Science Output:', result2.stdout);
-    
+    console.log('Data Science Output:', dataResult.stdout);
+
     // Clean up
     await sandbox.kill();
     console.log('\nSandbox cleaned up successfully');
-    
+
   } catch (error) {
     console.error('Error:', error.message);
+    if (error.message.includes('API key')) {
+      console.error('Get your E2B API key from https://e2b.dev/');
+    }
   }
 }
 

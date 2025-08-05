@@ -1,75 +1,64 @@
 /**
  * Auto-detection Example
  * 
- * This example shows how ComputeSDK automatically selects a provider
- * based on available API keys in environment variables.
- * 
- * Currently supported providers:
- * - E2B (fully implemented with filesystem/terminal support) - requires E2B_API_KEY
- * - Vercel (fully implemented) - requires VERCEL_TOKEN, VERCEL_TEAM_ID, VERCEL_PROJECT_ID
- * - Cloudflare (fully implemented) - platform-specific sandbox
- * - Fly (mock implementation) - coming soon
+ * This example demonstrates ComputeSDK's auto-detection feature.
+ * It automatically selects the best available provider based on
+ * your environment variables - no manual configuration needed!
  */
 
-import { ComputeSDK, FilesystemComputeSandbox, TerminalComputeSandbox } from 'computesdk';
+import { ComputeSDK } from 'computesdk';
+import { config } from 'dotenv';
+config(); // Load environment variables from .env file
 
 async function main() {
+  console.log('ComputeSDK Auto-Detection Example');
+  console.log('==================================\n');
+  
   try {
-    // Auto-detect provider based on environment variables
+    // 🎯 The magic happens here - auto-detect provider!
     const sandbox = ComputeSDK.createSandbox();
     
-    console.log('Using provider:', sandbox.provider);
-    console.log('Sandbox ID:', sandbox.sandboxId);
+    console.log('✨ Auto-detected provider:', sandbox.provider);
+    console.log('📦 Sandbox ID:', sandbox.sandboxId);
     
-    // Execute code based on provider
-    if (sandbox.provider === 'e2b') {
-      const pythonResult = await sandbox.execute('print("Hello from Python!")');
-      console.log('Python output:', pythonResult.stdout);
-      
-      // E2B supports filesystem operations
-      if ('filesystem' in sandbox) {
-        const fsSandbox = sandbox as FilesystemComputeSandbox;
-        await fsSandbox.filesystem.writeFile('/tmp/hello.txt', 'Hello from E2B filesystem!');
-        const content = await fsSandbox.filesystem.readFile('/tmp/hello.txt');
-        console.log('File content:', content);
-      }
-      
-      // E2B also supports terminal operations
-      if ('terminal' in sandbox) {
-        const termSandbox = sandbox as TerminalComputeSandbox;
-        const terminals = await termSandbox.terminal.list();
-        console.log('Active terminals:', terminals.length);
-      }
-    } else if (sandbox.provider === 'vercel') {
-      const nodeResult = await sandbox.execute('console.log("Hello from Node.js!")');
-      console.log('Node.js output:', nodeResult.stdout);
-    } else if (sandbox.provider === 'cloudflare') {
-      const result = await sandbox.execute('console.log("Hello from Cloudflare!")');
-      console.log('Cloudflare output:', result.stdout);
-    } else {
-      console.log('Note: Only E2B, Vercel, and Cloudflare providers are fully implemented. Fly provider uses mock responses.');
-      
-      // This will return mock data for Fly provider
-      const result = await sandbox.execute('print("Hello World!")');
-      console.log('Mock output:', result.stdout);
-    }
-    
-    // Get sandbox info
+    // Get basic info about the detected provider
     const info = await sandbox.getInfo();
-    console.log('Sandbox info:', info);
+    console.log('🏷️  Runtime:', info.runtime);
+    console.log('📊 Status:', info.status);
+    
+    // Execute a simple "Hello World" to prove it works
+    console.log('\n🚀 Testing execution...');
+    const code = sandbox.provider === 'e2b' || sandbox.provider === 'fly' 
+      ? 'print("Hello from " + "' + sandbox.provider.toUpperCase() + '!")'
+      : 'console.log("Hello from " + "' + sandbox.provider.toUpperCase() + '!")';
+      
+    const result = await sandbox.execute(code);
+    console.log('📤 Output:', result.stdout);
+    console.log('⏱️  Execution time:', result.executionTime + 'ms');
+    
+    // Show what capabilities this provider has
+    console.log('\n🔧 Provider capabilities:');
+    console.log('- Code execution: ✅');
+    console.log('- Filesystem ops:', 'filesystem' in sandbox ? '✅' : '❌');
+    console.log('- Terminal ops:', 'terminal' in sandbox ? '✅' : '❌');
     
     // Clean up
     await sandbox.kill();
-    console.log('Sandbox killed successfully');
+    console.log('\n✅ Success! Auto-detection worked perfectly.');
     
   } catch (error) {
-    console.error('Error:', error.message);
-    console.error('\nMake sure you have one of these environment variables set:');
-    console.error('- E2B_API_KEY (fully implemented with filesystem/terminal)');
-    console.error('- VERCEL_TOKEN + VERCEL_TEAM_ID + VERCEL_PROJECT_ID (fully implemented)');
-    console.error('- CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (platform-specific)');
-    console.error('- FLY_API_TOKEN (mock implementation)');
-    console.error('\nNote: E2B, Vercel, and Cloudflare providers execute real code. Fly returns mock responses.');
+    console.error('❌ Error:', error.message);
+    
+    console.log('\n💡 To use auto-detection, set one of these:');
+    console.log('');
+    console.log('🐍 E2B: E2B_API_KEY=your_key');
+    console.log('🚀 Vercel: VERCEL_TOKEN + VERCEL_TEAM_ID + VERCEL_PROJECT_ID');
+    console.log('☁️  Cloudflare: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID');
+    console.log('🪰 Fly: FLY_API_TOKEN=any_value (mock)');
+    console.log('');
+    console.log('👀 Check the other examples for detailed provider usage!');
+    
+    process.exit(1);
   }
 }
 

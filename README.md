@@ -9,12 +9,13 @@ ComputeSDK provides a consistent TypeScript interface for code execution across 
 ## Features
 
 - 🚀 **Multi-provider support** - E2B, Vercel, Cloudflare, Fly.io
-- 📁 **Filesystem operations** - Read, write, create directories across all providers
+- 📁 **Filesystem operations** - Read, write, create directories across providers
+- 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
+- ⚡ **Command execution** - Run shell commands directly
 - 🔄 **Auto-detection** - Automatically selects providers based on environment variables
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
 - 📦 **Modular** - Install only the providers you need
 - 🔧 **Extensible** - Easy to add custom providers
-- ⚡ **Performance** - Optimized for speed and reliability
 
 ## Installation
 
@@ -159,6 +160,15 @@ const result = await sandbox.execute('print("Hello")', 'python');
 // Returns: { stdout: string, stderr: string, executionTime: number }
 ```
 
+#### `sandbox.runCommand(command, args?)`
+
+Executes shell commands directly.
+
+```typescript
+const result = await sandbox.runCommand('ls', ['-la', '/tmp']);
+console.log(result.stdout); // Directory listing
+```
+
 #### `sandbox.getInfo()`
 
 Gets sandbox information.
@@ -247,27 +257,68 @@ Removes a file or directory.
 await sandbox.filesystem.remove('/path/to/delete');
 ```
 
+### Terminal Operations (E2B Only)
+
+E2B provides interactive terminal support with PTY (pseudo-terminal) sessions:
+
+#### `sandbox.terminal.create(options?)`
+
+Creates an interactive terminal session.
+
+```typescript
+import { e2b } from '@computesdk/e2b';
+
+const sandbox = e2b();
+
+// Create interactive terminal
+const terminal = await sandbox.terminal.create({
+  command: 'bash',  // Command to run (default: 'bash')
+  cols: 80,         // Terminal width
+  rows: 24          // Terminal height
+});
+
+// Write commands to terminal
+await terminal.write('echo "Hello from terminal!"\n');
+await terminal.write('python --version\n');
+
+// Handle terminal output
+terminal.onData = (data: Uint8Array) => {
+  const output = new TextDecoder().decode(data);
+  console.log('Terminal output:', output);
+};
+
+// Clean up
+await terminal.kill();
+```
+
+#### `sandbox.terminal.list()`
+
+Lists all active terminal sessions.
+
+```typescript
+const terminals = await sandbox.terminal.list();
+console.log(`Active terminals: ${terminals.length}`);
+```
+
 ## Error Handling
 
 ComputeSDK provides comprehensive error handling:
 
 ```typescript
-import { 
-  ExecutionError, 
-  TimeoutError, 
-  AuthenticationError,
-  QuotaExceededError 
-} from 'computesdk';
-
 try {
+  const sandbox = ComputeSDK.createSandbox();
   const result = await sandbox.execute('invalid python code');
 } catch (error) {
-  if (error instanceof ExecutionError) {
-    console.error('Code execution failed:', error.message);
-  } else if (error instanceof TimeoutError) {
-    console.error('Execution timed out');
-  } else if (error instanceof AuthenticationError) {
-    console.error('Check your API keys');
+  if (error.message.includes('Missing') && error.message.includes('API key')) {
+    console.error('Authentication Error: Check your environment variables');
+  } else if (error.message.includes('timeout')) {
+    console.error('Timeout Error: Execution took too long');
+  } else if (error.message.includes('quota') || error.message.includes('limit')) {
+    console.error('Quota Error: API usage limits exceeded');
+  } else if (error.message.includes('not installed')) {
+    console.error('Configuration Error: Provider package not installed');
+  } else {
+    console.error('Execution Error:', error.message);
   }
 }
 ```
@@ -453,21 +504,29 @@ cd examples/basic && pnpm run e2b
 ### Creating Custom Providers
 
 ```typescript
-import { BaseProvider, ComputeSpecification } from 'computesdk';
+import { BaseProvider, BaseComputeSandbox } from 'computesdk';
 
-class MyProvider extends BaseProvider implements ComputeSpecification {
-  specificationVersion = 'v1' as const;
+class MyProvider extends BaseProvider implements BaseComputeSandbox {
   provider = 'my-provider';
+  sandboxId = 'my-sandbox-id';
   
-  async doExecute(code: string) {
+  async execute(code: string) {
     // Implementation
   }
   
-  async doKill() {
+  async runCode(code: string) {
+    // Implementation
+  }
+  
+  async runCommand(command: string, args?: string[]) {
+    // Implementation
+  }
+  
+  async kill() {
     // Implementation  
   }
   
-  async doGetInfo() {
+  async getInfo() {
     // Implementation
   }
 }

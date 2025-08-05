@@ -6,48 +6,51 @@ Similar to how Vercel's AI SDK abstracts different LLM providers, ComputeSDK abs
 
 ## Features
 
-- **Unified API** - Single interface for multiple sandbox providers
-- **Auto-detection** - Automatically detects and uses available providers
-- **Provider-agnostic** - Switch between providers without code changes
-- **Type-safe** - Full TypeScript support with comprehensive type definitions
-- **Extensible** - Easy to add new providers
-- **Production-ready** - Built for real-world applications
+- 🚀 **Multi-provider support** - E2B, Vercel, Cloudflare, Fly.io
+- 📁 **Filesystem operations** - Read, write, create directories across providers
+- 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
+- ⚡ **Command execution** - Run shell commands directly
+- 🔄 **Auto-detection** - Automatically selects providers based on environment variables
+- 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
+- 📦 **Modular** - Install only the providers you need
+- 🔧 **Extensible** - Easy to add custom providers
 
 ## Supported Providers
 
-- **E2B** - Python-focused code execution with templates
-- **Vercel** - Node.js and Python execution on Vercel infrastructure
-- **Cloudflare** - Edge computing with Cloudflare Workers and Durable Objects
-- **Fly.io** - Fast boot containers (community contribution target)
+| Provider | Code Execution | Filesystem | Terminal | Use Cases |
+|----------|----------------|------------|----------|-----------|
+| **E2B** | Python | ✅ Full | ✅ PTY | Data science, AI/ML, interactive development |
+| **Vercel** | Node.js, Python | ✅ Full | ❌ | Web apps, APIs, serverless functions |
+| **Cloudflare** | Python, Node.js | ✅ Full | ❌ | Edge computing, global deployment |
+| **Fly.io** | Custom containers | 🚧 Planned | 🚧 Planned | Custom environments, Docker containers |
 
 ## Installation
 
 ```bash
+# Core SDK
 npm install computesdk
-```
 
-### Install Provider Packages
-
-```bash
-# Install the providers you need
+# Provider packages (install only what you need)
 npm install @computesdk/e2b        # E2B provider
-npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/vercel     # Vercel provider  
 npm install @computesdk/cloudflare # Cloudflare provider
+npm install @computesdk/fly        # Fly.io provider (community target)
 ```
 
 ## Quick Start
 
 ### Auto-detection (Recommended)
 
+ComputeSDK automatically detects available providers based on environment variables:
+
 ```typescript
 import { ComputeSDK } from 'computesdk';
 
-// Automatically detects and uses available providers
-const sdk = new ComputeSDK();
-const sandbox = await sdk.createSandbox();
+// Automatically detects and uses the first available provider
+const sandbox = ComputeSDK.createSandbox();
 
-const result = await sandbox.execute('print("Hello from ComputeSDK!")');
-console.log(result.stdout); // "Hello from ComputeSDK!"
+const result = await sandbox.execute('print("Hello World!")');
+console.log(result.stdout); // "Hello World!"
 
 await sandbox.kill();
 ```
@@ -68,66 +71,199 @@ const result = await executeSandbox({
 console.log(result.stdout);
 ```
 
-### Multiple Providers
+### Advanced Usage with Type Safety
+
+ComputeSDK provides rich TypeScript interfaces for different provider capabilities:
 
 ```typescript
-import { executeSandbox } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-import { vercel } from '@computesdk/vercel';
-import { cloudflare } from '@computesdk/cloudflare';
+import { ComputeSDK, FilesystemComputeSandbox, TerminalComputeSandbox } from 'computesdk';
 
-// Try different providers for different use cases
-const providers = [
-  { name: 'E2B', provider: e2b() },
-  { name: 'Vercel', provider: vercel() },
-  { name: 'Cloudflare', provider: cloudflare({ env }) }
-];
+const sandbox = ComputeSDK.createSandbox();
 
-for (const { name, provider } of providers) {
-  try {
-    const result = await executeSandbox({
-      sandbox: provider,
-      code: 'print("Hello from ' + name + '!")'
-    });
-    console.log(`${name}:`, result.stdout);
-  } catch (error) {
-    console.error(`${name} failed:`, error.message);
-  }
+// Check provider capabilities at runtime
+if ('filesystem' in sandbox) {
+  const fsSandbox = sandbox as FilesystemComputeSandbox;
+  
+  // Use filesystem operations
+  await fsSandbox.filesystem.writeFile('/tmp/data.txt', 'Hello World!');
+  const content = await fsSandbox.filesystem.readFile('/tmp/data.txt');
+  console.log(content); // "Hello World!"
 }
+
+if ('terminal' in sandbox) {
+  const termSandbox = sandbox as TerminalComputeSandbox;
+  
+  // Create interactive terminal (E2B only)
+  const terminal = await termSandbox.terminal.create({
+    command: 'bash',
+    cols: 80,
+    rows: 24
+  });
+  
+  await terminal.write('echo "Interactive terminal!"\n');
+  await terminal.kill();
+}
+```
+
+## Environment Setup
+
+Each provider requires specific environment variables for authentication:
+
+### E2B (Full Features)
+```bash
+export E2B_API_KEY=e2b_your_api_key_here
+```
+Get your API key from [e2b.dev](https://e2b.dev/)
+
+### Vercel (Filesystem + Code Execution)
+```bash
+export VERCEL_TOKEN=your_vercel_token_here
+export VERCEL_TEAM_ID=your_team_id_here
+export VERCEL_PROJECT_ID=your_project_id_here
+```
+Get your token from [Vercel Account Tokens](https://vercel.com/account/tokens)
+
+### Cloudflare (Edge Computing)
+```bash
+# For Workers environment - requires Durable Object bindings
+# Set up in wrangler.toml with Sandbox namespace
+```
+
+### Fly.io (Community Target)
+```bash
+export FLY_API_TOKEN=your_fly_api_token_here
 ```
 
 ## API Reference
 
-### `ComputeSDK`
+### Core SDK
 
-Main SDK class for auto-detection and management.
+#### `ComputeSDK.createSandbox(config?)`
+
+Creates a sandbox using auto-detection or specified configuration.
 
 ```typescript
-const sdk = new ComputeSDK(options?: ComputeSDKOptions);
+// Auto-detection
+const sandbox = ComputeSDK.createSandbox();
+
+// With configuration
+const sandbox = ComputeSDK.createSandbox({
+  provider: 'e2b',
+  runtime: 'python',
+  timeout: 600000 // 10 minutes
+});
 ```
 
-#### Methods
+**Parameters:**
+- `config` (optional): Sandbox configuration object
 
-- `createSandbox(config?: SandboxConfig)` - Creates a sandbox using auto-detection
-- `getAvailableProviders()` - Returns list of available providers
-- `registerProvider(name: string, provider: ComputeSpecification)` - Registers a custom provider
+**Returns:** `ComputeSandbox` - The appropriate sandbox type based on provider capabilities
 
-### `executeSandbox(config: ExecutionConfig)`
+#### `ComputeSDK.detectProviders()`
+
+Detects available providers based on environment variables.
+
+```typescript
+const providers = ComputeSDK.detectProviders();
+console.log('Available providers:', providers); // ['e2b', 'vercel']
+```
+
+**Returns:** `ProviderType[]` - Array of available provider names
+
+### Utility Functions
+
+#### `executeSandbox(params)`
 
 Utility function for one-off code execution.
 
 ```typescript
-interface ExecutionConfig {
-  sandbox: ComputeSpecification;
+import { executeSandbox } from 'computesdk';
+import { vercel } from '@computesdk/vercel';
+
+const result = await executeSandbox({
+  sandbox: vercel({ runtime: 'node' }),
+  code: 'console.log("Hello from Node.js!");',
+  runtime: 'node'
+});
+```
+
+**Parameters:**
+```typescript
+interface ExecuteSandboxParams {
+  sandbox: ComputeSandbox;
   code: string;
-  runtime?: 'python' | 'node';
-  timeout?: number;
+  runtime?: Runtime;
 }
 ```
 
-### `ExecutionResult`
+### Sandbox Interfaces
 
-Result object returned by all execution methods.
+ComputeSDK provides a rich type system for different provider capabilities:
+
+#### `BaseComputeSandbox`
+
+Basic code execution capabilities (all providers support this):
+
+```typescript
+interface BaseComputeSandbox {
+  provider: string;
+  sandboxId: string;
+  
+  execute(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
+  kill(): Promise<void>;
+  getInfo(): Promise<SandboxInfo>;
+}
+```
+
+#### `FilesystemComputeSandbox`
+
+Extends base capabilities with filesystem operations (E2B, Vercel, Cloudflare):
+
+```typescript
+interface FilesystemComputeSandbox extends BaseComputeSandbox {
+  readonly filesystem: SandboxFileSystem;
+}
+
+interface SandboxFileSystem {
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  mkdir(path: string): Promise<void>;
+  readdir(path: string): Promise<FileEntry[]>;
+  exists(path: string): Promise<boolean>;
+  remove(path: string): Promise<void>;
+}
+```
+
+#### `TerminalComputeSandbox`
+
+Extends base capabilities with terminal operations (E2B only):
+
+```typescript
+interface TerminalComputeSandbox extends BaseComputeSandbox {
+  readonly terminal: SandboxTerminal;
+}
+
+interface SandboxTerminal {
+  create(options?: TerminalCreateOptions): Promise<InteractiveTerminalSession>;
+  list(): Promise<InteractiveTerminalSession[]>;
+}
+```
+
+#### `FullComputeSandbox`
+
+Full capabilities including filesystem and terminal (E2B only):
+
+```typescript
+interface FullComputeSandbox extends FilesystemComputeSandbox, TerminalComputeSandbox {}
+```
+
+### Data Types
+
+#### `ExecutionResult`
+
+Result object returned by all execution methods:
 
 ```typescript
 interface ExecutionResult {
@@ -140,150 +276,371 @@ interface ExecutionResult {
 }
 ```
 
-### `SandboxInfo`
+#### `SandboxInfo`
 
-Information about a sandbox instance.
+Information about a sandbox instance:
 
 ```typescript
 interface SandboxInfo {
   id: string;
   provider: string;
-  runtime: string;
-  status: 'running' | 'stopped';
+  runtime: Runtime;
+  status: 'running' | 'stopped' | 'error';
   createdAt: Date;
   timeout: number;
   metadata?: Record<string, any>;
 }
 ```
 
-## Configuration
+#### `FileEntry`
 
-### Environment Variables
-
-Each provider requires specific environment variables:
-
-```bash
-# E2B
-E2B_API_KEY=your_e2b_api_key
-
-# Vercel
-VERCEL_TOKEN=your_vercel_token
-VERCEL_TEAM_ID=your_team_id
-VERCEL_PROJECT_ID=your_project_id
-
-# Cloudflare (Workers environment only)
-# Requires Durable Object bindings in wrangler.toml
-```
-
-### Provider Configuration
+File system entry information:
 
 ```typescript
-import { ComputeSDK } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-import { vercel } from '@computesdk/vercel';
-
-const sdk = new ComputeSDK({
-  preferredProviders: ['e2b', 'vercel'], // Order of preference
-  timeout: 300000, // Global timeout (5 minutes)
-  retryAttempts: 3 // Retry failed executions
-});
-
-// Or configure providers individually
-const customSandbox = e2b({
-  timeout: 600000, // 10 minutes
-  template: 'python-data-science'
-});
+interface FileEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  lastModified: Date;
+}
 ```
 
 ## Examples
 
-### Data Processing
+### Cross-Provider Data Processing
+
+```typescript
+import { ComputeSDK, FilesystemComputeSandbox } from 'computesdk';
+
+async function processData() {
+  // Auto-detect best available provider
+  const sandbox = ComputeSDK.createSandbox();
+  
+  if ('filesystem' in sandbox) {
+    const fsSandbox = sandbox as FilesystemComputeSandbox;
+    
+    // Create project structure
+    await fsSandbox.filesystem.mkdir('/project/data');
+    await fsSandbox.filesystem.mkdir('/project/output');
+    
+    // Write input data
+    const data = JSON.stringify([
+      { name: 'Alice', sales: 1000 },
+      { name: 'Bob', sales: 1500 },
+      { name: 'Charlie', sales: 800 }
+    ]);
+    
+    await fsSandbox.filesystem.writeFile('/project/data/sales.json', data);
+    
+    // Process data based on provider
+    let code: string;
+    if (sandbox.provider === 'e2b') {
+      // Python processing for E2B
+      code = `
+import json
+import pandas as pd
+
+# Read data
+with open('/project/data/sales.json', 'r') as f:
+    data = json.load(f)
+
+# Process with pandas
+df = pd.DataFrame(data)
+total_sales = df['sales'].sum()
+avg_sales = df['sales'].mean()
+
+# Write results
+results = {
+    'total_sales': total_sales,
+    'average_sales': avg_sales,
+    'top_performer': df.loc[df['sales'].idxmax(), 'name']
+}
+
+with open('/project/output/results.json', 'w') as f:
+    json.dump(results, f, indent=2)
+
+print(f"Total Sales: ${total_sales}")
+print(f"Average Sales: ${avg_sales:.2f}")
+print(f"Top Performer: {results['top_performer']}")
+      `;
+    } else {
+      // JavaScript processing for Vercel/Cloudflare
+      code = `
+const fs = require('fs');
+
+// Read data
+const data = JSON.parse(fs.readFileSync('/project/data/sales.json', 'utf8'));
+
+// Process data
+const totalSales = data.reduce((sum, person) => sum + person.sales, 0);
+const avgSales = totalSales / data.length;
+const topPerformer = data.reduce((top, person) => 
+  person.sales > top.sales ? person : top
+);
+
+// Write results
+const results = {
+  total_sales: totalSales,
+  average_sales: avgSales,
+  top_performer: topPerformer.name
+};
+
+fs.writeFileSync('/project/output/results.json', JSON.stringify(results, null, 2));
+
+console.log(\`Total Sales: $\${totalSales}\`);
+console.log(\`Average Sales: $\${avgSales.toFixed(2)}\`);
+console.log(\`Top Performer: \${results.top_performer}\`);
+      `;
+    }
+    
+    // Execute processing
+    const result = await fsSandbox.execute(code);
+    console.log('Processing Output:', result.stdout);
+    
+    // Read results
+    const results = await fsSandbox.filesystem.readFile('/project/output/results.json');
+    console.log('Results:', JSON.parse(results));
+    
+    // List generated files
+    const outputFiles = await fsSandbox.filesystem.readdir('/project/output');
+    console.log('Generated files:', outputFiles.map(f => f.name));
+  }
+  
+  await sandbox.kill();
+}
+
+processData().catch(console.error);
+```
+
+### Interactive Development with E2B
+
+```typescript
+import { e2b } from '@computesdk/e2b';
+import { TerminalComputeSandbox, FilesystemComputeSandbox } from 'computesdk';
+
+async function interactiveDevelopment() {
+  const sandbox = e2b() as TerminalComputeSandbox & FilesystemComputeSandbox;
+  
+  // Set up development environment
+  await sandbox.filesystem.mkdir('/workspace');
+  await sandbox.filesystem.writeFile('/workspace/requirements.txt', 
+    'pandas\nnumpy\nmatplotlib\nscikit-learn'
+  );
+  
+  // Create interactive terminal
+  const terminal = await sandbox.terminal.create({
+    command: 'bash',
+    cols: 120,
+    rows: 30
+  });
+  
+  // Set up output handler
+  terminal.onData = (data: Uint8Array) => {
+    const output = new TextDecoder().decode(data);
+    console.log('Terminal:', output);
+  };
+  
+  // Install dependencies
+  await terminal.write('cd /workspace\n');
+  await terminal.write('pip install -r requirements.txt\n');
+  
+  // Start interactive Python session
+  await terminal.write('python3\n');
+  await terminal.write('import pandas as pd\n');
+  await terminal.write('import numpy as np\n');
+  await terminal.write('print("Development environment ready!")\n');
+  
+  // Simulate interactive development
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  
+  // Clean up
+  await terminal.kill();
+  await sandbox.kill();
+}
+
+interactiveDevelopment().catch(console.error);
+```
+
+### Multi-Provider Comparison
 
 ```typescript
 import { executeSandbox } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
-
-const result = await executeSandbox({
-  sandbox: e2b(),
-  code: `
-import pandas as pd
-import numpy as np
-
-# Create sample data
-data = pd.DataFrame({
-    'sales': [100, 150, 200, 120, 180],
-    'profit': [20, 30, 45, 25, 40]
-})
-
-# Calculate metrics
-total_sales = data['sales'].sum()
-avg_profit = data['profit'].mean()
-profit_margin = (data['profit'].sum() / total_sales) * 100
-
-print(f"Total Sales: ${total_sales}")
-print(f"Average Profit: ${avg_profit:.2f}")
-print(f"Profit Margin: {profit_margin:.1f}%")
-  `
-});
-
-console.log(result.stdout);
-```
-
-### Web API Simulation
-
-```typescript
-import { executeSandbox } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
-
-const result = await executeSandbox({
-  sandbox: vercel({ runtime: 'node' }),
-  code: `
-const express = require('express');
-const app = express();
-
-// Simulate API routes
-const routes = {
-  '/api/users': { users: ['Alice', 'Bob', 'Charlie'] },
-  '/api/stats': { active: 150, total: 1000 }
-};
-
-// Process request
-const path = '/api/users';
-const response = routes[path] || { error: 'Not found' };
-
-console.log('API Response:', JSON.stringify(response, null, 2));
-  `
-});
-
-console.log(result.stdout);
-```
-
-### Edge Computing
-
-```typescript
-import { executeSandbox } from 'computesdk';
 import { cloudflare } from '@computesdk/cloudflare';
 
+async function compareProviders() {
+  const testCode = `
+import json
+import time
+start = time.time()
+
+# Simple computation
+result = sum(range(1000))
+elapsed = time.time() - start
+
+output = {
+    "result": result,
+    "elapsed_ms": round(elapsed * 1000, 2),
+    "provider": "will_be_set"
+}
+
+print(json.dumps(output))
+  `;
+  
+  const providers = [
+    { name: 'E2B', factory: () => e2b() },
+    { name: 'Vercel', factory: () => vercel({ runtime: 'python' }) },
+    // Cloudflare would need env parameter in Workers context
+  ];
+  
+  console.log('Performance Comparison:');
+  console.log('='.repeat(50));
+  
+  for (const { name, factory } of providers) {
+    try {
+      const start = Date.now();
+      const result = await executeSandbox({
+        sandbox: factory(),
+        code: testCode,
+        runtime: 'python'
+      });
+      const totalTime = Date.now() - start;
+      
+      const output = JSON.parse(result.stdout);
+      console.log(`${name}:`);
+      console.log(`  Computation: ${output.result}`);
+      console.log(`  Execution time: ${output.elapsed_ms}ms`);
+      console.log(`  Total time: ${totalTime}ms`);
+      console.log(`  Provider overhead: ${totalTime - output.elapsed_ms}ms`);
+      console.log();
+      
+    } catch (error) {
+      console.log(`${name}: Failed - ${error.message}`);
+      console.log();
+    }
+  }
+}
+
+compareProviders().catch(console.error);
+```
+
+## Error Handling
+
+ComputeSDK provides comprehensive error handling with specific error types:
+
+```typescript
+import { ComputeSDK } from 'computesdk';
+
+try {
+  const sandbox = ComputeSDK.createSandbox();
+  const result = await sandbox.execute('invalid python code');
+} catch (error) {
+  if (error.message.includes('Missing') && error.message.includes('API key')) {
+    console.error('Authentication Error: Check your environment variables');
+    console.error('Required: E2B_API_KEY, VERCEL_TOKEN, etc.');
+  } else if (error.message.includes('timeout')) {
+    console.error('Timeout Error: Execution took too long');
+  } else if (error.message.includes('quota') || error.message.includes('limit')) {
+    console.error('Quota Error: API usage limits exceeded');
+  } else if (error.message.includes('not installed')) {
+    console.error('Configuration Error: Provider package not installed');
+    console.error('Run: npm install @computesdk/[provider-name]');
+  } else {
+    console.error('Execution Error:', error.message);
+  }
+}
+```
+
+## Provider-Specific Features
+
+### E2B - Full Development Environment
+
+E2B provides the richest feature set with full filesystem and terminal support:
+
+```typescript
+import { e2b } from '@computesdk/e2b';
+
+const sandbox = e2b();
+
+// Full Python environment with data science libraries
+const result = await sandbox.execute(`
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create and visualize data
+data = np.random.randn(1000)
+plt.hist(data, bins=50)
+plt.savefig('/tmp/histogram.png')
+print("Histogram saved!")
+`);
+
+// Check if file was created
+const exists = await sandbox.filesystem.exists('/tmp/histogram.png');
+console.log('Histogram created:', exists);
+```
+
+### Vercel - Scalable Serverless Execution
+
+Vercel provides reliable execution with filesystem support:
+
+```typescript
+import { vercel } from '@computesdk/vercel';
+
+const sandbox = vercel({ runtime: 'node' });
+
+// Process data with Node.js
+const result = await sandbox.execute(`
+const fs = require('fs');
+const path = require('path');
+
+// Create API simulation
+const apiData = {
+  users: 1000,
+  active: 750,
+  revenue: 50000
+};
+
+// Write to filesystem
+fs.writeFileSync('/tmp/api-data.json', JSON.stringify(apiData, null, 2));
+
+console.log('API data processed and saved');
+console.log('Active users:', apiData.active);
+`);
+
+// Read the generated data
+const data = await sandbox.filesystem.readFile('/tmp/api-data.json');
+console.log('Generated data:', JSON.parse(data));
+```
+
+### Cloudflare - Edge Computing
+
+Cloudflare provides fast edge execution (requires Workers environment):
+
+```typescript
 // Within a Cloudflare Worker
+import { cloudflare } from '@computesdk/cloudflare';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const result = await executeSandbox({
-      sandbox: cloudflare({ env }),
-      code: `
+    const sandbox = cloudflare({ env, runtime: 'python' });
+    
+    const result = await sandbox.execute(`
 import json
 from datetime import datetime
 
-# Process request data
+# Process request at the edge
 data = {
     "timestamp": datetime.now().isoformat(),
-    "region": "auto",
-    "processed": True
+    "processed_at": "edge",
+    "status": "success"
 }
 
 print(json.dumps(data))
-      `
-    });
-
+    `);
+    
     return new Response(result.stdout, {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -291,46 +648,70 @@ print(json.dumps(data))
 };
 ```
 
-## Error Handling
+## Best Practices
 
-ComputeSDK provides comprehensive error handling:
+### 1. Provider Selection
+
+Choose providers based on your use case:
+
+- **E2B**: Data science, ML, interactive development, full Python environment
+- **Vercel**: Web applications, APIs, serverless functions, long-running tasks
+- **Cloudflare**: Edge computing, global deployment, low-latency responses
+- **Fly.io**: Custom containers, specialized environments
+
+### 2. Resource Management
+
+Always clean up resources:
 
 ```typescript
-import { 
-  ExecutionError, 
-  TimeoutError, 
-  AuthenticationError,
-  QuotaExceededError 
-} from 'computesdk';
-
+const sandbox = ComputeSDK.createSandbox();
 try {
-  const result = await executeSandbox({
-    sandbox: e2b(),
-    code: 'print("Hello World")'
-  });
-} catch (error) {
-  if (error instanceof TimeoutError) {
-    console.error('Execution timed out');
-  } else if (error instanceof AuthenticationError) {
-    console.error('Check your API credentials');
-  } else if (error instanceof QuotaExceededError) {
-    console.error('API quota exceeded');
-  } else if (error instanceof ExecutionError) {
-    console.error('Code execution failed:', error.stderr);
-  } else {
-    console.error('Unknown error:', error.message);
+  // Your code here
+  const result = await sandbox.execute('print("Hello")');
+} finally {
+  // Always clean up
+  await sandbox.kill();
+}
+```
+
+### 3. Error Handling
+
+Implement comprehensive error handling:
+
+```typescript
+async function robustExecution(code: string) {
+  let sandbox;
+  try {
+    sandbox = ComputeSDK.createSandbox();
+    return await sandbox.execute(code);
+  } catch (error) {
+    console.error('Execution failed:', error.message);
+    throw error;
+  } finally {
+    if (sandbox) {
+      await sandbox.kill();
+    }
   }
 }
 ```
 
-## Provider Comparison
+### 4. Type Safety
 
-| Provider | Runtimes | Max Timeout | Use Cases |
-|----------|----------|-------------|-----------|
-| E2B | Python | 5 minutes | Data science, AI/ML |
-| Vercel | Node.js, Python | 45 minutes | Web apps, APIs |
-| Cloudflare | Python, Node.js | 30 seconds | Edge computing, real-time |
-| Fly.io | Custom | Variable | Custom containers |
+Use TypeScript interfaces for better development experience:
+
+```typescript
+import { FilesystemComputeSandbox, TerminalComputeSandbox } from 'computesdk';
+
+function requiresFilesystem(sandbox: FilesystemComputeSandbox) {
+  // TypeScript ensures filesystem operations are available
+  return sandbox.filesystem.readFile('/path/to/file');
+}
+
+function requiresTerminal(sandbox: TerminalComputeSandbox) {
+  // TypeScript ensures terminal operations are available
+  return sandbox.terminal.create({ command: 'bash' });
+}
+```
 
 ## Contributing
 
@@ -338,9 +719,16 @@ We welcome contributions! Please see our [Contributing Guide](https://github.com
 
 ### Adding New Providers
 
-1. Implement the `ComputeSpecification` interface
-2. Add comprehensive tests
+1. Implement the appropriate `ComputeSpecification` interface:
+   - `BaseComputeSpecification` for basic execution
+   - `FilesystemComputeSpecification` for filesystem support
+   - `TerminalComputeSpecification` for terminal support
+   - `FullComputeSpecification` for complete functionality
+
+2. Add comprehensive tests covering all implemented interfaces
+
 3. Include documentation and examples
+
 4. Submit a pull request
 
 ## License
