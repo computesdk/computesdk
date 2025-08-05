@@ -8,7 +8,7 @@
 
   - **E2B Provider**: Full E2B Code Interpreter integration with comprehensive error handling, environment validation, and complete documentation
   - **Vercel Provider**: Vercel Sandbox API integration supporting Node.js and Python runtimes with team/project management
-  - **Cloudflare Provider**: Cloudflare Workers sandbox implementation using Durable Objects for edge computing
+  - **Daytona Provider**: Daytona workspace integration with full filesystem support and development environment capabilities
   - **Core SDK**: Unified API for sandbox management, auto-detection, and extensible provider system
 
   Features:
@@ -27,5 +27,4 @@
 - Updated dependencies
   - @computesdk/e2b@1.0.0
   - @computesdk/vercel@1.0.0
-  - @computesdk/cloudflare@1.0.0
-  - @computesdk/fly@1.0.0
+  - @computesdk/daytona@1.0.0

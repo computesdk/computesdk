@@ -6,18 +6,16 @@ This directory contains basic usage examples for ComputeSDK with different provi
 
 - **E2B**: ✅ Fully implemented - executes real Python code
 - **Vercel**: 🚧 Mock implementation - returns sample responses
-- **Cloudflare**: 🚧 Mock implementation - returns sample responses  
-- **Fly.io**: 🚧 Mock implementation - returns sample responses
+- **Daytona**: ✅ Fully implemented - executes real code in workspaces
 
 ## Prerequisites
 
-### For Real Code Execution (E2B only):
+### For Real Code Execution:
 - **E2B**: Set `E2B_API_KEY` (get from [e2b.dev](https://e2b.dev))
+- **Daytona**: Set `DAYTONA_API_KEY` (get from your Daytona instance)
 
 ### For Mock Demonstrations:
 - **Vercel**: Set `VERCEL_TOKEN` (optional - example will use mock data)
-- **Cloudflare**: Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (optional)
-- **Fly.io**: Set `FLY_API_TOKEN` (optional)
 
 ## Examples
 
@@ -40,17 +38,14 @@ pnpm run vercel
 ```
 Shows intended API for Vercel Sandbox. **Currently returns mock responses.**
 
-### Cloudflare Example 🚧 (Mock Implementation)
+### Daytona Example ✅ (Real Implementation)
 ```bash
-pnpm run cloudflare
+pnpm run daytona
 ```
-Shows intended API for Cloudflare Containers. **Currently returns mock responses.**
+Demonstrates code execution using Daytona workspaces, including filesystem operations.
+**This executes real code in Daytona environments.**
 
-### Fly.io Example 🚧 (Mock Implementation)
-```bash
-pnpm run fly
-```
-Shows intended API for Fly.io Machines. **Currently returns mock responses.**
+
 
 ## Running All Examples
 
