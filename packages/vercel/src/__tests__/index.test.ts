@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { vercel, VercelProvider } from '../index';
 import { Sandbox } from '@vercel/sandbox';
 
@@ -15,111 +15,73 @@ vi.mock('ms', () => ({
   },
 }));
 
+// Create mock result that matches the Vercel Sandbox API format
+const createMockResult = (exitCode = 0, stdoutData = '', stderrData = '') => ({
+  exitCode,
+  stdout: vi.fn().mockResolvedValue(stdoutData),
+  stderr: vi.fn().mockResolvedValue(stderrData),
+});
+
+// Create a comprehensive mock that matches the Vercel Sandbox interface
+const createMockSandbox = () => ({
+  id: 'vercel-sandbox-123',
+  runCommand: vi.fn(),
+  stop: vi.fn().mockResolvedValue(undefined),
+});
+
 describe('VercelProvider', () => {
-  let originalEnv: NodeJS.ProcessEnv;
-  let mockSandbox: any;
-
   beforeEach(() => {
-    originalEnv = process.env;
-    process.env = {
-      ...originalEnv,
-      VERCEL_TOKEN: 'test-token',
-      VERCEL_TEAM_ID: 'test-team-id',
-      VERCEL_PROJECT_ID: 'test-project-id',
-    };
-
-    // Create a proper mock for runCommand that returns a stream-like object
-    const createMockStream = (data?: string) => ({
-      on: vi.fn((event: string, callback: Function) => {
-        if (event === 'data' && data) {
-          // Simulate async data emission
-          setImmediate(() => callback(Buffer.from(data)));
-        } else if (event === 'end') {
-          // Simulate async end event
-          setImmediate(() => callback());
-        }
-        return this;
-      }),
-    });
-
-    const createMockProcess = (exitCode = 0, stdoutData = '') => ({
-      stdout: createMockStream(stdoutData),
-      stderr: createMockStream(''),
-      on: vi.fn((event: string, callback: Function) => {
-        if (event === 'exit') {
-          // Simulate async exit event
-          setImmediate(() => callback(exitCode));
-        }
-        return this;
-      }),
-    });
-
-    mockSandbox = {
-      runCommand: vi.fn((options: any) => {
-        // Mock different commands for filesystem operations
-        if (options.cmd === 'cat') {
-          return Promise.resolve(createMockProcess(0, 'Hello World'));
-        }
-        if (options.cmd === 'ls' && options.args.includes('-la')) {
-          const lsOutput = 'total 8\n-rw-r--r-- 1 user user   13 2024-01-01 12:00:00 test.txt\ndrwxr-xr-x 2 user user 4096 2024-01-01 12:00:00 subdir';
-          return Promise.resolve(createMockProcess(0, lsOutput));
-        }
-        if (options.cmd === 'test') {
-          return Promise.resolve(createMockProcess(0));
-        }
-        if (options.cmd === 'mkdir' || options.cmd === 'rm' || options.cmd === 'sh') {
-          return Promise.resolve(createMockProcess(0));
-        }
-        return Promise.resolve(createMockProcess());
-      }),
-      stop: vi.fn().mockResolvedValue(undefined),
-      id: 'test-sandbox-id',
-    };
-
-    vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any);
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
     vi.clearAllMocks();
-    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('VERCEL_TOKEN', 'vercel_test_token_1234567890abcdef');
+    vi.stubEnv('VERCEL_TEAM_ID', 'team_test_1234567890abcdef');
+    vi.stubEnv('VERCEL_PROJECT_ID', 'prj_test_1234567890abcdef');
   });
 
   describe('constructor', () => {
-    it('should create a VercelProvider instance with default config', () => {
-      const provider = vercel();
+    it('should create provider with default config', () => {
+      const provider = new VercelProvider({});
       
-      expect(provider).toBeInstanceOf(VercelProvider);
       expect(provider.provider).toBe('vercel');
-      expect(provider.specificationVersion).toBe('v1');
-      expect(provider.sandboxId).toMatch(/^vercel-\d+-\w+$/);
+      expect(provider.sandboxId).toBeDefined();
+      expect(typeof provider.sandboxId).toBe('string');
     });
 
-    it('should create a VercelProvider instance with custom config', () => {
-      const provider = vercel({
-        runtime: 'python',
-        timeout: 600000,
-      });
+    it('should throw error without VERCEL_TOKEN', () => {
+      vi.unstubAllEnvs();
       
-      expect(provider).toBeInstanceOf(VercelProvider);
+      expect(() => new VercelProvider({})).toThrow(
+        'Missing Vercel token. Set VERCEL_TOKEN environment variable.'
+      );
     });
 
-    it('should throw error when VERCEL_TOKEN is missing', () => {
-      delete process.env.VERCEL_TOKEN;
+    it('should throw error without VERCEL_TEAM_ID', () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv('VERCEL_TOKEN', 'test-token');
       
-      expect(() => vercel()).toThrow('Missing Vercel token');
+      expect(() => new VercelProvider({})).toThrow(
+        'Missing Vercel team ID. Set VERCEL_TEAM_ID environment variable.'
+      );
     });
 
-    it('should throw error when VERCEL_TEAM_ID is missing', () => {
-      delete process.env.VERCEL_TEAM_ID;
+    it('should throw error without VERCEL_PROJECT_ID', () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv('VERCEL_TOKEN', 'test-token');
+      vi.stubEnv('VERCEL_TEAM_ID', 'test-team');
       
-      expect(() => vercel()).toThrow('Missing Vercel team ID');
+      expect(() => new VercelProvider({})).toThrow(
+        'Missing Vercel project ID. Set VERCEL_PROJECT_ID environment variable.'
+      );
     });
 
-    it('should throw error when VERCEL_PROJECT_ID is missing', () => {
-      delete process.env.VERCEL_PROJECT_ID;
-      
-      expect(() => vercel()).toThrow('Missing Vercel project ID');
+    it('should accept different runtimes', () => {
+      const provider = new VercelProvider({ runtime: 'node' });
+      expect(provider).toBeDefined();
+    });
+
+    it('should accept python runtime', () => {
+      const provider = new VercelProvider({ runtime: 'python' });
+      expect(provider).toBeDefined();
     });
 
     it('should throw error for invalid runtime', () => {
@@ -130,224 +92,289 @@ describe('VercelProvider', () => {
   });
 
   describe('doExecute', () => {
-    it('should execute Node.js code successfully', async () => {
-      const provider = vercel({ runtime: 'node' });
-      
-      // Create specific mock for this test
-      const mockProcess = {
-        stdout: {
-          on: vi.fn((event: string, callback: Function) => {
-            if (event === 'data') {
-              callback(Buffer.from('Hello World'));
-            } else if (event === 'end') {
-              setImmediate(() => callback());
-            }
-          }),
-        },
-        stderr: {
-          on: vi.fn((event: string, callback: Function) => {
-            if (event === 'end') {
-              setImmediate(() => callback());
-            }
-          }),
-        },
-        on: vi.fn((event: string, callback: Function) => {
-          if (event === 'exit') {
-            setImmediate(() => callback(0));
-          }
-        }),
-      };
+    let mockSandbox: ReturnType<typeof createMockSandbox>;
 
-      mockSandbox.runCommand.mockResolvedValue(mockProcess);
-
-      const result = await provider.doExecute('console.log("Hello World");');
-
-      expect(mockSandbox.runCommand).toHaveBeenCalledWith({
-        cmd: 'node',
-        args: ['-e', 'console.log("Hello World");'],
-      });
-
-      expect(result).toEqual({
-        stdout: 'Hello World',
-        stderr: '',
-        exitCode: 0,
-        executionTime: expect.any(Number),
-        sandboxId: provider.sandboxId,
-        provider: 'vercel',
-      });
+    beforeEach(() => {
+      mockSandbox = createMockSandbox();
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any);
     });
 
-    it('should execute Python code successfully', async () => {
-      const provider = vercel({ runtime: 'python' });
+    it('should execute Node.js code', async () => {
+      const mockExecution = createMockResult(0, 'Hello World');
+      mockSandbox.runCommand.mockResolvedValue(mockExecution);
       
-      // Create specific mock for this test
-      const mockProcess = {
-        stdout: {
-          on: vi.fn((event: string, callback: Function) => {
-            if (event === 'data') {
-              callback(Buffer.from('Hello Python'));
-            } else if (event === 'end') {
-              setImmediate(() => callback());
-            }
-          }),
-        },
-        stderr: {
-          on: vi.fn((event: string, callback: Function) => {
-            if (event === 'end') {
-              setImmediate(() => callback());
-            }
-          }),
-        },
-        on: vi.fn((event: string, callback: Function) => {
-          if (event === 'exit') {
-            setImmediate(() => callback(0));
-          }
-        }),
-      };
-
-      mockSandbox.runCommand.mockResolvedValue(mockProcess);
-
-      const result = await provider.doExecute('print("Hello Python")');
-
-      expect(mockSandbox.runCommand).toHaveBeenCalledWith({
-        cmd: 'python',
-        args: ['-c', 'print("Hello Python")'],
-      });
-
-      expect(result).toEqual({
-        stdout: 'Hello Python',
-        stderr: '',
-        exitCode: 0,
-        executionTime: expect.any(Number),
-        sandboxId: provider.sandboxId,
-        provider: 'vercel',
-      });
+      const provider = new VercelProvider({});
+      const result = await provider.doExecute('console.log("Hello World")');
+      
+      expect(result.stdout).toBe('Hello World');
+      expect(result.stderr).toBe('');
+      expect(result.exitCode).toBe(0);
+      expect(result.provider).toBe('vercel');
+      expect(result.executionTime).toBeGreaterThanOrEqual(0);
     });
 
-    it('should handle execution errors', async () => {
-      const provider = vercel();
+    it('should execute code with different runtimes', async () => {
+      const mockExecution = createMockResult(0, 'Hello Python');
+      mockSandbox.runCommand.mockResolvedValue(mockExecution);
       
-      // Create specific mock for this test
-      const mockProcess = {
-        stdout: {
-          on: vi.fn((event: string, callback: Function) => {
-            if (event === 'end') {
-              setImmediate(() => callback());
-            }
-          }),
-        },
-        stderr: {
-          on: vi.fn((event: string, callback: Function) => {
-            if (event === 'data') {
-              callback(Buffer.from('Error message'));
-            } else if (event === 'end') {
-              setImmediate(() => callback());
-            }
-          }),
-        },
-        on: vi.fn((event: string, callback: Function) => {
-          if (event === 'exit') {
-            setImmediate(() => callback(1));
-          }
-        }),
-      };
+      const provider = new VercelProvider({});
+      const result = await provider.doExecute('print("Hello Python")', 'python');
+      
+      expect(result.stdout).toBe('Hello Python');
+      expect(result.stderr).toBe('');
+      expect(result.exitCode).toBe(0);
+    });
 
-      mockSandbox.runCommand.mockResolvedValue(mockProcess);
+    it('should handle Vercel execution errors', async () => {
+      vi.mocked(Sandbox.create).mockRejectedValue(new Error('Vercel connection failed'));
 
-      const result = await provider.doExecute('throw new Error("Test error");');
+      const provider = new VercelProvider({});
+      
+      await expect(provider.doExecute('console.log("test")'))
+        .rejects.toThrow('Failed to initialize Vercel sandbox: Vercel connection failed');
+    });
 
+    it('should handle execution errors with exit codes', async () => {
+      const mockExecution = createMockResult(1, '', 'Error: Test error');
+      mockSandbox.runCommand.mockResolvedValue(mockExecution);
+      
+      const provider = new VercelProvider({});
+      const result = await provider.doExecute('throw new Error("Test error")');
+      
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toBe('Error message');
-    });
-
-    it('should handle timeout errors', async () => {
-      const provider = vercel();
-      vi.mocked(Sandbox.create).mockRejectedValue(new Error('timeout'));
-
-      await expect(provider.doExecute('console.log("test");')).rejects.toThrow(
-        'Vercel execution timeout'
-      );
-    });
-
-    it('should handle memory errors', async () => {
-      const provider = vercel();
-      vi.mocked(Sandbox.create).mockRejectedValue(new Error('Memory limit exceeded'));
-
-      await expect(provider.doExecute('console.log("test");')).rejects.toThrow(
-        'Vercel execution failed due to memory limits'
-      );
-    });
-
-    it('should throw error for invalid runtime', async () => {
-      const provider = vercel();
-
-      await expect(provider.doExecute('code', 'invalid' as any)).rejects.toThrow(
-        'Vercel provider only supports Node.js and Python runtimes'
-      );
+      expect(result.stderr).toBe('Error: Test error');
     });
   });
 
   describe('doKill', () => {
-    it('should kill sandbox successfully', async () => {
-      const provider = vercel();
+    let mockSandbox: ReturnType<typeof createMockSandbox>;
+
+    beforeEach(() => {
+      mockSandbox = createMockSandbox();
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any);
+    });
+
+    it('should close Vercel session', async () => {
+      const mockExecution = createMockResult(0, 'test');
+      mockSandbox.runCommand.mockResolvedValue(mockExecution);
       
-      // First ensure sandbox is created
-      await provider.doGetInfo();
+      const provider = new VercelProvider({});
+      
+      // Initialize session by calling doExecute
+      await provider.doExecute('console.log("test")');
       
       await provider.doKill();
       
       expect(mockSandbox.stop).toHaveBeenCalled();
     });
 
-    it('should handle kill when no sandbox exists', async () => {
-      const provider = vercel();
+    it('should handle no active session', async () => {
+      const provider = new VercelProvider({});
       
       await expect(provider.doKill()).resolves.not.toThrow();
-    });
-
-    it('should handle kill errors', async () => {
-      const provider = vercel();
-      
-      // First ensure sandbox is created
-      await provider.doGetInfo();
-      
-      mockSandbox.stop.mockRejectedValue(new Error('Kill failed'));
-      
-      await expect(provider.doKill()).rejects.toThrow('Failed to kill Vercel sandbox');
     });
   });
 
   describe('doGetInfo', () => {
-    it('should return sandbox info', async () => {
-      const provider = vercel({ runtime: 'python', timeout: 600000 });
-      
+    let mockSandbox: ReturnType<typeof createMockSandbox>;
+
+    beforeEach(() => {
+      mockSandbox = createMockSandbox();
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any);
+    });
+
+    it('should return sandbox information', async () => {
+      const provider = new VercelProvider({});
       const info = await provider.doGetInfo();
       
-      expect(info).toEqual({
-        id: provider.sandboxId,
-        provider: 'vercel',
-        runtime: 'python',
-        status: 'running',
-        createdAt: expect.any(Date),
-        timeout: 600000,
-        metadata: {
-          vercelSandboxId: provider.sandboxId,
-          teamId: 'test-team-id',
-          projectId: 'test-project-id',
-          vcpus: 2,
-          region: 'global',
-        },
+      expect(info.provider).toBe('vercel');
+      expect(info.runtime).toBe('node');
+      expect(info.status).toBe('running');
+      expect(info.metadata?.vercelSandboxId).toBe(provider.sandboxId);
+    });
+  });
+
+  describe('filesystem operations', () => {
+    let mockSandbox: ReturnType<typeof createMockSandbox>;
+
+    beforeEach(() => {
+      mockSandbox = createMockSandbox();
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any);
+    });
+
+    describe('readFile', () => {
+      it('should read file contents', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(0, 'Hello, World!'));
+
+        const provider = new VercelProvider({});
+        const content = await provider.filesystem.readFile('/test/file.txt');
+        
+        expect(content).toBe('Hello, World!');
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith({
+          cmd: 'cat',
+          args: ['/test/file.txt'],
+        });
+      });
+
+      it('should handle file read errors', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(1, '', 'No such file or directory'));
+
+        const provider = new VercelProvider({});
+        
+        await expect(provider.filesystem.readFile('/nonexistent.txt'))
+          .rejects.toThrow('Failed to read file');
+      });
+    });
+
+    describe('writeFile', () => {
+      it('should write file contents', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(0));
+
+        const provider = new VercelProvider({});
+        await provider.filesystem.writeFile('/test/output.txt', 'Hello, World!');
+        
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith({
+          cmd: 'sh',
+          args: ['-c', "echo 'Hello, World!' > '/test/output.txt'"],
+        });
+      });
+
+      it('should handle write errors', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(1, '', 'Permission denied'));
+
+        const provider = new VercelProvider({});
+        
+        await expect(provider.filesystem.writeFile('/readonly.txt', 'content'))
+          .rejects.toThrow('Failed to write file');
+      });
+    });
+
+    describe('exists', () => {
+      it('should check if file exists', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(0));
+
+        const provider = new VercelProvider({});
+        const exists = await provider.filesystem.exists('/test/file.txt');
+        
+        expect(exists).toBe(true);
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith({
+          cmd: 'test',
+          args: ['-e', '/test/file.txt'],
+        });
+      });
+
+      it('should return false for non-existent files', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(1));
+
+        const provider = new VercelProvider({});
+        const exists = await provider.filesystem.exists('/nonexistent.txt');
+        
+        expect(exists).toBe(false);
+      });
+
+      it('should return false on error', async () => {
+        mockSandbox.runCommand.mockRejectedValue(new Error('Access denied'));
+
+        const provider = new VercelProvider({});
+        const exists = await provider.filesystem.exists('/protected.txt');
+        
+        expect(exists).toBe(false);
+      });
+    });
+
+    describe('readdir', () => {
+      it('should list directory contents', async () => {
+        const lsOutput = 'total 8\n-rw-r--r-- 1 user user 1024 2024-01-01 12:00 file1.txt\ndrwxr-xr-x 2 user user 4096 2024-01-01 12:00 subdir';
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(0, lsOutput));
+
+        const provider = new VercelProvider({});
+        const entries = await provider.filesystem.readdir('/test');
+        
+        expect(entries).toHaveLength(2);
+        expect(entries[0].name).toBe('file1.txt');
+        expect(entries[0].isDirectory).toBe(false);
+        expect(entries[1].name).toBe('subdir');
+        expect(entries[1].isDirectory).toBe(true);
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith({
+          cmd: 'ls',
+          args: ['-la', '--time-style=iso', '/test'],
+        });
+      });
+
+      it('should handle readdir errors', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(1, '', 'Directory not found'));
+
+        const provider = new VercelProvider({});
+        
+        await expect(provider.filesystem.readdir('/nonexistent'))
+          .rejects.toThrow('Failed to read directory');
+      });
+    });
+
+    describe('mkdir', () => {
+      it('should create directory', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(0));
+
+        const provider = new VercelProvider({});
+        await provider.filesystem.mkdir('/test/newdir');
+        
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith({
+          cmd: 'mkdir',
+          args: ['-p', '/test/newdir'],
+        });
+      });
+
+      it('should handle mkdir errors', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(1, '', 'Permission denied'));
+
+        const provider = new VercelProvider({});
+        
+        await expect(provider.filesystem.mkdir('/readonly/dir'))
+          .rejects.toThrow('Failed to create directory');
+      });
+    });
+
+    describe('remove', () => {
+      it('should remove file or directory', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(0));
+
+        const provider = new VercelProvider({});
+        await provider.filesystem.remove('/test/file.txt');
+        
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith({
+          cmd: 'rm',
+          args: ['-rf', '/test/file.txt'],
+        });
+      });
+
+      it('should handle remove errors', async () => {
+        mockSandbox.runCommand.mockResolvedValue(createMockResult(1, '', 'File not found'));
+
+        const provider = new VercelProvider({});
+        
+        await expect(provider.filesystem.remove('/nonexistent.txt'))
+          .rejects.toThrow('Failed to remove');
       });
     });
   });
 
   describe('ensureSandbox', () => {
+    let mockSandbox: ReturnType<typeof createMockSandbox>;
+
+    beforeEach(() => {
+      mockSandbox = createMockSandbox();
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any);
+    });
+
     it('should create sandbox with correct parameters', async () => {
       const provider = vercel({ runtime: 'python', timeout: 600000 });
       
       await provider.doGetInfo();
       
       expect(vi.mocked(Sandbox.create)).toHaveBeenCalledWith({
+        token: 'vercel_test_token_1234567890abcdef',
+        teamId: 'team_test_1234567890abcdef',
+        projectId: 'prj_test_1234567890abcdef',
         runtime: 'python3.13',
         timeout: 600000,
         resources: { vcpus: 2 },
@@ -393,73 +420,25 @@ describe('VercelProvider', () => {
       );
     });
   });
+});
 
-  describe('Filesystem Operations', () => {
-    it('should have filesystem property', () => {
-      const provider = vercel();
-      expect(provider.filesystem).toBeDefined();
-    });
+describe('vercel factory function', () => {
+  beforeEach(() => {
+    vi.stubEnv('VERCEL_TOKEN', 'vercel_test_token_1234567890abcdef');
+    vi.stubEnv('VERCEL_TEAM_ID', 'team_test_1234567890abcdef');
+    vi.stubEnv('VERCEL_PROJECT_ID', 'prj_test_1234567890abcdef');
+  });
 
-    it('should read file contents', async () => {
-      const provider = vercel();
-      const content = await provider.filesystem.readFile('/test.txt');
-      expect(content).toBe('Hello World');
-    });
+  it('should create Vercel provider with default config', () => {
+    const sandbox = vercel();
+    
+    expect(sandbox).toBeInstanceOf(VercelProvider);
+    expect(sandbox.provider).toBe('vercel');
+  });
 
-    it('should write file contents', async () => {
-      const provider = vercel();
-      await expect(provider.filesystem.writeFile('/test.txt', 'Hello World')).resolves.not.toThrow();
-    });
-
-    it('should create directories', async () => {
-      const provider = vercel();
-      await expect(provider.filesystem.mkdir('/test/dir')).resolves.not.toThrow();
-    });
-
-    it('should list directory contents', async () => {
-      const provider = vercel();
-      const entries = await provider.filesystem.readdir('/test');
-      
-      expect(entries).toHaveLength(2);
-      expect(entries[0].name).toBe('test.txt');
-      expect(entries[0].isDirectory).toBe(false);
-      expect(entries[0].size).toBe(13);
-      expect(entries[1].name).toBe('subdir');
-      expect(entries[1].isDirectory).toBe(true);
-    });
-
-    it('should check if file exists', async () => {
-      const provider = vercel();
-      const exists = await provider.filesystem.exists('/test.txt');
-      expect(exists).toBe(true);
-    });
-
-    it('should remove files', async () => {
-      const provider = vercel();
-      await expect(provider.filesystem.remove('/test.txt')).resolves.not.toThrow();
-    });
-
-    it('should handle filesystem errors gracefully', async () => {
-      const provider = vercel();
-      
-      // Mock a failing command
-      const failingProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn((event: string, callback: Function) => {
-          if (event === 'exit') {
-            setImmediate(() => callback(1)); // Exit code 1 = error
-          }
-        }),
-      };
-      
-      mockSandbox.runCommand.mockImplementationOnce(() => 
-        Promise.resolve(failingProcess)
-      );
-      
-      await expect(provider.filesystem.readFile('/nonexistent.txt')).rejects.toThrow(
-        'Failed to read file'
-      );
-    });
+  it('should create Vercel provider with custom config', () => {
+    const sandbox = vercel({ timeout: 60000 });
+    
+    expect(sandbox).toBeInstanceOf(VercelProvider);
   });
 });

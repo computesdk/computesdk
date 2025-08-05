@@ -35,7 +35,7 @@ class VercelFileSystem extends BaseFileSystem {
 
     // Handle the new Vercel Sandbox API format
     let content = '';
-    let exitCode = result.exitCode || 0;
+    let exitCode = result.exitCode ?? 0;
 
     // Get stdout by calling the function
     if (result.stdout && typeof result.stdout === 'function') {
@@ -71,7 +71,7 @@ class VercelFileSystem extends BaseFileSystem {
     });
 
     // Check exit code
-    const exitCode = result.exitCode || 0;
+    const exitCode = result.exitCode ?? 0;
     if (exitCode !== 0) {
       throw new Error(`Failed to write file ${path}: exit code ${exitCode}`);
     }
@@ -87,7 +87,7 @@ class VercelFileSystem extends BaseFileSystem {
     });
 
     // Check exit code
-    const exitCode = result.exitCode || 0;
+    const exitCode = result.exitCode ?? 0;
     if (exitCode !== 0) {
       throw new Error(`Failed to create directory ${path}: exit code ${exitCode}`);
     }
@@ -104,7 +104,7 @@ class VercelFileSystem extends BaseFileSystem {
 
     // Handle the new Vercel Sandbox API format
     let output = '';
-    let exitCode = result.exitCode || 0;
+    let exitCode = result.exitCode ?? 0;
 
     // Get stdout by calling the function
     if (result.stdout && typeof result.stdout === 'function') {
@@ -164,7 +164,7 @@ class VercelFileSystem extends BaseFileSystem {
       });
 
       // Get exit code from result
-      const exitCode = result.exitCode || 1;
+      const exitCode = result.exitCode ?? 1;
 
       return exitCode === 0;
     } catch (error) {
@@ -182,7 +182,7 @@ class VercelFileSystem extends BaseFileSystem {
     });
 
     // Check exit code
-    const exitCode = result.exitCode || 0;
+    const exitCode = result.exitCode ?? 0;
     if (exitCode !== 0) {
       throw new Error(`Failed to remove ${path}: exit code ${exitCode}`);
     }
@@ -325,7 +325,7 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
       // Handle the new Vercel Sandbox API format
       let stdout = '';
       let stderr = '';
-      let exitCode = result.exitCode || 0;
+      let exitCode = result.exitCode ?? 0;
 
       // Get stdout and stderr by calling the functions
       if (result.stdout && typeof result.stdout === 'function') {
@@ -427,7 +427,7 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
       // Handle the new Vercel Sandbox API format
       let stdout = '';
       let stderr = '';
-      let exitCode = result.exitCode || 0;
+      let exitCode = result.exitCode ?? 0;
 
       // Get stdout and stderr by calling the functions
       if (result.stdout && typeof result.stdout === 'function') {
