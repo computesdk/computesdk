@@ -11,8 +11,15 @@
 
 import { vercel } from '@computesdk/vercel';
 import { executeSandbox, BaseComputeSandbox } from 'computesdk';
+import { config } from 'dotenv';
+config({ path: '.env.local' }); // This loads the .env file
 
 async function main() {
+  // Inside your TypeScript file
+  console.log('VERCEL_TOKEN:', process.env.VERCEL_TOKEN);
+  console.log('VERCEL_TEAM_ID:', process.env.VERCEL_TEAM_ID);
+  console.log('VERCEL_PROJECT_ID:', process.env.VERCEL_PROJECT_ID);
+  
   // Check required environment variables
   if (!process.env.VERCEL_TOKEN) {
     console.error('Please set VERCEL_TOKEN environment variable');
