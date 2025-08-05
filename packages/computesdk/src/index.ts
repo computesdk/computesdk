@@ -26,9 +26,6 @@ export { BaseProvider, BaseFileSystem, BaseTerminal } from './providers/base';
 // Export main SDK class
 export { ComputeSDK } from './sdk';
 
-// Export test utilities (for provider testing)
-export { runProviderTestSuite } from './__tests__/shared/provider-test-suite';
-
 // Default export
 import { ComputeSDK } from './sdk';
 export default ComputeSDK;
