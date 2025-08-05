@@ -12,6 +12,8 @@
  */
 
 import { ComputeSDK, FilesystemComputeSandbox, TerminalComputeSandbox } from 'computesdk';
+import { config } from 'dotenv';
+config(); // Load environment variables from .env file
 
 async function main() {
   try {

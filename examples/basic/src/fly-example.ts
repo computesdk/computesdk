@@ -10,6 +10,8 @@
 
 import { fly } from '@computesdk/fly';
 import { executeSandbox, createComputeRegistry, BaseComputeSandbox, ContainerConfig } from 'computesdk';
+import { config } from 'dotenv';
+config(); // Load environment variables from .env file
 
 async function main() {
   console.log('⚠️  Note: This is a MOCK implementation!');

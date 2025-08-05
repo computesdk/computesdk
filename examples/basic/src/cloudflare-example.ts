@@ -10,6 +10,8 @@
 
 import { cloudflare } from '@computesdk/cloudflare';
 import { executeSandbox, BaseComputeSandbox } from 'computesdk';
+import { config } from 'dotenv';
+config(); // Load environment variables from .env file
 
 // This would typically be part of your Worker code
 interface Env {
