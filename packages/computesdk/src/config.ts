@@ -22,20 +22,8 @@ export const DEFAULT_TIMEOUT = 300000; // 5 minutes in milliseconds
 export const ENV_KEYS = {
   E2B: 'E2B_API_KEY',
   VERCEL: 'VERCEL_TOKEN',
-  CLOUDFLARE: 'CLOUDFLARE_API_TOKEN',
-  FLY: 'FLY_API_TOKEN',
+  DAYTONA: 'DAYTONA_API_KEY',
 };
-
-/**
- * Detect if running in Cloudflare Workers environment
- * 
- * @returns True if running in Cloudflare Workers
- */
-export function isCloudflareWorkers(): boolean {
-  return typeof DurableObject !== 'undefined' && 
-         typeof WebSocketPair !== 'undefined' &&
-         typeof caches !== 'undefined';
-}
 
 /**
  * Detect available providers based on environment variables
@@ -45,21 +33,19 @@ export function isCloudflareWorkers(): boolean {
 export function detectAvailableProviders(): ProviderType[] {
   const available: ProviderType[] = [];
 
-  if (process.env[ENV_KEYS.E2B]) {
+  // Safe process.env access for environments without Node.js
+  const env = typeof process !== 'undefined' ? process.env : {};
+
+  if (env[ENV_KEYS.E2B]) {
     available.push('e2b');
   }
 
-  if (process.env[ENV_KEYS.VERCEL]) {
+  if (env[ENV_KEYS.VERCEL]) {
     available.push('vercel');
   }
 
-  // Cloudflare can be detected by environment OR API key
-  if (isCloudflareWorkers() || process.env[ENV_KEYS.CLOUDFLARE]) {
-    available.push('cloudflare');
-  }
-
-  if (process.env[ENV_KEYS.FLY]) {
-    available.push('fly');
+  if (env[ENV_KEYS.DAYTONA]) {
+    available.push('daytona');
   }
 
   return available;
@@ -115,12 +101,8 @@ export function getDefaultRuntime(provider: ProviderType, runtime?: Runtime): Ru
       return 'python';
     case 'vercel':
       return 'node';
-    case 'cloudflare':
-    case 'fly':
-      throw new ConfigurationError(
-        `Container-based provider '${provider}' requires explicit runtime or container configuration`,
-        provider
-      );
+    case 'daytona':
+      return 'python';
     default:
       return 'node';
   }
@@ -142,15 +124,8 @@ export function validateProviderApiKey(provider: ProviderType): void {
     case 'vercel':
       envKey = ENV_KEYS.VERCEL;
       break;
-    case 'cloudflare':
-      // Cloudflare can work without API key if in Workers environment
-      if (isCloudflareWorkers()) {
-        return;
-      }
-      envKey = ENV_KEYS.CLOUDFLARE;
-      break;
-    case 'fly':
-      envKey = ENV_KEYS.FLY;
+    case 'daytona':
+      envKey = ENV_KEYS.DAYTONA;
       break;
     case 'auto':
       return; // Will be handled by auto-selection
@@ -158,7 +133,10 @@ export function validateProviderApiKey(provider: ProviderType): void {
       throw new ConfigurationError(`Unknown provider: ${provider}`, 'config');
   }
 
-  if (!process.env[envKey]) {
+  // Safe process.env access for environments without Node.js
+  const env = typeof process !== 'undefined' ? process.env : {};
+  
+  if (!env[envKey]) {
     const available = detectAvailableProviders();
     const suggestions = available.length > 0
       ? `Available providers: ${available.join(', ')}`

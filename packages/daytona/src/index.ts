@@ -3,6 +3,7 @@ import type {
   Runtime,
   SandboxInfo,
   SandboxConfig,
+  ProviderType,
   FileEntry,
   SandboxFileSystem,
   FilesystemComputeSpecification,
@@ -10,6 +11,20 @@ import type {
 } from 'computesdk';
 import { BaseProvider, BaseFileSystem } from 'computesdk';
 import { Daytona } from '@daytonaio/sdk';
+
+/**
+ * Daytona-specific configuration options
+ */
+export interface DaytonaConfig extends SandboxConfig {
+  /** Daytona API key - if not provided, will fallback to DAYTONA_API_KEY environment variable */
+  apiKey?: string;
+  /** Provider to use for execution */
+  provider?: ProviderType;
+  /** Runtime environment to use */
+  runtime?: Runtime;
+  /** Execution timeout in milliseconds */
+  timeout?: number;
+}
 
 /**
  * Daytona FileSystem implementation
@@ -54,15 +69,15 @@ export class DaytonaProvider extends BaseProvider implements FilesystemComputeSa
   private readonly runtime: Runtime;
   public readonly filesystem: SandboxFileSystem;
 
-  constructor(config: SandboxConfig) {
+  constructor(config: DaytonaConfig) {
     super('daytona', config.timeout || 300000);
 
-    // Get API key from environment
-    this.apiKey = process.env.DAYTONA_API_KEY || '';
+    // Get API key from config or environment
+    this.apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
 
     if (!this.apiKey) {
       throw new Error(
-        `Missing Daytona API key. Set DAYTONA_API_KEY environment variable.`
+        `Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable.`
       );
     }
 
@@ -71,7 +86,7 @@ export class DaytonaProvider extends BaseProvider implements FilesystemComputeSa
     // Initialize Daytona client
     this.daytona = new Daytona({ apiKey: this.apiKey });
 
-    // Initialize filesystem (no terminal support)
+    // Initialize filesystem (after super() call, so this.provider and this.sandboxId are available)
     this.filesystem = new DaytonaFileSystem(this.provider, this.sandboxId);
   }
 
@@ -196,8 +211,8 @@ export class DaytonaProvider extends BaseProvider implements FilesystemComputeSa
   }
 }
 
-export function daytona(config?: Partial<SandboxConfig>): DaytonaProvider {
-  const fullConfig: SandboxConfig = {
+export function daytona(config?: Partial<DaytonaConfig>): DaytonaProvider {
+  const fullConfig: DaytonaConfig = {
     provider: 'auto' as any, // Use 'auto' as base type, actual provider is 'daytona'
     runtime: 'python',
     timeout: 300000,

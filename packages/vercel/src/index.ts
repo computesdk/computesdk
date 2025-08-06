@@ -13,6 +13,18 @@ import type {
 import { BaseFileSystem } from 'computesdk';
 
 /**
+ * Vercel-specific configuration options
+ */
+export interface VercelConfig extends SandboxConfig {
+  /** Vercel API token - if not provided, will fallback to VERCEL_TOKEN environment variable */
+  token?: string;
+  /** Vercel team ID - if not provided, will fallback to VERCEL_TEAM_ID environment variable */
+  teamId?: string;
+  /** Vercel project ID - if not provided, will fallback to VERCEL_PROJECT_ID environment variable */
+  projectId?: string;
+}
+
+/**
  * Vercel FileSystem implementation using shell commands
  */
 class VercelFileSystem extends BaseFileSystem {
@@ -202,30 +214,30 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
   private readonly runtime: Runtime;
   private readonly timeout: number;
 
-  constructor(config: SandboxConfig) {
+  constructor(config: VercelConfig) {
     this.sandboxId = `vercel-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     this.timeout = config.timeout || 300000;
 
-    // Get authentication from environment
-    this.token = process.env.VERCEL_TOKEN || '';
-    this.teamId = process.env.VERCEL_TEAM_ID || '';
-    this.projectId = process.env.VERCEL_PROJECT_ID || '';
+    // Get authentication from config or environment
+    this.token = config.token || (typeof process !== 'undefined' && process.env?.VERCEL_TOKEN) || '';
+    this.teamId = config.teamId || (typeof process !== 'undefined' && process.env?.VERCEL_TEAM_ID) || '';
+    this.projectId = config.projectId || (typeof process !== 'undefined' && process.env?.VERCEL_PROJECT_ID) || '';
 
     if (!this.token) {
       throw new Error(
-        `Missing Vercel token. Set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
+        `Missing Vercel token. Provide 'token' in config or set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
       );
     }
 
     if (!this.teamId) {
       throw new Error(
-        `Missing Vercel team ID. Set VERCEL_TEAM_ID environment variable.`
+        `Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID environment variable.`
       );
     }
 
     if (!this.projectId) {
       throw new Error(
-        `Missing Vercel project ID. Set VERCEL_PROJECT_ID environment variable.`
+        `Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID environment variable.`
       );
     }
 
@@ -489,8 +501,8 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
   }
 }
 
-export function vercel(config?: Partial<SandboxConfig>): VercelProvider {
-  const fullConfig: SandboxConfig = {
+export function vercel(config?: Partial<VercelConfig>): VercelProvider {
+  const fullConfig: VercelConfig = {
     provider: 'vercel',
     runtime: 'node',
     timeout: 300000,
