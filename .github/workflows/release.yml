@@ -54,6 +54,10 @@ jobs:
             echo "has_changesets=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Create .npmrc
+        if: steps.check.outputs.has_changesets == 'true'
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
       - name: Version and Publish to NPM
         if: steps.check.outputs.has_changesets == 'true'
         run: |
