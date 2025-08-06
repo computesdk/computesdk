@@ -1,5 +1,16 @@
 # @computesdk/daytona
 
+## 2.0.0
+
+### Major Changes
+
+- be0715e: adding in daytona and making process.env optional
+
+### Patch Changes
+
+- Updated dependencies [be0715e]
+  - computesdk@2.0.0
+
 ## 1.0.0
 
 ### Major Changes

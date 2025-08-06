@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.0.0
+
+### Major Changes
+
+- be0715e: adding in daytona and making process.env optional
+
 ## 1.0.0
 
 ### Major Changes

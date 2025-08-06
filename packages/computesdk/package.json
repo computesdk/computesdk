@@ -1,6 +1,6 @@
 {
   "name": "computesdk",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "Unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
   "author": "Garrison",
   "license": "MIT",
@@ -51,7 +51,6 @@
     "zod": "^3.22.0",
     "uuid": "^9.0.0"
   },
-
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/uuid": "^9.0.0",
