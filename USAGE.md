@@ -9,16 +9,15 @@
 npm install computesdk
 
 # Install specific providers as needed
-npm install @computesdk/e2b @computesdk/vercel @computesdk/cloudflare @computesdk/fly
+npm install @computesdk/e2b @computesdk/vercel @computesdk/daytona
 ```
 
 ### Package Structure
 
 - `computesdk` - Main SDK package (like `ai` from Vercel)
 - `@computesdk/e2b` - E2B provider
-- `@computesdk/vercel` - Vercel Sandbox provider  
-- `@computesdk/cloudflare` - Cloudflare Containers provider
-- `@computesdk/fly` - Fly.io Machines provider
+- `@computesdk/vercel` - Vercel Sandbox provider
+- `@computesdk/daytona` - Daytona provider
 
 ## Usage Patterns
 
@@ -36,12 +35,20 @@ const result = await sandbox.execute('print("Hello World")');
 
 ```typescript
 import { e2b } from '@computesdk/e2b';
+import { daytona } from '@computesdk/daytona';
 import { executeSandbox } from 'computesdk';
 
 const sandbox = e2b();
 const result = await executeSandbox({
   sandbox,
   code: 'print("Hello from E2B!")'
+});
+
+// Or use Daytona
+const daytonaSandbox = daytona();
+const daytonaResult = await executeSandbox({
+  sandbox: daytonaSandbox,
+  code: 'print("Hello from Daytona!")'
 });
 ```
 
@@ -51,8 +58,9 @@ const result = await executeSandbox({
 import { createComputeRegistry } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 import { vercel } from '@computesdk/vercel';
+import { daytona } from '@computesdk/daytona';
 
-const registry = createComputeRegistry({ e2b, vercel });
+const registry = createComputeRegistry({ e2b, vercel, daytona });
 const sandbox = registry.sandbox('e2b:python');
 ```
 
@@ -67,12 +75,10 @@ export E2B_API_KEY=your_e2b_key
 # Vercel
 export VERCEL_TOKEN=your_vercel_token  
 
-# Cloudflare
-export CLOUDFLARE_API_TOKEN=your_cf_token
-export CLOUDFLARE_ACCOUNT_ID=your_cf_account
+# Daytona
+export DAYTONA_API_KEY=your_daytona_api_key
 
-# Fly.io
-export FLY_API_TOKEN=your_fly_token
+
 ```
 
 ## Package Comparison
@@ -86,6 +92,7 @@ import { generateText } from 'ai';
 
 // ComputeSDK
 import { e2b } from '@computesdk/e2b';
+import { daytona } from '@computesdk/daytona';
 import { executeSandbox } from 'computesdk';
 ```
 

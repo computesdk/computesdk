@@ -6,7 +6,7 @@ Similar to how Vercel's AI SDK abstracts different LLM providers, ComputeSDK abs
 
 ## Features
 
-- 🚀 **Multi-provider support** - E2B, Vercel, Cloudflare, Fly.io
+- 🚀 **Multi-provider support** - E2B, Vercel, Daytona
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
 - ⚡ **Command execution** - Run shell commands directly
@@ -21,8 +21,7 @@ Similar to how Vercel's AI SDK abstracts different LLM providers, ComputeSDK abs
 |----------|----------------|------------|----------|-----------|
 | **E2B** | Python | ✅ Full | ✅ PTY | Data science, AI/ML, interactive development |
 | **Vercel** | Node.js, Python | ✅ Full | ❌ | Web apps, APIs, serverless functions |
-| **Cloudflare** | Python, Node.js | ✅ Full | ❌ | Edge computing, global deployment |
-| **Fly.io** | Custom containers | 🚧 Planned | 🚧 Planned | Custom environments, Docker containers |
+| **Daytona** | Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
 
 ## Installation
 
@@ -32,9 +31,8 @@ npm install computesdk
 
 # Provider packages (install only what you need)
 npm install @computesdk/e2b        # E2B provider
-npm install @computesdk/vercel     # Vercel provider  
-npm install @computesdk/cloudflare # Cloudflare provider
-npm install @computesdk/fly        # Fly.io provider (community target)
+npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/daytona    # Daytona provider
 ```
 
 ## Quick Start
@@ -123,16 +121,12 @@ export VERCEL_PROJECT_ID=your_project_id_here
 ```
 Get your token from [Vercel Account Tokens](https://vercel.com/account/tokens)
 
-### Cloudflare (Edge Computing)
+### Daytona (Development Workspaces)
 ```bash
-# For Workers environment - requires Durable Object bindings
-# Set up in wrangler.toml with Sandbox namespace
+export DAYTONA_API_KEY=your_daytona_api_key_here
 ```
 
-### Fly.io (Community Target)
-```bash
-export FLY_API_TOKEN=your_fly_api_token_here
-```
+
 
 ## API Reference
 
@@ -219,7 +213,7 @@ interface BaseComputeSandbox {
 
 #### `FilesystemComputeSandbox`
 
-Extends base capabilities with filesystem operations (E2B, Vercel, Cloudflare):
+Extends base capabilities with filesystem operations (E2B, Vercel, Daytona):
 
 ```typescript
 interface FilesystemComputeSandbox extends BaseComputeSandbox {
@@ -365,7 +359,7 @@ print(f"Average Sales: ${avg_sales:.2f}")
 print(f"Top Performer: {results['top_performer']}")
       `;
     } else {
-      // JavaScript processing for Vercel/Cloudflare
+      // JavaScript processing for Vercel/Daytona
       code = `
 const fs = require('fs');
 
@@ -468,7 +462,7 @@ interactiveDevelopment().catch(console.error);
 import { executeSandbox } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 import { vercel } from '@computesdk/vercel';
-import { cloudflare } from '@computesdk/cloudflare';
+import { daytona } from '@computesdk/daytona';
 
 async function compareProviders() {
   const testCode = `
@@ -492,7 +486,7 @@ print(json.dumps(output))
   const providers = [
     { name: 'E2B', factory: () => e2b() },
     { name: 'Vercel', factory: () => vercel({ runtime: 'python' }) },
-    // Cloudflare would need env parameter in Workers context
+    { name: 'Daytona', factory: () => daytona({ runtime: 'python' }) },
   ];
   
   console.log('Performance Comparison:');
@@ -615,38 +609,45 @@ const data = await sandbox.filesystem.readFile('/tmp/api-data.json');
 console.log('Generated data:', JSON.parse(data));
 ```
 
-### Cloudflare - Edge Computing
+### Daytona - Development Workspaces
 
-Cloudflare provides fast edge execution (requires Workers environment):
+Daytona provides development workspace environments with full filesystem support:
 
 ```typescript
-// Within a Cloudflare Worker
-import { cloudflare } from '@computesdk/cloudflare';
+import { daytona } from '@computesdk/daytona';
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const sandbox = cloudflare({ env, runtime: 'python' });
-    
-    const result = await sandbox.execute(`
+const sandbox = daytona({ runtime: 'python' });
+
+// Execute Python code in workspace
+const result = await sandbox.execute(`
 import json
-from datetime import datetime
+import os
 
-# Process request at the edge
-data = {
-    "timestamp": datetime.now().isoformat(),
-    "processed_at": "edge",
-    "status": "success"
-}
+# Create project structure
+os.makedirs('/workspace/src', exist_ok=True)
+os.makedirs('/workspace/tests', exist_ok=True)
 
-print(json.dumps(data))
-    `);
-    
-    return new Response(result.stdout, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-};
+# Write project files
+with open('/workspace/src/main.py', 'w') as f:
+    f.write('def hello():\\n    return "Hello from Daytona!"\\n')
+
+with open('/workspace/tests/test_main.py', 'w') as f:
+    f.write('from src.main import hello\\n\\ndef test_hello():\\n    assert hello() == "Hello from Daytona!"\\n')
+
+print("Project structure created!")
+print("Files:", os.listdir('/workspace'))
+`);
+
+// Check created files
+const files = await sandbox.filesystem.readdir('/workspace');
+console.log('Workspace files:', files.map(f => f.name));
+
+// Read project file
+const mainPy = await sandbox.filesystem.readFile('/workspace/src/main.py');
+console.log('main.py content:', mainPy);
 ```
+
+
 
 ## Best Practices
 
@@ -656,8 +657,7 @@ Choose providers based on your use case:
 
 - **E2B**: Data science, ML, interactive development, full Python environment
 - **Vercel**: Web applications, APIs, serverless functions, long-running tasks
-- **Cloudflare**: Edge computing, global deployment, low-latency responses
-- **Fly.io**: Custom containers, specialized environments
+- **Daytona**: Development workspaces, custom environments, team collaboration
 
 ### 2. Resource Management
 

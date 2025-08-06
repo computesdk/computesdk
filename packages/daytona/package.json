@@ -1,7 +1,7 @@
 {
-  "name": "@computesdk/cloudflare",
+  "name": "@computesdk/daytona",
   "version": "1.0.0",
-  "description": "Cloudflare Containers provider for ComputeSDK",
+  "description": "Daytona provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -19,41 +19,41 @@
   ],
   "scripts": {
     "build": "tsup",
+    "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
   "dependencies": {
-    "@cloudflare/sandbox": "^0.0.8",
-    "cloudflare": "^3.0.0",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "@daytonaio/sdk": "^0.25.0"
   },
 
   "keywords": [
-    "cloudflare",
+    "daytona",
     "sandbox",
     "code-execution",
-    "edge",
-    "workers",
-    "durable-objects",
     "python",
-    "nodejs",
     "cloud",
     "compute"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/cloudflare"
+    "directory": "packages/daytona"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cloudflare",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/daytona",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250715.0",
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"

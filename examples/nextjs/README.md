@@ -26,7 +26,7 @@ This example demonstrates how to integrate ComputeSDK with Next.js for server-si
    
    - **E2B**: Get your API key from [e2b.dev](https://e2b.dev)
    - **Vercel**: Get your token from [vercel.com/account/tokens](https://vercel.com/account/tokens)
-   - **Cloudflare**: Get your API token from [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+   - **Daytona**: Get your API key from your Daytona instance
 
 3. **Run the development server**:
    ```bash
@@ -83,7 +83,7 @@ ComputeSDK will automatically detect and use the first available provider based 
 
 1. **E2B** - Requires `E2B_API_KEY`
 2. **Vercel** - Requires `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`
-3. **Cloudflare** - Requires `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+3. **Daytona** - Requires `DAYTONA_API_KEY`
 
 ## Deployment
 

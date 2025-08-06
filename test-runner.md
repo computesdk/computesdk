@@ -27,8 +27,7 @@ We use **Vitest** for all testing across packages because it:
 Each provider package has its own test suite:
 - **E2B**: `packages/e2b/src/__tests__/index.test.ts`
 - **Vercel**: `packages/vercel/src/__tests__/index.test.ts` (to be created)
-- **Cloudflare**: `packages/cloudflare/src/__tests__/index.test.ts` (to be created)
-- **Fly.io**: `packages/fly/src/__tests__/index.test.ts` (to be created)
+- **Daytona**: `packages/daytona/src/__tests__/index.test.ts`
 
 ## Running Tests
 
@@ -52,6 +51,9 @@ cd packages/core && pnpm test
 # E2B provider only
 cd packages/e2b && pnpm test
 
+# Daytona provider only
+cd packages/daytona && pnpm test
+
 # With coverage
 cd packages/core && pnpm test:coverage
 ```
@@ -60,7 +62,7 @@ cd packages/core && pnpm test:coverage
 
 ### Unit Tests
 - Test individual functions and classes in isolation
-- Mock external dependencies (E2B SDK, Vercel API, etc.)
+- Mock external dependencies (E2B SDK, Vercel API, Daytona API, etc.)
 - Focus on business logic and edge cases
 
 ### Integration Tests
@@ -141,6 +143,7 @@ pnpm test:coverage        # Run with coverage report
 # Individual packages
 cd packages/core && pnpm test
 cd packages/e2b && pnpm test
+cd packages/daytona && pnpm test
 
 # Type checking
 pnpm typecheck           # Check types across all packages

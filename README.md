@@ -4,11 +4,11 @@ A unified abstraction layer for executing code in secure, isolated sandboxed env
 
 ## Overview
 
-ComputeSDK provides a consistent TypeScript interface for code execution across different cloud compute providers, similar to how Vercel's AI SDK abstracts LLM providers. Whether you're using E2B, Vercel, Cloudflare, or Fly.io, ComputeSDK gives you the same simple API.
+ComputeSDK provides a consistent TypeScript interface for code execution across different cloud compute providers, similar to how Vercel's AI SDK abstracts LLM providers. Whether you're using E2B, Vercel, or Daytona, ComputeSDK gives you the same simple API.
 
 ## Features
 
-- 🚀 **Multi-provider support** - E2B, Vercel, Cloudflare, Fly.io
+- 🚀 **Multi-provider support** - E2B, Vercel, Daytona
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
 - ⚡ **Command execution** - Run shell commands directly
@@ -26,8 +26,7 @@ npm install computesdk
 # Provider packages (install only what you need)
 npm install @computesdk/e2b
 npm install @computesdk/vercel
-npm install @computesdk/cloudflare
-npm install @computesdk/fly
+npm install @computesdk/daytona
 ```
 
 ## Quick Start
@@ -107,33 +106,25 @@ console.log('Hello from Vercel Sandbox!');
 `);
 ```
 
-### Cloudflare (Fully Implemented)
+### Daytona (Fully Implemented)
 
 ```bash
-# Cloudflare Workers environment required
-# Set up in wrangler.toml with Durable Object bindings
+export DAYTONA_API_KEY=your_daytona_api_key
 ```
 
 ```typescript
-import { cloudflare } from '@computesdk/cloudflare';
+import { daytona } from '@computesdk/daytona';
 
-const sandbox = cloudflare({
-  env: { Sandbox: env.Sandbox }, // Durable Object binding
-  runtime: 'python',             // 'python' or 'node'
-  timeout: 300000,               // optional, defaults to 5 minutes
+const sandbox = daytona({
+  runtime: 'python',    // 'python', 'node', etc.
+  timeout: 300000,      // optional, defaults to 5 minutes
 });
 
 const result = await sandbox.execute(`
-print('Hello from Cloudflare!')
+print('Hello from Daytona!')
 import sys
 print(f'Python version: {sys.version}')
 `);
-```
-
-### Fly.io (Community Target)
-
-```bash
-export FLY_API_TOKEN=your_fly_token
 ```
 
 ## API Reference
@@ -423,9 +414,8 @@ await sandbox.kill();
 
 ```typescript
 import { vercel } from '@computesdk/vercel';
-import { cloudflare } from '@computesdk/cloudflare';
+import { daytona } from '@computesdk/daytona';
 
-// Works identically across providers
 async function processData(sandbox: any) {
   // Create workspace
   await sandbox.filesystem.mkdir('/workspace');
@@ -468,9 +458,9 @@ const vercelSandbox = vercel();
 const vercelResult = await processData(vercelSandbox);
 console.log('Vercel result:', vercelResult);
 
-const cloudflareSandbox = cloudflare({ env });
-const cloudflareResult = await processData(cloudflareSandbox);
-console.log('Cloudflare result:', cloudflareResult);
+const daytonaSandbox = daytona();
+const daytonaResult = await processData(daytonaSandbox);
+console.log('Daytona result:', daytonaResult);
 ```
 
 ## Development
@@ -481,8 +471,7 @@ console.log('Cloudflare result:', cloudflareResult);
 computesdk/                    # Main SDK package
 ├── @computesdk/e2b           # E2B provider
 ├── @computesdk/vercel        # Vercel provider
-├── @computesdk/cloudflare    # Cloudflare provider
-└── @computesdk/fly           # Fly.io provider
+└── @computesdk/daytona       # Daytona provider
 ```
 
 ### Building
@@ -542,8 +531,7 @@ export function myProvider(options = {}) {
 |----------|--------|----------------|------------|----------|----------|
 | **E2B** | ✅ Complete | ✅ Python | ✅ Native | ✅ PTY | Data science libraries, interactive terminals |
 | **Vercel** | ✅ Complete | ✅ Node.js, Python | ✅ Shell-based | ❌ | Global deployment, up to 45min runtime |
-| **Cloudflare** | ✅ Complete | ✅ Python, Node.js | ✅ Hybrid | ❌ | Global edge, container-based |
-| **Fly.io** | 🎯 Community | ✅ Mock | ❌ | ❌ | Docker containers, regional deployment |
+| **Daytona** | ✅ Complete | ✅ Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
 
 ### Feature Matrix
 
