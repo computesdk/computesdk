@@ -45,14 +45,19 @@ jobs:
       - name: Run linting
         run: pnpm lint
 
-      - name: Create Release Pull Request or Publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          publish: pnpm changeset publish
-          title: 'chore: release packages'
-          commit: 'chore: release packages'
-          createGithubReleases: true
+      - name: Check for changesets
+        id: check
+        run: |
+          if [ -d ".changeset" ] && [ "$(ls -A .changeset/*.md 2>/dev/null | wc -l)" -gt 0 ]; then
+            echo "has_changesets=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changesets=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Version and Publish to NPM
+        if: steps.check.outputs.has_changesets == 'true'
+        run: |
+          pnpm changeset version
+          pnpm changeset publish
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
