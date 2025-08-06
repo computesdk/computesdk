@@ -45,13 +45,18 @@ jobs:
       - name: Run linting
         run: pnpm lint
 
-      - name: Create Release Pull Request or Publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          publish: pnpm changeset publish
-          title: 'chore: release packages'
-          commit: 'chore: release packages'
+      - name: Version packages
+        run: pnpm changeset version
+
+      - name: Commit version changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || git commit -m "chore: release packages"
+          git push
+
+      - name: Publish to NPM
+        run: pnpm changeset publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
