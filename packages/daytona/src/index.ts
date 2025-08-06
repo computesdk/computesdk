@@ -3,6 +3,7 @@ import type {
   Runtime,
   SandboxInfo,
   SandboxConfig,
+  ProviderType,
   FileEntry,
   SandboxFileSystem,
   FilesystemComputeSpecification,
@@ -17,6 +18,12 @@ import { Daytona } from '@daytonaio/sdk';
 export interface DaytonaConfig extends SandboxConfig {
   /** Daytona API key - if not provided, will fallback to DAYTONA_API_KEY environment variable */
   apiKey?: string;
+  /** Provider to use for execution */
+  provider?: ProviderType;
+  /** Runtime environment to use */
+  runtime?: Runtime;
+  /** Execution timeout in milliseconds */
+  timeout?: number;
 }
 
 /**

@@ -51,7 +51,7 @@ describe('VercelProvider', () => {
       vi.unstubAllEnvs();
       
       expect(() => new VercelProvider({})).toThrow(
-        'Missing Vercel token. Set VERCEL_TOKEN environment variable.'
+        'Missing Vercel token. Provide \'token\' in config or set VERCEL_TOKEN environment variable.'
       );
     });
 
@@ -60,7 +60,7 @@ describe('VercelProvider', () => {
       vi.stubEnv('VERCEL_TOKEN', 'test-token');
       
       expect(() => new VercelProvider({})).toThrow(
-        'Missing Vercel team ID. Set VERCEL_TEAM_ID environment variable.'
+        'Missing Vercel team ID. Provide \'teamId\' in config or set VERCEL_TEAM_ID environment variable.'
       );
     });
 
@@ -70,7 +70,7 @@ describe('VercelProvider', () => {
       vi.stubEnv('VERCEL_TEAM_ID', 'test-team');
       
       expect(() => new VercelProvider({})).toThrow(
-        'Missing Vercel project ID. Set VERCEL_PROJECT_ID environment variable.'
+        'Missing Vercel project ID. Provide \'projectId\' in config or set VERCEL_PROJECT_ID environment variable.'
       );
     });
 

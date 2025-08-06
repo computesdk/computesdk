@@ -69,7 +69,7 @@ describe('E2BProvider', () => {
       vi.unstubAllEnvs()
       
       expect(() => new E2BProvider({})).toThrow(
-        'Missing E2B API key. Set E2B_API_KEY environment variable.'
+        'Missing E2B API key. Provide \'apiKey\' in config or set E2B_API_KEY environment variable.'
       )
     })
 
