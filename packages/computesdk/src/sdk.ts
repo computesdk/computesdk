@@ -41,26 +41,8 @@ export class ComputeSDK {
         );
       }
       
-      // Create the sandbox based on provider type
-      if (providerName === 'cloudflare') {
-        // Cloudflare requires env parameter with Durable Object namespace
-        // This would need to be passed in from the Worker context
-        throw new ConfigurationError(
-          'Cloudflare provider requires env parameter with Sandbox namespace. ' +
-          'Use createSandbox({ provider: "cloudflare", env: yourEnv }) from within a Worker.',
-          'sdk'
-        );
-      } else if (providerName === 'fly') {
-        if (!normalizedConfig.container) {
-          throw new ConfigurationError(
-            `${providerName} provider requires container configuration`,
-            'sdk'
-          );
-        }
-        return factory({ ...normalizedConfig, container: normalizedConfig.container });
-      } else {
-        return factory(normalizedConfig);
-      }
+      // Create the sandbox using the factory
+      return factory(normalizedConfig);
     } catch (error) {
       if (error instanceof ConfigurationError) {
         throw error;
