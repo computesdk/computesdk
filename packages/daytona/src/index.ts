@@ -86,7 +86,7 @@ export class DaytonaProvider extends BaseProvider implements FilesystemComputeSa
     // Initialize Daytona client
     this.daytona = new Daytona({ apiKey: this.apiKey });
 
-    // Initialize filesystem (no terminal support)
+    // Initialize filesystem (after super() call, so this.provider and this.sandboxId are available)
     this.filesystem = new DaytonaFileSystem(this.provider, this.sandboxId);
   }
 

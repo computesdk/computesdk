@@ -52,7 +52,7 @@ describe('DaytonaProvider', () => {
       vi.unstubAllEnvs()
       
       expect(() => new DaytonaProvider({})).toThrow(
-        'Missing Daytona API key. Set DAYTONA_API_KEY environment variable.'
+        'Missing Daytona API key. Provide \'apiKey\' in config or set DAYTONA_API_KEY environment variable.'
       )
     })
 

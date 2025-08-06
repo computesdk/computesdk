@@ -77,42 +77,25 @@ describe('Configuration', () => {
       expect(providers).not.toContain('e2b')
     })
 
-    it('should detect Cloudflare when both tokens are set', () => {
-      vi.stubEnv('CLOUDFLARE_API_TOKEN', 'test-token')
-      vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'test-account')
+    it('should detect Daytona when API key is set', () => {
+      vi.stubEnv('DAYTONA_API_KEY', 'test-key')
       
       const providers = detectAvailableProviders()
       
-      expect(providers).toContain('cloudflare')
-    })
-
-    it('should detect Cloudflare with API token', () => {
-      vi.stubEnv('CLOUDFLARE_API_TOKEN', 'test-token')
-      
-      const providers = detectAvailableProviders()
-      
-      expect(providers).toContain('cloudflare')
-    })
-
-    it('should detect Fly.io when token is set', () => {
-      vi.stubEnv('FLY_API_TOKEN', 'test-token')
-      
-      const providers = detectAvailableProviders()
-      
-      expect(providers).toContain('fly')
+      expect(providers).toContain('daytona')
     })
 
     it('should detect multiple providers', () => {
       vi.stubEnv('E2B_API_KEY', 'test-key')
       vi.stubEnv('VERCEL_TOKEN', 'test-token')
-      vi.stubEnv('FLY_API_TOKEN', 'test-token')
+      vi.stubEnv('DAYTONA_API_KEY', 'test-daytona-key')
       
       const providers = detectAvailableProviders()
       
       expect(providers).toHaveLength(3)
       expect(providers).toContain('e2b')
       expect(providers).toContain('vercel')
-      expect(providers).toContain('fly')
+      expect(providers).toContain('daytona')
     })
 
     it('should return empty array when no providers available', () => {
