@@ -16,6 +16,14 @@ import type {
 import { BaseProvider, BaseFileSystem, BaseTerminal } from 'computesdk';
 
 /**
+ * E2B-specific configuration options
+ */
+export interface E2BConfig extends SandboxConfig {
+  /** E2B API key - if not provided, will fallback to E2B_API_KEY environment variable */
+  apiKey?: string;
+}
+
+/**
  * E2B FileSystem implementation
  */
 class E2BFileSystem extends BaseFileSystem {
@@ -185,15 +193,15 @@ export class E2BProvider extends BaseProvider implements FullComputeSandbox, Ful
   public readonly filesystem: SandboxFileSystem;
   public readonly terminal: SandboxTerminal;
 
-  constructor(config: SandboxConfig) {
+  constructor(config: E2BConfig) {
     super('e2b', config.timeout || 300000);
 
-    // Get API key from environment
-    this.apiKey = process.env.E2B_API_KEY || '';
+    // Get API key from config or environment
+    this.apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.E2B_API_KEY) || '';
 
     if (!this.apiKey) {
       throw new Error(
-        `Missing E2B API key. Set E2B_API_KEY environment variable. Get your API key from https://e2b.dev/`
+        `Missing E2B API key. Provide 'apiKey' in config or set E2B_API_KEY environment variable. Get your API key from https://e2b.dev/`
       );
     }
 
@@ -363,8 +371,8 @@ sys.exit(result.returncode)
 
 }
 
-export function e2b(config?: Partial<SandboxConfig>): E2BProvider {
-  const fullConfig: SandboxConfig = {
+export function e2b(config?: Partial<E2BConfig>): E2BProvider {
+  const fullConfig: E2BConfig = {
     provider: 'e2b',
     runtime: 'python',
     timeout: 300000,
