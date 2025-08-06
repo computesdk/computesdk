@@ -4,18 +4,14 @@ This directory contains basic usage examples for ComputeSDK with different provi
 
 ## ⚠️ Current Implementation Status
 
-- **E2B**: ✅ Fully implemented - executes real Python code
-- **Vercel**: 🚧 Mock implementation - returns sample responses
-- **Daytona**: ✅ Fully implemented - executes real code in workspaces
+- **E2B**: ✅ Fully implemented - executes real Python code in sandboxes
+- **Vercel**: ✅ Fully implemented - executes real code in sandboxes
+- **Daytona**: ✅ Fully implemented - executes real code in sandboxes
 
 ## Prerequisites
-
-### For Real Code Execution:
 - **E2B**: Set `E2B_API_KEY` (get from [e2b.dev](https://e2b.dev))
-- **Daytona**: Set `DAYTONA_API_KEY` (get from your Daytona instance)
-
-### For Mock Demonstrations:
-- **Vercel**: Set `VERCEL_TOKEN` (optional - example will use mock data)
+- **Daytona**: Set `DAYTONA_API_KEY` (get from [Daytona](https://daytona.io))
+- **Vercel**: Set `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID` (get from [Vercel](https://vercel.com))
 
 ## Examples
 
@@ -32,11 +28,12 @@ pnpm run e2b
 Demonstrates Python code execution using E2B, including data science operations.
 **This executes real code in E2B sandboxes.**
 
-### Vercel Example 🚧 (Mock Implementation)
+### Vercel Example ✅ (Real Implementation)
 ```bash
 pnpm run vercel
 ```
-Shows intended API for Vercel Sandbox. **Currently returns mock responses.**
+Demonstrates code execution using Vercel sandboxes, including filesystem operations.
+**This executes real code in Vercel environments.**
 
 ### Daytona Example ✅ (Real Implementation)
 ```bash
