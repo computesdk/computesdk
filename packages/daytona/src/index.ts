@@ -12,6 +12,14 @@ import { BaseProvider, BaseFileSystem } from 'computesdk';
 import { Daytona } from '@daytonaio/sdk';
 
 /**
+ * Daytona-specific configuration options
+ */
+export interface DaytonaConfig extends SandboxConfig {
+  /** Daytona API key - if not provided, will fallback to DAYTONA_API_KEY environment variable */
+  apiKey?: string;
+}
+
+/**
  * Daytona FileSystem implementation
  */
 class DaytonaFileSystem extends BaseFileSystem {
@@ -54,15 +62,15 @@ export class DaytonaProvider extends BaseProvider implements FilesystemComputeSa
   private readonly runtime: Runtime;
   public readonly filesystem: SandboxFileSystem;
 
-  constructor(config: SandboxConfig) {
+  constructor(config: DaytonaConfig) {
     super('daytona', config.timeout || 300000);
 
-    // Get API key from environment
-    this.apiKey = process.env.DAYTONA_API_KEY || '';
+    // Get API key from config or environment
+    this.apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
 
     if (!this.apiKey) {
       throw new Error(
-        `Missing Daytona API key. Set DAYTONA_API_KEY environment variable.`
+        `Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable.`
       );
     }
 
@@ -196,8 +204,8 @@ export class DaytonaProvider extends BaseProvider implements FilesystemComputeSa
   }
 }
 
-export function daytona(config?: Partial<SandboxConfig>): DaytonaProvider {
-  const fullConfig: SandboxConfig = {
+export function daytona(config?: Partial<DaytonaConfig>): DaytonaProvider {
+  const fullConfig: DaytonaConfig = {
     provider: 'auto' as any, // Use 'auto' as base type, actual provider is 'daytona'
     runtime: 'python',
     timeout: 300000,
