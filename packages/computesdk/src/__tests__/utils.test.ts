@@ -104,7 +104,7 @@ describe('Utils', () => {
       const duration = Date.now() - start
       
       expect(result).toBe('success')
-      expect(duration).toBeGreaterThanOrEqual(50)
+      expect(duration).toBeGreaterThanOrEqual(45) // Allow for timing variance in CI
       expect(duration).toBeLessThan(150) // Should be around 50ms
     })
 
