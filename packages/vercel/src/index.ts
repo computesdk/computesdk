@@ -22,6 +22,8 @@ export interface VercelConfig extends SandboxConfig {
   teamId?: string;
   /** Vercel project ID - if not provided, will fallback to VERCEL_PROJECT_ID environment variable */
   projectId?: string;
+  /** Existing sandbox ID to reconnect to - if not provided, will create a new sandbox */
+  sandboxId?: string;
 }
 
 /**
@@ -204,7 +206,7 @@ class VercelFileSystem extends BaseFileSystem {
 export class VercelProvider implements FilesystemComputeSpecification, FilesystemComputeSandbox {
   public readonly specificationVersion = 'v1' as const;
   public readonly provider = 'vercel';
-  public readonly sandboxId: string;
+  public sandboxId: string;
   public readonly filesystem: SandboxFileSystem;
 
   private sandbox: any = null;
@@ -215,7 +217,8 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
   private readonly timeout: number;
 
   constructor(config: VercelConfig) {
-    this.sandboxId = `vercel-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    // Use provided sandboxId or generate a new one
+    this.sandboxId = config.sandboxId || `vercel-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     this.timeout = config.timeout || 300000;
 
     // Get authentication from config or environment
@@ -258,17 +261,31 @@ export class VercelProvider implements FilesystemComputeSpecification, Filesyste
     }
 
     try {
-      // Create Vercel Sandbox with appropriate runtime
-      const runtimeImage = this.runtime === 'node' ? 'node22' : 'python3.13';
+      // Check if we should reconnect to existing sandbox or create new one
+      if (this.sandboxId && !this.sandboxId.startsWith('vercel-')) {
+        // Reconnect to existing sandbox using provided sandboxId
+        this.sandbox = await Sandbox.get({
+          sandboxId: this.sandboxId,
+          token: this.token,
+          teamId: this.teamId,
+          projectId: this.projectId,
+        });
+      } else {
+        // Create new Vercel Sandbox with appropriate runtime
+        const runtimeImage = this.runtime === 'node' ? 'node22' : 'python3.13';
 
-      this.sandbox = await Sandbox.create({
-        token: this.token,
-        teamId: this.teamId,
-        projectId: this.projectId,
-        runtime: runtimeImage,
-        timeout: ms(`${this.timeout}ms`),
-        resources: { vcpus: 2 }, // Default to 2 vCPUs
-      });
+        this.sandbox = await Sandbox.create({
+          token: this.token,
+          teamId: this.teamId,
+          projectId: this.projectId,
+          runtime: runtimeImage,
+          timeout: ms(`${this.timeout}ms`),
+          resources: { vcpus: 2 }, // Default to 2 vCPUs
+        });
+
+        // Update sandboxId with the actual Vercel sandbox ID
+        this.sandboxId = this.sandbox.sandboxId;
+      }
 
       return this.sandbox;
     } catch (error) {
