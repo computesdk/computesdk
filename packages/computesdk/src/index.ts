@@ -26,6 +26,9 @@ export { BaseProvider, BaseFileSystem, BaseTerminal } from './providers/base';
 // Export main SDK class
 export { ComputeSDK } from './sdk';
 
+// Export server adapter
+export { handleComputeRequest } from './adapters';
+
 // Default export
 import { ComputeSDK } from './sdk';
 export default ComputeSDK;

@@ -324,3 +324,39 @@ export interface TerminalCreateOptions {
   /** Environment variables */
   env?: Record<string, string>;
 }
+
+/**
+ * Server adapter request for unified compute operations
+ */
+export interface ComputeRequest {
+  /** Type of operation to perform */
+  operation: 'sandbox' | 'filesystem';
+  /** Specific action within the operation */
+  action: string;
+  /** Operation-specific payload data */
+  payload: Record<string, any>;
+  /** Optional sandbox ID for persistent sessions */
+  sandboxId?: string;
+  /** Optional provider to use */
+  provider?: ProviderType;
+  /** Optional runtime environment */
+  runtime?: Runtime;
+}
+
+/**
+ * Server adapter response for unified compute operations
+ */
+export interface ComputeResponse {
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Operation result data (if successful) */
+  data?: any;
+  /** Error message (if failed) */
+  error?: string;
+  /** ID of the sandbox that handled the operation */
+  sandboxId: string;
+  /** Provider that handled the operation */
+  provider: string;
+  /** Execution time in milliseconds */
+  executionTime?: number;
+}
