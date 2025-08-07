@@ -1,30 +1,24 @@
 // @ts-nocheck
 import { json, error } from '@sveltejs/kit';
-import { ComputeSDK } from 'computesdk';
+import { handleComputeRequest } from 'computesdk';
 
 export const POST = async ({ request }) => {
   try {
-    const { code, runtime = 'python' } = await request.json();
+    const computeRequest = await request.json();
+    const response = await handleComputeRequest(computeRequest);
 
-    if (!code || typeof code !== 'string') {
-      throw error(400, 'Code is required and must be a string');
+    if (!response.success) {
+      throw error(500, response.error || 'Unknown error occurred');
     }
 
-    const sandbox = ComputeSDK.createSandbox({});
-    const result = await sandbox.execute(code, runtime);
-
-    return json({
-      success: true,
-      result: {
-        output: result.stdout,
-        error: result.stderr,
-        exitCode: result.exitCode,
-        executionTime: result.executionTime,
-        provider: result.provider
-      }
-    });
+    return json(response);
   } catch (err) {
-    console.error('Execution error:', err);
+    console.error('Request handling error:', err);
+    
+    // Re-throw SvelteKit error instances
+    if (err && typeof err === 'object' && 'status' in err) {
+      throw err;
+    }
     
     throw error(500, err instanceof Error ? err.message : 'Unknown error occurred');
   }
