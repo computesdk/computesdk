@@ -12,7 +12,7 @@ export type Runtime = 'node' | 'python';
 /**
  * Supported provider types
  */
-export type ProviderType = 'e2b' | 'vercel' | 'cloudflare' | 'fly' | 'auto';
+export type ProviderType = 'e2b' | 'vercel' | 'daytona' | 'freestyle' | 'auto';
 
 /**
  * Sandbox status types

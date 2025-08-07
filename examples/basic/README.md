@@ -7,11 +7,13 @@ This directory contains basic usage examples for ComputeSDK with different provi
 - **E2B**: ✅ Fully implemented - executes real Python code in sandboxes
 - **Vercel**: ✅ Fully implemented - executes real code in sandboxes
 - **Daytona**: ✅ Fully implemented - executes real code in sandboxes
+- **Freestyle**: ✅ Fully implemented - executes real Node.js code in sandboxes
 
 ## Prerequisites
 - **E2B**: Set `E2B_API_KEY` (get from [e2b.dev](https://e2b.dev))
 - **Daytona**: Set `DAYTONA_API_KEY` (get from [Daytona](https://daytona.io))
 - **Vercel**: Set `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID` (get from [Vercel](https://vercel.com))
+- **Freestyle**: Set `FREESTYLE_API_KEY` (get from [Freestyle](https://freestyle.sh))
 
 ## Examples
 
@@ -41,6 +43,13 @@ pnpm run daytona
 ```
 Demonstrates code execution using Daytona workspaces, including filesystem operations.
 **This executes real code in Daytona environments.**
+
+### Freestyle Example ✅ (Real Implementation)
+```bash
+pnpm run freestyle
+```
+Demonstrates Python and Node.js code execution using Freestyle sandboxes, including filesystem operations and data processing.
+**This executes real code in Freestyle environments.**
 
 
 

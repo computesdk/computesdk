@@ -127,6 +127,26 @@ print(f'Python version: {sys.version}')
 `);
 ```
 
+### Freestyle (Fully Implemented)
+
+```bash
+export FREESTYLE_API_KEY=your_freestyle_api_key
+```
+
+```typescript
+import { freestyle } from '@computesdk/freestyle';
+
+const sandbox = freestyle({
+  runtime: 'node',    // 'node'
+  timeout: 300000,    // optional, defaults to 5 minutes
+});
+
+const result = await sandbox.execute(`
+console.log('Node.js version:', process.version);
+console.log('Hello from Freestyle Sandbox!');
+`);
+```
+
 ## API Reference
 
 ### Core Methods
@@ -532,6 +552,7 @@ export function myProvider(options = {}) {
 | **E2B** | ✅ Complete | ✅ Python | ✅ Native | ✅ PTY | Data science libraries, interactive terminals |
 | **Vercel** | ✅ Complete | ✅ Node.js, Python | ✅ Shell-based | ❌ | Global deployment, up to 45min runtime |
 | **Daytona** | ✅ Complete | ✅ Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
+| **Freestyle** | ✅ Complete | ✅ Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
 
 ### Feature Matrix
 
