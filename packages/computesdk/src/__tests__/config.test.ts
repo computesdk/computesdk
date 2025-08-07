@@ -64,7 +64,7 @@ describe('Configuration', () => {
       
       expect(providers).toContain('e2b')
       expect(providers).not.toContain('vercel')
-      expect(providers).not.toContain('cloudflare')
+      expect(providers).not.toContain('daytona')
       expect(providers).not.toContain('fly')
     })
 
