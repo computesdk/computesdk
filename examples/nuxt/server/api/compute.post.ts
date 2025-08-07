@@ -1,10 +1,16 @@
 // @ts-nocheck
 import { handleComputeRequest } from 'computesdk'
+// import { e2b } from '@computesdk/e2b'
+// import { vercel } from '@computesdk/vercel'
+// import { daytona } from '@computesdk/daytona'
 
 export default defineEventHandler(async (event) => {
   try {
     const computeRequest = await readBody(event)
-    const response = await handleComputeRequest(computeRequest)
+    const response = await handleComputeRequest({
+      request: computeRequest,
+      provider: undefined // e2b() | vercel() | daytona()
+    })
     
     if (!response.success) {
       throw createError({

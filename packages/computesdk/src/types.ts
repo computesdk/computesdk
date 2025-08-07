@@ -245,8 +245,8 @@ export type ComputeSandbox = BaseComputeSandbox | FilesystemComputeSandbox | Ter
  * Parameters for the executeSandbox function
  */
 export interface ExecuteSandboxParams {
-  /** Sandbox to execute in */
-  sandbox: ComputeSandbox;
+  /** Provider to execute with */
+  provider: ComputeSandbox;
   /** Code to execute */
   code: string;
   /** Runtime to use */

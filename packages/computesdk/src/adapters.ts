@@ -5,22 +5,34 @@
  * across different providers and capabilities (sandbox, filesystem, terminal).
  */
 
-import { ComputeSDK } from './sdk';
+
 import type { 
   ComputeRequest, 
   ComputeResponse, 
   Runtime,
   FilesystemComputeSandbox,
-  BaseComputeSandbox
+  BaseComputeSandbox,
+  ComputeSandbox
 } from './types';
+
+/**
+ * Parameters for handleComputeRequest function
+ */
+export interface HandleComputeRequestParams {
+  /** The compute request containing operation, action, and payload */
+  request: ComputeRequest;
+  /** The provider instance to execute the request with */
+  provider: ComputeSandbox;
+}
 
 /**
  * Handles a unified compute request and returns a standardized response
  * 
- * @param request - The compute request containing operation, action, and payload
+ * @param params - Object containing request and provider
  * @returns Promise<ComputeResponse> - Standardized response with success/error info
  */
-export async function handleComputeRequest(request: ComputeRequest): Promise<ComputeResponse> {
+export async function handleComputeRequest(params: HandleComputeRequestParams): Promise<ComputeResponse> {
+  const { request, provider } = params;
   const startTime = Date.now();
   
   try {
@@ -35,27 +47,19 @@ export async function handleComputeRequest(request: ComputeRequest): Promise<Com
       };
     }
 
-    // Create or reconnect to sandbox
-    const sandbox = ComputeSDK.createSandbox({
-      provider: request.provider,
-      runtime: request.runtime,
-      // If sandboxId is provided, the provider will attempt to reconnect
-      ...(request.sandboxId && { sandboxId: request.sandboxId })
-    });
-
     let result: any;
 
     // Route to appropriate operation handler
     if (request.operation === 'sandbox') {
-      result = await handleSandboxOperation(sandbox, request.action, request.payload);
+      result = await handleSandboxOperation(provider, request.action, request.payload);
     } else if (request.operation === 'filesystem') {
-      result = await handleFilesystemOperation(sandbox, request.action, request.payload);
+      result = await handleFilesystemOperation(provider, request.action, request.payload);
     } else {
       return {
         success: false,
         error: `Unknown operation: ${request.operation}. Supported operations: sandbox, filesystem`,
-        sandboxId: sandbox.sandboxId,
-        provider: sandbox.provider,
+        sandboxId: provider.sandboxId,
+        provider: provider.provider,
         executionTime: Date.now() - startTime
       };
     }
@@ -63,8 +67,8 @@ export async function handleComputeRequest(request: ComputeRequest): Promise<Com
     return {
       success: true,
       data: result,
-      sandboxId: sandbox.sandboxId,
-      provider: sandbox.provider,
+      sandboxId: provider.sandboxId,
+      provider: provider.provider,
       executionTime: Date.now() - startTime
     };
 
@@ -72,8 +76,8 @@ export async function handleComputeRequest(request: ComputeRequest): Promise<Com
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
-      sandboxId: request.sandboxId || '',
-      provider: 'unknown',
+      sandboxId: provider.sandboxId || '',
+      provider: provider.provider || 'unknown',
       executionTime: Date.now() - startTime
     };
   }

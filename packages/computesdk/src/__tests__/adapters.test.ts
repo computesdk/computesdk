@@ -2,50 +2,67 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleComputeRequest } from '../adapters';
 import type { ComputeRequest } from '../types';
 
-// Mock the ComputeSDK
-vi.mock('../sdk', () => ({
-  ComputeSDK: {
-    createSandbox: vi.fn(() => ({
-      sandboxId: 'test-sandbox-123',
-      provider: 'mock',
-      execute: vi.fn().mockResolvedValue({
-        stdout: 'Hello World',
-        stderr: '',
-        exitCode: 0,
-        executionTime: 100,
-        sandboxId: 'test-sandbox-123',
-        provider: 'mock'
-      }),
-      runCommand: vi.fn().mockResolvedValue({
-        stdout: 'Command output',
-        stderr: '',
-        exitCode: 0,
-        executionTime: 50,
-        sandboxId: 'test-sandbox-123',
-        provider: 'mock'
-      }),
-      getInfo: vi.fn().mockResolvedValue({
-        id: 'test-sandbox-123',
-        provider: 'mock',
-        runtime: 'python',
-        status: 'running',
-        createdAt: new Date(),
-        timeout: 300000
-      }),
-      kill: vi.fn().mockResolvedValue(undefined),
-      filesystem: {
-        readFile: vi.fn().mockResolvedValue('file content'),
-        writeFile: vi.fn().mockResolvedValue(undefined),
-        mkdir: vi.fn().mockResolvedValue(undefined),
-        readdir: vi.fn().mockResolvedValue([
-          { name: 'file.txt', path: '/tmp/file.txt', isDirectory: false, size: 100, lastModified: new Date() }
-        ]),
-        exists: vi.fn().mockResolvedValue(true),
-        remove: vi.fn().mockResolvedValue(undefined)
-      }
-    }))
+// Create a mock provider
+const createMockProvider = () => ({
+  sandboxId: 'test-sandbox-123',
+  provider: 'mock',
+  execute: vi.fn().mockResolvedValue({
+    stdout: 'Hello World',
+    stderr: '',
+    exitCode: 0,
+    executionTime: 100,
+    sandboxId: 'test-sandbox-123',
+    provider: 'mock'
+  }),
+  runCode: vi.fn().mockResolvedValue({
+    stdout: 'Hello World',
+    stderr: '',
+    exitCode: 0,
+    executionTime: 100,
+    sandboxId: 'test-sandbox-123',
+    provider: 'mock'
+  }),
+  runCommand: vi.fn().mockResolvedValue({
+    stdout: 'Command output',
+    stderr: '',
+    exitCode: 0,
+    executionTime: 50,
+    sandboxId: 'test-sandbox-123',
+    provider: 'mock'
+  }),
+  getInfo: vi.fn().mockResolvedValue({
+    id: 'test-sandbox-123',
+    provider: 'mock',
+    runtime: 'python',
+    status: 'running',
+    createdAt: new Date(),
+    timeout: 300000
+  }),
+  kill: vi.fn().mockResolvedValue(undefined),
+  filesystem: {
+    readFile: vi.fn().mockResolvedValue('file content'),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    readdir: vi.fn().mockResolvedValue([
+      { name: 'file.txt', path: '/tmp/file.txt', isDirectory: false, size: 100, lastModified: new Date() }
+    ]),
+    exists: vi.fn().mockResolvedValue(true),
+    remove: vi.fn().mockResolvedValue(undefined)
+  },
+  terminal: {
+    create: vi.fn().mockResolvedValue({
+      pid: 123,
+      command: 'bash',
+      status: 'running',
+      cols: 80,
+      rows: 24,
+      write: vi.fn().mockResolvedValue(undefined),
+      resize: vi.fn().mockResolvedValue(undefined),
+      kill: vi.fn().mockResolvedValue(undefined)
+    }),
+    list: vi.fn().mockResolvedValue([])
   }
-}));
+});
 
 describe('handleComputeRequest', () => {
   beforeEach(() => {
@@ -55,7 +72,8 @@ describe('handleComputeRequest', () => {
   describe('request validation', () => {
     it('should return error for missing operation', async () => {
       const request = { action: 'execute', payload: {} } as ComputeRequest;
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider();
+      const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(false);
       expect(response.error).toContain('Missing required fields');
@@ -63,7 +81,8 @@ describe('handleComputeRequest', () => {
 
     it('should return error for missing action', async () => {
       const request = { operation: 'sandbox', payload: {} } as ComputeRequest;
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider();
+      const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(false);
       expect(response.error).toContain('Missing required fields');
@@ -78,7 +97,7 @@ describe('handleComputeRequest', () => {
         payload: { code: 'print("Hello World")', runtime: 'python' }
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(response.data.stdout).toBe('Hello World');
@@ -93,7 +112,7 @@ describe('handleComputeRequest', () => {
         payload: { command: 'ls', args: ['-la'] }
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(response.data.stdout).toBe('Command output');
@@ -106,7 +125,7 @@ describe('handleComputeRequest', () => {
         payload: {}
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(response.data.id).toBe('test-sandbox-123');
@@ -120,7 +139,7 @@ describe('handleComputeRequest', () => {
         payload: {}
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(response.data.message).toContain('terminated successfully');
@@ -133,7 +152,7 @@ describe('handleComputeRequest', () => {
         payload: {}
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(false);
       expect(response.error).toContain('Missing required field: code');
@@ -146,7 +165,7 @@ describe('handleComputeRequest', () => {
         payload: {}
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(false);
       expect(response.error).toContain('Unknown sandbox action');
@@ -161,7 +180,7 @@ describe('handleComputeRequest', () => {
         payload: { path: '/tmp/test.txt' }
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(response.data.content).toBe('file content');
@@ -174,7 +193,7 @@ describe('handleComputeRequest', () => {
         payload: { path: '/tmp/test.txt', content: 'Hello World' }
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(response.data.message).toContain('written successfully');
@@ -187,7 +206,7 @@ describe('handleComputeRequest', () => {
         payload: { path: '/tmp' }
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(response.data.entries).toHaveLength(1);
@@ -201,7 +220,7 @@ describe('handleComputeRequest', () => {
         payload: {}
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(false);
       expect(response.error).toContain('Missing required field: path');
@@ -214,7 +233,7 @@ describe('handleComputeRequest', () => {
         payload: { path: '/tmp' }
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(false);
       expect(response.error).toContain('Unknown filesystem action');
@@ -229,7 +248,7 @@ describe('handleComputeRequest', () => {
         payload: {}
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(false);
       expect(response.error).toContain('Unknown operation');
@@ -242,7 +261,7 @@ describe('handleComputeRequest', () => {
         payload: { code: 'print("test")' }
       };
 
-      const response = await handleComputeRequest(request);
+      const provider = createMockProvider(); const response = await handleComputeRequest({ request, provider });
       
       expect(response.success).toBe(true);
       expect(typeof response.executionTime).toBe('number');
