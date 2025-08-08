@@ -1,34 +1,14 @@
 /**
  * ComputeSDK Core
  * 
- * A unified abstraction layer for executing code in secure,
- * isolated sandboxed environments across multiple cloud providers.
+ * Clean Provider/Sandbox separation architecture with extensible compute.* API
  */
 
 // Export all types
 export * from './types';
 
-// Export all errors
-export * from './errors';
+// Export compute singleton - the main API
+export { compute } from './compute';
 
-// Export configuration utilities
-export * from './config';
-
-// Export utilities
-export { executeSandbox, runCode, runCommand, retry } from './utils';
-
-// Export registry
-export { createComputeRegistry } from './registry';
-
-// Export base provider for extension
-export { BaseProvider, BaseFileSystem, BaseTerminal } from './providers/base';
-
-// Export main SDK class
-export { ComputeSDK } from './sdk';
-
-// Export server adapter
-export { handleComputeRequest } from './adapters';
-
-// Default export
-import { ComputeSDK } from './sdk';
-export default ComputeSDK;
+// Export managers for advanced usage and testing
+export { SandboxManager } from './sandbox';

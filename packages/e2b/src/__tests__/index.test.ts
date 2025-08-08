@@ -1,22 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { E2BProvider, e2b } from '../index'
-import { ConfigurationError } from 'computesdk'
 
 // Mock the E2B SDK
 vi.mock('@e2b/code-interpreter', () => ({
   Sandbox: {
-    create: vi.fn()
+    create: vi.fn(),
+    connect: vi.fn()
   }
 }))
 
-// Create a more complete mock that matches the E2B Sandbox interface
-const createMockSandbox = () => ({
-  id: 'e2b-session-123',
-  sandboxId: 'e2b-session-123',
+// Create a mock E2B sandbox that matches the real interface
+const createMockE2BSandbox = (sandboxId = 'e2b-session-123') => ({
+  sandboxId,
   runCode: vi.fn(),
   kill: vi.fn(),
-  close: vi.fn(),
-  // E2B SDK uses 'files' not 'fileSystem'
   files: {
     read: vi.fn(),
     write: vi.fn(),
@@ -25,8 +22,6 @@ const createMockSandbox = () => ({
     exists: vi.fn(),
     remove: vi.fn()
   },
-  commands: {},
-  // Mock PTY interface for interactive terminals
   pty: {
     create: vi.fn().mockResolvedValue({
       pid: 1234,
@@ -36,17 +31,7 @@ const createMockSandbox = () => ({
     sendInput: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn()
-  },
-  isRunning: true,
-  template: 'base',
-  metadata: {},
-  envVars: {},
-  cwd: '/code',
-  onStdout: vi.fn(),
-  onStderr: vi.fn(),
-  onExit: vi.fn(),
-  filesystem: {},
-  process: {}
+  }
 })
 
 describe('E2BProvider', () => {
@@ -56,13 +41,16 @@ describe('E2BProvider', () => {
     vi.stubEnv('E2B_API_KEY', 'e2b_test_1234567890abcdef1234567890abcdef12345678')
   })
 
-  describe('constructor', () => {
-    it('should create provider with default config', () => {
+  describe('Provider interface', () => {
+    it('should implement Provider interface correctly', () => {
       const provider = new E2BProvider({})
       
-      expect(provider.provider).toBe('e2b')
-      expect(provider.sandboxId).toBeDefined()
-      expect(typeof provider.sandboxId).toBe('string')
+      expect(provider.name).toBe('e2b')
+      expect(provider.sandbox).toBeDefined()
+      expect(typeof provider.sandbox.create).toBe('function')
+      expect(typeof provider.sandbox.getById).toBe('function')
+      expect(typeof provider.sandbox.list).toBe('function')
+      expect(typeof provider.sandbox.destroy).toBe('function')
     })
 
     it('should throw error without API key', () => {
@@ -73,430 +61,454 @@ describe('E2BProvider', () => {
       )
     })
 
-    it('should accept different runtimes', () => {
-      const provider = new E2BProvider({ runtime: 'node' })
-      expect(provider).toBeDefined()
+    it('should throw error with invalid API key format', () => {
+      vi.unstubAllEnvs()
+      vi.stubEnv('E2B_API_KEY', 'invalid_key_format')
+      
+      expect(() => new E2BProvider({})).toThrow(
+        'Invalid E2B API key format. E2B API keys should start with \'e2b_\'.'
+      )
     })
 
-    it('should accept python runtime', () => {
-      const provider = new E2BProvider({ runtime: 'python' })
-      expect(provider).toBeDefined()
+    it('should accept API key from config', () => {
+      vi.unstubAllEnvs()
+      
+      const provider = new E2BProvider({ 
+        apiKey: 'e2b_config_1234567890abcdef1234567890abcdef12345678' 
+      })
+      
+      expect(provider.name).toBe('e2b')
     })
   })
 
-  describe('doExecute', () => {
-    it('should execute Python code', async () => {
-      const mockExecution = {
-        logs: {
-          stdout: ['Hello World'],
-          stderr: []
-        },
-        error: null
-      }
-
-      const mockSandbox = createMockSandbox()
-      mockSandbox.runCode.mockResolvedValue(mockExecution)
-      
+  describe('sandbox.create()', () => {
+    it('should create new sandbox', async () => {
+      const mockE2BSandbox = createMockE2BSandbox()
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
+      vi.mocked(Sandbox.create).mockResolvedValue(mockE2BSandbox as any)
 
       const provider = new E2BProvider({})
-      const result = await provider.doExecute('print("Hello World")')
+      const sandbox = await provider.sandbox.create()
       
-      expect(result.stdout).toBe('Hello World')
-      expect(result.stderr).toBe('')
-      expect(result.exitCode).toBe(0)
-      expect(result.provider).toBe('e2b')
-      expect(result.executionTime).toBeGreaterThanOrEqual(0)
+      expect(sandbox.sandboxId).toBe('e2b-session-123')
+      expect(sandbox.provider).toBe('e2b')
+      expect(sandbox.filesystem).toBeDefined()
+      expect(sandbox.terminal).toBeDefined()
+      expect(typeof sandbox.runCode).toBe('function')
+      expect(typeof sandbox.runCommand).toBe('function')
+      expect(typeof sandbox.getInfo).toBe('function')
+      expect(typeof sandbox.kill).toBe('function')
     })
 
-    it('should execute code with different runtimes', async () => {
-      const mockExecution = {
-        logs: {
-          stdout: ['Hello World'],
-          stderr: []
-        },
-        error: null
-      }
-
-      const mockSandbox = createMockSandbox()
-      mockSandbox.runCode.mockResolvedValue(mockExecution)
-      
+    it('should create sandbox with custom options', async () => {
+      const mockE2BSandbox = createMockE2BSandbox()
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
+      vi.mocked(Sandbox.create).mockResolvedValue(mockE2BSandbox as any)
 
       const provider = new E2BProvider({})
-      const result = await provider.doExecute('console.log("test")', 'node')
+      const sandbox = await provider.sandbox.create({ 
+        runtime: 'python'
+      })
       
-      expect(result.stdout).toBe('Hello World')
-      expect(result.stderr).toBe('')
-      expect(result.exitCode).toBe(0)
+      expect(sandbox.provider).toBe('e2b')
     })
 
-    it('should handle E2B execution errors', async () => {
+    it('should reconnect to existing sandbox with sandboxId', async () => {
+      const mockE2BSandbox = createMockE2BSandbox('existing-sandbox-123')
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.connect).mockResolvedValue(mockE2BSandbox as any)
+
+      const provider = new E2BProvider({})
+      const sandbox = await provider.sandbox.create({ sandboxId: 'existing-sandbox-123' })
+      
+      expect(sandbox.sandboxId).toBe('existing-sandbox-123')
+      expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox-123', {
+        apiKey: 'e2b_test_1234567890abcdef1234567890abcdef12345678'
+      })
+    })
+
+    it('should handle E2B creation errors', async () => {
       const { Sandbox } = await import('@e2b/code-interpreter')
       vi.mocked(Sandbox.create).mockRejectedValue(new Error('E2B connection failed'))
 
       const provider = new E2BProvider({})
       
-      await expect(provider.doExecute('print("test")'))
-        .rejects.toThrow('Failed to initialize E2B session: E2B connection failed')
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        'Failed to create E2B sandbox: E2B connection failed'
+      )
     })
-  })
 
-  describe('doKill', () => {
-    it('should close E2B session', async () => {
-      const mockExecution = {
-        logs: {
-          stdout: ['test'],
-          stderr: []
-        },
-        error: null
-      }
-
-      const mockSandbox = createMockSandbox()
-      mockSandbox.runCode.mockResolvedValue(mockExecution)
-      
+    it('should handle authentication errors', async () => {
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
+      vi.mocked(Sandbox.create).mockRejectedValue(new Error('unauthorized API key'))
 
       const provider = new E2BProvider({})
       
-      // Initialize session by calling doExecute
-      await provider.doExecute('print("test")')
-      
-      await provider.doKill()
-      
-      expect(mockSandbox.kill).toHaveBeenCalled()
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        'E2B authentication failed. Please check your E2B_API_KEY environment variable.'
+      )
     })
 
-    it('should handle no active session', async () => {
-      const provider = new E2BProvider({})
-      
-      await expect(provider.doKill()).resolves.not.toThrow()
-    })
-  })
-
-  describe('doGetInfo', () => {
-    it('should return sandbox information', async () => {
-      const mockSandbox = createMockSandbox()
-      
+    it('should handle quota errors', async () => {
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
+      vi.mocked(Sandbox.create).mockRejectedValue(new Error('quota exceeded'))
 
       const provider = new E2BProvider({})
-      const info = await provider.doGetInfo()
       
-      expect(info.provider).toBe('e2b')
-      expect(info.runtime).toBe('python')
-      expect(info.status).toBe('running')
-      expect(info.metadata?.e2bSessionId).toBe(provider.sandboxId)
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        'E2B quota exceeded. Please check your usage at https://e2b.dev/'
+      )
     })
   })
 
-  describe('filesystem operations', () => {
-    let mockSandbox: ReturnType<typeof createMockSandbox>
+  describe('sandbox.getById()', () => {
+    it('should return existing sandbox from cache', async () => {
+      const mockE2BSandbox = createMockE2BSandbox('cached-sandbox-123')
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.create).mockResolvedValue(mockE2BSandbox as any)
+
+      const provider = new E2BProvider({})
+      
+      // Create sandbox first to cache it
+      await provider.sandbox.create()
+      
+      // Get it by ID
+      const found = await provider.sandbox.getById('cached-sandbox-123')
+      
+      expect(found).toBeDefined()
+      expect(found?.sandboxId).toBe('cached-sandbox-123')
+    })
+
+    it('should reconnect to sandbox not in cache', async () => {
+      const mockE2BSandbox = createMockE2BSandbox('remote-sandbox-456')
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.connect).mockResolvedValue(mockE2BSandbox as any)
+
+      const provider = new E2BProvider({})
+      const found = await provider.sandbox.getById('remote-sandbox-456')
+      
+      expect(found).toBeDefined()
+      expect(found?.sandboxId).toBe('remote-sandbox-456')
+      expect(Sandbox.connect).toHaveBeenCalledWith('remote-sandbox-456', {
+        apiKey: 'e2b_test_1234567890abcdef1234567890abcdef12345678'
+      })
+    })
+
+    it('should return null for non-existent sandbox', async () => {
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.connect).mockRejectedValue(new Error('Sandbox not found'))
+
+      const provider = new E2BProvider({})
+      const found = await provider.sandbox.getById('non-existent-sandbox')
+      
+      expect(found).toBeNull()
+    })
+  })
+
+  describe('sandbox.list()', () => {
+    it('should return empty list when no sandboxes exist', async () => {
+      const provider = new E2BProvider({})
+      const sandboxes = await provider.sandbox.list()
+      
+      expect(sandboxes).toEqual([])
+    })
+
+    it('should return active sandboxes', async () => {
+      const mockE2BSandbox1 = createMockE2BSandbox('sandbox-1')
+      const mockE2BSandbox2 = createMockE2BSandbox('sandbox-2')
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.create)
+        .mockResolvedValueOnce(mockE2BSandbox1 as any)
+        .mockResolvedValueOnce(mockE2BSandbox2 as any)
+
+      const provider = new E2BProvider({})
+      
+      // Create two sandboxes
+      await provider.sandbox.create()
+      await provider.sandbox.create()
+      
+      const sandboxes = await provider.sandbox.list()
+      
+      expect(sandboxes).toHaveLength(2)
+      expect(sandboxes[0].sandboxId).toBe('sandbox-1')
+      expect(sandboxes[1].sandboxId).toBe('sandbox-2')
+    })
+  })
+
+  describe('sandbox.destroy()', () => {
+    it('should destroy cached sandbox', async () => {
+      const mockE2BSandbox = createMockE2BSandbox('destroy-test-123')
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.create).mockResolvedValue(mockE2BSandbox as any)
+
+      const provider = new E2BProvider({})
+      
+      // Create sandbox first
+      await provider.sandbox.create()
+      
+      // Destroy it
+      await provider.sandbox.destroy('destroy-test-123')
+      
+      expect(mockE2BSandbox.kill).toHaveBeenCalled()
+      
+      // Should be removed from cache
+      const sandboxes = await provider.sandbox.list()
+      expect(sandboxes).toHaveLength(0)
+    })
+
+    it('should attempt to destroy non-cached sandbox', async () => {
+      const mockE2BSandbox = createMockE2BSandbox('remote-destroy-456')
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.connect).mockResolvedValue(mockE2BSandbox as any)
+
+      const provider = new E2BProvider({})
+      
+      // Destroy sandbox not in cache
+      await provider.sandbox.destroy('remote-destroy-456')
+      
+      expect(Sandbox.connect).toHaveBeenCalledWith('remote-destroy-456', {
+        apiKey: 'e2b_test_1234567890abcdef1234567890abcdef12345678'
+      })
+      expect(mockE2BSandbox.kill).toHaveBeenCalled()
+    })
+
+    it('should handle destroy errors gracefully', async () => {
+      const { Sandbox } = await import('@e2b/code-interpreter')
+      vi.mocked(Sandbox.connect).mockRejectedValue(new Error('Sandbox not found'))
+
+      const provider = new E2BProvider({})
+      
+      // Should not throw for non-existent sandbox
+      await expect(provider.sandbox.destroy('non-existent')).resolves.not.toThrow()
+    })
+  })
+
+  describe('Sandbox implementation', () => {
+    let mockE2BSandbox: ReturnType<typeof createMockE2BSandbox>
+    let sandbox: any
 
     beforeEach(async () => {
-      mockSandbox = createMockSandbox()
+      mockE2BSandbox = createMockE2BSandbox()
       const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
+      vi.mocked(Sandbox.create).mockResolvedValue(mockE2BSandbox as any)
+
+      const provider = new E2BProvider({})
+      sandbox = await provider.sandbox.create()
     })
 
-    describe('readFile', () => {
-      it('should read file contents', async () => {
-        mockSandbox.files.read.mockResolvedValue('Hello, World!')
+    describe('runCode()', () => {
+      it('should execute code and return result', async () => {
+        const mockExecution = {
+          logs: {
+            stdout: ['Hello World'],
+            stderr: []
+          },
+          error: null
+        }
+        mockE2BSandbox.runCode.mockResolvedValue(mockExecution)
 
-        const provider = new E2BProvider({})
-        const content = await provider.filesystem.readFile('/test/file.txt')
+        const result = await sandbox.runCode('print("Hello World")')
         
-        expect(content).toBe('Hello, World!')
-        expect(mockSandbox.files.read).toHaveBeenCalledWith('/test/file.txt', { format: 'text' })
+        expect(result.stdout).toBe('Hello World')
+        expect(result.stderr).toBe('')
+        expect(result.exitCode).toBe(0)
+        expect(result.provider).toBe('e2b')
+        expect(result.sandboxId).toBe('e2b-session-123')
+        expect(result.executionTime).toBeGreaterThanOrEqual(0)
       })
 
-      it('should handle file read errors', async () => {
-        mockSandbox.files.read.mockRejectedValue(new Error('File not found'))
+      it('should handle execution errors', async () => {
+        const mockExecution = {
+          logs: {
+            stdout: [],
+            stderr: ['Error: something went wrong']
+          },
+          error: new Error('Execution failed')
+        }
+        mockE2BSandbox.runCode.mockResolvedValue(mockExecution)
 
-        const provider = new E2BProvider({})
+        const result = await sandbox.runCode('invalid code')
         
-        await expect(provider.filesystem.readFile('/nonexistent.txt'))
-          .rejects.toThrow('Failed to read file: File not found')
-      })
-    })
-
-    describe('writeFile', () => {
-      it('should write file contents', async () => {
-        mockSandbox.files.write.mockResolvedValue(undefined)
-
-        const provider = new E2BProvider({})
-        await provider.filesystem.writeFile('/test/output.txt', 'Hello, World!')
-        
-        expect(mockSandbox.files.write).toHaveBeenCalledWith('/test/output.txt', 'Hello, World!')
+        expect(result.stdout).toBe('')
+        expect(result.stderr).toBe('Error: something went wrong')
+        expect(result.exitCode).toBe(1)
       })
 
-      it('should handle write errors', async () => {
-        mockSandbox.files.write.mockRejectedValue(new Error('Permission denied'))
+      it('should handle E2B SDK errors', async () => {
+        mockE2BSandbox.runCode.mockRejectedValue(new Error('E2B SDK error'))
 
-        const provider = new E2BProvider({})
-        
-        await expect(provider.filesystem.writeFile('/readonly.txt', 'content'))
-          .rejects.toThrow('Failed to write file: Permission denied')
-      })
-    })
-
-    describe('exists', () => {
-      it('should check if file exists', async () => {
-        mockSandbox.files.exists.mockResolvedValue(true)
-
-        const provider = new E2BProvider({})
-        const exists = await provider.filesystem.exists('/test/file.txt')
-        
-        expect(exists).toBe(true)
-        expect(mockSandbox.files.exists).toHaveBeenCalledWith('/test/file.txt')
-      })
-
-      it('should return false for non-existent files', async () => {
-        mockSandbox.files.exists.mockResolvedValue(false)
-
-        const provider = new E2BProvider({})
-        const exists = await provider.filesystem.exists('/nonexistent.txt')
-        
-        expect(exists).toBe(false)
-      })
-
-      it('should return false on error', async () => {
-        mockSandbox.files.exists.mockRejectedValue(new Error('Access denied'))
-
-        const provider = new E2BProvider({})
-        const exists = await provider.filesystem.exists('/protected.txt')
-        
-        expect(exists).toBe(false)
+        await expect(sandbox.runCode('print("test")')).rejects.toThrow(
+          'E2B execution failed: E2B SDK error'
+        )
       })
     })
 
-    describe('readdir', () => {
+    describe('runCommand()', () => {
+      it('should execute shell commands', async () => {
+        const mockExecution = {
+          logs: {
+            stdout: ['file1.txt\nfile2.txt'],
+            stderr: []
+          },
+          error: null
+        }
+        mockE2BSandbox.runCode.mockResolvedValue(mockExecution)
+
+        const result = await sandbox.runCommand('ls', ['-la'])
+        
+        expect(result.stdout).toBe('file1.txt\nfile2.txt')
+        expect(result.exitCode).toBe(0)
+        expect(mockE2BSandbox.runCode).toHaveBeenCalledWith(expect.stringContaining('ls -la'))
+      })
+
+      it('should handle command without args', async () => {
+        const mockExecution = {
+          logs: { stdout: ['output'], stderr: [] },
+          error: null
+        }
+        mockE2BSandbox.runCode.mockResolvedValue(mockExecution)
+
+        await sandbox.runCommand('pwd')
+        
+        expect(mockE2BSandbox.runCode).toHaveBeenCalledWith(expect.stringContaining('pwd'))
+      })
+    })
+
+    describe('getInfo()', () => {
+      it('should return sandbox information', async () => {
+        const info = await sandbox.getInfo()
+        
+        expect(info.id).toBe('e2b-session-123')
+        expect(info.provider).toBe('e2b')
+        expect(info.runtime).toBe('python')
+        expect(info.status).toBe('running')
+        expect(info.timeout).toBe(300000)
+        expect(info.metadata?.e2bSessionId).toBe('e2b-session-123')
+      })
+    })
+
+    describe('kill()', () => {
+      it('should kill the sandbox', async () => {
+        await sandbox.kill()
+        
+        expect(mockE2BSandbox.kill).toHaveBeenCalled()
+      })
+
+      it('should handle kill errors', async () => {
+        mockE2BSandbox.kill.mockRejectedValue(new Error('Kill failed'))
+
+        await expect(sandbox.kill()).rejects.toThrow(
+          'Failed to kill E2B session: Kill failed'
+        )
+      })
+    })
+
+    describe('filesystem', () => {
+      it('should read files', async () => {
+        mockE2BSandbox.files.read.mockResolvedValue('file content')
+
+        const content = await sandbox.filesystem.readFile('/test.txt')
+        
+        expect(content).toBe('file content')
+        expect(mockE2BSandbox.files.read).toHaveBeenCalledWith('/test.txt', { format: 'text' })
+      })
+
+      it('should write files', async () => {
+        await sandbox.filesystem.writeFile('/test.txt', 'content')
+        
+        expect(mockE2BSandbox.files.write).toHaveBeenCalledWith('/test.txt', 'content')
+      })
+
+      it('should create directories', async () => {
+        await sandbox.filesystem.mkdir('/newdir')
+        
+        expect(mockE2BSandbox.files.makeDir).toHaveBeenCalledWith('/newdir')
+      })
+
       it('should list directory contents', async () => {
         const mockEntries = [
-          {
-            name: 'file1.txt',
-            path: '/test/file1.txt',
-            isDir: false,
-            size: 1024,
-            lastModified: Date.now()
-          },
-          {
-            name: 'subdir',
-            path: '/test/subdir',
-            isDir: true,
-            size: 0,
-            lastModified: Date.now()
-          }
+          { name: 'file.txt', path: '/file.txt', isDir: false, size: 100, lastModified: Date.now() }
         ]
+        mockE2BSandbox.files.list.mockResolvedValue(mockEntries)
 
-        mockSandbox.files.list.mockResolvedValue(mockEntries)
-
-        const provider = new E2BProvider({})
-        const entries = await provider.filesystem.readdir('/test')
+        const entries = await sandbox.filesystem.readdir('/')
         
-        expect(entries).toHaveLength(2)
-        expect(entries[0].name).toBe('file1.txt')
+        expect(entries).toHaveLength(1)
+        expect(entries[0].name).toBe('file.txt')
         expect(entries[0].isDirectory).toBe(false)
-        expect(entries[1].name).toBe('subdir')
-        expect(entries[1].isDirectory).toBe(true)
-        expect(mockSandbox.files.list).toHaveBeenCalledWith('/test')
       })
 
-      it('should handle readdir errors', async () => {
-        mockSandbox.files.list.mockRejectedValue(new Error('Directory not found'))
+      it('should check file existence', async () => {
+        mockE2BSandbox.files.exists.mockResolvedValue(true)
 
-        const provider = new E2BProvider({})
+        const exists = await sandbox.filesystem.exists('/test.txt')
         
-        await expect(provider.filesystem.readdir('/nonexistent'))
-          .rejects.toThrow('Failed to read directory: Directory not found')
+        expect(exists).toBe(true)
+      })
+
+      it('should remove files', async () => {
+        await sandbox.filesystem.remove('/test.txt')
+        
+        expect(mockE2BSandbox.files.remove).toHaveBeenCalledWith('/test.txt')
       })
     })
 
-    describe('mkdir', () => {
-      it('should create directory', async () => {
-        mockSandbox.files.makeDir.mockResolvedValue(undefined)
-
-        const provider = new E2BProvider({})
-        await provider.filesystem.mkdir('/test/newdir')
-        
-        expect(mockSandbox.files.makeDir).toHaveBeenCalledWith('/test/newdir')
-      })
-
-      it('should handle mkdir errors', async () => {
-        mockSandbox.files.makeDir.mockRejectedValue(new Error('Permission denied'))
-
-        const provider = new E2BProvider({})
-        
-        await expect(provider.filesystem.mkdir('/readonly/dir'))
-          .rejects.toThrow('Failed to create directory: Permission denied')
-      })
-    })
-
-    describe('remove', () => {
-      it('should remove file or directory', async () => {
-        mockSandbox.files.remove.mockResolvedValue(undefined)
-
-        const provider = new E2BProvider({})
-        await provider.filesystem.remove('/test/file.txt')
-        
-        expect(mockSandbox.files.remove).toHaveBeenCalledWith('/test/file.txt')
-      })
-
-      it('should handle remove errors', async () => {
-        mockSandbox.files.remove.mockRejectedValue(new Error('File not found'))
-
-        const provider = new E2BProvider({})
-        
-        await expect(provider.filesystem.remove('/nonexistent.txt'))
-          .rejects.toThrow('Failed to remove: File not found')
-      })
-    })
-  })
-
-  describe('terminal operations', () => {
-    let mockSandbox: ReturnType<typeof createMockSandbox>
-
-    beforeEach(async () => {
-      mockSandbox = createMockSandbox()
-      const { Sandbox } = await import('@e2b/code-interpreter')
-      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any)
-    })
-
-    describe('create', () => {
-      it('should create a terminal session', async () => {
+    describe('terminal', () => {
+      it('should create terminal sessions', async () => {
         const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
+        mockE2BSandbox.pty.create.mockResolvedValue(mockPtyHandle)
 
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create({ command: 'bash' })
+        const terminal = await sandbox.terminal.create({ command: 'bash' })
         
         expect(terminal.pid).toBe(1234)
         expect(terminal.command).toBe('bash')
         expect(terminal.status).toBe('running')
         expect(terminal.cols).toBe(80)
         expect(terminal.rows).toBe(24)
-        expect(terminal.write).toBeDefined()
-        expect(terminal.resize).toBeDefined()
-        expect(terminal.kill).toBeDefined()
       })
 
-      it('should default to bash', async () => {
+      it('should list terminal sessions', async () => {
         const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
+        mockE2BSandbox.pty.create.mockResolvedValue(mockPtyHandle)
 
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create()
+        await sandbox.terminal.create()
+        const terminals = await sandbox.terminal.list()
         
-        expect(terminal.command).toBe('bash')
+        expect(terminals).toHaveLength(1)
+        expect(terminals[0].pid).toBe(1234)
       })
 
-      it('should support custom dimensions', async () => {
+      it('should write to terminal', async () => {
         const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
+        mockE2BSandbox.pty.create.mockResolvedValue(mockPtyHandle)
 
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create({ cols: 120, rows: 40 })
+        const terminal = await sandbox.terminal.create()
+        await terminal.write('echo hello')
         
-        expect(terminal.cols).toBe(120)
-        expect(terminal.rows).toBe(40)
-        expect(mockSandbox.pty.create).toHaveBeenCalledWith({ cols: 120, rows: 40, onData: expect.any(Function) })
-      })
-    })
-
-    describe('terminal session methods', () => {
-      it('should write data to terminal', async () => {
-        const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
-
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create()
-        
-        await terminal.write('echo "Hello"')
-        
-        expect(mockSandbox.pty.sendInput).toHaveBeenCalledWith(1234, new TextEncoder().encode('echo "Hello"'))
-      })
-
-      it('should write binary data to terminal', async () => {
-        const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
-
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create()
-        
-        const binaryData = new Uint8Array([1, 2, 3])
-        await terminal.write(binaryData)
-        
-        expect(mockSandbox.pty.sendInput).toHaveBeenCalledWith(1234, binaryData)
-      })
-
-      it('should handle write errors', async () => {
-        const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
-        mockSandbox.pty.sendInput.mockRejectedValue(new Error('PTY send failed'))
-
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create()
-        
-        await expect(terminal.write('invalid'))
-          .rejects.toThrow('PTY send failed')
+        expect(mockE2BSandbox.pty.sendInput).toHaveBeenCalledWith(1234, new TextEncoder().encode('echo hello'))
       })
 
       it('should resize terminal', async () => {
         const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
+        mockE2BSandbox.pty.create.mockResolvedValue(mockPtyHandle)
 
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create()
-        
+        const terminal = await sandbox.terminal.create()
         await terminal.resize(100, 50)
         
-        expect(mockSandbox.pty.resize).toHaveBeenCalledWith(1234, { cols: 100, rows: 50 })
+        expect(mockE2BSandbox.pty.resize).toHaveBeenCalledWith(1234, { cols: 100, rows: 50 })
         expect(terminal.cols).toBe(100)
         expect(terminal.rows).toBe(50)
       })
 
-      it('should kill terminal session', async () => {
+      it('should kill terminal', async () => {
         const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
+        mockE2BSandbox.pty.create.mockResolvedValue(mockPtyHandle)
 
-        const provider = new E2BProvider({})
-        const terminal = await provider.terminal.create()
-        
+        const terminal = await sandbox.terminal.create()
         await terminal.kill()
         
-        expect(mockSandbox.pty.kill).toHaveBeenCalledWith(1234)
+        expect(mockE2BSandbox.pty.kill).toHaveBeenCalledWith(1234)
         expect(terminal.status).toBe('exited')
-      })
-    })
-
-    describe('list', () => {
-      it('should return empty list when no terminals exist', async () => {
-        const provider = new E2BProvider({})
-        const terminals = await provider.terminal.list()
-        
-        expect(terminals).toEqual([])
-      })
-
-      it('should return active terminals with methods', async () => {
-        const mockPtyHandle = { pid: 1234 }
-        mockSandbox.pty.create.mockResolvedValue(mockPtyHandle)
-
-        const provider = new E2BProvider({})
-        await provider.terminal.create({ command: 'bash' })
-        
-        const terminals = await provider.terminal.list()
-        
-        expect(terminals).toHaveLength(1)
-        expect(terminals[0].pid).toBe(1234)
-        expect(terminals[0].command).toBe('bash')
-        expect(terminals[0].status).toBe('running')
-        expect(terminals[0].write).toBeDefined()
-        expect(terminals[0].resize).toBeDefined()
-        expect(terminals[0].kill).toBeDefined()
       })
     })
   })
@@ -508,15 +520,16 @@ describe('e2b factory function', () => {
   })
 
   it('should create E2B provider with default config', () => {
-    const sandbox = e2b()
+    const provider = e2b()
     
-    expect(sandbox).toBeInstanceOf(E2BProvider)
-    expect(sandbox.provider).toBe('e2b')
+    expect(provider).toBeInstanceOf(E2BProvider)
+    expect(provider.name).toBe('e2b')
   })
 
   it('should create E2B provider with custom config', () => {
-    const sandbox = e2b({ timeout: 60000 })
+    const provider = e2b({ timeout: 60000, runtime: 'node' })
     
-    expect(sandbox).toBeInstanceOf(E2BProvider)
+    expect(provider).toBeInstanceOf(E2BProvider)
+    expect(provider.name).toBe('e2b')
   })
 })

@@ -1,18 +1,13 @@
 /**
- * ComputeSDK Types
+ * ComputeSDK Core Types
  * 
- * This file contains all the type definitions for the ComputeSDK.
+ * Clean Provider/Sandbox separation architecture
  */
 
 /**
  * Supported runtime environments
  */
 export type Runtime = 'node' | 'python';
-
-/**
- * Supported provider types
- */
-export type ProviderType = 'e2b' | 'vercel' | 'daytona' | 'auto';
 
 /**
  * Sandbox status types
@@ -58,38 +53,6 @@ export interface SandboxInfo {
 }
 
 /**
- * Configuration for container-based providers
- */
-export interface ContainerConfig {
-  /** Docker image to use */
-  image: string;
-  /** Command to run in the container */
-  command?: string[];
-  /** Environment variables for the container */
-  env?: Record<string, string>;
-  /** Ports to expose from the container */
-  ports?: number[];
-  /** Working directory in the container */
-  workdir?: string;
-}
-
-/**
- * Configuration for creating a compute sandbox
- */
-export interface SandboxConfig {
-  /** Provider to use for execution */
-  provider?: ProviderType;
-  /** Runtime environment to use */
-  runtime?: Runtime;
-  /** Container configuration if using container-based provider */
-  container?: string | ContainerConfig;
-  /** Execution timeout in milliseconds */
-  timeout?: number;
-  /** Existing sandbox ID to reconnect to */
-  sandboxId?: string;
-}
-
-/**
  * File system entry information
  */
 export interface FileEntry {
@@ -103,20 +66,6 @@ export interface FileEntry {
   size: number;
   /** Last modified timestamp */
   lastModified: Date;
-}
-
-/**
- * Basic terminal session information
- */
-export interface TerminalSession {
-  /** Terminal process ID */
-  pid: number;
-  /** Terminal command */
-  command: string;
-  /** Terminal status */
-  status: 'running' | 'exited';
-  /** Exit code (if exited) */
-  exitCode?: number;
 }
 
 /**
@@ -138,179 +87,31 @@ export interface SandboxFileSystem {
 }
 
 /**
- * Terminal operations interface for managing terminal sessions in a sandbox
+ * Terminal session information
  */
-export interface SandboxTerminal {
-  /** Create a new interactive terminal session */
-  create(options?: TerminalCreateOptions): Promise<InteractiveTerminalSession>;
-  /** List active terminal sessions */
-  list(): Promise<InteractiveTerminalSession[]>;
-}
-
-/**
- * Base provider specification that all providers must implement
- */
-export interface BaseComputeSpecification {
-  /** Version of the specification */
-  specificationVersion: 'v1';
-  /** Provider identifier */
-  provider: string;
-  /** Sandbox identifier */
-  sandboxId: string;
-
-  /** Execute code in the sandbox */
-  doExecute(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  /** Execute code in a runtime environment */
-  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  /** Execute shell commands */
-  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
-  /** Kill the sandbox */
-  doKill(): Promise<void>;
-  /** Get information about the sandbox */
-  doGetInfo(): Promise<SandboxInfo>;
-}
-
-/**
- * Provider specification with filesystem support
- */
-export interface FilesystemComputeSpecification extends BaseComputeSpecification {
-  /** File system operations */
-  readonly filesystem: SandboxFileSystem;
-}
-
-/**
- * Provider specification with terminal support
- */
-export interface TerminalComputeSpecification extends BaseComputeSpecification {
-  /** Terminal operations */
-  readonly terminal: SandboxTerminal;
-}
-
-/**
- * Provider specification with full filesystem and terminal support
- */
-export interface FullComputeSpecification extends FilesystemComputeSpecification, TerminalComputeSpecification {}
-
-/**
- * Union type for all possible provider specifications
- */
-export type ComputeSpecification = BaseComputeSpecification | FilesystemComputeSpecification | TerminalComputeSpecification | FullComputeSpecification;
-
-/**
- * Base compute sandbox interface that all providers expose
- */
-export interface BaseComputeSandbox {
-  /** Provider identifier */
-  provider: string;
-  /** Sandbox identifier */
-  sandboxId: string;
-
-  /** Execute code in the sandbox */
-  execute(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  /** Execute code in a runtime environment */
-  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  /** Execute shell commands */
-  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
-  /** Kill the sandbox */
-  kill(): Promise<void>;
-  /** Get information about the sandbox */
-  getInfo(): Promise<SandboxInfo>;
-}
-
-/**
- * Compute sandbox with filesystem support
- */
-export interface FilesystemComputeSandbox extends BaseComputeSandbox {
-  /** File system operations */
-  readonly filesystem: SandboxFileSystem;
-}
-
-/**
- * Compute sandbox with terminal support
- */
-export interface TerminalComputeSandbox extends BaseComputeSandbox {
-  /** Terminal operations */
-  readonly terminal: SandboxTerminal;
-}
-
-/**
- * Compute sandbox with full filesystem and terminal support
- */
-export interface FullComputeSandbox extends FilesystemComputeSandbox, TerminalComputeSandbox {}
-
-/**
- * Union type for all possible compute sandbox types
- */
-export type ComputeSandbox = BaseComputeSandbox | FilesystemComputeSandbox | TerminalComputeSandbox | FullComputeSandbox;
-
-/**
- * Parameters for the executeSandbox function
- */
-export interface ExecuteSandboxParams {
-  /** Provider to execute with */
-  provider: ComputeSandbox;
-  /** Code to execute */
-  code: string;
-  /** Runtime to use */
-  runtime?: Runtime;
-}
-
-/**
- * Provider registry configuration
- */
-export interface ProviderRegistry {
-  /** Get a sandbox by ID */
-  sandbox(id: string): ComputeSandbox;
-}
-
-/**
- * Provider factory function type for base providers
- */
-export type BaseProviderFactory = (config?: any) => BaseComputeSandbox;
-
-/**
- * Provider factory function type for filesystem providers
- */
-export type FilesystemProviderFactory = (config?: any) => FilesystemComputeSandbox;
-
-/**
- * Provider factory function type for terminal providers
- */
-export type TerminalProviderFactory = (config?: any) => TerminalComputeSandbox;
-
-/**
- * Provider factory function type for full-featured providers
- */
-export type FullProviderFactory = (config?: any) => FullComputeSandbox;
-
-/**
- * Union type for all provider factory types
- */
-export type ProviderFactory = BaseProviderFactory | FilesystemProviderFactory | TerminalProviderFactory | FullProviderFactory;
-
-/**
- * Provider registry map type
- */
-export type ProviderMap = Record<string, ProviderFactory>;
-
-/**
- * Terminal session with PTY (pseudo-terminal) support for interactive use
- */
-export interface InteractiveTerminalSession extends TerminalSession {
+export interface TerminalSession {
+  /** Terminal process ID */
+  pid: number;
+  /** Terminal command */
+  command: string;
+  /** Terminal status */
+  status: 'running' | 'exited';
+  /** Exit code (if exited) */
+  exitCode?: number;
   /** Terminal columns */
   cols: number;
   /** Terminal rows */
   rows: number;
-  /** Data stream handler */
-  onData?: (data: Uint8Array) => void;
-  /** Exit handler */
-  onExit?: (exitCode: number) => void;
   /** Write data to this terminal session */
   write(data: Uint8Array | string): Promise<void>;
   /** Resize this terminal session */
   resize(cols: number, rows: number): Promise<void>;
   /** Kill this terminal session */
   kill(): Promise<void>;
+  /** Data stream handler */
+  onData?: (data: Uint8Array) => void;
+  /** Exit handler */
+  onExit?: (exitCode: number) => void;
 }
 
 /**
@@ -328,37 +129,129 @@ export interface TerminalCreateOptions {
 }
 
 /**
- * Server adapter request for unified compute operations
+ * Terminal operations interface for managing terminal sessions in a sandbox
  */
-export interface ComputeRequest {
-  /** Type of operation to perform */
-  operation: 'sandbox' | 'filesystem';
-  /** Specific action within the operation */
-  action: string;
-  /** Operation-specific payload data */
-  payload: Record<string, any>;
-  /** Optional sandbox ID for persistent sessions */
-  sandboxId?: string;
-  /** Optional provider to use */
-  provider?: ProviderType;
-  /** Optional runtime environment */
-  runtime?: Runtime;
+export interface SandboxTerminal {
+  /** Create a new interactive terminal session */
+  create(options?: TerminalCreateOptions): Promise<TerminalSession>;
+  /** List active terminal sessions */
+  list(): Promise<TerminalSession[]>;
+}
+
+// ============================================================================
+// CORE ARCHITECTURE: Provider/Sandbox Separation
+// ============================================================================
+
+/**
+ * Base sandbox interface - what developers interact with
+ */
+export interface Sandbox {
+  /** Unique identifier for the sandbox */
+  readonly sandboxId: string;
+  /** Provider that created this sandbox */
+  readonly provider: string;
+
+  /** Execute code in the sandbox */
+  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
+  /** Execute shell commands */
+  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
+  /** Get information about the sandbox */
+  getInfo(): Promise<SandboxInfo>;
+  /** Kill the sandbox */
+  kill(): Promise<void>;
+
+  /** File system operations */
+  readonly filesystem: SandboxFileSystem;
+  /** Terminal operations */
+  readonly terminal: SandboxTerminal;
 }
 
 /**
- * Server adapter response for unified compute operations
+ * Provider sandbox management interface
  */
-export interface ComputeResponse {
-  /** Whether the operation was successful */
-  success: boolean;
-  /** Operation result data (if successful) */
-  data?: any;
-  /** Error message (if failed) */
-  error?: string;
-  /** ID of the sandbox that handled the operation */
-  sandboxId: string;
-  /** Provider that handled the operation */
-  provider: string;
-  /** Execution time in milliseconds */
-  executionTime?: number;
+export interface ProviderSandboxManager {
+  /** Create a new sandbox */
+  create(options?: CreateSandboxOptions): Promise<Sandbox>;
+  /** Get an existing sandbox by ID */
+  getById(sandboxId: string): Promise<Sandbox | null>;
+  /** List all active sandboxes */
+  list(): Promise<Sandbox[]>;
+  /** Destroy a sandbox */
+  destroy(sandboxId: string): Promise<void>;
+}
+
+/**
+ * Provider interface - creates and manages sandboxes
+ */
+export interface Provider {
+  /** Provider name/type */
+  readonly name: string;
+  
+  /** Sandbox management operations */
+  readonly sandbox: ProviderSandboxManager;
+}
+
+/**
+ * Options for creating a sandbox
+ */
+export interface CreateSandboxOptions {
+  /** Runtime environment */
+  runtime?: Runtime;
+  /** Execution timeout in milliseconds */
+  timeout?: number;
+  /** Custom sandbox ID (if supported by provider) */
+  sandboxId?: string;
+}
+
+// ============================================================================
+// COMPUTE SINGLETON API
+// ============================================================================
+
+/**
+ * Parameters for compute.sandbox.create()
+ */
+export interface CreateSandboxParams {
+  /** Provider instance to use */
+  provider: Provider;
+  /** Optional sandbox creation options */
+  options?: CreateSandboxOptions;
+}
+
+/**
+ * Configuration for the compute singleton
+ */
+export interface ComputeConfig {
+  /** Default provider to use when none is specified */
+  provider: Provider;
+}
+
+/**
+ * Parameters for compute.sandbox.create() with optional provider
+ */
+export interface CreateSandboxParamsWithOptionalProvider {
+  /** Provider instance to use (optional if default is set) */
+  provider?: Provider;
+  /** Optional sandbox creation options */
+  options?: CreateSandboxOptions;
+}
+
+/**
+ * Compute singleton interface
+ */
+export interface ComputeAPI {
+  /** Configuration management */
+  setConfig(config: ComputeConfig): void;
+  getConfig(): ComputeConfig | null;
+  clearConfig(): void;
+  
+  sandbox: {
+    /** Create a sandbox from a provider (or default provider if configured) */
+    create(params: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox>;
+    /** Get an existing sandbox by ID from a provider (or default provider if configured) */
+    getById(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null>;
+    /** List all active sandboxes from a provider (or default provider if configured) */
+    list(provider?: Provider): Promise<Sandbox[]>;
+    /** Destroy a sandbox via a provider (or default provider if configured) */
+    destroy(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<void>;
+  };
 }
