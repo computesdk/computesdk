@@ -9,6 +9,7 @@ export const POST: APIRoute = async ({ request }) => {
     const computeRequest = await request.json();
     const response = await handleComputeRequest({
       request: computeRequest,
+      // @ts-ignore - Example only, provider would be e2b() | vercel() | daytona()
       provider: undefined // e2b() | vercel() | daytona()
     });
 

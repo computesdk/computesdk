@@ -7,8 +7,10 @@ import { handleComputeRequest } from "computesdk";
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const computeRequest = await request.json();
+    // @ts-ignore - Example only, provider would be e2b() | vercel() | daytona()
     const response = await handleComputeRequest({
       request: computeRequest,
+      // @ts-ignore - Example only, provider would be e2b() | vercel() | daytona()
       provider: undefined // e2b() | vercel() | daytona()
     });
 
