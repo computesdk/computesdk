@@ -38,7 +38,14 @@ async function main() {
   
   try {
     // Configure compute with Vercel provider
-    compute.setConfig({ provider: vercel({ runtime: 'node' }) });
+    compute.setConfig({ 
+      provider: vercel({ 
+        token: process.env.VERCEL_TOKEN,
+        teamId: process.env.VERCEL_TEAM_ID,
+        projectId: process.env.VERCEL_PROJECT_ID,
+        runtime: 'node' 
+      }) 
+    });
     
     // Create sandbox using compute singleton
     const sandbox = await compute.sandbox.create({});

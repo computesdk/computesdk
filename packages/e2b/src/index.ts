@@ -118,9 +118,9 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       },
 
       list: async (_config: E2BConfig) => {
-        // E2B doesn't have a native list API, so we return empty array
-        // In a real implementation, you might want to store sandbox IDs in a database
-        return [];
+        throw new Error(
+          `E2B provider does not support listing sandboxes. E2B sandboxes are managed individually and don't have a native list API. Consider using a provider with persistent sandbox management or implement your own tracking system.`
+        );
       },
 
       destroy: async (config: E2BConfig, sandboxId: string) => {
@@ -290,9 +290,9 @@ sys.exit(result.returncode)
         },
 
         list: async (sandbox: E2BSandbox): Promise<TerminalSession[]> => {
-          // E2B doesn't have a native list terminals API
-          // In a real implementation, you might want to track active terminals
-          return [];
+          throw new Error(
+            `E2B provider does not support listing active terminals. E2B terminals are managed individually through the PTY interface. Create terminals as needed using terminal.create().`
+          );
         }
       }
     }

@@ -32,7 +32,7 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   destroy: (config: TConfig, sandboxId: string) => Promise<void>;
   
   // Instance operations (map to individual Sandbox methods)
-  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime) => Promise<ExecutionResult>;
+  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<ExecutionResult>;
   runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   
@@ -205,7 +205,7 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
   }
 
   async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
-    return await this.methods.runCode(this.sandbox, code, runtime);
+    return await this.methods.runCode(this.sandbox, code, runtime, this.config);
   }
 
   async runCommand(command: string, args?: string[]): Promise<ExecutionResult> {

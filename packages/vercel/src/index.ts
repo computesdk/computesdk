@@ -25,27 +25,7 @@ export interface VercelConfig {
   timeout?: number;
 }
 
-/**
- * Helper to get command output from Vercel SDK streams
- */
-async function getCommandOutput(stream: any): Promise<string> {
-  if (!stream) return '';
-  
-  // Handle different stream types from Vercel SDK
-  if (typeof stream === 'function') {
-    try {
-      return await stream() || '';
-    } catch (error) {
-      return '';
-    }
-  }
-  
-  if (typeof stream === 'string') {
-    return stream;
-  }
-  
-  return '';
-}
+
 
 /**
  * Create a Vercel provider instance using the factory pattern
@@ -86,18 +66,14 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           let sandbox: VercelSandbox;
 
           if (options?.sandboxId) {
-            // Reconnect to existing Vercel sandbox
-            sandbox = await VercelSandbox.get({
-              sandboxId: options.sandboxId,
-              token,
-              teamId,
-              projectId,
-            });
+            // Vercel doesn't support reconnecting to existing sandboxes
+            // Each sandbox is ephemeral and must be created fresh
+            throw new Error(
+              `Vercel provider does not support reconnecting to existing sandboxes. Vercel sandboxes are ephemeral and must be created fresh each time.`
+            );
           } else {
-            // Create new Vercel sandbox
+            // Create new Vercel sandbox using the correct API
             sandbox = await VercelSandbox.create({
-              runtime: runtime === 'python' ? 'python3.13' : 'node22',
-              timeout,
               token,
               teamId,
               projectId,
@@ -106,7 +82,7 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
 
           return {
             sandbox,
-            sandboxId: `vercel-${Date.now()}`
+            sandboxId: sandbox.sandboxId
           };
         } catch (error) {
           if (error instanceof Error) {
@@ -151,9 +127,9 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       },
 
       list: async (_config: VercelConfig) => {
-        // Vercel doesn't have a native list API, so we return empty array
-        // In a real implementation, you might want to store sandbox IDs in a database
-        return [];
+        throw new Error(
+          `Vercel provider does not support listing sandboxes. Vercel sandboxes are ephemeral and designed for single-use execution. Consider using a provider with persistent sandbox management like E2B.`
+        );
       },
 
       destroy: async (config: VercelConfig, sandboxId: string) => {
@@ -176,29 +152,44 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime, config?: VercelConfig): Promise<ExecutionResult> => {
         const startTime = Date.now();
         
         try {
-          let result;
+          // Use provided runtime or fall back to config default
+          const effectiveRuntime = runtime || config?.runtime || 'node';
+          let command;
           
-          if (runtime === 'python') {
+          if (effectiveRuntime === 'python') {
             // Execute Python code
-            result = await sandbox.runCommand('python3', ['-c', code]);
+            command = await sandbox.runCommand('python3', ['-c', code]);
           } else {
-            // Execute Node.js code
-            result = await sandbox.runCommand('node', ['-e', code]);
+            // Execute Node.js code  
+            command = await sandbox.runCommand('node', ['-e', code]);
           }
 
-          const stdout = await getCommandOutput(result.stdout);
-          const stderr = await getCommandOutput(result.stderr);
+          // Wait for command to complete and get exit code
+          const finishedCommand = await command.wait();
+
+          // Use single logs() iteration to avoid "multiple consumers" warning
+          let stdout = '';
+          let stderr = '';
+          
+          // Single iteration through logs to collect both stdout and stderr
+          for await (const log of finishedCommand.logs()) {
+            if (log.stream === 'stdout') {
+              stdout += log.data;
+            } else if (log.stream === 'stderr') {
+              stderr += log.data;
+            }
+          }
 
           return {
             stdout,
             stderr,
-            exitCode: result.exitCode || 0,
+            exitCode: finishedCommand.exitCode,
             executionTime: Date.now() - startTime,
-            sandboxId: 'vercel-unknown',
+            sandboxId: sandbox.sandboxId,
             provider: 'vercel'
           };
         } catch (error) {
@@ -212,16 +203,29 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
         const startTime = Date.now();
 
         try {
-          const result = await sandbox.runCommand(command, args);
-          const stdout = await getCommandOutput(result.stdout);
-          const stderr = await getCommandOutput(result.stderr);
+          const cmd = await sandbox.runCommand(command, args);
+          
+          // Wait for command to complete and get exit code
+          const finishedCommand = await cmd.wait();
+
+          // Use logs() iterator to avoid "multiple consumers" warning
+          let stdout = '';
+          let stderr = '';
+          
+          for await (const log of finishedCommand.logs()) {
+            if (log.stream === 'stdout') {
+              stdout += log.data;
+            } else if (log.stream === 'stderr') {
+              stderr += log.data;
+            }
+          }
 
           return {
             stdout,
             stderr,
-            exitCode: result.exitCode || 0,
+            exitCode: finishedCommand.exitCode,
             executionTime: Date.now() - startTime,
-            sandboxId: 'vercel-unknown',
+            sandboxId: sandbox.sandboxId,
             provider: 'vercel'
           };
         } catch (error) {
@@ -248,38 +252,81 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       // Optional filesystem methods - Vercel has shell-based filesystem support
       filesystem: {
         readFile: async (sandbox: VercelSandbox, path: string): Promise<string> => {
-          const result = await sandbox.runCommand('cat', [path]);
-          const content = await getCommandOutput(result.stdout);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to read file ${path}: ${await getCommandOutput(result.stderr)}`);
+          const cmd = await sandbox.runCommand('cat', [path]);
+          const finishedCommand = await cmd.wait();
+          
+          if (finishedCommand.exitCode !== 0) {
+            let stderr = '';
+            for await (const log of finishedCommand.logs()) {
+              if (log.stream === 'stderr') {
+                stderr += log.data;
+              }
+            }
+            throw new Error(`Failed to read file ${path}: ${stderr}`);
+          }
+          
+          let content = '';
+          for await (const log of finishedCommand.logs()) {
+            if (log.stream === 'stdout') {
+              content += log.data;
+            }
           }
           return content;
         },
 
         writeFile: async (sandbox: VercelSandbox, path: string, content: string): Promise<void> => {
-          const result = await sandbox.runCommand('sh', ['-c', `echo ${JSON.stringify(content)} > ${JSON.stringify(path)}`]);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to write file ${path}: ${await getCommandOutput(result.stderr)}`);
+          const cmd = await sandbox.runCommand('sh', ['-c', `echo ${JSON.stringify(content)} > ${JSON.stringify(path)}`]);
+          const finishedCommand = await cmd.wait();
+          
+          if (finishedCommand.exitCode !== 0) {
+            let stderr = '';
+            for await (const log of finishedCommand.logs()) {
+              if (log.stream === 'stderr') {
+                stderr += log.data;
+              }
+            }
+            throw new Error(`Failed to write file ${path}: ${stderr}`);
           }
         },
 
         mkdir: async (sandbox: VercelSandbox, path: string): Promise<void> => {
-          const result = await sandbox.runCommand('mkdir', ['-p', path]);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to create directory ${path}: ${await getCommandOutput(result.stderr)}`);
+          const cmd = await sandbox.runCommand('mkdir', ['-p', path]);
+          const finishedCommand = await cmd.wait();
+          
+          if (finishedCommand.exitCode !== 0) {
+            let stderr = '';
+            for await (const log of finishedCommand.logs()) {
+              if (log.stream === 'stderr') {
+                stderr += log.data;
+              }
+            }
+            throw new Error(`Failed to create directory ${path}: ${stderr}`);
           }
         },
 
         readdir: async (sandbox: VercelSandbox, path: string): Promise<FileEntry[]> => {
-          const result = await sandbox.runCommand('ls', ['-la', path]);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to list directory ${path}: ${await getCommandOutput(result.stderr)}`);
-          }
-
-          const output = await getCommandOutput(result.stdout);
-          const lines = output.split('\n').filter(line => line.trim() && !line.startsWith('total'));
+          const cmd = await sandbox.runCommand('ls', ['-la', path]);
+          const finishedCommand = await cmd.wait();
           
-          return lines.map(line => {
+          let stdout = '';
+          let stderr = '';
+          
+          // Single iteration through logs to collect both stdout and stderr
+          for await (const log of finishedCommand.logs()) {
+            if (log.stream === 'stdout') {
+              stdout += log.data;
+            } else if (log.stream === 'stderr') {
+              stderr += log.data;
+            }
+          }
+          
+          if (finishedCommand.exitCode !== 0) {
+            throw new Error(`Failed to list directory ${path}: ${stderr}`);
+          }
+          
+          const lines = (stdout || '').split('\n').filter((line: string) => line.trim() && !line.startsWith('total'));
+          
+          return lines.map((line: string) => {
             const parts = line.trim().split(/\s+/);
             const name = parts[parts.length - 1];
             const isDirectory = line.startsWith('d');
@@ -295,14 +342,23 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
         },
 
         exists: async (sandbox: VercelSandbox, path: string): Promise<boolean> => {
-          const result = await sandbox.runCommand('test', ['-e', path]);
-          return result.exitCode === 0;
+          const cmd = await sandbox.runCommand('test', ['-e', path]);
+          const finishedCommand = await cmd.wait();
+          return finishedCommand.exitCode === 0; // Exit code 0 means file exists
         },
 
         remove: async (sandbox: VercelSandbox, path: string): Promise<void> => {
-          const result = await sandbox.runCommand('rm', ['-rf', path]);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to remove ${path}: ${await getCommandOutput(result.stderr)}`);
+          const cmd = await sandbox.runCommand('rm', ['-rf', path]);
+          const finishedCommand = await cmd.wait();
+          
+          if (finishedCommand.exitCode !== 0) {
+            let stderr = '';
+            for await (const log of finishedCommand.logs()) {
+              if (log.stream === 'stderr') {
+                stderr += log.data;
+              }
+            }
+            throw new Error(`Failed to remove ${path}: ${stderr}`);
           }
         }
       }

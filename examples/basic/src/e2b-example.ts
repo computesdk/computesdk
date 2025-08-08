@@ -19,7 +19,7 @@ async function main() {
 
   try {
     // Configure compute with E2B provider
-    compute.setConfig({ provider: e2b() });
+    compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
 
     // Create sandbox using compute singleton
     const sandbox = await compute.sandbox.create({});

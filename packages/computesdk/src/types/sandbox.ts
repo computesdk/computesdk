@@ -182,6 +182,8 @@ export interface Sandbox {
   getInfo(): Promise<SandboxInfo>;
   /** Kill the sandbox */
   kill(): Promise<void>;
+  /** Destroy the sandbox and clean up resources */
+  destroy(): Promise<void>;
 
   /** File system operations */
   readonly filesystem: SandboxFileSystem;

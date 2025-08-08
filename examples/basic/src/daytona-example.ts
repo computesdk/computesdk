@@ -25,7 +25,7 @@ async function main() {
 
   try {
     // Configure compute with Daytona provider
-    compute.setConfig({ provider: daytona() });
+    compute.setConfig({ provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) });
 
     // Create sandbox using compute singleton
     const sandbox = await compute.sandbox.create({});
