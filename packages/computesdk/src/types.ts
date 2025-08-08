@@ -85,6 +85,8 @@ export interface SandboxConfig {
   container?: string | ContainerConfig;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Existing sandbox ID to reconnect to */
+  sandboxId?: string;
 }
 
 /**

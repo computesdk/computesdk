@@ -4,6 +4,13 @@ import type { ExecutionResult, SandboxInfo, Runtime } from '../../types'
 
 // Create a concrete implementation for testing
 class TestProvider extends BaseProvider {
+  public readonly sandboxId: string;
+
+  constructor(provider: string, timeout: number, sandboxId?: string) {
+    super(provider, timeout);
+    this.sandboxId = sandboxId || 'test-sandbox-123';
+  }
+
   async doExecute(code: string, runtime?: Runtime): Promise<ExecutionResult> {
     return {
       stdout: `Executed: ${code}`,
@@ -41,12 +48,13 @@ describe('BaseProvider', () => {
   describe('constructor', () => {
     it('should initialize with provider name and timeout', () => {
       expect(provider.provider).toBe('test')
-      expect(provider.sandboxId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+      expect(provider.sandboxId).toBe('test-sandbox-123')
     })
 
-    it('should generate unique sandbox IDs', () => {
-      const provider2 = new TestProvider('test', 5000)
-      expect(provider.sandboxId).not.toBe(provider2.sandboxId)
+    it('should use provided sandbox IDs', () => {
+      const provider2 = new TestProvider('test', 5000, 'custom-sandbox-456')
+      expect(provider.sandboxId).toBe('test-sandbox-123')
+      expect(provider2.sandboxId).toBe('custom-sandbox-456')
     })
   })
 

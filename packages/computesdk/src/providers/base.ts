@@ -5,7 +5,7 @@
  * specific provider implementations extend.
  */
 
-import { v4 as uuidv4 } from 'uuid';
+
 import {
   BaseComputeSpecification,
   BaseComputeSandbox,
@@ -29,8 +29,8 @@ export abstract class BaseProvider implements BaseComputeSandbox, BaseComputeSpe
   /** Provider identifier */
   public readonly provider: string;
 
-  /** Sandbox identifier */
-  public readonly sandboxId: string;
+  /** Sandbox identifier - must be implemented by each provider */
+  public abstract readonly sandboxId: string;
 
   /** Execution timeout in milliseconds */
   protected readonly timeout: number;
@@ -43,7 +43,6 @@ export abstract class BaseProvider implements BaseComputeSandbox, BaseComputeSpe
    */
   constructor(provider: string, timeout: number) {
     this.provider = provider;
-    this.sandboxId = uuidv4();
     this.timeout = timeout;
   }
 

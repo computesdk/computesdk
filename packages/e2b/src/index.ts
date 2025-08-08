@@ -21,6 +21,8 @@ import { BaseProvider, BaseFileSystem, BaseTerminal } from 'computesdk';
 export interface E2BConfig extends SandboxConfig {
   /** E2B API key - if not provided, will fallback to E2B_API_KEY environment variable */
   apiKey?: string;
+  /** Existing sandbox ID to reconnect to */
+  sandboxId?: string;
 }
 
 /**
@@ -187,14 +189,20 @@ class E2BTerminal extends BaseTerminal {
 }
 
 export class E2BProvider extends BaseProvider implements FullComputeSandbox, FullComputeSpecification {
+  public sandboxId: string;
   private session: E2BSandbox | null = null;
   private readonly apiKey: string;
   private readonly runtime: Runtime;
+  private readonly configuredSandboxId?: string;
   public readonly filesystem: SandboxFileSystem;
   public readonly terminal: SandboxTerminal;
 
   constructor(config: E2BConfig) {
     super('e2b', config.timeout || 300000);
+    
+    this.configuredSandboxId = config.sandboxId;
+    // Start with configured ID or placeholder - will be updated when sandbox is created
+    this.sandboxId = config.sandboxId || 'e2b-pending';
 
     // Get API key from config or environment
     this.apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.E2B_API_KEY) || '';
@@ -225,11 +233,21 @@ export class E2BProvider extends BaseProvider implements FullComputeSandbox, Ful
     }
 
     try {
-      // Create new E2B session with configuration
-      this.session = await E2BSandbox.create({
-        apiKey: this.apiKey,
-        timeoutMs: this.timeout,
-      });
+      if (this.configuredSandboxId) {
+        // Reconnect to existing E2B session
+        this.session = await E2BSandbox.connect(this.configuredSandboxId, {
+          apiKey: this.apiKey,
+        });
+        this.sandboxId = this.configuredSandboxId;
+      } else {
+        // Create new E2B session with configuration
+        this.session = await E2BSandbox.create({
+          apiKey: this.apiKey,
+          timeoutMs: this.timeout,
+        });
+        // Update with real E2B sandbox ID
+        this.sandboxId = this.session.sandboxId || 'e2b-created';
+      }
 
       return this.session;
     } catch (error) {
