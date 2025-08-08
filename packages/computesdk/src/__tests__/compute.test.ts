@@ -65,6 +65,10 @@ class MockSandbox implements Sandbox {
     // Mock implementation
   }
 
+  async destroy(): Promise<void> {
+    // Mock implementation
+  }
+
   readonly filesystem = {
     async readFile(path: string): Promise<string> {
       return `Mock file content from ${path}`
