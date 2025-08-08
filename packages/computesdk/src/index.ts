@@ -18,11 +18,4 @@ export { createProvider } from './factory';
 export type { ProviderConfig, SandboxMethods } from './factory';
 export type { SandboxManagerMethods } from './types';
 
-// Export test suite for provider testing
-export { 
-  runProviderTestSuite,
-  createProviderTests,
-  runUnitTests, 
-  runIntegrationTests 
-} from './__tests__/provider-test-suite';
-export type { ProviderTestConfig } from './__tests__/provider-test-suite';
+// Test suite is available separately via @computesdk/test-utils package
