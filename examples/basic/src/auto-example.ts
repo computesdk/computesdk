@@ -53,8 +53,7 @@ async function main() {
     console.log('');
     console.log('🐍 E2B: E2B_API_KEY=your_key');
     console.log('🚀 Vercel: VERCEL_TOKEN + VERCEL_TEAM_ID + VERCEL_PROJECT_ID');
-    console.log('☁️  Cloudflare: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID');
-    console.log('🪰 Fly: FLY_API_TOKEN=any_value (mock)');
+    console.log('🌅 Daytona: DAYTONA_API_KEY=your_key');
     console.log('');
     console.log('👀 Check the other examples for detailed provider usage!');
     

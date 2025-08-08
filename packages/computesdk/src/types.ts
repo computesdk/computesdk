@@ -85,6 +85,8 @@ export interface SandboxConfig {
   container?: string | ContainerConfig;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Existing sandbox ID to reconnect to */
+  sandboxId?: string;
 }
 
 /**
@@ -245,8 +247,8 @@ export type ComputeSandbox = BaseComputeSandbox | FilesystemComputeSandbox | Ter
  * Parameters for the executeSandbox function
  */
 export interface ExecuteSandboxParams {
-  /** Sandbox to execute in */
-  sandbox: ComputeSandbox;
+  /** Provider to execute with */
+  provider: ComputeSandbox;
   /** Code to execute */
   code: string;
   /** Runtime to use */
@@ -323,4 +325,40 @@ export interface TerminalCreateOptions {
   rows?: number;
   /** Environment variables */
   env?: Record<string, string>;
+}
+
+/**
+ * Server adapter request for unified compute operations
+ */
+export interface ComputeRequest {
+  /** Type of operation to perform */
+  operation: 'sandbox' | 'filesystem';
+  /** Specific action within the operation */
+  action: string;
+  /** Operation-specific payload data */
+  payload: Record<string, any>;
+  /** Optional sandbox ID for persistent sessions */
+  sandboxId?: string;
+  /** Optional provider to use */
+  provider?: ProviderType;
+  /** Optional runtime environment */
+  runtime?: Runtime;
+}
+
+/**
+ * Server adapter response for unified compute operations
+ */
+export interface ComputeResponse {
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Operation result data (if successful) */
+  data?: any;
+  /** Error message (if failed) */
+  error?: string;
+  /** ID of the sandbox that handled the operation */
+  sandboxId: string;
+  /** Provider that handled the operation */
+  provider: string;
+  /** Execution time in milliseconds */
+  executionTime?: number;
 }

@@ -36,6 +36,10 @@ describe('VercelProvider', () => {
     vi.stubEnv('VERCEL_TOKEN', 'vercel_test_token_1234567890abcdef');
     vi.stubEnv('VERCEL_TEAM_ID', 'team_test_1234567890abcdef');
     vi.stubEnv('VERCEL_PROJECT_ID', 'prj_test_1234567890abcdef');
+    
+    // Setup default mocks for Sandbox static methods
+    vi.mocked(Sandbox.create).mockResolvedValue(createMockSandbox() as any);
+    vi.mocked(Sandbox.get).mockResolvedValue(createMockSandbox() as any);
   });
 
   describe('constructor', () => {
@@ -45,6 +49,14 @@ describe('VercelProvider', () => {
       expect(provider.provider).toBe('vercel');
       expect(provider.sandboxId).toBeDefined();
       expect(typeof provider.sandboxId).toBe('string');
+    });
+
+    it('should use provided sandboxId for reconnection', () => {
+      const existingSandboxId = 'existing-sandbox-123';
+      const provider = new VercelProvider({ sandboxId: existingSandboxId });
+      
+      expect(provider.provider).toBe('vercel');
+      expect(provider.sandboxId).toBe(existingSandboxId);
     });
 
     it('should throw error without VERCEL_TOKEN', () => {
@@ -88,6 +100,59 @@ describe('VercelProvider', () => {
       expect(() => vercel({ runtime: 'invalid' as any })).toThrow(
         'Vercel provider only supports Node.js and Python runtimes'
       );
+    });
+  });
+
+  describe('sandbox reconnection', () => {
+    it('should reconnect to existing sandbox when sandboxId is provided', async () => {
+      const existingSandboxId = 'existing-sandbox-123';
+      const mockSandbox = createMockSandbox();
+      
+      // Mock Sandbox.get for reconnection
+      vi.mocked(Sandbox.get).mockResolvedValue(mockSandbox as any);
+      
+      const provider = new VercelProvider({ sandboxId: existingSandboxId });
+      
+      // Trigger sandbox creation by calling doExecute
+      mockSandbox.runCommand.mockResolvedValue(createMockResult(0, 'test output'));
+      await provider.doExecute('console.log("test")');
+      
+      // Verify Sandbox.get was called with the existing sandboxId
+      expect(Sandbox.get).toHaveBeenCalledWith({
+        sandboxId: existingSandboxId,
+        token: 'vercel_test_token_1234567890abcdef',
+        teamId: 'team_test_1234567890abcdef',
+        projectId: 'prj_test_1234567890abcdef',
+      });
+      
+      // Verify Sandbox.create was NOT called
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('should create new sandbox when no sandboxId is provided', async () => {
+      const mockSandbox = createMockSandbox();
+      
+      // Mock Sandbox.create for new sandbox
+      vi.mocked(Sandbox.create).mockResolvedValue(mockSandbox as any);
+      
+      const provider = new VercelProvider({});
+      
+      // Trigger sandbox creation by calling doExecute
+      mockSandbox.runCommand.mockResolvedValue(createMockResult(0, 'test output'));
+      await provider.doExecute('console.log("test")');
+      
+      // Verify Sandbox.create was called
+      expect(Sandbox.create).toHaveBeenCalledWith({
+        token: 'vercel_test_token_1234567890abcdef',
+        teamId: 'team_test_1234567890abcdef',
+        projectId: 'prj_test_1234567890abcdef',
+        runtime: 'node22',
+        timeout: 300000,
+        resources: { vcpus: 2 },
+      });
+      
+      // Verify Sandbox.get was NOT called
+      expect(Sandbox.get).not.toHaveBeenCalled();
     });
   });
 

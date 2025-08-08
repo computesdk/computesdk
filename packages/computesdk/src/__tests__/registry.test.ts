@@ -16,8 +16,7 @@ describe('Registry', () => {
   const mockProviders = {
     e2b: vi.fn(() => createMockSandbox('e2b')) as ProviderFactory,
     vercel: vi.fn(() => createMockSandbox('vercel')) as ProviderFactory,
-    cloudflare: vi.fn(() => createMockSandbox('cloudflare')) as ProviderFactory,
-    fly: vi.fn(() => createMockSandbox('fly')) as ProviderFactory
+    daytona: vi.fn(() => createMockSandbox('daytona')) as ProviderFactory
   }
 
   describe('createComputeRegistry', () => {
@@ -55,10 +54,10 @@ describe('Registry', () => {
     it('should create sandbox with provider and container image', () => {
       const registry = createComputeRegistry(mockProviders)
       
-      const sandbox = registry.sandbox('cloudflare:python:3.11')
+      const sandbox = registry.sandbox('daytona:python:3.11')
       
-      expect(sandbox.provider).toBe('cloudflare')
-      expect(mockProviders.cloudflare).toHaveBeenCalledWith({ 
+      expect(sandbox.provider).toBe('daytona')
+      expect(mockProviders.daytona).toHaveBeenCalledWith({ 
         container: { image: 'python:3.11' }
       })
     })
@@ -78,10 +77,10 @@ describe('Registry', () => {
     it('should handle provider with multiple colons', () => {
       const registry = createComputeRegistry(mockProviders)
       
-      const sandbox = registry.sandbox('fly:ubuntu:22.04')
+      const sandbox = registry.sandbox('daytona:ubuntu:22.04')
       
-      expect(sandbox.provider).toBe('fly')
-      expect(mockProviders.fly).toHaveBeenCalledWith({ 
+      expect(sandbox.provider).toBe('daytona')
+      expect(mockProviders.daytona).toHaveBeenCalledWith({ 
         container: { image: 'ubuntu:22.04' }
       })
     })

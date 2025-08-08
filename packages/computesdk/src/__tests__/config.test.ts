@@ -64,7 +64,7 @@ describe('Configuration', () => {
       
       expect(providers).toContain('e2b')
       expect(providers).not.toContain('vercel')
-      expect(providers).not.toContain('cloudflare')
+      expect(providers).not.toContain('daytona')
       expect(providers).not.toContain('fly')
     })
 
@@ -120,9 +120,7 @@ describe('Configuration', () => {
       // Set all providers
       vi.stubEnv('E2B_API_KEY', 'test-key')
       vi.stubEnv('VERCEL_TOKEN', 'test-token')
-      vi.stubEnv('CLOUDFLARE_API_TOKEN', 'test-token')
-      vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'test-account')
-      vi.stubEnv('FLY_API_TOKEN', 'test-token')
+      vi.stubEnv('DAYTONA_API_KEY', 'test-daytona-key')
       
       const provider = autoSelectProvider()
       

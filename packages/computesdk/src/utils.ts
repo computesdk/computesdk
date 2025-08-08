@@ -8,15 +8,15 @@ import type { ExecuteSandboxParams, ExecutionResult, ComputeSandbox, Runtime } f
  * Execute code in a sandbox
  */
 export async function executeSandbox(params: ExecuteSandboxParams): Promise<ExecutionResult> {
-  return await params.sandbox.execute(params.code, params.runtime);
+  return await params.provider.execute(params.code, params.runtime);
 }
 
 /**
  * Parameters for the runCode function
  */
 export interface RunCodeParams {
-  /** Sandbox to execute in */
-  sandbox: ComputeSandbox;
+  /** Provider to execute with */
+  provider: ComputeSandbox;
   /** Code to execute */
   code: string;
   /** Runtime to use */
@@ -27,15 +27,15 @@ export interface RunCodeParams {
  * Execute code in a runtime environment
  */
 export async function runCode(params: RunCodeParams): Promise<ExecutionResult> {
-  return await params.sandbox.runCode(params.code, params.runtime);
+  return await params.provider.runCode(params.code, params.runtime);
 }
 
 /**
  * Parameters for the runCommand function
  */
 export interface RunCommandParams {
-  /** Sandbox to execute in */
-  sandbox: ComputeSandbox;
+  /** Provider to execute with */
+  provider: ComputeSandbox;
   /** Command to execute */
   command: string;
   /** Command arguments */
@@ -46,7 +46,7 @@ export interface RunCommandParams {
  * Execute shell commands
  */
 export async function runCommand(params: RunCommandParams): Promise<ExecutionResult> {
-  return await params.sandbox.runCommand(params.command, params.args);
+  return await params.provider.runCommand(params.command, params.args);
 }
 
 /**

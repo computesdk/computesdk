@@ -24,6 +24,8 @@ export interface DaytonaConfig extends SandboxConfig {
   runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Existing sandbox ID to reconnect to */
+  sandboxId?: string;
 }
 
 /**
@@ -63,14 +65,20 @@ class DaytonaFileSystem extends BaseFileSystem {
 }
 
 export class DaytonaProvider extends BaseProvider implements FilesystemComputeSandbox, FilesystemComputeSpecification {
+  public sandboxId: string;
   private daytona: Daytona;
   private sandbox: any | null = null;
   private readonly apiKey: string;
   private readonly runtime: Runtime;
+  private readonly configuredSandboxId?: string;
   public readonly filesystem: SandboxFileSystem;
 
   constructor(config: DaytonaConfig) {
     super('daytona', config.timeout || 300000);
+    
+    this.configuredSandboxId = config.sandboxId;
+    // Start with configured ID or placeholder - will be updated when sandbox is created
+    this.sandboxId = config.sandboxId || 'daytona-pending';
 
     // Get API key from config or environment
     this.apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';

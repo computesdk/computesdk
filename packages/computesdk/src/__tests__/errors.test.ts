@@ -40,7 +40,7 @@ describe('Error Classes', () => {
   describe('ProviderError', () => {
     it('should create provider error with cause', () => {
       const cause = new Error('Network error')
-      const error = new ProviderError('Provider request failed', 'cloudflare', cause, 'sandbox-789')
+      const error = new ProviderError('Provider request failed', 'daytona', cause, 'sandbox-789')
       
       expect(error).toBeInstanceOf(ComputeError)
       expect(error.code).toBe('PROVIDER_ERROR')

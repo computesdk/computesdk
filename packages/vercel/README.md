@@ -49,6 +49,23 @@ console.log(result.stdout); // "Hello from Python on Vercel!"
 await sandbox.doKill();
 ```
 
+### Sandbox Reconnection
+
+```typescript
+import { vercel } from '@computesdk/vercel';
+
+// Create a new sandbox
+const sandbox1 = vercel();
+const result1 = await sandbox1.doExecute('console.log("First execution");');
+const sandboxId = sandbox1.sandboxId;
+
+// Later, reconnect to the same sandbox
+const sandbox2 = vercel({ sandboxId });
+const result2 = await sandbox2.doExecute('console.log("Reconnected!");');
+
+// Both executions run in the same Vercel sandbox environment
+```
+
 ### With ComputeSDK
 
 ```typescript
@@ -79,10 +96,13 @@ console.log(result.stdout);
 ### Options
 
 ```typescript
-interface SandboxConfig {
+interface VercelConfig {
   runtime?: 'node' | 'python';  // Default: 'node'
   timeout?: number;              // Default: 300000 (5 minutes)
-  provider?: string;             // Default: 'vercel'
+  sandboxId?: string;            // Existing sandbox ID to reconnect to
+  token?: string;                // Vercel API token (fallback to VERCEL_TOKEN)
+  teamId?: string;               // Vercel team ID (fallback to VERCEL_TEAM_ID)
+  projectId?: string;            // Vercel project ID (fallback to VERCEL_PROJECT_ID)
 }
 ```
 

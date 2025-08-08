@@ -25,7 +25,7 @@ describe('Utils', () => {
       }
 
       const result = await executeSandbox({
-        sandbox: mockSandbox,
+        provider: mockSandbox,
         code: 'print("Hello World")'
       })
 
@@ -52,7 +52,7 @@ describe('Utils', () => {
       }
 
       await executeSandbox({
-        sandbox: mockSandbox,
+        provider: mockSandbox,
         code: 'console.log("test")',
         runtime: 'node'
       })
