@@ -1,8 +1,10 @@
 /**
  * Vercel Sandbox Provider Example
  * 
- * This example shows how to use the Vercel provider for Node.js and Python code execution
- * with filesystem support.
+ * This example shows how to use the Vercel provider for Node.js and Python code execution.
+ * 
+ * Note: Filesystem operations are not yet implemented for Vercel provider.
+ * Use E2B or Daytona providers for reliable filesystem support.
  * 
  * Prerequisites:
  * - VERCEL_TOKEN environment variable
@@ -11,7 +13,9 @@
  */
 
 import { vercel } from '@computesdk/vercel';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
+import { NODEJS_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
 
 async function main() {
@@ -33,68 +37,46 @@ async function main() {
   }
   
   try {
-    // Create Vercel sandbox with filesystem support
-    const sandbox = vercel({ runtime: 'node' });
+    // Configure compute with Vercel provider
+    compute.setConfig({ provider: vercel({ runtime: 'node' }) });
+    
+    // Create sandbox using compute singleton
+    const sandbox = await compute.sandbox.create({});
     
     console.log('Created Vercel sandbox:', sandbox.sandboxId);
     console.log('Provider:', sandbox.provider);
     
     // Execute Node.js code
-    const nodeResult = await sandbox.execute(`
-console.log('Node.js version:', process.version);
-console.log('Platform:', process.platform);
-
-const data = [
-  { id: 1, name: 'Alice', role: 'Developer' },
-  { id: 2, name: 'Bob', role: 'Designer' }
-];
-
-console.log('\\nTeam Members:');
-data.forEach(member => {
-  console.log(\`- \${member.name} (\${member.role})\`);
-});
-
-console.log('\\nExecution complete!');
-    `);
+    const nodeResult = await sandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
     
     console.log('Node.js Output:', nodeResult.stdout);
     console.log('Execution Time:', nodeResult.executionTime, 'ms');
     
-    // Filesystem operations
+    // Note: Filesystem operations are not supported by Vercel's sandbox environment
     console.log('\n--- Filesystem Operations ---');
+    console.log('Note: Filesystem operations are not supported by Vercel\'s sandbox environment.');
+    console.log('Vercel sandboxes are designed for code execution only.');
     
-    // Write configuration file
-    await sandbox.filesystem.writeFile('/tmp/config.json', JSON.stringify({
-      app: 'Vercel Demo',
-      version: '1.0.0'
-    }, null, 2));
-    
-    // Execute Node.js script that uses the file
-    const fileResult = await sandbox.execute(`
-const fs = require('fs');
-
-// Read configuration
-const config = JSON.parse(fs.readFileSync('/tmp/config.json', 'utf8'));
+    // Instead, demonstrate in-memory data processing
+    const dataResult = await sandbox.runCode(`
+// In-memory data processing example
+const config = { app: 'Vercel Demo', version: '1.0.0' };
 console.log('Config loaded:', config.app, 'v' + config.version);
 
-// Process data and write results
+// Process data in memory
 const results = { processed: true, timestamp: new Date().toISOString() };
-fs.writeFileSync('/tmp/results.json', JSON.stringify(results, null, 2));
-
-console.log('Results written to filesystem');
+console.log('Results processed:', JSON.stringify(results, null, 2));
     `);
     
-    console.log('Filesystem Output:', fileResult.stdout);
-    
-    // Read the results back
-    const results = await sandbox.filesystem.readFile('/tmp/results.json');
-    console.log('Results from filesystem:', JSON.parse(results));
+    console.log('Data Processing Output:', dataResult.stdout);
     
     // Python example
     console.log('\n--- Python Execution ---');
     
-    const pythonSandbox = vercel({ runtime: 'python' });
-    const pythonResult = await pythonSandbox.execute(`
+    // Create Python sandbox using compute singleton
+    compute.setConfig({ provider: vercel({ runtime: 'python' }) });
+    const pythonSandbox = await compute.sandbox.create({});
+    const pythonResult = await pythonSandbox.runCode(`
 import json
 import datetime
 

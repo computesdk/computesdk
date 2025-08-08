@@ -1,144 +1,99 @@
 /**
- * Example demonstrating the unified server-side API
+ * Example demonstrating the unified compute singleton API
  * 
- * This shows how to use handleComputeRequest for both sandbox and filesystem operations
+ * This shows how to use compute.sandbox for both code execution and filesystem operations
  */
 
-import { handleComputeRequest } from 'computesdk';
-import type { ComputeRequest } from 'computesdk';
+import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
+import { config } from 'dotenv';
+config(); // Load environment variables from .env file
 
 async function runUnifiedAPIExample() {
   console.log('🚀 ComputeSDK Unified API Example\n');
 
+  if (!process.env.E2B_API_KEY) {
+    console.error('Please set E2B_API_KEY environment variable');
+    process.exit(1);
+  }
+
   try {
-    // 1. Execute Python code
-    console.log('1. Executing Python code...');
-    const executeRequest: ComputeRequest = {
-      operation: 'sandbox',
-      action: 'execute',
-      payload: {
-        code: 'print("Hello from ComputeSDK!")\nprint("Current working directory:", __import__("os").getcwd())',
-        runtime: 'python'
-      }
-    };
+    // Configure compute with E2B provider
+    compute.setConfig({ provider: e2b() });
 
-    const executeResponse = await handleComputeRequest(executeRequest);
+    // 1. Create sandbox and execute Python code
+    console.log('1. Creating sandbox and executing Python code...');
+    const sandbox = await compute.sandbox.create({});
+    
+    const executeResult = await sandbox.runCode(
+      'print("Hello from ComputeSDK!")\nprint("Current working directory:", __import__("os").getcwd())',
+      'python'
+    );
+    
     console.log('✅ Execute Response:', {
-      success: executeResponse.success,
-      output: executeResponse.data?.stdout,
-      provider: executeResponse.provider,
-      sandboxId: executeResponse.sandboxId
+      output: executeResult.stdout,
+      provider: sandbox.provider,
+      sandboxId: sandbox.sandboxId,
+      executionTime: executeResult.executionTime
     });
-
-    // Store sandbox ID for subsequent operations
-    const sandboxId = executeResponse.sandboxId;
 
     // 2. Create a file using filesystem operations
     console.log('\n2. Creating a Python file...');
-    const writeFileRequest: ComputeRequest = {
-      operation: 'filesystem',
-      action: 'writeFile',
-      payload: {
-        path: '/tmp/hello.py',
-        content: 'print("Hello from file!")\nprint("This file was created via the unified API")'
-      },
-      sandboxId // Use the same sandbox
-    };
-
-    const writeResponse = await handleComputeRequest(writeFileRequest);
-    console.log('✅ Write File Response:', {
-      success: writeResponse.success,
-      message: writeResponse.data?.message
-    });
+    await sandbox.filesystem.writeFile('/tmp/hello.py', 
+      'print("Hello from file!")\nprint("This file was created via the unified API")'
+    );
+    
+    console.log('✅ Write File Response: File created successfully');
 
     // 3. Read the file back
     console.log('\n3. Reading the file back...');
-    const readFileRequest: ComputeRequest = {
-      operation: 'filesystem',
-      action: 'readFile',
-      payload: {
-        path: '/tmp/hello.py'
-      },
-      sandboxId
-    };
-
-    const readResponse = await handleComputeRequest(readFileRequest);
+    const fileContent = await sandbox.filesystem.readFile('/tmp/hello.py');
     console.log('✅ Read File Response:', {
-      success: readResponse.success,
-      content: readResponse.data?.content
+      content: fileContent.substring(0, 100) + '...'
     });
 
-    // 4. Execute the file we created
+    // 4. Execute the file we just created
     console.log('\n4. Executing the created file...');
-    const runCommandRequest: ComputeRequest = {
-      operation: 'sandbox',
-      action: 'runCommand',
-      payload: {
-        command: 'python',
-        args: ['/tmp/hello.py']
-      },
-      sandboxId
-    };
-
-    const runResponse = await handleComputeRequest(runCommandRequest);
-    console.log('✅ Run Command Response:', {
-      success: runResponse.success,
-      output: runResponse.data?.stdout
+    const fileExecuteResult = await sandbox.runCommand('python', ['/tmp/hello.py']);
+    console.log('✅ File Execute Response:', {
+      output: fileExecuteResult.stdout,
+      executionTime: fileExecuteResult.executionTime
     });
 
-    // 5. List directory contents
-    console.log('\n5. Listing /tmp directory...');
-    const readdirRequest: ComputeRequest = {
-      operation: 'filesystem',
-      action: 'readdir',
-      payload: {
-        path: '/tmp'
-      },
-      sandboxId
-    };
-
-    const readdirResponse = await handleComputeRequest(readdirRequest);
-    console.log('✅ Directory Listing:', {
-      success: readdirResponse.success,
-      files: readdirResponse.data?.entries?.map((entry: any) => ({
-        name: entry.name,
-        isDirectory: entry.isDirectory,
-        size: entry.size
-      }))
+    // 5. List files in the directory
+    console.log('\n5. Listing files in /tmp...');
+    const files = await sandbox.filesystem.readdir('/tmp');
+    console.log('✅ List Files Response:', {
+      fileCount: files.length,
+      files: files.map(f => f.name).slice(0, 5) // Show first 5 files
     });
 
-    // 6. Get sandbox info
+    // 6. Get sandbox information
     console.log('\n6. Getting sandbox information...');
-    const infoRequest: ComputeRequest = {
-      operation: 'sandbox',
-      action: 'getInfo',
-      payload: {},
-      sandboxId
-    };
-
-    const infoResponse = await handleComputeRequest(infoRequest);
+    const info = await sandbox.getInfo();
     console.log('✅ Sandbox Info:', {
-      success: infoResponse.success,
-      info: {
-        id: infoResponse.data?.id,
-        provider: infoResponse.data?.provider,
-        runtime: infoResponse.data?.runtime,
-        status: infoResponse.data?.status
-      }
+      id: info.id,
+      provider: info.provider,
+      runtime: info.runtime,
+      status: info.status,
+      createdAt: info.createdAt
     });
 
+    // Clean up
+    await sandbox.kill();
+    console.log('\n✅ Sandbox cleaned up successfully');
     console.log('\n🎉 Unified API example completed successfully!');
-    console.log(`📊 Used provider: ${executeResponse.provider}`);
-    console.log(`🆔 Sandbox ID: ${sandboxId}`);
 
   } catch (error) {
-    console.error('❌ Error running unified API example:', error);
+    console.error('❌ Error:', error.message);
+    
+    if (error.message.includes('API key')) {
+      console.error('Get your E2B API key from https://e2b.dev/');
+    }
+    
+    process.exit(1);
   }
 }
 
-// Run the example if this file is executed directly
-if (require.main === module) {
-  runUnifiedAPIExample();
-}
-
-export { runUnifiedAPIExample };
+// Run the example
+runUnifiedAPIExample();
