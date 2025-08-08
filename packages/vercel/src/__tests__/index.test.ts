@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { VercelProvider, vercel } from '../index'
+import { vercel } from '../index'
 
 // Mock the @vercel/sandbox module
 vi.mock('@vercel/sandbox', () => ({
