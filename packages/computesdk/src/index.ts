@@ -8,7 +8,14 @@
 export * from './types';
 
 // Export compute singleton - the main API
-export { compute } from './compute';
+export { compute, handleComputeRequest } from './compute';
+
+// Export compute request/response types
+export type { 
+  ComputeRequest, 
+  ComputeResponse, 
+  HandleComputeRequestParams 
+} from './compute';
 
 // Export managers for advanced usage and testing
 export { SandboxManager } from './sandbox';

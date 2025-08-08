@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { compute } from '../compute'
+import { compute, handleComputeRequest, type ComputeRequest } from '../compute'
 import { SandboxManager } from '../sandbox'
 import type { Provider, Sandbox, ExecutionResult, SandboxInfo } from '../types'
 
@@ -508,6 +508,119 @@ describe('Compute API - Provider-Centric', () => {
         const sandboxes2 = await compute.sandbox.list(explicitProvider)
         expect(sandboxes2).toHaveLength(1)
       })
+    })
+  })
+
+  describe('handleComputeRequest', () => {
+    it('should handle execute action', async () => {
+      const provider = new MockProvider()
+      const request: ComputeRequest = {
+        action: 'execute',
+        code: 'print("Hello World")',
+        runtime: 'python'
+      }
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(true)
+      expect(response.provider).toBe('mock')
+      expect(response.result?.stdout).toBe('Executed: print("Hello World")')
+      expect(response.result?.exitCode).toBe(0)
+    })
+
+    it('should handle create action', async () => {
+      const provider = new MockProvider()
+      const request: ComputeRequest = {
+        action: 'create',
+        runtime: 'python'
+      }
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(true)
+      expect(response.provider).toBe('mock')
+      expect(response.sandboxId).toMatch(/^mock-sandbox-/)
+    })
+
+    it('should handle destroy action', async () => {
+      const provider = new MockProvider()
+      const request: ComputeRequest = {
+        action: 'destroy',
+        sandboxId: 'test-sandbox-id'
+      }
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(true)
+      expect(response.provider).toBe('mock')
+      expect(response.sandboxId).toBe('test-sandbox-id')
+    })
+
+    it('should handle getInfo action', async () => {
+      const provider = new MockProvider()
+      const request: ComputeRequest = {
+        action: 'getInfo',
+        sandboxId: 'test-sandbox-id'
+      }
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(true)
+      expect(response.provider).toBe('mock')
+      expect(response.info?.id).toMatch(/^mock-sandbox-/) // MockSandbox generates random IDs
+      expect(response.info?.runtime).toBe('node')
+    })
+
+    it('should return error for execute action without code', async () => {
+      const provider = new MockProvider()
+      const request: ComputeRequest = {
+        action: 'execute'
+      }
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(false)
+      expect(response.error).toBe('Code is required for execute action')
+      expect(response.provider).toBe('mock')
+    })
+
+    it('should return error for destroy action without sandboxId', async () => {
+      const provider = new MockProvider()
+      const request: ComputeRequest = {
+        action: 'destroy'
+      }
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(false)
+      expect(response.error).toBe('Sandbox ID is required for destroy action')
+      expect(response.provider).toBe('mock')
+    })
+
+    it('should return error for getInfo action without sandboxId', async () => {
+      const provider = new MockProvider()
+      const request: ComputeRequest = {
+        action: 'getInfo'
+      }
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(false)
+      expect(response.error).toBe('Sandbox ID is required for getInfo action')
+      expect(response.provider).toBe('mock')
+    })
+
+    it('should return error for unknown action', async () => {
+      const provider = new MockProvider()
+      const request = {
+        action: 'unknown'
+      } as any
+
+      const response = await handleComputeRequest({ request, provider })
+
+      expect(response.success).toBe(false)
+      expect(response.error).toBe('Unknown action: unknown')
+      expect(response.provider).toBe('mock')
     })
   })
 })
