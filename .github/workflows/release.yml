@@ -11,9 +11,32 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Wait for CI workflow to complete successfully
+  wait-for-ci:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.ref }}
+          check-name: 'build-and-test'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+      - name: Wait for integration tests (if they run)
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.ref }}
+          check-regexp: 'provider-integration-tests.*'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          allowed-conclusions: success,skipped  # Allow skipped if no secrets configured
+
   release:
     name: Release
     runs-on: ubuntu-latest
+    needs: wait-for-ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,15 +58,6 @@ jobs:
 
       - name: Build packages
         run: pnpm build
-
-      - name: Run tests
-        run: pnpm test
-
-      - name: Run type checking
-        run: pnpm typecheck
-
-      - name: Run linting
-        run: pnpm lint
 
       - name: Check for changesets
         id: check

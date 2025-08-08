@@ -50,6 +50,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
