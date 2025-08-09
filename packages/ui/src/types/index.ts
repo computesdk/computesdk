@@ -34,7 +34,13 @@ export interface ComputeRequest {
     | 'compute.sandbox.filesystem.remove'
     // Terminal operations
     | 'compute.sandbox.terminal.create'
-    | 'compute.sandbox.terminal.list';
+    | 'compute.sandbox.terminal.getById'
+    | 'compute.sandbox.terminal.list'
+    | 'compute.sandbox.terminal.destroy'
+    // Terminal I/O operations
+    | 'compute.sandbox.terminal.write'
+    | 'compute.sandbox.terminal.resize'
+    | 'compute.sandbox.terminal.kill';
 
   /** Sandbox ID (required for operations on existing sandboxes) */
   sandboxId?: string;
@@ -64,6 +70,16 @@ export interface ComputeRequest {
     rows?: number;
     env?: Record<string, string>;
   };
+
+  /** Terminal ID (for terminal operations) */
+  terminalId?: string;
+
+  /** Terminal input data (for terminal.write) */
+  data?: string | Uint8Array;
+
+  /** Terminal resize dimensions (for terminal.resize) */
+  cols?: number;
+  rows?: number;
   
   /** Additional sandbox creation options */
   options?: {
@@ -146,6 +162,36 @@ export interface ComputeResponse {
 }
 
 /**
+ * Frontend terminal interface - mirrors SDK terminal API
+ */
+export interface FrontendTerminal {
+  /** Terminal process ID */
+  pid: number;
+  /** Terminal command */
+  command: string;
+  /** Terminal status */
+  status: 'running' | 'exited';
+  /** Terminal columns */
+  cols: number;
+  /** Terminal rows */
+  rows: number;
+  /** Exit code (if exited) */
+  exitCode?: number;
+  
+  /** Write data to this terminal */
+  write(data: Uint8Array | string): Promise<void>;
+  /** Resize this terminal */
+  resize(cols: number, rows: number): Promise<void>;
+  /** Kill this terminal process */
+  kill(): Promise<void>;
+  
+  /** Data stream handler - setting this automatically starts SSE streaming */
+  onData?: (data: Uint8Array) => void;
+  /** Exit handler */
+  onExit?: (exitCode: number) => void;
+}
+
+/**
  * Configuration for compute API integration
  */
 export interface ComputeConfig {
@@ -207,8 +253,10 @@ export interface FrontendSandbox {
       cols?: number;
       rows?: number;
       env?: Record<string, string>;
-    }) => Promise<ComputeResponse>;
-    list: () => Promise<ComputeResponse>;
+    }) => Promise<FrontendTerminal>;
+    getById: (terminalId: string) => Promise<FrontendTerminal | null>;
+    list: () => Promise<FrontendTerminal[]>;
+    destroy: (terminalId: string) => Promise<void>;
   };
 }
 
