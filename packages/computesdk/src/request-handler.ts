@@ -34,7 +34,9 @@ export interface ComputeRequest {
     | 'compute.sandbox.filesystem.remove'
     // Terminal operations
     | 'compute.sandbox.terminal.create'
-    | 'compute.sandbox.terminal.list';
+    | 'compute.sandbox.terminal.getById'
+    | 'compute.sandbox.terminal.list'
+    | 'compute.sandbox.terminal.destroy';
 
   /** Sandbox ID (required for operations on existing sandboxes) */
   sandboxId?: string;
@@ -64,6 +66,9 @@ export interface ComputeRequest {
     rows?: number;
     env?: Record<string, string>;
   };
+
+  /** Terminal ID (for WebSocket terminal operations) */
+  terminalId?: string;
   
   /** Additional sandbox creation options */
   options?: {
@@ -143,6 +148,13 @@ export interface ComputeResponse {
     cols: number;
     rows: number;
   }>;
+
+  /** WebSocket connection info (for terminal.connect action) */
+  websocket?: {
+    url: string;
+    headers?: Record<string, string>;
+    protocols?: string[];
+  };
 }
 
 /**
@@ -586,6 +598,80 @@ export async function handleComputeRequest(params: HandleComputeRequestParams): 
         };
       }
 
+      case 'compute.sandbox.terminal.getById': {
+        if (!request.sandboxId) {
+          return {
+            success: false,
+            error: 'Sandbox ID is required for terminal operations',
+            sandboxId: '',
+            provider: provider.name
+          };
+        }
+
+        if (!request.terminalId) {
+          return {
+            success: false,
+            error: 'Terminal ID is required for getById action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        const sandbox = await getSandbox(request.sandboxId);
+        const terminal = await sandbox.terminal.getById(request.terminalId);
+        
+        if (!terminal) {
+          return {
+            success: false,
+            error: `Terminal with ID ${request.terminalId} not found`,
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+        
+        return {
+          success: true,
+          sandboxId: request.sandboxId,
+          provider: provider.name,
+          terminal: {
+            pid: terminal.pid,
+            command: terminal.command,
+            status: terminal.status,
+            cols: terminal.cols,
+            rows: terminal.rows
+          }
+        };
+      }
+
+      case 'compute.sandbox.terminal.destroy': {
+        if (!request.sandboxId) {
+          return {
+            success: false,
+            error: 'Sandbox ID is required for terminal operations',
+            sandboxId: '',
+            provider: provider.name
+          };
+        }
+
+        if (!request.terminalId) {
+          return {
+            success: false,
+            error: 'Terminal ID is required for destroy action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        const sandbox = await getSandbox(request.sandboxId);
+        await sandbox.terminal.destroy(request.terminalId);
+        
+        return {
+          success: true,
+          sandboxId: request.sandboxId,
+          provider: provider.name
+        };
+      }
+
       default:
         return {
           success: false,
@@ -602,4 +688,49 @@ export async function handleComputeRequest(params: HandleComputeRequestParams): 
       provider: provider.name
     };
   }
+}
+
+/**
+ * Handle WebSocket upgrade requests for real-time terminal I/O
+ * 
+ * TODO: Implement WebSocket terminal connections
+ * 
+ * This function should:
+ * 1. Parse WebSocket upgrade request (sandboxId, terminalId from URL/headers)
+ * 2. Validate the terminal session exists
+ * 3. Upgrade HTTP connection to WebSocket
+ * 4. Establish bidirectional proxy to provider's WebSocket
+ * 5. Handle connection lifecycle (connect, disconnect, error)
+ * 
+ * @example
+ * ```typescript
+ * // Framework usage (Next.js)
+ * export async function GET(request: Request) {
+ *   if (request.headers.get('upgrade') === 'websocket') {
+ *     return handleComputeWebSocket(request, { provider })
+ *   }
+ *   return handleComputeRequest({ request, provider })
+ * }
+ * 
+ * // Frontend usage
+ * const ws = new WebSocket('/api/compute?action=terminal.connect&sandboxId=123&terminalId=456')
+ * ws.onmessage = (event) => console.log(event.data)
+ * ws.send('ls -la\n')
+ * ```
+ * 
+ * @param request - WebSocket upgrade request
+ * @param params - Handler parameters (provider, etc.)
+ * @returns WebSocket upgrade response
+ */
+export async function handleComputeWebSocket(
+  _request: Request,
+  _params: HandleComputeRequestParams
+): Promise<Response> {
+  // TODO: Implement WebSocket terminal connections
+  // This is a placeholder for future implementation
+  
+  return new Response('WebSocket terminal connections not yet implemented', {
+    status: 501,
+    statusText: 'Not Implemented'
+  });
 }
