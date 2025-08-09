@@ -104,8 +104,14 @@ class MockSandbox implements Sandbox {
         kill: vi.fn()
       }
     },
+    async getById(terminalId: string): Promise<any> {
+      return null
+    },
     async list(): Promise<any[]> {
       return []
+    },
+    async destroy(terminalId: string): Promise<void> {
+      // Mock destroy
     }
   }
 }

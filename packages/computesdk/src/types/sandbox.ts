@@ -138,6 +138,10 @@ export interface TerminalCreateOptions {
   rows?: number;
   /** Environment variables */
   env?: Record<string, string>;
+  /** Data stream handler */
+  onData?: (data: Uint8Array) => void;
+  /** Exit handler */
+  onExit?: (exitCode: number) => void;
 }
 
 /**

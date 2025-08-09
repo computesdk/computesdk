@@ -18,7 +18,6 @@ import type {
   FileEntry,
   TerminalSession,
   TerminalCreateOptions,
-  SandboxManagerMethods,
 } from './types/index.js';
 
 /**
@@ -48,8 +47,14 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   
   // Optional terminal methods
   terminal?: {
-    create: (sandbox: TSandbox, options?: TerminalCreateOptions) => Promise<TerminalSession>;
-    list: (sandbox: TSandbox) => Promise<TerminalSession[]>;
+    create: (sandbox: TSandbox, options?: TerminalCreateOptions) => Promise<{ terminal: any; terminalId: string }>;
+    getById: (sandbox: TSandbox, terminalId: string) => Promise<{ terminal: any; terminalId: string } | null>;
+    list: (sandbox: TSandbox) => Promise<Array<{ terminal: any; terminalId: string }>>;
+    destroy: (sandbox: TSandbox, terminalId: string) => Promise<void>;
+    // Terminal instance methods
+    write: (sandbox: TSandbox, terminal: any, data: Uint8Array | string) => Promise<void>;
+    resize: (sandbox: TSandbox, terminal: any, cols: number, rows: number) => Promise<void>;
+    kill: (sandbox: TSandbox, terminal: any) => Promise<void>;
   };
 }
 
@@ -109,11 +114,19 @@ class UnsupportedTerminal implements SandboxTerminal {
   }
 
   async create(_options?: TerminalCreateOptions): Promise<TerminalSession> {
-    throw new Error(`Interactive terminal sessions are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes only support individual command execution.`);
+    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
+  }
+
+  async getById(_terminalId: string): Promise<TerminalSession | null> {
+    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
   }
 
   async list(): Promise<TerminalSession[]> {
-    throw new Error(`Interactive terminal sessions are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes only support individual command execution.`);
+    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
+  }
+
+  async destroy(_terminalId: string): Promise<void> {
+    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
   }
 }
 
@@ -152,6 +165,47 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 }
 
 /**
+ * Generated terminal session class - implements the TerminalSession interface
+ */
+class GeneratedTerminalSession<TSandbox = any> implements TerminalSession {
+  readonly pid: number;
+  readonly command: string;
+  readonly status: 'running' | 'exited';
+  readonly cols: number;
+  readonly rows: number;
+  onData?: (data: Uint8Array) => void;
+  onExit?: (exitCode: number) => void;
+
+  constructor(
+    private terminal: any,
+    private sandbox: TSandbox,
+    private methods: NonNullable<SandboxMethods<TSandbox>['terminal']>,
+    terminalId: string,
+    command: string,
+    cols: number = 80,
+    rows: number = 24
+  ) {
+    this.pid = parseInt(terminalId);
+    this.command = command;
+    this.status = 'running';
+    this.cols = cols;
+    this.rows = rows;
+  }
+
+  async write(data: Uint8Array | string): Promise<void> {
+    return this.methods.write(this.sandbox, this.terminal, data);
+  }
+
+  async resize(cols: number, rows: number): Promise<void> {
+    return this.methods.resize(this.sandbox, this.terminal, cols, rows);
+  }
+
+  async kill(): Promise<void> {
+    return this.methods.kill(this.sandbox, this.terminal);
+  }
+}
+
+/**
  * Auto-generated terminal implementation that wraps provider methods
  */
 class SupportedTerminal<TSandbox> implements SandboxTerminal {
@@ -161,11 +215,72 @@ class SupportedTerminal<TSandbox> implements SandboxTerminal {
   ) {}
 
   async create(options?: TerminalCreateOptions): Promise<TerminalSession> {
-    return this.methods.create(this.sandbox, options);
+    // Create a GeneratedTerminalSession first so we can set up callback forwarding
+    let terminalSession: GeneratedTerminalSession<TSandbox>;
+    
+    // Create options with callback forwarding to the GeneratedTerminalSession
+    const createOptions: TerminalCreateOptions = {
+      ...options,
+      onData: (data: Uint8Array) => {
+        // Forward to the GeneratedTerminalSession's onData if set
+        if (terminalSession?.onData) {
+          terminalSession.onData(data);
+        }
+      },
+      onExit: (exitCode: number) => {
+        // Forward to the GeneratedTerminalSession's onExit if set
+        if (terminalSession?.onExit) {
+          terminalSession.onExit(exitCode);
+        }
+      }
+    };
+
+    const result = await this.methods.create(this.sandbox, createOptions);
+    
+    // Now create the GeneratedTerminalSession
+    terminalSession = new GeneratedTerminalSession(
+      result.terminal,
+      this.sandbox,
+      this.methods,
+      result.terminalId,
+      options?.command || 'bash',
+      options?.cols || 80,
+      options?.rows || 24
+    );
+
+    return terminalSession;
+  }
+
+  async getById(terminalId: string): Promise<TerminalSession | null> {
+    const result = await this.methods.getById(this.sandbox, terminalId);
+    if (!result) return null;
+    
+    return new GeneratedTerminalSession(
+      result.terminal,
+      this.sandbox,
+      this.methods,
+      result.terminalId,
+      'bash', // Default command for existing terminals
+      80, // Default cols
+      24  // Default rows
+    );
   }
 
   async list(): Promise<TerminalSession[]> {
-    return this.methods.list(this.sandbox);
+    const results = await this.methods.list(this.sandbox);
+    return results.map(result => new GeneratedTerminalSession(
+      result.terminal,
+      this.sandbox,
+      this.methods,
+      result.terminalId,
+      'bash', // Default command
+      80, // Default cols
+      24  // Default rows
+    ));
+  }
+
+  async destroy(terminalId: string): Promise<void> {
+    return this.methods.destroy(this.sandbox, terminalId);
   }
 }
 
