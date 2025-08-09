@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { compute, handleComputeRequest, type ComputeRequest } from '../compute'
+import { compute } from '../compute'
+import { handleComputeRequest, type ComputeRequest } from '../request-handler'
 import { SandboxManager } from '../sandbox'
 import type { Provider, Sandbox, ExecutionResult, SandboxInfo } from '../types'
 
@@ -512,12 +513,13 @@ describe('Compute API - Provider-Centric', () => {
   })
 
   describe('handleComputeRequest', () => {
-    it('should handle execute action', async () => {
+    it('should handle runCode action', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'execute',
+        action: 'compute.sandbox.runCode',
         code: 'print("Hello World")',
-        runtime: 'python'
+        runtime: 'python',
+        sandboxId: 'test-sandbox-id'
       }
 
       const response = await handleComputeRequest({ request, provider })
@@ -531,7 +533,7 @@ describe('Compute API - Provider-Centric', () => {
     it('should handle create action', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'create',
+        action: 'compute.sandbox.create',
         runtime: 'python'
       }
 
@@ -545,7 +547,7 @@ describe('Compute API - Provider-Centric', () => {
     it('should handle destroy action', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'destroy',
+        action: 'compute.sandbox.destroy',
         sandboxId: 'test-sandbox-id'
       }
 
@@ -559,7 +561,7 @@ describe('Compute API - Provider-Centric', () => {
     it('should handle getInfo action', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'getInfo',
+        action: 'compute.sandbox.getInfo',
         sandboxId: 'test-sandbox-id'
       }
 
@@ -574,20 +576,20 @@ describe('Compute API - Provider-Centric', () => {
     it('should return error for execute action without code', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'execute'
+        action: 'compute.sandbox.runCode'
       }
 
       const response = await handleComputeRequest({ request, provider })
 
       expect(response.success).toBe(false)
-      expect(response.error).toBe('Code is required for execute action')
+      expect(response.error).toBe('Code is required for runCode action')
       expect(response.provider).toBe('mock')
     })
 
     it('should return error for destroy action without sandboxId', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'destroy'
+        action: 'compute.sandbox.destroy'
       }
 
       const response = await handleComputeRequest({ request, provider })
@@ -600,7 +602,7 @@ describe('Compute API - Provider-Centric', () => {
     it('should return error for getInfo action without sandboxId', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'getInfo'
+        action: 'compute.sandbox.getInfo'
       }
 
       const response = await handleComputeRequest({ request, provider })
