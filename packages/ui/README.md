@@ -1,6 +1,6 @@
 # @computesdk/ui
 
-Standardized UI components for ComputeSDK framework integrations. Provides consistent code execution interfaces across React, Vue, Svelte, and Vanilla JavaScript.
+Types, configurations, and utilities for integrating with ComputeSDK APIs from frontend applications. This package provides the foundation for building compute interfaces across any framework.
 
 ## Installation
 
@@ -8,132 +8,176 @@ Standardized UI components for ComputeSDK framework integrations. Provides consi
 npm install @computesdk/ui
 ```
 
-## Framework Adapters
+## What's Included
 
-### React
+### Types
+Complete TypeScript definitions for ComputeSDK API integration:
 
-```tsx
-import { CodeExecutionPanel } from '@computesdk/ui/react'
+```typescript
+import type { 
+  ComputeRequest, 
+  ComputeResponse, 
+  ComputeConfig,
+  Runtime 
+} from '@computesdk/ui'
+```
 
-function App() {
-  return (
-    <CodeExecutionPanel 
-      apiEndpoint="/api/execute"
-      defaultCode='print("Hello World!")'
-      defaultRuntime="python"
-    />
-  )
+### API Utilities
+Helper functions for making requests to ComputeSDK APIs:
+
+```typescript
+import { 
+  executeComputeRequest,
+  executeCode,
+  APIError 
+} from '@computesdk/ui'
+
+// Execute code
+const response = await executeCode(
+  'print("Hello World!")', 
+  'python',
+  undefined, // sandboxId (optional)
+  '/api/compute'
+)
+
+// Or make any compute request
+const response = await executeComputeRequest({
+  action: 'compute.sandbox.filesystem.readFile',
+  sandboxId: 'sandbox-123',
+  path: '/tmp/output.txt'
+}, '/api/compute')
+```
+
+### Validation Utilities
+Input validation for compute operations:
+
+```typescript
+import { 
+  validateCode,
+  validateRuntime,
+  validateComputeRequest 
+} from '@computesdk/ui'
+
+const codeValidation = validateCode('print("hello")')
+if (!codeValidation.isValid) {
+  console.error(codeValidation.errors)
 }
 ```
-
-### Vue
-
-```vue
-<template>
-  <CodeExecutionComponent 
-    api-endpoint="/api/execute"
-    initial-code='print("Hello World!")'
-    initial-runtime="python"
-  />
-</template>
-
-<script setup>
-import { CodeExecutionComponent } from '@computesdk/ui/vue'
-</script>
-```
-
-### Svelte
-
-```svelte
-<script>
-  import { onMount } from 'svelte'
-  import { createCodeExecutionStore } from '@computesdk/ui/svelte'
-
-  let container
-
-  onMount(() => {
-    const store = createCodeExecutionStore({
-      apiEndpoint: '/api/execute',
-      initialCode: 'print("Hello World!")',
-      initialRuntime: 'python'
-    })
-    store.mount(container)
-  })
-</script>
-
-<div bind:this={container}></div>
-```
-
-### Vanilla JavaScript
-
-```html
-<div id="code-execution"></div>
-
-<script type="module">
-  import { createCodeExecutionComponent } from '@computesdk/ui/vanilla'
-  
-  const container = document.getElementById('code-execution')
-  createCodeExecutionComponent(container, {
-    apiEndpoint: '/api/execute',
-    initialCode: 'print("Hello World!")',
-    initialRuntime: 'python'
-  })
-</script>
-```
-
-## Features
-
-- **Unified API** - Consistent interface across all frameworks
-- **Built-in State Management** - Loading states, error handling, and execution results
-- **Runtime Selection** - Support for Python and JavaScript execution
-- **Responsive Design** - Mobile-friendly with Tailwind CSS classes
-- **TypeScript Support** - Full type safety (when types are enabled)
-- **Framework Native** - Uses each framework's conventions (hooks, composables, stores)
 
 ## API Reference
 
-### Common Props/Options
+### Core Types
 
-- `apiEndpoint` - API endpoint for code execution (default: `/api/execute`)
-- `initialCode`/`defaultCode` - Initial code in the editor
-- `initialRuntime`/`defaultRuntime` - Initial runtime selection (`python` | `javascript`)
-- `className` - Additional CSS classes
-- `title` - Panel title (React only)
-- `showControls` - Show/hide runtime controls (React only)
+#### `ComputeRequest`
+Request structure for all compute operations:
+- `action` - Operation type (e.g., `'compute.sandbox.runCode'`)
+- `sandboxId?` - Target sandbox ID
+- `code?` - Code to execute
+- `runtime?` - Runtime environment (`'python'` | `'javascript'`)
+- `path?` - File path (for filesystem operations)
+- `content?` - File content (for write operations)
+- And more...
 
-### Expected API Response
+#### `ComputeResponse`
+Response structure from compute operations:
+- `success` - Whether operation succeeded
+- `error?` - Error message if failed
+- `sandboxId` - Sandbox ID involved
+- `provider` - Provider that handled the operation
+- `result?` - Execution results
+- `fileContent?` - File content (for read operations)
+- And more...
 
-Your API endpoint should return:
+### Utility Functions
 
+#### `executeCode(code, runtime?, sandboxId?, endpoint?)`
+Convenience function for code execution.
+
+#### `executeComputeRequest(request, endpoint?)`
+Generic function for any compute operation.
+
+#### `validateCode(code)`, `validateRuntime(runtime)`, etc.
+Input validation functions.
+
+## Framework Integration
+
+This package is framework-agnostic. Use it with any frontend framework:
+
+### React Example
 ```typescript
-interface ExecutionResult {
-  success: boolean
-  result?: {
-    output: string
-    error?: string
-    executionTime: number
-    provider: string
+import { executeCode, type ComputeResponse } from '@computesdk/ui'
+
+function useCodeExecution() {
+  const [result, setResult] = useState<ComputeResponse | null>(null)
+  
+  const execute = async (code: string) => {
+    const response = await executeCode(code, 'python')
+    setResult(response)
   }
-  error?: string
+  
+  return { result, execute }
 }
 ```
 
-## Styling
+### Vue Example
+```typescript
+import { ref } from 'vue'
+import { executeCode, type ComputeResponse } from '@computesdk/ui'
 
-Components use Tailwind CSS classes. Include Tailwind in your project or provide equivalent styles:
+export function useCodeExecution() {
+  const result = ref<ComputeResponse | null>(null)
+  
+  const execute = async (code: string) => {
+    result.value = await executeCode(code, 'python')
+  }
+  
+  return { result, execute }
+}
+```
 
-```html
-<script src="https://cdn.tailwindcss.com"></script>
+### Svelte Example
+```typescript
+import { writable } from 'svelte/store'
+import { executeCode, type ComputeResponse } from '@computesdk/ui'
+
+export const result = writable<ComputeResponse | null>(null)
+
+export async function execute(code: string) {
+  const response = await executeCode(code, 'python')
+  result.set(response)
+}
+```
+
+## Server-Side Integration
+
+Your server should implement the ComputeSDK request handler:
+
+```typescript
+// /api/compute endpoint
+import { handleComputeRequest } from 'computesdk'
+import { e2b } from '@computesdk/e2b'
+
+export async function POST(request: Request) {
+  const computeRequest = await request.json()
+  
+  const response = await handleComputeRequest({
+    request: computeRequest,
+    provider: e2b({ apiKey: process.env.E2B_API_KEY })
+  })
+  
+  return Response.json(response)
+}
 ```
 
 ## Examples
 
-See the [ComputeSDK examples](https://github.com/sst/computesdk/tree/main/examples) for complete framework integrations:
+See the [ComputeSDK examples](https://github.com/computesdk/computesdk/tree/main/examples) for complete framework integrations:
 
-- [Next.js](https://github.com/sst/computesdk/tree/main/examples/nextjs)
-- [Nuxt](https://github.com/sst/computesdk/tree/main/examples/nuxt)  
-- [SvelteKit](https://github.com/sst/computesdk/tree/main/examples/sveltekit)
-- [Astro](https://github.com/sst/computesdk/tree/main/examples/astro)
+- [Next.js](https://github.com/computesdk/computesdk/tree/main/examples/nextjs)
+- [Nuxt](https://github.com/computesdk/computesdk/tree/main/examples/nuxt)  
+- [SvelteKit](https://github.com/computesdk/computesdk/tree/main/examples/sveltekit)
+- [Remix](https://github.com/computesdk/computesdk/tree/main/examples/remix)
+- [Astro](https://github.com/computesdk/computesdk/tree/main/examples/astro)
 
 ## License
 

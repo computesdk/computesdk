@@ -146,8 +146,12 @@ export interface TerminalCreateOptions {
 export interface SandboxTerminal {
   /** Create a new interactive terminal session */
   create(options?: TerminalCreateOptions): Promise<TerminalSession>;
+  /** Get existing terminal session by ID */
+  getById(terminalId: string): Promise<TerminalSession | null>;
   /** List active terminal sessions */
   list(): Promise<TerminalSession[]>;
+  /** Destroy a terminal session */
+  destroy(terminalId: string): Promise<void>;
 }
 
 /**
