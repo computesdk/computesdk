@@ -6,7 +6,9 @@
  */
 
 import { e2b } from '@computesdk/e2b';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
+import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
 
 async function main() {
@@ -16,26 +18,16 @@ async function main() {
   }
 
   try {
-    // Create E2B sandbox with full capabilities
-    const sandbox = e2b();
+    // Configure compute with E2B provider
+    compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
+
+    // Create sandbox using compute singleton
+    const sandbox = await compute.sandbox.create({});
 
     console.log('Created E2B sandbox:', sandbox.sandboxId);
 
     // Execute Python code
-    const result = await sandbox.execute(`
-import sys
-print(f"Python version: {sys.version}")
-print("Hello from E2B!")
-
-# Calculate fibonacci
-def fibonacci(n):
-    if n <= 1:
-        return n
-    return fibonacci(n-1) + fibonacci(n-2)
-
-for i in range(5):
-    print(f"fibonacci({i}) = {fibonacci(i)}")
-    `);
+    const result = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
 
     console.log('Output:', result.stdout);
     console.log('Execution time:', result.executionTime, 'ms');
@@ -44,15 +36,9 @@ for i in range(5):
     console.log('\n--- Filesystem Operations ---');
 
     // Write and execute a Python script
-    await sandbox.filesystem.writeFile('/tmp/script.py', `
-def greet(name):
-    return f"Hello, {name}!"
+    await sandbox.filesystem.writeFile('/tmp/script.py', PYTHON_SNIPPETS.FILE_PROCESSOR);
 
-print(greet("E2B"))
-print("This script was written via filesystem!")
-    `);
-
-    const scriptResult = await sandbox.execute('python /tmp/script.py');
+    const scriptResult = await sandbox.runCommand('python', ['/tmp/script.py']);
     console.log('Script output:', scriptResult.stdout);
 
     // Create directory and list files
@@ -80,17 +66,7 @@ print("This script was written via filesystem!")
     // Data science example
     console.log('\n--- Data Science ---');
     
-    const dataResult = await sandbox.execute(`
-import pandas as pd
-import numpy as np
-
-# Create sample data
-data = {'A': [1, 2, 3], 'B': [4, 5, 6]}
-df = pd.DataFrame(data)
-print("DataFrame:")
-print(df)
-print(f"Sum: {df.sum().sum()}")
-    `);
+    const dataResult = await sandbox.runCode(PYTHON_SNIPPETS.DATA_SCIENCE);
     
     console.log('Data Science Output:', dataResult.stdout);
 

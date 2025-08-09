@@ -28,11 +28,84 @@ jobs:
     - name: Build packages
       run: pnpm build
     
-    - name: Run tests
+    - name: Run all tests (mock mode)
       run: pnpm test
+      env:
+        # Ensure tests run in mock mode
+        E2B_API_KEY: ""
+        VERCEL_TOKEN: ""
+        VERCEL_TEAM_ID: ""
+        VERCEL_PROJECT_ID: ""
+        DAYTONA_API_KEY: ""
     
     - name: Run type checking
       run: pnpm typecheck
     
     - name: Run linting
       run: pnpm lint
+
+  provider-integration-tests:
+    runs-on: ubuntu-latest
+    needs: test  # Only run if basic tests pass
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'  # Only on main branch pushes
+    
+    strategy:
+      matrix:
+        provider: [e2b, vercel, daytona]
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+    
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+    
+    - name: Build packages
+      run: pnpm build
+        
+    - name: Run E2B Integration Tests
+      if: matrix.provider == 'e2b'
+      env:
+        E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+      run: |
+        if [ -n "$E2B_API_KEY" ]; then
+          echo "Running E2B integration tests with real API..."
+          pnpm --filter @computesdk/e2b test
+        else
+          echo "Skipping E2B integration tests - no API key provided"
+        fi
+        
+    - name: Run Vercel Integration Tests
+      if: matrix.provider == 'vercel'
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      run: |
+        if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_TEAM_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+          echo "Running Vercel integration tests with real API..."
+          pnpm --filter @computesdk/vercel test
+        else
+          echo "Skipping Vercel integration tests - missing required secrets"
+        fi
+        
+    - name: Run Daytona Integration Tests
+      if: matrix.provider == 'daytona'
+      env:
+        DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+      run: |
+        if [ -n "$DAYTONA_API_KEY" ]; then
+          echo "Running Daytona integration tests with real API..."
+          pnpm --filter @computesdk/daytona test
+        else
+          echo "Skipping Daytona integration tests - no API key provided"
+        fi

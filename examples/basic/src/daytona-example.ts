@@ -9,6 +9,7 @@
  */
 
 import { daytona } from '@computesdk/daytona';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 config(); // Load environment variables from .env file
 
@@ -23,13 +24,16 @@ async function main() {
   }
 
   try {
-    // Create Daytona sandbox with filesystem capabilities
-    const sandbox = daytona();
+    // Configure compute with Daytona provider
+    compute.setConfig({ provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) });
+
+    // Create sandbox using compute singleton
+    const sandbox = await compute.sandbox.create({});
 
     console.log('Created Daytona sandbox:', sandbox.sandboxId);
 
     // Execute Python code
-    const result = await sandbox.execute(`
+    const result = await sandbox.runCode(`
 import sys
 print(f"Python version: {sys.version}")
 print("Hello from Daytona!")
@@ -69,7 +73,7 @@ print(greet("Daytona"))
 print("This script was written via filesystem!")
     `);
 
-    const scriptResult = await sandbox.execute('python /tmp/script.py');
+    const scriptResult = await sandbox.runCommand('python', ['/tmp/script.py']);
     console.log('Script output:', scriptResult.stdout);
 
     // Create directory and list files
@@ -80,7 +84,7 @@ print("This script was written via filesystem!")
     // Data science example
     console.log('\n--- Data Science Example ---');
     
-    const dataResult = await sandbox.execute(`
+    const dataResult = await sandbox.runCode(`
 import pandas as pd
 import numpy as np
 

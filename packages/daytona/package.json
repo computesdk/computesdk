@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/daytona",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Daytona provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
@@ -50,6 +50,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",

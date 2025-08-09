@@ -1,231 +1,200 @@
-import type {
-  ExecutionResult,
-  Runtime,
-  SandboxInfo,
-  SandboxConfig,
-  ProviderType,
-  FileEntry,
-  SandboxFileSystem,
-  FilesystemComputeSpecification,
-  FilesystemComputeSandbox,
-} from 'computesdk';
-import { BaseProvider, BaseFileSystem } from 'computesdk';
-import { Daytona } from '@daytonaio/sdk';
+/**
+ * Daytona Provider - Factory-based Implementation
+ * 
+ * Code execution only provider using the factory pattern.
+ * Reduces ~300 lines of boilerplate to ~80 lines of core logic.
+ */
+
+import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { createProvider } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions } from 'computesdk';
 
 /**
  * Daytona-specific configuration options
  */
-export interface DaytonaConfig extends SandboxConfig {
+export interface DaytonaConfig {
   /** Daytona API key - if not provided, will fallback to DAYTONA_API_KEY environment variable */
   apiKey?: string;
-  /** Provider to use for execution */
-  provider?: ProviderType;
-  /** Runtime environment to use */
+  /** Default runtime environment */
   runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
-  /** Existing sandbox ID to reconnect to */
-  sandboxId?: string;
 }
 
 /**
- * Daytona FileSystem implementation
+ * Create a Daytona provider instance using the factory pattern
  */
-class DaytonaFileSystem extends BaseFileSystem {
-  constructor(
-    provider: string,
-    sandboxId: string
-  ) {
-    super(provider, sandboxId);
-  }
+export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
+  name: 'daytona',
+  methods: {
+    sandbox: {
+      // Collection operations (compute.sandbox.*)
+      create: async (config: DaytonaConfig, options?: CreateSandboxOptions) => {
+        // Validate API key
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
 
-  protected async doReadFile(_path: string): Promise<string> {
-    throw new Error('Daytona file read not implemented yet');
-  }
-
-  protected async doWriteFile(_path: string, _content: string): Promise<void> {
-    throw new Error('Daytona file write not implemented yet');
-  }
-
-  protected async doMkdir(_path: string): Promise<void> {
-    throw new Error('Daytona mkdir not implemented yet');
-  }
-
-  protected async doReaddir(_path: string): Promise<FileEntry[]> {
-    throw new Error('Daytona readdir not implemented yet');
-  }
-
-  protected async doExists(_path: string): Promise<boolean> {
-    return false;
-  }
-
-  protected async doRemove(_path: string): Promise<void> {
-    throw new Error('Daytona remove not implemented yet');
-  }
-}
-
-export class DaytonaProvider extends BaseProvider implements FilesystemComputeSandbox, FilesystemComputeSpecification {
-  public sandboxId: string;
-  private daytona: Daytona;
-  private sandbox: any | null = null;
-  private readonly apiKey: string;
-  private readonly runtime: Runtime;
-  private readonly configuredSandboxId?: string;
-  public readonly filesystem: SandboxFileSystem;
-
-  constructor(config: DaytonaConfig) {
-    super('daytona', config.timeout || 300000);
-    
-    this.configuredSandboxId = config.sandboxId;
-    // Start with configured ID or placeholder - will be updated when sandbox is created
-    this.sandboxId = config.sandboxId || 'daytona-pending';
-
-    // Get API key from config or environment
-    this.apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
-
-    if (!this.apiKey) {
-      throw new Error(
-        `Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable.`
-      );
-    }
-
-    this.runtime = config.runtime || 'python';
-
-    // Initialize Daytona client
-    this.daytona = new Daytona({ apiKey: this.apiKey });
-
-    // Initialize filesystem (after super() call, so this.provider and this.sandboxId are available)
-    this.filesystem = new DaytonaFileSystem(this.provider, this.sandboxId);
-  }
-
-  private async ensureSandbox(): Promise<any> {
-    if (this.sandbox) {
-      return this.sandbox;
-    }
-
-    try {
-      // Create a new Daytona sandbox
-      this.sandbox = await this.daytona.create({
-        language: this.runtime === 'python' ? 'python' : 'typescript',
-      });
-
-      return this.sandbox;
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.includes('unauthorized') || error.message.includes('API key')) {
+        if (!apiKey) {
           throw new Error(
-            `Daytona authentication failed. Please check your DAYTONA_API_KEY environment variable.`
+            `Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable. Get your API key from https://daytona.io/`
           );
         }
-        if (error.message.includes('quota') || error.message.includes('limit')) {
+
+        const runtime = options?.runtime || config.runtime || 'python';
+        const timeout = config.timeout || 300000;
+
+        try {
+          // Initialize Daytona client
+          const daytona = new Daytona({ apiKey: apiKey });
+
+          let session: DaytonaSandbox;
+          let sandboxId: string;
+
+          if (options?.sandboxId) {
+            // Reconnect to existing Daytona sandbox
+            session = await daytona.get(options.sandboxId);
+            sandboxId = options.sandboxId;
+          } else {
+            // Create new Daytona sandbox
+            session = await daytona.create({
+              language: runtime === 'python' ? 'python' : 'typescript',
+            });
+            sandboxId = session.id;
+          }
+
+          return {
+            sandbox: session,
+            sandboxId
+          };
+        } catch (error) {
+          if (error instanceof Error) {
+            if (error.message.includes('unauthorized') || error.message.includes('API key')) {
+              throw new Error(
+                `Daytona authentication failed. Please check your DAYTONA_API_KEY environment variable. Get your API key from https://daytona.io/`
+              );
+            }
+            if (error.message.includes('quota') || error.message.includes('limit')) {
+              throw new Error(
+                `Daytona quota exceeded. Please check your usage at https://daytona.io/`
+              );
+            }
+          }
           throw new Error(
-            `Daytona quota exceeded. Please check your usage.`
+            `Failed to create Daytona sandbox: ${error instanceof Error ? error.message : String(error)}`
           );
         }
+      },
+
+      getById: async (config: DaytonaConfig, sandboxId: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+
+        try {
+          const daytona = new Daytona({ apiKey: apiKey });
+          const session = await daytona.get(sandboxId);
+
+          return {
+            sandbox: session,
+            sandboxId
+          };
+        } catch (error) {
+          // Sandbox doesn't exist or can't be accessed
+          return null;
+        }
+      },
+
+      list: async (config: DaytonaConfig) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+
+        try {
+          const daytona = new Daytona({ apiKey: apiKey });
+          const sandboxes = await daytona.list();
+
+          return sandboxes.map((session: any) => ({
+            sandbox: session,
+            sandboxId: session.id
+          }));
+        } catch (error) {
+          // Return empty array if listing fails
+          return [];
+        }
+      },
+
+      destroy: async (config: DaytonaConfig, sandboxId: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+
+        try {
+          const daytona = new Daytona({ apiKey: apiKey });
+          // Note: Daytona SDK expects a Sandbox object, but we only have the ID
+          // This is a limitation of the current Daytona SDK design
+          // For now, we'll skip the delete operation
+          const sandbox = await daytona.get(sandboxId);
+          await sandbox.delete();
+        } catch (error) {
+          // Sandbox might already be destroyed or doesn't exist
+          // This is acceptable for destroy operations
+        }
+      },
+
+      // Instance operations (sandbox.*)
+      runCode: async (session: DaytonaSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+        const startTime = Date.now();
+
+        try {
+          // Execute code using Daytona's process.codeRun method
+          const response = await session.process.codeRun(code);
+
+          return {
+            stdout: response.result || '',
+            stderr: '', // Daytona doesn't separate stderr in the response
+            exitCode: response.exitCode || 0,
+            executionTime: Date.now() - startTime,
+            sandboxId: session.id,
+            provider: 'daytona'
+          };
+        } catch (error) {
+          throw new Error(
+            `Daytona execution failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      runCommand: async (session: DaytonaSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+        const startTime = Date.now();
+
+        try {
+          // Construct full command with arguments
+          const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+
+          // Execute command using Daytona's process.executeCommand method
+          const response = await session.process.executeCommand(fullCommand);
+
+          return {
+            stdout: response.result || '',
+            stderr: '', // Daytona doesn't separate stderr in the response
+            exitCode: response.exitCode || 0,
+            executionTime: Date.now() - startTime,
+            sandboxId: session.id,
+            provider: 'daytona'
+          };
+        } catch (error) {
+          throw new Error(
+            `Daytona command execution failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      getInfo: async (session: DaytonaSandbox): Promise<SandboxInfo> => {
+        return {
+          id: session.id,
+          provider: 'daytona',
+          runtime: 'python', // Daytona default
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000,
+          metadata: {
+            daytonaSandboxId: session.id
+          }
+        };
       }
-      throw new Error(
-        `Failed to initialize Daytona sandbox: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
   }
-
-  async doExecute(code: string, _runtime?: Runtime): Promise<ExecutionResult> {
-    const sandbox = await this.ensureSandbox();
-
-    try {
-      // Execute code using Daytona's process.codeRun method
-      const response = await sandbox.process.codeRun(code);
-      
-      return {
-        stdout: response.result || '',
-        stderr: response.error || '',
-        exitCode: response.exitCode || 0,
-        executionTime: 0, // BaseProvider will calculate this
-        sandboxId: this.sandboxId,
-        provider: this.provider
-      };
-    } catch (error) {
-      return {
-        stdout: '',
-        stderr: error instanceof Error ? error.message : String(error),
-        exitCode: 1,
-        executionTime: 0,
-        sandboxId: this.sandboxId,
-        provider: this.provider
-      };
-    }
-  }
-
-  async doRunCommand(command: string, args: string[] = []): Promise<ExecutionResult> {
-    const sandbox = await this.ensureSandbox();
-
-    // Construct full command with arguments
-    const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-
-    try {
-      // Execute command using Daytona's process.executeCommand method
-      const response = await sandbox.process.executeCommand(fullCommand);
-      
-      return {
-        stdout: response.result || '',
-        stderr: response.error || '',
-        exitCode: response.exitCode || 0,
-        executionTime: 0, // BaseProvider will calculate this
-        sandboxId: this.sandboxId,
-        provider: this.provider
-      };
-    } catch (error) {
-      return {
-        stdout: '',
-        stderr: error instanceof Error ? error.message : String(error),
-        exitCode: 1,
-        executionTime: 0,
-        sandboxId: this.sandboxId,
-        provider: this.provider
-      };
-    }
-  }
-
-  async doKill(): Promise<void> {
-    if (!this.sandbox) {
-      return;
-    }
-
-    try {
-      // Delete the Daytona sandbox
-      await this.sandbox.delete();
-      this.sandbox = null;
-    } catch (error) {
-      throw new Error(
-        `Failed to kill Daytona sandbox: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
-
-  async doGetInfo(): Promise<SandboxInfo> {
-    await this.ensureSandbox();
-
-    return {
-      id: this.sandboxId,
-      provider: this.provider,
-      runtime: this.runtime,
-      status: this.sandbox ? 'running' : 'stopped',
-      createdAt: new Date(),
-      timeout: this.timeout,
-      metadata: {
-        daytonaSessionId: this.sandboxId
-      }
-    };
-  }
-}
-
-export function daytona(config?: Partial<DaytonaConfig>): DaytonaProvider {
-  const fullConfig: DaytonaConfig = {
-    provider: 'auto' as any, // Use 'auto' as base type, actual provider is 'daytona'
-    runtime: 'python',
-    timeout: 300000,
-    ...config
-  };
-
-  return new DaytonaProvider(fullConfig);
-}
+});

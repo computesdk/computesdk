@@ -6,8 +6,9 @@
  * your environment variables - no manual configuration needed!
  */
 
-import { ComputeSDK } from 'computesdk';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
+import { CODE_UTILS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
 
 async function main() {
@@ -16,7 +17,7 @@ async function main() {
   
   try {
     // 🎯 The magic happens here - auto-detect provider!
-    const sandbox = ComputeSDK.createSandbox();
+    const sandbox = await compute.sandbox.create({});
     
     console.log('✨ Auto-detected provider:', sandbox.provider);
     console.log('📦 Sandbox ID:', sandbox.sandboxId);
@@ -28,11 +29,8 @@ async function main() {
     
     // Execute a simple "Hello World" to prove it works
     console.log('\n🚀 Testing execution...');
-    const code = sandbox.provider === 'e2b' || sandbox.provider === 'fly' 
-      ? 'print("Hello from " + "' + sandbox.provider.toUpperCase() + '!")'
-      : 'console.log("Hello from " + "' + sandbox.provider.toUpperCase() + '!")';
-      
-    const result = await sandbox.execute(code);
+    const runtime = (sandbox.provider === 'e2b' || sandbox.provider === 'fly') ? 'python' : 'node';
+    const result = await sandbox.runCode(CODE_UTILS.getGreetingCode(sandbox.provider, runtime));
     console.log('📤 Output:', result.stdout);
     console.log('⏱️  Execution time:', result.executionTime + 'ms');
     
