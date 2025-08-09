@@ -1,13 +1,8 @@
-import type { ExecutionResult, Runtime, ExecutionOptions } from '../types/index.js'
+import type { ComputeRequest, ComputeResponse, Runtime } from '../types/index.js'
 
-export interface ExecuteCodeRequest {
-  code: string
-  runtime: Runtime
-  options?: ExecutionOptions
-}
-
-export interface ExecuteCodeResponse extends ExecutionResult {}
-
+/**
+ * API Error class for compute operations
+ */
 export class APIError extends Error {
   constructor(
     message: string,
@@ -19,10 +14,13 @@ export class APIError extends Error {
   }
 }
 
-export async function executeCode(
-  request: ExecuteCodeRequest,
-  endpoint: string = '/api/execute'
-): Promise<ExecuteCodeResponse> {
+/**
+ * Execute a compute request against the API
+ */
+export async function executeComputeRequest(
+  request: ComputeRequest,
+  endpoint: string = '/api/compute'
+): Promise<ComputeResponse> {
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -51,7 +49,7 @@ export async function executeCode(
       throw new APIError(errorMessage, response.status, errorCode)
     }
 
-    const result: ExecuteCodeResponse = await response.json()
+    const result: ComputeResponse = await response.json()
     return result
   } catch (error) {
     if (error instanceof APIError) {
@@ -68,6 +66,9 @@ export async function executeCode(
   }
 }
 
+/**
+ * Format execution time for display
+ */
 export function formatExecutionTime(milliseconds: number): string {
   if (milliseconds < 1000) {
     return `${milliseconds}ms`
@@ -83,25 +84,30 @@ export function formatExecutionTime(milliseconds: number): string {
   return `${minutes}m ${remainingSeconds}s`
 }
 
+/**
+ * Format output for display
+ */
 export function formatOutput(output: string): string {
   return output.trim()
 }
 
-export function isExecutionError(result: ExecutionResult): boolean {
-  return !result.success || !!result.error || !!result.result?.error
+/**
+ * Check if a compute response indicates an error
+ */
+export function isComputeError(response: ComputeResponse): boolean {
+  return !response.success || !!response.error
 }
 
-export function getErrorMessage(result: ExecutionResult): string {
-  if (result.error) {
-    return result.error
+/**
+ * Get error message from compute response
+ */
+export function getErrorMessage(response: ComputeResponse): string {
+  if (response.error) {
+    return response.error
   }
   
-  if (result.result?.error) {
-    return result.result.error
-  }
-  
-  if (!result.success) {
-    return 'Execution failed'
+  if (!response.success) {
+    return 'Operation failed'
   }
   
   return 'Unknown error'
