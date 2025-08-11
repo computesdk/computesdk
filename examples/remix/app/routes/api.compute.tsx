@@ -6,28 +6,30 @@ import { handleComputeRequest } from "computesdk";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
-    const computeRequest = await request.json();
-    // @ts-ignore - Example only, provider would be e2b() | vercel() | daytona()
+    const formData = await request.formData();
+    const code = formData.get("code") as string;
+    
+    // Configure your provider - uncomment one of the following:
+    // const provider = e2b({ apiKey: process.env.E2B_API_KEY! });
+    // const provider = vercel({ token: process.env.VERCEL_TOKEN!, teamId: process.env.VERCEL_TEAM_ID!, projectId: process.env.VERCEL_PROJECT_ID! });
+    // const provider = daytona({ apiKey: process.env.DAYTONA_API_KEY! });
+    
     const response = await handleComputeRequest({
-      request: computeRequest,
-      // @ts-ignore - Example only, provider would be e2b() | vercel() | daytona()
-      provider: undefined // e2b() | vercel() | daytona()
+      request: {
+        action: 'compute.sandbox.runCode',
+        code
+      },
+      // @ts-ignore - Uncomment a provider above
+      provider: undefined
     });
 
-    return Response.json(response, { 
-      status: response.success ? 200 : 500 
-    });
+    if (response.success) {
+      return { output: response.result?.stdout || 'No output' };
+    } else {
+      return { error: response.error || 'Unknown error' };
+    }
   } catch (error) {
     console.error("Request handling error:", error);
-    
-    return Response.json(
-      { 
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error occurred",
-        sandboxId: '',
-        provider: 'unknown'
-      },
-      { status: 500 }
-    );
+    return { error: error instanceof Error ? error.message : "Unknown error occurred" };
   }
 };

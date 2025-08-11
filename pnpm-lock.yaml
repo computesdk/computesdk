@@ -47,6 +47,12 @@ importers:
 
   examples/astro:
     dependencies:
+      '@astrojs/node':
+        specifier: ^8.0.0
+        version: 8.3.4(astro@4.16.18(@types/node@20.19.5)(rollup@4.45.1)(terser@5.43.1)(typescript@5.8.3))
+      '@computesdk/daytona':
+        specifier: workspace:*
+        version: link:../../packages/daytona
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../../packages/e2b
@@ -103,6 +109,9 @@ importers:
 
   examples/nextjs:
     dependencies:
+      '@computesdk/daytona':
+        specifier: workspace:*
+        version: link:../../packages/daytona
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../../packages/e2b
@@ -146,6 +155,9 @@ importers:
 
   examples/nuxt:
     dependencies:
+      '@computesdk/daytona':
+        specifier: workspace:*
+        version: link:../../packages/daytona
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../../packages/e2b
@@ -174,9 +186,15 @@ importers:
 
   examples/remix:
     dependencies:
+      '@computesdk/daytona':
+        specifier: workspace:*
+        version: link:../../packages/daytona
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../../packages/e2b
+      '@computesdk/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@computesdk/vercel':
         specifier: workspace:*
         version: link:../../packages/vercel
@@ -220,6 +238,9 @@ importers:
 
   examples/sveltekit:
     dependencies:
+      '@computesdk/daytona':
+        specifier: workspace:*
+        version: link:../../packages/daytona
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../../packages/e2b
@@ -499,6 +520,11 @@ packages:
 
   '@astrojs/markdown-remark@5.3.0':
     resolution: {integrity: sha512-r0Ikqr0e6ozPb5bvhup1qdWnSPUvQu6tub4ZLYaKyG50BXZ0ej6FhGz3GpChKpH7kglRFPObJd/bDyf2VM9pkg==}
+
+  '@astrojs/node@8.3.4':
+    resolution: {integrity: sha512-xzQs39goN7xh9np9rypGmbgZj3AmmjNxEMj9ZWz5aBERlqqFF3n8A/w/uaJeZ/bkHS60l1BXVS0tgsQt9MFqBA==}
+    peerDependencies:
+      astro: ^4.2.0
 
   '@astrojs/prism@3.1.0':
     resolution: {integrity: sha512-Z9IYjuXSArkAUx3N6xj6+Bnvx8OdUSHA8YoOgyepp3+zJmtVYJIl/I18GozdJVW1p5u/CNpl3Km7/gwTJK85cw==}
@@ -7586,6 +7612,9 @@ packages:
     resolution: {integrity: sha512-61g9pCh0Vnh7IutZjtLGGpTA355+OPn2TyDv/6ivP2h/AdAVX9azsoxmg2/M6nZeQZNYBEwIcsne1mJd9oQItQ==}
     engines: {node: '>= 18'}
 
+  server-destroy@1.0.1:
+    resolution: {integrity: sha512-rb+9B5YBIEzYcD6x2VKidaa+cqYBJQKnU4oe4E3ANwRRN56yk/ua1YCJT1n21NTS8w6CcOclAKNP3PhdCXKYtQ==}
+
   set-cookie-parser@2.7.1:
     resolution: {integrity: sha512-IOc8uWeOZgnb3ptbCURJWNjWUPcO3ZnTTdzsurqERrP6nPyv+paC55vJM0LpOlT2ne+Ix+9+CRG1MNLlyZ4GjQ==}
 
@@ -9048,6 +9077,14 @@ snapshots:
       unist-util-visit: 5.0.0
       unist-util-visit-parents: 6.0.1
       vfile: 6.0.3
+    transitivePeerDependencies:
+      - supports-color
+
+  '@astrojs/node@8.3.4(astro@4.16.18(@types/node@20.19.5)(rollup@4.45.1)(terser@5.43.1)(typescript@5.8.3))':
+    dependencies:
+      astro: 4.16.18(@types/node@20.19.5)(rollup@4.45.1)(terser@5.43.1)(typescript@5.8.3)
+      send: 0.19.0
+      server-destroy: 1.0.1
     transitivePeerDependencies:
       - supports-color
 
@@ -17920,6 +17957,8 @@ snapshots:
       send: 1.2.0
     transitivePeerDependencies:
       - supports-color
+
+  server-destroy@1.0.1: {}
 
   set-cookie-parser@2.7.1: {}
 

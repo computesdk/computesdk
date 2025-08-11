@@ -1,34 +1,29 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { createCodeExecutionStore } from '@computesdk/ui/svelte';
+  import { useCompute } from '@computesdk/ui';
+  
+  let output = '';
+  const compute = useCompute({ apiEndpoint: '/api/compute' });
 
-  let container: HTMLDivElement;
-
-  onMount(() => {
-    // Load Tailwind CSS
-    const script = document.createElement('script');
-    script.src = 'https://cdn.tailwindcss.com';
-    document.head.appendChild(script);
-
-    // Initialize the code execution component
-    const store = createCodeExecutionStore({
-      apiEndpoint: '/api/execute',
-      initialCode: 'print("Hello from ComputeSDK!")',
-      initialRuntime: 'python'
-    });
-
-    // Mount the component to the container
-    store.mount(container);
-  });
+  async function runCode() {
+    try {
+      const sandbox = await compute.sandbox.create();
+      const result = await sandbox.runCode('print("Hello from ComputeSDK!")');
+      output = result.result?.stdout || 'No output';
+      await sandbox.destroy();
+    } catch (error) {
+      output = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
 </script>
 
 <svelte:head>
-  <title>ComputeSDK + SvelteKit Example</title>
-  <meta name="description" content="Example of using ComputeSDK with SvelteKit for server-side code execution" />
+  <title>ComputeSDK + SvelteKit</title>
 </svelte:head>
 
-<main class="container mx-auto p-8 max-w-4xl">
-  <h1 class="text-3xl font-bold mb-8">ComputeSDK + SvelteKit Example</h1>
-  
-  <div bind:this={container}></div>
+<main style="padding: 2rem;">
+  <h1>ComputeSDK + SvelteKit</h1>
+  <button on:click={runCode}>Run Code</button>
+  {#if output}
+    <pre style="margin-top: 1rem; padding: 1rem; background: #f5f5f5;">{output}</pre>
+  {/if}
 </main>
