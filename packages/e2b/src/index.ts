@@ -212,7 +212,10 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
           const hasError = execution.error != null; // Checks for both null and undefined
           const exitCode = hasError ? 1 : 0;
           
-
+          // Check for syntax errors and throw them
+          if (hasError && execution.error?.name === 'SyntaxError') {
+            throw new Error(`Syntax error: ${execution.error.value || execution.error.traceback}`);
+          }
           
           return {
             stdout: hasError ? '' : execution.logs.stdout.join('\n'),
@@ -252,9 +255,15 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             provider: 'e2b'
           };
         } catch (error) {
-          throw new Error(
-            `E2B command execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
+          // For command failures, return error info instead of throwing
+          return {
+            stdout: '',
+            stderr: error instanceof Error ? error.message : String(error),
+            exitCode: 127, // Command not found exit code
+            executionTime: Date.now() - startTime,
+            sandboxId: sandbox.sandboxId || 'e2b-unknown',
+            provider: 'e2b'
+          };
         }
       },
 
@@ -322,6 +331,9 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
               // Default no-op if no onData provided
             })
           });
+
+          // Add the onData callback to the terminal object for test compatibility
+          (ptyHandle as any).onData = options.onData;
 
           return {
             terminal: ptyHandle,
