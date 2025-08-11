@@ -7,10 +7,10 @@
 
 import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
 import { createProvider } from 'computesdk';
-import type { 
-  Runtime, 
-  ExecutionResult, 
-  SandboxInfo, 
+import type {
+  Runtime,
+  ExecutionResult,
+  SandboxInfo,
   CreateSandboxOptions,
   FileEntry,
   TerminalSession,
@@ -29,6 +29,8 @@ export interface E2BConfig {
   timeout?: number;
 }
 
+
+
 /**
  * Create an E2B provider instance using the factory pattern
  */
@@ -40,7 +42,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       create: async (config: E2BConfig, options?: CreateSandboxOptions) => {
         // Validate API key
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.E2B_API_KEY) || '';
-        
+
         if (!apiKey) {
           throw new Error(
             `Missing E2B API key. Provide 'apiKey' in config or set E2B_API_KEY environment variable. Get your API key from https://e2b.dev/`
@@ -54,7 +56,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
           );
         }
 
-        const runtime = options?.runtime || config.runtime || 'python';
+
         const timeout = config.timeout || 300000;
 
         try {
@@ -106,7 +108,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
           const sandbox = await E2BSandbox.connect(sandboxId, {
             apiKey: apiKey,
           });
-          
+
           return {
             sandbox,
             sandboxId
@@ -125,7 +127,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
 
       destroy: async (config: E2BConfig, sandboxId: string) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
-        
+
         try {
           const sandbox = await E2BSandbox.connect(sandboxId, {
             apiKey: apiKey,
@@ -138,7 +140,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: E2BSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: E2BSandbox, code: string, _runtime?: Runtime): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
@@ -168,21 +170,12 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
           const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
 
           // Execute command using E2B's bash execution via Python subprocess
-          const execution = await sandbox.runCode(`
-import subprocess
-import sys
-
-result = subprocess.run(${JSON.stringify(fullCommand)}, shell=True, capture_output=True, text=True)
-print(result.stdout, end='')
-if result.stderr:
-    print(result.stderr, end='', file=sys.stderr)
-sys.exit(result.returncode)
-`);
+          const execution = await sandbox.commands.run(fullCommand);
 
           return {
-            stdout: execution.logs.stdout.join('\n'),
-            stderr: execution.logs.stderr.join('\n'),
-            exitCode: execution.error ? 1 : 0,
+            stdout: execution.stdout,
+            stderr: execution.stderr,
+            exitCode: execution.exitCode,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.sandboxId || 'e2b-unknown',
             provider: 'e2b'
@@ -245,7 +238,7 @@ sys.exit(result.returncode)
 
       // Optional terminal methods - E2B has PTY terminal support
       terminal: {
-        create: async (sandbox: E2BSandbox, options: TerminalCreateOptions = {}): Promise<TerminalSession> => {
+        create: async (sandbox: E2BSandbox, options: TerminalCreateOptions = {}) => {
           const command = options.command || 'bash';
           const cols = options.cols || 80;
           const rows = options.rows || 24;
@@ -254,45 +247,96 @@ sys.exit(result.returncode)
           const ptyHandle = await sandbox.pty.create({ 
             cols: cols, 
             rows: rows,
-            onData: (data: Uint8Array) => {
-              // PTY output handler - applications can subscribe to this
-              if (terminalSession.onData) {
-                terminalSession.onData(data);
-              }
-            }
+            onData: options.onData || (() => {
+              // Default no-op if no onData provided
+            })
           });
 
-          // Create terminal session with methods
-          const terminalSession: TerminalSession = {
-            pid: ptyHandle.pid,
-            command,
-            status: 'running',
-            cols,
-            rows,
-            
-            write: async (data: Uint8Array | string) => {
-              // E2B PTY handles write via the onData callback mechanism
-              // For now, we'll throw an error since direct write isn't supported
-              throw new Error('Direct terminal write not supported by E2B PTY. Use command execution instead.');
-            },
-            
-            resize: async (newCols: number, newRows: number) => {
-              // E2B PTY doesn't support runtime resize
-              throw new Error('Terminal resize not supported by E2B PTY.');
-            },
-            
-            kill: async () => {
-              await ptyHandle.kill();
-            }
+          return {
+            terminal: ptyHandle,
+            terminalId: ptyHandle.pid.toString()
           };
-
-          return terminalSession;
         },
 
-        list: async (sandbox: E2BSandbox): Promise<TerminalSession[]> => {
-          throw new Error(
-            `E2B provider does not support listing active terminals. E2B terminals are managed individually through the PTY interface. Create terminals as needed using terminal.create().`
-          );
+        getById: async (sandbox: E2BSandbox, terminalId: string) => {
+          try {
+            const pid = parseInt(terminalId);
+            if (isNaN(pid)) return null;
+
+            // List all running processes (includes PTY sessions)
+            const processes = await sandbox.commands.list();
+            
+            // Find PTY process by PID
+            const ptyProcess = processes.find(p => p.pid === pid);
+            if (!ptyProcess) return null;
+
+            return {
+              terminal: { pid: ptyProcess.pid, cmd: ptyProcess.cmd },
+              terminalId: terminalId
+            };
+          } catch (error) {
+            return null;
+          }
+        },
+
+        list: async (sandbox: E2BSandbox) => {
+          try {
+            // List all running processes
+            const processes = await sandbox.commands.list();
+            
+            // Filter for PTY sessions and return raw terminal data
+            return processes
+              .filter(p => ['bash', 'sh', 'zsh', 'fish', 'pty'].some(term => p.cmd.includes(term)))
+              .map(p => ({
+                terminal: { pid: p.pid, cmd: p.cmd },
+                terminalId: p.pid.toString()
+              }));
+          } catch (error) {
+            // If listing fails, return empty array
+            return [];
+          }
+        },
+
+        destroy: async (sandbox: E2BSandbox, terminalId: string): Promise<void> => {
+          const pid = parseInt(terminalId);
+          if (isNaN(pid)) {
+            throw new Error(`Invalid terminal ID: ${terminalId}. Expected numeric PID.`);
+          }
+
+          try {
+            await sandbox.pty.kill(pid);
+          } catch (error) {
+            // Terminal might already be destroyed or doesn't exist
+            // This is acceptable for destroy operations
+          }
+        },
+
+        // Terminal instance methods
+        write: async (sandbox: E2BSandbox, terminal: any, data: Uint8Array | string): Promise<void> => {
+          const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+          if (terminal.pid) {
+            // For existing terminals, use PID
+            await sandbox.pty.sendInput(terminal.pid, bytes);
+          } else {
+            // For new terminals, use the ptyHandle directly
+            await sandbox.pty.sendInput(terminal.pid || terminal.id, bytes);
+          }
+        },
+
+        resize: async (sandbox: E2BSandbox, terminal: any, cols: number, rows: number): Promise<void> => {
+          const pid = terminal.pid || terminal.id;
+          await sandbox.pty.resize(pid, { cols, rows });
+        },
+
+        kill: async (sandbox: E2BSandbox, terminal: any): Promise<void> => {
+          const pid = terminal.pid || terminal.id;
+          if (terminal.kill) {
+            // For ptyHandle objects
+            await terminal.kill();
+          } else {
+            // For process objects
+            await sandbox.pty.kill(pid);
+          }
         }
       }
     }

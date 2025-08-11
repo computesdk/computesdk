@@ -1,19 +1,16 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: [
-    'src/index.ts',
-    'adapters/react.tsx',
-    'adapters/vue.ts',
-    'adapters/svelte.ts',
-    'adapters/vanilla.ts'
-  ],
+  entry: {
+    index: 'src/index.ts',
+    types: 'src/types/index.ts',
+    utils: 'src/utils/api.ts'
+  },
   format: ['esm'],
-  dts: false, // Disable type generation for now due to React type issues
+  dts: true,
   clean: true,
   splitting: false,
   sourcemap: true,
   minify: false,
-  external: ['react', 'vue'],
   treeshake: true
 });

@@ -198,6 +198,10 @@ print(json.dumps(data, indent=2))
           expect(terminal.pid).toBeDefined();
           expect(typeof terminal.pid).toBe('number');
           expect(terminal.pid).toBeGreaterThan(0);
+          expect(terminal.command).toBeDefined();
+          expect(terminal.status).toBe('running');
+          expect(terminal.cols).toBeGreaterThan(0);
+          expect(terminal.rows).toBeGreaterThan(0);
         }, timeout);
 
         it('should write to terminal and receive data', async () => {
@@ -209,6 +213,142 @@ print(json.dumps(data, indent=2))
           // In a real implementation, you would listen for onData events
           // For testing purposes, we just verify the terminal exists and can be written to
           expect(terminal.write).toBeDefined();
+        }, timeout);
+
+        it('should support onData callback in create options', async () => {
+          let receivedData: Uint8Array | null = null;
+          let callbackCalled = false;
+
+          const terminal = await sandbox.terminal.create({
+            onData: (data: Uint8Array) => {
+              receivedData = data;
+              callbackCalled = true;
+            }
+          });
+
+          expect(terminal).toBeDefined();
+          expect(typeof terminal.onData).toBe('function');
+          
+          // For mock tests, we simulate data reception
+          if (skipIntegration && terminal.onData) {
+            const mockData = new Uint8Array([72, 101, 108, 108, 111]); // "Hello"
+            terminal.onData(mockData);
+            expect(callbackCalled).toBe(true);
+            expect(receivedData).toEqual(mockData);
+          }
+        }, timeout);
+
+        it('should allow setting onData callback after creation', async () => {
+          const terminal = await sandbox.terminal.create();
+          
+          let receivedData: Uint8Array | null = null;
+          let callbackCalled = false;
+
+          // Set callback after creation
+          terminal.onData = (data: Uint8Array) => {
+            receivedData = data;
+            callbackCalled = true;
+          };
+
+          expect(typeof terminal.onData).toBe('function');
+          
+          // For mock tests, simulate data reception
+          if (skipIntegration && terminal.onData) {
+            const mockData = new Uint8Array([87, 111, 114, 108, 100]); // "World"
+            terminal.onData(mockData);
+            expect(callbackCalled).toBe(true);
+            expect(receivedData).toEqual(mockData);
+          }
+        }, timeout);
+
+        it('should handle onData callback updates', async () => {
+          const terminal = await sandbox.terminal.create();
+          
+          let callback1Called = false;
+          let callback2Called = false;
+
+          // Set first callback
+          terminal.onData = (data: Uint8Array) => {
+            callback1Called = true;
+          };
+
+          // Replace with second callback
+          terminal.onData = (data: Uint8Array) => {
+            callback2Called = true;
+          };
+
+          // For mock tests, simulate data reception
+          if (skipIntegration && terminal.onData) {
+            const mockData = new Uint8Array([84, 101, 115, 116]); // "Test"
+            terminal.onData(mockData);
+            expect(callback1Called).toBe(false); // First callback should not be called
+            expect(callback2Called).toBe(true);  // Second callback should be called
+          }
+        }, timeout);
+
+        it('should handle onData with Uint8Array data type', async () => {
+          let receivedDataType: string | null = null;
+          let isUint8Array = false;
+
+          const terminal = await sandbox.terminal.create({
+            onData: (data: Uint8Array) => {
+              receivedDataType = typeof data;
+              isUint8Array = data instanceof Uint8Array;
+            }
+          });
+
+          // For mock tests, simulate data reception
+          if (skipIntegration && terminal.onData) {
+            const mockData = new Uint8Array([65, 66, 67]); // "ABC"
+            terminal.onData(mockData);
+            expect(receivedDataType).toBe('object');
+            expect(isUint8Array).toBe(true);
+          }
+        }, timeout);
+
+        it('should support terminal resize operations', async () => {
+          const terminal = await sandbox.terminal.create();
+          
+          expect(terminal.resize).toBeDefined();
+          expect(typeof terminal.resize).toBe('function');
+          
+          // Test resize operation
+          await terminal.resize(120, 30);
+          
+          // For mock implementation, we can't verify the actual resize
+          // but we can verify the method exists and doesn't throw
+        }, timeout);
+
+        it('should support terminal kill operations', async () => {
+          const terminal = await sandbox.terminal.create();
+          
+          expect(terminal.kill).toBeDefined();
+          expect(typeof terminal.kill).toBe('function');
+          
+          // Test kill operation
+          await terminal.kill();
+          
+          // For mock implementation, we can't verify the actual kill
+          // but we can verify the method exists and doesn't throw
+        }, timeout);
+
+        it('should handle onExit callback if supported', async () => {
+          let exitCallbackCalled = false;
+          let exitCode: number | null = null;
+
+          const terminal = await sandbox.terminal.create({
+            onExit: (code: number) => {
+              exitCallbackCalled = true;
+              exitCode = code;
+            }
+          });
+
+          // For mock tests, simulate exit event
+          if (skipIntegration && terminal.onExit) {
+            terminal.onExit(0);
+            expect(exitCallbackCalled).toBe(true);
+            expect(exitCode).toBe(0);
+          }
         }, timeout);
       });
     }
@@ -411,17 +551,24 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
     },
     
     terminal: {
-      create: async (): Promise<TerminalSession> => ({
-        pid: 12345,
-        command: '/bin/bash',
-        status: 'running' as const,
-        cols: 80,
-        rows: 24,
-        write: async (data: string | Uint8Array) => {},
-        resize: async (cols: number, rows: number) => {},
-        kill: async () => {}
-      }),
-      list: async (): Promise<TerminalSession[]> => []
+      create: async (options?: any): Promise<TerminalSession> => {
+        const mockTerminal: TerminalSession = {
+          pid: 12345,
+          command: options?.command || '/bin/bash',
+          status: 'running' as const,
+          cols: options?.cols || 80,
+          rows: options?.rows || 24,
+          write: async (data: string | Uint8Array) => {},
+          resize: async (cols: number, rows: number) => {},
+          kill: async () => {},
+          onData: options?.onData,
+          onExit: options?.onExit
+        };
+        return mockTerminal;
+      },
+      getById: async (terminalId: string): Promise<TerminalSession | null> => null,
+      list: async (): Promise<TerminalSession[]> => [],
+      destroy: async (terminalId: string): Promise<void> => {}
     }
   };
 }

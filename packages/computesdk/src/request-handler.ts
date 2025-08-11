@@ -12,6 +12,78 @@ import type { Provider, Runtime, Sandbox } from './types';
 import { compute } from './compute';
 
 /**
+ * Terminal callback manager for handling multiple SSE connections
+ */
+class TerminalCallbackManager {
+  private static instance: TerminalCallbackManager;
+  private callbacks = new Map<string, Map<string, (data: Uint8Array) => void>>();
+  private terminals = new Map<string, any>();
+
+  static getInstance(): TerminalCallbackManager {
+    if (!TerminalCallbackManager.instance) {
+      TerminalCallbackManager.instance = new TerminalCallbackManager();
+    }
+    return TerminalCallbackManager.instance;
+  }
+
+  /**
+   * Add a callback for a terminal
+   */
+  addCallback(terminalId: string, connectionId: string, callback: (data: Uint8Array) => void, terminal: any): void {
+    // Initialize terminal callbacks if not exists
+    if (!this.callbacks.has(terminalId)) {
+      this.callbacks.set(terminalId, new Map());
+      this.terminals.set(terminalId, terminal);
+      
+      // Set up the master onData callback that broadcasts to all connections
+      terminal.onData = (data: Uint8Array) => {
+        const terminalCallbacks = this.callbacks.get(terminalId);
+        if (terminalCallbacks) {
+          terminalCallbacks.forEach(cb => {
+            try {
+              cb(data);
+            } catch (error) {
+              // Ignore errors from individual callbacks
+              console.warn('Terminal callback error:', error);
+            }
+          });
+        }
+      };
+    }
+
+    // Add this connection's callback
+    this.callbacks.get(terminalId)!.set(connectionId, callback);
+  }
+
+  /**
+   * Remove a callback for a terminal
+   */
+  removeCallback(terminalId: string, connectionId: string): void {
+    const terminalCallbacks = this.callbacks.get(terminalId);
+    if (terminalCallbacks) {
+      terminalCallbacks.delete(connectionId);
+      
+      // If no more callbacks, clean up the terminal's onData
+      if (terminalCallbacks.size === 0) {
+        const terminal = this.terminals.get(terminalId);
+        if (terminal) {
+          terminal.onData = undefined;
+        }
+        this.callbacks.delete(terminalId);
+        this.terminals.delete(terminalId);
+      }
+    }
+  }
+
+  /**
+   * Get number of active connections for a terminal
+   */
+  getConnectionCount(terminalId: string): number {
+    return this.callbacks.get(terminalId)?.size || 0;
+  }
+}
+
+/**
  * Extended request structure supporting all SDK capabilities
  */
 export interface ComputeRequest {
@@ -34,7 +106,13 @@ export interface ComputeRequest {
     | 'compute.sandbox.filesystem.remove'
     // Terminal operations
     | 'compute.sandbox.terminal.create'
-    | 'compute.sandbox.terminal.list';
+    | 'compute.sandbox.terminal.getById'
+    | 'compute.sandbox.terminal.list'
+    | 'compute.sandbox.terminal.destroy'
+    // Terminal I/O operations
+    | 'compute.sandbox.terminal.write'
+    | 'compute.sandbox.terminal.resize'
+    | 'compute.sandbox.terminal.kill';
 
   /** Sandbox ID (required for operations on existing sandboxes) */
   sandboxId?: string;
@@ -64,6 +142,16 @@ export interface ComputeRequest {
     rows?: number;
     env?: Record<string, string>;
   };
+
+  /** Terminal ID (for terminal operations) */
+  terminalId?: string;
+
+  /** Terminal input data (for terminal.write) */
+  data?: string | Uint8Array;
+
+  /** Terminal resize dimensions (for terminal.resize) */
+  cols?: number;
+  rows?: number;
   
   /** Additional sandbox creation options */
   options?: {
@@ -143,6 +231,13 @@ export interface ComputeResponse {
     cols: number;
     rows: number;
   }>;
+
+  /** WebSocket connection info (for terminal.connect action) */
+  websocket?: {
+    url: string;
+    headers?: Record<string, string>;
+    protocols?: string[];
+  };
 }
 
 /**
@@ -153,6 +248,195 @@ export interface HandleComputeRequestParams {
   request: ComputeRequest;
   /** Provider to use for the operation */
   provider: Provider;
+}
+
+/**
+ * Parameters for handleHttpComputeRequest
+ */
+export interface HandleHttpComputeRequestParams {
+  /** The HTTP request to handle */
+  request: Request;
+  /** Provider to use for the operation */
+  provider: Provider;
+}
+
+/**
+ * Handle HTTP compute requests with automatic SSE detection
+ * 
+ * This is the main entry point for web frameworks. It automatically detects
+ * different request types and routes them appropriately:
+ * - GET with action=terminal.stream: Returns SSE stream for terminal output
+ * - POST: Regular compute operations (including terminal I/O)
+ * 
+ * @example
+ * ```typescript
+ * // Framework implementation (works for Next.js, Nuxt, SvelteKit, etc.)
+ * export async function GET(request: Request) {
+ *   return handleHttpComputeRequest({
+ *     request,
+ *     provider: e2b({ apiKey: process.env.E2B_API_KEY })
+ *   });
+ * }
+ * 
+ * export async function POST(request: Request) {
+ *   return handleHttpComputeRequest({
+ *     request,
+ *     provider: e2b({ apiKey: process.env.E2B_API_KEY })
+ *   });
+ * }
+ * 
+ * // Client usage
+ * // 1. Create terminal (HTTP POST)
+ * fetch('/api/compute', {
+ *   method: 'POST',
+ *   body: JSON.stringify({ action: 'compute.sandbox.terminal.create', sandboxId: '123' })
+ * });
+ * 
+ * // 2. Stream terminal output (EventSource GET)
+ * const eventSource = new EventSource('/api/compute?action=terminal.stream&terminalId=456');
+ * eventSource.onmessage = (event) => xtermInstance.write(JSON.parse(event.data));
+ * 
+ * // 3. Send terminal input (HTTP POST)
+ * fetch('/api/compute', {
+ *   method: 'POST',
+ *   body: JSON.stringify({ action: 'compute.sandbox.terminal.write', terminalId: '456', data: 'ls -la\n' })
+ * });
+ * ```
+ */
+export async function handleHttpComputeRequest(params: HandleHttpComputeRequestParams): Promise<Response> {
+  const { request, provider } = params;
+  
+  // Handle GET requests (SSE streaming)
+  if (request.method === 'GET') {
+    const url = new URL(request.url);
+    const action = url.searchParams.get('action');
+    
+    if (action === 'terminal.stream') {
+      return handleTerminalStream(request, provider);
+    }
+    
+    // Other GET requests not supported
+    return Response.json({
+      success: false,
+      error: 'GET requests only supported for terminal.stream action',
+      sandboxId: '',
+      provider: provider.name
+    }, { status: 400 });
+  }
+  
+  // Handle POST requests (regular compute operations)
+  try {
+    const body = await request.json();
+    const computeRequest = body as ComputeRequest;
+    
+    // Use existing handleComputeRequest function
+    const response = await handleComputeRequest({
+      request: computeRequest,
+      provider
+    });
+    
+    return Response.json(response);
+    
+  } catch (error) {
+    return Response.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Invalid request format',
+      sandboxId: '',
+      provider: provider.name
+    }, { status: 400 });
+  }
+}
+
+/**
+ * Handle terminal SSE streaming
+ */
+async function handleTerminalStream(request: Request, provider: Provider): Promise<Response> {
+  const url = new URL(request.url);
+  const sandboxId = url.searchParams.get('sandboxId');
+  const terminalId = url.searchParams.get('terminalId');
+  
+  if (!sandboxId || !terminalId) {
+    return Response.json({
+      success: false,
+      error: 'sandboxId and terminalId are required for terminal streaming',
+      sandboxId: sandboxId || '',
+      provider: provider.name
+    }, { status: 400 });
+  }
+  
+  try {
+    // Get the sandbox and terminal
+    const sandbox = await compute.sandbox.getById(provider, sandboxId);
+    if (!sandbox) {
+      return Response.json({
+        success: false,
+        error: `Sandbox with ID ${sandboxId} not found`,
+        sandboxId,
+        provider: provider.name
+      }, { status: 404 });
+    }
+    
+    const terminal = await sandbox.terminal.getById(terminalId);
+    if (!terminal) {
+      return Response.json({
+        success: false,
+        error: `Terminal with ID ${terminalId} not found`,
+        sandboxId,
+        provider: provider.name
+      }, { status: 404 });
+    }
+    
+    // Generate unique connection ID
+    const connectionId = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const callbackManager = TerminalCallbackManager.getInstance();
+    
+    // Create SSE stream
+    const stream = new ReadableStream({
+      start(controller) {
+        // Set up callback for this connection
+        const callback = (data: Uint8Array) => {
+          const dataArray = Array.from(data);
+          const sseData = `data: ${JSON.stringify(dataArray)}\n\n`;
+          controller.enqueue(new TextEncoder().encode(sseData));
+        };
+        
+        // Register callback with manager
+        callbackManager.addCallback(terminalId, connectionId, callback, terminal);
+        
+        // Send initial connection message
+        const connectMsg = `data: ${JSON.stringify({ 
+          type: 'connected', 
+          terminalId, 
+          connectionId,
+          activeConnections: callbackManager.getConnectionCount(terminalId)
+        })}\n\n`;
+        controller.enqueue(new TextEncoder().encode(connectMsg));
+      },
+      
+      cancel() {
+        // Clean up this connection's callback
+        callbackManager.removeCallback(terminalId, connectionId);
+      }
+    });
+    
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+      }
+    });
+    
+  } catch (error) {
+    return Response.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create terminal stream',
+      sandboxId,
+      provider: provider.name
+    }, { status: 500 });
+  }
 }
 
 /**
@@ -586,6 +870,219 @@ export async function handleComputeRequest(params: HandleComputeRequestParams): 
         };
       }
 
+      case 'compute.sandbox.terminal.getById': {
+        if (!request.sandboxId) {
+          return {
+            success: false,
+            error: 'Sandbox ID is required for terminal operations',
+            sandboxId: '',
+            provider: provider.name
+          };
+        }
+
+        if (!request.terminalId) {
+          return {
+            success: false,
+            error: 'Terminal ID is required for getById action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        const sandbox = await getSandbox(request.sandboxId);
+        const terminal = await sandbox.terminal.getById(request.terminalId);
+        
+        if (!terminal) {
+          return {
+            success: false,
+            error: `Terminal with ID ${request.terminalId} not found`,
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+        
+        return {
+          success: true,
+          sandboxId: request.sandboxId,
+          provider: provider.name,
+          terminal: {
+            pid: terminal.pid,
+            command: terminal.command,
+            status: terminal.status,
+            cols: terminal.cols,
+            rows: terminal.rows
+          }
+        };
+      }
+
+      case 'compute.sandbox.terminal.destroy': {
+        if (!request.sandboxId) {
+          return {
+            success: false,
+            error: 'Sandbox ID is required for terminal operations',
+            sandboxId: '',
+            provider: provider.name
+          };
+        }
+
+        if (!request.terminalId) {
+          return {
+            success: false,
+            error: 'Terminal ID is required for destroy action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        const sandbox = await getSandbox(request.sandboxId);
+        await sandbox.terminal.destroy(request.terminalId);
+        
+        return {
+          success: true,
+          sandboxId: request.sandboxId,
+          provider: provider.name
+        };
+      }
+
+      // Terminal I/O operations
+      case 'compute.sandbox.terminal.write': {
+        if (!request.sandboxId) {
+          return {
+            success: false,
+            error: 'Sandbox ID is required for terminal operations',
+            sandboxId: '',
+            provider: provider.name
+          };
+        }
+
+        if (!request.terminalId) {
+          return {
+            success: false,
+            error: 'Terminal ID is required for write action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        if (!request.data) {
+          return {
+            success: false,
+            error: 'Data is required for write action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        const sandbox = await getSandbox(request.sandboxId);
+        const terminal = await sandbox.terminal.getById(request.terminalId);
+        
+        if (!terminal) {
+          return {
+            success: false,
+            error: `Terminal with ID ${request.terminalId} not found`,
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        await terminal.write(request.data);
+        
+        return {
+          success: true,
+          sandboxId: request.sandboxId,
+          provider: provider.name
+        };
+      }
+
+      case 'compute.sandbox.terminal.resize': {
+        if (!request.sandboxId) {
+          return {
+            success: false,
+            error: 'Sandbox ID is required for terminal operations',
+            sandboxId: '',
+            provider: provider.name
+          };
+        }
+
+        if (!request.terminalId) {
+          return {
+            success: false,
+            error: 'Terminal ID is required for resize action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        if (!request.cols || !request.rows) {
+          return {
+            success: false,
+            error: 'Cols and rows are required for resize action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        const sandbox = await getSandbox(request.sandboxId);
+        const terminal = await sandbox.terminal.getById(request.terminalId);
+        
+        if (!terminal) {
+          return {
+            success: false,
+            error: `Terminal with ID ${request.terminalId} not found`,
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        await terminal.resize(request.cols, request.rows);
+        
+        return {
+          success: true,
+          sandboxId: request.sandboxId,
+          provider: provider.name
+        };
+      }
+
+      case 'compute.sandbox.terminal.kill': {
+        if (!request.sandboxId) {
+          return {
+            success: false,
+            error: 'Sandbox ID is required for terminal operations',
+            sandboxId: '',
+            provider: provider.name
+          };
+        }
+
+        if (!request.terminalId) {
+          return {
+            success: false,
+            error: 'Terminal ID is required for kill action',
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        const sandbox = await getSandbox(request.sandboxId);
+        const terminal = await sandbox.terminal.getById(request.terminalId);
+        
+        if (!terminal) {
+          return {
+            success: false,
+            error: `Terminal with ID ${request.terminalId} not found`,
+            sandboxId: request.sandboxId,
+            provider: provider.name
+          };
+        }
+
+        await terminal.kill();
+        
+        return {
+          success: true,
+          sandboxId: request.sandboxId,
+          provider: provider.name
+        };
+      }
+
       default:
         return {
           success: false,
@@ -602,4 +1099,49 @@ export async function handleComputeRequest(params: HandleComputeRequestParams): 
       provider: provider.name
     };
   }
+}
+
+/**
+ * Handle WebSocket upgrade requests for real-time terminal I/O
+ * 
+ * TODO: Implement WebSocket terminal connections
+ * 
+ * This function should:
+ * 1. Parse WebSocket upgrade request (sandboxId, terminalId from URL/headers)
+ * 2. Validate the terminal session exists
+ * 3. Upgrade HTTP connection to WebSocket
+ * 4. Establish bidirectional proxy to provider's WebSocket
+ * 5. Handle connection lifecycle (connect, disconnect, error)
+ * 
+ * @example
+ * ```typescript
+ * // Framework usage (Next.js)
+ * export async function GET(request: Request) {
+ *   if (request.headers.get('upgrade') === 'websocket') {
+ *     return handleComputeWebSocket(request, { provider })
+ *   }
+ *   return handleComputeRequest({ request, provider })
+ * }
+ * 
+ * // Frontend usage
+ * const ws = new WebSocket('/api/compute?action=terminal.connect&sandboxId=123&terminalId=456')
+ * ws.onmessage = (event) => console.log(event.data)
+ * ws.send('ls -la\n')
+ * ```
+ * 
+ * @param request - WebSocket upgrade request
+ * @param params - Handler parameters (provider, etc.)
+ * @returns WebSocket upgrade response
+ */
+export async function handleComputeWebSocket(
+  _request: Request,
+  _params: HandleComputeRequestParams
+): Promise<Response> {
+  // TODO: Implement WebSocket terminal connections
+  // This is a placeholder for future implementation
+  
+  return new Response('WebSocket terminal connections not yet implemented', {
+    status: 501,
+    statusText: 'Not Implemented'
+  });
 }

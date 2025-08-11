@@ -79,8 +79,12 @@ jspm_packages/
 # Next.js build output
 .next
 
+# SvelteKit build output
+.svelte-kit
+
 # Nuxt.js build / generate output
 .nuxt
+.output
 dist
 
 # Storybook build outputs

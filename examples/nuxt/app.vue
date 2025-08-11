@@ -1,25 +1,30 @@
 <template>
-  <div class="container mx-auto p-8 max-w-4xl">
-    <h1 class="text-3xl font-bold mb-8">ComputeSDK + Nuxt Example</h1>
-    
-    <CodeExecutionComponent 
-      api-endpoint="/api/execute"
-      initial-code='print("Hello from ComputeSDK!")'
-      initial-runtime="python"
-    />
-  </div>
+  <main style="padding: 2rem;">
+    <h1>ComputeSDK + Nuxt</h1>
+    <button @click="runCode">Run Code</button>
+    <pre v-if="output" style="margin-top: 1rem; padding: 1rem; background: #f5f5f5;">{{ output }}</pre>
+  </main>
 </template>
 
 <script setup>
-import { CodeExecutionComponent } from '@computesdk/ui/vue'
+import { ref } from 'vue'
+import { useCompute } from '@computesdk/ui'
 
 useHead({
-  title: 'ComputeSDK + Nuxt Example',
-  meta: [
-    { name: 'description', content: 'Example of using ComputeSDK with Nuxt for server-side code execution' }
-  ],
-  script: [
-    { src: 'https://cdn.tailwindcss.com' }
-  ]
+  title: 'ComputeSDK + Nuxt'
 })
+
+const output = ref('')
+const compute = useCompute({ apiEndpoint: '/api/compute' })
+
+async function runCode() {
+  try {
+    const sandbox = await compute.sandbox.create()
+    const result = await sandbox.runCode('print("Hello from ComputeSDK!")')
+    output.value = result.result?.stdout || 'No output'
+    await sandbox.destroy()
+  } catch (error) {
+    output.value = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+  }
+}
 </script>
