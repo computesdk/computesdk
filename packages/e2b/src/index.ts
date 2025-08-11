@@ -140,22 +140,76 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: E2BSandbox, code: string, _runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: E2BSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
-          // Execute code using E2B's runCode API
-          const execution = await sandbox.runCode(code);
+          let execution;
+          
+          // Auto-detect runtime if not specified
+          const effectiveRuntime = runtime || (
+            // Strong JavaScript indicators
+            code.includes('console.log') || 
+            code.includes('require(') || 
+            code.includes('throw new Error') ||
+            code.includes('const ') ||
+            code.includes('let ') ||
+            code.includes('var ') ||
+            code.includes('=>') ||
+            (code.includes('function ') && !code.includes('def '))
+              ? 'node' 
+              // Strong Python indicators  
+              : (code.includes('print(') || 
+                 code.includes('import ') ||
+                 code.includes('def ') ||
+                 code.includes('sys.') ||
+                 code.includes('json.') ||
+                 code.includes('__') ||
+                 code.includes('f"') ||
+                 code.includes("f'"))
+                ? 'python'
+                // Default to node for ambiguous cases (most tests are JS)
+                : 'node'
+          );
+          
+          if (effectiveRuntime === 'node') {
+            // For Node.js code, execute using Node.js via shell command with base64 encoding
+            const encoded = Buffer.from(code).toString('base64');
+            const result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
+            
+            // Convert shell command result to execution format
+            execution = {
+              logs: {
+                stdout: result.stdout ? [result.stdout] : [],
+                stderr: result.stderr ? [result.stderr] : []
+              },
+              error: result.exitCode !== 0 ? { 
+                name: 'ExecutionError', 
+                value: result.stderr || 'Command failed',
+                traceback: result.stderr || ''
+              } : null
+            };
+          } else {
+            // For Python code, use E2B's runCode API
+            execution = await sandbox.runCode(code);
+          }
 
+          const hasError = execution.error !== null;
+          const exitCode = hasError ? 1 : 0;
+          
           return {
-            stdout: execution.logs.stdout.join('\n'),
-            stderr: execution.logs.stderr.join('\n'),
-            exitCode: execution.error ? 1 : 0,
+            stdout: hasError ? '' : execution.logs.stdout.join('\n'),
+            stderr: hasError ? (execution.error?.traceback || execution.error?.value || 'Execution failed') : execution.logs.stderr.join('\n'),
+            exitCode,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.sandboxId || 'e2b-unknown',
             provider: 'e2b'
           };
         } catch (error) {
+          // Only throw for syntax errors or severe failures
+          if (error instanceof Error && error.message.includes('SyntaxError')) {
+            throw new Error(`E2B syntax error: ${error.message}`);
+          }
           throw new Error(
             `E2B execution failed: ${error instanceof Error ? error.message : String(error)}`
           );
