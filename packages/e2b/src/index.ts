@@ -172,30 +172,47 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
                 : 'node'
           );
           
+
+          
           if (effectiveRuntime === 'node') {
             // For Node.js code, execute using Node.js via shell command with base64 encoding
             const encoded = Buffer.from(code).toString('base64');
-            const result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
             
-            // Convert shell command result to execution format
-            execution = {
-              logs: {
-                stdout: result.stdout ? [result.stdout] : [],
-                stderr: result.stderr ? [result.stderr] : []
-              },
-              error: result.exitCode !== 0 ? { 
-                name: 'ExecutionError', 
-                value: result.stderr || 'Command failed',
-                traceback: result.stderr || ''
-              } : null
-            };
+            try {
+              const result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
+              
+              // Convert shell command result to execution format
+              execution = {
+                logs: {
+                  stdout: result.stdout ? [result.stdout] : [],
+                  stderr: result.stderr ? [result.stderr] : []
+                },
+                error: result.exitCode !== 0 ? { 
+                  name: 'ExecutionError', 
+                  value: result.stderr || 'Command failed',
+                  traceback: result.stderr || ''
+                } : undefined
+              };
+            } catch (commandError) {
+              // Handle command execution failures
+              execution = {
+                logs: { stdout: [], stderr: [] },
+                error: {
+                  name: 'ExecutionError',
+                  value: commandError instanceof Error ? commandError.message : String(commandError),
+                  traceback: commandError instanceof Error ? commandError.stack || '' : ''
+                }
+              };
+            }
           } else {
             // For Python code, use E2B's runCode API
             execution = await sandbox.runCode(code);
           }
 
-          const hasError = execution.error !== null;
+          const hasError = execution.error != null; // Checks for both null and undefined
           const exitCode = hasError ? 1 : 0;
+          
+
           
           return {
             stdout: hasError ? '' : execution.logs.stdout.join('\n'),
