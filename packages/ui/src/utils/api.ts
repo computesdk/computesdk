@@ -1,4 +1,4 @@
-import type { ComputeRequest, ComputeResponse, Runtime } from '../types/index.js'
+import type { ComputeRequest, ComputeResponse } from '../types/index.js'
 
 /**
  * API Error class for compute operations

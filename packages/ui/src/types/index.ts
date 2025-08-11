@@ -118,7 +118,7 @@ export interface ComputeResponse {
     status: SandboxStatus;
     createdAt: string;
     timeout: number;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   };
   
   /** File content (for readFile action) */
