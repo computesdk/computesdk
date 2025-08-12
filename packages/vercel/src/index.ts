@@ -235,7 +235,7 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
             }
           }
 
-          // Check for syntax errors and throw them (similar to E2B behavior)
+          // Check for syntax errors and throw them
           if (finishedCommand.exitCode !== 0 && stderr) {
             // Check for common syntax error patterns
             if (stderr.includes('SyntaxError') || 

@@ -183,11 +183,11 @@ try {
 Use with web frameworks via the request handler:
 
 ```typescript
-import { handleHttpComputeRequest } from 'computesdk';
+import { handleComputeRequest } from 'computesdk';
 import { daytona } from '@computesdk/daytona';
 
 export async function POST(request: Request) {
-  return handleHttpComputeRequest({
+  return handleComputeRequest({
     request,
     provider: daytona({ apiKey: process.env.DAYTONA_API_KEY })
   });

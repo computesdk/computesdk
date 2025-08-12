@@ -1,14 +1,14 @@
-# ComputeSDK + Next.js Example
+# ComputeSDK + Remix Example
 
-This example demonstrates how to integrate ComputeSDK with Next.js for server-side code execution using App Router.
+This example demonstrates how to integrate ComputeSDK with Remix for server-side code execution using action functions and the `useCompute` hook.
 
 ## Features
 
-- **API Route**: `/api/compute` endpoint using ComputeSDK request handler
+- **Action Route**: `/api/compute` endpoint using ComputeSDK request handler
 - **Multiple Providers**: Support for E2B, Vercel, and Daytona providers
-- **Multiple Runtimes**: Support for Python and Node.js execution
-- **Error Handling**: Comprehensive error handling and user feedback
+- **Frontend Integration**: Uses `@computesdk/ui` with `useCompute` hook
 - **TypeScript**: Full type safety throughout the application
+- **React**: Modern React with hooks and server-side rendering
 
 ## Setup
 
@@ -19,10 +19,10 @@ This example demonstrates how to integrate ComputeSDK with Next.js for server-si
 
 2. **Configure environment variables**:
    ```bash
-   cp .env.example .env.local
+   cp .env.example .env
    ```
    
-   Edit `.env.local` and add your provider credentials. You need at least one provider configured:
+   Edit `.env` and add your provider credentials. You need at least one provider configured:
    
    - **E2B**: Get your API key from [e2b.dev](https://e2b.dev)
      ```bash
@@ -45,27 +45,36 @@ This example demonstrates how to integrate ComputeSDK with Next.js for server-si
      DAYTONA_API_KEY=your_daytona_api_key_here
      ```
 
-3. **Run the development server**:
+3. **Update the action route** (`app/routes/api.compute.tsx`):
+   
+   Uncomment and configure your preferred provider:
+   ```typescript
+   // Choose one provider:
+   const provider = e2b({ apiKey: process.env.E2B_API_KEY! })
+   // const provider = vercel({ token: process.env.VERCEL_TOKEN!, teamId: process.env.VERCEL_TEAM_ID!, projectId: process.env.VERCEL_PROJECT_ID! })
+   // const provider = daytona({ apiKey: process.env.DAYTONA_API_KEY! })
+   ```
+
+4. **Run the development server**:
    ```bash
    npm run dev
    ```
 
-4. **Open your browser** and navigate to [http://localhost:3000](http://localhost:3000)
+5. **Open your browser** and navigate to [http://localhost:3000](http://localhost:3000)
 
 ## Usage
 
-1. Select your preferred runtime (Python or Node.js)
-2. Enter your code in the text area
-3. Click "Execute Code" to run it in a secure sandbox
-4. View the results, including output, errors, execution time, and provider used
+1. Click the "Run Code" button to execute Python code in a secure sandbox
+2. View the output displayed below the button
+3. The example demonstrates creating a sandbox, running code, and cleaning up
 
 ## API Reference
 
 ### POST /api/compute
 
-Execute code using ComputeSDK's unified request handler.
+Execute code using ComputeSDK's unified request handler via Remix action.
 
-**Request Body:**
+**Request Body (JSON):**
 ```json
 {
   "action": "compute.sandbox.runCode",
@@ -117,7 +126,7 @@ The `/api/compute` endpoint supports all ComputeSDK actions:
 
 ## Provider Configuration
 
-The example uses a single provider based on available environment variables. The API route automatically selects the first available provider:
+The example uses a single provider based on available environment variables. The action route automatically selects the configured provider:
 
 1. **E2B** - Full development environment with data science libraries
 2. **Vercel** - Serverless execution with up to 45 minutes runtime
@@ -125,53 +134,67 @@ The example uses a single provider based on available environment variables. The
 
 ## Implementation Details
 
-### API Route (`/api/compute/route.ts`)
+### Action Route (`app/routes/api.compute.tsx`)
 
 ```typescript
-import { handleComputeRequest } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+import type { ActionFunctionArgs } from "@remix-run/node";
+import { handleComputeRequest } from "computesdk";
+import { e2b } from "@computesdk/e2b";
 
-export async function GET(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: e2b({ apiKey: process.env.E2B_API_KEY })
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const formData = await request.formData();
+  const code = formData.get("code") as string;
+  
+  const response = await handleComputeRequest({
+    request: {
+      action: 'compute.sandbox.runCode',
+      code
+    },
+    provider: e2b({ apiKey: process.env.E2B_API_KEY! })
   });
-}
 
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: e2b({ apiKey: process.env.E2B_API_KEY })
-  });
-}
+  if (response.success) {
+    return { output: response.result?.stdout || 'No output' };
+  } else {
+    return { error: response.error || 'Unknown error' };
+  }
+};
 ```
 
-### Frontend Integration
+### Frontend Integration (`app/routes/_index.tsx`)
 
-The example uses standard `fetch` API to communicate with the ComputeSDK backend:
+The example uses the `useCompute` hook from `@computesdk/ui`:
 
 ```typescript
-const response = await fetch('/api/compute', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'compute.sandbox.runCode',
-    code: userCode,
-    runtime: selectedRuntime
-  })
-});
+import { useCompute } from "@computesdk/ui";
 
-const result = await response.json();
+export default function Index() {
+  const compute = useCompute({ apiEndpoint: '/api/compute' });
+
+  const runCode = async () => {
+    const sandbox = await compute.sandbox.create();
+    const result = await sandbox.runCode('print("Hello from ComputeSDK!")');
+    console.log(result.result?.stdout);
+    await sandbox.destroy();
+  };
+
+  return (
+    <main>
+      <button onClick={runCode}>Run Code</button>
+    </main>
+  );
+}
 ```
 
 ## Deployment
 
-This example can be deployed to any platform that supports Next.js:
+This example can be deployed to any platform that supports Remix:
 
 - **Vercel**: `vercel deploy`
 - **Netlify**: Connect your Git repository
 - **Railway**: `railway deploy`
-- **Docker**: Use the included Dockerfile
+- **Fly.io**: `fly deploy`
+- **Cloudflare Pages**: Connect your Git repository
 
 Make sure to configure your environment variables in your deployment platform.
 
@@ -182,11 +205,12 @@ Make sure to configure your environment variables in your deployment platform.
 - Input validation is performed by ComputeSDK request handler
 - Consider implementing rate limiting for production use
 - API keys are never exposed to the client
+- Remix's built-in CSRF protection helps secure form submissions
 
 ## Learn More
 
 - [ComputeSDK Documentation](https://github.com/computesdk/computesdk)
-- [Next.js Documentation](https://nextjs.org/docs)
+- [Remix Documentation](https://remix.run/docs)
 - [E2B Documentation](https://e2b.dev/docs)
 - [Vercel Documentation](https://vercel.com/docs)
 - [Daytona Documentation](https://daytona.io/docs)

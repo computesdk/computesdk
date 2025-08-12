@@ -242,11 +242,11 @@ try {
 Use with web frameworks via the request handler:
 
 ```typescript
-import { handleHttpComputeRequest } from 'computesdk';
+import { handleComputeRequest } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 export async function POST(request: Request) {
-  return handleHttpComputeRequest({
+  return handleComputeRequest({
     request,
     provider: e2b({ apiKey: process.env.E2B_API_KEY })
   });

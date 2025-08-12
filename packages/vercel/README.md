@@ -235,11 +235,11 @@ try {
 Use with web frameworks via the request handler:
 
 ```typescript
-import { handleHttpComputeRequest } from 'computesdk';
+import { handleComputeRequest } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
 
 export async function POST(request: Request) {
-  return handleHttpComputeRequest({
+  return handleComputeRequest({
     request,
     provider: vercel({ runtime: 'node' })
   });

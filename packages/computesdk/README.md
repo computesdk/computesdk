@@ -144,12 +144,12 @@ const terminal = await sandbox.terminal.getById('terminal-id');
 ComputeSDK provides built-in request handlers for web frameworks:
 
 ```typescript
-import { handleHttpComputeRequest } from 'computesdk';
+import { handleComputeRequest } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 // Next.js API route
 export async function POST(request: Request) {
-  return handleHttpComputeRequest({
+  return handleComputeRequest({
     request,
     provider: e2b({ apiKey: process.env.E2B_API_KEY })
   });

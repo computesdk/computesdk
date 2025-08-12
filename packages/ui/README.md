@@ -458,18 +458,18 @@ Your server should implement the ComputeSDK request handler:
 
 ```typescript
 // /api/compute endpoint
-import { handleHttpComputeRequest } from 'computesdk'
+import { handleComputeRequest } from 'computesdk'
 import { e2b } from '@computesdk/e2b'
 
 export async function GET(request: Request) {
-  return handleHttpComputeRequest({
+  return handleComputeRequest({
     request,
     provider: e2b({ apiKey: process.env.E2B_API_KEY })
   })
 }
 
 export async function POST(request: Request) {
-  return handleHttpComputeRequest({
+  return handleComputeRequest({
     request,
     provider: e2b({ apiKey: process.env.E2B_API_KEY })
   })

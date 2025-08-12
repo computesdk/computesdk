@@ -16,7 +16,7 @@ ComputeSDK provides a consistent TypeScript interface for code execution across 
 - 📦 **Modular** - Install only the providers you need
 - 🔧 **Extensible** - Easy to add custom providers
 - 🌐 **Web Framework Integration** - Built-in request handlers for Next.js, Nuxt, SvelteKit, etc.
-- 🎨 **Frontend Integration** - React hooks and utilities via @computesdk/ui
+- 🎨 **Frontend Integration** - Client-side hooks and utilities via @computesdk/ui
 
 ## Installation
 
@@ -59,7 +59,7 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 
 ### E2B - Full Development Environment
 
-E2B provides the richest feature set with full filesystem and terminal support:
+E2B provides full filesystem and terminal support:
 
 ```bash
 export E2B_API_KEY=e2b_your_api_key_here
@@ -268,12 +268,12 @@ const terminal = await sandbox.terminal.getById('terminal-id');
 ComputeSDK provides built-in request handlers for web frameworks:
 
 ```typescript
-import { handleHttpComputeRequest } from 'computesdk';
+import { handleComputeRequest } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 // Next.js API route
 export async function POST(request: Request) {
-  return handleHttpComputeRequest({
+  return handleComputeRequest({
     request,
     provider: e2b({ apiKey: process.env.E2B_API_KEY })
   });
