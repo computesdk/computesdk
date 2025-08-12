@@ -40,10 +40,11 @@ ComputeSDK is a unified abstraction layer that lets you execute code in secure, 
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
 - ⚡ **Command execution** - Run shell commands directly
-- 🔄 **Auto-detection** - Automatically selects providers based on environment variables
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
 - 📦 **Modular** - Install only the providers you need
 - 🔧 **Extensible** - Easy to add custom providers
+- 🌐 **Web Framework Integration** - Built-in request handlers for Next.js, Nuxt, SvelteKit, etc.
+- 🎨 **Frontend Integration** - Client-side hooks and utilities via @computesdk/ui
 
 ## Get Started in 30 Seconds
 
@@ -55,6 +56,9 @@ npm install computesdk
 npm install @computesdk/e2b        # For data science and Python
 npm install @computesdk/vercel     # For web-scale Node.js/Python  
 npm install @computesdk/daytona    # For development workspaces
+
+# Frontend integration (optional)
+npm install @computesdk/ui         # React hooks and utilities
 ```
 
 Set your environment variables and you're ready to go:
@@ -67,286 +71,323 @@ export E2B_API_KEY=your_api_key
 
 ## Quick Start
 
-### Auto-detection (Recommended)
-
 ```typescript
-import { ComputeSDK } from 'computesdk';
-
-// Automatically detects and uses the first available provider
-const sandbox = ComputeSDK.createSandbox();
-
-const result = await sandbox.execute('print("Hello World!")');
-console.log(result.stdout);
-
-await sandbox.kill();
-```
-
-### Provider-specific usage
-
-```typescript
+import { compute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
-import { executeSandbox } from 'computesdk';
 
-const result = await executeSandbox({
-  sandbox: e2b(),
-  code: 'print("Hello from E2B!")'
+// Set default provider
+compute.setConfig({ 
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
+
+// Create a sandbox
+const sandbox = await compute.sandbox.create({});
+
+// Execute code
+const result = await sandbox.runCode('print("Hello World!")');
+console.log(result.stdout); // "Hello World!"
+
+// Clean up
+await compute.sandbox.destroy(sandbox.sandboxId);
 ```
 
 ## Provider Setup
 
-### E2B (Fully Implemented)
+### E2B - Full Development Environment
+
+E2B provides full filesystem and terminal support:
 
 ```bash
-# Set environment variable
-export E2B_API_KEY=your_e2b_api_key
+export E2B_API_KEY=e2b_your_api_key_here
 ```
 
 ```typescript
+import { compute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
-const sandbox = e2b({
-  template: 'python', // optional, defaults to 'python'
-  timeout: 300000,    // optional, defaults to 5 minutes
+compute.setConfig({ 
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
 
-const result = await sandbox.execute(`
-import numpy as np
+const sandbox = await compute.sandbox.create({});
+
+// Execute Python with data science libraries
+const result = await sandbox.runCode(`
 import pandas as pd
+import numpy as np
 
 data = {'A': [1, 2, 3], 'B': [4, 5, 6]}
 df = pd.DataFrame(data)
 print(df)
+print(f"Sum: {df.sum().sum()}")
 `);
+
+// Interactive terminal support
+const terminal = await sandbox.terminal.create({
+  command: 'bash',
+  cols: 80,
+  rows: 24
+});
 ```
 
-### Vercel (Fully Implemented)
+### Vercel - Scalable Serverless Execution
+
+Vercel provides reliable execution with filesystem support:
 
 ```bash
-export VERCEL_TOKEN=your_vercel_token
-export VERCEL_TEAM_ID=your_team_id
-export VERCEL_PROJECT_ID=your_project_id
+# Method 1: OIDC Token (Recommended)
+vercel env pull  # Downloads VERCEL_OIDC_TOKEN
+
+# Method 2: Traditional
+export VERCEL_TOKEN=your_vercel_token_here
+export VERCEL_TEAM_ID=your_team_id_here
+export VERCEL_PROJECT_ID=your_project_id_here
 ```
 
 ```typescript
+import { compute } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
 
-const sandbox = vercel({
-  runtime: 'node',    // 'node' or 'python'
-  timeout: 300000,    // optional, defaults to 5 minutes
+compute.setConfig({ 
+  provider: vercel({ runtime: 'node' }) 
 });
 
-const result = await sandbox.execute(`
+const sandbox = await compute.sandbox.create({});
+
+// Execute Node.js or Python
+const result = await sandbox.runCode(`
 console.log('Node.js version:', process.version);
-console.log('Hello from Vercel Sandbox!');
+console.log('Hello from Vercel!');
 `);
+
+// Up to 45 minutes execution time
+// Global infrastructure deployment
 ```
 
-### Daytona (Fully Implemented)
+### Daytona - Development Workspaces
+
+Daytona provides development workspace environments:
 
 ```bash
-export DAYTONA_API_KEY=your_daytona_api_key
+export DAYTONA_API_KEY=your_daytona_api_key_here
 ```
 
 ```typescript
+import { compute } from 'computesdk';
 import { daytona } from '@computesdk/daytona';
 
-const sandbox = daytona({
-  runtime: 'python',    // 'python', 'node', etc.
-  timeout: 300000,      // optional, defaults to 5 minutes
+compute.setConfig({ 
+  provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
 });
 
-const result = await sandbox.execute(`
+const sandbox = await compute.sandbox.create({});
+
+// Execute in development workspace
+const result = await sandbox.runCode(`
 print('Hello from Daytona!')
 import sys
 print(f'Python version: {sys.version}')
 `);
 ```
 
-## API Reference
+## Core API
 
-### Core Methods
-
-#### `ComputeSDK.createSandbox(options?)`
-
-Creates a sandbox using auto-detection.
+### Configuration
 
 ```typescript
-const sandbox = ComputeSDK.createSandbox({
-  timeout: 300000,  // 5 minutes (optional)
-  runtime: 'python' // runtime preference (optional)
+import { compute } from 'computesdk';
+
+// Set default provider
+compute.setConfig({ provider: myProvider });
+
+// Get current config
+const config = compute.getConfig();
+
+// Clear config
+compute.clearConfig();
+```
+
+### Sandbox Management
+
+```typescript
+// Create sandbox with explicit provider
+const sandbox = await compute.sandbox.create({
+  provider: e2b({ apiKey: 'your-key' }),
+  options: { runtime: 'python', timeout: 300000 }
 });
-```
 
-#### `sandbox.execute(code, runtime?)`
-
-Executes code in the sandbox.
-
-```typescript
-const result = await sandbox.execute('print("Hello")', 'python');
-// Returns: { stdout: string, stderr: string, executionTime: number }
-```
-
-#### `sandbox.runCommand(command, args?)`
-
-Executes shell commands directly.
-
-```typescript
-const result = await sandbox.runCommand('ls', ['-la', '/tmp']);
-console.log(result.stdout); // Directory listing
-```
-
-#### `sandbox.getInfo()`
-
-Gets sandbox information.
-
-```typescript
-const info = await sandbox.getInfo();
-// Returns: { provider: string, sandboxId: string, status: string, ... }
-```
-
-#### `sandbox.kill()`
-
-Terminates the sandbox.
-
-```typescript
-await sandbox.kill();
-```
-
-#### `executeSandbox(options)`
-
-Utility function for one-off executions.
-
-```typescript
-const result = await executeSandbox({
-  sandbox: e2b(),
-  code: 'print("Hello")',
-  runtime: 'python' // optional
+// Create sandbox with default provider
+const sandbox = await compute.sandbox.create({
+  options: { runtime: 'python' }
 });
+
+// Get existing sandbox
+const sandbox = await compute.sandbox.getById('sandbox-id');
+
+// List all sandboxes
+const sandboxes = await compute.sandbox.list();
+
+// Destroy sandbox
+await compute.sandbox.destroy('sandbox-id');
+```
+
+### Code Execution
+
+```typescript
+// Run code
+const result = await sandbox.runCode('print("Hello")', 'python');
+
+// Run shell command
+const result = await sandbox.runCommand('ls', ['-la']);
+
+// Result structure
+interface ExecutionResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  executionTime: number;
+  sandboxId: string;
+  provider: string;
+}
 ```
 
 ### Filesystem Operations
 
-All providers support comprehensive filesystem operations through the `sandbox.filesystem` interface:
-
-#### `sandbox.filesystem.readFile(path)`
-
-Reads the contents of a file.
-
 ```typescript
-const content = await sandbox.filesystem.readFile('/path/to/file.txt');
-console.log(content); // File contents as string
+// Write file
+await sandbox.filesystem.writeFile('/tmp/hello.py', 'print("Hello")');
+
+// Read file
+const content = await sandbox.filesystem.readFile('/tmp/hello.py');
+
+// Create directory
+await sandbox.filesystem.mkdir('/tmp/mydir');
+
+// List directory
+const files = await sandbox.filesystem.readdir('/tmp');
+
+// Check if exists
+const exists = await sandbox.filesystem.exists('/tmp/hello.py');
+
+// Remove file/directory
+await sandbox.filesystem.remove('/tmp/hello.py');
 ```
 
-#### `sandbox.filesystem.writeFile(path, content)`
-
-Writes content to a file, creating it if it doesn't exist.
+### Terminal Operations
 
 ```typescript
-await sandbox.filesystem.writeFile('/path/to/file.txt', 'Hello World!');
-```
-
-#### `sandbox.filesystem.mkdir(path)`
-
-Creates a directory (and parent directories if needed).
-
-```typescript
-await sandbox.filesystem.mkdir('/path/to/new/directory');
-```
-
-#### `sandbox.filesystem.readdir(path)`
-
-Lists the contents of a directory.
-
-```typescript
-const entries = await sandbox.filesystem.readdir('/path/to/directory');
-entries.forEach(entry => {
-  console.log(`${entry.name} (${entry.isDirectory ? 'dir' : 'file'}) - ${entry.size} bytes`);
+// Create terminal (E2B only)
+const terminal = await sandbox.terminal.create({
+  command: 'bash',
+  cols: 80,
+  rows: 24
 });
+
+// Write to terminal
+await terminal.write('ls -la\n');
+
+// Resize terminal
+await terminal.resize(120, 30);
+
+// Kill terminal
+await terminal.kill();
+
+// List terminals
+const terminals = await sandbox.terminal.list();
+
+// Get terminal by ID
+const terminal = await sandbox.terminal.getById('terminal-id');
 ```
 
-#### `sandbox.filesystem.exists(path)`
+## Web Framework Integration
 
-Checks if a file or directory exists.
-
-```typescript
-const exists = await sandbox.filesystem.exists('/path/to/check');
-if (exists) {
-  console.log('Path exists!');
-}
-```
-
-#### `sandbox.filesystem.remove(path)`
-
-Removes a file or directory.
+ComputeSDK provides built-in request handlers for web frameworks:
 
 ```typescript
-await sandbox.filesystem.remove('/path/to/delete');
-```
-
-### Terminal Operations (E2B Only)
-
-E2B provides interactive terminal support with PTY (pseudo-terminal) sessions:
-
-#### `sandbox.terminal.create(options?)`
-
-Creates an interactive terminal session.
-
-```typescript
+import { handleComputeRequest } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
-const sandbox = e2b();
+// Next.js API route
+export async function POST(request: Request) {
+  return handleComputeRequest({
+    request,
+    provider: e2b({ apiKey: process.env.E2B_API_KEY })
+  });
+}
 
-// Create interactive terminal
-const terminal = await sandbox.terminal.create({
-  command: 'bash',  // Command to run (default: 'bash')
-  cols: 80,         // Terminal width
-  rows: 24          // Terminal height
+// Client usage
+const response = await fetch('/api/compute', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'compute.sandbox.runCode',
+    code: 'print("Hello from web!")',
+    runtime: 'python'
+  })
 });
 
-// Write commands to terminal
-await terminal.write('echo "Hello from terminal!"\n');
-await terminal.write('python --version\n');
-
-// Handle terminal output
-terminal.onData = (data: Uint8Array) => {
-  const output = new TextDecoder().decode(data);
-  console.log('Terminal output:', output);
-};
-
-// Clean up
-await terminal.kill();
+const result = await response.json();
+console.log(result.result.stdout);
 ```
 
-#### `sandbox.terminal.list()`
+### Supported Actions
 
-Lists all active terminal sessions.
+- `compute.sandbox.create` - Create new sandbox
+- `compute.sandbox.destroy` - Destroy sandbox
+- `compute.sandbox.getInfo` - Get sandbox information
+- `compute.sandbox.list` - List all sandboxes
+- `compute.sandbox.runCode` - Execute code
+- `compute.sandbox.runCommand` - Run shell command
+- `compute.sandbox.filesystem.readFile` - Read file
+- `compute.sandbox.filesystem.writeFile` - Write file
+- `compute.sandbox.filesystem.mkdir` - Create directory
+- `compute.sandbox.filesystem.readdir` - List directory
+- `compute.sandbox.filesystem.exists` - Check if path exists
+- `compute.sandbox.filesystem.remove` - Remove file/directory
+- `compute.sandbox.terminal.create` - Create terminal
+- `compute.sandbox.terminal.list` - List terminals
+- `compute.sandbox.terminal.getById` - Get terminal by ID
+- `compute.sandbox.terminal.destroy` - Destroy terminal
+- `compute.sandbox.terminal.write` - Write to terminal
+- `compute.sandbox.terminal.resize` - Resize terminal
+- `compute.sandbox.terminal.kill` - Kill terminal
+
+## Frontend Integration
+
+Use `@computesdk/ui` for React hooks and utilities:
 
 ```typescript
-const terminals = await sandbox.terminal.list();
-console.log(`Active terminals: ${terminals.length}`);
+import { useCompute } from '@computesdk/ui';
+
+function CodeExecutor() {
+  const compute = useCompute({
+    apiEndpoint: '/api/compute',
+    defaultRuntime: 'python'
+  });
+  
+  const executeCode = async () => {
+    const sandbox = await compute.sandbox.create();
+    const result = await sandbox.runCode('print("Hello World!")');
+    console.log(result.result?.stdout);
+    await sandbox.destroy();
+  };
+  
+  return (
+    <button onClick={executeCode}>
+      Execute Code
+    </button>
+  );
+}
 ```
 
 ## Error Handling
 
-ComputeSDK provides comprehensive error handling:
-
 ```typescript
 try {
-  const sandbox = ComputeSDK.createSandbox();
-  const result = await sandbox.execute('invalid python code');
+  const sandbox = await compute.sandbox.create({});
+  const result = await sandbox.runCode('invalid code');
 } catch (error) {
-  if (error.message.includes('Missing') && error.message.includes('API key')) {
-    console.error('Authentication Error: Check your environment variables');
-  } else if (error.message.includes('timeout')) {
-    console.error('Timeout Error: Execution took too long');
-  } else if (error.message.includes('quota') || error.message.includes('limit')) {
-    console.error('Quota Error: API usage limits exceeded');
-  } else if (error.message.includes('not installed')) {
-    console.error('Configuration Error: Provider package not installed');
-  } else {
-    console.error('Execution Error:', error.message);
-  }
+  console.error('Execution failed:', error.message);
 }
 ```
 
@@ -355,104 +396,84 @@ try {
 ### Data Science with E2B
 
 ```typescript
+import { compute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
-const sandbox = e2b();
+compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
 
-const result = await sandbox.execute(`
+const sandbox = await compute.sandbox.create({});
+
+// Create project structure
+await sandbox.filesystem.mkdir('/analysis');
+await sandbox.filesystem.mkdir('/analysis/data');
+await sandbox.filesystem.mkdir('/analysis/output');
+
+// Write input data
+const csvData = `name,age,city
+Alice,25,New York
+Bob,30,San Francisco
+Charlie,35,Chicago`;
+
+await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
+
+// Process data with Python
+const result = await sandbox.runCode(`
+import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
 
-# Generate data
-x = np.linspace(0, 10, 100)
-y = np.sin(x)
+# Read data
+df = pd.read_csv('/analysis/data/people.csv')
+print("Data loaded:")
+print(df)
 
-# Create plot
-plt.figure(figsize=(10, 6))
-plt.plot(x, y, 'b-', linewidth=2)
-plt.title('Sine Wave')
-plt.xlabel('x')
-plt.ylabel('sin(x)')
-plt.grid(True)
-plt.savefig('sine_wave.png')
-plt.show()
+# Calculate statistics
+avg_age = df['age'].mean()
+print(f"\\nAverage age: {avg_age}")
 
-print("Plot saved as sine_wave.png")
+# Create visualization
+plt.figure(figsize=(8, 6))
+plt.bar(df['name'], df['age'])
+plt.title('Age by Person')
+plt.xlabel('Name')
+plt.ylabel('Age')
+plt.savefig('/analysis/output/age_chart.png')
+print("\\nChart saved to /analysis/output/age_chart.png")
+
+# Save results
+results = {
+    'total_people': len(df),
+    'average_age': avg_age,
+    'cities': df['city'].unique().tolist()
+}
+
+import json
+with open('/analysis/output/results.json', 'w') as f:
+    json.dump(results, f, indent=2)
+
+print("Results saved!")
 `);
 
 console.log(result.stdout);
-```
-
-### Filesystem Operations
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-const sandbox = e2b();
-
-// Create a directory structure
-await sandbox.filesystem.mkdir('/project/data');
-await sandbox.filesystem.mkdir('/project/output');
-
-// Write configuration file
-const config = JSON.stringify({
-  name: 'My Project',
-  version: '1.0.0',
-  settings: { debug: true }
-}, null, 2);
-
-await sandbox.filesystem.writeFile('/project/config.json', config);
-
-// Create a Python script
-const script = `
-import json
-import os
-
-# Read configuration
-with open('/project/config.json', 'r') as f:
-    config = json.load(f)
-
-print(f"Project: {config['name']} v{config['version']}")
-
-# Process data
-data = [1, 2, 3, 4, 5]
-result = sum(data)
-
-# Write results
-with open('/project/output/results.txt', 'w') as f:
-    f.write(f"Sum: {result}\\n")
-    f.write(f"Count: {len(data)}\\n")
-
-print("Processing complete!")
-`;
-
-await sandbox.filesystem.writeFile('/project/process.py', script);
-
-// Execute the script
-const result = await sandbox.execute('python /project/process.py');
-console.log(result.stdout);
 
 // Read the results
-const results = await sandbox.filesystem.readFile('/project/output/results.txt');
-console.log('Results:', results);
+const results = await sandbox.filesystem.readFile('/analysis/output/results.json');
+console.log('Analysis results:', JSON.parse(results));
 
-// List all files in the project
-const files = await sandbox.filesystem.readdir('/project');
-console.log('Project files:');
-files.forEach(file => {
-  console.log(`  ${file.name} (${file.isDirectory ? 'directory' : 'file'})`);
-});
-
-await sandbox.kill();
+await compute.sandbox.destroy(sandbox.sandboxId);
 ```
 
-### Cross-Provider Filesystem Example
+### Cross-Provider Data Processing
 
 ```typescript
+import { compute } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
 import { daytona } from '@computesdk/daytona';
 
-async function processData(sandbox: any) {
+async function processData(provider: any) {
+  compute.setConfig({ provider });
+  
+  const sandbox = await compute.sandbox.create({});
+  
   // Create workspace
   await sandbox.filesystem.mkdir('/workspace');
   
@@ -462,7 +483,7 @@ async function processData(sandbox: any) {
   );
   
   // Process with code execution
-  const result = await sandbox.execute(`
+  const result = await sandbox.runCode(`
 import json
 
 # Read input
@@ -486,94 +507,96 @@ print("Processing complete!")
   
   // Read results
   const output = await sandbox.filesystem.readFile('/workspace/output.json');
+  await compute.sandbox.destroy(sandbox.sandboxId);
+  
   return JSON.parse(output);
 }
 
-// Use with any provider
-const vercelSandbox = vercel();
-const vercelResult = await processData(vercelSandbox);
+// Use with different providers
+const vercelResult = await processData(vercel({ runtime: 'python' }));
 console.log('Vercel result:', vercelResult);
 
-const daytonaSandbox = daytona();
-const daytonaResult = await processData(daytonaSandbox);
+const daytonaResult = await processData(daytona({ runtime: 'python' }));
 console.log('Daytona result:', daytonaResult);
 ```
 
-## Development
+## Provider Packages
 
-### Package Structure
-
-```
-computesdk/                    # Main SDK package
-├── @computesdk/e2b           # E2B provider
-├── @computesdk/vercel        # Vercel provider
-└── @computesdk/daytona       # Daytona provider
-```
-
-### Building
+ComputeSDK uses separate provider packages:
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Build all packages
-pnpm build
-
-# Run tests
-pnpm test
-
-# Run examples
-cd examples/basic && pnpm run e2b
+npm install @computesdk/e2b        # E2B provider
+npm install @computesdk/vercel     # Vercel provider  
+npm install @computesdk/daytona    # Daytona provider
 ```
 
-### Creating Custom Providers
+Each provider implements the same interface but may support different capabilities (filesystem, terminal, etc.).
+
+## Custom Providers
+
+Create custom providers using the factory:
 
 ```typescript
-import { BaseProvider, BaseComputeSandbox } from 'computesdk';
+import { createProvider } from 'computesdk';
 
-class MyProvider extends BaseProvider implements BaseComputeSandbox {
-  provider = 'my-provider';
-  sandboxId = 'my-sandbox-id';
-  
-  async execute(code: string) {
-    // Implementation
+const myProvider = createProvider({
+  name: 'my-provider',
+  methods: {
+    sandbox: {
+      create: async (config, options) => {
+        // Implementation
+      },
+      getById: async (config, id) => {
+        // Implementation  
+      },
+      list: async (config) => {
+        // Implementation
+      },
+      destroy: async (config, id) => {
+        // Implementation
+      }
+    }
   }
-  
-  async runCode(code: string) {
-    // Implementation
-  }
-  
-  async runCommand(command: string, args?: string[]) {
-    // Implementation
-  }
-  
-  async kill() {
-    // Implementation  
-  }
-  
-  async getInfo() {
-    // Implementation
-  }
-}
-
-export function myProvider(options = {}) {
-  return new MyProvider(options);
-}
+});
 ```
 
-## Provider Status
+## TypeScript Support
 
-| Provider | Status | Code Execution | Filesystem | Terminal | Features |
-|----------|--------|----------------|------------|----------|----------|
-| **E2B** | ✅ Complete | ✅ Python | ✅ Native | ✅ PTY | Data science libraries, interactive terminals |
-| **Vercel** | ✅ Complete | ✅ Node.js, Python | ✅ Shell-based | ❌ | Global deployment, up to 45min runtime |
-| **Daytona** | ✅ Complete | ✅ Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
+ComputeSDK is fully typed with comprehensive TypeScript definitions:
 
-### Feature Matrix
+```typescript
+import type { 
+  Sandbox, 
+  Provider, 
+  ExecutionResult,
+  ComputeConfig,
+  Runtime 
+} from 'computesdk';
+```
 
-- **✅ Complete**: Fully implemented and tested
-- **🎯 Community**: Available for community contribution
-- **❌ Not Available**: Not supported by the provider
+## Provider Comparison
+
+| Provider | Code Execution | Filesystem | Terminal | Use Cases |
+|----------|----------------|------------|----------|-----------|
+| **E2B** | Python, Node.js | ✅ Full | ✅ PTY | Data science, AI/ML, interactive development |
+| **Vercel** | Node.js, Python | ✅ Full | ❌ | Web apps, APIs, serverless functions |
+| **Daytona** | Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
+
+### Key Differences
+
+- **E2B**: Full development environment with data science libraries and interactive terminals
+- **Vercel**: Ephemeral sandboxes optimized for serverless execution (up to 45 minutes)
+- **Daytona**: Development workspaces with persistent environments
+
+## Examples
+
+Check out the [examples directory](./examples) for complete implementations with different web frameworks:
+
+- [Next.js](./examples/nextjs)
+- [Nuxt](./examples/nuxt) 
+- [SvelteKit](./examples/sveltekit)
+- [Remix](./examples/remix)
+- [Astro](./examples/astro)
 
 ## Resources
 
