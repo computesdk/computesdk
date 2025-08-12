@@ -1,6 +1,6 @@
 # @computesdk/vercel
 
-Vercel Sandbox provider for ComputeSDK - Execute Node.js and Python code in secure, isolated Vercel sandboxes.
+Vercel provider for ComputeSDK - Execute Node.js and Python code in secure, isolated Vercel sandboxes.
 
 ## Installation
 
@@ -8,7 +8,7 @@ Vercel Sandbox provider for ComputeSDK - Execute Node.js and Python code in secu
 npm install @computesdk/vercel
 ```
 
-## Prerequisites
+## Authentication
 
 Vercel provider supports two authentication methods:
 
@@ -27,250 +27,223 @@ vercel env pull  # Downloads VERCEL_OIDC_TOKEN to .env.local
 
 Alternative method using explicit credentials:
 
-- `VERCEL_TOKEN` - Your Vercel access token (get from [Vercel Account Tokens](https://vercel.com/account/tokens))
-- `VERCEL_TEAM_ID` - Your Vercel team ID
-- `VERCEL_PROJECT_ID` - Your Vercel project ID
-
-## Quick Start
-
-### Basic Usage
-
-```typescript
-import { vercel } from '@computesdk/vercel';
-
-// Create sandbox with default Node.js runtime
-const sandbox = vercel();
-
-// Execute Node.js code
-const result = await sandbox.doExecute('console.log("Hello from Vercel!");');
-console.log(result.stdout); // "Hello from Vercel!"
-
-// Clean up
-await sandbox.doKill();
+```bash
+export VERCEL_TOKEN=your_vercel_token_here
+export VERCEL_TEAM_ID=your_team_id_here
+export VERCEL_PROJECT_ID=your_project_id_here
 ```
 
-### Python Runtime
+Get your token from [Vercel Account Tokens](https://vercel.com/account/tokens)
 
-```typescript
-import { vercel } from '@computesdk/vercel';
-
-// Create sandbox with Python runtime
-const sandbox = vercel({ runtime: 'python' });
-
-// Execute Python code
-const result = await sandbox.doExecute('print("Hello from Python on Vercel!")');
-console.log(result.stdout); // "Hello from Python on Vercel!"
-
-await sandbox.doKill();
-```
-
-### Sandbox Reconnection
-
-```typescript
-import { vercel } from '@computesdk/vercel';
-
-// Create a new sandbox
-const sandbox1 = vercel();
-const result1 = await sandbox1.doExecute('console.log("First execution");');
-const sandboxId = sandbox1.sandboxId;
-
-// Later, reconnect to the same sandbox
-const sandbox2 = vercel({ sandboxId });
-const result2 = await sandbox2.doExecute('console.log("Reconnected!");');
-
-// Both executions run in the same Vercel sandbox environment
-```
+## Usage
 
 ### With ComputeSDK
 
 ```typescript
+import { compute } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
-import { executeSandbox } from 'computesdk';
 
-// One-off execution
-const result = await executeSandbox({
-  sandbox: vercel({ runtime: 'python' }),
-  code: `
-import json
-import datetime
-
-data = {
-    "timestamp": datetime.datetime.now().isoformat(),
-    "message": "Hello from Vercel Sandbox"
-}
-
-print(json.dumps(data, indent=2))
-  `
+// Set as default provider
+compute.setConfig({ 
+  provider: vercel({ runtime: 'node' }) 
 });
 
-console.log(result.stdout);
+// Create sandbox
+const sandbox = await compute.sandbox.create({});
+
+// Execute Node.js code
+const result = await sandbox.runCode('console.log("Hello from Vercel!");');
+console.log(result.stdout); // "Hello from Vercel!"
+
+// Execute Python code
+const pythonResult = await sandbox.runCode('print("Hello from Python!")', 'python');
+console.log(pythonResult.stdout); // "Hello from Python!"
+
+// Clean up
+await compute.sandbox.destroy(sandbox.sandboxId);
+```
+
+### Direct Usage
+
+```typescript
+import { vercel } from '@computesdk/vercel';
+
+// Create provider with explicit config
+const provider = vercel({
+  token: 'your-token',
+  teamId: 'your-team-id', 
+  projectId: 'your-project-id',
+  runtime: 'python',
+  timeout: 600000 // 10 minutes
+});
+
+// Use with compute singleton
+const sandbox = await compute.sandbox.create({ provider });
 ```
 
 ## Configuration
 
-### Options
+### Environment Variables
+
+```bash
+# Method 1: OIDC Token (Recommended)
+export VERCEL_OIDC_TOKEN=your_oidc_token_here
+
+# Method 2: Traditional
+export VERCEL_TOKEN=your_vercel_token_here
+export VERCEL_TEAM_ID=your_team_id_here
+export VERCEL_PROJECT_ID=your_project_id_here
+```
+
+### Configuration Options
 
 ```typescript
 interface VercelConfig {
-  runtime?: 'node' | 'python';  // Default: 'node'
-  timeout?: number;              // Default: 300000 (5 minutes)
-  sandboxId?: string;            // Existing sandbox ID to reconnect to
-  token?: string;                // Vercel API token (fallback to VERCEL_TOKEN)
-  teamId?: string;               // Vercel team ID (fallback to VERCEL_TEAM_ID)
-  projectId?: string;            // Vercel project ID (fallback to VERCEL_PROJECT_ID)
+  /** Vercel API token - if not provided, will use VERCEL_TOKEN env var */
+  token?: string;
+  /** Vercel team ID - if not provided, will use VERCEL_TEAM_ID env var */
+  teamId?: string;
+  /** Vercel project ID - if not provided, will use VERCEL_PROJECT_ID env var */
+  projectId?: string;
+  /** Default runtime environment */
+  runtime?: 'node' | 'python';
+  /** Execution timeout in milliseconds */
+  timeout?: number;
 }
-```
-
-### Example with Custom Configuration
-
-```typescript
-const sandbox = vercel({
-  runtime: 'python',
-  timeout: 600000,  // 10 minutes
-});
 ```
 
 ## Features
 
-### Supported Runtimes
-
-- **Node.js 22** (`node`) - Default runtime
-- **Python 3.13** (`python`) - Full Python environment
-
-### Capabilities
-
-- ✅ **Isolated execution** - Each sandbox runs in its own secure environment
-- ✅ **Long-running tasks** - Up to 45 minutes execution time
-- ✅ **Standard libraries** - Node.js and Python standard libraries included
-- ✅ **Error handling** - Comprehensive error reporting
-- ✅ **Stream support** - Real-time stdout/stderr capture
-- ✅ **Global deployment** - Runs on Vercel's global infrastructure
-
-### Limitations
-
-- Maximum execution time: 45 minutes (configurable)
-- Maximum 8 vCPUs per sandbox (default: 2 vCPUs)
-- Memory allocation: 2048 MB per vCPU
+- ✅ **Code Execution** - Node.js 22 and Python 3.13 runtime support
+- ✅ **Command Execution** - Run shell commands in sandbox
+- ✅ **Filesystem Operations** - Full file system access via shell commands
+- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
+- ✅ **Long-running Tasks** - Up to 45 minutes execution time
+- ✅ **Global Infrastructure** - Runs on Vercel's global network
+- ❌ **Interactive Terminals** - Not supported by Vercel Sandbox
+- ❌ **Sandbox Reconnection** - Sandboxes are ephemeral (single-use)
 
 ## API Reference
 
-### `vercel(config?)`
-
-Creates a new Vercel sandbox provider.
-
-**Parameters:**
-- `config` (optional): Configuration object
-
-**Returns:** `VercelProvider` instance
-
-### `sandbox.doExecute(code, runtime?)`
-
-Executes code in the sandbox.
-
-**Parameters:**
-- `code`: String containing the code to execute
-- `runtime` (optional): Runtime to use ('node' | 'python')
-
-**Returns:** `Promise<ExecutionResult>`
+### Code Execution
 
 ```typescript
-interface ExecutionResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  executionTime: number;
-  sandboxId: string;
-  provider: string;
-}
+// Execute Node.js code
+const result = await sandbox.runCode(`
+const data = { message: "Hello from Node.js" };
+console.log(JSON.stringify(data));
+`, 'node');
+
+// Execute Python code  
+const result = await sandbox.runCode(`
+import json
+data = {"message": "Hello from Python"}
+print(json.dumps(data))
+`, 'python');
+
+// Auto-detection (based on code patterns)
+const result = await sandbox.runCode('print("Auto-detected as Python")');
 ```
 
-### `sandbox.doGetInfo()`
-
-Gets information about the sandbox.
-
-**Returns:** `Promise<SandboxInfo>`
+### Command Execution
 
 ```typescript
-interface SandboxInfo {
-  id: string;
-  provider: string;
-  runtime: string;
-  status: 'running' | 'stopped';
-  createdAt: Date;
-  timeout: number;
-  metadata: {
-    vercelSandboxId: string;
-    teamId: string;
-    projectId: string;
-    vcpus: number;
-    region: string;
-  };
-}
+// List files
+const result = await sandbox.runCommand('ls', ['-la']);
+
+// Install packages (Node.js)
+const result = await sandbox.runCommand('npm', ['install', 'lodash']);
+
+// Install packages (Python)
+const result = await sandbox.runCommand('pip', ['install', 'requests']);
+
+// Run scripts
+const result = await sandbox.runCommand('node', ['script.js']);
 ```
-
-### `sandbox.doKill()`
-
-Terminates the sandbox.
-
-**Returns:** `Promise<void>`
 
 ### Filesystem Operations
 
-The Vercel provider supports comprehensive filesystem operations through the `filesystem` property:
-
-#### `sandbox.filesystem.readFile(path)`
-
-Reads the contents of a file.
-
 ```typescript
-const content = await sandbox.filesystem.readFile('/vercel/sandbox/data.txt');
-console.log(content);
+// Write file
+await sandbox.filesystem.writeFile('/tmp/hello.py', 'print("Hello World")');
+
+// Read file
+const content = await sandbox.filesystem.readFile('/tmp/hello.py');
+
+// Create directory
+await sandbox.filesystem.mkdir('/tmp/data');
+
+// List directory contents
+const files = await sandbox.filesystem.readdir('/tmp');
+
+// Check if file exists
+const exists = await sandbox.filesystem.exists('/tmp/hello.py');
+
+// Remove file or directory
+await sandbox.filesystem.remove('/tmp/hello.py');
 ```
 
-#### `sandbox.filesystem.writeFile(path, content)`
-
-Writes content to a file, creating directories as needed.
+### Sandbox Management
 
 ```typescript
-await sandbox.filesystem.writeFile('/vercel/sandbox/output.txt', 'Hello World!');
+// Get sandbox info
+const info = await sandbox.getInfo();
+console.log(info.id, info.provider, info.status);
+
+// Get existing sandbox
+const existing = await compute.sandbox.getById(provider, 'sandbox-id');
+
+// Destroy sandbox
+await compute.sandbox.destroy(provider, 'sandbox-id');
+
+// Note: Vercel doesn't support listing all sandboxes
+// Each sandbox is ephemeral and single-use
 ```
 
-#### `sandbox.filesystem.mkdir(path)`
+## Runtime Detection
 
-Creates a directory and any necessary parent directories.
+The provider automatically detects the runtime based on code patterns:
 
-```typescript
-await sandbox.filesystem.mkdir('/vercel/sandbox/project/data');
-```
+**Python indicators:**
+- `print(` statements
+- `import` statements  
+- `def` function definitions
+- Python-specific syntax (`f"`, `__`, etc.)
 
-#### `sandbox.filesystem.readdir(path)`
+**Default:** Node.js for all other cases
 
-Lists the contents of a directory.
-
-```typescript
-const entries = await sandbox.filesystem.readdir('/vercel/sandbox');
-entries.forEach(entry => {
-  console.log(`${entry.name} (${entry.isDirectory ? 'directory' : 'file'}) - ${entry.size} bytes`);
-});
-```
-
-#### `sandbox.filesystem.exists(path)`
-
-Checks if a file or directory exists.
+## Error Handling
 
 ```typescript
-const exists = await sandbox.filesystem.exists('/vercel/sandbox/config.json');
-if (exists) {
-  console.log('Configuration file found!');
+try {
+  const result = await sandbox.runCode('invalid code');
+} catch (error) {
+  if (error.message.includes('Missing Vercel authentication')) {
+    console.error('Set VERCEL_OIDC_TOKEN or VERCEL_TOKEN environment variables');
+  } else if (error.message.includes('authentication failed')) {
+    console.error('Check your Vercel credentials');
+  } else if (error.message.includes('team/project configuration failed')) {
+    console.error('Check your VERCEL_TEAM_ID and VERCEL_PROJECT_ID');
+  } else if (error.message.includes('Syntax error')) {
+    console.error('Code has syntax errors');
+  }
 }
 ```
 
-#### `sandbox.filesystem.remove(path)`
+## Web Framework Integration
 
-Removes a file or directory.
+Use with web frameworks via the request handler:
 
 ```typescript
-await sandbox.filesystem.remove('/vercel/sandbox/temp.txt');
+import { handleHttpComputeRequest } from 'computesdk';
+import { vercel } from '@computesdk/vercel';
+
+export async function POST(request: Request) {
+  return handleHttpComputeRequest({
+    request,
+    provider: vercel({ runtime: 'node' })
+  });
+}
 ```
 
 ## Examples
@@ -278,11 +251,11 @@ await sandbox.filesystem.remove('/vercel/sandbox/temp.txt');
 ### Node.js Web Server Simulation
 
 ```typescript
-import { vercel } from '@computesdk/vercel';
+const sandbox = await compute.sandbox.create({
+  provider: vercel({ runtime: 'node' })
+});
 
-const sandbox = vercel({ runtime: 'node' });
-
-const result = await sandbox.doExecute(`
+const result = await sandbox.runCode(`
 const http = require('http');
 const url = require('url');
 
@@ -294,7 +267,10 @@ const routes = {
       { id: 2, name: 'Bob', role: 'Designer' }
     ]
   }),
-  '/api/health': () => ({ status: 'healthy', timestamp: new Date().toISOString() })
+  '/api/health': () => ({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString() 
+  })
 };
 
 // Process request
@@ -310,11 +286,11 @@ console.log(result.stdout);
 ### Python Data Processing
 
 ```typescript
-import { vercel } from '@computesdk/vercel';
+const sandbox = await compute.sandbox.create({
+  provider: vercel({ runtime: 'python' })
+});
 
-const sandbox = vercel({ runtime: 'python' });
-
-const result = await sandbox.doExecute(`
+const result = await sandbox.runCode(`
 import json
 import statistics
 from collections import Counter
@@ -350,64 +326,61 @@ for product, revenue in sorted(product_sales.items(), key=lambda x: x[1], revers
 console.log(result.stdout);
 ```
 
-### Filesystem Operations Example
+### Filesystem Operations Pipeline
 
 ```typescript
-import { vercel } from '@computesdk/vercel';
+const sandbox = await compute.sandbox.create({
+  provider: vercel({ runtime: 'python' })
+});
 
-const sandbox = vercel({ runtime: 'python' });
+// Create project structure
+await sandbox.filesystem.mkdir('/tmp/project');
+await sandbox.filesystem.mkdir('/tmp/project/data');
+await sandbox.filesystem.mkdir('/tmp/project/output');
 
-// Create a complete data processing pipeline using filesystem operations
-try {
-  // 1. Set up project structure
-  await sandbox.filesystem.mkdir('/vercel/sandbox/project');
-  await sandbox.filesystem.mkdir('/vercel/sandbox/project/data');
-  await sandbox.filesystem.mkdir('/vercel/sandbox/project/output');
+// Create configuration file
+const config = {
+  project_name: "Vercel Data Pipeline",
+  version: "1.0.0",
+  settings: {
+    input_format: "json",
+    output_format: "csv",
+    debug: true
+  }
+};
 
-  // 2. Create configuration file
-  const config = {
-    project_name: "Vercel Data Pipeline",
-    version: "1.0.0",
-    settings: {
-      input_format: "json",
-      output_format: "csv",
-      debug: true
-    }
-  };
-  
-  await sandbox.filesystem.writeFile(
-    '/vercel/sandbox/project/config.json', 
-    JSON.stringify(config, null, 2)
-  );
+await sandbox.filesystem.writeFile(
+  '/tmp/project/config.json', 
+  JSON.stringify(config, null, 2)
+);
 
-  // 3. Create sample data
-  const sampleData = [
-    { id: 1, name: "Alice", department: "Engineering", salary: 95000 },
-    { id: 2, name: "Bob", department: "Marketing", salary: 75000 },
-    { id: 3, name: "Charlie", department: "Engineering", salary: 105000 },
-    { id: 4, name: "Diana", department: "Sales", salary: 85000 }
-  ];
+// Create sample data
+const sampleData = [
+  { id: 1, name: "Alice", department: "Engineering", salary: 95000 },
+  { id: 2, name: "Bob", department: "Marketing", salary: 75000 },
+  { id: 3, name: "Charlie", department: "Engineering", salary: 105000 },
+  { id: 4, name: "Diana", department: "Sales", salary: 85000 }
+];
 
-  await sandbox.filesystem.writeFile(
-    '/vercel/sandbox/project/data/employees.json',
-    JSON.stringify(sampleData, null, 2)
-  );
+await sandbox.filesystem.writeFile(
+  '/tmp/project/data/employees.json',
+  JSON.stringify(sampleData, null, 2)
+);
 
-  // 4. Create and execute data processing script
-  const processingScript = `
+// Process data
+const result = await sandbox.runCode(`
 import json
 import csv
-import os
 from collections import defaultdict
 
 # Read configuration
-with open('/vercel/sandbox/project/config.json', 'r') as f:
+with open('/tmp/project/config.json', 'r') as f:
     config = json.load(f)
 
 print(f"Running {config['project_name']} v{config['version']}")
 
 # Read employee data
-with open('/vercel/sandbox/project/data/employees.json', 'r') as f:
+with open('/tmp/project/data/employees.json', 'r') as f:
     employees = json.load(f)
 
 # Process data - calculate department statistics
@@ -430,11 +403,11 @@ for dept, salaries in dept_stats.items():
 results.sort(key=lambda x: x['average_salary'], reverse=True)
 
 # Write results as JSON
-with open('/vercel/sandbox/project/output/department_stats.json', 'w') as f:
+with open('/tmp/project/output/department_stats.json', 'w') as f:
     json.dump(results, f, indent=2)
 
 # Write results as CSV
-with open('/vercel/sandbox/project/output/department_stats.csv', 'w', newline='') as f:
+with open('/tmp/project/output/department_stats.csv', 'w', newline='') as f:
     writer = csv.DictWriter(f, fieldnames=['department', 'employee_count', 'average_salary', 'total_salary'])
     writer.writeheader()
     writer.writerows(results)
@@ -445,117 +418,87 @@ print(f"Generated {len(results)} department statistics")
 # Print summary
 for result in results:
     print(f"{result['department']}: {result['employee_count']} employees, avg salary ${result['average_salary']}")
-  `;
+`);
 
-  await sandbox.filesystem.writeFile('/vercel/sandbox/project/process.py', processingScript);
+console.log('Execution Output:', result.stdout);
 
-  // 5. Execute the processing script
-  const result = await sandbox.doExecute('python /vercel/sandbox/project/process.py');
-  console.log('Execution Output:', result.stdout);
+// Read and display results
+const jsonResults = await sandbox.filesystem.readFile('/tmp/project/output/department_stats.json');
+const csvResults = await sandbox.filesystem.readFile('/tmp/project/output/department_stats.csv');
 
-  // 6. Read and display results
-  const jsonResults = await sandbox.filesystem.readFile('/vercel/sandbox/project/output/department_stats.json');
-  const csvResults = await sandbox.filesystem.readFile('/vercel/sandbox/project/output/department_stats.csv');
+console.log('JSON Results:', jsonResults);
+console.log('CSV Results:', csvResults);
 
-  console.log('JSON Results:', jsonResults);
-  console.log('CSV Results:', csvResults);
-
-  // 7. List all generated files
-  const outputFiles = await sandbox.filesystem.readdir('/vercel/sandbox/project/output');
-  console.log('Generated files:');
-  outputFiles.forEach(file => {
-    console.log(`  ${file.name} (${file.size} bytes)`);
-  });
-
-  // 8. Verify file existence
-  const configExists = await sandbox.filesystem.exists('/vercel/sandbox/project/config.json');
-  const resultsExist = await sandbox.filesystem.exists('/vercel/sandbox/project/output/department_stats.json');
-  
-  console.log(`Configuration file exists: ${configExists}`);
-  console.log(`Results file exists: ${resultsExist}`);
-
-} catch (error) {
-  console.error('Pipeline failed:', error.message);
-} finally {
-  await sandbox.doKill();
-}
+// List all generated files
+const outputFiles = await sandbox.filesystem.readdir('/tmp/project/output');
+console.log('Generated files:');
+outputFiles.forEach(file => {
+  console.log(`  ${file.name} (${file.size} bytes)`);
+});
 ```
 
-## Error Handling
-
-The provider includes comprehensive error handling:
+### Package Installation and Usage
 
 ```typescript
-import { vercel } from '@computesdk/vercel';
+// Node.js example with package installation
+const sandbox = await compute.sandbox.create({
+  provider: vercel({ runtime: 'node' })
+});
 
-try {
-  const sandbox = vercel();
-  const result = await sandbox.doExecute('invalid syntax here');
-} catch (error) {
-  if (error.message.includes('timeout')) {
-    console.error('Execution timed out');
-  } else if (error.message.includes('memory')) {
-    console.error('Memory limit exceeded');
-  } else if (error.message.includes('authentication')) {
-    console.error('Check your VERCEL_TOKEN');
-  } else {
-    console.error('Execution failed:', error.message);
-  }
-}
+// Install lodash
+const installResult = await sandbox.runCommand('npm', ['install', 'lodash']);
+console.log('Install result:', installResult.stdout);
+
+// Use lodash in code
+const result = await sandbox.runCode(`
+const _ = require('lodash');
+
+const data = [
+  { name: 'Alice', age: 25, city: 'New York' },
+  { name: 'Bob', age: 30, city: 'San Francisco' },
+  { name: 'Charlie', age: 35, city: 'Chicago' }
+];
+
+// Group by city
+const grouped = _.groupBy(data, 'city');
+console.log('Grouped by city:', JSON.stringify(grouped, null, 2));
+
+// Calculate average age
+const avgAge = _.meanBy(data, 'age');
+console.log('Average age:', avgAge);
+
+// Find oldest person
+const oldest = _.maxBy(data, 'age');
+console.log('Oldest person:', oldest.name);
+`);
+
+console.log(result.stdout);
 ```
 
-## Authentication Setup
+## Best Practices
 
-1. **Get Vercel Token:**
-   - Go to [Vercel Account Tokens](https://vercel.com/account/tokens)
-   - Create a new token with appropriate permissions
-   - Set as `VERCEL_TOKEN` environment variable
+1. **Authentication**: Use OIDC token method when possible for simpler setup
+2. **Resource Management**: Destroy sandboxes when done (they're ephemeral anyway)
+3. **Error Handling**: Use try-catch blocks for robust error handling
+4. **Timeouts**: Set appropriate timeouts for long-running tasks (up to 45 minutes)
+5. **File Organization**: Use the filesystem API to organize project files
+6. **Package Installation**: Install packages at runtime as needed
 
-2. **Get Team and Project IDs:**
-   - Find your team ID in the Vercel dashboard URL
-   - Find your project ID in the project settings
-   - Set as `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`
+## Limitations
 
-3. **Environment Variables:**
-   ```bash
-   export VERCEL_TOKEN=your_vercel_token_here
-   export VERCEL_TEAM_ID=your_team_id_here
-   export VERCEL_PROJECT_ID=your_project_id_here
-   ```
-
-## Testing
-
-Run the test suite:
-
-```bash
-npm test
-```
-
-Run tests with coverage:
-
-```bash
-npm run test:coverage
-```
-
-## Development
-
-Build the package:
-
-```bash
-npm run build
-```
-
-Run in development mode:
-
-```bash
-npm run dev
-```
-
-## License
-
-MIT - see LICENSE file for details.
+- **Ephemeral Sandboxes**: Each sandbox is single-use and cannot be reconnected to
+- **No Sandbox Listing**: Vercel doesn't support listing all sandboxes
+- **No Interactive Terminals**: Terminal operations are not supported
+- **Memory Limits**: Subject to Vercel sandbox memory constraints (2048 MB per vCPU)
+- **Execution Time**: Maximum 45 minutes execution time
+- **Network Access**: Limited outbound network access
 
 ## Support
 
-- [GitHub Issues](https://github.com/computesdk/computesdk/issues)
-- [ComputeSDK Documentation](https://github.com/computesdk/computesdk)
+- [Vercel Documentation](https://vercel.com/docs)
+- [ComputeSDK Issues](https://github.com/computesdk/computesdk/issues)
+- [Vercel Support](https://vercel.com/support)
+
+## License
+
+MIT

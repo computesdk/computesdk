@@ -151,7 +151,7 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
 
       list: async (_config: VercelConfig) => {
         throw new Error(
-          `Vercel provider does not support listing sandboxes. Vercel sandboxes are ephemeral and designed for single-use execution. Consider using a provider with persistent sandbox management like E2B.`
+          `Vercel provider does not support listing sandboxes. Vercel sandboxes are ephemeral and designed for single-use execution.`
         );
       },
 
