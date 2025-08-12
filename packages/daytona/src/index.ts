@@ -138,15 +138,32 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         const startTime = Date.now();
 
         try {
-          let response;
+          // Auto-detect runtime if not specified
+          const effectiveRuntime = runtime || (
+            // Strong Python indicators
+            code.includes('print(') || 
+            code.includes('import ') ||
+            code.includes('def ') ||
+            code.includes('sys.') ||
+            code.includes('json.') ||
+            code.includes('__') ||
+            code.includes('f"') ||
+            code.includes("f'")
+              ? 'python'
+              // Default to Node.js for all other cases (including ambiguous)
+              : 'node'
+          );
           
-          if (runtime === 'python') {
+          // Use shell-based execution for both runtimes for consistency
+          let response;
+          const encoded = Buffer.from(code).toString('base64');
+          
+          if (effectiveRuntime === 'python') {
             // For Python code, use base64 encoding to safely handle special characters
-            const encoded = Buffer.from(code).toString('base64');
             response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d | python3`);
           } else {
-            // For Node.js/JavaScript code, use Daytona's codeRun method
-            response = await sandbox.process.codeRun(code);
+            // For Node.js code, use base64 encoding to safely handle special characters
+            response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d | node`);
           }
 
           // Daytona always returns exitCode: 0, so we need to detect errors from output

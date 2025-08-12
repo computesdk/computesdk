@@ -10,7 +10,22 @@ npm install @computesdk/vercel
 
 ## Prerequisites
 
-You need the following environment variables set:
+Vercel provider supports two authentication methods:
+
+### Method 1: OIDC Token (Recommended)
+
+The simplest way to authenticate. Vercel manages token expiration automatically.
+
+**Development:**
+```bash
+vercel env pull  # Downloads VERCEL_OIDC_TOKEN to .env.local
+```
+
+**Production:** Vercel automatically provides `VERCEL_OIDC_TOKEN` in your deployment environment.
+
+### Method 2: Access Token + Team/Project IDs
+
+Alternative method using explicit credentials:
 
 - `VERCEL_TOKEN` - Your Vercel access token (get from [Vercel Account Tokens](https://vercel.com/account/tokens))
 - `VERCEL_TEAM_ID` - Your Vercel team ID
