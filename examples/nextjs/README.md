@@ -1,15 +1,5 @@
 # ComputeSDK + Next.js Example
 
-This example demonstrates how to integrate ComputeSDK with Next.js for server-side code execution using App Router.
-
-## Features
-
-- **API Route**: `/api/compute` endpoint using ComputeSDK request handler
-- **Multiple Providers**: Support for E2B, Vercel, and Daytona providers
-- **Multiple Runtimes**: Support for Python and Node.js execution
-- **Error Handling**: Comprehensive error handling and user feedback
-- **TypeScript**: Full type safety throughout the application
-
 ## Setup
 
 1. **Install dependencies**:
@@ -52,76 +42,6 @@ This example demonstrates how to integrate ComputeSDK with Next.js for server-si
 
 4. **Open your browser** and navigate to [http://localhost:3000](http://localhost:3000)
 
-## Usage
-
-1. Select your preferred runtime (Python or Node.js)
-2. Enter your code in the text area
-3. Click "Execute Code" to run it in a secure sandbox
-4. View the results, including output, errors, execution time, and provider used
-
-## API Reference
-
-### POST /api/compute
-
-Execute code using ComputeSDK's unified request handler.
-
-**Request Body:**
-```json
-{
-  "action": "compute.sandbox.runCode",
-  "code": "print('Hello, World!')",
-  "runtime": "python"
-}
-```
-
-**Response (Success):**
-```json
-{
-  "success": true,
-  "sandboxId": "sandbox-123",
-  "provider": "e2b",
-  "result": {
-    "stdout": "Hello, World!\n",
-    "stderr": "",
-    "exitCode": 0,
-    "executionTime": 150
-  }
-}
-```
-
-**Response (Error):**
-```json
-{
-  "success": false,
-  "error": "Code is required for runCode action",
-  "sandboxId": "",
-  "provider": "e2b"
-}
-```
-
-## Supported Actions
-
-The `/api/compute` endpoint supports all ComputeSDK actions:
-
-- `compute.sandbox.create` - Create new sandbox
-- `compute.sandbox.runCode` - Execute code
-- `compute.sandbox.runCommand` - Run shell command
-- `compute.sandbox.filesystem.readFile` - Read file
-- `compute.sandbox.filesystem.writeFile` - Write file
-- `compute.sandbox.filesystem.mkdir` - Create directory
-- `compute.sandbox.filesystem.readdir` - List directory
-- `compute.sandbox.filesystem.exists` - Check if path exists
-- `compute.sandbox.filesystem.remove` - Remove file/directory
-- `compute.sandbox.terminal.create` - Create terminal (E2B only)
-- And more...
-
-## Provider Configuration
-
-The example uses a single provider based on available environment variables. The API route automatically selects the first available provider:
-
-1. **E2B** - Full development environment with data science libraries
-2. **Vercel** - Serverless execution with up to 45 minutes runtime
-3. **Daytona** - Development workspaces with custom environments
 
 ## Implementation Details
 
@@ -131,13 +51,6 @@ The example uses a single provider based on available environment variables. The
 import { handleComputeRequest } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
-export async function GET(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: e2b({ apiKey: process.env.E2B_API_KEY })
-  });
-}
-
 export async function POST(request: Request) {
   return handleComputeRequest({
     request,
@@ -145,48 +58,3 @@ export async function POST(request: Request) {
   });
 }
 ```
-
-### Frontend Integration
-
-The example uses standard `fetch` API to communicate with the ComputeSDK backend:
-
-```typescript
-const response = await fetch('/api/compute', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'compute.sandbox.runCode',
-    code: userCode,
-    runtime: selectedRuntime
-  })
-});
-
-const result = await response.json();
-```
-
-## Deployment
-
-This example can be deployed to any platform that supports Next.js:
-
-- **Vercel**: `vercel deploy`
-- **Netlify**: Connect your Git repository
-- **Railway**: `railway deploy`
-- **Docker**: Use the included Dockerfile
-
-Make sure to configure your environment variables in your deployment platform.
-
-## Security Considerations
-
-- All code execution happens in isolated sandbox environments
-- Environment variables are only accessible on the server side
-- Input validation is performed by ComputeSDK request handler
-- Consider implementing rate limiting for production use
-- API keys are never exposed to the client
-
-## Learn More
-
-- [ComputeSDK Documentation](https://github.com/computesdk/computesdk)
-- [Next.js Documentation](https://nextjs.org/docs)
-- [E2B Documentation](https://e2b.dev/docs)
-- [Vercel Documentation](https://vercel.com/docs)
-- [Daytona Documentation](https://daytona.io/docs)
