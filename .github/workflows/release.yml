@@ -16,14 +16,13 @@ jobs:
     name: Wait for CI
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for CI workflow
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.ref }}
-          check-name: 'build-and-test'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-
+       - name: Wait for CI workflow
+         uses: lewagon/wait-on-check-action@v1.3.4
+         with:
+           ref: ${{ github.ref }}
+           check-name: 'test'
+           repo-token: ${{ secrets.GITHUB_TOKEN }}
+           wait-interval: 10
       - name: Wait for integration tests (if they run)
         uses: lewagon/wait-on-check-action@v1.3.4
         with:

@@ -7,14 +7,13 @@
 
 import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
 import { createProvider } from 'computesdk';
-import type {
+import type { 
+  ExecutionResult, 
+  SandboxInfo, 
   Runtime,
-  ExecutionResult,
-  SandboxInfo,
+  TerminalCreateOptions,
   CreateSandboxOptions,
-  FileEntry,
-  TerminalSession,
-  TerminalCreateOptions
+  FileEntry
 } from 'computesdk';
 
 /**
@@ -140,22 +139,85 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: E2BSandbox, code: string, _runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: E2BSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
-          // Execute code using E2B's runCode API
-          const execution = await sandbox.runCode(code);
+          
+          // Auto-detect runtime if not specified
+          const effectiveRuntime = runtime || (
+            // Strong Python indicators
+            code.includes('print(') || 
+            code.includes('import ') ||
+            code.includes('def ') ||
+            code.includes('sys.') ||
+            code.includes('json.') ||
+            code.includes('__') ||
+            code.includes('f"') ||
+            code.includes("f'")
+              ? 'python'
+              // Default to Node.js for all other cases (including ambiguous)
+              : 'node'
+          );
+          
+          // Use runCommand for consistent execution across all providers
+          let result;
+          
+          // Use base64 encoding for both runtimes for reliability and consistency
+          const encoded = Buffer.from(code).toString('base64');
+          
+          if (effectiveRuntime === 'python') {
+            result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | python3`);
+          } else {
+            result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
+          }
+
+          // Check for syntax errors and throw them (similar to Vercel behavior)
+          if (result.exitCode !== 0 && result.stderr) {
+            // Check for common syntax error patterns
+            if (result.stderr.includes('SyntaxError') || 
+                result.stderr.includes('invalid syntax') ||
+                result.stderr.includes('Unexpected token') ||
+                result.stderr.includes('Unexpected identifier')) {
+              throw new Error(`Syntax error: ${result.stderr.trim()}`);
+            }
+          }
 
           return {
-            stdout: execution.logs.stdout.join('\n'),
-            stderr: execution.logs.stderr.join('\n'),
-            exitCode: execution.error ? 1 : 0,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.sandboxId || 'e2b-unknown',
             provider: 'e2b'
           };
         } catch (error) {
+          // Handle E2B's CommandExitError - check if it contains actual error details
+          if (error instanceof Error && error.message === 'exit status 1') {
+            const actualStderr = (error as any)?.result?.stderr || '';
+            const isSyntaxError = actualStderr.includes('SyntaxError');
+            
+            if (isSyntaxError) {
+              // For syntax errors, throw
+              const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
+              throw new Error(`Syntax error: ${syntaxErrorLine}`);
+            } else {
+              // For runtime errors, return a result instead of throwing
+              return {
+                stdout: '',
+                stderr: actualStderr || 'Error: Runtime error occurred during execution',
+                exitCode: 1,
+                executionTime: Date.now() - startTime,
+                sandboxId: sandbox.sandboxId || 'e2b-unknown',
+                provider: 'e2b'
+              };
+            }
+          }
+          
+          // Re-throw syntax errors
+          if (error instanceof Error && error.message.includes('Syntax error')) {
+            throw error;
+          }
           throw new Error(
             `E2B execution failed: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -181,9 +243,15 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             provider: 'e2b'
           };
         } catch (error) {
-          throw new Error(
-            `E2B command execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
+          // For command failures, return error info instead of throwing
+          return {
+            stdout: '',
+            stderr: error instanceof Error ? error.message : String(error),
+            exitCode: 127, // Command not found exit code
+            executionTime: Date.now() - startTime,
+            sandboxId: sandbox.sandboxId || 'e2b-unknown',
+            provider: 'e2b'
+          };
         }
       },
 
@@ -239,7 +307,6 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       // Optional terminal methods - E2B has PTY terminal support
       terminal: {
         create: async (sandbox: E2BSandbox, options: TerminalCreateOptions = {}) => {
-          const command = options.command || 'bash';
           const cols = options.cols || 80;
           const rows = options.rows || 24;
 
@@ -252,8 +319,15 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             })
           });
 
+          // Create a wrapper object that includes the onData callback
+          const terminalWrapper = {
+            ...ptyHandle,
+            onData: options.onData,
+            onExit: options.onExit
+          };
+
           return {
-            terminal: ptyHandle,
+            terminal: terminalWrapper,
             terminalId: ptyHandle.pid.toString()
           };
         },

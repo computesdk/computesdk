@@ -39,7 +39,7 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
           );
         }
 
-        const runtime = options?.runtime || config.runtime || 'python';
+        const runtime = options?.runtime || config.runtime || 'node';
 
         try {
           // Initialize Daytona client
@@ -55,7 +55,7 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
           } else {
             // Create new Daytona sandbox
             session = await daytona.create({
-              language: runtime === 'python' ? 'python' : 'typescript',
+              language: runtime === 'python' ? 'python' : 'javascript',
             });
             sandboxId = session.id;
           }
@@ -134,22 +134,71 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       // Instance operations (sandbox.*)
-      runCode: async (sandbox: DaytonaSandbox, code: string, _runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: DaytonaSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
-          // Execute code using Daytona's process.codeRun method
-          const response = await sandbox.process.codeRun(code);
+          // Auto-detect runtime if not specified
+          const effectiveRuntime = runtime || (
+            // Strong Python indicators
+            code.includes('print(') || 
+            code.includes('import ') ||
+            code.includes('def ') ||
+            code.includes('sys.') ||
+            code.includes('json.') ||
+            code.includes('__') ||
+            code.includes('f"') ||
+            code.includes("f'")
+              ? 'python'
+              // Default to Node.js for all other cases (including ambiguous)
+              : 'node'
+          );
+          
+          // Use direct command execution like Vercel for consistency
+          let response;
+          
+          // Use base64 encoding for both runtimes for reliability and consistency
+          const encoded = Buffer.from(code).toString('base64');
+          
+          if (effectiveRuntime === 'python') {
+            response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d | python3`);
+          } else {
+            response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d | node`);
+          }
+
+          // Daytona always returns exitCode: 0, so we need to detect errors from output
+          const output = response.result || '';
+          const hasError = output.includes('Error:') || 
+                          output.includes('error TS') || 
+                          output.includes('SyntaxError:') ||
+                          output.includes('TypeError:') ||
+                          output.includes('ReferenceError:') ||
+                          output.includes('Traceback (most recent call last)');
+
+          // Check for syntax errors and throw them (similar to Vercel behavior)
+          if (hasError && (output.includes('SyntaxError:') || 
+                          output.includes('invalid syntax') ||
+                          output.includes('Unexpected token') ||
+                          output.includes('Unexpected identifier') ||
+                          output.includes('error TS1434'))) {
+            throw new Error(`Syntax error: ${output.trim()}`);
+          }
+
+          const actualExitCode = hasError ? 1 : (response.exitCode || 0);
 
           return {
-            stdout: response.result || '',
-            stderr: '', // Daytona doesn't separate stderr in the response
-            exitCode: response.exitCode || 0,
+            stdout: hasError ? '' : output,
+            stderr: hasError ? output : '',
+            exitCode: actualExitCode,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.id,
             provider: 'daytona'
           };
         } catch (error) {
+          // Re-throw syntax errors
+          if (error instanceof Error && error.message.includes('Syntax error')) {
+            throw error;
+          }
           throw new Error(
             `Daytona execution failed: ${error instanceof Error ? error.message : String(error)}`
           );

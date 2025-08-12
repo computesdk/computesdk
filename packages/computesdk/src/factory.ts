@@ -248,6 +248,10 @@ class SupportedTerminal<TSandbox> implements SandboxTerminal {
       options?.rows || 24
     );
 
+    // Set the original callbacks on the terminal session
+    terminalSession.onData = options?.onData;
+    terminalSession.onExit = options?.onExit;
+
     return terminalSession;
   }
 
