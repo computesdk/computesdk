@@ -143,7 +143,6 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         const startTime = Date.now();
 
         try {
-          let execution;
           
           // Auto-detect runtime if not specified
           const effectiveRuntime = runtime || (
@@ -161,111 +160,63 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
               : 'node'
           );
           
-          // Use shell-based execution for both runtimes for consistency
+          // Use runCommand for consistent execution across all providers
           let result;
           
-          try {
-            if (effectiveRuntime === 'python') {
-              // For Python code, execute using python3 via shell command with base64 encoding
-              const encoded = Buffer.from(code).toString('base64');
-              result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | python3`);
-            } else {
-              // For Node.js code, execute using node via shell command with base64 encoding
-              const encoded = Buffer.from(code).toString('base64');
-              result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
-            }
-            
-            // Convert shell command result to execution format
-            // Handle E2B's specific behavior where it returns 'exit status 1' instead of actual error
-            let stderrContent = result.stderr || '';
-            
-            if (result.exitCode !== 0 && stderrContent === 'exit status 1') {
-              // E2B is not capturing the actual error message, but we know it's a runtime error
-              // For Node.js runtime errors, provide a more meaningful message
-              if (effectiveRuntime === 'node' && code.includes('throw new Error')) {
-                stderrContent = 'Error: Runtime error occurred during execution';
-              } else {
-                stderrContent = 'Error: Command execution failed';
-              }
-            }
-            
-            execution = {
-              logs: {
-                stdout: result.stdout ? [result.stdout] : [],
-                stderr: stderrContent ? [stderrContent] : []
-              },
-              error: result.exitCode !== 0 ? { 
-                name: 'ExecutionError', 
-                value: stderrContent || 'Command failed',
-                traceback: stderrContent || ''
-              } : undefined
-            };
-          } catch (commandError) {
-            // Handle command execution failures - this includes syntax errors
-            let errorMessage = commandError instanceof Error ? commandError.message : String(commandError);
-            
-            // Handle E2B's CommandExitError with generic 'exit status 1' message
-            if (errorMessage === 'exit status 1') {
-              // Check if E2B's result contains actual error details
-              const actualStderr = (commandError as any)?.result?.stderr || '';
-              const isSyntaxError = actualStderr.includes('SyntaxError');
-              
-              if (isSyntaxError) {
-                // For syntax errors, keep the original behavior (throw) but use actual error
-                errorMessage = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
-              } else if (effectiveRuntime === 'node' && code.includes('throw new Error')) {
-                // For runtime errors, provide a meaningful message but don't throw
-                errorMessage = 'Error: Runtime error occurred during execution';
-              } else {
-                errorMessage = 'Error: Command execution failed';
-              }
-            }
-            
-            execution = {
-              logs: { stdout: [], stderr: [] },
-              error: {
-                name: 'ExecutionError',
-                value: errorMessage,
-                traceback: errorMessage
-              }
-            };
+          // Use base64 encoding for both runtimes for reliability and consistency
+          const encoded = Buffer.from(code).toString('base64');
+          
+          if (effectiveRuntime === 'python') {
+            result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | python3`);
+          } else {
+            result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
           }
 
-          const hasError = execution.error != null; // Checks for both null and undefined
-          const exitCode = hasError ? 1 : 0;
-          
-          // For shell-based execution, check stderr for syntax errors
-          const stderr = hasError ? (execution.error?.traceback || execution.error?.value || 'Execution failed') : execution.logs.stderr.join('\n');
-          
-          // Only throw for syntax errors, not runtime errors
-          // Check if this is the specific invalid syntax test case
-          const isInvalidSyntaxTest = code.includes('invalid syntax here!!!');
-          
-          if (hasError && (
-            execution.error?.name === 'SyntaxError' ||
-            stderr.includes('SyntaxError') ||
-            stderr.includes('invalid syntax') ||
-            stderr.includes('Unexpected token') ||
-            stderr.includes('Unexpected identifier') ||
-            // For the specific invalid syntax test, treat exit status 1 as syntax error
-            (isInvalidSyntaxTest && stderr.includes('exit status 1'))
-          )) {
-            const errorMessage = execution.error?.value || execution.error?.traceback || stderr;
-            throw new Error(`Syntax error: ${errorMessage}`);
+          // Check for syntax errors and throw them (similar to Vercel behavior)
+          if (result.exitCode !== 0 && result.stderr) {
+            // Check for common syntax error patterns
+            if (result.stderr.includes('SyntaxError') || 
+                result.stderr.includes('invalid syntax') ||
+                result.stderr.includes('Unexpected token') ||
+                result.stderr.includes('Unexpected identifier')) {
+              throw new Error(`Syntax error: ${result.stderr.trim()}`);
+            }
           }
-          
+
           return {
-            stdout: hasError ? '' : execution.logs.stdout.join('\n'),
-            stderr,
-            exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.sandboxId || 'e2b-unknown',
             provider: 'e2b'
           };
         } catch (error) {
-          // Only throw for syntax errors or severe failures
-          if (error instanceof Error && error.message.includes('SyntaxError')) {
-            throw new Error(`E2B syntax error: ${error.message}`);
+          // Handle E2B's CommandExitError - check if it contains actual error details
+          if (error instanceof Error && error.message === 'exit status 1') {
+            const actualStderr = (error as any)?.result?.stderr || '';
+            const isSyntaxError = actualStderr.includes('SyntaxError');
+            
+            if (isSyntaxError) {
+              // For syntax errors, throw
+              const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
+              throw new Error(`Syntax error: ${syntaxErrorLine}`);
+            } else {
+              // For runtime errors, return a result instead of throwing
+              return {
+                stdout: '',
+                stderr: actualStderr || 'Error: Runtime error occurred during execution',
+                exitCode: 1,
+                executionTime: Date.now() - startTime,
+                sandboxId: sandbox.sandboxId || 'e2b-unknown',
+                provider: 'e2b'
+              };
+            }
+          }
+          
+          // Re-throw syntax errors
+          if (error instanceof Error && error.message.includes('Syntax error')) {
+            throw error;
           }
           throw new Error(
             `E2B execution failed: ${error instanceof Error ? error.message : String(error)}`

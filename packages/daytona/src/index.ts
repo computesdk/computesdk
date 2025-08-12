@@ -154,15 +154,15 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
               : 'node'
           );
           
-          // Use shell-based execution for both runtimes for consistency
+          // Use direct command execution like Vercel for consistency
           let response;
+          
+          // Use base64 encoding for both runtimes for reliability and consistency
           const encoded = Buffer.from(code).toString('base64');
           
           if (effectiveRuntime === 'python') {
-            // For Python code, use base64 encoding to safely handle special characters
             response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d | python3`);
           } else {
-            // For Node.js code, use base64 encoding to safely handle special characters
             response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d | node`);
           }
 
@@ -175,8 +175,12 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
                           output.includes('ReferenceError:') ||
                           output.includes('Traceback (most recent call last)');
 
-          // For invalid syntax, throw an error (as expected by tests)
-          if (output.includes('error TS1434') || output.includes('SyntaxError:')) {
+          // Check for syntax errors and throw them (similar to Vercel behavior)
+          if (hasError && (output.includes('SyntaxError:') || 
+                          output.includes('invalid syntax') ||
+                          output.includes('Unexpected token') ||
+                          output.includes('Unexpected identifier') ||
+                          output.includes('error TS1434'))) {
             throw new Error(`Syntax error: ${output.trim()}`);
           }
 
@@ -191,7 +195,10 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
             provider: 'daytona'
           };
         } catch (error) {
-          // For syntax errors or execution failures, throw the error
+          // Re-throw syntax errors
+          if (error instanceof Error && error.message.includes('Syntax error')) {
+            throw error;
+          }
           throw new Error(
             `Daytona execution failed: ${error instanceof Error ? error.message : String(error)}`
           );

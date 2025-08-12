@@ -207,14 +207,16 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
               : 'node'
           );
           
+          // Use base64 encoding for both runtimes for reliability and consistency
+          const encoded = Buffer.from(code).toString('base64');
           let command;
           
           if (effectiveRuntime === 'python') {
-            // Execute Python code
-            command = await sandbox.runCommand('python3', ['-c', code]);
+            // Execute Python code with base64 encoding
+            command = await sandbox.runCommand('sh', ['-c', `echo "${encoded}" | base64 -d | python3`]);
           } else {
-            // Execute Node.js code  
-            command = await sandbox.runCommand('node', ['-e', code]);
+            // Execute Node.js code with base64 encoding
+            command = await sandbox.runCommand('sh', ['-c', `echo "${encoded}" | base64 -d | node`]);
           }
 
           // Wait for command to complete and get exit code
