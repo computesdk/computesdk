@@ -259,6 +259,15 @@ describe('Compute API - Provider-Centric', () => {
         expect(sandbox.provider).toBe('mock')
       })
 
+      it('should create sandbox with no parameters using default provider', async () => {
+        const provider = new MockProvider()
+        compute.setConfig({ provider })
+        
+        const sandbox = await compute.sandbox.create()
+        
+        expect(sandbox.provider).toBe('mock')
+      })
+
       it('should get sandbox by ID using default provider', async () => {
         const provider = new MockProvider()
         compute.setConfig({ provider })

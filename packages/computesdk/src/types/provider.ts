@@ -75,7 +75,7 @@ export interface ComputeAPI {
   
   sandbox: {
     /** Create a sandbox from a provider (or default provider if configured) */
-    create(params: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox>;
+    create(params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox>;
     /** Get an existing sandbox by ID from a provider (or default provider if configured) */
     getById(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null>;
     /** List all active sandboxes from a provider (or default provider if configured) */

@@ -61,14 +61,15 @@ class ComputeManager implements ComputeAPI {
      *   provider: e2b({ apiKey: 'your-key' })
      * })
      * 
-     * // With default provider
+     * // With default provider (both forms work)
      * compute.setConfig({ provider: e2b({ apiKey: 'your-key' }) })
-     * const sandbox = await compute.sandbox.create({})
+     * const sandbox1 = await compute.sandbox.create({})
+     * const sandbox2 = await compute.sandbox.create()
      * ```
      */
-    create: async (params: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox> => {
-      const provider = 'provider' in params && params.provider ? params.provider : this.getDefaultProvider();
-      const options = params.options;
+    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox> => {
+      const provider = params && 'provider' in params && params.provider ? params.provider : this.getDefaultProvider();
+      const options = params?.options;
       return await this.sandboxManager.create(provider, options);
     },
 
