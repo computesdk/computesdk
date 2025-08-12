@@ -1,10 +1,38 @@
-# ComputeSDK
+<div align="center">
+  <img src="https://www.computesdk.com/_astro/hv_main_logo_light.CpYMD9-V.svg" alt="ComputeSDK" width="300" />
+</div>
 
-A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers.
+<div align="center">
+  <strong>A free and open-source toolkit for running other people's code in your applications.</strong>
+</div>
 
-## Overview
+<div align="center">
 
-ComputeSDK provides a consistent TypeScript interface for code execution across different cloud compute providers, similar to how Vercel's AI SDK abstracts LLM providers. Whether you're using E2B, Vercel, or Daytona, ComputeSDK gives you the same simple API.
+[![npm version](https://badge.fury.io/js/computesdk.svg)](https://badge.fury.io/js/computesdk)
+[![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://img.shields.io/badge/docs-computesdk.com-blue)](https://computesdk.com)
+
+</div>
+
+---
+
+## What is ComputeSDK?
+
+ComputeSDK is a unified abstraction layer that lets you execute code in secure, isolated sandboxed environments across multiple cloud providers. Think of it as the "Vercel AI SDK for compute" - providing a consistent TypeScript interface whether you're using E2B, Vercel, or Daytona.
+
+**Why ComputeSDK?**
+- 🔄 **Provider-agnostic** - Switch between E2B, Vercel, and Daytona without code changes
+- 🛡️ **Security-first** - Isolated sandboxes protect your infrastructure
+- ⚡ **Developer experience** - Simple, TypeScript-native API
+- 🌍 **Production-ready** - Used by teams building the next generation of developer tools
+
+**Perfect for building:**
+- **Code execution platforms** - Run user-submitted code safely
+- **Educational tools** - Interactive coding environments  
+- **Data analysis applications** - Process code with full filesystem access
+- **AI-powered development tools** - Let AI agents write and execute code
+- **Testing & CI/CD systems** - Isolated test environments
 
 ## Features
 
@@ -17,16 +45,24 @@ ComputeSDK provides a consistent TypeScript interface for code execution across 
 - 📦 **Modular** - Install only the providers you need
 - 🔧 **Extensible** - Easy to add custom providers
 
-## Installation
+## Get Started in 30 Seconds
 
 ```bash
-# Core SDK
+# Install the core SDK
 npm install computesdk
 
-# Provider packages (install only what you need)
-npm install @computesdk/e2b
-npm install @computesdk/vercel
-npm install @computesdk/daytona
+# Add your preferred provider
+npm install @computesdk/e2b        # For data science and Python
+npm install @computesdk/vercel     # For web-scale Node.js/Python  
+npm install @computesdk/daytona    # For development workspaces
+```
+
+Set your environment variables and you're ready to go:
+
+```bash
+export E2B_API_KEY=your_api_key
+# or VERCEL_TOKEN=your_token
+# or DAYTONA_API_KEY=your_key
 ```
 
 ## Quick Start
@@ -539,7 +575,16 @@ export function myProvider(options = {}) {
 - **🎯 Community**: Available for community contribution
 - **❌ Not Available**: Not supported by the provider
 
+## Resources
+
+- 📖 **[Full Documentation](https://computesdk.com)** - Complete guides and API reference
+- 🚀 **[Getting Started](https://computesdk.com/getting-started)** - Quick setup guide
+- 💡 **[Examples](./examples)** - Real-world usage examples
+- 🎯 **[Providers](https://computesdk.com/providers)** - Provider-specific guides
+
 ## Contributing
+
+ComputeSDK is open source and welcomes contributions! Whether you're fixing bugs, adding features, or improving documentation, we'd love your help.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -547,14 +592,19 @@ export function myProvider(options = {}) {
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+## Community & Support
+
+- 💬 **[GitHub Discussions](https://github.com/computesdk/computesdk/discussions)** - Ask questions and share ideas
+- 🐛 **[GitHub Issues](https://github.com/computesdk/computesdk/issues)** - Report bugs and request features
+- 📧 **[Contact Us](https://computesdk.com/contact)** - Get in touch with the team
+
 ## License
 
 MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
+---
 
-- [GitHub Issues](https://github.com/computesdk/computesdk/issues)
-- [Documentation](https://github.com/computesdk/computesdk)
-- [Examples](./examples)
-# Test pre-commit
-# Test
+<div align="center">
+  <strong>Built with ❤️ by the ComputeSDK team</strong><br>
+  <a href="https://computesdk.com">computesdk.com</a>
+</div>
