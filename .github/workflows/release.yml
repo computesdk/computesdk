@@ -16,9 +16,9 @@ jobs:
     name: Wait for CI
     runs-on: ubuntu-latest
     steps:
-       - name: Wait for CI workflow
-         uses: lewagon/wait-on-check-action@v1.3.4
-         with:
+      - name: Wait for CI workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
            ref: ${{ github.ref }}
            check-name: 'test'
            repo-token: ${{ secrets.GITHUB_TOKEN }}
