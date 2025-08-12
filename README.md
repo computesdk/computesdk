@@ -22,7 +22,7 @@
 ComputeSDK is a unified abstraction layer that lets you execute code in secure, isolated sandboxed environments across multiple cloud providers. Think of it as the "Vercel AI SDK for compute" - providing a consistent TypeScript interface whether you're using E2B, Vercel, or Daytona.
 
 **Why ComputeSDK?**
-- 🔄 **Provider-agnostic** - Switch between E2B, Vercel, and Daytona without code changes
+- 🔄 **Provider-agnostic** - Switch between E2B, Vercel, Daytona and more (coming soon) without code changes
 - 🛡️ **Security-first** - Isolated sandboxes protect your infrastructure
 - ⚡ **Developer experience** - Simple, TypeScript-native API
 - 🌍 **Production-ready** - Used by teams building the next generation of developer tools
