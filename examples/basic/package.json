@@ -7,7 +7,7 @@
     "e2b": "tsx src/e2b-example.ts",
     "vercel": "tsx src/vercel-example.ts",
     "daytona": "tsx src/daytona-example.ts",
-    "auto": "tsx src/auto-example.ts"
+    "launch": "tsx src/launch-example.ts"
   },
   "dependencies": {
     "@computesdk/vercel": "workspace:*",
