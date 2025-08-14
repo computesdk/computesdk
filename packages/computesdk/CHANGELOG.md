@@ -1,5 +1,14 @@
 # computesdk
 
+## 1.1.0
+
+### Minor Changes
+
+- d3ec023: improving core SDK to use provider factory methods
+- df4df20: improvement: no longer shall we require an empty param on the creating of a sandbox. No longer shall it be required i say.
+- 1302a77: feat: initial release
+- a81d748: Updating README and examples for core package
+
 ## 1.0.0
 
 ### Major Changes

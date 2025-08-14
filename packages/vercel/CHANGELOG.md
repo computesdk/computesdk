@@ -1,5 +1,20 @@
 # @computesdk/vercel
 
+## 1.1.0
+
+### Minor Changes
+
+- d3ec023: improving core SDK to use provider factory methods
+- 1302a77: feat: initial release
+
+### Patch Changes
+
+- Updated dependencies [d3ec023]
+- Updated dependencies [df4df20]
+- Updated dependencies [1302a77]
+- Updated dependencies [a81d748]
+  - computesdk@1.1.0
+
 ## 1.0.0
 
 ### Major Changes

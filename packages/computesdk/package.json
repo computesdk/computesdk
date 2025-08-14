@@ -1,6 +1,6 @@
 {
   "name": "computesdk",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "A free and open-source toolkit for running other people's code in your applications.",
   "author": "Garrison",
   "license": "MIT",
@@ -50,7 +50,6 @@
     "zod": "^3.22.0",
     "uuid": "^9.0.0"
   },
-
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/uuid": "^9.0.0",
