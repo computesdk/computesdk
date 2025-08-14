@@ -6,7 +6,7 @@
 
 import { e2b } from '@computesdk/e2b';
 // import { vercel } from '@computesdk/vercel';
-// import { daytona } from '@computesdk/daytona';
+import { daytona } from '@computesdk/daytona';
 import { compute } from 'computesdk';
 import { config } from 'dotenv';
 config();
@@ -22,12 +22,14 @@ async function main() {
   //   }) 
   // });
 
-  // compute.setConfig({ provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) });
+  compute.setConfig({ provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) });
 
-  compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
+  // compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
+
+  // and more!!
 
   // Create sandbox
-  const sandbox = await compute.sandbox.create({});
+  const sandbox = await compute.sandbox.create();
   console.log('✅ Sandbox created:', sandbox.sandboxId);
 
   // Write a simple Python script

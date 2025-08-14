@@ -1,7 +1,7 @@
 {
   "name": "computesdk",
   "version": "1.0.2",
-  "description": "Unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
+  "description": "A free and open-source toolkit for running other people's code in your applications.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -16,7 +16,7 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "../../README.md"
   ],
   "scripts": {
     "build": "tsup",

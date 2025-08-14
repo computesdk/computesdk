@@ -14,6 +14,11 @@
   "dependencies": {
     "astro": "^4.0.0",
     "@astrojs/node": "^8.0.0",
+    "@astrojs/react": "^3.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
     "computesdk": "workspace:*",
     "@computesdk/e2b": "workspace:*",
     "@computesdk/vercel": "workspace:*",
