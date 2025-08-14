@@ -1,5 +1,12 @@
 # @computesdk/ui
 
+## 0.5.0
+
+### Minor Changes
+
+- d3ec023: improving core SDK to use provider factory methods
+- 1302a77: feat: initial release
+
 ## 0.2.1
 
 ### Patch Changes

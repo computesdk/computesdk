@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/e2b",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "E2B provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
@@ -31,7 +31,6 @@
     "@e2b/code-interpreter": "^1.5.1",
     "computesdk": "workspace:*"
   },
-
   "keywords": [
     "e2b",
     "sandbox",

@@ -1,6 +1,6 @@
-# @computesdk/example-astro
+# @computesdk/example-remix
 
-## 0.1.3
+## 0.1.1
 
 ### Patch Changes
 
@@ -13,17 +13,3 @@
   - @computesdk/ui@0.5.0
   - @computesdk/daytona@1.1.0
   - @computesdk/vercel@1.1.0
-
-## 0.1.2
-
-### Patch Changes
-
-- Updated dependencies
-  - @computesdk/ui@0.2.1
-
-## 0.1.1
-
-### Patch Changes
-
-- Updated dependencies
-  - @computesdk/ui@0.2.0
