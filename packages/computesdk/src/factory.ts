@@ -10,14 +10,11 @@ import type {
   ProviderSandboxManager,
   Sandbox,
   SandboxFileSystem,
-  SandboxTerminal,
   SandboxInfo,
   ExecutionResult,
   Runtime,
   CreateSandboxOptions,
   FileEntry,
-  TerminalSession,
-  TerminalCreateOptions,
 } from './types/index.js';
 
 /**
@@ -37,25 +34,15 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   
   // Optional filesystem methods
   filesystem?: {
-    readFile: (sandbox: TSandbox, path: string) => Promise<string>;
-    writeFile: (sandbox: TSandbox, path: string, content: string) => Promise<void>;
-    mkdir: (sandbox: TSandbox, path: string) => Promise<void>;
-    readdir: (sandbox: TSandbox, path: string) => Promise<FileEntry[]>;
-    exists: (sandbox: TSandbox, path: string) => Promise<boolean>;
-    remove: (sandbox: TSandbox, path: string) => Promise<void>;
+    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<string>;
+    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
+    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
+    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<FileEntry[]>;
+    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<boolean>;
+    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
   };
   
-  // Optional terminal methods
-  terminal?: {
-    create: (sandbox: TSandbox, options?: TerminalCreateOptions) => Promise<{ terminal: any; terminalId: string }>;
-    getById: (sandbox: TSandbox, terminalId: string) => Promise<{ terminal: any; terminalId: string } | null>;
-    list: (sandbox: TSandbox) => Promise<Array<{ terminal: any; terminalId: string }>>;
-    destroy: (sandbox: TSandbox, terminalId: string) => Promise<void>;
-    // Terminal instance methods
-    write: (sandbox: TSandbox, terminal: any, data: Uint8Array | string) => Promise<void>;
-    resize: (sandbox: TSandbox, terminal: any, cols: number, rows: number) => Promise<void>;
-    kill: (sandbox: TSandbox, terminal: any) => Promise<void>;
-  };
+
 }
 
 /**
@@ -67,6 +54,95 @@ export interface ProviderConfig<TSandbox = any, TConfig = any> {
     sandbox: SandboxMethods<TSandbox, TConfig>;
   };
 }
+
+/**
+ * Default filesystem implementations based on shell commands
+ * These work for any provider that supports shell command execution
+ */
+const defaultFilesystemMethods = {
+  readFile: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<string> => {
+    const result = await runCommand(sandbox, 'cat', [path]);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to read file ${path}: ${result.stderr}`);
+    }
+    // Trim trailing newline that cat command adds
+    return result.stdout.replace(/\n$/, '');
+  },
+
+  writeFile: async (sandbox: any, path: string, content: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<void> => {
+    const result = await runCommand(sandbox, 'sh', ['-c', `echo ${JSON.stringify(content)} > ${JSON.stringify(path)}`]);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to write file ${path}: ${result.stderr}`);
+    }
+  },
+
+  mkdir: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<void> => {
+    const result = await runCommand(sandbox, 'mkdir', ['-p', path]);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
+    }
+  },
+
+  readdir: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<FileEntry[]> => {
+    // Try different ls variations for maximum compatibility
+    let result = await runCommand(sandbox, 'ls', ['-la', path]);
+    let hasDetailedOutput = true;
+    
+    // Fall back to basic ls if detailed flags not supported
+    if (result.exitCode !== 0) {
+      result = await runCommand(sandbox, 'ls', ['-l', path]);
+    }
+    if (result.exitCode !== 0) {
+      result = await runCommand(sandbox, 'ls', [path]);
+      hasDetailedOutput = false;
+    }
+    
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
+    }
+
+    const lines = (result.stdout || '').split('\n').filter((line: string) => line.trim() && !line.startsWith('total'));
+
+    return lines.map((line: string) => {
+      if (hasDetailedOutput && line.includes(' ')) {
+        // Parse detailed ls output (ls -la or ls -l)
+        const parts = line.trim().split(/\s+/);
+        const name = parts[parts.length - 1];
+        const isDirectory = line.startsWith('d');
+        
+        return {
+          name,
+          path: `${path}/${name}`,
+          isDirectory,
+          size: parseInt(parts[4]) || 0,
+          lastModified: new Date()
+        };
+      } else {
+        // Parse simple ls output (just filenames)
+        const name = line.trim();
+        return {
+          name,
+          path: `${path}/${name}`,
+          isDirectory: false, // Can't determine from simple ls
+          size: 0,
+          lastModified: new Date()
+        };
+      }
+    });
+  },
+
+  exists: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<boolean> => {
+    const result = await runCommand(sandbox, 'test', ['-e', path]);
+    return result.exitCode === 0; // Exit code 0 means file exists
+  },
+
+  remove: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<void> => {
+    const result = await runCommand(sandbox, 'rm', ['-rf', path]);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to remove ${path}: ${result.stderr}`);
+    }
+  }
+};
 
 /**
  * Auto-generated filesystem implementation that throws "not supported" errors
@@ -103,32 +179,7 @@ class UnsupportedFileSystem implements SandboxFileSystem {
   }
 }
 
-/**
- * Auto-generated terminal implementation that throws "not supported" errors
- */
-class UnsupportedTerminal implements SandboxTerminal {
-  private readonly providerName: string;
 
-  constructor(providerName: string) {
-    this.providerName = providerName;
-  }
-
-  async create(_options?: TerminalCreateOptions): Promise<TerminalSession> {
-    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async getById(_terminalId: string): Promise<TerminalSession | null> {
-    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async list(): Promise<TerminalSession[]> {
-    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async destroy(_terminalId: string): Promise<void> {
-    throw new Error(`Terminal operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-}
 
 /**
  * Auto-generated filesystem implementation that wraps provider methods
@@ -136,157 +187,38 @@ class UnsupportedTerminal implements SandboxTerminal {
 class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
   constructor(
     private sandbox: TSandbox,
-    private methods: NonNullable<SandboxMethods<TSandbox>['filesystem']>
+    private methods: NonNullable<SandboxMethods<TSandbox>['filesystem']>,
+    private allMethods: SandboxMethods<TSandbox>
   ) {}
 
   async readFile(path: string): Promise<string> {
-    return this.methods.readFile(this.sandbox, path);
+    return this.methods.readFile(this.sandbox, path, this.allMethods.runCommand);
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    return this.methods.writeFile(this.sandbox, path, content);
+    return this.methods.writeFile(this.sandbox, path, content, this.allMethods.runCommand);
   }
 
   async mkdir(path: string): Promise<void> {
-    return this.methods.mkdir(this.sandbox, path);
+    return this.methods.mkdir(this.sandbox, path, this.allMethods.runCommand);
   }
 
   async readdir(path: string): Promise<FileEntry[]> {
-    return this.methods.readdir(this.sandbox, path);
+    return this.methods.readdir(this.sandbox, path, this.allMethods.runCommand);
   }
 
   async exists(path: string): Promise<boolean> {
-    return this.methods.exists(this.sandbox, path);
+    return this.methods.exists(this.sandbox, path, this.allMethods.runCommand);
   }
 
   async remove(path: string): Promise<void> {
-    return this.methods.remove(this.sandbox, path);
+    return this.methods.remove(this.sandbox, path, this.allMethods.runCommand);
   }
 }
 
-/**
- * Generated terminal session class - implements the TerminalSession interface
- */
-class GeneratedTerminalSession<TSandbox = any> implements TerminalSession {
-  readonly pid: number;
-  readonly command: string;
-  readonly status: 'running' | 'exited';
-  readonly cols: number;
-  readonly rows: number;
-  onData?: (data: Uint8Array) => void;
-  onExit?: (exitCode: number) => void;
 
-  constructor(
-    private terminal: any,
-    private sandbox: TSandbox,
-    private methods: NonNullable<SandboxMethods<TSandbox>['terminal']>,
-    terminalId: string,
-    command: string,
-    cols: number = 80,
-    rows: number = 24
-  ) {
-    this.pid = parseInt(terminalId);
-    this.command = command;
-    this.status = 'running';
-    this.cols = cols;
-    this.rows = rows;
-  }
 
-  async write(data: Uint8Array | string): Promise<void> {
-    return this.methods.write(this.sandbox, this.terminal, data);
-  }
 
-  async resize(cols: number, rows: number): Promise<void> {
-    return this.methods.resize(this.sandbox, this.terminal, cols, rows);
-  }
-
-  async kill(): Promise<void> {
-    return this.methods.kill(this.sandbox, this.terminal);
-  }
-}
-
-/**
- * Auto-generated terminal implementation that wraps provider methods
- */
-class SupportedTerminal<TSandbox> implements SandboxTerminal {
-  constructor(
-    private sandbox: TSandbox,
-    private methods: NonNullable<SandboxMethods<TSandbox>['terminal']>
-  ) {}
-
-  async create(options?: TerminalCreateOptions): Promise<TerminalSession> {
-    // Create a GeneratedTerminalSession first so we can set up callback forwarding
-    let terminalSession: GeneratedTerminalSession<TSandbox>;
-    
-    // Create options with callback forwarding to the GeneratedTerminalSession
-    const createOptions: TerminalCreateOptions = {
-      ...options,
-      onData: (data: Uint8Array) => {
-        // Forward to the GeneratedTerminalSession's onData if set
-        if (terminalSession?.onData) {
-          terminalSession.onData(data);
-        }
-      },
-      onExit: (exitCode: number) => {
-        // Forward to the GeneratedTerminalSession's onExit if set
-        if (terminalSession?.onExit) {
-          terminalSession.onExit(exitCode);
-        }
-      }
-    };
-
-    const result = await this.methods.create(this.sandbox, createOptions);
-    
-    // Now create the GeneratedTerminalSession
-    terminalSession = new GeneratedTerminalSession(
-      result.terminal,
-      this.sandbox,
-      this.methods,
-      result.terminalId,
-      options?.command || 'bash',
-      options?.cols || 80,
-      options?.rows || 24
-    );
-
-    // Set the original callbacks on the terminal session
-    terminalSession.onData = options?.onData;
-    terminalSession.onExit = options?.onExit;
-
-    return terminalSession;
-  }
-
-  async getById(terminalId: string): Promise<TerminalSession | null> {
-    const result = await this.methods.getById(this.sandbox, terminalId);
-    if (!result) return null;
-    
-    return new GeneratedTerminalSession(
-      result.terminal,
-      this.sandbox,
-      this.methods,
-      result.terminalId,
-      'bash', // Default command for existing terminals
-      80, // Default cols
-      24  // Default rows
-    );
-  }
-
-  async list(): Promise<TerminalSession[]> {
-    const results = await this.methods.list(this.sandbox);
-    return results.map(result => new GeneratedTerminalSession(
-      result.terminal,
-      this.sandbox,
-      this.methods,
-      result.terminalId,
-      'bash', // Default command
-      80, // Default cols
-      24  // Default rows
-    ));
-  }
-
-  async destroy(terminalId: string): Promise<void> {
-    return this.methods.destroy(this.sandbox, terminalId);
-  }
-}
 
 /**
  * Generated sandbox class - implements the Sandbox interface
@@ -295,7 +227,6 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
-  readonly terminal: SandboxTerminal;
 
   constructor(
     private sandbox: TSandbox,
@@ -310,16 +241,9 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
-      this.filesystem = new SupportedFileSystem(sandbox, methods.filesystem);
+      this.filesystem = new SupportedFileSystem(sandbox, methods.filesystem, methods);
     } else {
       this.filesystem = new UnsupportedFileSystem(providerName);
-    }
-
-    // Auto-detect terminal support
-    if (methods.terminal) {
-      this.terminal = new SupportedTerminal(sandbox, methods.terminal);
-    } else {
-      this.terminal = new UnsupportedTerminal(providerName);
     }
   }
 
@@ -454,6 +378,11 @@ class GeneratedProvider<TSandbox, TConfig> implements Provider {
 export function createProvider<TSandbox, TConfig>(
   providerConfig: ProviderConfig<TSandbox, TConfig>
 ): (config: TConfig) => Provider {
+  // Auto-inject default filesystem methods if none provided
+  if (!providerConfig.methods.sandbox.filesystem) {
+    providerConfig.methods.sandbox.filesystem = defaultFilesystemMethods;
+  }
+
   return (config: TConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };

@@ -129,7 +129,7 @@ describe('Factory', () => {
       expect(info.provider).toBe('mock')
     })
 
-    it('should handle providers without filesystem support', async () => {
+    it('should automatically provide default filesystem methods', async () => {
       const methods = {
         create: vi.fn().mockResolvedValue({ 
           sandbox: { id: 'test-123', status: 'running' }, 
@@ -155,54 +155,14 @@ describe('Factory', () => {
 
       expect(sandbox.filesystem).toBeDefined()
       
-      // Should throw errors for unsupported operations
-      await expect(sandbox.filesystem.readFile('/test.txt')).rejects.toThrow(
-        'Filesystem operations are not supported by mock-no-fs\'s sandbox environment'
-      )
-      await expect(sandbox.filesystem.writeFile('/test.txt', 'content')).rejects.toThrow(
-        'Filesystem operations are not supported by mock-no-fs\'s sandbox environment'
-      )
-      await expect(sandbox.filesystem.mkdir('/test')).rejects.toThrow(
-        'Filesystem operations are not supported by mock-no-fs\'s sandbox environment'
-      )
-    })
-
-    it('should handle providers without terminal support', async () => {
-      const methods = {
-        create: vi.fn().mockResolvedValue({ 
-          sandbox: { id: 'test-123', status: 'running' }, 
-          sandboxId: 'test-123' 
-        }),
-        getById: vi.fn().mockResolvedValue(null),
-        list: vi.fn().mockResolvedValue([]),
-        destroy: vi.fn().mockResolvedValue(undefined),
-        runCode: vi.fn().mockResolvedValue({} as ExecutionResult),
-        runCommand: vi.fn().mockResolvedValue({} as ExecutionResult),
-        getInfo: vi.fn().mockResolvedValue({} as SandboxInfo)
-        // No terminal methods provided
-      }
-
-      const providerFactory = createProvider({
-        name: 'mock-no-terminal',
-        methods: { sandbox: methods }
-      })
-
-      const config = { apiKey: 'test-key' }
-      const provider = providerFactory(config)
-      const sandbox = await provider.sandbox.create()
-
-      expect(sandbox.terminal).toBeDefined()
-      
-      // Should throw errors for unsupported operations
-      await expect(sandbox.terminal.create()).rejects.toThrow(
-        'Terminal operations are not supported by mock-no-terminal\'s sandbox environment'
-      )
-      await expect(sandbox.terminal.list()).rejects.toThrow(
-        'Terminal operations are not supported by mock-no-terminal\'s sandbox environment'
-      )
-      await expect(sandbox.terminal.getById('123')).rejects.toThrow(
-        'Terminal operations are not supported by mock-no-terminal\'s sandbox environment'
-      )
+      // Should automatically get default filesystem methods when none provided
+      // The methods will use runCommand under the hood
+      expect(sandbox.filesystem.readFile).toBeDefined()
+      expect(sandbox.filesystem.writeFile).toBeDefined()
+      expect(sandbox.filesystem.mkdir).toBeDefined()
+      expect(sandbox.filesystem.readdir).toBeDefined()
+      expect(sandbox.filesystem.exists).toBeDefined()
+      expect(sandbox.filesystem.remove).toBeDefined()
     })
   })
 })

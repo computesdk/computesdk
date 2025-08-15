@@ -19,11 +19,12 @@ describe('Request Handler', () => {
           options: { runtime: 'python' }
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.sandboxId).toMatch(/^mock-sandbox-/)
-        expect(response.provider).toBe('mock')
+        expect(result.success).toBe(true)
+        expect(result.sandboxId).toMatch(/^mock-sandbox-/)
+        expect(result.provider).toBe('mock')
       })
 
       it('should handle sandbox destroy action', async () => {
@@ -32,11 +33,12 @@ describe('Request Handler', () => {
           sandboxId: 'test-sandbox-id'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.sandboxId).toBe('test-sandbox-id')
-        expect(response.provider).toBe('mock')
+        expect(result.success).toBe(true)
+        expect(result.sandboxId).toBe('test-sandbox-id')
+        expect(result.provider).toBe('mock')
       })
 
       it('should handle sandbox getInfo action', async () => {
@@ -45,13 +47,14 @@ describe('Request Handler', () => {
           sandboxId: 'test-sandbox-id'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.sandboxId).toBe('test-sandbox-id')
-        expect(response.provider).toBe('mock')
-        expect(response.info).toBeDefined()
-        expect(response.info?.id).toMatch(/^mock-sandbox-/)
+        expect(result.success).toBe(true)
+        expect(result.sandboxId).toBe('test-sandbox-id')
+        expect(result.provider).toBe('mock')
+        expect(result.info).toBeDefined()
+        expect(result.info?.id).toMatch(/^mock-sandbox-/)
       })
 
       it('should handle sandbox list action', async () => {
@@ -59,12 +62,13 @@ describe('Request Handler', () => {
           action: 'compute.sandbox.list'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.provider).toBe('mock')
-        expect(response.sandboxes).toBeDefined()
-        expect(Array.isArray(response.sandboxes)).toBe(true)
+        expect(result.success).toBe(true)
+        expect(result.provider).toBe('mock')
+        expect(result.sandboxes).toBeDefined()
+        expect(Array.isArray(result.sandboxes)).toBe(true)
       })
 
       it('should return error for destroy without sandboxId', async () => {
@@ -72,10 +76,11 @@ describe('Request Handler', () => {
           action: 'compute.sandbox.destroy'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Sandbox ID is required for destroy action')
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('sandboxId is required for destroy action')
       })
     })
 
@@ -83,33 +88,35 @@ describe('Request Handler', () => {
       it('should handle runCode action', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.runCode',
+          sandboxId: 'test-sandbox-id',
           code: 'print("Hello World")',
-          runtime: 'python',
-          sandboxId: 'test-sandbox-id'
+          runtime: 'python'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.result).toBeDefined()
-        expect(response.result?.stdout).toBe('Executed: print("Hello World")')
-        expect(response.result?.exitCode).toBe(0)
+        expect(result.success).toBe(true)
+        expect(result.result).toBeDefined()
+        expect(result.result?.stdout).toBe('Executed: print("Hello World")')
+        expect(result.result?.exitCode).toBe(0)
       })
 
       it('should handle runCommand action', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.runCommand',
+          sandboxId: 'test-sandbox-id',
           command: 'ls',
-          args: ['-la'],
-          sandboxId: 'test-sandbox-id'
+          args: ['-la']
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.result).toBeDefined()
-        expect(response.result?.stdout).toBe('Command executed: ls -la')
-        expect(response.result?.exitCode).toBe(0)
+        expect(result.success).toBe(true)
+        expect(result.result).toBeDefined()
+        expect(result.result?.stdout).toBe('Command executed: ls -la')
+        expect(result.result?.exitCode).toBe(0)
       })
 
       it('should return error for runCode without code', async () => {
@@ -118,10 +125,11 @@ describe('Request Handler', () => {
           sandboxId: 'test-sandbox-id'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Code is required for runCode action')
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('code is required')
       })
 
       it('should return error for runCommand without command', async () => {
@@ -130,10 +138,11 @@ describe('Request Handler', () => {
           sandboxId: 'test-sandbox-id'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Command is required for runCommand action')
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('command is required')
       })
     })
 
@@ -142,91 +151,98 @@ describe('Request Handler', () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.filesystem.readFile',
           sandboxId: 'test-sandbox-id',
-          path: '/test.txt'
+          path: '/test/file.txt'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.fileContent).toBe('Mock file content from /test.txt')
+        expect(result.success).toBe(true)
+        expect(result.fileContent).toBe('Mock file content from /test/file.txt')
       })
 
       it('should handle filesystem writeFile action', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.filesystem.writeFile',
           sandboxId: 'test-sandbox-id',
-          path: '/test.txt',
-          content: 'new content'
+          path: '/test/file.txt',
+          content: 'Hello World'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
+        expect(result.success).toBe(true)
       })
 
       it('should handle filesystem mkdir action', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.filesystem.mkdir',
           sandboxId: 'test-sandbox-id',
-          path: '/new-dir'
+          path: '/test/new-dir'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
+        expect(result.success).toBe(true)
       })
 
       it('should handle filesystem readdir action', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.filesystem.readdir',
           sandboxId: 'test-sandbox-id',
-          path: '/'
+          path: '/test'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.files).toBeDefined()
-        expect(Array.isArray(response.files)).toBe(true)
-        expect(response.files?.length).toBe(1)
-        expect(response.files?.[0].name).toBe('test.txt')
+        expect(result.success).toBe(true)
+        expect(result.files).toBeDefined()
+        expect(Array.isArray(result.files)).toBe(true)
+        expect(result.files?.[0]?.name).toBe('test.txt')
+        expect(result.files?.[0]?.isDirectory).toBe(false)
       })
 
       it('should handle filesystem exists action', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.filesystem.exists',
           sandboxId: 'test-sandbox-id',
-          path: '/test.txt'
+          path: '/test/file.txt'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
-        expect(response.exists).toBe(true)
+        expect(result.success).toBe(true)
+        expect(result.exists).toBe(true)
       })
 
       it('should handle filesystem remove action', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.filesystem.remove',
           sandboxId: 'test-sandbox-id',
-          path: '/test.txt'
+          path: '/test/file.txt'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(true)
+        expect(result.success).toBe(true)
       })
 
       it('should return error for filesystem operations without sandboxId', async () => {
         const request: ComputeRequest = {
           action: 'compute.sandbox.filesystem.readFile',
-          path: '/test.txt'
+          path: '/test/file.txt'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Sandbox ID is required for filesystem operations')
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('sandboxId is required for this action')
       })
 
       it('should return error for filesystem operations without path', async () => {
@@ -235,155 +251,46 @@ describe('Request Handler', () => {
           sandboxId: 'test-sandbox-id'
         }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('File path is required for readFile action')
-      })
-    })
-
-    describe('Terminal operations', () => {
-      it('should handle terminal create action', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.create',
-          sandboxId: 'test-sandbox-id',
-          terminalOptions: { command: 'bash', cols: 80, rows: 24 }
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(true)
-        expect(response.terminal).toBeDefined()
-        expect(response.terminal?.pid).toBe(123)
-        expect(response.terminal?.command).toBe('bash')
-      })
-
-      it('should handle terminal getById action', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.getById',
-          sandboxId: 'test-sandbox-id',
-          terminalId: '123'
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(true)
-        expect(response.terminal).toBeDefined()
-        expect(response.terminal?.pid).toBe(123)
-      })
-
-      it('should handle terminal list action', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.list',
-          sandboxId: 'test-sandbox-id'
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(true)
-        expect(response.terminals).toBeDefined()
-        expect(Array.isArray(response.terminals)).toBe(true)
-      })
-
-      it('should handle terminal destroy action', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.destroy',
-          sandboxId: 'test-sandbox-id',
-          terminalId: '123'
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(true)
-      })
-
-      it('should handle terminal write action', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.write',
-          sandboxId: 'test-sandbox-id',
-          terminalId: '123',
-          data: 'ls -la\n'
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(true)
-      })
-
-      it('should handle terminal resize action', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.resize',
-          sandboxId: 'test-sandbox-id',
-          terminalId: '123',
-          cols: 100,
-          rows: 30
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(true)
-      })
-
-      it('should handle terminal kill action', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.kill',
-          sandboxId: 'test-sandbox-id',
-          terminalId: '123'
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(true)
-      })
-
-      it('should return error for terminal operations without sandboxId', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.create'
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Sandbox ID is required for terminal operations')
-      })
-
-      it('should return error for terminal operations without terminalId', async () => {
-        const request: ComputeRequest = {
-          action: 'compute.sandbox.terminal.getById',
-          sandboxId: 'test-sandbox-id'
-        }
-
-        const response = await handleComputeRequest({ request, provider: mockProvider })
-
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Terminal ID is required for getById action')
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('path is required')
       })
     })
 
     describe('Error handling', () => {
       it('should handle unknown actions', async () => {
-        const request = {
-          action: 'unknown.action'
-        } as any
+        const request: ComputeRequest = {
+          action: 'unknown.action',
+          sandboxId: 'test-sandbox-id'
+        }
 
-        const response = await handleComputeRequest({ request, provider: mockProvider })
+        const response = await handleComputeRequest(request, mockProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Unknown action: unknown.action')
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('Unknown action: unknown.action')
       })
 
       it('should handle provider errors', async () => {
-        const errorProvider = new MockProvider()
-        errorProvider.sandbox.create = vi.fn().mockRejectedValue(new Error('Provider error'))
+        const errorProvider = {
+          ...mockProvider,
+          sandbox: {
+            ...mockProvider.sandbox,
+            create: vi.fn().mockRejectedValue(new Error('Provider error'))
+          }
+        }
 
         const request: ComputeRequest = {
           action: 'compute.sandbox.create'
         }
 
-        const response = await handleComputeRequest({ request, provider: errorProvider })
+        const response = await handleComputeRequest(request, errorProvider)
+        const result = await response.json()
 
-        expect(response.success).toBe(false)
-        expect(response.error).toBe('Provider error')
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('Provider error')
       })
     })
   })
@@ -395,69 +302,43 @@ describe('Request Handler', () => {
         options: { runtime: 'python' }
       }
 
-      const mockRequest = {
+      const mockRequest = new Request('http://localhost/api/compute', {
         method: 'POST',
-        json: vi.fn().mockResolvedValue(requestBody)
-      } as any
-
-      const response = await handleHttpComputeRequest({
-        request: mockRequest,
-        provider: mockProvider
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
       })
 
-      expect(response.status).toBe(200)
-      const responseData = await response.json()
-      expect(responseData.success).toBe(true)
-      expect(responseData.sandboxId).toMatch(/^mock-sandbox-/)
-    })
+      const response = await handleHttpComputeRequest(mockRequest, mockProvider)
+      const result = await response.json()
 
-    it('should handle GET requests for terminal streaming', async () => {
-      const mockRequest = {
-        method: 'GET',
-        url: 'http://localhost/api/compute?action=terminal.stream&sandboxId=test-123&terminalId=123'
-      } as any
-
-      const response = await handleHttpComputeRequest({
-        request: mockRequest,
-        provider: mockProvider
-      })
-
-      expect(response.headers.get('Content-Type')).toBe('text/event-stream')
-      expect(response.headers.get('Cache-Control')).toBe('no-cache')
+      expect(result.success).toBe(true)
+      expect(result.sandboxId).toMatch(/^mock-sandbox-/)
     })
 
     it('should return error for unsupported GET requests', async () => {
-      const mockRequest = {
-        method: 'GET',
-        url: 'http://localhost/api/compute?action=unsupported'
-      } as any
-
-      const response = await handleHttpComputeRequest({
-        request: mockRequest,
-        provider: mockProvider
+      const mockRequest = new Request('http://localhost/api/compute', {
+        method: 'GET'
       })
 
-      expect(response.status).toBe(400)
-      const responseData = await response.json()
-      expect(responseData.success).toBe(false)
-      expect(responseData.error).toBe('GET requests only supported for terminal.stream action')
+      const response = await handleHttpComputeRequest(mockRequest, mockProvider)
+      const result = await response.json()
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Only POST requests are supported')
     })
 
     it('should handle invalid JSON in POST requests', async () => {
-      const mockRequest = {
+      const mockRequest = new Request('http://localhost/api/compute', {
         method: 'POST',
-        json: vi.fn().mockRejectedValue(new Error('Invalid JSON'))
-      } as any
-
-      const response = await handleHttpComputeRequest({
-        request: mockRequest,
-        provider: mockProvider
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid json'
       })
 
-      expect(response.status).toBe(400)
-      const responseData = await response.json()
-      expect(responseData.success).toBe(false)
-      expect(responseData.error).toBe('Invalid JSON')
+      const response = await handleHttpComputeRequest(mockRequest, mockProvider)
+      const result = await response.json()
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Invalid JSON in request body')
     })
   })
 })

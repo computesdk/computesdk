@@ -1,49 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { compute } from '../compute'
 import { handleComputeRequest, type ComputeRequest } from '../request-handler'
-import { SandboxManager } from '../sandbox'
 import { MockProvider } from './test-utils.js'
 describe('Compute API - Provider-Centric', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
-  })
-
-  describe('SandboxManager (unit tests)', () => {
-    it('should create and manage sandboxes via provider', async () => {
-      const manager = new SandboxManager()
-      const provider = new MockProvider()
-      
-      const sandbox = await manager.create(provider)
-      
-      expect(sandbox.provider).toBe('mock')
-    })
-
-    it('should get sandbox via provider', async () => {
-      const manager = new SandboxManager()
-      const provider = new MockProvider()
-      
-      const sandbox = await manager.getById(provider, 'test-id')
-      
-      expect(sandbox?.provider).toBe('mock')
-    })
-
-    it('should list sandboxes via provider', async () => {
-      const manager = new SandboxManager()
-      const provider = new MockProvider()
-      
-      const sandboxes = await manager.list(provider)
-      
-      expect(sandboxes).toHaveLength(1)
-      expect(sandboxes[0].provider).toBe('mock')
-    })
-
-    it('should destroy sandbox via provider', async () => {
-      const manager = new SandboxManager()
-      const provider = new MockProvider()
-      
-      // Should not throw
-      await expect(manager.destroy(provider, 'test-id')).resolves.toBeUndefined()
-    })
   })
 
   describe('Provider interface (direct usage)', () => {
@@ -155,15 +116,7 @@ describe('Compute API - Provider-Centric', () => {
       expect(content).toBe('Mock file content from /tmp/test.txt')
     })
 
-    it('should have terminal capabilities', async () => {
-      const provider = new MockProvider()
-      const sandbox = await compute.sandbox.create({ provider })
-      
-      const terminal = await sandbox.terminal.create()
-      
-      expect(terminal.pid).toBe(123)
-      expect(terminal.command).toBe('bash')
-    })
+
   })
 
   describe('provider-centric architecture benefits', () => {
@@ -424,12 +377,13 @@ describe('Compute API - Provider-Centric', () => {
         sandboxId: 'test-sandbox-id'
       }
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(true)
-      expect(response.provider).toBe('mock')
-      expect(response.result?.stdout).toBe('Executed: print("Hello World")')
-      expect(response.result?.exitCode).toBe(0)
+      expect(result.success).toBe(true)
+      expect(result.provider).toBe('mock')
+      expect(result.result?.stdout).toBe('Executed: print("Hello World")')
+      expect(result.result?.exitCode).toBe(0)
     })
 
     it('should handle create action', async () => {
@@ -439,11 +393,12 @@ describe('Compute API - Provider-Centric', () => {
         runtime: 'python'
       }
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(true)
-      expect(response.provider).toBe('mock')
-      expect(response.sandboxId).toMatch(/^mock-sandbox-/)
+      expect(result.success).toBe(true)
+      expect(result.provider).toBe('mock')
+      expect(result.sandboxId).toMatch(/^mock-sandbox-/)
     })
 
     it('should handle destroy action', async () => {
@@ -453,11 +408,12 @@ describe('Compute API - Provider-Centric', () => {
         sandboxId: 'test-sandbox-id'
       }
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(true)
-      expect(response.provider).toBe('mock')
-      expect(response.sandboxId).toBe('test-sandbox-id')
+      expect(result.success).toBe(true)
+      expect(result.provider).toBe('mock')
+      expect(result.sandboxId).toBe('test-sandbox-id')
     })
 
     it('should handle getInfo action', async () => {
@@ -467,25 +423,28 @@ describe('Compute API - Provider-Centric', () => {
         sandboxId: 'test-sandbox-id'
       }
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(true)
-      expect(response.provider).toBe('mock')
-      expect(response.info?.id).toMatch(/^mock-sandbox-/) // MockSandbox generates random IDs
-      expect(response.info?.runtime).toBe('node')
+      expect(result.success).toBe(true)
+      expect(result.provider).toBe('mock')
+      expect(result.info?.id).toMatch(/^mock-sandbox-/) // MockSandbox generates random IDs
+      expect(result.info?.runtime).toBe('node')
     })
 
     it('should return error for execute action without code', async () => {
       const provider = new MockProvider()
       const request: ComputeRequest = {
-        action: 'compute.sandbox.runCode'
+        action: 'compute.sandbox.runCode',
+        sandboxId: 'test-sandbox-id'
       }
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(false)
-      expect(response.error).toBe('Code is required for runCode action')
-      expect(response.provider).toBe('mock')
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('code is required')
+      expect(result.provider).toBe('mock')
     })
 
     it('should return error for destroy action without sandboxId', async () => {
@@ -494,11 +453,12 @@ describe('Compute API - Provider-Centric', () => {
         action: 'compute.sandbox.destroy'
       }
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(false)
-      expect(response.error).toBe('Sandbox ID is required for destroy action')
-      expect(response.provider).toBe('mock')
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('sandboxId is required for destroy action')
+      expect(result.provider).toBe('mock')
     })
 
     it('should return error for getInfo action without sandboxId', async () => {
@@ -507,24 +467,27 @@ describe('Compute API - Provider-Centric', () => {
         action: 'compute.sandbox.getInfo'
       }
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(false)
-      expect(response.error).toBe('Sandbox ID is required for getInfo action')
-      expect(response.provider).toBe('mock')
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('sandboxId is required for this action')
+      expect(result.provider).toBe('mock')
     })
 
     it('should return error for unknown action', async () => {
       const provider = new MockProvider()
       const request = {
-        action: 'unknown'
+        action: 'unknown',
+        sandboxId: 'test-sandbox-id'
       } as any
 
-      const response = await handleComputeRequest({ request, provider })
+      const response = await handleComputeRequest(request, provider)
+      const result = await response.json()
 
-      expect(response.success).toBe(false)
-      expect(response.error).toBe('Unknown action: unknown')
-      expect(response.provider).toBe('mock')
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Unknown action: unknown')
+      expect(result.provider).toBe('mock')
     })
   })
 })

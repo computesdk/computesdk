@@ -85,50 +85,7 @@ export class MockSandbox implements Sandbox {
     }
   }
 
-  readonly terminal = {
-    async create(): Promise<any> {
-      return {
-        pid: 123,
-        command: 'bash',
-        status: 'running',
-        cols: 80,
-        rows: 24,
-        write: vi.fn().mockResolvedValue(undefined),
-        resize: vi.fn().mockResolvedValue(undefined),
-        kill: vi.fn().mockResolvedValue(undefined)
-      }
-    },
-    async getById(terminalId: string): Promise<any> {
-      if (terminalId === '123') {
-        return {
-          pid: 123,
-          command: 'bash',
-          status: 'running',
-          cols: 80,
-          rows: 24,
-          write: vi.fn().mockResolvedValue(undefined),
-          resize: vi.fn().mockResolvedValue(undefined),
-          kill: vi.fn().mockResolvedValue(undefined)
-        }
-      }
-      return null
-    },
-    async list(): Promise<any[]> {
-      return [{
-        pid: 123,
-        command: 'bash',
-        status: 'running',
-        cols: 80,
-        rows: 24,
-        write: vi.fn().mockResolvedValue(undefined),
-        resize: vi.fn().mockResolvedValue(undefined),
-        kill: vi.fn().mockResolvedValue(undefined)
-      }]
-    },
-    async destroy(terminalId: string): Promise<void> {
-      // Mock destroy
-    }
-  }
+
 }
 
 /**

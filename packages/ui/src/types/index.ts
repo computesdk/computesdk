@@ -31,16 +31,7 @@ export interface ComputeRequest {
     | 'compute.sandbox.filesystem.mkdir'
     | 'compute.sandbox.filesystem.readdir'
     | 'compute.sandbox.filesystem.exists'
-    | 'compute.sandbox.filesystem.remove'
-    // Terminal operations
-    | 'compute.sandbox.terminal.create'
-    | 'compute.sandbox.terminal.getById'
-    | 'compute.sandbox.terminal.list'
-    | 'compute.sandbox.terminal.destroy'
-    // Terminal I/O operations
-    | 'compute.sandbox.terminal.write'
-    | 'compute.sandbox.terminal.resize'
-    | 'compute.sandbox.terminal.kill';
+    | 'compute.sandbox.filesystem.remove';
 
   /** Sandbox ID (required for operations on existing sandboxes) */
   sandboxId?: string;
@@ -62,24 +53,6 @@ export interface ComputeRequest {
   
   /** File content (for writeFile action) */
   content?: string;
-  
-  /** Terminal options (for terminal.create) */
-  terminalOptions?: {
-    command?: string;
-    cols?: number;
-    rows?: number;
-    env?: Record<string, string>;
-  };
-
-  /** Terminal ID (for terminal operations) */
-  terminalId?: string;
-
-  /** Terminal input data (for terminal.write) */
-  data?: string | Uint8Array;
-
-  /** Terminal resize dimensions (for terminal.resize) */
-  cols?: number;
-  rows?: number;
   
   /** Additional sandbox creation options */
   options?: {
@@ -142,54 +115,9 @@ export interface ComputeResponse {
     provider: string;
   }>;
   
-  /** Terminal session (for terminal.create action) */
-  terminal?: {
-    pid: number;
-    command: string;
-    status: string;
-    cols: number;
-    rows: number;
-  };
-  
-  /** Terminal sessions (for terminal.list action) */
-  terminals?: Array<{
-    pid: number;
-    command: string;
-    status: string;
-    cols: number;
-    rows: number;
-  }>;
 }
 
-/**
- * Frontend terminal interface - mirrors SDK terminal API
- */
-export interface FrontendTerminal {
-  /** Terminal process ID */
-  pid: number;
-  /** Terminal command */
-  command: string;
-  /** Terminal status */
-  status: 'running' | 'exited';
-  /** Terminal columns */
-  cols: number;
-  /** Terminal rows */
-  rows: number;
-  /** Exit code (if exited) */
-  exitCode?: number;
-  
-  /** Write data to this terminal */
-  write(data: Uint8Array | string): Promise<void>;
-  /** Resize this terminal */
-  resize(cols: number, rows: number): Promise<void>;
-  /** Kill this terminal process */
-  kill(): Promise<void>;
-  
-  /** Data stream handler - setting this automatically starts SSE streaming */
-  onData?: (data: Uint8Array) => void;
-  /** Exit handler */
-  onExit?: (exitCode: number) => void;
-}
+
 
 /**
  * Configuration for compute API integration
@@ -246,18 +174,7 @@ export interface FrontendSandbox {
     remove: (path: string) => Promise<ComputeResponse>;
   };
   
-  /** Terminal operations */
-  terminal: {
-    create: (options?: {
-      command?: string;
-      cols?: number;
-      rows?: number;
-      env?: Record<string, string>;
-    }) => Promise<FrontendTerminal>;
-    getById: (terminalId: string) => Promise<FrontendTerminal | null>;
-    list: () => Promise<FrontendTerminal[]>;
-    destroy: (terminalId: string) => Promise<void>;
-  };
+
 }
 
 /**

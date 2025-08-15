@@ -1,7 +1,7 @@
 /**
  * E2B Provider - Factory-based Implementation
  * 
- * Full-featured provider with filesystem and terminal support using the factory pattern.
+ * Full-featured provider with filesystem support using the factory pattern.
  * Reduces ~400 lines of boilerplate to ~100 lines of core logic.
  */
 
@@ -11,7 +11,6 @@ import type {
   ExecutionResult, 
   SandboxInfo, 
   Runtime,
-  TerminalCreateOptions,
   CreateSandboxOptions,
   FileEntry
 } from 'computesdk';
@@ -304,115 +303,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      // Optional terminal methods - E2B has PTY terminal support
-      terminal: {
-        create: async (sandbox: E2BSandbox, options: TerminalCreateOptions = {}) => {
-          const cols = options.cols || 80;
-          const rows = options.rows || 24;
 
-          // Create PTY session using E2B's pty.create
-          const ptyHandle = await sandbox.pty.create({ 
-            cols: cols, 
-            rows: rows,
-            onData: options.onData || (() => {
-              // Default no-op if no onData provided
-            })
-          });
-
-          // Create a wrapper object that includes the onData callback
-          const terminalWrapper = {
-            ...ptyHandle,
-            onData: options.onData,
-            onExit: options.onExit
-          };
-
-          return {
-            terminal: terminalWrapper,
-            terminalId: ptyHandle.pid.toString()
-          };
-        },
-
-        getById: async (sandbox: E2BSandbox, terminalId: string) => {
-          try {
-            const pid = parseInt(terminalId);
-            if (isNaN(pid)) return null;
-
-            // List all running processes (includes PTY sessions)
-            const processes = await sandbox.commands.list();
-            
-            // Find PTY process by PID
-            const ptyProcess = processes.find(p => p.pid === pid);
-            if (!ptyProcess) return null;
-
-            return {
-              terminal: { pid: ptyProcess.pid, cmd: ptyProcess.cmd },
-              terminalId: terminalId
-            };
-          } catch (error) {
-            return null;
-          }
-        },
-
-        list: async (sandbox: E2BSandbox) => {
-          try {
-            // List all running processes
-            const processes = await sandbox.commands.list();
-            
-            // Filter for PTY sessions and return raw terminal data
-            return processes
-              .filter(p => ['bash', 'sh', 'zsh', 'fish', 'pty'].some(term => p.cmd.includes(term)))
-              .map(p => ({
-                terminal: { pid: p.pid, cmd: p.cmd },
-                terminalId: p.pid.toString()
-              }));
-          } catch (error) {
-            // If listing fails, return empty array
-            return [];
-          }
-        },
-
-        destroy: async (sandbox: E2BSandbox, terminalId: string): Promise<void> => {
-          const pid = parseInt(terminalId);
-          if (isNaN(pid)) {
-            throw new Error(`Invalid terminal ID: ${terminalId}. Expected numeric PID.`);
-          }
-
-          try {
-            await sandbox.pty.kill(pid);
-          } catch (error) {
-            // Terminal might already be destroyed or doesn't exist
-            // This is acceptable for destroy operations
-          }
-        },
-
-        // Terminal instance methods
-        write: async (sandbox: E2BSandbox, terminal: any, data: Uint8Array | string): Promise<void> => {
-          const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
-          if (terminal.pid) {
-            // For existing terminals, use PID
-            await sandbox.pty.sendInput(terminal.pid, bytes);
-          } else {
-            // For new terminals, use the ptyHandle directly
-            await sandbox.pty.sendInput(terminal.pid || terminal.id, bytes);
-          }
-        },
-
-        resize: async (sandbox: E2BSandbox, terminal: any, cols: number, rows: number): Promise<void> => {
-          const pid = terminal.pid || terminal.id;
-          await sandbox.pty.resize(pid, { cols, rows });
-        },
-
-        kill: async (sandbox: E2BSandbox, terminal: any): Promise<void> => {
-          const pid = terminal.pid || terminal.id;
-          if (terminal.kill) {
-            // For ptyHandle objects
-            await terminal.kill();
-          } else {
-            // For process objects
-            await sandbox.pty.kill(pid);
-          }
-        }
-      }
     }
   }
 });

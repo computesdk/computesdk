@@ -5,13 +5,11 @@
  */
 
 import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider } from './types';
-import { SandboxManager } from './sandbox';
 
 /**
  * Compute singleton implementation - orchestrates all compute operations
  */
 class ComputeManager implements ComputeAPI {
-  private sandboxManager = new SandboxManager();
   private config: ComputeConfig | null = null;
 
   /**
@@ -70,7 +68,7 @@ class ComputeManager implements ComputeAPI {
     create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox> => {
       const provider = params && 'provider' in params && params.provider ? params.provider : this.getDefaultProvider();
       const options = params?.options;
-      return await this.sandboxManager.create(provider, options);
+      return await provider.sandbox.create(options);
     },
 
     /**
@@ -80,13 +78,13 @@ class ComputeManager implements ComputeAPI {
       if (typeof providerOrSandboxId === 'string') {
         // Called with just sandboxId, use default provider
         const provider = this.getDefaultProvider();
-        return await this.sandboxManager.getById(provider, providerOrSandboxId);
+        return await provider.sandbox.getById(providerOrSandboxId);
       } else {
         // Called with provider and sandboxId
         if (!sandboxId) {
           throw new Error('sandboxId is required when provider is specified');
         }
-        return await this.sandboxManager.getById(providerOrSandboxId, sandboxId);
+        return await providerOrSandboxId.sandbox.getById(sandboxId);
       }
     },
 
@@ -95,7 +93,7 @@ class ComputeManager implements ComputeAPI {
      */
     list: async (provider?: Provider): Promise<Sandbox[]> => {
       const actualProvider = provider || this.getDefaultProvider();
-      return await this.sandboxManager.list(actualProvider);
+      return await actualProvider.sandbox.list();
     },
 
     /**
@@ -105,13 +103,13 @@ class ComputeManager implements ComputeAPI {
       if (typeof providerOrSandboxId === 'string') {
         // Called with just sandboxId, use default provider
         const provider = this.getDefaultProvider();
-        return await this.sandboxManager.destroy(provider, providerOrSandboxId);
+        return await provider.sandbox.destroy(providerOrSandboxId);
       } else {
         // Called with provider and sandboxId
         if (!sandboxId) {
           throw new Error('sandboxId is required when provider is specified');
         }
-        return await this.sandboxManager.destroy(providerOrSandboxId, sandboxId);
+        return await providerOrSandboxId.sandbox.destroy(sandboxId);
       }
     }
   };
@@ -121,12 +119,7 @@ class ComputeManager implements ComputeAPI {
   // database = new DatabaseManager();  
   // git = new GitManager();
 
-  /**
-   * Get the sandbox manager (useful for testing)
-   */
-  getSandboxManager(): SandboxManager {
-    return this.sandboxManager;
-  }
+
 }
 
 /**
