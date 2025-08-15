@@ -225,9 +225,28 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
  * Main request handler - handles HTTP requests and pre-parsed bodies
  */
 export async function handleComputeRequest(
+  params: HandleComputeRequestParams
+): Promise<ComputeResponse>;
+export async function handleComputeRequest(
   requestOrBody: Request | ComputeRequest,
   provider: Provider
-): Promise<Response> {
+): Promise<Response>;
+export async function handleComputeRequest(
+  paramsOrRequestOrBody: HandleComputeRequestParams | Request | ComputeRequest,
+  provider?: Provider
+): Promise<ComputeResponse | Response> {
+  // Handle object-style API
+  if (typeof paramsOrRequestOrBody === 'object' && 'request' in paramsOrRequestOrBody && 'provider' in paramsOrRequestOrBody) {
+    const params = paramsOrRequestOrBody as HandleComputeRequestParams;
+    return await executeAction(params.request, params.provider);
+  }
+  
+  // Handle original API
+  if (!provider) {
+    throw new Error('Provider is required when not using object-style API');
+  }
+  
+  const requestOrBody = paramsOrRequestOrBody as Request | ComputeRequest;
   try {
     let body: ComputeRequest;
     
