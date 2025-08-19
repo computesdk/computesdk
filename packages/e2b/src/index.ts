@@ -117,10 +117,21 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      list: async (_config: E2BConfig) => {
-        throw new Error(
-          `E2B provider does not support listing sandboxes. E2B sandboxes are managed individually and don't have a native list API. Consider using a provider with persistent sandbox management or implement your own tracking system.`
-        );
+      list: async (config: E2BConfig) => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+
+        try {
+          const sandboxes = await E2BSandbox.list({
+            apiKey: apiKey,
+          });
+          return sandboxes.map((sandbox: any) => ({
+            sandbox,
+            sandboxId: sandbox.id
+          }));
+        } catch (error) {
+          // Return empty array if listing fails
+          return [];
+        }
       },
 
       destroy: async (config: E2BConfig, sandboxId: string) => {
