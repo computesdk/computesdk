@@ -46,23 +46,6 @@ async function main() {
     const files = await sandbox.filesystem.readdir('/tmp');
     console.log('Files in /tmp:', files.map(f => f.name));
 
-    // Terminal operations
-    console.log('\n--- Terminal Operations ---');
-
-    // Create interactive terminal
-    const terminal = await sandbox.terminal.create();
-    console.log('Created terminal with PID:', terminal.pid);
-
-    // Send commands
-    await terminal.write('echo "Hello from terminal!"\n');
-    
-    // List active terminals
-    const terminals = await sandbox.terminal.list();
-    console.log('Active terminals:', terminals.length);
-
-    // Clean up terminal
-    await terminal.kill();
-
     // Data science example
     console.log('\n--- Data Science ---');
     
