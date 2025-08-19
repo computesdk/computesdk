@@ -82,8 +82,19 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
               // Basic sandbox configuration
               // Modal will use default Python image and settings
             });
-            // Use the actual sandbox ID from Modal
-            sandboxId = sandbox.sandboxId || `modal-${Date.now()}`;
+            
+            // Handle Modal's sandbox ID - it may be an object or undefined in alpha
+            if (sandbox.sandboxId) {
+              if (typeof sandbox.sandboxId === 'object') {
+                // Convert object ID to string representation
+                sandboxId = `modal-${JSON.stringify(sandbox.sandboxId).replace(/[^a-zA-Z0-9]/g, '')}`;
+              } else {
+                sandboxId = String(sandbox.sandboxId);
+              }
+            } else {
+              // Generate our own ID if Modal doesn't provide one
+              sandboxId = `modal-${Date.now()}-${Math.random().toString(36).substring(2)}`;
+            }
           }
 
           const modalSandbox: ModalSandbox = {
