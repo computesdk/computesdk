@@ -1,10 +1,10 @@
-import { useCompute } from '@computesdk/ui';
+import { createCompute } from '@computesdk/ui';
 import { useState } from 'react';
 
 export default function ComputeDemo() {
   const [output, setOutput] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const compute = useCompute({ apiEndpoint: '/api/compute' });
+  const compute = createCompute({ apiEndpoint: '/api/compute' });
 
   const runCode = async () => {
     setLoading(true);

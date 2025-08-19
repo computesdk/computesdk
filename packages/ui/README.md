@@ -1,6 +1,6 @@
 # @computesdk/ui
 
-Frontend integration utilities for ComputeSDK - Types, hooks, and utilities for building compute interfaces across any framework.
+Framework-agnostic factory functions and types for ComputeSDK frontend integration.
 
 ## Installation
 
@@ -17,20 +17,21 @@ Complete TypeScript definitions for ComputeSDK API integration:
 import type { 
   ComputeRequest, 
   ComputeResponse, 
-  ComputeConfig,
   Runtime,
-  FrontendSandbox,
-  FrontendTerminal
+  UIConsole,
+  UISandbox,
+  UIFilesystem
 } from '@computesdk/ui'
 ```
 
-### useCompute Hook
-Framework-agnostic hook for compute operations:
+### Factory Functions
+Framework-agnostic functions for creating compute instances:
 
 ```typescript
-import { useCompute } from '@computesdk/ui'
+import { createCompute, createSandboxConsole } from '@computesdk/ui'
 
-const compute = useCompute({
+// Main compute management
+const compute = createCompute({
   apiEndpoint: '/api/compute',
   defaultRuntime: 'python'
 })
@@ -38,8 +39,15 @@ const compute = useCompute({
 // Create sandbox
 const sandbox = await compute.sandbox.create()
 
-// Execute code
-const result = await sandbox.runCode('print("Hello World!")')
+// REPL-style console with history
+const console = createSandboxConsole({
+  sandboxId: sandbox.id,
+  apiEndpoint: '/api/compute'
+})
+
+await console.runCode('x = 42')
+await console.runCode('print(x)')  // Maintains context
+console.history  // View execution history
 ```
 
 ### API Utilities
