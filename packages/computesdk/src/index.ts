@@ -14,18 +14,17 @@ export { compute } from './compute';
 export { handleComputeRequest } from './request-handler';
 
 // Export compute request/response types
-export type { 
-  ComputeRequest, 
-  ComputeResponse, 
-  HandleComputeRequestParams 
+export type {
+  ComputeRequest,
+  ComputeResponse,
+  HandleComputeRequestParams
 } from './request-handler';
 
-// Export managers for advanced usage and testing
-export { SandboxManager } from './sandbox';
+
 
 // Export provider factory for creating custom providers
 export { createProvider } from './factory';
 export type { ProviderConfig, SandboxMethods } from './factory';
-export type { SandboxManagerMethods } from './types';
+
 
 // Test suite is available separately via @computesdk/test-utils package

@@ -8,14 +8,14 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useCompute } from '@computesdk/ui'
+import { createCompute } from '@computesdk/ui'
 
 useHead({
   title: 'ComputeSDK + Nuxt'
 })
 
 const output = ref('')
-const compute = useCompute({ apiEndpoint: '/api/compute' })
+const compute = createCompute({ apiEndpoint: '/api/compute' })
 
 async function runCode() {
   try {

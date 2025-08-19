@@ -354,13 +354,13 @@ console.log(result.result.stdout);
 
 ## Frontend Integration
 
-Use `@computesdk/ui` for React hooks and utilities:
+Use `@computesdk/ui` for framework-agnostic factory functions:
 
 ```typescript
-import { useCompute } from '@computesdk/ui';
+import { createCompute, createSandboxConsole } from '@computesdk/ui';
 
 function CodeExecutor() {
-  const compute = useCompute({
+  const compute = createCompute({
     apiEndpoint: '/api/compute',
     defaultRuntime: 'python'
   });

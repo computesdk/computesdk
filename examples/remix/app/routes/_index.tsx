@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useCompute } from "@computesdk/ui";
+import { createCompute } from "@computesdk/ui";
 import type { MetaFunction } from "@remix-run/node";
 
 export const meta: MetaFunction = () => {
@@ -8,7 +8,7 @@ export const meta: MetaFunction = () => {
 
 export default function Index() {
   const [output, setOutput] = useState('');
-  const compute = useCompute({ apiEndpoint: '/api/compute' });
+  const compute = createCompute({ apiEndpoint: '/api/compute' });
 
   const runCode = async () => {
     try {

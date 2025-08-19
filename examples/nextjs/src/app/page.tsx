@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useCompute } from '@computesdk/ui'
+import { createCompute } from '@computesdk/ui'
 
 export default function Home() {
   const [output, setOutput] = useState('')
-  const compute = useCompute({ apiEndpoint: '/api/compute' })
+  const compute = createCompute({ apiEndpoint: '/api/compute' })
 
   const runCode = async () => {
     try {

@@ -98,80 +98,9 @@ export interface SandboxFileSystem {
   remove(path: string): Promise<void>;
 }
 
-/**
- * Terminal session information
- */
-export interface TerminalSession {
-  /** Terminal process ID */
-  pid: number;
-  /** Terminal command */
-  command: string;
-  /** Terminal status */
-  status: 'running' | 'exited';
-  /** Exit code (if exited) */
-  exitCode?: number;
-  /** Terminal columns */
-  cols: number;
-  /** Terminal rows */
-  rows: number;
-  /** Write data to this terminal session */
-  write(data: Uint8Array | string): Promise<void>;
-  /** Resize this terminal session */
-  resize(cols: number, rows: number): Promise<void>;
-  /** Kill this terminal session */
-  kill(): Promise<void>;
-  /** Data stream handler */
-  onData?: (data: Uint8Array) => void;
-  /** Exit handler */
-  onExit?: (exitCode: number) => void;
-}
 
-/**
- * Terminal creation options
- */
-export interface TerminalCreateOptions {
-  /** Command to run (defaults to shell) */
-  command?: string;
-  /** Terminal columns */
-  cols?: number;
-  /** Terminal rows */
-  rows?: number;
-  /** Environment variables */
-  env?: Record<string, string>;
-  /** Data stream handler */
-  onData?: (data: Uint8Array) => void;
-  /** Exit handler */
-  onExit?: (exitCode: number) => void;
-}
 
-/**
- * Terminal operations interface for managing terminal sessions in a sandbox
- */
-export interface SandboxTerminal {
-  /** Create a new interactive terminal session */
-  create(options?: TerminalCreateOptions): Promise<TerminalSession>;
-  /** Get existing terminal session by ID */
-  getById(terminalId: string): Promise<TerminalSession | null>;
-  /** List active terminal sessions */
-  list(): Promise<TerminalSession[]>;
-  /** Destroy a terminal session */
-  destroy(terminalId: string): Promise<void>;
-}
 
-/**
- * Factory method definitions for sandbox management operations
- * Used by createProvider() to generate ProviderSandboxManager implementations
- */
-export interface SandboxManagerMethods<TSandbox = any, TConfig = any> {
-  /** Create a new sandbox */
-  create: (config: TConfig, options?: CreateSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string }>;
-  /** Get an existing sandbox by ID */
-  getById: (config: TConfig, sandboxId: string) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
-  /** List all active sandboxes */
-  list: (config: TConfig) => Promise<Array<{ sandbox: TSandbox; sandboxId: string }>>;
-  /** Destroy a sandbox */
-  destroy: (config: TConfig, sandboxId: string) => Promise<void>;
-}
 
 /**
  * Base sandbox interface - what developers interact with
@@ -195,6 +124,4 @@ export interface Sandbox {
 
   /** File system operations */
   readonly filesystem: SandboxFileSystem;
-  /** Terminal operations */
-  readonly terminal: SandboxTerminal;
 }

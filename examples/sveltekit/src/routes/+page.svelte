@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { useCompute } from '@computesdk/ui';
+  import { createCompute } from '@computesdk/ui';
   
   let output = '';
-  const compute = useCompute({ apiEndpoint: '/api/compute' });
+  const compute = createCompute({ apiEndpoint: '/api/compute' });
 
   async function runCode() {
     try {
