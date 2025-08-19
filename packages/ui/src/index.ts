@@ -12,5 +12,5 @@ export * from './types/index.js';
 export * from './utils/api.js';
 export * from './utils/validation.js';
 
-// Export hooks
-export * from './hooks/useCompute.js';
+// Export core factory functions
+export * from './core/factories.js';

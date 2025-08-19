@@ -144,15 +144,123 @@ export interface ValidationResult {
 }
 
 /**
- * Frontend sandbox interface - mirrors server-side capabilities
+ * Console entry for REPL-style interaction history
  */
-export interface FrontendSandbox {
+export interface ConsoleEntry {
+  /** Unique ID for this entry */
+  id: string;
+  /** Type of entry */
+  type: 'input' | 'output' | 'error';
+  /** Content of the entry */
+  content: string;
+  /** Runtime used for execution (if input) */
+  runtime?: Runtime;
+  /** Timestamp when entry was created */
+  timestamp: Date;
+  /** Execution result (if input type) */
+  result?: {
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    executionTime: number;
+  };
+}
+
+/**
+ * Console result for individual code executions
+ */
+export interface ConsoleResult {
+  /** Whether execution was successful */
+  success: boolean;
+  /** Standard output */
+  stdout: string;
+  /** Standard error */
+  stderr: string;
+  /** Exit code */
+  exitCode: number;
+  /** Execution time in milliseconds */
+  executionTime: number;
+  /** Error message if execution failed */
+  error?: string;
+}
+
+/**
+ * UI Console interface - REPL-style code execution with history
+ */
+export interface UIConsole {
+  /** Sandbox ID this console is connected to */
+  sandboxId: string;
+  
+  /** Execute code and maintain context/history */
+  runCode: (code: string, runtime?: Runtime) => Promise<ConsoleResult>;
+  
+  /** Run shell command (non-persistent) */
+  runCommand: (command: string, args?: string[]) => Promise<ConsoleResult>;
+  
+  /** Console history entries */
+  history: ConsoleEntry[];
+  
+  /** Whether console is currently executing */
+  isRunning: boolean;
+  
+  /** Current runtime environment */
+  currentRuntime: Runtime;
+  
+  /** Clear console history */
+  clear: () => void;
+  
+
+  
+  /** Get current execution context/variables */
+  getContext: () => Promise<Record<string, unknown>>;
+}
+
+/**
+ * UI Filesystem interface - file operations with better UX
+ */
+export interface UIFilesystem {
+  /** Sandbox ID this filesystem is connected to */
+  sandboxId: string;
+  
+  /** Read file content */
+  readFile: (path: string) => Promise<string>;
+  
+  /** Write file content */
+  writeFile: (path: string, content: string) => Promise<void>;
+  
+  /** Create directory */
+  mkdir: (path: string) => Promise<void>;
+  
+  /** List directory contents */
+  readdir: (path: string) => Promise<Array<{
+    name: string;
+    path: string;
+    isDirectory: boolean;
+    size: number;
+    lastModified: string;
+  }>>;
+  
+  /** Check if file/directory exists */
+  exists: (path: string) => Promise<boolean>;
+  
+  /** Remove file or directory */
+  remove: (path: string) => Promise<void>;
+}
+
+/**
+ * UI Sandbox interface - sandbox lifecycle management
+ */
+export interface UISandbox {
   /** Sandbox ID */
   id: string;
   /** Provider handling this sandbox */
   provider: string;
+  /** Current sandbox status */
+  status: SandboxStatus;
+  /** Runtime environment */
+  runtime: Runtime;
   
-  /** Execute code in the sandbox */
+  /** Execute code in the sandbox (simple execution) */
   runCode: (code: string, runtime?: Runtime) => Promise<ComputeResponse>;
   
   /** Run shell commands */
@@ -173,45 +281,49 @@ export interface FrontendSandbox {
     exists: (path: string) => Promise<ComputeResponse>;
     remove: (path: string) => Promise<ComputeResponse>;
   };
-  
-
 }
 
 /**
- * Compute hook return type - will expand to include blob, database, git
+ * Configuration for createSandboxConsole factory
  */
-export interface ComputeHook {
-  /** Sandbox management */
-  sandbox: {
-    /** Create a new sandbox */
-    create: (options?: { runtime?: Runtime; timeout?: number }) => Promise<FrontendSandbox>;
-    /** Get existing sandbox by ID */
-    get: (sandboxId: string) => Promise<FrontendSandbox | null>;
-    /** List all sandboxes */
-    list: () => Promise<FrontendSandbox[]>;
-    /** Destroy a sandbox */
-    destroy: (sandboxId: string) => Promise<void>;
-  };
-  
-  // Future expansion:
-  // blob: BlobOperations;
-  // database: DatabaseOperations;
-  // git: GitOperations;
-}
-
-/**
- * Configuration for useCompute hook
- */
-export interface UseComputeConfig {
+export interface SandboxConsoleConfig {
+  /** Sandbox ID to connect console to */
+  sandboxId: string;
   /** API endpoint for compute operations */
   apiEndpoint?: string;
-  /** Default runtime for new sandboxes */
+  /** Default runtime for console */
   defaultRuntime?: Runtime;
-  /** Request timeout in milliseconds */
-  timeout?: number;
-  /** Number of retry attempts */
-  retries?: number;
+  /** Maximum history entries to keep */
+  maxHistoryEntries?: number;
 }
+
+/**
+ * Configuration for createSandboxFilesystem factory
+ */
+export interface SandboxFilesystemConfig {
+  /** Sandbox ID to connect filesystem to */
+  sandboxId: string;
+  /** API endpoint for compute operations */
+  apiEndpoint?: string;
+}
+
+/**
+ * Configuration for createSandbox factory
+ */
+export interface SandboxConfig {
+  /** Sandbox ID */
+  sandboxId: string;
+  /** Provider name */
+  provider: string;
+  /** Runtime environment */
+  runtime: Runtime;
+  /** Sandbox status */
+  status: SandboxStatus;
+  /** API endpoint for compute operations */
+  apiEndpoint: string;
+}
+
+
 
 /**
  * Theme configuration for UI components

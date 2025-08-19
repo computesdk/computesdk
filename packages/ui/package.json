@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/ui",
   "version": "0.5.0",
-  "description": "Types, configurations, and utilities for ComputeSDK frontend integration",
+  "description": "Framework-agnostic factory functions and types for ComputeSDK frontend integration",
   "type": "module",
   "exports": {
     ".": {
