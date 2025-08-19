@@ -17,9 +17,8 @@ import type {
   FileEntry
 } from 'computesdk';
 
-// Import Modal with require to avoid TypeScript issues with alpha types
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const modalSDK = require('modal');
+// Import Modal SDK
+import { App, Sandbox, initializeClient } from 'modal';
 
 /**
  * Modal-specific configuration options
@@ -66,35 +65,21 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
         try {
           // Initialize Modal client with credentials
-          await modalSDK.initializeClient(tokenId, tokenSecret);
+          initializeClient({ tokenId, tokenSecret });
 
           let sandbox: any;
           let sandboxId: string;
 
           if (options?.sandboxId) {
             // Reconnect to existing Modal sandbox
-            sandbox = modalSDK.Sandbox.fromId(options.sandboxId);
+            sandbox = await Sandbox.fromId(options.sandboxId);
             sandboxId = options.sandboxId;
           } else {
-            // Create new Modal sandbox
-            // Modal SDK allows creation with basic configuration
-            sandbox = new modalSDK.Sandbox({
-              // Basic sandbox configuration
-              // Modal will use default Python image and settings
-            });
-            
-            // Handle Modal's sandbox ID - it may be an object or undefined in alpha
-            if (sandbox.sandboxId) {
-              if (typeof sandbox.sandboxId === 'object') {
-                // Convert object ID to string representation
-                sandboxId = `modal-${JSON.stringify(sandbox.sandboxId).replace(/[^a-zA-Z0-9]/g, '')}`;
-              } else {
-                sandboxId = String(sandbox.sandboxId);
-              }
-            } else {
-              // Generate our own ID if Modal doesn't provide one
-              sandboxId = `modal-${Date.now()}-${Math.random().toString(36).substring(2)}`;
-            }
+            // Create new Modal sandbox using working pattern from debug
+            const app = await App.lookup('computesdk-modal', { createIfMissing: true });
+            const image = await app.imageFromRegistry('python:3.13-slim');
+            sandbox = await app.createSandbox(image);
+            sandboxId = sandbox.sandboxId;
           }
 
           const modalSandbox: ModalSandbox = {
@@ -130,8 +115,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         const tokenSecret = config.tokenSecret || process.env.MODAL_TOKEN_SECRET!;
 
         try {
-          await modalSDK.initializeClient(tokenId, tokenSecret);
-          const sandbox = modalSDK.Sandbox.fromId(sandboxId);
+          initializeClient({ tokenId, tokenSecret });
+          const sandbox = await Sandbox.fromId(sandboxId);
 
           const modalSandbox: ModalSandbox = {
             sandbox,
@@ -156,7 +141,7 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
       destroy: async (_config: ModalConfig, sandboxId: string) => {
         try {
-          const sandbox = modalSDK.Sandbox.fromId(sandboxId);
+          const sandbox = await Sandbox.fromId(sandboxId);
           if (sandbox && typeof sandbox.terminate === 'function') {
             await sandbox.terminate();
           }
