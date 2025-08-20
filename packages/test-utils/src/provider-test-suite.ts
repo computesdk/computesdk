@@ -240,6 +240,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
   return {
     sandboxId: 'mock-sandbox-123',
     provider: providerName,
+    instance: {}, // Mock native instance
     
     runCode: async (code: string, runtime?: string): Promise<ExecutionResult> => {
       // Simulate realistic code execution

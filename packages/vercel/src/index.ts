@@ -161,7 +161,7 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
         }
       },
 
-      getById: async (config: VercelConfig, sandboxId: string) => {
+      getById: async (config: VercelConfig, sandboxId: string, options?: { domain?: string }) => {
         // Check for OIDC token first (recommended method)
         const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
 

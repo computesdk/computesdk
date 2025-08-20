@@ -65,14 +65,22 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             // Reconnect to existing E2B session
             sandbox = await E2BSandbox.connect(options.sandboxId, {
               apiKey: apiKey,
+              domain: options.domain,
             });
             sandboxId = options.sandboxId;
           } else {
             // Create new E2B session
-            sandbox = await E2BSandbox.create({
-              apiKey: apiKey,
-              timeoutMs: timeout,
-            });
+            if (options?.templateId) {
+              sandbox = await E2BSandbox.create(options.templateId, {
+                apiKey: apiKey,
+                timeoutMs: timeout,
+              });
+            } else {
+              sandbox = await E2BSandbox.create({
+                apiKey: apiKey,
+                timeoutMs: timeout,
+              });
+            }
             sandboxId = sandbox.sandboxId || `e2b-${Date.now()}`;
           }
 
@@ -99,12 +107,13 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      getById: async (config: E2BConfig, sandboxId: string) => {
+      getById: async (config: E2BConfig, sandboxId: string, options?: { domain?: string }) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
 
         try {
           const sandbox = await E2BSandbox.connect(sandboxId, {
             apiKey: apiKey,
+            domain: options?.domain,
           });
 
           return {

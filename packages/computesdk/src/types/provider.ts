@@ -13,7 +13,7 @@ export interface ProviderSandboxManager {
   /** Create a new sandbox */
   create(options?: CreateSandboxOptions): Promise<Sandbox>;
   /** Get an existing sandbox by ID */
-  getById(sandboxId: string): Promise<Sandbox | null>;
+  getById(sandboxId: string, options?: { domain?: string }): Promise<Sandbox | null>;
   /** List all active sandboxes */
   list(): Promise<Sandbox[]>;
   /** Destroy a sandbox */
@@ -77,7 +77,9 @@ export interface ComputeAPI {
     /** Create a sandbox from a provider (or default provider if configured) */
     create(params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox>;
     /** Get an existing sandbox by ID from a provider (or default provider if configured) */
-    getById(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null>;
+    getById(sandboxId: string, options?: { domain?: string }): Promise<Sandbox | null>;
+    getById(provider: Provider, sandboxId: string, options?: { domain?: string }): Promise<Sandbox | null>;
+    getById(providerOrSandboxId: Provider | string, sandboxIdOrOptions?: string | { domain?: string }, options?: { domain?: string }): Promise<Sandbox | null>;
     /** List all active sandboxes from a provider (or default provider if configured) */
     list(provider?: Provider): Promise<Sandbox[]>;
     /** Destroy a sandbox via a provider (or default provider if configured) */

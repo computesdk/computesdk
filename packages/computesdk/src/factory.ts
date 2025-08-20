@@ -23,7 +23,7 @@ import type {
 export interface SandboxMethods<TSandbox = any, TConfig = any> {
   // Collection operations (map to compute.sandbox.*)
   create: (config: TConfig, options?: CreateSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string }>;
-  getById: (config: TConfig, sandboxId: string) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
+  getById: (config: TConfig, sandboxId: string, options?: { domain?: string }) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
   list: (config: TConfig) => Promise<Array<{ sandbox: TSandbox; sandboxId: string }>>;
   destroy: (config: TConfig, sandboxId: string) => Promise<void>;
   
@@ -226,6 +226,7 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 class GeneratedSandbox<TSandbox = any> implements Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
+  readonly instance: TSandbox;
   readonly filesystem: SandboxFileSystem;
 
   constructor(
@@ -238,6 +239,7 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
+    this.instance = sandbox;
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
@@ -297,15 +299,15 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async getById(sandboxId: string): Promise<Sandbox | null> {
+  async getById(sandboxId: string, options?: { domain?: string }): Promise<Sandbox | null> {
     // Check active sandboxes first
     const existing = this.activeSandboxes.get(sandboxId);
     if (existing) {
       return existing;
     }
 
-    // Try to reconnect
-    const result = await this.methods.getById(this.config, sandboxId);
+    // Try to reconnect with options
+    const result = await this.methods.getById(this.config, sandboxId, options);
     if (!result) {
       return null;
     }

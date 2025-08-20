@@ -62,6 +62,14 @@ export interface CreateSandboxOptions {
   timeout?: number;
   /** Custom sandbox ID (if supported by provider) */
   sandboxId?: string;
+  /** Template ID for sandbox creation (provider-specific) */
+  templateId?: string;
+  /** Additional metadata for the sandbox */
+  metadata?: Record<string, any>;
+  /** Domain for sandbox connection (provider-specific) */
+  domain?: string;
+  /** Environment variables for the sandbox */
+  envs?: Record<string, string>;
 }
 
 /**
@@ -98,6 +106,34 @@ export interface SandboxFileSystem {
   remove(path: string): Promise<void>;
 }
 
+/**
+ * Error thrown when a command exits with a non-zero status
+ */
+export class CommandExitError extends Error {
+  name = 'CommandExitError';
+  constructor(public result: {
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+    error: boolean;
+  }) {
+    super(`Command exited with code ${result.exitCode}`);
+  }
+}
+
+/**
+ * Type guard to check if an error is a CommandExitError
+ */
+export function isCommandExitError(error: unknown): error is CommandExitError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    error.name === 'CommandExitError' &&
+    'result' in error
+  );
+}
+
 
 
 
@@ -110,6 +146,8 @@ export interface Sandbox {
   readonly sandboxId: string;
   /** Provider that created this sandbox */
   readonly provider: string;
+  /** Access to the native provider sandbox instance */
+  readonly instance: unknown;
 
   /** Execute code in the sandbox */
   runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
