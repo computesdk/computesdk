@@ -22,7 +22,7 @@
 ComputeSDK is a free and open-source toolkit for running other people's code in your applications. Think of it as the "AI SDK for compute" - providing a consistent TypeScript interface whether you're using E2B, Vercel, or Daytona.
 
 **Why ComputeSDK?**
-- 🔄 **Provider-agnostic** - Switch between E2B, Vercel, Daytona and more (coming soon) without code changes
+- 🔄 **Provider-agnostic** - Switch between E2B, Vercel, Daytona, Modal, CodeSandbox and more without code changes
 - 🛡️ **Security-first** - Isolated sandboxes protect your infrastructure
 - ⚡ **Developer experience** - Simple, TypeScript-native API
 - 🌍 **Production-ready** - Used by teams building the next generation of developer tools
@@ -36,9 +36,8 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 
 ## Features
 
-- 🚀 **Multi-provider support** - E2B, Vercel, Daytona
+- 🚀 **Multi-provider support** - E2B, Vercel, Daytona, Modal, CodeSandbox
 - 📁 **Filesystem operations** - Read, write, create directories across providers
-- 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
 - ⚡ **Command execution** - Run shell commands directly
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
 - 📦 **Modular** - Install only the providers you need
@@ -56,6 +55,8 @@ npm install computesdk
 npm install @computesdk/e2b        # For data science and Python
 npm install @computesdk/vercel     # For web-scale Node.js/Python  
 npm install @computesdk/daytona    # For development workspaces
+npm install @computesdk/modal      # For GPU-accelerated Python workloads
+npm install @computesdk/codesandbox # For collaborative sandboxes
 
 # Frontend integration (optional)
 npm install @computesdk/ui         # React hooks and utilities
@@ -67,6 +68,8 @@ Set your environment variables and you're ready to go:
 export E2B_API_KEY=your_api_key
 # or VERCEL_TOKEN=your_token
 # or DAYTONA_API_KEY=your_key
+# or MODAL_TOKEN_ID=your_token_id and MODAL_TOKEN_SECRET=your_token_secret
+# or CODESANDBOX_TOKEN=your_token
 ```
 
 ## Quick Start
@@ -93,9 +96,7 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 
 ## Provider Setup
 
-### E2B - Full Development Environment
-
-E2B provides full filesystem and terminal support:
+### E2B
 
 ```bash
 export E2B_API_KEY=e2b_your_api_key_here
@@ -121,16 +122,9 @@ df = pd.DataFrame(data)
 print(df)
 print(f"Sum: {df.sum().sum()}")
 `);
-
-// Interactive terminal support
-const terminal = await sandbox.terminal.create({
-  command: 'bash',
-  cols: 80,
-  rows: 24
-});
 ```
 
-### Vercel - Scalable Serverless Execution
+### Vercel
 
 Vercel provides reliable execution with filesystem support:
 
@@ -164,7 +158,7 @@ console.log('Hello from Vercel!');
 // Global infrastructure deployment
 ```
 
-### Daytona - Development Workspaces
+### Daytona
 
 Daytona provides development workspace environments:
 
@@ -187,6 +181,77 @@ const result = await sandbox.runCode(`
 print('Hello from Daytona!')
 import sys
 print(f'Python version: {sys.version}')
+`);
+```
+
+### Modal
+
+Modal provides powerful cloud compute with GPU support:
+
+```bash
+export MODAL_TOKEN_ID=your_modal_token_id_here
+export MODAL_TOKEN_SECRET=your_modal_token_secret_here
+```
+
+```typescript
+import { compute } from 'computesdk';
+import { modal } from '@computesdk/modal';
+
+compute.setConfig({ 
+  provider: modal({ 
+    tokenId: process.env.MODAL_TOKEN_ID,
+    tokenSecret: process.env.MODAL_TOKEN_SECRET 
+  }) 
+});
+
+const sandbox = await compute.sandbox.create({});
+
+// Execute GPU-accelerated Python workloads
+const result = await sandbox.runCode(`
+import torch
+print(f'PyTorch version: {torch.__version__}')
+print(f'CUDA available: {torch.cuda.is_available()}')
+
+# Example GPU computation
+if torch.cuda.is_available():
+    x = torch.rand(1000, 1000).cuda()
+    y = torch.mm(x, x)
+    print(f'GPU computation result shape: {y.shape}')
+else:
+    print('Running on CPU')
+`);
+```
+
+### CodeSandbox
+
+CodeSandbox provides collaborative sandbox environments:
+
+```bash
+export CODESANDBOX_TOKEN=your_codesandbox_token_here
+```
+
+```typescript
+import { compute } from 'computesdk';
+import { codesandbox } from '@computesdk/codesandbox';
+
+compute.setConfig({ 
+  provider: codesandbox({ 
+    apiToken: process.env.CODESANDBOX_TOKEN 
+  }) 
+});
+
+const sandbox = await compute.sandbox.create({});
+
+// Execute in collaborative environment
+const result = await sandbox.runCode(`
+print('Hello from CodeSandbox!')
+import os
+print(f'Environment: {os.environ.get("SANDBOX_ID", "local")}')
+
+# Access to popular Python libraries
+import requests
+import numpy as np
+print(f'NumPy version: {np.__version__}')
 `);
 ```
 
@@ -273,32 +338,6 @@ const exists = await sandbox.filesystem.exists('/tmp/hello.py');
 await sandbox.filesystem.remove('/tmp/hello.py');
 ```
 
-### Terminal Operations
-
-```typescript
-// Create terminal (E2B only)
-const terminal = await sandbox.terminal.create({
-  command: 'bash',
-  cols: 80,
-  rows: 24
-});
-
-// Write to terminal
-await terminal.write('ls -la\n');
-
-// Resize terminal
-await terminal.resize(120, 30);
-
-// Kill terminal
-await terminal.kill();
-
-// List terminals
-const terminals = await sandbox.terminal.list();
-
-// Get terminal by ID
-const terminal = await sandbox.terminal.getById('terminal-id');
-```
-
 ## Web Framework Integration
 
 ComputeSDK provides built-in request handlers for web frameworks:
@@ -344,13 +383,6 @@ console.log(result.result.stdout);
 - `compute.sandbox.filesystem.readdir` - List directory
 - `compute.sandbox.filesystem.exists` - Check if path exists
 - `compute.sandbox.filesystem.remove` - Remove file/directory
-- `compute.sandbox.terminal.create` - Create terminal
-- `compute.sandbox.terminal.list` - List terminals
-- `compute.sandbox.terminal.getById` - Get terminal by ID
-- `compute.sandbox.terminal.destroy` - Destroy terminal
-- `compute.sandbox.terminal.write` - Write to terminal
-- `compute.sandbox.terminal.resize` - Resize terminal
-- `compute.sandbox.terminal.kill` - Kill terminal
 
 ## Frontend Integration
 
@@ -468,6 +500,8 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 import { compute } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
 import { daytona } from '@computesdk/daytona';
+import { modal } from '@computesdk/modal';
+import { codesandbox } from '@computesdk/codesandbox';
 
 async function processData(provider: any) {
   compute.setConfig({ provider });
@@ -518,6 +552,17 @@ console.log('Vercel result:', vercelResult);
 
 const daytonaResult = await processData(daytona({ runtime: 'python' }));
 console.log('Daytona result:', daytonaResult);
+
+const modalResult = await processData(modal({ 
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET 
+}));
+console.log('Modal result:', modalResult);
+
+const codesandboxResult = await processData(codesandbox({ 
+  apiToken: process.env.CODESANDBOX_TOKEN 
+}));
+console.log('CodeSandbox result:', codesandboxResult);
 ```
 
 ## Provider Packages
@@ -528,9 +573,11 @@ ComputeSDK uses separate provider packages:
 npm install @computesdk/e2b        # E2B provider
 npm install @computesdk/vercel     # Vercel provider  
 npm install @computesdk/daytona    # Daytona provider
+npm install @computesdk/modal      # Modal provider
+npm install @computesdk/codesandbox # CodeSandbox provider
 ```
 
-Each provider implements the same interface but may support different capabilities (filesystem, terminal, etc.).
+Each provider implements the same interface but may support different capabilities (filesystem, etc.).
 
 ## Custom Providers
 
@@ -576,17 +623,21 @@ import type {
 
 ## Provider Comparison
 
-| Provider | Code Execution | Filesystem | Terminal | Use Cases |
-|----------|----------------|------------|----------|-----------|
-| **E2B** | Python, Node.js | ✅ Full | ✅ PTY | Data science, AI/ML, interactive development |
-| **Vercel** | Node.js, Python | ✅ Full | ❌ | Web apps, APIs, serverless functions |
-| **Daytona** | Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
+| Provider | Code Execution | Filesystem | Use Cases |
+|----------|----------------|------------|-----------|
+| **E2B** | Python, Node.js | ✅ Full | Data science, AI/ML, interactive development |
+| **Vercel** | Node.js, Python | ✅ Full | Web apps, APIs, serverless functions |
+| **Daytona** | Python, Node.js | ✅ Full | Development workspaces, custom environments |
+| **Modal** | Python | ✅ Full | GPU computing, ML inference, large-scale Python workloads |
+| **CodeSandbox** | JavaScript, Python | ✅ Full | Collaborative development, web development, prototyping |
 
 ### Key Differences
 
-- **E2B**: Full development environment with data science libraries and interactive terminals
+- **E2B**: Full development environment with data science libraries
 - **Vercel**: Ephemeral sandboxes optimized for serverless execution (up to 45 minutes)
 - **Daytona**: Development workspaces with persistent environments
+- **Modal**: GPU-accelerated cloud compute optimized for ML and data-intensive Python workloads
+- **CodeSandbox**: Collaborative browser-based development environments with instant sharing
 
 ## Examples
 
