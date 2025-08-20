@@ -41,7 +41,9 @@ export interface Provider {
  */
 export interface ComputeConfig {
   /** Default provider to use when none is specified */
-  provider: Provider;
+  defaultProvider?: Provider;
+  /** @deprecated Use defaultProvider instead. Kept for backwards compatibility */
+  provider?: Provider;
 }
 
 /**

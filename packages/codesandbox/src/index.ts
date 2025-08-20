@@ -255,6 +255,13 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
         };
       },
 
+      getUrl: async (sandbox: CodesandboxSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        const protocol = options.protocol || 'https';
+        // CodeSandbox provides URLs in the format: https://{sandbox-id}.{cluster}.csb.app:{port}
+        // Use the actual CodeSandbox URL format
+        return `${protocol}://${sandbox.id}.${sandbox.cluster}.csb.app:${options.port}`;
+      },
+
       // Filesystem operations using CodeSandbox client.fs API
       filesystem: {
         readFile: async (sandbox: CodesandboxSandbox, path: string): Promise<string> => {

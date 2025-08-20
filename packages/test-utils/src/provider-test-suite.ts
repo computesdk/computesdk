@@ -399,6 +399,18 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       }
     },
     
+    getProvider: () => {
+      // Return a mock provider for testing
+      return {
+        name: providerName,
+        sandbox: {
+          create: async () => { throw new Error('Not implemented in mock'); },
+          getById: async () => { throw new Error('Not implemented in mock'); },
+          list: async () => { throw new Error('Not implemented in mock'); },
+          destroy: async () => { throw new Error('Not implemented in mock'); }
+        }
+      };
+    }
 
   };
 }

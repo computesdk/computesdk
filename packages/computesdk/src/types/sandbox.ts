@@ -4,6 +4,8 @@
  * Types related to sandbox execution, filesystem, terminal operations
  */
 
+import type { Provider } from './provider.js';
+
 /**
  * Supported runtime environments
  */
@@ -157,6 +159,8 @@ export interface Sandbox {
   getInfo(): Promise<SandboxInfo>;
   /** Get URL for accessing the sandbox on a specific port */
   getUrl(options: { port: number; protocol?: string }): Promise<string>;
+  /** Get the provider instance that created this sandbox */
+  getProvider(): Provider;
   /** Kill the sandbox */
   kill(): Promise<void>;
   /** Destroy the sandbox and clean up resources */
