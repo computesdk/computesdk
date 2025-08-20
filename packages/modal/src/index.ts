@@ -325,11 +325,30 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
       },
 
       getUrl: async (modalSandbox: ModalSandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        const { port, protocol = 'https' } = options;
-        // Note: Modal sandboxes don't have predictable external URLs like E2B
-        // This is a placeholder - Modal typically uses internal networking
-        const sandboxId = modalSandbox.sandboxId;
-        return `${protocol}://modal-sandbox-${sandboxId}-${port}.modal.com`;
+        try {
+          // Use Modal's built-in tunnels method to get tunnel information
+          const tunnels = await modalSandbox.sandbox.tunnels();
+          const tunnel = tunnels[options.port];
+          
+          if (!tunnel) {
+            throw new Error(`No tunnel found for port ${options.port}. Available ports: ${Object.keys(tunnels).join(', ')}`);
+          }
+          
+          let url = tunnel.url;
+          
+          // If a specific protocol is requested, replace the URL's protocol
+          if (options.protocol) {
+            const urlObj = new URL(url);
+            urlObj.protocol = options.protocol + ':';
+            url = urlObj.toString();
+          }
+          
+          return url;
+        } catch (error) {
+          throw new Error(
+            `Failed to get Modal tunnel URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       // Optional filesystem methods - Modal supports filesystem operations
