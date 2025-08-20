@@ -325,6 +325,11 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       timeout: 300000,
       metadata: {}
     }),
+
+    getUrl: async (options: { port: number; protocol?: string }): Promise<string> => {
+      const { port, protocol = 'https' } = options;
+      return `${protocol}://mock-sandbox-123-${port}.example.com`;
+    },
     
     kill: async (): Promise<void> => {
       // Mock implementation

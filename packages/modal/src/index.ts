@@ -324,6 +324,14 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         };
       },
 
+      getUrl: async (modalSandbox: ModalSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        const { port, protocol = 'https' } = options;
+        // Note: Modal sandboxes don't have predictable external URLs like E2B
+        // This is a placeholder - Modal typically uses internal networking
+        const sandboxId = modalSandbox.sandboxId;
+        return `${protocol}://modal-sandbox-${sandboxId}-${port}.modal.com`;
+      },
+
       // Optional filesystem methods - Modal supports filesystem operations
       filesystem: {
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {

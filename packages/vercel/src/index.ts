@@ -308,6 +308,14 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           }
         };
       },
+
+      getUrl: async (sandbox: VercelSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        const { port, protocol = 'https' } = options;
+        // Note: Vercel sandboxes don't have predictable URLs like E2B
+        // This is a placeholder - actual implementation would depend on Vercel's URL structure
+        const sandboxId = sandbox.sandboxId || 'unknown';
+        return `${protocol}://vercel-sandbox-${sandboxId}-${port}.vercel.app`;
+      },
     }
   }
 });

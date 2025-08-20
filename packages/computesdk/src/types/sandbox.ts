@@ -155,6 +155,8 @@ export interface Sandbox {
   runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
   /** Get information about the sandbox */
   getInfo(): Promise<SandboxInfo>;
+  /** Get URL for accessing the sandbox on a specific port */
+  getUrl(options: { port: number; protocol?: string }): Promise<string>;
   /** Kill the sandbox */
   kill(): Promise<void>;
   /** Destroy the sandbox and clean up resources */

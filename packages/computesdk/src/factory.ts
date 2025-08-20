@@ -31,6 +31,7 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<ExecutionResult>;
   runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
+  getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
   
   // Optional filesystem methods
   filesystem?: {
@@ -259,6 +260,10 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
 
   async getInfo(): Promise<SandboxInfo> {
     return await this.methods.getInfo(this.sandbox);
+  }
+
+  async getUrl(options: { port: number; protocol?: string }): Promise<string> {
+    return await this.methods.getUrl(this.sandbox, options);
   }
 
   async kill(): Promise<void> {
