@@ -107,13 +107,12 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      getById: async (config: E2BConfig, sandboxId: string, options?: { domain?: string }) => {
+      getById: async (config: E2BConfig, sandboxId: string) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
 
         try {
           const sandbox = await E2BSandbox.connect(sandboxId, {
             apiKey: apiKey,
-            domain: options?.domain,
           });
 
           return {

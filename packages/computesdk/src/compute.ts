@@ -74,18 +74,17 @@ class ComputeManager implements ComputeAPI {
     /**
      * Get an existing sandbox by ID from a provider (or default provider if configured)
      */
-    getById: async (providerOrSandboxId: Provider | string, sandboxIdOrOptions?: string | { domain?: string }, options?: { domain?: string }): Promise<Sandbox | null> => {
+    getById: async (providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null> => {
       if (typeof providerOrSandboxId === 'string') {
-        // Called with just sandboxId and options: getById(sandboxId, { domain })
+        // Called with just sandboxId, use default provider
         const provider = this.getDefaultProvider();
-        const opts = typeof sandboxIdOrOptions === 'object' ? sandboxIdOrOptions : options;
-        return await provider.sandbox.getById(providerOrSandboxId, opts);
+        return await provider.sandbox.getById(providerOrSandboxId);
       } else {
-        // Called with provider, sandboxId, and options: getById(provider, sandboxId, { domain })
-        if (typeof sandboxIdOrOptions !== 'string') {
-          throw new Error('sandboxId must be a string when provider is specified');
+        // Called with provider and sandboxId
+        if (!sandboxId) {
+          throw new Error('sandboxId is required when provider is specified');
         }
-        return await providerOrSandboxId.sandbox.getById(sandboxIdOrOptions, options);
+        return await providerOrSandboxId.sandbox.getById(sandboxId);
       }
     },
 

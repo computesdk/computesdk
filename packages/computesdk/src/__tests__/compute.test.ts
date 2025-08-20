@@ -328,7 +328,7 @@ describe('Compute API - Provider-Centric', () => {
         const provider = new MockProvider()
         
         await expect(compute.sandbox.getById(provider)).rejects.toThrow(
-          'sandboxId must be a string when provider is specified'
+          'sandboxId is required when provider is specified'
         )
       })
 

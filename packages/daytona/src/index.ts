@@ -83,7 +83,7 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      getById: async (config: DaytonaConfig, sandboxId: string, options?: { domain?: string }) => {
+      getById: async (config: DaytonaConfig, sandboxId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
 
         try {

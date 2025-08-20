@@ -23,7 +23,7 @@ import type {
 export interface SandboxMethods<TSandbox = any, TConfig = any> {
   // Collection operations (map to compute.sandbox.*)
   create: (config: TConfig, options?: CreateSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string }>;
-  getById: (config: TConfig, sandboxId: string, options?: { domain?: string }) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
+  getById: (config: TConfig, sandboxId: string) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
   list: (config: TConfig) => Promise<Array<{ sandbox: TSandbox; sandboxId: string }>>;
   destroy: (config: TConfig, sandboxId: string) => Promise<void>;
   
@@ -299,15 +299,15 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async getById(sandboxId: string, options?: { domain?: string }): Promise<Sandbox | null> {
+  async getById(sandboxId: string): Promise<Sandbox | null> {
     // Check active sandboxes first
     const existing = this.activeSandboxes.get(sandboxId);
     if (existing) {
       return existing;
     }
 
-    // Try to reconnect with options
-    const result = await this.methods.getById(this.config, sandboxId, options);
+    // Try to reconnect
+    const result = await this.methods.getById(this.config, sandboxId);
     if (!result) {
       return null;
     }
