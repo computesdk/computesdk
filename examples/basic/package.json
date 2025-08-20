@@ -8,6 +8,7 @@
     "vercel": "tsx src/vercel-example.ts",
     "daytona": "tsx src/daytona-example.ts",
     "modal": "tsx src/modal-example.ts",
+    "codesandbox": "tsx src/codesandbox-example.ts",
     "launch": "tsx src/launch-example.ts"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "@computesdk/e2b": "workspace:*",
     "@computesdk/daytona": "workspace:*",
     "@computesdk/modal": "workspace:*",
+    "@computesdk/codesandbox": "workspace:*",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

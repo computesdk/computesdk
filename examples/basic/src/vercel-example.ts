@@ -48,7 +48,7 @@ async function main() {
     });
     
     // Create sandbox using compute singleton
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     
     console.log('Created Vercel sandbox:', sandbox.sandboxId);
     console.log('Provider:', sandbox.provider);
