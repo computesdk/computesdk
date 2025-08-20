@@ -245,11 +245,15 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       getUrl: async (sandbox: DaytonaSandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        const { port, protocol = 'https' } = options;
-        // Note: Daytona workspaces have URLs but the structure depends on the deployment
-        // This is a placeholder - actual implementation would depend on Daytona's URL structure
-        const workspaceId = sandbox.id;
-        return `${protocol}://workspace-${workspaceId}-${port}.daytona.io`;
+        try {
+          // Use Daytona's built-in getPreviewLink method
+          const previewInfo = await sandbox.getPreviewLink(options.port);
+          return previewInfo.url;
+        } catch (error) {
+          throw new Error(
+            `Failed to get Daytona preview URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       // Filesystem operations via terminal commands
