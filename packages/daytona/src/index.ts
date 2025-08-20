@@ -248,7 +248,16 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         try {
           // Use Daytona's built-in getPreviewLink method
           const previewInfo = await sandbox.getPreviewLink(options.port);
-          return previewInfo.url;
+          let url = previewInfo.url;
+          
+          // If a specific protocol is requested, replace the URL's protocol
+          if (options.protocol) {
+            const urlObj = new URL(url);
+            urlObj.protocol = options.protocol + ':';
+            url = urlObj.toString();
+          }
+          
+          return url;
         } catch (error) {
           throw new Error(
             `Failed to get Daytona preview URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
