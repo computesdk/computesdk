@@ -4,7 +4,11 @@
  * Types related to sandbox execution, filesystem, terminal operations
  */
 
-import type { Provider } from './provider.js';
+// Forward declaration to avoid circular dependency
+interface Provider {
+  readonly name: string;
+  readonly sandbox: any; // Will be properly typed when imported together
+}
 
 /**
  * Supported runtime environments
