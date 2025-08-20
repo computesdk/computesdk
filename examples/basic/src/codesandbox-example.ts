@@ -22,7 +22,7 @@ async function main() {
     compute.setConfig({ provider: codesandbox({ apiKey: process.env.CSB_API_KEY }) });
 
     // Create sandbox using compute singleton
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
 
     console.log('Created CodeSandbox sandbox:', sandbox.sandboxId);
 

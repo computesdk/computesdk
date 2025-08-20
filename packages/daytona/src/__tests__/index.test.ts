@@ -2,7 +2,7 @@ import { runProviderTestSuite } from '@computesdk/test-utils';
 import { daytona } from '../index';
 
 runProviderTestSuite({
-  name: 'Daytona',
+  name: 'daytona',
   provider: daytona({}),
   supportsFilesystem: true,  // Daytona supports filesystem operations
   supportsPython: true,      // Daytona supports Python runtime

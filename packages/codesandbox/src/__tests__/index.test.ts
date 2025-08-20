@@ -2,7 +2,7 @@ import { runProviderTestSuite } from '@computesdk/test-utils';
 import { codesandbox } from '../index';
 
 runProviderTestSuite({
-  name: 'CodeSandbox',
+  name: 'codesandbox',
   provider: codesandbox({}),
   supportsFilesystem: true,  // CodeSandbox supports filesystem operations
   supportsPython: true,      // CodeSandbox supports Python runtime
