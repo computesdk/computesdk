@@ -16,7 +16,22 @@ class ComputeManager implements ComputeAPI {
    * Set default configuration
    */
   setConfig(config: ComputeConfig): void {
-    this.config = config;
+    // Validate that at least one provider is specified
+    if (!config.defaultProvider && !config.provider) {
+      throw new Error('Either defaultProvider or provider must be specified in setConfig');
+    }
+    
+    // Handle backwards compatibility: if both are provided, defaultProvider takes precedence
+    if (config.defaultProvider && config.provider) {
+      console.warn('Both defaultProvider and provider specified in setConfig. Using defaultProvider. The provider key is deprecated, please use defaultProvider instead.');
+    }
+    
+    // Normalize config to always have provider for internal use (for backwards compatibility)
+    const actualProvider = config.defaultProvider || config.provider!;
+    this.config = {
+      provider: actualProvider,
+      defaultProvider: actualProvider
+    };
   }
 
   /**
@@ -39,7 +54,7 @@ class ComputeManager implements ComputeAPI {
   private getDefaultProvider(): Provider {
     if (!this.config?.provider) {
       throw new Error(
-        'No default provider configured. Either call compute.setConfig({ provider }) or pass provider explicitly.'
+        'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
       );
     }
     return this.config.provider;
@@ -59,10 +74,10 @@ class ComputeManager implements ComputeAPI {
      *   provider: e2b({ apiKey: 'your-key' })
      * })
      * 
-     * // With default provider (both forms work)
-     * compute.setConfig({ provider: e2b({ apiKey: 'your-key' }) })
-     * const sandbox1 = await compute.sandbox.create({})
-     * const sandbox2 = await compute.sandbox.create()
+      * // With default provider (both forms work)
+      * compute.setConfig({ defaultProvider: e2b({ apiKey: 'your-key' }) })
+      * const sandbox1 = await compute.sandbox.create({})
+      * const sandbox2 = await compute.sandbox.create()
      * ```
      */
     create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox> => {

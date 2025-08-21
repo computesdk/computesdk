@@ -17,6 +17,16 @@ describe('Compute API - Provider-Centric', () => {
       expect(sandbox.provider).toBe('mock')
     })
 
+    it('should return provider instance via sandbox.getProvider()', async () => {
+      const provider = new MockProvider()
+      
+      const sandbox = await provider.sandbox.create({ runtime: 'python' })
+      const returnedProvider = sandbox.getProvider()
+      
+      expect(returnedProvider).toBe(provider)
+      expect(returnedProvider.name).toBe('mock')
+    })
+
     it('should get sandbox via provider.sandbox.get()', async () => {
       const provider = new MockProvider()
       
@@ -132,6 +142,10 @@ describe('Compute API - Provider-Centric', () => {
       expect(sandboxes2).toHaveLength(1)
       expect(sandboxes1[0].provider).toBe('mock')
       expect(sandboxes2[0].provider).toBe('mock')
+      
+      // Each sandbox knows which provider created it
+      expect(sandboxes1[0].getProvider()).toBe(provider1)
+      expect(sandboxes2[0].getProvider()).toBe(provider2)
     })
 
     it('should support custom sandbox IDs', async () => {
@@ -160,8 +174,8 @@ describe('Compute API - Provider-Centric', () => {
         compute.setConfig({ provider })
         
         const config = compute.getConfig()
-        expect(config).toEqual({ provider })
-        expect(config?.provider.name).toBe('mock')
+        expect(config).toEqual({ provider, defaultProvider: provider })
+        expect(config?.provider?.name).toBe('mock')
       })
 
       it('should return null when no config is set', () => {
@@ -188,6 +202,41 @@ describe('Compute API - Provider-Centric', () => {
         
         compute.setConfig({ provider: provider2 })
         expect(compute.getConfig()?.provider).toBe(provider2)
+      })
+
+      it('should accept defaultProvider key', () => {
+        const provider = new MockProvider()
+        
+        compute.setConfig({ defaultProvider: provider })
+        
+        const config = compute.getConfig()
+        expect(config).toEqual({ provider, defaultProvider: provider })
+        expect(config?.provider?.name).toBe('mock')
+        expect(config?.defaultProvider?.name).toBe('mock')
+      })
+
+      it('should handle both provider and defaultProvider keys (defaultProvider wins)', () => {
+        const oldProvider = new MockProvider()
+        const newProvider = new MockProvider()
+        
+        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        
+        compute.setConfig({ provider: oldProvider, defaultProvider: newProvider })
+        
+        const config = compute.getConfig()
+        expect(config?.provider).toBe(newProvider)
+        expect(config?.defaultProvider).toBe(newProvider)
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'Both defaultProvider and provider specified in setConfig. Using defaultProvider. The provider key is deprecated, please use defaultProvider instead.'
+        )
+        
+        consoleSpy.mockRestore()
+      })
+
+      it('should throw error when neither provider is specified', () => {
+        expect(() => {
+          compute.setConfig({} as any)
+        }).toThrow('Either defaultProvider or provider must be specified in setConfig')
       })
     })
 
@@ -300,25 +349,25 @@ describe('Compute API - Provider-Centric', () => {
     describe('error handling without default provider', () => {
       it('should throw error when creating sandbox without provider or default', async () => {
         await expect(compute.sandbox.create({})).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ provider }) or pass provider explicitly.'
+          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
         )
       })
 
       it('should throw error when getting sandbox without provider or default', async () => {
         await expect(compute.sandbox.getById('test-id')).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ provider }) or pass provider explicitly.'
+          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
         )
       })
 
       it('should throw error when listing sandboxes without provider or default', async () => {
         await expect(compute.sandbox.list()).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ provider }) or pass provider explicitly.'
+          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
         )
       })
 
       it('should throw error when destroying sandbox without provider or default', async () => {
         await expect(compute.sandbox.destroy('test-id')).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ provider }) or pass provider explicitly.'
+          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
         )
       })
     })

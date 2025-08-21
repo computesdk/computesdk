@@ -31,6 +31,7 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<ExecutionResult>;
   runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
+  getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
   
   // Optional filesystem methods
   filesystem?: {
@@ -226,6 +227,7 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 class GeneratedSandbox<TSandbox = any> implements Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
+  readonly instance: TSandbox;
   readonly filesystem: SandboxFileSystem;
 
   constructor(
@@ -234,10 +236,12 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
     providerName: string,
     private methods: SandboxMethods<TSandbox>,
     private config: any,
-    private destroyMethod: (config: any, sandboxId: string) => Promise<void>
+    private destroyMethod: (config: any, sandboxId: string) => Promise<void>,
+    private providerInstance: Provider
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
+    this.instance = sandbox;
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
@@ -257,6 +261,14 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
 
   async getInfo(): Promise<SandboxInfo> {
     return await this.methods.getInfo(this.sandbox);
+  }
+
+  async getUrl(options: { port: number; protocol?: string }): Promise<string> {
+    return await this.methods.getUrl(this.sandbox, options);
+  }
+
+  getProvider(): Provider {
+    return this.providerInstance;
   }
 
   async kill(): Promise<void> {
@@ -279,7 +291,8 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   constructor(
     private config: TConfig,
     private providerName: string,
-    private methods: SandboxMethods<TSandbox, TConfig>
+    private methods: SandboxMethods<TSandbox, TConfig>,
+    private providerInstance: Provider
   ) {}
 
   async create(options?: CreateSandboxOptions): Promise<Sandbox> {
@@ -290,7 +303,8 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.providerName,
       this.methods,
       this.config,
-      this.methods.destroy
+      this.methods.destroy,
+      this.providerInstance
     );
     
     this.activeSandboxes.set(result.sandboxId, sandbox);
@@ -316,7 +330,8 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.providerName,
       this.methods,
       this.config,
-      this.methods.destroy
+      this.methods.destroy,
+      this.providerInstance
     );
     
     this.activeSandboxes.set(result.sandboxId, sandbox);
@@ -336,7 +351,8 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
           this.providerName,
           this.methods,
           this.config,
-          this.methods.destroy
+          this.methods.destroy,
+          this.providerInstance
         );
         this.activeSandboxes.set(result.sandboxId, sandbox);
       }
@@ -364,7 +380,8 @@ class GeneratedProvider<TSandbox, TConfig> implements Provider {
     this.sandbox = new GeneratedSandboxManager(
       config,
       providerConfig.name,
-      providerConfig.methods.sandbox
+      providerConfig.methods.sandbox,
+      this
     );
   }
 }

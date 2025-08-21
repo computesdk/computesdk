@@ -65,14 +65,24 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             // Reconnect to existing E2B session
             sandbox = await E2BSandbox.connect(options.sandboxId, {
               apiKey: apiKey,
+              domain: options.domain,
             });
             sandboxId = options.sandboxId;
           } else {
             // Create new E2B session
-            sandbox = await E2BSandbox.create({
-              apiKey: apiKey,
-              timeoutMs: timeout,
-            });
+            if (options?.templateId) {
+              sandbox = await E2BSandbox.create(options.templateId, {
+                apiKey: apiKey,
+                timeoutMs: timeout,
+                domain: options.domain,
+              });
+            } else {
+              sandbox = await E2BSandbox.create({
+                apiKey: apiKey,
+                timeoutMs: timeout,
+                domain: options?.domain,
+              });
+            }
             sandboxId = sandbox.sandboxId || `e2b-${Date.now()}`;
           }
 
@@ -266,6 +276,19 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             e2bSessionId: sandbox.sandboxId
           }
         };
+      },
+
+      getUrl: async (sandbox: E2BSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        try {
+          // Use E2B's built-in getHost method for accurate host information
+          const host = sandbox.getHost(options.port);
+          const protocol = options.protocol || 'https';
+          return `${protocol}://${host}`;
+        } catch (error) {
+          throw new Error(
+            `Failed to get E2B host for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       // Optional filesystem methods - E2B has full filesystem support

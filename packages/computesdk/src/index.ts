@@ -26,5 +26,7 @@ export type {
 export { createProvider } from './factory';
 export type { ProviderConfig, SandboxMethods } from './factory';
 
+// Export error handling utilities (explicitly for clarity)
+export { CommandExitError, isCommandExitError } from './types/sandbox';
 
 // Test suite is available separately via @computesdk/test-utils package
