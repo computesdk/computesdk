@@ -227,7 +227,6 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 class GeneratedSandbox<TSandbox = any> implements Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
-  readonly instance: TSandbox;
   readonly filesystem: SandboxFileSystem;
 
   constructor(
@@ -241,7 +240,6 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
-    this.instance = sandbox;
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
@@ -249,6 +247,10 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
     } else {
       this.filesystem = new UnsupportedFileSystem(providerName);
     }
+  }
+
+  getInstance<T = TSandbox>(): T {
+    return this.sandbox as unknown as T;
   }
 
   async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
