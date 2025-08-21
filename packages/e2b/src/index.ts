@@ -277,10 +277,16 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       },
 
       getUrl: async (sandbox: E2BSandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        const { port, protocol = 'https' } = options;
-        const e2bDomain = 'e2b-foxtrot.dev'; // Default E2B domain
-        const host = `${port}-${sandbox.sandboxId}.${e2bDomain}`;
-        return `${protocol}://${host}`;
+        try {
+          // Use E2B's built-in getHost method for accurate host information
+          const host = sandbox.getHost(options.port);
+          const protocol = options.protocol || 'https';
+          return `${protocol}://${host}`;
+        } catch (error) {
+          throw new Error(
+            `Failed to get E2B host for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       // Optional filesystem methods - E2B has full filesystem support
