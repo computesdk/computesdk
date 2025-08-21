@@ -312,7 +312,13 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
           const client = await sandbox.connect();
           await client.fs.remove(path);
         }
-      }
+      },
+
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox: CodesandboxSandbox): CodesandboxSandbox => {
+        return sandbox;
+      },
+
     }
   }
 });

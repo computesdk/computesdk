@@ -13,7 +13,11 @@ import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry } from 
 export class MockSandbox implements Sandbox {
   readonly sandboxId = `mock-sandbox-${Math.random().toString(36).substr(2, 9)}`
   readonly provider = 'mock'
-  readonly instance = {}  // Mock native instance
+  private _mockInstance = {}  // Mock native instance
+
+  getInstance<T = unknown>(): T {
+    return this._mockInstance as T
+  }
 
   async runCode(code: string): Promise<ExecutionResult> {
     return {

@@ -531,7 +531,13 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             throw new Error(`Failed to remove ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
-      }
+      },
+
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox: ModalSandbox): ModalSandbox => {
+        return sandbox;
+      },
+
     }
   }
 });

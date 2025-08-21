@@ -152,8 +152,6 @@ export interface Sandbox {
   readonly sandboxId: string;
   /** Provider that created this sandbox */
   readonly provider: string;
-  /** Access to the native provider sandbox instance */
-  readonly instance: unknown;
 
   /** Execute code in the sandbox */
   runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
@@ -165,6 +163,8 @@ export interface Sandbox {
   getUrl(options: { port: number; protocol?: string }): Promise<string>;
   /** Get the provider instance that created this sandbox */
   getProvider(): Provider;
+  /** Get the native provider sandbox instance with proper typing */
+  getInstance<T = unknown>(): T;
   /** Kill the sandbox */
   kill(): Promise<void>;
   /** Destroy the sandbox and clean up resources */

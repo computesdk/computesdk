@@ -328,6 +328,12 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           );
         }
       },
+
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox: VercelSandbox): VercelSandbox => {
+        return sandbox;
+      },
+
     }
   }
 });

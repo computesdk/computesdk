@@ -33,6 +33,9 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
   
+  // Optional provider-specific typed getInstance method
+  getInstance?: (sandbox: TSandbox) => TSandbox;
+  
   // Optional filesystem methods
   filesystem?: {
     readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<string>;
@@ -227,7 +230,6 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 class GeneratedSandbox<TSandbox = any> implements Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
-  readonly instance: TSandbox;
   readonly filesystem: SandboxFileSystem;
 
   constructor(
@@ -241,7 +243,6 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
-    this.instance = sandbox;
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
@@ -249,6 +250,15 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
     } else {
       this.filesystem = new UnsupportedFileSystem(providerName);
     }
+  }
+
+  getInstance<T = TSandbox>(): T {
+    // Use provider-specific typed getInstance if available
+    if (this.methods.getInstance) {
+      return this.methods.getInstance(this.sandbox) as unknown as T;
+    }
+    // Fallback to generic casting
+    return this.sandbox as unknown as T;
   }
 
   async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {

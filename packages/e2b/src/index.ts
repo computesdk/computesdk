@@ -7,9 +7,9 @@
 
 import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
 import { createProvider } from 'computesdk';
-import type { 
-  ExecutionResult, 
-  SandboxInfo, 
+import type {
+  ExecutionResult,
+  SandboxInfo,
   Runtime,
   CreateSandboxOptions,
   FileEntry
@@ -163,29 +163,29 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         const startTime = Date.now();
 
         try {
-          
+
           // Auto-detect runtime if not specified
           const effectiveRuntime = runtime || (
             // Strong Python indicators
-            code.includes('print(') || 
-            code.includes('import ') ||
-            code.includes('def ') ||
-            code.includes('sys.') ||
-            code.includes('json.') ||
-            code.includes('__') ||
-            code.includes('f"') ||
-            code.includes("f'")
+            code.includes('print(') ||
+              code.includes('import ') ||
+              code.includes('def ') ||
+              code.includes('sys.') ||
+              code.includes('json.') ||
+              code.includes('__') ||
+              code.includes('f"') ||
+              code.includes("f'")
               ? 'python'
               // Default to Node.js for all other cases (including ambiguous)
               : 'node'
           );
-          
+
           // Use runCommand for consistent execution across all providers
           let result;
-          
+
           // Use base64 encoding for both runtimes for reliability and consistency
           const encoded = Buffer.from(code).toString('base64');
-          
+
           if (effectiveRuntime === 'python') {
             result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | python3`);
           } else {
@@ -195,10 +195,10 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
           // Check for syntax errors and throw them (similar to Vercel behavior)
           if (result.exitCode !== 0 && result.stderr) {
             // Check for common syntax error patterns
-            if (result.stderr.includes('SyntaxError') || 
-                result.stderr.includes('invalid syntax') ||
-                result.stderr.includes('Unexpected token') ||
-                result.stderr.includes('Unexpected identifier')) {
+            if (result.stderr.includes('SyntaxError') ||
+              result.stderr.includes('invalid syntax') ||
+              result.stderr.includes('Unexpected token') ||
+              result.stderr.includes('Unexpected identifier')) {
               throw new Error(`Syntax error: ${result.stderr.trim()}`);
             }
           }
@@ -216,7 +216,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
           if (error instanceof Error && error.message === 'exit status 1') {
             const actualStderr = (error as any)?.result?.stderr || '';
             const isSyntaxError = actualStderr.includes('SyntaxError');
-            
+
             if (isSyntaxError) {
               // For syntax errors, throw
               const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
@@ -233,7 +233,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
               };
             }
           }
-          
+
           // Re-throw syntax errors
           if (error instanceof Error && error.message.includes('Syntax error')) {
             throw error;
@@ -337,6 +337,10 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox: E2BSandbox): E2BSandbox => {
+        return sandbox;
+      },
 
     }
   }

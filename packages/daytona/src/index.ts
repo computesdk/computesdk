@@ -364,9 +364,15 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
             throw new Error(`Failed to remove ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
-      }
+      },
+
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox: DaytonaSandbox): DaytonaSandbox => {
+        return sandbox;
+      },
 
       // Terminal operations not implemented - Daytona session API needs verification
+
     }
   }
 });
