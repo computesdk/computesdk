@@ -29,7 +29,7 @@ async function main() {
 
     // Create sandbox using compute singleton - auto-detects Python runtime
     console.log('Creating Modal sandbox for Python...');
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
 
     console.log('Created Modal sandbox:', sandbox.sandboxId);
 

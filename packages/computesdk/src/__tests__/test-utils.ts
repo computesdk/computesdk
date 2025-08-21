@@ -13,6 +13,7 @@ import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry } from 
 export class MockSandbox implements Sandbox {
   readonly sandboxId = `mock-sandbox-${Math.random().toString(36).substr(2, 9)}`
   readonly provider = 'mock'
+  readonly instance = {}  // Mock native instance
 
   async runCode(code: string): Promise<ExecutionResult> {
     return {
@@ -46,6 +47,16 @@ export class MockSandbox implements Sandbox {
       createdAt: new Date(),
       timeout: 30000
     }
+  }
+
+  async getUrl(options: { port: number; protocol?: string }): Promise<string> {
+    const protocol = options.protocol || 'https'
+    return `${protocol}://${options.port}-${this.sandboxId}.mock.dev`
+  }
+
+  getProvider(): Provider {
+    // This will be set by the MockProvider when creating sandboxes
+    return (this as any)._mockProvider
   }
 
   async kill(): Promise<void> {
@@ -94,16 +105,22 @@ export class MockSandbox implements Sandbox {
 export class MockProvider implements Provider {
   readonly name = 'mock'
   readonly sandbox = {
-    async create(options?: any): Promise<Sandbox> {
-      return new MockSandbox()
+    create: async (options?: any): Promise<Sandbox> => {
+      const sandbox = new MockSandbox()
+      ;(sandbox as any)._mockProvider = this
+      return sandbox
     },
-    async getById(sandboxId: string): Promise<Sandbox | null> {
-      return new MockSandbox()
+    getById: async (sandboxId: string): Promise<Sandbox | null> => {
+      const sandbox = new MockSandbox()
+      ;(sandbox as any)._mockProvider = this
+      return sandbox
     },
-    async list(): Promise<Sandbox[]> {
-      return [new MockSandbox()]
+    list: async (): Promise<Sandbox[]> => {
+      const sandbox = new MockSandbox()
+      ;(sandbox as any)._mockProvider = this
+      return [sandbox]
     },
-    async destroy(sandboxId: string): Promise<void> {
+    destroy: async (sandboxId: string): Promise<void> => {
       // Mock destroy
     }
   }

@@ -22,7 +22,7 @@ async function main() {
     compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
 
     // Create sandbox using compute singleton
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
 
     console.log('Created E2B sandbox:', sandbox.sandboxId);
 
@@ -45,23 +45,6 @@ async function main() {
     await sandbox.filesystem.mkdir('/tmp/data');
     const files = await sandbox.filesystem.readdir('/tmp');
     console.log('Files in /tmp:', files.map(f => f.name));
-
-    // Terminal operations
-    console.log('\n--- Terminal Operations ---');
-
-    // Create interactive terminal
-    const terminal = await sandbox.terminal.create();
-    console.log('Created terminal with PID:', terminal.pid);
-
-    // Send commands
-    await terminal.write('echo "Hello from terminal!"\n');
-    
-    // List active terminals
-    const terminals = await sandbox.terminal.list();
-    console.log('Active terminals:', terminals.length);
-
-    // Clean up terminal
-    await terminal.kill();
 
     // Data science example
     console.log('\n--- Data Science ---');

@@ -37,6 +37,8 @@ jobs:
         VERCEL_TEAM_ID: ""
         VERCEL_PROJECT_ID: ""
         DAYTONA_API_KEY: ""
+        MODAL_TOKEN_ID: ""
+        MODAL_TOKEN_SECRET: ""
     
     - name: Run type checking
       run: pnpm typecheck
@@ -51,7 +53,7 @@ jobs:
     
     strategy:
       matrix:
-        provider: [e2b, vercel, daytona]
+        provider: [e2b, vercel, daytona, modal]
       fail-fast: false
     
     steps:
@@ -108,4 +110,17 @@ jobs:
           pnpm --filter @computesdk/daytona test
         else
           echo "Skipping Daytona integration tests - no API key provided"
+        fi
+        
+    - name: Run Modal Integration Tests
+      if: matrix.provider == 'modal'
+      env:
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      run: |
+        if [ -n "$MODAL_TOKEN_ID" ] && [ -n "$MODAL_TOKEN_SECRET" ]; then
+          echo "Running Modal integration tests with real API..."
+          pnpm --filter @computesdk/modal test
+        else
+          echo "Skipping Modal integration tests - missing required secrets"
         fi

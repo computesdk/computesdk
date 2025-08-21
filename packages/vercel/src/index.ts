@@ -308,6 +308,26 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           }
         };
       },
+
+      getUrl: async (sandbox: VercelSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        try {
+          // Use Vercel's built-in domain method to get the real domain
+          let url = sandbox.domain(options.port);
+          
+          // If a specific protocol is requested, replace the URL's protocol
+          if (options.protocol) {
+            const urlObj = new URL(url);
+            urlObj.protocol = options.protocol + ':';
+            url = urlObj.toString();
+          }
+          
+          return url;
+        } catch (error) {
+          throw new Error(
+            `Failed to get Vercel domain for port ${options.port}: ${error instanceof Error ? error.message : String(error)}. Ensure the port has an associated route.`
+          );
+        }
+      },
     }
   }
 });

@@ -240,6 +240,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
   return {
     sandboxId: 'mock-sandbox-123',
     provider: providerName,
+    instance: {}, // Mock native instance
     
     runCode: async (code: string, runtime?: string): Promise<ExecutionResult> => {
       // Simulate realistic code execution
@@ -324,6 +325,11 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       timeout: 300000,
       metadata: {}
     }),
+
+    getUrl: async (options: { port: number; protocol?: string }): Promise<string> => {
+      const { port, protocol = 'https' } = options;
+      return `${protocol}://mock-sandbox-123-${port}.example.com`;
+    },
     
     kill: async (): Promise<void> => {
       // Mock implementation
@@ -393,6 +399,18 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       }
     },
     
+    getProvider: () => {
+      // Return a mock provider for testing
+      return {
+        name: providerName,
+        sandbox: {
+          create: async () => { throw new Error('Not implemented in mock'); },
+          getById: async () => { throw new Error('Not implemented in mock'); },
+          list: async () => { throw new Error('Not implemented in mock'); },
+          destroy: async () => { throw new Error('Not implemented in mock'); }
+        }
+      };
+    }
 
   };
 }

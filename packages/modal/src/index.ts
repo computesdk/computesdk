@@ -45,6 +45,37 @@ interface ModalSandbox {
 }
 
 /**
+ * Detect runtime from code content
+ */
+function detectRuntime(code: string): Runtime {
+  // Strong Node.js indicators
+  if (code.includes('console.log') || 
+      code.includes('process.') ||
+      code.includes('require(') ||
+      code.includes('module.exports') ||
+      code.includes('__dirname') ||
+      code.includes('__filename') ||
+      code.includes('throw new Error') ||  // JavaScript error throwing
+      code.includes('new Error(')) {
+    return 'node';
+  }
+
+  // Strong Python indicators  
+  if (code.includes('print(') || 
+      code.includes('import ') ||
+      code.includes('def ') ||
+      code.includes('sys.') ||
+      code.includes('json.') ||
+      code.includes('f"') ||
+      code.includes("f'")) {
+    return 'python';
+  }
+
+  // Default to Python for Modal
+  return 'python';
+}
+
+/**
  * Create a Modal provider instance using the factory pattern
  */
 export const modal = createProvider<ModalSandbox, ModalConfig>({
@@ -156,54 +187,45 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         const startTime = Date.now();
 
         try {
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || (
-            // Strong Python indicators
-            code.includes('print(') || 
-            code.includes('import ') ||
-            code.includes('def ') ||
-            code.includes('sys.') ||
-            code.includes('json.') ||
-            code.includes('__') ||
-            code.includes('f"') ||
-            code.includes("f'")
-              ? 'python'
-              // Default to Python for Modal (primarily Python-focused)
-              : 'python'
-          );
+          // Auto-detect runtime from code if not specified
+          const detectedRuntime = runtime || detectRuntime(code);
           
-          // Modal primarily supports Python execution
-          if (effectiveRuntime !== 'python') {
-            throw new Error('Modal provider currently only supports Python runtime');
+          // Create appropriate sandbox and command for the runtime
+          let executionSandbox = modalSandbox.sandbox;
+          let command: string[];
+          let shouldCleanupSandbox = false;
+          
+          if (detectedRuntime === 'node') {
+            // For Node.js execution, create a Node.js sandbox dynamically
+            const app = await App.lookup('computesdk-modal', { createIfMissing: true });
+            const nodeImage = await app.imageFromRegistry('node:20-alpine');
+            executionSandbox = await app.createSandbox(nodeImage);
+            command = ['node', '-e', code];
+            shouldCleanupSandbox = true; // Clean up temporary Node.js sandbox
+          } else {
+            // Use existing Python sandbox for Python code
+            command = ['python3', '-c', code];
           }
 
-          // Execute code using Modal's exec method
-          // Use python3 with -c flag to execute code directly
-          const process = await modalSandbox.sandbox.exec(['python3', '-c', code]);
-          
-          // Wait for process completion
+          const process = await executionSandbox.exec(command, {
+            stdout: 'pipe',
+            stderr: 'pipe'
+          });
+
+          // Use working stream reading pattern from debug
+          const [stdout, stderr] = await Promise.all([
+            process.stdout.readText(),
+            process.stderr.readText()
+          ]);
+
           const exitCode = await process.wait();
           
-          // Read stdout and stderr from the process streams
-          let stdout = '';
-          let stderr = '';
-          
-          // Handle Modal's stream objects
-          if (process.stdout && typeof process.stdout.read === 'function') {
+          // Clean up temporary Node.js sandbox if created
+          if (shouldCleanupSandbox && executionSandbox !== modalSandbox.sandbox) {
             try {
-              const stdoutData = await process.stdout.read();
-              stdout = typeof stdoutData === 'string' ? stdoutData : new TextDecoder().decode(stdoutData);
+              await executionSandbox.terminate();
             } catch (e) {
-              // If reading fails, stdout remains empty
-            }
-          }
-          
-          if (process.stderr && typeof process.stderr.read === 'function') {
-            try {
-              const stderrData = await process.stderr.read();
-              stderr = typeof stderrData === 'string' ? stderrData : new TextDecoder().decode(stderrData);
-            } catch (e) {
-              // If reading fails, stderr remains empty
+              // Ignore cleanup errors
             }
           }
 
@@ -239,35 +261,19 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         const startTime = Date.now();
 
         try {
-          // Execute command using Modal's exec method
-          const commandArray = [command, ...args];
-          const process = await modalSandbox.sandbox.exec(commandArray);
-          
-          // Wait for process completion
+          // Execute command using Modal's exec method with working pattern
+          const process = await modalSandbox.sandbox.exec([command, ...args], {
+            stdout: 'pipe',
+            stderr: 'pipe'
+          });
+
+          // Use working stream reading pattern from debug
+          const [stdout, stderr] = await Promise.all([
+            process.stdout.readText(),
+            process.stderr.readText()
+          ]);
+
           const exitCode = await process.wait();
-          
-          // Read stdout and stderr from the process streams
-          let stdout = '';
-          let stderr = '';
-          
-          // Handle Modal's stream objects
-          if (process.stdout && typeof process.stdout.read === 'function') {
-            try {
-              const stdoutData = await process.stdout.read();
-              stdout = typeof stdoutData === 'string' ? stdoutData : new TextDecoder().decode(stdoutData);
-            } catch (e) {
-              // If reading fails, stdout remains empty
-            }
-          }
-          
-          if (process.stderr && typeof process.stderr.read === 'function') {
-            try {
-              const stderrData = await process.stderr.read();
-              stderr = typeof stderrData === 'string' ? stderrData : new TextDecoder().decode(stderrData);
-            } catch (e) {
-              // If reading fails, stderr remains empty
-            }
-          }
 
           return {
             stdout: stdout || '',
@@ -318,6 +324,33 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         };
       },
 
+      getUrl: async (modalSandbox: ModalSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        try {
+          // Use Modal's built-in tunnels method to get tunnel information
+          const tunnels = await modalSandbox.sandbox.tunnels();
+          const tunnel = tunnels[options.port];
+          
+          if (!tunnel) {
+            throw new Error(`No tunnel found for port ${options.port}. Available ports: ${Object.keys(tunnels).join(', ')}`);
+          }
+          
+          let url = tunnel.url;
+          
+          // If a specific protocol is requested, replace the URL's protocol
+          if (options.protocol) {
+            const urlObj = new URL(url);
+            urlObj.protocol = options.protocol + ':';
+            url = urlObj.toString();
+          }
+          
+          return url;
+        } catch (error) {
+          throw new Error(
+            `Failed to get Modal tunnel URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
       // Optional filesystem methods - Modal supports filesystem operations
       filesystem: {
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
@@ -339,18 +372,25 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             
             return content;
           } catch (error) {
-            // Fallback to using cat command if direct file API fails
+            // Fallback to using cat command with working stream pattern
             try {
-              const process = await modalSandbox.sandbox.exec(['cat', path]);
-              await process.wait();
-              
-              let content = '';
-              if (process.stdout && typeof process.stdout.read === 'function') {
-                const data = await process.stdout.read();
-                content = typeof data === 'string' ? data : new TextDecoder().decode(data);
+              const process = await modalSandbox.sandbox.exec(['cat', path], {
+                stdout: 'pipe',
+                stderr: 'pipe'
+              });
+
+              const [content, stderr] = await Promise.all([
+                process.stdout.readText(),
+                process.stderr.readText()
+              ]);
+
+              const exitCode = await process.wait();
+
+              if (exitCode !== 0) {
+                throw new Error(`cat failed: ${stderr}`);
               }
-              
-              return content;
+
+              return content.trim(); // Remove extra newlines
             } catch (fallbackError) {
               throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
             }
@@ -372,12 +412,23 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
               await file.close();
             }
           } catch (error) {
-            // Fallback to using echo command if direct file API fails
+            // Fallback to using shell command with proper escaping
             try {
-              // Escape content for shell command
-              const escapedContent = content.replace(/'/g, "'\"'\"'");
-              const process = await modalSandbox.sandbox.exec(['sh', '-c', `echo '${escapedContent}' > "${path}"`]);
-              await process.wait();
+              const process = await modalSandbox.sandbox.exec(['sh', '-c', `printf '%s' "${content.replace(/"/g, '\\"')}" > "${path}"`], {
+                stdout: 'pipe',
+                stderr: 'pipe'
+              });
+
+              const [, stderr] = await Promise.all([
+                process.stdout.readText(),
+                process.stderr.readText()
+              ]);
+
+              const exitCode = await process.wait();
+
+              if (exitCode !== 0) {
+                throw new Error(`write failed: ${stderr}`);
+              }
             } catch (fallbackError) {
               throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
             }
@@ -386,16 +437,20 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           try {
-            const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path]);
+            const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], {
+              stdout: 'pipe',
+              stderr: 'pipe'
+            });
+
+            const [, stderr] = await Promise.all([
+              process.stdout.readText(),
+              process.stderr.readText()
+            ]);
+
             const exitCode = await process.wait();
-            
+
             if (exitCode !== 0) {
-              let stderr = '';
-              if (process.stderr && typeof process.stderr.read === 'function') {
-                const data = await process.stderr.read();
-                stderr = typeof data === 'string' ? data : new TextDecoder().decode(data);
-              }
-              throw new Error(`mkdir failed with exit code ${exitCode}: ${stderr}`);
+              throw new Error(`mkdir failed: ${stderr}`);
             }
           } catch (error) {
             throw new Error(`Failed to create directory ${path}: ${error instanceof Error ? error.message : String(error)}`);
@@ -404,42 +459,42 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
         readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
           try {
-            const process = await modalSandbox.sandbox.exec(['ls', '-la', '--time-style=iso', path]);
-            const exitCode = await process.wait();
-            
-            if (exitCode !== 0) {
-              let stderr = '';
-              if (process.stderr && typeof process.stderr.read === 'function') {
-                const data = await process.stderr.read();
-                stderr = typeof data === 'string' ? data : new TextDecoder().decode(data);
-              }
-              throw new Error(`ls failed with exit code ${exitCode}: ${stderr}`);
-            }
-            
-            let output = '';
-            if (process.stdout && typeof process.stdout.read === 'function') {
-              const data = await process.stdout.read();
-              output = typeof data === 'string' ? data : new TextDecoder().decode(data);
-            }
-            
-            const lines = output.split('\n').slice(1); // Skip header line
-            
-            return lines.filter(line => line.trim()).map(line => {
-              const parts = line.trim().split(/\s+/);
-              const permissions = parts[0] || '';
-              const size = parseInt(parts[4]) || 0;
-              const dateStr = (parts[5] || '') + ' ' + (parts[6] || '');
-              const date = dateStr.trim() ? new Date(dateStr) : new Date();
-              const name = parts.slice(8).join(' ') || 'unknown';
-              
-              return {
-                name,
-                path: `${path}/${name}`,
-                isDirectory: permissions.startsWith('d'),
-                size,
-                lastModified: isNaN(date.getTime()) ? new Date() : date
-              };
+            const process = await modalSandbox.sandbox.exec(['ls', '-la', '--time-style=iso', path], {
+              stdout: 'pipe',
+              stderr: 'pipe'
             });
+
+            const [output, stderr] = await Promise.all([
+              process.stdout.readText(),
+              process.stderr.readText()
+            ]);
+
+            const exitCode = await process.wait();
+
+            if (exitCode !== 0) {
+              throw new Error(`ls failed: ${stderr}`);
+            }
+
+            const lines = output.split('\n').slice(1); // Skip header
+
+            return lines
+              .filter((line: string) => line.trim())
+              .map((line: string) => {
+                const parts = line.trim().split(/\s+/);
+                const permissions = parts[0] || '';
+                const size = parseInt(parts[4]) || 0;
+                const dateStr = (parts[5] || '') + ' ' + (parts[6] || '');
+                const date = dateStr.trim() ? new Date(dateStr) : new Date();
+                const name = parts.slice(8).join(' ') || parts[parts.length - 1] || 'unknown';
+
+                return {
+                  name,
+                  path: `${path}/${name}`.replace('//', '/'),
+                  isDirectory: permissions.startsWith('d'),
+                  size,
+                  lastModified: isNaN(date.getTime()) ? new Date() : date
+                };
+              });
           } catch (error) {
             throw new Error(`Failed to read directory ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
@@ -457,16 +512,20 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
         remove: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           try {
-            const process = await modalSandbox.sandbox.exec(['rm', '-rf', path]);
+            const process = await modalSandbox.sandbox.exec(['rm', '-rf', path], {
+              stdout: 'pipe',
+              stderr: 'pipe'
+            });
+
+            const [, stderr] = await Promise.all([
+              process.stdout.readText(),
+              process.stderr.readText()
+            ]);
+
             const exitCode = await process.wait();
-            
+
             if (exitCode !== 0) {
-              let stderr = '';
-              if (process.stderr && typeof process.stderr.read === 'function') {
-                const data = await process.stderr.read();
-                stderr = typeof data === 'string' ? data : new TextDecoder().decode(data);
-              }
-              throw new Error(`rm failed with exit code ${exitCode}: ${stderr}`);
+              throw new Error(`rm failed: ${stderr}`);
             }
           } catch (error) {
             throw new Error(`Failed to remove ${path}: ${error instanceof Error ? error.message : String(error)}`);

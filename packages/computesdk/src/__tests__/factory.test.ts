@@ -40,7 +40,8 @@ describe('Factory', () => {
           createdAt: new Date(),
           timeout: 300000,
           metadata: {}
-        } as SandboxInfo)
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev')
       }
 
       const providerFactory = createProvider({
@@ -97,7 +98,8 @@ describe('Factory', () => {
           status: 'running',
           createdAt: new Date(),
           timeout: 300000
-        } as SandboxInfo)
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev')
       }
 
       const providerFactory = createProvider({
@@ -140,7 +142,8 @@ describe('Factory', () => {
         destroy: vi.fn().mockResolvedValue(undefined),
         runCode: vi.fn().mockResolvedValue({} as ExecutionResult),
         runCommand: vi.fn().mockResolvedValue({} as ExecutionResult),
-        getInfo: vi.fn().mockResolvedValue({} as SandboxInfo)
+        getInfo: vi.fn().mockResolvedValue({} as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev')
         // No filesystem methods provided
       }
 

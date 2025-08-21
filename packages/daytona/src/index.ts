@@ -244,6 +244,27 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         };
       },
 
+      getUrl: async (sandbox: DaytonaSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        try {
+          // Use Daytona's built-in getPreviewLink method
+          const previewInfo = await sandbox.getPreviewLink(options.port);
+          let url = previewInfo.url;
+          
+          // If a specific protocol is requested, replace the URL's protocol
+          if (options.protocol) {
+            const urlObj = new URL(url);
+            urlObj.protocol = options.protocol + ':';
+            url = urlObj.toString();
+          }
+          
+          return url;
+        } catch (error) {
+          throw new Error(
+            `Failed to get Daytona preview URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
       // Filesystem operations via terminal commands
       filesystem: {
         readFile: async (sandbox: DaytonaSandbox, path: string): Promise<string> => {
