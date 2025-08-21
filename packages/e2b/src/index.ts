@@ -326,6 +326,10 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox: E2BSandbox): E2BSandbox => {
+        return sandbox;
+      },
 
     }
   }

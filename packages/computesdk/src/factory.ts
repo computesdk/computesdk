@@ -33,6 +33,9 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
   
+  // Optional provider-specific typed getInstance method
+  getInstance?: (sandbox: TSandbox) => TSandbox;
+  
   // Optional filesystem methods
   filesystem?: {
     readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<string>;
@@ -250,6 +253,11 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
   }
 
   getInstance<T = TSandbox>(): T {
+    // Use provider-specific typed getInstance if available
+    if (this.methods.getInstance) {
+      return this.methods.getInstance(this.sandbox) as unknown as T;
+    }
+    // Fallback to generic casting
     return this.sandbox as unknown as T;
   }
 
