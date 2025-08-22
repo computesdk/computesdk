@@ -27,6 +27,65 @@ export interface RunloopConfig {
 }
 
 /**
+ * Options for creating snapshots
+ */
+export interface CreateSnapshotOptions {
+  /** Optional name for the snapshot */
+  name?: string;
+  /** Optional metadata for the snapshot */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Options for listing snapshots
+ */
+export interface ListSnapshotsOptions {
+  /** Filter by sandbox ID */
+  sandboxId?: string;
+  /** Limit the number of results */
+  limit?: number;
+}
+
+/**
+ * Options for creating blueprint templates
+ */
+export interface CreateBlueprintTemplateOptions {
+  /** Name of the blueprint template */
+  name: string;
+  /** Custom Dockerfile content */
+  dockerfile?: string;
+  /** System setup commands to run during blueprint creation */
+  systemSetupCommands?: string[];
+  /** Launch commands to run when starting a devbox from this blueprint */
+  launchCommands?: string[];
+  /** File mounts as key-value pairs (path -> content) */
+  fileMounts?: Record<string, string>;
+  /** Code repository mounts */
+  codeMounts?: Array<{
+    repoName: string;
+    repoOwner: string;
+    token?: string;
+    installCommand?: string;
+  }>;
+  /** Resource size for devboxes created from this blueprint */
+  resourceSize?: 'X_SMALL' | 'SMALL' | 'MEDIUM' | 'LARGE' | 'X_LARGE' | 'XX_LARGE' | 'CUSTOM_SIZE';
+  /** CPU architecture */
+  architecture?: 'x86_64' | 'arm64';
+  /** Custom CPU cores (requires CUSTOM_SIZE) */
+  customCpuCores?: number;
+  /** Custom memory in GB (requires CUSTOM_SIZE) */
+  customMemoryGb?: number;
+  /** Custom disk size (requires CUSTOM_SIZE) */
+  customDiskSize?: number;
+  /** Available ports for the devbox */
+  availablePorts?: number[];
+  /** Action to take when devbox is idle */
+  afterIdle?: { action: string; timeSeconds: number };
+  /** Keep alive time in seconds */
+  keepAliveTimeSeconds?: number;
+}
+
+/**
  * Create a Runloop provider instance using the factory pattern
  */
 export const runloop = createProvider<any, RunloopConfig>({
@@ -57,7 +116,17 @@ export const runloop = createProvider<any, RunloopConfig>({
 
           // Use blueprint if specified
           if (config.blueprint || options?.templateId) {
-            devboxParams.blueprintId = config.blueprint || options?.templateId;
+            const templateId = config.blueprint || options?.templateId;
+            
+            // Check template prefix to determine parameter type
+            if (templateId?.startsWith('bpt_')) {
+              devboxParams.blueprintId = templateId;
+            } else if (templateId?.startsWith('snp_')) {
+              devboxParams.snapshotId = templateId;
+            } else {
+              // Default to blueprintId for backward compatibility
+              devboxParams.blueprintId = templateId;
+            }
           }
 
           // Add environment variables if specified
@@ -342,6 +411,209 @@ export const runloop = createProvider<any, RunloopConfig>({
       // Provider-specific typed getInstance method
       getInstance: (sandbox: any): any => {
         return sandbox;
+      },
+
+      // Snapshot management methods
+      createSnapshot: async (config: RunloopConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error('Missing Runloop API key for snapshot creation');
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          const snapshotParams: any = {};
+          if (options?.name) {
+            snapshotParams.name = options.name;
+          }
+          if (options?.metadata) {
+            snapshotParams.metadata = options.metadata;
+          }
+
+          const snapshot = await client.devboxes.snapshotDisk(sandboxId, snapshotParams);
+          return snapshot;
+        } catch (error) {
+          throw new Error(
+            `Failed to create snapshot for sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      listSnapshots: async (config: RunloopConfig, options?: ListSnapshotsOptions) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error('Missing Runloop API key for listing snapshots');
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          const listParams: any = {};
+          if (options?.limit) {
+            listParams.limit = options.limit;
+          }
+
+          const response = await client.devboxes.listDiskSnapshots(listParams);
+          return response || [];
+        } catch (error) {
+          throw new Error(
+            `Failed to list snapshots: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      deleteSnapshot: async (config: RunloopConfig, snapshotId: string) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error('Missing Runloop API key for snapshot deletion');
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          await client.devboxes.deleteDiskSnapshot(snapshotId);
+        } catch (error) {
+          throw new Error(
+            `Failed to delete snapshot ${snapshotId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      // Blueprint template management methods
+      createBlueprintTemplate: async (config: RunloopConfig, options: CreateBlueprintTemplateOptions) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error('Missing Runloop API key for blueprint template creation');
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          const blueprintParams: any = {
+            name: options.name,
+          };
+
+          if (options.dockerfile) {
+            blueprintParams.dockerfile = options.dockerfile;
+          }
+
+          if (options.systemSetupCommands) {
+            blueprintParams.system_setup_commands = options.systemSetupCommands;
+          }
+
+          if (options.fileMounts) {
+            blueprintParams.file_mounts = options.fileMounts;
+          }
+
+          if (options.codeMounts) {
+            blueprintParams.code_mounts = options.codeMounts.map(mount => ({
+              repo_name: mount.repoName,
+              repo_owner: mount.repoOwner,
+              token: mount.token,
+              install_command: mount.installCommand,
+            }));
+          }
+
+          // Add launch parameters if specified
+          const launchParameters: any = {};
+          if (options.launchCommands) {
+            launchParameters.launch_commands = options.launchCommands;
+          }
+          if (options.resourceSize) {
+            launchParameters.resource_size_request = options.resourceSize;
+          }
+          if (options.architecture) {
+            launchParameters.architecture = options.architecture;
+          }
+          if (options.customCpuCores) {
+            launchParameters.custom_cpu_cores = options.customCpuCores;
+          }
+          if (options.customMemoryGb) {
+            launchParameters.custom_gb_memory = options.customMemoryGb;
+          }
+          if (options.customDiskSize) {
+            launchParameters.custom_disk_size = options.customDiskSize;
+          }
+          if (options.availablePorts) {
+            launchParameters.available_ports = options.availablePorts;
+          }
+          if (options.afterIdle) {
+            launchParameters.after_idle = options.afterIdle;
+          }
+          if (options.keepAliveTimeSeconds) {
+            launchParameters.keep_alive_time_seconds = options.keepAliveTimeSeconds;
+          }
+
+          if (Object.keys(launchParameters).length > 0) {
+            blueprintParams.launch_parameters = launchParameters;
+          }
+
+          const blueprint = await client.blueprints.create(blueprintParams);
+          return blueprint;
+        } catch (error) {
+          throw new Error(
+            `Failed to create blueprint template: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      listBlueprintTemplates: async (config: RunloopConfig, options?: { limit?: number }) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error('Missing Runloop API key for listing blueprint templates');
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          const listParams: any = {};
+          if (options?.limit) {
+            listParams.limit = options.limit;
+          }
+
+          const response = await client.blueprints.list(listParams);
+          return response || [];
+        } catch (error) {
+          throw new Error(
+            `Failed to list blueprint templates: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      deleteBlueprintTemplate: async (config: RunloopConfig, blueprintId: string) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error('Missing Runloop API key for blueprint template deletion');
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          await client.blueprints.delete(blueprintId);
+        } catch (error) {
+          throw new Error(
+            `Failed to delete blueprint template ${blueprintId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
     }
   }
