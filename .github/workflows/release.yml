@@ -58,23 +58,13 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Check for changesets
-        id: check
-        run: |
-          if [ -d ".changeset" ] && [ "$(ls -A .changeset/*.md 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo "has_changesets=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_changesets=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create .npmrc
-        if: steps.check.outputs.has_changesets == 'true'
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-
-      - name: Version and Publish to NPM
-        if: steps.check.outputs.has_changesets == 'true'
-        run: |
-          pnpm changeset version
-          pnpm changeset publish
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          publish: pnpm changeset publish
+          title: "Version Packages"
+          commit: "Version Packages"
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
