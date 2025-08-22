@@ -1,5 +1,17 @@
 # computesdk
 
+## 1.2.0
+
+### Minor Changes
+
+- 1fa3690: Adding instance typing
+- 485f706: adding in getInstance w/ typing
+- 2b537df: improving standard methods on provider
+
+### Patch Changes
+
+- 8d807e6: Updating meta
+
 ## 1.1.0
 
 ### Minor Changes
