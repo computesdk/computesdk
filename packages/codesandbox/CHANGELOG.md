@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- 1fa3690: Adding instance typing
+- 485f706: adding in getInstance w/ typing
+- 2b537df: improving standard methods on provider
+
+### Patch Changes
+
+- Updated dependencies [1fa3690]
+- Updated dependencies [485f706]
+- Updated dependencies [2b537df]
+- Updated dependencies [8d807e6]
+  - computesdk@1.2.0
+
 All notable changes to the CodeSandbox provider will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -8,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-01-20
 
 ### Added
+
 - Initial release of CodeSandbox provider for ComputeSDK
 - **Sandbox Management**: Create, resume, hibernate, and destroy sandboxes using CodeSandbox SDK
 - **Code Execution**: Support for both Python and Node.js runtime environments
@@ -25,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Comprehensive Testing**: Complete test suite using ComputeSDK test utilities
 
 ### Implementation Details
+
 - Uses `@codesandbox/sdk` v2.0.7 for all sandbox operations
 - Implements factory pattern using `createProvider()` from ComputeSDK
 - Supports CodeSandbox-specific features like snapshot/resume and hibernation
@@ -33,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proper error categorization for different failure scenarios
 
 ### API Methods Implemented
+
 - `sandbox.create()` - Create new sandboxes with optional template support
 - `sandbox.getById()` - Resume existing sandboxes by ID
 - `sandbox.destroy()` - Hibernate sandboxes (preserves state)
@@ -42,10 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `filesystem.*` - Complete filesystem operations suite
 
 ### Dependencies
+
 - `@codesandbox/sdk` ^2.0.7 - CodeSandbox SDK for sandbox management
 - `computesdk` workspace dependency - Core ComputeSDK framework
 
 ### Documentation
+
 - Comprehensive README with usage examples and API reference
 - TypeScript interface documentation
 - Error handling guide
