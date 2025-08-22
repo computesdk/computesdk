@@ -1,5 +1,16 @@
 # @computesdk/e2b
 
+## 1.3.0
+
+### Minor Changes
+
+- fdb1271: Releasing sandbox instances via getInstance method
+
+### Patch Changes
+
+- Updated dependencies [fdb1271]
+  - computesdk@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes
