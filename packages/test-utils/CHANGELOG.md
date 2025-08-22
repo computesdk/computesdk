@@ -1,5 +1,13 @@
 # @computesdk/test-utils
 
+## 1.2.0
+
+### Minor Changes
+
+- 1fa3690: Adding instance typing
+- 485f706: adding in getInstance w/ typing
+- 2b537df: improving standard methods on provider
+
 ## 1.1.0
 
 ### Minor Changes
