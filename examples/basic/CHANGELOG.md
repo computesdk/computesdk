@@ -1,5 +1,17 @@
 # @computesdk/example-basic
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [fdb1271]
+  - @computesdk/codesandbox@1.2.0
+  - computesdk@1.3.0
+  - @computesdk/daytona@1.3.0
+  - @computesdk/e2b@1.3.0
+  - @computesdk/modal@1.2.0
+  - @computesdk/vercel@1.3.0
+
 ## 0.2.0
 
 ### Minor Changes
