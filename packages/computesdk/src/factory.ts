@@ -252,13 +252,15 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
     }
   }
 
-  getInstance<T = TSandbox>(): T {
+  getInstance(): TSandbox;
+  getInstance<T extends TSandbox>(): T;
+  getInstance<T extends TSandbox = TSandbox>(): T {
     // Use provider-specific typed getInstance if available
     if (this.methods.getInstance) {
-      return this.methods.getInstance(this.sandbox) as unknown as T;
+      return this.methods.getInstance(this.sandbox) as T;
     }
     // Fallback to generic casting
-    return this.sandbox as unknown as T;
+    return this.sandbox as T;
   }
 
   async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
