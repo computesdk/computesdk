@@ -1,5 +1,11 @@
 # @computesdk/test-utils
 
+## 1.3.0
+
+### Minor Changes
+
+- fdb1271: Releasing sandbox instances via getInstance method
+
 ## 1.2.0
 
 ### Minor Changes
