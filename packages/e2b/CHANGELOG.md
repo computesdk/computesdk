@@ -1,5 +1,16 @@
 # @computesdk/e2b
 
+## 1.4.0
+
+### Minor Changes
+
+- 3b23385: swtiching to core e2b package (whoops)
+
+### Patch Changes
+
+- Updated dependencies [3b23385]
+  - computesdk@1.4.0
+
 ## 1.3.1
 
 ### Patch Changes
