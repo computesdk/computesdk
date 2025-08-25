@@ -19,15 +19,15 @@ await sandbox.getInstance().setTimeout(minDurationMs);
 ```
 
 **Technical Details:**
-- Fixed factory's `getInstance()` method to use proper generic constraints
-- Updated Sandbox interface with function overloads for better type inference  
+- Fixed factory's `getInstance()` method to use proper generic constraints 
+- Simplified Sandbox interface to single generic `getInstance<T = any>(): T` signature
 - Preserved backward compatibility with explicit type parameters
 - Added comprehensive test coverage for type inference scenarios
 
 **Root Cause:** 
-The factory was casting provider-specific types through `unknown`, breaking TypeScript's type inference chain.
+The Sandbox interface had conflicting overloads `getInstance(): any; getInstance<T>(): T;` where TypeScript always chose the first overload returning `any`, breaking type inference.
 
 **Solution:**
-- Constrained generic `T` to extend `TSandbox` for safe casting
-- Added overloaded signatures to support both implicit and explicit typing
-- Removed unnecessary `unknown` type casting that broke inference
+- Removed problematic `getInstance(): any;` overload from Sandbox interface
+- Factory implementation now properly preserves provider-specific types through generic constraints
+- Provider-specific `getInstance` methods can now return their proper types without casting through `any`
