@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@e2b/code-interpreter": "^1.5.1",
+    "e2b": "^2.0.1",
     "computesdk": "workspace:*"
   },
   "keywords": [

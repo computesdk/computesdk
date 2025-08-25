@@ -164,8 +164,7 @@ export interface Sandbox {
   /** Get the provider instance that created this sandbox */
   getProvider(): Provider;
   /** Get the native provider sandbox instance with proper typing */
-  getInstance(): any;
-  getInstance<T>(): T;
+  getInstance<T = any>(): T;
   /** Kill the sandbox */
   kill(): Promise<void>;
   /** Destroy the sandbox and clean up resources */
