@@ -1,5 +1,15 @@
 # @computesdk/example-sveltekit
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [3b23385]
+  - computesdk@1.4.0
+  - @computesdk/e2b@1.4.0
+  - @computesdk/daytona@1.3.2
+  - @computesdk/vercel@1.3.2
+
 ## 0.1.6
 
 ### Patch Changes
