@@ -1,0 +1,20 @@
+name = "computesdk-cloudflare-test"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[env.test]
+vars = { NODE_ENV = "test" }
+
+[[env.test.durable_objects.bindings]]
+name = "Sandbox"
+class_name = "SandboxDO"
+script_name = "cloudflare-sandbox"
+
+[[env.test.kv_namespaces]]
+binding = "TEST_KV"
+id = "test-kv-namespace"
+preview_id = "test-kv-preview"
+
+[[env.test.r2_buckets]]
+binding = "TEST_BUCKET"
+bucket_name = "test-bucket"

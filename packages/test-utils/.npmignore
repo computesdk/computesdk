@@ -1,0 +1,12 @@
+# Development files
+src/
+tsconfig.json
+tsconfig.tsbuildinfo
+tsup.config.ts
+*.test.ts
+*.spec.ts
+
+# Build artifacts (except dist)
+node_modules/
+.git/
+*.log

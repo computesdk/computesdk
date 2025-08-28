@@ -24,11 +24,17 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.config.*'
       ]
-    }
+    },
+    // Support for top-level await in tests
+    pool: 'forks'
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')
     }
+  },
+  // Allow ES modules and dynamic imports
+  esbuild: {
+    target: 'node18'
   }
 })
