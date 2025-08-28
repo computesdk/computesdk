@@ -8,13 +8,14 @@
  * foundation but may need updates as the Modal API evolves.
  */
 
-import { createProvider } from 'computesdk';
+import { createProvider, createBackgroundCommand } from 'computesdk';
 import type { 
   ExecutionResult, 
   SandboxInfo, 
   Runtime,
   CreateSandboxOptions,
-  FileEntry
+  FileEntry,
+  RunCommandOptions
 } from 'computesdk';
 
 // Import Modal SDK
@@ -257,12 +258,15 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         }
       },
 
-      runCommand: async (modalSandbox: ModalSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (modalSandbox: ModalSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
+          // Handle background command execution
+          const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
+          
           // Execute command using Modal's exec method with working pattern
-          const process = await modalSandbox.sandbox.exec([command, ...args], {
+          const process = await modalSandbox.sandbox.exec([finalCommand, ...finalArgs], {
             stdout: 'pipe',
             stderr: 'pipe'
           });
@@ -281,7 +285,10 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             exitCode: exitCode || 0,
             executionTime: Date.now() - startTime,
             sandboxId: modalSandbox.sandboxId,
-            provider: 'modal'
+            provider: 'modal',
+            isBackground,
+            // For background commands, we can't get a real PID, but we can indicate it's running
+            ...(isBackground && { pid: -1 })
           };
         } catch (error) {
           // For command failures, return error info instead of throwing
@@ -291,7 +298,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             exitCode: 127, // Command not found exit code
             executionTime: Date.now() - startTime,
             sandboxId: modalSandbox.sandboxId,
-            provider: 'modal'
+            provider: 'modal',
+            isBackground: false // Error case, command didn't run as background
           };
         }
       },
