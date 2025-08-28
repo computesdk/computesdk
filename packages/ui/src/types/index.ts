@@ -45,6 +45,11 @@ export interface ComputeRequest {
   /** Command arguments (for runCommand action) */
   args?: string[];
   
+  /** Command options (for runCommand action) */
+  commandOptions?: {
+    background?: boolean;
+  };
+  
   /** Runtime environment */
   runtime?: Runtime;
   

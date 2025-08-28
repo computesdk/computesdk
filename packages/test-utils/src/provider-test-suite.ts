@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry } from 'computesdk';
+import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -92,6 +92,14 @@ export function createProviderTests(config: ProviderTestConfig) {
         
         expect(result).toBeDefined();
         expect(result.stdout).toContain('Hello from command');
+        expect(result.exitCode).toBe(0);
+      }, timeout);
+
+      it('should execute background commands', async () => {
+        const result = await sandbox.runCommand('sleep', ['1'], { background: true });
+        
+        expect(result).toBeDefined();
+        expect(result.isBackground).toBe(true);
         expect(result.exitCode).toBe(0);
       }, timeout);
 
@@ -281,7 +289,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       };
     },
     
-    runCommand: async (command: string, args?: string[]): Promise<ExecutionResult> => {
+    runCommand: async (command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult> => {
       const fullCommand = `${command} ${args?.join(' ') || ''}`.trim();
       
       if (command === 'echo' && args?.includes('Hello from command')) {
@@ -291,7 +299,9 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           exitCode: 0,
           executionTime: 10,
           sandboxId: 'mock-sandbox-123',
-          provider: providerName
+          provider: providerName,
+          isBackground: options?.background || false,
+          ...(options?.background && { pid: -1 })
         };
       }
       
@@ -302,7 +312,9 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           exitCode: 127,
           executionTime: 5,
           sandboxId: 'mock-sandbox-123',
-          provider: providerName
+          provider: providerName,
+          isBackground: options?.background || false,
+          ...(options?.background && { pid: -1 })
         };
       }
       
@@ -312,7 +324,9 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
         exitCode: 0,
         executionTime: 50,
         sandboxId: 'mock-sandbox-123',
-        provider: providerName
+        provider: providerName,
+        isBackground: options?.background || false,
+        ...(options?.background && { pid: -1 })
       };
     },
     
