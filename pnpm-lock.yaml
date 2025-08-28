@@ -306,6 +306,9 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
     devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20250826.0
+        version: 4.20250826.0
       '@computesdk/test-utils':
         specifier: workspace:*
         version: link:../test-utils
@@ -1062,6 +1065,9 @@ packages:
 
   '@cloudflare/sandbox@0.3.0':
     resolution: {integrity: sha512-l10QT0SdgluAy47gxnmuaGQIIDUkHKm80vs2W+8rEzus7zVOviMtLf8d0y/MCyVIRlI+jzFOIirCBUy0oVUfDw==}
+
+  '@cloudflare/workers-types@4.20250826.0':
+    resolution: {integrity: sha512-nAbTVI81wFSxbESRbfGRlfL4WYNvq8T46yr1ukypHL8O2xnbZfQnQhC7ftSBmDqov8HqQSdqcz9jCgLjVh61SQ==}
 
   '@codesandbox/api@1.1.3':
     resolution: {integrity: sha512-GHrxd/tL4CHy/+42Qx0RC65EHUH6jjzuRm+JcBgAlRcMCJPvSTANpoNgI6fQKofvEJIVc4ghqR7X87j6emEZyg==}
@@ -11031,6 +11037,8 @@ snapshots:
   '@cloudflare/sandbox@0.3.0':
     dependencies:
       '@cloudflare/containers': 0.0.25
+
+  '@cloudflare/workers-types@4.20250826.0': {}
 
   '@codesandbox/api@1.1.3':
     dependencies:

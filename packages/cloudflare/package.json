@@ -52,6 +52,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250826.0",
     "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
