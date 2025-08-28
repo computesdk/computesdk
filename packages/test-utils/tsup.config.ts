@@ -8,5 +8,5 @@ export default defineConfig({
   sourcemap: true,
   external: ['vitest'],
   // Use build-time-only tsconfig
-  tsconfig: './build/tsconfig.json'
+  tsconfig: './config/tsconfig.json'
 });
