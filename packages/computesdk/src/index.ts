@@ -23,7 +23,7 @@ export type {
 
 
 // Export provider factory for creating custom providers
-export { createProvider } from './factory';
+export { createProvider, createBackgroundCommand } from './factory';
 export type { ProviderConfig, SandboxMethods } from './factory';
 
 // Export error handling utilities (explicitly for clarity)

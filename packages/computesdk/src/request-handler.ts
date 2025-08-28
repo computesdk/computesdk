@@ -24,6 +24,11 @@ export interface ComputeRequest {
   path?: string;
   content?: string;
   
+  /** Command options (for runCommand action) */
+  commandOptions?: {
+    background?: boolean;
+  };
+  
   /** Sandbox creation options */
   options?: {
     runtime?: Runtime;
@@ -136,7 +141,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
     
     if (action === 'compute.sandbox.runCommand') {
       if (!body.command) throw new Error('command is required');
-      const result = await sandbox.runCommand(body.command, body.args);
+      const result = await sandbox.runCommand(body.command, body.args, body.commandOptions);
       return {
         success: true,
         sandboxId,
@@ -145,7 +150,9 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
           stdout: result.stdout,
           stderr: result.stderr,
           exitCode: result.exitCode,
-          executionTime: result.executionTime
+          executionTime: result.executionTime,
+          ...(result.isBackground && { isBackground: result.isBackground }),
+          ...(result.pid && { pid: result.pid })
         }
       };
     }

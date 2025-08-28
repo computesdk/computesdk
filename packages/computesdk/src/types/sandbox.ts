@@ -21,6 +21,14 @@ export type Runtime = 'node' | 'python';
 export type SandboxStatus = 'running' | 'stopped' | 'error';
 
 /**
+ * Options for running commands
+ */
+export interface RunCommandOptions {
+  /** Run command in background (non-blocking) */
+  background?: boolean;
+}
+
+/**
  * Result of code execution
  */
 export interface ExecutionResult {
@@ -36,6 +44,10 @@ export interface ExecutionResult {
   sandboxId: string;
   /** Provider that executed the code */
   provider: string;
+  /** Process ID for background jobs (if applicable) */
+  pid?: number;
+  /** Whether this command is running in background */
+  isBackground?: boolean;
 }
 
 /**
@@ -156,7 +168,7 @@ export interface Sandbox {
   /** Execute code in the sandbox */
   runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
   /** Execute shell commands */
-  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
+  runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult>;
   /** Get information about the sandbox */
   getInfo(): Promise<SandboxInfo>;
   /** Get URL for accessing the sandbox on a specific port */

@@ -95,6 +95,14 @@ export function createProviderTests(config: ProviderTestConfig) {
         expect(result.exitCode).toBe(0);
       }, timeout);
 
+      it('should execute background commands', async () => {
+        const result = await sandbox.runCommand('sleep', ['1'], { background: true });
+        
+        expect(result).toBeDefined();
+        expect(result.isBackground).toBe(true);
+        expect(result.exitCode).toBe(0);
+      }, timeout);
+
       it('should get sandbox info', async () => {
         const info = await sandbox.getInfo();
         
