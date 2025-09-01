@@ -6,8 +6,8 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
-import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { createProvider, createBackgroundCommand } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 /**
  * Codesandbox-specific configuration options
@@ -204,15 +204,18 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
         }
       },
 
-      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
         const startTime = Date.now();
+
+        // Handle background command execution outside try block so it's accessible everywhere
+        const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
 
         try {
           // Connect to the sandbox client using sandbox.connect()
           const client = await sandbox.connect();
-
+          
           // Construct full command with arguments
-          const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+          const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
 
           // Execute command using CodeSandbox client.commands.run()
           // This returns the full output as a string
@@ -224,7 +227,10 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
             exitCode: 0,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.id,
-            provider: 'codesandbox'
+            provider: 'codesandbox',
+            isBackground,
+            // For background commands, we can't get a real PID, but we can indicate it's running
+            ...(isBackground && { pid: -1 })
           };
         } catch (error) {
           // For command failures, return error info instead of throwing
@@ -234,7 +240,8 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
             exitCode: 127, // Command not found exit code
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.id,
-            provider: 'codesandbox'
+            provider: 'codesandbox',
+            isBackground  // Use the same value even for errors
           };
         }
       },

@@ -6,8 +6,8 @@
  */
 
 import { Sandbox as VercelSandbox } from '@vercel/sandbox';
-import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { createProvider, createBackgroundCommand } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 /**
  * Vercel sandbox provider configuration
@@ -291,8 +291,18 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
         }
       },
 
-      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
-        return await executeVercelCommand(sandbox, command, args);
+      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+        // Handle background command execution
+        const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
+        
+        const result = await executeVercelCommand(sandbox, finalCommand, finalArgs);
+        
+        return {
+          ...result,
+          isBackground,
+          // For background commands, we can't get a real PID, but we can indicate it's running
+          ...(isBackground && { pid: -1 })
+        };
       },
 
       getInfo: async (sandbox: VercelSandbox): Promise<SandboxInfo> => {
