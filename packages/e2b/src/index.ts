@@ -5,14 +5,15 @@
  * Reduces ~400 lines of boilerplate to ~100 lines of core logic.
  */
 
-import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
-import { createProvider } from 'computesdk';
+import { Sandbox as E2BSandbox } from 'e2b';
+import { createProvider, createBackgroundCommand } from 'computesdk';
 import type {
   ExecutionResult,
   SandboxInfo,
   Runtime,
   CreateSandboxOptions,
-  FileEntry
+  FileEntry,
+  RunCommandOptions
 } from 'computesdk';
 
 /**
@@ -131,10 +132,12 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
 
         try {
-          const sandboxes = await E2BSandbox.list({
+          const paginator = E2BSandbox.list({
             apiKey: apiKey,
           });
-          return sandboxes.map((sandbox: any) => ({
+          // Get first page of results using nextItems
+          const items = await paginator.nextItems();
+          return items.map((sandbox: any) => ({
             sandbox,
             sandboxId: sandbox.id
           }));
@@ -244,12 +247,15 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
+          // Handle background command execution
+          const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
+          
           // Construct full command with arguments
-          const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+          const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
 
           // Execute command using E2B's bash execution via Python subprocess
           const execution = await sandbox.commands.run(fullCommand);
@@ -260,7 +266,10 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             exitCode: execution.exitCode,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.sandboxId || 'e2b-unknown',
-            provider: 'e2b'
+            provider: 'e2b',
+            isBackground,
+            // For background commands, we can't get a real PID, but we can indicate it's running
+            ...(isBackground && { pid: -1 })
           };
         } catch (error) {
           // For command failures, return error info instead of throwing
