@@ -5,7 +5,7 @@
  * Reduces ~400 lines of boilerplate to ~100 lines of core logic.
  */
 
-import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
+import { Sandbox as E2BSandbox } from 'e2b';
 import { createProvider } from 'computesdk';
 import type {
   ExecutionResult,
@@ -131,10 +131,12 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
 
         try {
-          const sandboxes = await E2BSandbox.list({
+          const paginator = E2BSandbox.list({
             apiKey: apiKey,
           });
-          return sandboxes.map((sandbox: any) => ({
+          // Get first page of results using nextItems
+          const items = await paginator.nextItems();
+          return items.map((sandbox: any) => ({
             sandbox,
             sandboxId: sandbox.id
           }));
