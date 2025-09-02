@@ -15,7 +15,28 @@ import type {
   Runtime,
   CreateSandboxOptions,
   FileEntry,
+  RunCommandOptions,
 } from './types/index.js';
+
+/**
+ * Helper function to handle background command execution
+ * Providers can use this to implement background job support
+ */
+export function createBackgroundCommand(command: string, args: string[] = [], options?: RunCommandOptions): { command: string; args: string[]; isBackground: boolean } {
+  if (!options?.background) {
+    return { command, args, isBackground: false };
+  }
+
+  // For background execution, we modify the command to run in background
+  // Default approach: append & to make it run in background
+  const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+  
+  return {
+    command: 'sh',
+    args: ['-c', `${fullCommand} &`],
+    isBackground: true
+  };
+}
 
 /**
  * Flat sandbox method implementations - all operations in one place
@@ -29,7 +50,7 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   
   // Instance operations (map to individual Sandbox methods)
   runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<ExecutionResult>;
-  runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>;
+  runCommand: (sandbox: TSandbox, command: string, args?: string[], options?: RunCommandOptions) => Promise<ExecutionResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
   
@@ -267,8 +288,8 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
     return await this.methods.runCode(this.sandbox, code, runtime, this.config);
   }
 
-  async runCommand(command: string, args?: string[]): Promise<ExecutionResult> {
-    return await this.methods.runCommand(this.sandbox, command, args);
+  async runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult> {
+    return await this.methods.runCommand(this.sandbox, command, args, options);
   }
 
   async getInfo(): Promise<SandboxInfo> {

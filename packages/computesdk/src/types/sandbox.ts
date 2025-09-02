@@ -11,6 +11,21 @@ interface Provider {
 }
 
 /**
+ * Utility type to extract the native instance type from a provider
+ * This enables proper typing for getInstance() calls by looking at the provider's internal types
+ */
+export type ExtractSandboxInstanceType<TProvider extends Provider> = TProvider extends Provider ? 
+  TProvider extends { 
+    sandbox: { 
+      create(): Promise<infer TSandbox> 
+    } 
+  } ? (
+    TSandbox extends { getInstance(): infer TInstance } 
+      ? TInstance 
+      : any
+  ) : any : any;
+
+/**
  * Supported runtime environments
  */
 export type Runtime = 'node' | 'python';
@@ -19,6 +34,14 @@ export type Runtime = 'node' | 'python';
  * Sandbox status types
  */
 export type SandboxStatus = 'running' | 'stopped' | 'error';
+
+/**
+ * Options for running commands
+ */
+export interface RunCommandOptions {
+  /** Run command in background (non-blocking) */
+  background?: boolean;
+}
 
 /**
  * Result of code execution
@@ -36,6 +59,10 @@ export interface ExecutionResult {
   sandboxId: string;
   /** Provider that executed the code */
   provider: string;
+  /** Process ID for background jobs (if applicable) */
+  pid?: number;
+  /** Whether this command is running in background */
+  isBackground?: boolean;
 }
 
 /**
@@ -156,7 +183,7 @@ export interface Sandbox {
   /** Execute code in the sandbox */
   runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
   /** Execute shell commands */
-  runCommand(command: string, args?: string[]): Promise<ExecutionResult>;
+  runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult>;
   /** Get information about the sandbox */
   getInfo(): Promise<SandboxInfo>;
   /** Get URL for accessing the sandbox on a specific port */
@@ -172,4 +199,15 @@ export interface Sandbox {
 
   /** File system operations */
   readonly filesystem: SandboxFileSystem;
+}
+
+/**
+ * Typed sandbox interface that preserves the provider's native instance type
+ */
+export interface TypedSandbox<TProvider extends Provider> extends Sandbox {
+  /** Get the provider instance that created this sandbox with proper typing */
+  getProvider(): TProvider;
+  /** Get the native provider sandbox instance with proper typing */
+  getInstance(): ExtractSandboxInstanceType<TProvider>;
+  getInstance<T>(): T;
 }
