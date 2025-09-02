@@ -102,6 +102,9 @@ importers:
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../../packages/e2b
+      '@computesdk/fly':
+        specifier: workspace:*
+        version: link:../../packages/premium/fly
       '@computesdk/modal':
         specifier: workspace:*
         version: link:../../packages/modal
