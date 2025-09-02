@@ -39,11 +39,11 @@ export interface Provider {
 /**
  * Configuration for the compute singleton
  */
-export interface ComputeConfig {
+export interface ComputeConfig<TProvider extends Provider = Provider> {
   /** Default provider to use when none is specified */
-  defaultProvider?: Provider;
+  defaultProvider?: TProvider;
   /** @deprecated Use defaultProvider instead. Kept for backwards compatibility */
-  provider?: Provider;
+  provider?: TProvider;
 }
 
 /**
@@ -67,11 +67,11 @@ export interface CreateSandboxParamsWithOptionalProvider {
 }
 
 /**
- * Compute singleton interface
+ * Base Compute API interface (non-generic)
  */
 export interface ComputeAPI {
   /** Configuration management */
-  setConfig(config: ComputeConfig): void;
+  setConfig<TProvider extends Provider>(config: ComputeConfig<TProvider>): void;
   getConfig(): ComputeConfig | null;
   clearConfig(): void;
   
@@ -91,3 +91,4 @@ export interface ComputeAPI {
   // git: ProviderGitAPI;
   // domains: ProviderDomainAPI;
 }
+
