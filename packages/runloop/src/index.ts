@@ -412,95 +412,97 @@ export const runloop = createProvider<any, RunloopConfig>({
       },
 
       // Snapshot management methods
-      createSnapshot: async (
-        config: RunloopConfig,
-        sandboxId: string,
-        options?: CreateSnapshotOptions
-      ) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+      snapshot: {
+        create: async (
+          config: RunloopConfig,
+          sandboxId: string,
+          options?: CreateSnapshotOptions
+        ) => {
+          const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for snapshot creation");
-        }
-
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          const snapshotParams: any = {};
-          if (options?.name) {
-            snapshotParams.name = options.name;
-          }
-          if (options?.metadata) {
-            snapshotParams.metadata = options.metadata;
+          if (!apiKey) {
+            throw new Error("Missing Runloop API key for snapshot creation");
           }
 
-          const snapshot = await client.devboxes.snapshotDisk(
-            sandboxId,
-            snapshotParams
-          );
-          return snapshot;
-        } catch (error) {
-          throw new Error(
-            `Failed to create snapshot for sandbox ${sandboxId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      },
+          try {
+            const client = new Runloop({
+              bearerToken: apiKey,
+            });
 
-      listSnapshots: async (
-        config: RunloopConfig,
-        options?: ListSnapshotsOptions
-      ) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+            const snapshotParams: any = {};
+            if (options?.name) {
+              snapshotParams.name = options.name;
+            }
+            if (options?.metadata) {
+              snapshotParams.metadata = options.metadata;
+            }
 
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for listing snapshots");
-        }
+            const snapshot = await client.devboxes.snapshotDisk(
+              sandboxId,
+              snapshotParams
+            );
+            return snapshot;
+          } catch (error) {
+            throw new Error(
+              `Failed to create snapshot for sandbox ${sandboxId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+          }
+        },
 
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
+        list: async (
+          config: RunloopConfig,
+          options?: ListSnapshotsOptions
+        ) => {
+          const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
-          const listParams: any = {};
-          if (options?.limit) {
-            listParams.limit = options.limit;
+          if (!apiKey) {
+            throw new Error("Missing Runloop API key for listing snapshots");
           }
 
-          const response = await client.devboxes.listDiskSnapshots(listParams);
-          return response || [];
-        } catch (error) {
-          throw new Error(
-            `Failed to list snapshots: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      },
+          try {
+            const client = new Runloop({
+              bearerToken: apiKey,
+            });
 
-      deleteSnapshot: async (config: RunloopConfig, snapshotId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+            const listParams: any = {};
+            if (options?.limit) {
+              listParams.limit = options.limit;
+            }
 
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for snapshot deletion");
-        }
+            const response = await client.devboxes.listDiskSnapshots(listParams);
+            return response || [];
+          } catch (error) {
+            throw new Error(
+              `Failed to list snapshots: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+          }
+        },
 
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
+        delete: async (config: RunloopConfig, snapshotId: string) => {
+          const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
-          await client.devboxes.deleteDiskSnapshot(snapshotId);
-        } catch (error) {
-          throw new Error(
-            `Failed to delete snapshot ${snapshotId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+          if (!apiKey) {
+            throw new Error("Missing Runloop API key for snapshot deletion");
+          }
+
+          try {
+            const client = new Runloop({
+              bearerToken: apiKey,
+            });
+
+            await client.devboxes.deleteDiskSnapshot(snapshotId);
+          } catch (error) {
+            throw new Error(
+              `Failed to delete snapshot ${snapshotId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+          }
+        },
       },
     },
 
