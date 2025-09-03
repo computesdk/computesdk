@@ -30,6 +30,9 @@ export interface Provider<TSandbox = any> {
   /** Sandbox management operations */
   readonly sandbox: ProviderSandboxManager<TSandbox>;
   
+  /** Phantom type property for TypeScript inference - not used at runtime */
+  readonly __sandboxType: TSandbox;
+  
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;
   // readonly git: ProviderGitManager;

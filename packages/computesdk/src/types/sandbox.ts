@@ -210,11 +210,16 @@ export interface Sandbox<TSandbox = any> {
 }
 
 /**
+ * Extract the sandbox type from a provider
+ */
+type ExtractProviderSandboxType<TProvider extends Provider> = TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
+
+/**
  * Typed sandbox interface that preserves the provider's native instance type
  */
-export interface TypedSandbox<TProvider extends Provider> extends Sandbox {
+export interface TypedSandbox<TProvider extends Provider> extends Omit<Sandbox<ExtractProviderSandboxType<TProvider>>, 'getProvider'> {
   /** Get the provider instance that created this sandbox with proper typing */
   getProvider(): TProvider;
   /** Get the native provider sandbox instance with proper typing */
-  getInstance(): TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
+  getInstance(): ExtractProviderSandboxType<TProvider>;
 }

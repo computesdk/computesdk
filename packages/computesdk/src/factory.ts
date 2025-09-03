@@ -405,6 +405,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
 class GeneratedProvider<TSandbox, TConfig> implements Provider<TSandbox> {
   readonly name: string;
   readonly sandbox: ProviderSandboxManager<TSandbox>;
+  readonly __sandboxType!: TSandbox; // Phantom type for TypeScript inference
 
   constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig>) {
     this.name = providerConfig.name;
