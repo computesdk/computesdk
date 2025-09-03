@@ -356,3 +356,53 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
     }
   }
 });
+
+// Export E2B sandbox type for explicit typing
+export type { Sandbox as E2BSandbox } from 'e2b';
+
+/**
+ * Create a properly typed compute instance for E2B
+ * This version provides full type safety for getInstance() calls
+ * 
+ * @example
+ * ```typescript
+ * import { createE2BCompute } from '@computesdk/e2b'
+ * 
+ * const compute = createE2BCompute({ apiKey: 'your-key' });
+ * const sandbox = await compute.sandbox.create();
+ * const instance = sandbox.getInstance(); // ✅ Properly typed as E2B Sandbox!
+ * ```
+ */
+export function createE2BCompute(config: E2BConfig): {
+  sandbox: {
+    create(): Promise<{
+      sandboxId: string;
+      provider: string;
+      runCode(code: string, runtime?: import('computesdk').Runtime): Promise<import('computesdk').ExecutionResult>;
+      runCommand(command: string, args?: string[]): Promise<import('computesdk').ExecutionResult>;
+      getInfo(): Promise<import('computesdk').SandboxInfo>;
+      getUrl(options: { port: number; protocol?: string }): Promise<string>;
+      getProvider(): ReturnType<typeof e2b>;
+      getInstance(): E2BSandbox; // ✅ Properly typed!
+      kill(): Promise<void>;
+      destroy(): Promise<void>;
+      filesystem: import('computesdk').SandboxFileSystem;
+    }>;
+  };
+} {
+  const provider = e2b(config);
+  
+  return {
+    sandbox: {
+      create: async () => {
+        const sandbox = await provider.sandbox.create();
+        return {
+          ...sandbox,
+          getInstance: (): E2BSandbox => {
+            return sandbox.getInstance() as E2BSandbox;
+          }
+        };
+      }
+    }
+  };
+}

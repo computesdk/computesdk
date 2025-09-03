@@ -202,6 +202,6 @@ export interface TypedSandbox<TProvider extends Provider> extends Sandbox {
   /** Get the provider instance that created this sandbox with proper typing */
   getProvider(): TProvider;
   /** Get the native provider sandbox instance with proper typing */
-  getInstance(): ExtractSandboxInstanceType<TProvider>;
+  getInstance(): TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
   getInstance<T>(): T;
 }

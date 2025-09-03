@@ -176,20 +176,25 @@ class ComputeManager implements ComputeAPI {
 export const compute: ComputeAPI = new ComputeManager();
 
 /**
- * Create a compute instance with proper typing
- * This enables proper type inference for getInstance() calls
+ * Create a compute instance with provider support
+ * 
+ * Note: getInstance() returns 'any' type with this generic function.
+ * For full type safety, use provider-specific functions like createE2BCompute()
  * 
  * @example
  * ```typescript
  * import { e2b } from '@computesdk/e2b'
  * import { createCompute } from 'computesdk'
  * 
+ * // Generic version (getInstance returns 'any')
  * const compute = createCompute({
  *   defaultProvider: e2b({ apiKey: 'your-key' }),
  * });
  * 
- * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed!
+ * // For full typing, use provider-specific functions:
+ * import { createE2BCompute } from '@computesdk/e2b'
+ * const typedCompute = createE2BCompute({ apiKey: 'your-key' });
+ * const instance = sandbox.getInstance(); // ✅ Fully typed!
  * ```
  */
 export function createCompute<TProvider extends Provider>(config: ComputeConfig<TProvider>): TypedComputeAPI<TProvider> {
