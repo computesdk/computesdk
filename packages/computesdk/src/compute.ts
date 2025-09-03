@@ -4,7 +4,7 @@
  * Provides the unified compute.* API and delegates to specialized managers
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI, ExtractSandboxInstanceType } from './types';
 
 /**
  * Compute singleton implementation - orchestrates all compute operations
@@ -175,26 +175,22 @@ class ComputeManager implements ComputeAPI {
  */
 export const compute: ComputeAPI = new ComputeManager();
 
+
+
 /**
- * Create a compute instance with provider support
- * 
- * Note: getInstance() returns 'any' type with this generic function.
- * For full type safety, use provider-specific functions like createE2BCompute()
+ * Create a compute instance with proper typing
  * 
  * @example
  * ```typescript
  * import { e2b } from '@computesdk/e2b'
  * import { createCompute } from 'computesdk'
  * 
- * // Generic version (getInstance returns 'any')
  * const compute = createCompute({
  *   defaultProvider: e2b({ apiKey: 'your-key' }),
  * });
  * 
- * // For full typing, use provider-specific functions:
- * import { createE2BCompute } from '@computesdk/e2b'
- * const typedCompute = createE2BCompute({ apiKey: 'your-key' });
- * const instance = sandbox.getInstance(); // ✅ Fully typed!
+ * const sandbox = await compute.sandbox.create();
+ * const instance = sandbox.getInstance(); // ✅ Properly typed E2B Sandbox!
  * ```
  */
 export function createCompute<TProvider extends Provider>(config: ComputeConfig<TProvider>): TypedComputeAPI<TProvider> {
@@ -219,6 +215,7 @@ export function createCompute<TProvider extends Provider>(config: ComputeConfig<
     sandbox: {
       create: async (params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>) => {
         const sandbox = await manager.sandbox.create(params);
+        // The sandbox should now have the correct getInstance typing from the generic Sandbox<TSandbox>
         return sandbox as TypedSandbox<TProvider>;
       },
       

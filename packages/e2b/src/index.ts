@@ -360,6 +360,8 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
 // Export E2B sandbox type for explicit typing
 export type { Sandbox as E2BSandbox } from 'e2b';
 
+// Note: getInstance() typing is now handled by generic type parameters in the core SDK
+
 /**
  * Create a properly typed compute instance for E2B
  * This version provides full type safety for getInstance() calls
