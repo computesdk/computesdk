@@ -234,6 +234,5 @@ export function createCompute<TProvider extends Provider>(config: ComputeConfig<
   } as TypedComputeAPI<TProvider>;
 }
 
-// Alias for backwards compatibility
-export const createTypedCompute = createCompute;
+
 
