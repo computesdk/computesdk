@@ -200,7 +200,6 @@ export interface Sandbox<TSandbox = any> {
   getProvider(): import('./provider').Provider<TSandbox>;
   /** Get the native provider sandbox instance with proper typing */
   getInstance(): TSandbox;
-  getInstance<T>(): T;
   /** Kill the sandbox */
   kill(): Promise<void>;
   /** Destroy the sandbox and clean up resources */
@@ -218,5 +217,4 @@ export interface TypedSandbox<TProvider extends Provider> extends Sandbox {
   getProvider(): TProvider;
   /** Get the native provider sandbox instance with proper typing */
   getInstance(): TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
-  getInstance<T>(): T;
 }
