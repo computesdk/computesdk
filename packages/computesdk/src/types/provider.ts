@@ -95,7 +95,10 @@ export interface ComputeAPI {
 /**
  * Typed Compute API interface that preserves provider type information
  */
-export interface TypedComputeAPI<TProvider extends Provider> extends Omit<ComputeAPI, 'sandbox'> {
+export interface TypedComputeAPI<TProvider extends Provider> extends Omit<ComputeAPI, 'sandbox' | 'setConfig'> {
+  /** Configuration management that returns typed compute instance */
+  setConfig<T extends Provider>(config: ComputeConfig<T>): TypedComputeAPI<T>;
+  
   sandbox: {
     /** Create a sandbox from the configured provider with proper typing */
     create(params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>): Promise<import('./sandbox').TypedSandbox<TProvider>>;
