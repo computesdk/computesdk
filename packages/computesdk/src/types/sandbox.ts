@@ -12,18 +12,12 @@ interface Provider {
 
 /**
  * Utility type to extract the native instance type from a provider
- * This enables proper typing for getInstance() calls by looking at the provider's internal types
+ * Uses the __sandboxType property that createProvider adds for type inference
  */
-export type ExtractSandboxInstanceType<TProvider extends Provider> = TProvider extends Provider ? 
-  TProvider extends { 
-    sandbox: { 
-      create(): Promise<infer TSandbox> 
-    } 
-  } ? (
-    TSandbox extends { getInstance(): infer TInstance } 
-      ? TInstance 
-      : any
-  ) : any : any;
+export type ExtractSandboxInstanceType<TProvider extends Provider> = 
+  TProvider extends { readonly __sandboxType: infer TSandbox } 
+    ? TSandbox 
+    : any;
 
 /**
  * Supported runtime environments

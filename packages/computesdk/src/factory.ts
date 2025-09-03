@@ -407,6 +407,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
 class GeneratedProvider<TSandbox, TConfig> implements Provider {
   readonly name: string;
   readonly sandbox: ProviderSandboxManager;
+  readonly __sandboxType!: TSandbox; // Type-only property for type inference
 
   constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig>) {
     this.name = providerConfig.name;
@@ -427,7 +428,7 @@ class GeneratedProvider<TSandbox, TConfig> implements Provider {
  */
 export function createProvider<TSandbox, TConfig>(
   providerConfig: ProviderConfig<TSandbox, TConfig>
-): (config: TConfig) => Provider {
+): (config: TConfig) => Provider & { readonly __sandboxType: TSandbox } {
   // Auto-inject default filesystem methods if none provided
   if (!providerConfig.methods.sandbox.filesystem) {
     providerConfig.methods.sandbox.filesystem = defaultFilesystemMethods;

@@ -30,6 +30,9 @@ export interface Provider {
   /** Sandbox management operations */
   readonly sandbox: ProviderSandboxManager;
   
+  /** Type-only property for extracting sandbox type (added by createProvider) */
+  readonly __sandboxType?: any;
+  
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;
   // readonly git: ProviderGitManager;
