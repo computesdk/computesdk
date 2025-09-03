@@ -7,15 +7,15 @@
 import type { Sandbox, CreateSandboxOptions } from './sandbox';
 
 /**
- * Provider sandbox management interface
+ * Provider sandbox manager interface - handles sandbox lifecycle
  */
-export interface ProviderSandboxManager {
+export interface ProviderSandboxManager<TSandbox = any> {
   /** Create a new sandbox */
-  create(options?: CreateSandboxOptions): Promise<Sandbox>;
+  create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>>;
   /** Get an existing sandbox by ID */
-  getById(sandboxId: string): Promise<Sandbox | null>;
+  getById(sandboxId: string): Promise<Sandbox<TSandbox> | null>;
   /** List all active sandboxes */
-  list(): Promise<Sandbox[]>;
+  list(): Promise<Sandbox<TSandbox>[]>;
   /** Destroy a sandbox */
   destroy(sandboxId: string): Promise<void>;
 }
@@ -23,12 +23,15 @@ export interface ProviderSandboxManager {
 /**
  * Provider interface - creates and manages resources
  */
-export interface Provider {
+export interface Provider<TSandbox = any> {
   /** Provider name/type */
   readonly name: string;
   
   /** Sandbox management operations */
-  readonly sandbox: ProviderSandboxManager;
+  readonly sandbox: ProviderSandboxManager<TSandbox>;
+  
+  /** Phantom type property for TypeScript inference - not used at runtime */
+  readonly __sandboxType: TSandbox;
   
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;

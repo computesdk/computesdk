@@ -4,7 +4,7 @@
  * Provides the unified compute.* API and delegates to specialized managers
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI, ExtractSandboxInstanceType } from './types';
 
 /**
  * Compute singleton implementation - orchestrates all compute operations
@@ -175,9 +175,10 @@ class ComputeManager implements ComputeAPI {
  */
 export const compute: ComputeAPI = new ComputeManager();
 
+
+
 /**
  * Create a compute instance with proper typing
- * This enables proper type inference for getInstance() calls
  * 
  * @example
  * ```typescript
@@ -189,7 +190,7 @@ export const compute: ComputeAPI = new ComputeManager();
  * });
  * 
  * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed!
+ * const instance = sandbox.getInstance(); // ✅ Properly typed E2B Sandbox!
  * ```
  */
 export function createCompute<TProvider extends Provider>(config: ComputeConfig<TProvider>): TypedComputeAPI<TProvider> {
@@ -214,6 +215,7 @@ export function createCompute<TProvider extends Provider>(config: ComputeConfig<
     sandbox: {
       create: async (params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>) => {
         const sandbox = await manager.sandbox.create(params);
+        // The sandbox should now have the correct getInstance typing from the generic Sandbox<TSandbox>
         return sandbox as TypedSandbox<TProvider>;
       },
       

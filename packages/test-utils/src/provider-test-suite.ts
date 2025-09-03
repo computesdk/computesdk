@@ -417,6 +417,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       // Return a mock provider for testing
       return {
         name: providerName,
+        __sandboxType: null as any, // Phantom type for testing
         sandbox: {
           create: async () => { throw new Error('Not implemented in mock'); },
           getById: async () => { throw new Error('Not implemented in mock'); },

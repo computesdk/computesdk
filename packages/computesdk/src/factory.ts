@@ -248,7 +248,7 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 /**
  * Generated sandbox class - implements the Sandbox interface
  */
-class GeneratedSandbox<TSandbox = any> implements Sandbox {
+class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
@@ -273,15 +273,13 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
     }
   }
 
-  getInstance(): TSandbox;
-  getInstance<T extends TSandbox>(): T;
-  getInstance<T extends TSandbox = TSandbox>(): T {
+  getInstance(): TSandbox {
     // Use provider-specific typed getInstance if available
     if (this.methods.getInstance) {
-      return this.methods.getInstance(this.sandbox) as T;
+      return this.methods.getInstance(this.sandbox);
     }
-    // Fallback to generic casting
-    return this.sandbox as T;
+    // Fallback to returning the sandbox directly
+    return this.sandbox;
   }
 
   async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
@@ -300,7 +298,7 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
     return await this.methods.getUrl(this.sandbox, options);
   }
 
-  getProvider(): Provider {
+  getProvider(): Provider<TSandbox> {
     return this.providerInstance;
   }
 
@@ -318,7 +316,7 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox {
 /**
  * Auto-generated Sandbox Manager implementation
  */
-class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManager {
+class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManager<TSandbox> {
   private activeSandboxes: Map<string, GeneratedSandbox<TSandbox>> = new Map();
 
   constructor(
@@ -328,9 +326,9 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     private providerInstance: Provider
   ) {}
 
-  async create(options?: CreateSandboxOptions): Promise<Sandbox> {
+  async create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>> {
     const result = await this.methods.create(this.config, options);
-    const sandbox = new GeneratedSandbox(
+    const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -344,7 +342,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async getById(sandboxId: string): Promise<Sandbox | null> {
+  async getById(sandboxId: string): Promise<Sandbox<TSandbox> | null> {
     // Check active sandboxes first
     const existing = this.activeSandboxes.get(sandboxId);
     if (existing) {
@@ -357,7 +355,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       return null;
     }
 
-    const sandbox = new GeneratedSandbox(
+    const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -371,14 +369,14 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async list(): Promise<Sandbox[]> {
+  async list(): Promise<Sandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
     const sandboxes: Sandbox[] = [];
 
     for (const result of results) {
       let sandbox = this.activeSandboxes.get(result.sandboxId);
       if (!sandbox) {
-        sandbox = new GeneratedSandbox(
+        sandbox = new GeneratedSandbox<TSandbox>(
           result.sandbox,
           result.sandboxId,
           this.providerName,
@@ -404,9 +402,10 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
 /**
  * Auto-generated Provider implementation
  */
-class GeneratedProvider<TSandbox, TConfig> implements Provider {
+class GeneratedProvider<TSandbox, TConfig> implements Provider<TSandbox> {
   readonly name: string;
-  readonly sandbox: ProviderSandboxManager;
+  readonly sandbox: ProviderSandboxManager<TSandbox>;
+  readonly __sandboxType!: TSandbox; // Phantom type for TypeScript inference
 
   constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig>) {
     this.name = providerConfig.name;
@@ -427,7 +426,7 @@ class GeneratedProvider<TSandbox, TConfig> implements Provider {
  */
 export function createProvider<TSandbox, TConfig>(
   providerConfig: ProviderConfig<TSandbox, TConfig>
-): (config: TConfig) => Provider {
+): (config: TConfig) => Provider<TSandbox> {
   // Auto-inject default filesystem methods if none provided
   if (!providerConfig.methods.sandbox.filesystem) {
     providerConfig.methods.sandbox.filesystem = defaultFilesystemMethods;
