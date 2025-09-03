@@ -12,6 +12,7 @@ function createMockProvider(name: string) {
 
   return {
     name,
+    __sandboxType: null as any, // Phantom type for testing
     sandbox: {
       create: vi.fn().mockResolvedValue({
         sandboxId: 'test-123',
