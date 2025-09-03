@@ -4,7 +4,7 @@
  * Provides the unified compute.* API and delegates to specialized managers
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI } from './types';
 
 /**
  * Compute singleton implementation - orchestrates all compute operations
@@ -171,7 +171,69 @@ class ComputeManager implements ComputeAPI {
 }
 
 /**
- * Singleton instance - the main API
+ * Singleton instance - the main API (untyped)
  */
 export const compute: ComputeAPI = new ComputeManager();
+
+/**
+ * Create a compute instance with proper typing
+ * This enables proper type inference for getInstance() calls
+ * 
+ * @example
+ * ```typescript
+ * import { e2b } from '@computesdk/e2b'
+ * import { createCompute } from 'computesdk'
+ * 
+ * const compute = createCompute({
+ *   defaultProvider: e2b({ apiKey: 'your-key' }),
+ * });
+ * 
+ * const sandbox = await compute.sandbox.create();
+ * const instance = sandbox.getInstance(); // ✅ Properly typed!
+ * ```
+ */
+export function createCompute<TProvider extends Provider>(config: ComputeConfig<TProvider>): TypedComputeAPI<TProvider> {
+  const manager = new ComputeManager();
+  
+  // Set config directly without calling the public setConfig method
+  const actualProvider = config.defaultProvider || config.provider!;
+  manager['config'] = {
+    provider: actualProvider,
+    defaultProvider: actualProvider
+  };
+  manager['typedState'] = {
+    isTyped: true,
+    provider: actualProvider
+  };
+  
+  return {
+    setConfig: <T extends Provider>(cfg: ComputeConfig<T>) => createCompute(cfg),
+    getConfig: () => manager.getConfig(),
+    clearConfig: () => manager.clearConfig(),
+    
+    sandbox: {
+      create: async (params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>) => {
+        const sandbox = await manager.sandbox.create(params);
+        return sandbox as TypedSandbox<TProvider>;
+      },
+      
+      getById: async (sandboxId: string) => {
+        const sandbox = await manager.sandbox.getById(sandboxId);
+        return sandbox ? sandbox as TypedSandbox<TProvider> : null;
+      },
+      
+      list: async () => {
+        const sandboxes = await manager.sandbox.list();
+        return sandboxes as TypedSandbox<TProvider>[];
+      },
+      
+      destroy: async (sandboxId: string) => {
+        return await manager.sandbox.destroy(sandboxId);
+      }
+    }
+  } as TypedComputeAPI<TProvider>;
+}
+
+// Alias for backwards compatibility
+export const createTypedCompute = createCompute;
 
