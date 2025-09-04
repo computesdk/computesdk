@@ -1,5 +1,19 @@
 # @computesdk/e2b
 
+## 1.4.3
+
+### Patch Changes
+
+- Updated dependencies [763a9a7]
+  - computesdk@1.7.0
+
+## 1.4.2
+
+### Patch Changes
+
+- Updated dependencies [19e4fe6]
+  - computesdk@1.6.0
+
 ## 1.4.1
 
 ### Patch Changes

@@ -1,5 +1,59 @@
 # computesdk
 
+## 1.7.0
+
+### Minor Changes
+
+- 763a9a7: Fix getInstance() typing to return provider-specific sandbox types
+
+  The `getInstance()` method now returns properly typed provider instances instead of the generic `Sandbox` type. This enables full TypeScript intellisense and type safety when working with provider-specific methods and properties.
+
+  **Before:**
+
+  ```typescript
+  const instance = sandbox.getInstance(); // Returns generic Sandbox
+  // No intellisense for E2B-specific methods
+  ```
+
+  **After:**
+
+  ```typescript
+  const compute = createCompute({
+    defaultProvider: e2b({ apiKey: "your-key" }),
+  });
+
+  const sandbox = await compute.sandbox.create();
+  const instance = sandbox.getInstance(); // Returns properly typed E2B Sandbox
+  // Full intellisense: instance.sandboxId, instance.commands, instance.files, etc.
+  ```
+
+  This change uses a phantom type approach (`__sandboxType`) to preserve type information through the provider chain, enabling TypeScript to correctly infer the native sandbox type.
+
+## 1.6.0
+
+### Minor Changes
+
+- 19e4fe6: Add createCompute() function with proper getInstance() typing
+
+  - Add new createCompute() function that preserves provider type information
+  - Fix getInstance() returning 'any' type when using default provider configuration
+  - Add TypedComputeAPI interface for type-safe compute operations
+  - Maintain full backward compatibility with existing compute singleton
+
+  Usage:
+
+  ```typescript
+  import { createCompute } from "computesdk";
+  import { e2b } from "@computesdk/e2b";
+
+  const compute = createCompute({
+    defaultProvider: e2b({ apiKey: "your-key" }),
+  });
+
+  const sandbox = await compute.sandbox.create();
+  const instance = sandbox.getInstance(); // ✅ Properly typed!
+  ```
+
 ## 1.5.0
 
 ### Minor Changes

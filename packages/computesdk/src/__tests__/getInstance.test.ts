@@ -149,13 +149,12 @@ describe('getInstance method', () => {
     expect(instance.status).toBe('running')
   })
 
-  it('should support explicit type parameter for getInstance', async () => {
-    interface CustomType {
+  it('should return typed instance through provider type inference', async () => {
+    interface CustomSandbox {
       customProperty: string
     }
 
-    const mockSandbox = {
-      id: 'test-123',
+    const mockSandbox: CustomSandbox = {
       customProperty: 'custom-value'
     }
 
@@ -173,10 +172,15 @@ describe('getInstance method', () => {
       runCode: vi.fn().mockResolvedValue({} as ExecutionResult),
       runCommand: vi.fn().mockResolvedValue({} as ExecutionResult),
       getInfo: vi.fn().mockResolvedValue({} as SandboxInfo),
-      getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev')
+      getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev'),
+      
+      // Custom getInstance that returns proper type
+      getInstance: (sandbox: CustomSandbox): CustomSandbox => {
+        return sandbox
+      }
     }
 
-    const providerFactory = createProvider({
+    const providerFactory = createProvider<CustomSandbox, { apiKey: string }>({
       name: 'mock-custom',
       methods: { sandbox: methods }
     })
@@ -185,8 +189,8 @@ describe('getInstance method', () => {
     const provider = providerFactory(config)
     const sandbox = await provider.sandbox.create()
 
-    // Test getInstance() with explicit type parameter
-    const instance = sandbox.getInstance<CustomType>()
+    // Test getInstance() returns properly typed instance
+    const instance = sandbox.getInstance()
     
     expect(instance.customProperty).toBe('custom-value')
   })

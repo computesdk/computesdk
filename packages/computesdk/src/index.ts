@@ -8,7 +8,7 @@
 export * from './types';
 
 // Export compute singleton - the main API
-export { compute } from './compute';
+export { compute, createCompute } from './compute';
 
 // Export request handler for web framework integration
 export { handleComputeRequest } from './request-handler';
