@@ -111,7 +111,7 @@ export const runloop = createProvider<any, RunloopConfig>({
           );
         }
 
-        const timeout = config.timeout || 300000;
+        const timeout = config.timeout;
 
         try {
           const client = new Runloop({
@@ -120,7 +120,7 @@ export const runloop = createProvider<any, RunloopConfig>({
 
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: {
-              keep_alive_time_seconds: options?.timeout || 300000,
+              keep_alive_time_seconds: timeout || options?.timeout || 300000,
             },
             name: options?.sandboxId,
             metadata: options?.metadata,
