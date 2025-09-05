@@ -15,8 +15,8 @@ export class MockSandbox implements Sandbox {
   readonly provider = 'mock'
   private _mockInstance = {}  // Mock native instance
 
-  getInstance<T = unknown>(): T {
-    return this._mockInstance as T
+  getInstance(): unknown {
+    return this._mockInstance
   }
 
   async runCode(code: string): Promise<ExecutionResult> {
@@ -108,6 +108,7 @@ export class MockSandbox implements Sandbox {
  */
 export class MockProvider implements Provider {
   readonly name = 'mock'
+  readonly __sandboxType!: any // Phantom type for testing
   readonly sandbox = {
     create: async (options?: any): Promise<Sandbox> => {
       const sandbox = new MockSandbox()
@@ -135,7 +136,7 @@ export class MockProvider implements Provider {
  */
 export function createMockProvider(overrides?: Partial<Provider>): Provider {
   const mockProvider = new MockProvider()
-  return { ...mockProvider, ...overrides }
+  return { ...mockProvider, __sandboxType: null as any, ...overrides }
 }
 
 /**

@@ -11,19 +11,27 @@ interface Provider {
 }
 
 /**
- * Utility type to extract the native instance type from a provider
- * This enables proper typing for getInstance() calls by looking at the provider's internal types
+ * Type mapping for provider names to their sandbox types
+ * Manually defined for known providers since declaration merging isn't working reliably
  */
-export type ExtractSandboxInstanceType<TProvider extends Provider> = TProvider extends Provider ? 
-  TProvider extends { 
-    sandbox: { 
-      create(): Promise<infer TSandbox> 
-    } 
-  } ? (
-    TSandbox extends { getInstance(): infer TInstance } 
-      ? TInstance 
-      : any
-  ) : any : any;
+export interface ProviderSandboxTypeMap {
+  e2b: any; // We can't import the E2B type directly, but we'll handle it differently
+  vercel: any;
+  daytona: any;
+}
+
+/**
+ * Utility type to extract the native instance type from a provider
+ * Uses provider name and manual type inference
+ */
+export type ExtractSandboxInstanceType<TProvider extends Provider> = 
+  TProvider extends { readonly name: 'e2b' }
+    ? any // For now, let's just try to make the runtime casting work
+    : TProvider extends { readonly name: 'vercel' }
+      ? any
+      : TProvider extends { readonly name: 'daytona' }
+        ? any
+        : any;
 
 /**
  * Supported runtime environments
@@ -174,7 +182,7 @@ export function isCommandExitError(error: unknown): error is CommandExitError {
 /**
  * Base sandbox interface - what developers interact with
  */
-export interface Sandbox {
+export interface Sandbox<TSandbox = any> {
   /** Unique identifier for the sandbox */
   readonly sandboxId: string;
   /** Provider that created this sandbox */
@@ -189,9 +197,9 @@ export interface Sandbox {
   /** Get URL for accessing the sandbox on a specific port */
   getUrl(options: { port: number; protocol?: string }): Promise<string>;
   /** Get the provider instance that created this sandbox */
-  getProvider(): Provider;
+  getProvider(): import('./provider').Provider<TSandbox>;
   /** Get the native provider sandbox instance with proper typing */
-  getInstance<T = any>(): T;
+  getInstance(): TSandbox;
   /** Kill the sandbox */
   kill(): Promise<void>;
   /** Destroy the sandbox and clean up resources */
@@ -202,12 +210,16 @@ export interface Sandbox {
 }
 
 /**
+ * Extract the sandbox type from a provider
+ */
+type ExtractProviderSandboxType<TProvider extends Provider> = TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
+
+/**
  * Typed sandbox interface that preserves the provider's native instance type
  */
-export interface TypedSandbox<TProvider extends Provider> extends Sandbox {
+export interface TypedSandbox<TProvider extends Provider> extends Omit<Sandbox<ExtractProviderSandboxType<TProvider>>, 'getProvider'> {
   /** Get the provider instance that created this sandbox with proper typing */
   getProvider(): TProvider;
   /** Get the native provider sandbox instance with proper typing */
-  getInstance(): ExtractSandboxInstanceType<TProvider>;
-  getInstance<T>(): T;
+  getInstance(): ExtractProviderSandboxType<TProvider>;
 }
