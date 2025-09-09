@@ -1,0 +1,15 @@
+name = "computesdk-cloudflare-daytona-example"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Environment variables (set these in Cloudflare dashboard or via wrangler secret)
+# DAYTONA_API_KEY should be set as a secret: wrangler secret put DAYTONA_API_KEY
+
+[vars]
+NODE_ENV = "production"
+
+# Optional: Add Durable Objects binding if you want to use Cloudflare's sandbox
+# [[durable_objects.bindings]]
+# name = "Sandbox"
+# class_name = "SandboxDO"
+# script_name = "cloudflare-sandbox"
