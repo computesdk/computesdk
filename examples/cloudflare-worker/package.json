@@ -9,10 +9,20 @@
 		"test": "vitest",
 		"cf-typegen": "wrangler types"
 	},
+	"dependencies": {
+		"@computesdk/codesandbox": "workspace:*",
+		"@computesdk/cloudflare": "workspace:*",
+		"@computesdk/daytona": "workspace:*",
+		"@computesdk/e2b": "workspace:*",
+		"@computesdk/modal": "workspace:*",
+		"@computesdk/vercel": "workspace:*",
+		"computesdk": "workspace:*"
+	  },
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
 		"typescript": "^5.5.2",
 		"vitest": "~3.2.0",
-		"wrangler": "^4.35.0"
+		"wrangler": "^4.35.0",
+		"dotenv": "^17.2.1"
 	}
 }

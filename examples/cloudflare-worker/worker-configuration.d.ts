@@ -3,6 +3,7 @@
 // Runtime types generated with workerd@1.20250906.0 2025-09-09 
 declare namespace Cloudflare {
 	interface Env {
+		DAYTONA_API_KEY: string;
 	}
 }
 interface Env extends Cloudflare.Env {}
