@@ -81,9 +81,9 @@ export interface CreateBlueprintTemplateOptions {
  */
 export const runloop = createProvider<
   { devbox: any; client: any }, // TSandbox
-  RunloopConfig,               // TConfig
-  RunloopTemplate,             // TTemplate 
-  RunloopSnapshot              // TSnapshot
+  RunloopConfig,                // TConfig
+  RunloopTemplate,              // TTemplate 
+  RunloopSnapshot               // TSnapshot
 >({
   name: "runloop",
   methods: {
