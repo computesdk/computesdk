@@ -14,6 +14,7 @@ import type {
   FileEntry,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
+  Runtime,
 } from "computesdk";
 
 // Define Runloop-specific types
@@ -177,7 +178,7 @@ export const runloop = createProvider<
           const response = await client.devboxes.list();
           const devboxes = response.devboxes || [];
 
-          return devboxes.map((devbox: any) => ({
+          return devboxes.map((devbox) => ({
             sandbox: { devbox, client },
             sandboxId: devbox.id,
           }));
@@ -253,13 +254,13 @@ export const runloop = createProvider<
         }
       },
 
-      getInfo: async (sandbox: any): Promise<SandboxInfo> => {
+      getInfo: async (sandbox): Promise<SandboxInfo> => {
         const { devbox } = sandbox;
 
         return {
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
-          runtime: "node", // Runloop supports multiple runtimes, defaulting to node
+          runtime: "node" as Runtime, // Runloop supports multiple runtimes, defaulting to node
           status: devbox.status,
           createdAt: new Date(devbox.create_time_ms || Date.now()),
           timeout: devbox.launch_parameters.keep_alive_time_seconds || 300000,
@@ -396,12 +397,7 @@ export const runloop = createProvider<
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
           }
         },
-      },
-
-      // Provider-specific typed getInstance method
-      getInstance: (sandbox: any): any => {
-        return sandbox;
-      },
+      }
     },
 
     // Template management methods using the new factory pattern
