@@ -15,6 +15,8 @@ import type {
   CreateSnapshotOptions,
   ListSnapshotsOptions,
   Runtime,
+  SandboxStatus,
+  Sandbox,
 } from "computesdk";
 
 // Define Runloop-specific types
@@ -81,10 +83,10 @@ export interface CreateBlueprintTemplateOptions {
  * Create a Runloop provider instance using the factory pattern
  */
 export const runloop = createProvider<
-  { devbox: any; client: any }, // TSandbox
-  RunloopConfig,                // TConfig
-  RunloopTemplate,              // TTemplate 
-  RunloopSnapshot               // TSnapshot
+  Runloop.DevboxView,         // TSandbox
+  RunloopConfig,              // TConfig
+  RunloopTemplate,            // TTemplate 
+  RunloopSnapshot             // TSnapshot
 >({
   name: "runloop",
   methods: {
@@ -135,7 +137,7 @@ export const runloop = createProvider<
           const dbx = await client.devboxes.createAndAwaitRunning(devboxParams);
 
           return {
-            sandbox: { devbox: dbx, client },
+            sandbox: dbx, 
             sandboxId: dbx.id,
           };
         } catch (error) {
@@ -158,7 +160,7 @@ export const runloop = createProvider<
           const devbox = await client.devboxes.retrieve(sandboxId);
 
           return {
-            sandbox: { devbox, client },
+            sandbox: devbox,
             sandboxId,
           };
         } catch (error) {
@@ -179,7 +181,7 @@ export const runloop = createProvider<
           const devboxes = response.devboxes || [];
 
           return devboxes.map((devbox) => ({
-            sandbox: { devbox, client },
+            sandbox: devbox,
             sandboxId: devbox.id,
           }));
         } catch (error) {
@@ -255,13 +257,13 @@ export const runloop = createProvider<
       },
 
       getInfo: async (sandbox): Promise<SandboxInfo> => {
-        const { devbox } = sandbox;
+        const devbox = sandbox;
 
         return {
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
           runtime: "node" as Runtime, // Runloop supports multiple runtimes, defaulting to node
-          status: devbox.status,
+          status: devbox.status as SandboxStatus,
           createdAt: new Date(devbox.create_time_ms || Date.now()),
           timeout: devbox.launch_parameters.keep_alive_time_seconds || 300000,
           metadata: {
@@ -397,7 +399,12 @@ export const runloop = createProvider<
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
           }
         },
-      }
+      },
+      
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox): Runloop.DevboxView => {
+        return sandbox;
+      },
     },
 
     // Template management methods using the new factory pattern
