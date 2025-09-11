@@ -8,6 +8,8 @@
 import type {
   Provider,
   ProviderSandboxManager,
+  ProviderTemplateManager,
+  ProviderSnapshotManager,
   Sandbox,
   SandboxFileSystem,
   SandboxInfo,
@@ -16,6 +18,10 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
+  CreateSnapshotOptions,
+  ListSnapshotsOptions,
+  CreateTemplateOptions,
+  ListTemplatesOptions,
 } from './types/index.js';
 
 /**
@@ -66,17 +72,35 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
     exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<boolean>;
     remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
   };
-  
+}
 
+/**
+ * Template method implementations
+ */
+export interface TemplateMethods<TTemplate = any, TConfig = any> {
+  create: (config: TConfig, options: CreateTemplateOptions | any) => Promise<TTemplate>;
+  list: (config: TConfig, options?: ListTemplatesOptions) => Promise<TTemplate[]>;
+  delete: (config: TConfig, templateId: string) => Promise<void>;
+}
+
+/**
+ * Snapshot method implementations  
+ */
+export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
+  create: (config: TConfig, sandboxId: string, options?: CreateSnapshotOptions) => Promise<TSnapshot>;
+  list: (config: TConfig, options?: ListSnapshotsOptions) => Promise<TSnapshot[]>;
+  delete: (config: TConfig, snapshotId: string) => Promise<void>;
 }
 
 /**
  * Provider configuration for createProvider()
  */
-export interface ProviderConfig<TSandbox = any, TConfig = any> {
+export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, TSnapshot = any> {
   name: string;
   methods: {
     sandbox: SandboxMethods<TSandbox, TConfig>;
+    template?: TemplateMethods<TTemplate, TConfig>;
+    snapshot?: SnapshotMethods<TSnapshot, TConfig>;
   };
 }
 
@@ -400,14 +424,60 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
 }
 
 /**
+ * Auto-generated Template Manager implementation
+ */
+class GeneratedTemplateManager<TTemplate, TConfig> implements ProviderTemplateManager<TTemplate> {
+  constructor(
+    private config: TConfig,
+    private methods: TemplateMethods<TTemplate, TConfig>
+  ) {}
+
+  async create(options: CreateTemplateOptions | any): Promise<TTemplate> {
+    return await this.methods.create(this.config, options);
+  }
+
+  async list(options?: ListTemplatesOptions): Promise<TTemplate[]> {
+    return await this.methods.list(this.config, options);
+  }
+
+  async delete(templateId: string): Promise<void> {
+    return await this.methods.delete(this.config, templateId);
+  }
+}
+
+/**
+ * Auto-generated Snapshot Manager implementation
+ */
+class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotManager<TSnapshot> {
+  constructor(
+    private config: TConfig,
+    private methods: SnapshotMethods<TSnapshot, TConfig>
+  ) {}
+
+  async create(sandboxId: string, options?: CreateSnapshotOptions): Promise<TSnapshot> {
+    return await this.methods.create(this.config, sandboxId, options);
+  }
+
+  async list(options?: ListSnapshotsOptions): Promise<TSnapshot[]> {
+    return await this.methods.list(this.config, options);
+  }
+
+  async delete(snapshotId: string): Promise<void> {
+    return await this.methods.delete(this.config, snapshotId);
+  }
+}
+
+/**
  * Auto-generated Provider implementation
  */
-class GeneratedProvider<TSandbox, TConfig> implements Provider<TSandbox> {
+class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Provider<TSandbox, TTemplate, TSnapshot> {
   readonly name: string;
   readonly sandbox: ProviderSandboxManager<TSandbox>;
+  readonly template?: ProviderTemplateManager<TTemplate>;
+  readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
   readonly __sandboxType!: TSandbox; // Phantom type for TypeScript inference
 
-  constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig>) {
+  constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>) {
     this.name = providerConfig.name;
     this.sandbox = new GeneratedSandboxManager(
       config,
@@ -415,6 +485,15 @@ class GeneratedProvider<TSandbox, TConfig> implements Provider<TSandbox> {
       providerConfig.methods.sandbox,
       this
     );
+
+    // Initialize optional managers if methods are provided
+    if (providerConfig.methods.template) {
+      this.template = new GeneratedTemplateManager(config, providerConfig.methods.template);
+    }
+    
+    if (providerConfig.methods.snapshot) {
+      this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
+    }
   }
 }
 
@@ -424,9 +503,9 @@ class GeneratedProvider<TSandbox, TConfig> implements Provider<TSandbox> {
  * Auto-generates all boilerplate classes and provides feature detection
  * based on which methods are implemented.
  */
-export function createProvider<TSandbox, TConfig>(
-  providerConfig: ProviderConfig<TSandbox, TConfig>
-): (config: TConfig) => Provider<TSandbox> {
+export function createProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
+  providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>
+): (config: TConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
   // Auto-inject default filesystem methods if none provided
   if (!providerConfig.methods.sandbox.filesystem) {
     providerConfig.methods.sandbox.filesystem = defaultFilesystemMethods;

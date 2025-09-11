@@ -7,6 +7,46 @@
 import type { Sandbox, CreateSandboxOptions } from './sandbox';
 
 /**
+ * Common options for creating snapshots
+ */
+export interface CreateSnapshotOptions {
+  /** Optional name for the snapshot */
+  name?: string;
+  /** Optional metadata for the snapshot */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Common options for listing snapshots
+ */
+export interface ListSnapshotsOptions {
+  /** Filter by sandbox ID */
+  sandboxId?: string;
+  /** Limit the number of results */
+  limit?: number;
+}
+
+/**
+ * Common options for creating templates/blueprints
+ */
+export interface CreateTemplateOptions {
+  /** Name of the template */
+  name: string;
+  /** Optional description */
+  description?: string;
+  /** Optional metadata for the template */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Common options for listing templates
+ */
+export interface ListTemplatesOptions {
+  /** Limit the number of results */
+  limit?: number;
+}
+
+/**
  * Provider sandbox manager interface - handles sandbox lifecycle
  */
 export interface ProviderSandboxManager<TSandbox = any> {
@@ -21,14 +61,44 @@ export interface ProviderSandboxManager<TSandbox = any> {
 }
 
 /**
+ * Provider template manager interface - handles template/blueprint lifecycle
+ */
+export interface ProviderTemplateManager<TTemplate = any> {
+  /** Create a new template */
+  create(options: CreateTemplateOptions | any): Promise<TTemplate>;
+  /** List all available templates */
+  list(options?: ListTemplatesOptions): Promise<TTemplate[]>;
+  /** Delete a template */
+  delete(templateId: string): Promise<void>;
+}
+
+/**
+ * Provider snapshot manager interface - handles snapshot lifecycle
+ */
+export interface ProviderSnapshotManager<TSnapshot = any> {
+  /** Create a snapshot from a sandbox */
+  create(sandboxId: string, options?: CreateSnapshotOptions): Promise<TSnapshot>;
+  /** List all snapshots */
+  list(options?: ListSnapshotsOptions): Promise<TSnapshot[]>;
+  /** Delete a snapshot */
+  delete(snapshotId: string): Promise<void>;
+}
+
+/**
  * Provider interface - creates and manages resources
  */
-export interface Provider<TSandbox = any> {
+export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
   /** Provider name/type */
   readonly name: string;
   
   /** Sandbox management operations */
   readonly sandbox: ProviderSandboxManager<TSandbox>;
+  
+  /** Optional template management operations */
+  readonly template?: ProviderTemplateManager<TTemplate>;
+  
+  /** Optional snapshot management operations */
+  readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
   
   /** Phantom type property for TypeScript inference - not used at runtime */
   readonly __sandboxType: TSandbox;
@@ -54,7 +124,7 @@ export interface ComputeConfig<TProvider extends Provider = Provider> {
  */
 export interface CreateSandboxParams {
   /** Provider instance to use */
-  provider: Provider;
+  provider: Provider;  
   /** Optional sandbox creation options */
   options?: CreateSandboxOptions;
 }
