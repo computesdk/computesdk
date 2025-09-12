@@ -12,7 +12,16 @@ import type {
   SandboxInfo,
   CreateSandboxOptions,
   FileEntry,
+  CreateSnapshotOptions,
+  ListSnapshotsOptions,
+  Runtime,
+  SandboxStatus,
+  Sandbox,
 } from "computesdk";
+
+// Define Runloop-specific types
+type RunloopSnapshot = Runloop.DevboxSnapshotView;
+type RunloopTemplate = Runloop.BlueprintView;
 
 /**
  * Runloop-specific configuration options
@@ -25,27 +34,7 @@ export interface RunloopConfig {
 }
 
 /**
- * Options for creating snapshots
- */
-export interface CreateSnapshotOptions {
-  /** Optional name for the snapshot */
-  name?: string;
-  /** Optional metadata for the snapshot */
-  metadata?: Record<string, string>;
-}
-
-/**
- * Options for listing snapshots
- */
-export interface ListSnapshotsOptions {
-  /** Filter by sandbox ID */
-  sandboxId?: string;
-  /** Limit the number of results */
-  limit?: number;
-}
-
-/**
- * Options for creating blueprint templates
+ * Runloop-specific blueprint creation options
  */
 export interface CreateBlueprintTemplateOptions {
   /** Name of the blueprint template */
@@ -93,7 +82,12 @@ export interface CreateBlueprintTemplateOptions {
 /**
  * Create a Runloop provider instance using the factory pattern
  */
-export const runloop = createProvider<any, RunloopConfig>({
+export const runloop = createProvider<
+  Runloop.DevboxView,         // TSandbox
+  RunloopConfig,              // TConfig
+  RunloopTemplate,            // TTemplate 
+  RunloopSnapshot             // TSnapshot
+>({
   name: "runloop",
   methods: {
     sandbox: {
@@ -143,7 +137,7 @@ export const runloop = createProvider<any, RunloopConfig>({
           const dbx = await client.devboxes.createAndAwaitRunning(devboxParams);
 
           return {
-            sandbox: dbx,
+            sandbox: dbx, 
             sandboxId: dbx.id,
           };
         } catch (error) {
@@ -186,7 +180,7 @@ export const runloop = createProvider<any, RunloopConfig>({
           const response = await client.devboxes.list();
           const devboxes = response.devboxes || [];
 
-          return devboxes.map((devbox: any) => ({
+          return devboxes.map((devbox) => ({
             sandbox: devbox,
             sandboxId: devbox.id,
           }));
@@ -212,7 +206,7 @@ export const runloop = createProvider<any, RunloopConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: any, code: string): Promise<ExecutionResult> => {
+      runCode: async (_sandbox: any, _code: string): Promise<ExecutionResult> => {
         throw new Error("Please use runCommand instead");
       },
 
@@ -262,13 +256,14 @@ export const runloop = createProvider<any, RunloopConfig>({
         }
       },
 
-      getInfo: async (sandbox: any): Promise<SandboxInfo> => {
-        const { devbox } = sandbox;
+      getInfo: async (sandbox): Promise<SandboxInfo> => {
+        const devbox = sandbox;
 
         return {
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
-          status: devbox.status,
+          runtime: "node" as Runtime, // Runloop supports multiple runtimes, defaulting to node
+          status: devbox.status as SandboxStatus,
           createdAt: new Date(devbox.create_time_ms || Date.now()),
           timeout: devbox.launch_parameters.keep_alive_time_seconds || 300000,
           metadata: {
@@ -405,112 +400,18 @@ export const runloop = createProvider<any, RunloopConfig>({
           }
         },
       },
-
+      
       // Provider-specific typed getInstance method
-      getInstance: (sandbox: any): any => {
+      getInstance: (sandbox): Runloop.DevboxView => {
         return sandbox;
-      },
-
-      // Snapshot management methods
-      snapshot: {
-        create: async (
-          config: RunloopConfig,
-          sandboxId: string,
-          options?: CreateSnapshotOptions
-        ) => {
-          const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-          if (!apiKey) {
-            throw new Error("Missing Runloop API key for snapshot creation");
-          }
-
-          try {
-            const client = new Runloop({
-              bearerToken: apiKey,
-            });
-
-            const snapshotParams: any = {};
-            if (options?.name) {
-              snapshotParams.name = options.name;
-            }
-            if (options?.metadata) {
-              snapshotParams.metadata = options.metadata;
-            }
-
-            const snapshot = await client.devboxes.snapshotDisk(
-              sandboxId,
-              snapshotParams
-            );
-            return snapshot;
-          } catch (error) {
-            throw new Error(
-              `Failed to create snapshot for sandbox ${sandboxId}: ${
-                error instanceof Error ? error.message : String(error)
-              }`
-            );
-          }
-        },
-
-        list: async (
-          config: RunloopConfig,
-          options?: ListSnapshotsOptions
-        ) => {
-          const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-          if (!apiKey) {
-            throw new Error("Missing Runloop API key for listing snapshots");
-          }
-
-          try {
-            const client = new Runloop({
-              bearerToken: apiKey,
-            });
-
-            const listParams: any = {};
-            if (options?.limit) {
-              listParams.limit = options.limit;
-            }
-
-            const response = await client.devboxes.listDiskSnapshots(listParams);
-            return response || [];
-          } catch (error) {
-            throw new Error(
-              `Failed to list snapshots: ${
-                error instanceof Error ? error.message : String(error)
-              }`
-            );
-          }
-        },
-
-        delete: async (config: RunloopConfig, snapshotId: string) => {
-          const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-          if (!apiKey) {
-            throw new Error("Missing Runloop API key for snapshot deletion");
-          }
-
-          try {
-            const client = new Runloop({
-              bearerToken: apiKey,
-            });
-
-            await client.devboxes.deleteDiskSnapshot(snapshotId);
-          } catch (error) {
-            throw new Error(
-              `Failed to delete snapshot ${snapshotId}: ${
-                error instanceof Error ? error.message : String(error)
-              }`
-            );
-          }
-        },
       },
     },
 
+    // Template management methods using the new factory pattern
     template: {
-      // Blueprint template management methods
       create: async (
         config: RunloopConfig,
-        options: Runloop.BlueprintCreateParams
+        options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams
       ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
@@ -556,7 +457,7 @@ export const runloop = createProvider<any, RunloopConfig>({
           }
 
           const response = await client.blueprints.list(listParams);
-          return response || [];
+          return response.blueprints || [];
         } catch (error) {
           throw new Error(
             `Failed to list blueprint templates: ${
@@ -584,6 +485,100 @@ export const runloop = createProvider<any, RunloopConfig>({
         } catch (error) {
           throw new Error(
             `Failed to delete blueprint template ${blueprintId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      },
+    },
+
+    // Snapshot management methods using the new factory pattern
+    snapshot: {
+      create: async (
+        config: RunloopConfig,
+        sandboxId: string,
+        options?: CreateSnapshotOptions
+      ) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error("Missing Runloop API key for snapshot creation");
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          const snapshotParams: any = {};
+          if (options?.name) {
+            snapshotParams.name = options.name;
+          }
+          if (options?.metadata) {
+            snapshotParams.metadata = options.metadata;
+          }
+
+          const snapshot = await client.devboxes.snapshotDisk(
+            sandboxId,
+            snapshotParams
+          );
+          return snapshot;
+        } catch (error) {
+          throw new Error(
+            `Failed to create snapshot for sandbox ${sandboxId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      },
+
+      list: async (
+        config: RunloopConfig,
+        options?: ListSnapshotsOptions
+      ) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error("Missing Runloop API key for listing snapshots");
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          const listParams: any = {};
+          if (options?.limit) {
+            listParams.limit = options.limit;
+          }
+
+          const response = await client.devboxes.listDiskSnapshots(listParams);
+          return response.snapshots || [];
+        } catch (error) {
+          throw new Error(
+            `Failed to list snapshots: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      },
+
+      delete: async (config: RunloopConfig, snapshotId: string) => {
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error("Missing Runloop API key for snapshot deletion");
+        }
+
+        try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
+
+          await client.devboxes.deleteDiskSnapshot(snapshotId);
+        } catch (error) {
+          throw new Error(
+            `Failed to delete snapshot ${snapshotId}: ${
               error instanceof Error ? error.message : String(error)
             }`
           );
