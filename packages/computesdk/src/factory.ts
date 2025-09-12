@@ -351,7 +351,9 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   ) {}
 
   async create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>> {
-    const result = await this.methods.create(this.config, options);
+    // Default to 'node' runtime if not specified for consistency across providers
+    const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
+    const result = await this.methods.create(this.config, optionsWithDefaults);
     const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
