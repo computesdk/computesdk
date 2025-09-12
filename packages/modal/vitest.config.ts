@@ -1,9 +1,5 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
-import { config } from 'dotenv'
-
-// Load environment variables from root .env file
-config({ path: path.resolve(__dirname, '../../.env') })
 
 export default defineConfig({
   test: {
