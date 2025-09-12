@@ -19,10 +19,10 @@
 
 ## What is ComputeSDK?
 
-ComputeSDK is a free and open-source toolkit for running other people's code in your applications. Think of it as the "AI SDK for compute" - providing a consistent TypeScript interface whether you're using E2B, Vercel, or Daytona.
+ComputeSDK is a free and open-source toolkit for running other people's code in your applications. Think of it as the "AI SDK for compute" - providing a consistent TypeScript interface whether you're using Blaxel, E2B, Vercel, or Daytona.
 
 **Why ComputeSDK?**
-- 🔄 **Provider-agnostic** - Switch between E2B, Vercel, Daytona and more (coming soon) without code changes
+- 🔄 **Provider-agnostic** - Switch between Blaxel, E2B, Vercel, Daytona and more (coming soon) without code changes
 - 🛡️ **Security-first** - Isolated sandboxes protect your infrastructure
 - ⚡ **Developer experience** - Simple, TypeScript-native API
 - 🌍 **Production-ready** - Used by teams building the next generation of developer tools
@@ -36,7 +36,7 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 
 ## Features
 
-- 🚀 **Multi-provider support** - E2B, Vercel, Daytona
+- 🚀 **Multi-provider support** - Blaxel, E2B, Vercel, Daytona
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
 - ⚡ **Command execution** - Run shell commands directly
@@ -53,6 +53,7 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 npm install computesdk
 
 # Add your preferred provider
+npm install @computesdk/blaxel     # For AI-powered code execution
 npm install @computesdk/e2b        # For data science and Python
 npm install @computesdk/vercel     # For web-scale Node.js/Python  
 npm install @computesdk/daytona    # For development workspaces
@@ -64,7 +65,9 @@ npm install @computesdk/ui         # React hooks and utilities
 Set your environment variables and you're ready to go:
 
 ```bash
-export E2B_API_KEY=your_api_key
+export BLAXEL_API_KEY=your_api_key
+export BLAXEL_WORKSPACE=your_workspace
+# or E2B_API_KEY=your_api_key
 # or VERCEL_TOKEN=your_token
 # or DAYTONA_API_KEY=your_key
 ```
@@ -73,11 +76,14 @@ export E2B_API_KEY=your_api_key
 
 ```typescript
 import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+import { blaxel } from '@computesdk/blaxel';
 
 // Set default provider
 compute.setConfig({ 
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
+  provider: blaxel({ 
+    apiKey: process.env.BLAXEL_API_KEY,
+    workspace: process.env.BLAXEL_WORKSPACE
+  }) 
 });
 
 // Create a sandbox
@@ -92,6 +98,40 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 ```
 
 ## Provider Setup
+
+### Blaxel - AI-Powered Code Execution
+
+Blaxel provides intelligent code execution with AI assistance:
+
+```bash
+export BLAXEL_API_KEY=your_blaxel_api_key_here
+export BLAXEL_WORKSPACE=your_workspace_here
+```
+
+```typescript
+import { compute } from 'computesdk';
+import { blaxel } from '@computesdk/blaxel';
+
+compute.setConfig({ 
+  provider: blaxel({ 
+    apiKey: process.env.BLAXEL_API_KEY,
+    workspace: process.env.BLAXEL_WORKSPACE
+  }) 
+});
+
+const sandbox = await compute.sandbox.create({});
+
+// Execute code with AI assistance
+const result = await sandbox.runCode(`
+print("Hello from Blaxel!")
+# Your code can leverage AI capabilities
+import json
+data = {"message": "AI-powered execution"}
+print(json.dumps(data, indent=2))
+`);
+
+console.log(result.stdout);
+```
 
 ### E2B - Full Development Environment
 
