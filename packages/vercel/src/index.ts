@@ -247,7 +247,8 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
               code.includes('json.') ||
               code.includes('__') ||
               code.includes('f"') ||
-              code.includes("f'")
+              code.includes("f'") ||
+              code.includes('raise ')
               ? 'python'
               // Default to Node.js for all other cases (including ambiguous)
               : 'node'

@@ -68,7 +68,8 @@ function detectRuntime(code: string): Runtime {
       code.includes('sys.') ||
       code.includes('json.') ||
       code.includes('f"') ||
-      code.includes("f'")) {
+      code.includes("f'") ||
+      code.includes('raise ')) {
     return 'python';
   }
 
