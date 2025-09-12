@@ -351,7 +351,9 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   ) {}
 
   async create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>> {
-    const result = await this.methods.create(this.config, options);
+    // Default to 'node' runtime if not specified for consistency across providers
+    const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
+    const result = await this.methods.create(this.config, optionsWithDefaults);
     const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
@@ -494,6 +496,12 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
     if (providerConfig.methods.snapshot) {
       this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
     }
+  }
+
+  getSupportedRuntimes(): Runtime[] {
+    // For now, all providers support both node and python
+    // In the future, this could be configurable per provider
+    return ['node', 'python'];
   }
 }
 

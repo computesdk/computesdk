@@ -97,7 +97,7 @@ export interface SandboxInfo {
  * Options for creating a sandbox
  */
 export interface CreateSandboxOptions {
-  /** Runtime environment */
+  /** Runtime environment (defaults to 'node' if not specified) */
   runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;

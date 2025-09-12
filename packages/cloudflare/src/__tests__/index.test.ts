@@ -203,7 +203,6 @@ if (skipIntegration) {
       runtime: 'python'
     }),
     supportsFilesystem: true,  // Cloudflare supports full filesystem operations
-    supportsPython: true,      // Cloudflare supports Python runtime
     timeout: 300000,           // 5 minutes for container operations
     skipIntegration: true     // Always skip for mocked tests
   });

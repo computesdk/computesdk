@@ -5,7 +5,10 @@
  */
 
 import { vi } from 'vitest'
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry } from '../types/index.js'
+import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, Runtime } from '../types/index.js'
+
+/** Standard mock runtime support for testing */
+export const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
 
 /**
  * Mock sandbox implementation for testing
@@ -109,6 +112,11 @@ export class MockSandbox implements Sandbox {
 export class MockProvider implements Provider {
   readonly name = 'mock'
   readonly __sandboxType!: any // Phantom type for testing
+
+  getSupportedRuntimes(): Runtime[] {
+    return MOCK_SUPPORTED_RUNTIMES
+  }
+
   readonly sandbox = {
     create: async (options?: any): Promise<Sandbox> => {
       const sandbox = new MockSandbox()
@@ -136,7 +144,12 @@ export class MockProvider implements Provider {
  */
 export function createMockProvider(overrides?: Partial<Provider>): Provider {
   const mockProvider = new MockProvider()
-  return { ...mockProvider, __sandboxType: null as any, ...overrides }
+  return { 
+    ...mockProvider, 
+    __sandboxType: null as any, 
+    getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
+    ...overrides 
+  }
 }
 
 /**
