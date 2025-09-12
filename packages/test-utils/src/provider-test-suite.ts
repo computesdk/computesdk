@@ -16,9 +16,6 @@ export interface ProviderTestConfig {
   name: string;
   /** Whether this provider supports filesystem operations */
   supportsFilesystem?: boolean;
-
-  /** Whether this provider supports Python runtime */
-  supportsPython?: boolean;
   /** Custom test timeout in milliseconds */
   timeout?: number;
   /** Skip tests that require real API calls */
@@ -30,7 +27,7 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function createProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, supportsPython = false, timeout = 30000, skipIntegration = false } = config;
+  const { provider, name, supportsFilesystem = false, timeout = 30000, skipIntegration = false } = config;
 
   return () => {
     // Helper function to create and cleanup sandboxes for each runtime
@@ -189,8 +186,7 @@ export function createProviderTests(config: ProviderTestConfig) {
       }
     });
 
-    if (supportsPython) {
-      describe('Python Runtime', () => {
+    describe('Python Runtime', () => {
         let pythonSandbox: Sandbox;
 
         beforeEach(async () => {
@@ -254,7 +250,6 @@ print(json.dumps(data, indent=2))
           }).rejects.toThrow();
         });
       });
-    }
   };
 }
 

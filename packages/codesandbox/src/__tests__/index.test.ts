@@ -5,6 +5,5 @@ runProviderTestSuite({
   name: 'codesandbox',
   provider: codesandbox({}),
   supportsFilesystem: true,  // CodeSandbox supports filesystem operations
-  supportsPython: true,      // CodeSandbox supports Python runtime
   skipIntegration: !process.env.CSB_API_KEY
 });
