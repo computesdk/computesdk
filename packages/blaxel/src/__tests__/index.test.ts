@@ -5,5 +5,5 @@ runProviderTestSuite({
   name: 'blaxel',
   provider: blaxel({}),
   supportsFilesystem: true,   // Blaxel supports filesystem operations via fs API
-  //skipIntegration: !process.env.BL_API_KEY && !process.env.BL_WORKSPACE
+  skipIntegration: !process.env.BLAXEL_API_KEY || !process.env.BLAXEL_WORKSPACE
 }); 
