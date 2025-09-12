@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
+// @ts-ignore - workspace reference
+import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions, Runtime } from 'computesdk';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -30,6 +31,9 @@ export function createProviderTests(config: ProviderTestConfig) {
   const { provider, name, supportsFilesystem = false, timeout = 30000, skipIntegration = false } = config;
 
   return () => {
+    // Get supported runtimes dynamically from provider
+    const supportedRuntimes = provider.getSupportedRuntimes();
+    
     // Helper function to create and cleanup sandboxes for each runtime
     const createRuntimeSandbox = async (runtime: 'node' | 'python') => {
       if (skipIntegration) {
@@ -54,202 +58,194 @@ export function createProviderTests(config: ProviderTestConfig) {
       }
     };
 
-    describe('Node.js Runtime', () => {
-      let nodeSandbox: Sandbox;
-
-      beforeEach(async () => {
-        nodeSandbox = await createRuntimeSandbox('node');
-      }, timeout);
-
-      afterEach(async () => {
-        await cleanupSandbox(nodeSandbox);
-      }, 15000);
-
-      it('should create a sandbox with valid ID', () => {
-        expect(nodeSandbox).toBeDefined();
-        expect(nodeSandbox.sandboxId).toBeDefined();
-        expect(typeof nodeSandbox.sandboxId).toBe('string');
-        expect(nodeSandbox.provider).toBe(name.toLowerCase());
-      });
-
-      it('should execute simple Node.js code', async () => {
-        const result = await nodeSandbox.runCode('console.log("Hello, World!")');
-        
-        expect(result).toBeDefined();
-        expect(result.stdout).toContain('Hello, World!');
-        expect(result.provider).toBe(name.toLowerCase());
-        expect(typeof result.executionTime).toBe('number');
-        expect(result.executionTime).toBeGreaterThan(0);
-      }, timeout);
-
-      it('should handle Node.js code execution errors gracefully', async () => {
-        const result = await nodeSandbox.runCode('throw new Error("Test error")');
-        
-        expect(result).toBeDefined();
-        expect(result.exitCode).not.toBe(0);
-        expect(result.stderr).toContain('Error');
-      }, timeout);
-
-      it('should execute shell commands', async () => {
-        const result = await nodeSandbox.runCommand('echo', ['Hello from command']);
-        
-        expect(result).toBeDefined();
-        expect(result.stdout).toContain('Hello from command');
-        expect(result.exitCode).toBe(0);
-      }, timeout);
-
-      it('should execute background commands', async () => {
-        const result = await nodeSandbox.runCommand('sleep', ['1'], { background: true });
-        
-        expect(result).toBeDefined();
-        expect(result.isBackground).toBe(true);
-        expect(result.exitCode).toBe(0);
-      }, timeout);
-
-      it('should get sandbox info', async () => {
-        const info = await nodeSandbox.getInfo();
-        
-        expect(info).toBeDefined();
-        expect(info.id).toBeDefined();
-        expect(info.provider).toBe(name.toLowerCase());
-        expect(info.status).toBeDefined();
-      });
-
-      it('should handle invalid Node.js code gracefully', async () => {
-        await expect(async () => {
-          await nodeSandbox.runCode('invalid syntax here!!!');
-        }).rejects.toThrow();
-      });
-
-      it('should handle invalid commands gracefully', async () => {
-        const result = await nodeSandbox.runCommand('nonexistent-command-12345');
-        expect(result.exitCode).not.toBe(0);
-      });
-
-      if (supportsFilesystem) {
-        describe('Filesystem Operations', () => {
-          const testFilePath = '/tmp/test-file.txt';
-          const testDirPath = '/tmp/test-dir';
-          const testContent = 'Hello, ComputeSDK filesystem!';
-
-          it('should write and read files', async () => {
-            await nodeSandbox.filesystem.writeFile(testFilePath, testContent);
-            const content = await nodeSandbox.filesystem.readFile(testFilePath);
-            
-            expect(content).toBe(testContent);
-          }, timeout);
-
-          it('should check file existence', async () => {
-            await nodeSandbox.filesystem.writeFile(testFilePath, testContent);
-            const exists = await nodeSandbox.filesystem.exists(testFilePath);
-            
-            expect(exists).toBe(true);
-          }, timeout);
-
-          it('should create directories', async () => {
-            await nodeSandbox.filesystem.mkdir(testDirPath);
-            const exists = await nodeSandbox.filesystem.exists(testDirPath);
-            
-            expect(exists).toBe(true);
-          }, timeout);
-
-          it('should list directory contents', async () => {
-            await nodeSandbox.filesystem.mkdir(testDirPath);
-            await nodeSandbox.filesystem.writeFile(`${testDirPath}/file1.txt`, 'content1');
-            await nodeSandbox.filesystem.writeFile(`${testDirPath}/file2.txt`, 'content2');
-            
-            const entries = await nodeSandbox.filesystem.readdir(testDirPath);
-            
-            expect(entries).toBeDefined();
-            expect(Array.isArray(entries)).toBe(true);
-            expect(entries.length).toBeGreaterThanOrEqual(2);
-            
-            const fileNames = entries.map((entry: FileEntry) => entry.name);
-            expect(fileNames).toContain('file1.txt');
-            expect(fileNames).toContain('file2.txt');
-          }, timeout);
-
-          it('should remove files and directories', async () => {
-            await nodeSandbox.filesystem.writeFile(testFilePath, testContent);
-            await nodeSandbox.filesystem.remove(testFilePath);
-            
-            const exists = await nodeSandbox.filesystem.exists(testFilePath);
-            expect(exists).toBe(false);
-          }, timeout);
-
-          it('should handle file not found errors', async () => {
-            await expect(async () => {
-              await nodeSandbox.filesystem.readFile('/nonexistent/file.txt');
-            }).rejects.toThrow();
-          });
-        });
-      }
-    });
-
-    describe('Python Runtime', () => {
-        let pythonSandbox: Sandbox;
+    // Test each supported runtime dynamically
+    supportedRuntimes.forEach(runtime => {
+      const runtimeName = runtime.charAt(0).toUpperCase() + runtime.slice(1);
+      
+      describe(`${runtimeName} Runtime`, () => {
+        let sandbox: Sandbox;
 
         beforeEach(async () => {
-          pythonSandbox = await createRuntimeSandbox('python');
+          sandbox = await createRuntimeSandbox(runtime);
         }, timeout);
 
         afterEach(async () => {
-          await cleanupSandbox(pythonSandbox);
+          await cleanupSandbox(sandbox);
         }, 15000);
 
-        it('should create a Python sandbox with valid ID', () => {
-          expect(pythonSandbox).toBeDefined();
-          expect(pythonSandbox.sandboxId).toBeDefined();
-          expect(typeof pythonSandbox.sandboxId).toBe('string');
-          expect(pythonSandbox.provider).toBe(name.toLowerCase());
+        it(`should create a ${runtimeName} sandbox with valid ID`, () => {
+          expect(sandbox).toBeDefined();
+          expect(sandbox.sandboxId).toBeDefined();
+          expect(typeof sandbox.sandboxId).toBe('string');
+          expect(sandbox.provider).toBe(name.toLowerCase());
         });
 
-        it('should execute Python code', async () => {
-          const pythonCode = `
+        if (runtime === 'node') {
+          it('should execute simple Node.js code', async () => {
+            const result = await sandbox.runCode('console.log("Hello, World!")');
+            
+            expect(result).toBeDefined();
+            expect(result.stdout).toContain('Hello, World!');
+            expect(result.provider).toBe(name.toLowerCase());
+            expect(typeof result.executionTime).toBe('number');
+            expect(result.executionTime).toBeGreaterThan(0);
+          }, timeout);
+
+          it('should handle Node.js code execution errors gracefully', async () => {
+            const result = await sandbox.runCode('throw new Error("Test error")');
+            
+            expect(result).toBeDefined();
+            expect(result.exitCode).not.toBe(0);
+            expect(result.stderr).toContain('Error');
+          }, timeout);
+
+          it('should handle invalid Node.js code gracefully', async () => {
+            await expect(async () => {
+              await sandbox.runCode('invalid syntax here!!!');
+            }).rejects.toThrow();
+          });
+        }
+
+        if (runtime === 'python') {
+          it('should execute Python code', async () => {
+            const pythonCode = `
 import sys
 print(f"Python version: {sys.version}")
 print("Hello from Python!")
-          `.trim();
+            `.trim();
 
-          const result = await pythonSandbox.runCode(pythonCode);
-          
-          expect(result).toBeDefined();
-          expect(result.stdout).toContain('Python version:');
-          expect(result.stdout).toContain('Hello from Python!');
-          expect(result.exitCode).toBe(0);
-        }, timeout);
+            const result = await sandbox.runCode(pythonCode);
+            
+            expect(result).toBeDefined();
+            expect(result.stdout).toContain('Python version:');
+            expect(result.stdout).toContain('Hello from Python!');
+            expect(result.exitCode).toBe(0);
+          }, timeout);
 
-        it('should handle Python imports', async () => {
-          const pythonCode = `
+          it('should handle Python imports', async () => {
+            const pythonCode = `
 import json
 import datetime
 
 data = {"message": "Hello", "timestamp": str(datetime.datetime.now())}
 print(json.dumps(data, indent=2))
-          `.trim();
+            `.trim();
 
-          const result = await pythonSandbox.runCode(pythonCode);
+            const result = await sandbox.runCode(pythonCode);
+            
+            expect(result).toBeDefined();
+            expect(result.stdout).toContain('"message": "Hello"');
+            expect(result.stdout).toContain('"timestamp"');
+            expect(result.exitCode).toBe(0);
+          }, timeout);
+
+          it('should handle Python execution errors gracefully', async () => {
+            const result = await sandbox.runCode('raise Exception("Python test error")');
+            
+            expect(result).toBeDefined();
+            expect(result.exitCode).not.toBe(0);
+            expect(result.stderr).toContain('Exception');
+          }, timeout);
+
+          it('should handle invalid Python code gracefully', async () => {
+            await expect(async () => {
+              await sandbox.runCode('invalid python syntax here!!!');
+            }).rejects.toThrow();
+          });
+        }
+
+        // Common tests for all runtimes
+        it('should execute shell commands', async () => {
+          const result = await sandbox.runCommand('echo', ['Hello from command']);
           
           expect(result).toBeDefined();
-          expect(result.stdout).toContain('"message": "Hello"');
-          expect(result.stdout).toContain('"timestamp"');
+          expect(result.stdout).toContain('Hello from command');
           expect(result.exitCode).toBe(0);
         }, timeout);
 
-        it('should handle Python execution errors gracefully', async () => {
-          const result = await pythonSandbox.runCode('raise Exception("Python test error")');
+        it('should execute background commands', async () => {
+          const result = await sandbox.runCommand('sleep', ['1'], { background: true });
           
           expect(result).toBeDefined();
-          expect(result.exitCode).not.toBe(0);
-          expect(result.stderr).toContain('Exception');
+          expect(result.isBackground).toBe(true);
+          expect(result.exitCode).toBe(0);
         }, timeout);
 
-        it('should handle invalid Python code gracefully', async () => {
-          await expect(async () => {
-            await pythonSandbox.runCode('invalid python syntax here!!!');
-          }).rejects.toThrow();
+        it('should get sandbox info', async () => {
+          const info = await sandbox.getInfo();
+          
+          expect(info).toBeDefined();
+          expect(info.id).toBeDefined();
+          expect(info.provider).toBe(name.toLowerCase());
+          expect(info.status).toBeDefined();
         });
+
+        it('should handle invalid commands gracefully', async () => {
+          const result = await sandbox.runCommand('nonexistent-command-12345');
+          expect(result.exitCode).not.toBe(0);
+        });
+
+        // Filesystem tests (only for first runtime to avoid duplication)
+        if (supportsFilesystem && runtime === supportedRuntimes[0]) {
+          describe('Filesystem Operations', () => {
+            const testFilePath = '/tmp/test-file.txt';
+            const testDirPath = '/tmp/test-dir';
+            const testContent = 'Hello, ComputeSDK filesystem!';
+
+            it('should write and read files', async () => {
+              await sandbox.filesystem.writeFile(testFilePath, testContent);
+              const content = await sandbox.filesystem.readFile(testFilePath);
+              
+              expect(content).toBe(testContent);
+            }, timeout);
+
+            it('should check file existence', async () => {
+              await sandbox.filesystem.writeFile(testFilePath, testContent);
+              const exists = await sandbox.filesystem.exists(testFilePath);
+              
+              expect(exists).toBe(true);
+            }, timeout);
+
+            it('should create directories', async () => {
+              await sandbox.filesystem.mkdir(testDirPath);
+              const exists = await sandbox.filesystem.exists(testDirPath);
+              
+              expect(exists).toBe(true);
+            }, timeout);
+
+            it('should list directory contents', async () => {
+              await sandbox.filesystem.mkdir(testDirPath);
+              await sandbox.filesystem.writeFile(`${testDirPath}/file1.txt`, 'content1');
+              await sandbox.filesystem.writeFile(`${testDirPath}/file2.txt`, 'content2');
+              
+              const entries = await sandbox.filesystem.readdir(testDirPath);
+              
+              expect(entries).toBeDefined();
+              expect(Array.isArray(entries)).toBe(true);
+              expect(entries.length).toBeGreaterThanOrEqual(2);
+              
+              const fileNames = entries.map((entry: FileEntry) => entry.name);
+              expect(fileNames).toContain('file1.txt');
+              expect(fileNames).toContain('file2.txt');
+            }, timeout);
+
+            it('should remove files and directories', async () => {
+              await sandbox.filesystem.writeFile(testFilePath, testContent);
+              await sandbox.filesystem.remove(testFilePath);
+              
+              const exists = await sandbox.filesystem.exists(testFilePath);
+              expect(exists).toBe(false);
+            }, timeout);
+
+            it('should handle file not found errors', async () => {
+              await expect(async () => {
+                await sandbox.filesystem.readFile('/nonexistent/file.txt');
+              }).rejects.toThrow();
+            });
+          });
+        }
       });
+    });
   };
 }
 
@@ -482,6 +478,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       return {
         name: providerName,
         __sandboxType: null as any, // Phantom type for testing
+        getSupportedRuntimes: () => ['node', 'python'],
         sandbox: {
           create: async () => { throw new Error('Not implemented in mock'); },
           getById: async () => { throw new Error('Not implemented in mock'); },

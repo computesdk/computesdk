@@ -497,6 +497,12 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
       this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
     }
   }
+
+  getSupportedRuntimes(): Runtime[] {
+    // For now, all providers support both node and python
+    // In the future, this could be configurable per provider
+    return ['node', 'python'];
+  }
 }
 
 /**

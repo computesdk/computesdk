@@ -4,7 +4,7 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { Sandbox, CreateSandboxOptions } from './sandbox';
+import type { Sandbox, CreateSandboxOptions, Runtime } from './sandbox';
 
 /**
  * Common options for creating snapshots
@@ -99,6 +99,9 @@ export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
   
   /** Optional snapshot management operations */
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
+  
+  /** Get the list of supported runtime environments */
+  getSupportedRuntimes(): Runtime[];
   
   /** Phantom type property for TypeScript inference - not used at runtime */
   readonly __sandboxType: TSandbox;
