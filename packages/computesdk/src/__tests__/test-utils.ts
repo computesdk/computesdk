@@ -7,6 +7,9 @@
 import { vi } from 'vitest'
 import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, Runtime } from '../types/index.js'
 
+/** Standard mock runtime support for testing */
+export const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
+
 /**
  * Mock sandbox implementation for testing
  */
@@ -111,7 +114,7 @@ export class MockProvider implements Provider {
   readonly __sandboxType!: any // Phantom type for testing
 
   getSupportedRuntimes(): Runtime[] {
-    return ['node', 'python']
+    return MOCK_SUPPORTED_RUNTIMES
   }
 
   readonly sandbox = {
@@ -144,7 +147,7 @@ export function createMockProvider(overrides?: Partial<Provider>): Provider {
   return { 
     ...mockProvider, 
     __sandboxType: null as any, 
-    getSupportedRuntimes: () => ['node', 'python'] as Runtime[],
+    getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
     ...overrides 
   }
 }

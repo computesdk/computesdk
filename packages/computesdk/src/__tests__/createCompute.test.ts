@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createCompute } from '../compute.js'
 import type { Runtime, ExecutionResult, SandboxInfo } from '../types/index.js'
+import { MOCK_SUPPORTED_RUNTIMES } from './test-utils.js'
 
 // Mock E2B-like provider
 function createMockProvider(name: string) {
@@ -13,7 +14,7 @@ function createMockProvider(name: string) {
   return {
     name,
     __sandboxType: null as any, // Phantom type for testing
-    getSupportedRuntimes: () => ['node', 'python'] as Runtime[],
+    getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
     sandbox: {
       create: vi.fn().mockResolvedValue({
         sandboxId: 'test-123',
