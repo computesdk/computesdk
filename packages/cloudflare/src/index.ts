@@ -52,7 +52,8 @@ function detectRuntime(code: string): Runtime {
       code.includes('json.') ||
       code.includes('__') ||
       code.includes('f"') ||
-      code.includes("f'")) {
+      code.includes("f'") ||
+      code.includes('raise ')) {
     return 'python';
   }
 
