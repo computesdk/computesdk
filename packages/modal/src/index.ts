@@ -209,17 +209,10 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             command = ['python3', '-c', code];
           }
 
-          // Add timeout wrapper to prevent hanging on invalid code
-          const execPromise = executionSandbox.exec(command, {
+          const process = await executionSandbox.exec(command, {
             stdout: 'pipe',
             stderr: 'pipe'
           });
-
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Code execution timeout')), 4000); // 4 second timeout for code execution
-          });
-
-          const process = await Promise.race([execPromise, timeoutPromise]);
 
           // Use working stream reading pattern from debug
           const [stdout, stderr] = await Promise.all([
@@ -272,20 +265,6 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         try {
           // Handle background command execution
           const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-          
-          // For commands that clearly don't exist, fail fast to avoid Modal hanging
-          if (finalCommand.includes('nonexistent-command') || 
-              finalCommand.match(/^[a-z]+-[a-z]+-\d+$/)) {
-            return {
-              stdout: '',
-              stderr: `${finalCommand}: command not found`,
-              exitCode: 127, // Command not found exit code
-              executionTime: Date.now() - startTime,
-              sandboxId: modalSandbox.sandboxId,
-              provider: 'modal',
-              isBackground: false
-            };
-          }
           
           // Execute command using Modal's exec method with working pattern
           const process = await modalSandbox.sandbox.exec([finalCommand, ...finalArgs], {
