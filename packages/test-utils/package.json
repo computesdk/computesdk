@@ -19,6 +19,9 @@
     "dev": "tsup --watch",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "dotenv": "^17.2.1"
+  },
   "peerDependencies": {
     "vitest": "^1.0.0"
   },
