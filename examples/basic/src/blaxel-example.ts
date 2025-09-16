@@ -12,47 +12,31 @@ import { PYTHON_SNIPPETS, NODEJS_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
 
 async function main() {
-  console.log('🔍 Debug: Checking environment variables...');
-  console.log('BLAXEL_API_KEY exists:', !!process.env.BLAXEL_API_KEY);
-  console.log('BLAXEL_WORKSPACE exists:', !!process.env.BLAXEL_WORKSPACE);
-  console.log('BLAXEL_API_KEY length:', process.env.BLAXEL_API_KEY?.length || 0);
-  console.log('BLAXEL_WORKSPACE value:', process.env.BLAXEL_WORKSPACE || 'undefined');
-
-  if (!process.env.BLAXEL_API_KEY || !process.env.BLAXEL_WORKSPACE) {
+  // Check required environment variables
+  if (!process.env.BL_API_KEY || !process.env.BL_WORKSPACE) {
     console.error('❌ Missing required environment variables:');
-    console.error('- BLAXEL_API_KEY:', !!process.env.BLAXEL_API_KEY ? '✅ Set' : '❌ Missing');
-    console.error('- BLAXEL_WORKSPACE:', !!process.env.BLAXEL_WORKSPACE ? '✅ Set' : '❌ Missing');
+    console.error('- BL_API_KEY: API key from Blaxel dashboard');
+    console.error('- BL_WORKSPACE: Your Blaxel workspace name');
     console.error('\nPlease set both environment variables and try again.');
     process.exit(1);
   }
 
   try {
-    console.log('\n🔍 Debug: Creating Blaxel provider...');
-    
     // Configure compute with Blaxel provider
-    const providerConfig = {
-      apiKey: process.env.BLAXEL_API_KEY,
-      workspace: process.env.BLAXEL_WORKSPACE
-    };
-    
-    console.log('🔍 Debug: Provider config (sanitized):', {
-      apiKey: `${providerConfig.apiKey?.substring(0, 8)}...`,
-      workspace: providerConfig.workspace
+    const blaxelProvider = blaxel({
+      apiKey: process.env.BL_API_KEY,
+      workspace: process.env.BL_WORKSPACE
     });
-
-    const blaxelProvider = blaxel(providerConfig);
-    console.log('🔍 Debug: Blaxel provider created successfully');
 
     const compute = createCompute({ 
       defaultProvider: blaxelProvider
     });
-    console.log('🔍 Debug: Compute configured with Blaxel provider');
 
-    // Create sandbox using compute singleton - auto-detects Python runtime
-    console.log('\n🚀 Creating Blaxel sandbox for Python...');
+    // Create Python sandbox
+    console.log('🚀 Creating Blaxel sandbox for Python...');
     
     try {
-      const sandbox = await compute.sandbox.create();
+      const sandbox = await compute.sandbox.create({ options: { runtime: 'python' } });
       console.log('✅ Created Blaxel sandbox:', sandbox.sandboxId);
 
       // Execute Python code
@@ -86,12 +70,56 @@ async function main() {
       const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
       console.log('Node.js Output:', nodeResult.stdout);
 
-      // Data science example (Python)
+      // Data science example (Python) - install pandas first or use simple example
       console.log('\n--- Data Science ---');
       
-      const dataResult = await sandbox.runCode(PYTHON_SNIPPETS.DATA_SCIENCE);
-      
-      console.log('Data Science Output:', dataResult.stdout);
+      // Try to install pandas first
+      try {
+        console.log('Installing pandas...');
+        const installResult = await sandbox.runCommand('pip', ['install', 'pandas', 'numpy']);
+        console.log('Pandas installation result:', installResult.stdout);
+        
+        // Now run the data science code
+        const dataResult = await sandbox.runCode(PYTHON_SNIPPETS.DATA_SCIENCE);
+        console.log('Data Science Output:', dataResult.stdout);
+      } catch (installError) {
+        console.log('Could not install pandas, using simple data processing instead...');
+        
+        // Simple data processing without external libraries
+        const simpleDataCode = `
+# Simple data processing without external libraries
+import json
+from statistics import mean
+
+# Create sample data
+data = [
+    {'name': 'Alice', 'age': 25, 'score': 85},
+    {'name': 'Bob', 'age': 30, 'score': 92},
+    {'name': 'Charlie', 'age': 35, 'score': 78}
+]
+
+print("Data Processing Results:")
+print("=" * 30)
+
+# Print all records
+for person in data:
+    print(f"Name: {person['name']}, Age: {person['age']}, Score: {person['score']}")
+
+# Calculate statistics
+ages = [person['age'] for person in data]
+scores = [person['score'] for person in data]
+
+print(f"\\nStatistics:")
+print(f"Average age: {mean(ages):.1f}")
+print(f"Average score: {mean(scores):.1f}")
+print(f"Total records: {len(data)}")
+print(f"Age range: {min(ages)}-{max(ages)}")
+print(f"Score range: {min(scores)}-{max(scores)}")
+        `.trim();
+        
+        const simpleResult = await sandbox.runCode(simpleDataCode);
+        console.log('Simple Data Processing Output:', simpleResult.stdout);
+      }
 
       // Clean up
       await sandbox.kill();
@@ -162,8 +190,11 @@ async function main() {
       try {
         const serialized = JSON.stringify(error, null, 2);
         console.error('Serialized error:', serialized);
-      } catch (serializationError) {
-        console.error('Could not serialize error:', serializationError.message);
+      } catch (serializationError: unknown) {
+        const errorMessage = serializationError instanceof Error 
+          ? serializationError.message 
+          : String(serializationError);
+        console.error('Could not serialize error:', errorMessage);
         
         // Manual property inspection
         if (typeof error === 'object' && error !== null) {
@@ -173,7 +204,10 @@ async function main() {
               console.error(`  ${key}:`, typeof value === 'object' ? JSON.stringify(value) : value);
             }
           } catch (inspectionError) {
-            console.error('Error inspecting properties:', inspectionError.message);
+            const errorMessage = inspectionError instanceof Error 
+              ? inspectionError.message 
+              : String(inspectionError);
+            console.error('Error inspecting properties:', errorMessage);
           }
         }
       }
