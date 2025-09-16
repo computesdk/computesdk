@@ -13,16 +13,19 @@ npm install @computesdk/e2b
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 // Set as default provider
-compute.setConfig({ 
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
+const compute = createCompute({ 
+  defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from E2B!")');
@@ -69,15 +72,6 @@ interface E2BConfig {
   apiUrl?: string;
 }
 ```
-
-## Features
-
-- ✅ **Code Execution** - Python and Node.js with extensive library support
-- ✅ **Terminal Support** - Interactive PTY terminals for development
-- ✅ **Filesystem Operations** - Complete read/write access
-- ✅ **Command Execution** - Full shell command support
-- ✅ **Pre-installed Libraries** - Data science, ML, and development tools
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 
 ## API Reference
 

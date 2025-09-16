@@ -9,6 +9,7 @@
     "daytona": "tsx src/daytona-example.ts",
     "modal": "tsx src/modal-example.ts",
     "codesandbox": "tsx src/codesandbox-example.ts",
+    "blaxel": "tsx src/blaxel-example.ts",
     "launch": "tsx src/launch-example.ts"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "@computesdk/daytona": "workspace:*",
     "@computesdk/modal": "workspace:*",
     "@computesdk/codesandbox": "workspace:*",
+    "@computesdk/blaxel": "workspace:*",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

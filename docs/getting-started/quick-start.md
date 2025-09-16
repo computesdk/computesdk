@@ -22,16 +22,19 @@ npm install @computesdk/ui         # React hooks and utilities
 ## Basic Usage
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 // Set default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
 
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello World!")');
@@ -46,14 +49,17 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 ### E2B - Full Development Environment
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
-compute.setConfig({ 
+const compute = createCompute({ 
   defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
 
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute Python with data science libraries
 const result = await sandbox.runCode(`
@@ -72,14 +78,17 @@ console.log(result.stdout);
 ### Vercel - Serverless Execution
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
 
-compute.setConfig({ 
+const compute = createCompute({ 
   defaultProvider: vercel({ runtime: 'node' }) 
 });
 
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute Node.js or Python
 const result = await sandbox.runCode(`
@@ -93,14 +102,17 @@ console.log(result.stdout);
 ### Daytona - Development Workspaces
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { daytona } from '@computesdk/daytona';
 
-compute.setConfig({ 
+const compute = createCompute({ 
   defaultProvider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
 });
 
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute in development workspace
 const result = await sandbox.runCode(`
@@ -115,10 +127,10 @@ console.log(result.stdout);
 ### Modal - GPU-Accelerated Python Workloads
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { modal } from '@computesdk/modal';
 
-compute.setConfig({ 
+const compute = createCompute({ 
   defaultProvider: modal({ 
     tokenId: process.env.MODAL_TOKEN_ID,
     tokenSecret: process.env.MODAL_TOKEN_SECRET 
@@ -126,6 +138,9 @@ compute.setConfig({
 });
 
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute GPU-accelerated Python workloads
 const result = await sandbox.runCode(`
@@ -148,16 +163,19 @@ console.log(result.stdout);
 ### CodeSandbox - Collaborative Sandboxes
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { codesandbox } from '@computesdk/codesandbox';
 
-compute.setConfig({ 
+const compute = createCompute({ 
   defaultProvider: codesandbox({ 
     apiKey: process.env.CSB_API_KEY 
   }) 
 });
 
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute in collaborative environment
 const result = await sandbox.runCode(`

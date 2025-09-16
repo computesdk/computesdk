@@ -13,16 +13,19 @@ npm install @computesdk/codesandbox
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { codesandbox } from '@computesdk/codesandbox';
 
 // Set as default provider
-compute.setConfig({ 
-  provider: codesandbox({ apiKey: process.env.CODESANDBOX_API_KEY }) 
+const compute = createCompute({ 
+  defaultProvider: codesandbox({ apiKey: process.env.CODESANDBOX_API_KEY }) 
 });
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('console.log("Hello from CodeSandbox!")');
@@ -71,16 +74,6 @@ interface CodeSandboxConfig {
   baseUrl?: string;
 }
 ```
-
-## Features
-
-- ✅ **Web Development** - React, Vue, Angular, and vanilla JavaScript
-- ✅ **Template Support** - Pre-configured project templates
-- ✅ **Package Management** - npm/yarn package installation
-- ✅ **Live Preview** - Real-time preview of web applications
-- ✅ **Filesystem Operations** - Full file system access
-- ✅ **Public Sharing** - Share sandboxes with public URLs
-- ✅ **Auto Runtime Detection** - Automatically detects JavaScript vs TypeScript
 
 ## API Reference
 

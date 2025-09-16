@@ -13,16 +13,19 @@ npm install @computesdk/vercel
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
 
 // Set as default provider
-compute.setConfig({ 
-  provider: vercel({ runtime: 'node' }) 
+const compute = createCompute({ 
+  defaultProvider: vercel({ runtime: 'node' }) 
 });
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('console.log("Hello from Vercel!")');
@@ -83,16 +86,6 @@ interface VercelConfig {
   timeout?: number;
 }
 ```
-
-## Features
-
-- ✅ **Code Execution** - Node.js and Python runtime support
-- ✅ **Global Infrastructure** - Edge deployment across multiple regions
-- ✅ **Long Execution** - Up to 45 minutes execution time
-- ✅ **Filesystem Operations** - Full file system access
-- ✅ **Command Execution** - Run shell commands
-- ✅ **Auto-scaling** - Automatic resource scaling
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 
 ## API Reference
 

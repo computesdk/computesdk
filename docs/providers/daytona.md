@@ -13,16 +13,19 @@ npm install @computesdk/daytona
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { daytona } from '@computesdk/daytona';
 
 // Set as default provider
-compute.setConfig({ 
-  provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
+const compute = createCompute({ 
+  defaultProvider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
 });
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Daytona!")');
@@ -69,14 +72,6 @@ interface DaytonaConfig {
   baseUrl?: string;
 }
 ```
-
-## Features
-
-- ✅ **Code Execution** - Python and Node.js runtime support
-- ✅ **Command Execution** - Run shell commands in workspace
-- ✅ **Filesystem Operations** - Full file system access
-- ✅ **Development Workspaces** - Persistent workspace environments
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 
 ## API Reference
 

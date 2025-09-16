@@ -33,16 +33,17 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 ## Quick Example
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 // Set default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
 
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello World!")');

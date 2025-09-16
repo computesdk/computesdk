@@ -13,12 +13,12 @@ npm install @computesdk/modal
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { modal } from '@computesdk/modal';
 
 // Set as default provider
-compute.setConfig({ 
-  provider: modal({ 
+const compute = createCompute({ 
+  defaultProvider: modal({ 
     tokenId: process.env.MODAL_TOKEN_ID,
     tokenSecret: process.env.MODAL_TOKEN_SECRET
   }) 
@@ -26,6 +26,9 @@ compute.setConfig({
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Modal!")');
@@ -80,16 +83,6 @@ interface ModalConfig {
   image?: string;
 }
 ```
-
-## Features
-
-- ✅ **GPU Support** - T4, A10G, and A100 GPUs for ML workloads
-- ✅ **Code Execution** - Python with ML/AI libraries pre-installed
-- ✅ **Scalable Compute** - Auto-scaling based on demand
-- ✅ **Custom Images** - Use custom Docker images
-- ✅ **Filesystem Operations** - Full file system access
-- ✅ **Command Execution** - Run shell commands and scripts
-- ✅ **ML Libraries** - Pre-installed PyTorch, TensorFlow, and more
 
 ## API Reference
 

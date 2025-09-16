@@ -13,12 +13,12 @@ npm install @computesdk/blaxel
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { blaxel } from '@computesdk/blaxel';
 
 // Set as default provider
-compute.setConfig({ 
-  provider: blaxel({ 
+const compute = createCompute({ 
+  defaultProvider: blaxel({ 
     apiKey: process.env.BLAXEL_API_KEY,
     workspace: process.env.BLAXEL_WORKSPACE
   }) 
@@ -26,6 +26,9 @@ compute.setConfig({
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
+
+// Get instance
+const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Blaxel!")');
@@ -80,16 +83,6 @@ interface BlaxelConfig {
   baseUrl?: string;
 }
 ```
-
-## Features
-
-- ✅ **Ultra-fast Boot** - 25ms sandbox creation time
-- ✅ **AI Integration** - LLM-powered code assistance and optimization
-- ✅ **Code Execution** - Python, Node.js, and TypeScript support
-- ✅ **Persistent Storage** - Data survives sandbox destruction
-- ✅ **Auto-scaling** - Scales to zero after 5 seconds of inactivity
-- ✅ **Filesystem Operations** - Full file system access with persistence
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js vs TypeScript
 
 ## API Reference
 
@@ -484,7 +477,7 @@ const results = [];
 for (let i = 1; i <= iterations; i++) {
   const startTime = Date.now();
   
-  // Create sandbox (25ms boot time)
+  // Create sandbox
   const sandbox = await compute.sandbox.create();
   const bootTime = Date.now() - startTime;
   
