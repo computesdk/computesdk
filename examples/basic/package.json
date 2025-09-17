@@ -10,6 +10,7 @@
     "modal": "tsx src/modal-example.ts",
     "codesandbox": "tsx src/codesandbox-example.ts",
     "blaxel": "tsx src/blaxel-example.ts",
+    "runloop": "tsx src/runloop-example.ts",
     "launch": "tsx src/launch-example.ts"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@computesdk/modal": "workspace:*",
     "@computesdk/codesandbox": "workspace:*",
     "@computesdk/blaxel": "workspace:*",
+    "@computesdk/runloop": "workspace:*",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

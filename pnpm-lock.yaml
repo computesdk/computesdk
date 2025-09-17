@@ -108,6 +108,9 @@ importers:
       '@computesdk/modal':
         specifier: workspace:*
         version: link:../../packages/modal
+      '@computesdk/runloop':
+        specifier: workspace:*
+        version: link:../../packages/runloop
       '@computesdk/vercel':
         specifier: workspace:*
         version: link:../../packages/vercel
