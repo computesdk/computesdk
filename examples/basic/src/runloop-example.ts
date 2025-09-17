@@ -36,15 +36,15 @@ async function main() {
     console.log('\n--- Filesystem Operations ---');
 
     // Write and execute a Python script
-    await sandbox.filesystem.writeFile('/project/workspace/script.py', PYTHON_SNIPPETS.FILE_PROCESSOR);
+    await sandbox.filesystem.writeFile('project/workspace/script.py', PYTHON_SNIPPETS.FILE_PROCESSOR);
 
-    const scriptResult = await sandbox.runCommand('python', ['/project/workspace/script.py']);
+    const scriptResult = await sandbox.runCommand('python', ['project/workspace/script.py']);
     console.log('Script output:', scriptResult.stdout);
 
     // Create directory and list files
-    await sandbox.filesystem.mkdir('/project/workspace/data');
-    const files = await sandbox.filesystem.readdir('/project/workspace');
-    console.log('Files in /project/workspace:', files.map(f => f.name));
+    await sandbox.filesystem.mkdir('project/workspace/data');
+    const files = await sandbox.filesystem.readdir('project/workspace');
+    console.log('Files in project/workspace:', files.map(f => f.name));
 
     // Clean up
     await sandbox.kill();
