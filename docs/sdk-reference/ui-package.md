@@ -1,4 +1,4 @@
-# UI Package (@computesdk/ui)
+# UI Package
 
 The `@computesdk/ui` package provides React components and utilities for integrating ComputeSDK into your frontend applications. It offers both UI components for user interaction and headless hooks for building custom interfaces.
 

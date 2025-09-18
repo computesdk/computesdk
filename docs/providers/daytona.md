@@ -1,4 +1,4 @@
-# @computesdk/daytona
+# Daytona
 
 Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
 

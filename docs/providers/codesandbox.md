@@ -1,4 +1,4 @@
-# @computesdk/codesandbox
+# Codesandbox
 
 CodeSandbox provider for ComputeSDK - Execute code in web-based development environments.
 

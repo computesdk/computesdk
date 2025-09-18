@@ -1,4 +1,4 @@
-# SDK Reference Overview
+# Overview
 
 Complete reference documentation for ComputeSDK's APIs and interfaces.
 

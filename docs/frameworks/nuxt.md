@@ -1,4 +1,4 @@
-# ComputeSDK + Nuxt
+# Nuxt
 
 Use ComputeSDK to execute code in secure sandboxes from your Nuxt server API routes.
 
