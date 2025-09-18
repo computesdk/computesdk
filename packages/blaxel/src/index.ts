@@ -91,65 +91,20 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
 					};
 				} catch (error) {
-					// Enhanced error handling with detailed debugging
-					console.error('🔍 Blaxel SDK Error Debug Info:');
-					console.error('Error type:', typeof error);
-					console.error('Error constructor:', error?.constructor?.name);
-					console.error('Is Error instance:', error instanceof Error);
-					
-					let errorDetails = 'Unknown error';
-					
 					if (error instanceof Error) {
-						console.error('Error message:', error.message);
-						console.error('Error name:', error.name);
-						console.error('Error stack:', error.stack);
-						errorDetails = error.message;
-						
 						if (error.message.includes('unauthorized') || error.message.includes('API key')) {
 							throw new Error(
-								`Blaxel authentication failed. Please check your BLAXEL_API_KEY environment variable. Original error: ${error.message}`
+								`Blaxel authentication failed. Please check your BLAXEL_API_KEY environment variable.`
 							);
 						}
 						if (error.message.includes('quota') || error.message.includes('limit')) {
 							throw new Error(
-								`Blaxel quota exceeded. Please check your usage limits. Original error: ${error.message}`
+								`Blaxel quota exceeded. Please check your usage limits.`
 							);
 						}
-					} else {
-						// Handle non-Error objects
-						console.error('Raw error object:', error);
-						
-						try {
-							const serialized = JSON.stringify(error, null, 2);
-							console.error('Serialized error:', serialized);
-							errorDetails = serialized;
-						} catch (serializationError) {
-							const serializationMsg = serializationError instanceof Error ? serializationError.message : String(serializationError);
-							console.error('Could not serialize error:', serializationMsg);
-							
-							// Manual property inspection
-							if (typeof error === 'object' && error !== null) {
-								console.error('Error properties:');
-								const properties: Record<string, any> = {};
-								try {
-									for (const [key, value] of Object.entries(error)) {
-										console.error(`  ${key}:`, value);
-										properties[key] = value;
-									}
-									errorDetails = JSON.stringify(properties);
-								} catch (inspectionError) {
-									const inspectionMsg = inspectionError instanceof Error ? inspectionError.message : String(inspectionError);
-									console.error('Error inspecting properties:', inspectionMsg);
-									errorDetails = `Could not inspect error: ${inspectionMsg}`;
-								}
-							} else {
-								errorDetails = String(error);
-							}
-						}
 					}
-					
 					throw new Error(
-						`Failed to create Blaxel sandbox: ${errorDetails}`
+						`Failed to create Blaxel sandbox: ${error instanceof Error ? error.message : String(error)}`
 					);
 				}
 			},
@@ -531,63 +486,21 @@ export function createBlaxelCompute(config: BlaxelConfig): {
 }
 
 async function handleBlaxelAuth(config: BlaxelConfig) {
-	console.log('🔍 Blaxel Auth Debug: Starting authentication...');
-	console.log('🔍 Config workspace:', config.workspace);
-	console.log('🔍 Config API key exists:', !!config.apiKey);
-	console.log('🔍 Config API key length:', config.apiKey?.length || 0);
-	
 	// Check if auth is already set in the SDK
 	try {
-		console.log('🔍 Blaxel Auth Debug: Attempting initial authentication...');
 		await settings.authenticate();
-		console.log('✅ Blaxel Auth Debug: Initial authentication successful');
 	} catch (error) {
-		console.log('🔍 Blaxel Auth Debug: Initial auth failed, setting environment variables...');
-		console.error('🔍 Initial auth error:', error instanceof Error ? error.message : JSON.stringify(error));
-		
 		// If not, set the auth from the config
 		if (config.workspace || process.env.BLAXEL_WORKSPACE && typeof process !== 'undefined') {
-			const workspace = config.workspace || process.env.BLAXEL_WORKSPACE;
-			process.env.BL_WORKSPACE = workspace;
-			console.log('🔍 Set BL_WORKSPACE to:', workspace);
+			process.env.BL_WORKSPACE = config.workspace || process.env.BLAXEL_WORKSPACE;
 		}
 		if (config.apiKey || process.env.BLAXEL_API_KEY && typeof process !== 'undefined') {
-			const apiKey = config.apiKey || process.env.BLAXEL_API_KEY;
-			process.env.BL_API_KEY = apiKey;
-			console.log('🔍 Set BL_API_KEY (length):', apiKey?.length || 0);
+			process.env.BL_API_KEY = config.apiKey || process.env.BLAXEL_API_KEY;
 		}
-		
-		console.log('🔍 Current environment variables:');
-		console.log('  BL_WORKSPACE:', process.env.BL_WORKSPACE);
-		console.log('  BL_API_KEY exists:', !!process.env.BL_API_KEY);
-		console.log('  BL_API_KEY length:', process.env.BL_API_KEY?.length || 0);
-		
 		try {
-			console.log('🔍 Blaxel Auth Debug: Attempting authentication with env vars...');
 			await settings.authenticate();
-			console.log('✅ Blaxel Auth Debug: Authentication with env vars successful');
-		} catch (authError) {
-			console.error('🔍 Blaxel Auth Debug: Final authentication failed');
-			console.error('Auth error type:', typeof authError);
-			console.error('Auth error constructor:', authError?.constructor?.name);
-			
-			let authErrorDetails = 'Unknown authentication error';
-			if (authError instanceof Error) {
-				console.error('Auth error message:', authError.message);
-				console.error('Auth error name:', authError.name);
-				console.error('Auth error stack:', authError.stack);
-				authErrorDetails = authError.message;
-			} else {
-				try {
-					authErrorDetails = JSON.stringify(authError, null, 2);
-					console.error('Auth error serialized:', authErrorDetails);
-				} catch {
-					authErrorDetails = String(authError);
-					console.error('Auth error string:', authErrorDetails);
-				}
-			}
-			
-			throw new Error(`Blaxel authentication failed: ${authErrorDetails}. Please check your API credentials and visit: https://docs.blaxel.ai/Security/Access-tokens#using-api-keys`);
+		} catch (error) {
+			throw new Error('Blaxel authentication failed. Please check the following documents for more information: https://docs.blaxel.ai/Security/Access-tokens#using-api-keys');
 		}
 	}
 }

@@ -137,7 +137,7 @@ export const runloop = createProvider<
           const dbx = await client.devboxes.createAndAwaitRunning(devboxParams);
 
           return {
-            sandbox: dbx,
+            sandbox: dbx, 
             sandboxId: dbx.id,
           };
         } catch (error) {
@@ -206,80 +206,8 @@ export const runloop = createProvider<
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
-        const startTime = Date.now();
-        const { devbox, client } = sandbox;
-
-        try {
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || (
-            // Strong Python indicators
-            code.includes('print(') ||
-              code.includes('import ') ||
-              code.includes('def ') ||
-              code.includes('sys.') ||
-              code.includes('json.') ||
-              code.includes('__') ||
-              code.includes('f"') ||
-              code.includes("f'") ||
-              code.includes('raise ')
-              ? 'python'
-              // Default to Node.js for all other cases (including ambiguous)
-              : 'node'
-          );
-
-          // Use base64 encoding for both runtimes for reliability and consistency
-          const encoded = Buffer.from(code).toString('base64');
-          
-          let command: string;
-          if (effectiveRuntime === 'python') {
-            command = `echo "${encoded}" | base64 -d | python3`;
-          } else {
-            command = `echo "${encoded}" | base64 -d | node`;
-          }
-
-          const execution = await client.devboxes.executeAsync(devbox.id, {
-            command: command,
-          });
-
-          const executionResult = await client.devboxes.executions.awaitCompleted(
-            devbox.id,
-            execution.execution_id
-          );
-
-          // Check for syntax errors and throw them
-          if (executionResult.exit_status !== 0 && executionResult.stderr) {
-            // Check for common syntax error patterns
-            if (executionResult.stderr.includes('SyntaxError') ||
-              executionResult.stderr.includes('invalid syntax') ||
-              executionResult.stderr.includes('Unexpected token') ||
-              executionResult.stderr.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${executionResult.stderr.trim()}`);
-            }
-          }
-
-          return {
-            stdout: executionResult.stdout || "",
-            stderr: executionResult.stderr || "",
-            exitCode: executionResult.exit_status || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: devbox.id || "runloop-unknown",
-            provider: "runloop",
-          };
-        } catch (error) {
-          // Re-throw syntax errors
-          if (
-            error instanceof Error &&
-            error.message.includes("Syntax error")
-          ) {
-            throw error;
-          }
-          throw new Error(
-            `Runloop code execution failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+      runCode: async (_sandbox: any, _code: string): Promise<ExecutionResult> => {
+        throw new Error("Please use runCommand instead");
       },
 
       runCommand: async (
@@ -374,7 +302,7 @@ export const runloop = createProvider<
 
           try {
             const result = await client.devboxes.readFileContents(devbox.id, {
-              file_path: path,
+              path: path,
             });
             return result.content || "";
           } catch (error) {
@@ -395,8 +323,8 @@ export const runloop = createProvider<
 
           try {
             await client.devboxes.writeFileContents(devbox.id, {
-              file_path: path,
-              contents: content,
+              path: path,
+              content: content,
             });
           } catch (error) {
             throw new Error(
