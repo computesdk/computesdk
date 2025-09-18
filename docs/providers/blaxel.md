@@ -1,4 +1,4 @@
-# @computesdk/blaxel
+# Blaxel
 
 Blaxel provider for ComputeSDK - Execute code with AI-powered assistance and ultra-fast 25ms boot times.
 

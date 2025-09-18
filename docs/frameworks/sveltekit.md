@@ -1,4 +1,4 @@
-# ComputeSDK + SvelteKit
+# SvelteKit
 
 Use ComputeSDK to execute code in secure sandboxes from your SvelteKit server API routes.
 

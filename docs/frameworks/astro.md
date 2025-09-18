@@ -1,4 +1,4 @@
-# ComputeSDK + Astro
+# Astro
 
 Use ComputeSDK to execute code in secure sandboxes from your Astro API endpoints.
 

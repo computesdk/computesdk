@@ -1,4 +1,4 @@
-# @computesdk/vercel
+# Vercel
 
 Vercel provider for ComputeSDK - Execute code in globally distributed serverless environments.
 

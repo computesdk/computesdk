@@ -1,4 +1,4 @@
-# @computesdk/e2b
+# E2B
 
 E2B provider for ComputeSDK - Execute code in full development environments with terminal support.
 
