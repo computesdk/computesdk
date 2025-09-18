@@ -107,7 +107,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						
 						if (error.message.includes('unauthorized') || error.message.includes('API key')) {
 							throw new Error(
-								`Blaxel authentication failed. Please check your BL_API_KEY environment variable. Original error: ${error.message}`
+								`Blaxel authentication failed. Please check your BLAXEL_API_KEY environment variable. Original error: ${error.message}`
 							);
 						}
 						if (error.message.includes('quota') || error.message.includes('limit')) {
@@ -531,31 +531,59 @@ export function createBlaxelCompute(config: BlaxelConfig): {
 }
 
 async function handleBlaxelAuth(config: BlaxelConfig) {
+	console.log('🔍 Blaxel Auth Debug: Starting authentication...');
+	console.log('🔍 Config workspace:', config.workspace);
+	console.log('🔍 Config API key exists:', !!config.apiKey);
+	console.log('🔍 Config API key length:', config.apiKey?.length || 0);
+	
 	// Check if auth is already set in the SDK
 	try {
+		console.log('🔍 Blaxel Auth Debug: Attempting initial authentication...');
 		await settings.authenticate();
+		console.log('✅ Blaxel Auth Debug: Initial authentication successful');
 	} catch (error) {
+		console.log('🔍 Blaxel Auth Debug: Initial auth failed, setting environment variables...');
+		console.error('🔍 Initial auth error:', error instanceof Error ? error.message : JSON.stringify(error));
+		
 		// If not, set the auth from the config
-		if (config.workspace || process.env.BL_WORKSPACE && typeof process !== 'undefined') {
-			const workspace = config.workspace || process.env.BL_WORKSPACE;
+		if (config.workspace || process.env.BLAXEL_WORKSPACE && typeof process !== 'undefined') {
+			const workspace = config.workspace || process.env.BLAXEL_WORKSPACE;
 			process.env.BL_WORKSPACE = workspace;
+			console.log('🔍 Set BL_WORKSPACE to:', workspace);
 		}
-		if (config.apiKey || process.env.BL_API_KEY && typeof process !== 'undefined') {
-			const apiKey = config.apiKey || process.env.BL_API_KEY;
+		if (config.apiKey || process.env.BLAXEL_API_KEY && typeof process !== 'undefined') {
+			const apiKey = config.apiKey || process.env.BLAXEL_API_KEY;
 			process.env.BL_API_KEY = apiKey;
+			console.log('🔍 Set BL_API_KEY (length):', apiKey?.length || 0);
 		}
 		
+		console.log('🔍 Current environment variables:');
+		console.log('  BL_WORKSPACE:', process.env.BL_WORKSPACE);
+		console.log('  BL_API_KEY exists:', !!process.env.BL_API_KEY);
+		console.log('  BL_API_KEY length:', process.env.BL_API_KEY?.length || 0);
+		
 		try {
+			console.log('🔍 Blaxel Auth Debug: Attempting authentication with env vars...');
 			await settings.authenticate();
+			console.log('✅ Blaxel Auth Debug: Authentication with env vars successful');
 		} catch (authError) {
+			console.error('🔍 Blaxel Auth Debug: Final authentication failed');
+			console.error('Auth error type:', typeof authError);
+			console.error('Auth error constructor:', authError?.constructor?.name);
+			
 			let authErrorDetails = 'Unknown authentication error';
 			if (authError instanceof Error) {
+				console.error('Auth error message:', authError.message);
+				console.error('Auth error name:', authError.name);
+				console.error('Auth error stack:', authError.stack);
 				authErrorDetails = authError.message;
 			} else {
 				try {
 					authErrorDetails = JSON.stringify(authError, null, 2);
+					console.error('Auth error serialized:', authErrorDetails);
 				} catch {
 					authErrorDetails = String(authError);
+					console.error('Auth error string:', authErrorDetails);
 				}
 			}
 			

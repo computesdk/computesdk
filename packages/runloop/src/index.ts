@@ -1,6 +1,8 @@
 /**
  * Runloop Provider - Factory-based Implementation
  *
+ * Full-featured provider with filesystem support using the factory pattern.
+ * Reduces ~400 lines of boilerplate to ~100 lines of core logic.
  */
 
 import { Runloop } from "@runloop/api-client";
@@ -29,8 +31,6 @@ export interface RunloopConfig {
   apiKey?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
-  /** Pre-created Runloop client instance - used internally by the provider */
-  client?: Runloop;
 }
 
 /**
@@ -82,50 +82,35 @@ export interface CreateBlueprintTemplateOptions {
 /**
  * Create a Runloop provider instance using the factory pattern
  */
-export const runloop = (userConfig: RunloopConfig = {}) => {
-  // Lazy client creation - only create when needed
-  let client: Runloop | null = null;
-  
-  const createClient = () => {
-    if (client) return client;
-    
-    const apiKey = userConfig.apiKey || 
-      (typeof process !== "undefined" && process.env?.RUNLOOP_API_KEY) || 
-      "";
-
-    if (!apiKey) {
-      throw new Error(
-        `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`
-      );
-    }
-
-    client = new Runloop({
-      bearerToken: apiKey,
-    });
-    
-    return client;
-  };
-
-  // Helper function to get client from config or create default
-  const getClient = (config: RunloopConfig) => {
-    return config.client || createClient();
-  };
-
-  const providerFactory = createProvider<
-    Runloop.DevboxView,         // TSandbox
-    RunloopConfig,              // TConfig
-    RunloopTemplate,            // TTemplate 
-    RunloopSnapshot             // TSnapshot
-  >({
+export const runloop = createProvider<
+  Runloop.DevboxView,         // TSandbox
+  RunloopConfig,              // TConfig
+  RunloopTemplate,            // TTemplate 
+  RunloopSnapshot             // TSnapshot
+>({
   name: "runloop",
   methods: {
     sandbox: {
       // Collection operations (map to compute.sandbox.*)
       create: async (config: RunloopConfig, options?: CreateSandboxOptions) => {
+        // Validate API key
+        const apiKey =
+          config.apiKey ||
+          (typeof process !== "undefined" && process.env?.RUNLOOP_API_KEY) ||
+          "";
+
+        if (!apiKey) {
+          throw new Error(
+            `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`
+          );
+        }
+
         const timeout = config.timeout;
-        const client = getClient(config);
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: {
@@ -165,9 +150,12 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       },
 
       getById: async (config: RunloopConfig, sandboxId: string) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           const devbox = await client.devboxes.retrieve(sandboxId);
 
@@ -182,9 +170,12 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       },
 
       list: async (config: RunloopConfig) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           const response = await client.devboxes.list();
           const devboxes = response.devboxes || [];
@@ -200,9 +191,12 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       },
 
       destroy: async (config: RunloopConfig, sandboxId: string) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           await client.devboxes.shutdown(sandboxId);
         } catch (error) {
@@ -214,8 +208,7 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       // Instance operations (map to individual Sandbox methods)
       runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
         const startTime = Date.now();
-        const devbox = sandbox;
-        const client = createClient();
+        const { devbox, client } = sandbox;
 
         try {
           // Auto-detect runtime if not specified
@@ -295,8 +288,7 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
         args: string[] = []
       ): Promise<ExecutionResult> => {
         const startTime = Date.now();
-        const devbox = sandbox;
-        const client = createClient();
+        const { devbox, client } = sandbox;
 
         try {
           // Execute code using Runloop's executeAsync
@@ -358,8 +350,7 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
         sandbox: any,
         options: { port: number }
       ): Promise<string> => {
-        const devbox = sandbox;
-        const client = createClient();
+        const { devbox, client } = sandbox;
 
         try {
           const tunnel = await client.devboxes.createTunnel(devbox.id, {
@@ -379,17 +370,13 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       // Optional filesystem methods - using Runloop's file operations
       filesystem: {
         readFile: async (sandbox: any, path: string): Promise<string> => {
-          const devbox = sandbox;
-          const client = createClient();
+          const { devbox, client } = sandbox;
 
           try {
-            // Convert absolute paths to relative paths for Runloop API
-            const relativePath = path.startsWith('/') ? path.slice(1) : path;
-            
             const result = await client.devboxes.readFileContents(devbox.id, {
-              file_path: relativePath,
+              file_path: path,
             });
-            return result || "";
+            return result.content || "";
           } catch (error) {
             throw new Error(
               `Failed to read file ${path}: ${
@@ -404,15 +391,11 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
           path: string,
           content: string
         ): Promise<void> => {
-          const devbox = sandbox;
-          const client = createClient();
+          const { devbox, client } = sandbox;
 
           try {
-            // Convert absolute paths to relative paths for Runloop API
-            const relativePath = path.startsWith('/') ? path.slice(1) : path;
-            
             await client.devboxes.writeFileContents(devbox.id, {
-              file_path: relativePath,
+              file_path: path,
               contents: content,
             });
           } catch (error) {
@@ -429,9 +412,7 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
           path: string,
           runCommand: any
         ): Promise<void> => {
-          // Convert absolute paths to relative paths for consistency
-          const relativePath = path.startsWith('/') ? path.slice(1) : path;
-          const result = await runCommand(sandbox, "mkdir", ["-p", relativePath]);
+          const result = await runCommand(sandbox, "mkdir", ["-p", path]);
           if (result.exitCode !== 0) {
             throw new Error(
               `Failed to create directory ${path}: ${result.stderr}`
@@ -444,9 +425,7 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
           path: string,
           runCommand: any
         ): Promise<FileEntry[]> => {
-          // Convert absolute paths to relative paths for consistency
-          const relativePath = path.startsWith('/') ? path.slice(1) : path;
-          const result = await runCommand(sandbox, "ls", ["-la", relativePath]);
+          const result = await runCommand(sandbox, "ls", ["-la", path]);
 
           if (result.exitCode !== 0) {
             throw new Error(
@@ -478,9 +457,7 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
           path: string,
           runCommand: any
         ): Promise<boolean> => {
-          // Convert absolute paths to relative paths for consistency
-          const relativePath = path.startsWith('/') ? path.slice(1) : path;
-          const result = await runCommand(sandbox, "test", ["-e", relativePath]);
+          const result = await runCommand(sandbox, "test", ["-e", path]);
           return result.exitCode === 0;
         },
 
@@ -489,9 +466,7 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
           path: string,
           runCommand: any
         ): Promise<void> => {
-          // Convert absolute paths to relative paths for consistency
-          const relativePath = path.startsWith('/') ? path.slice(1) : path;
-          const result = await runCommand(sandbox, "rm", ["-rf", relativePath]);
+          const result = await runCommand(sandbox, "rm", ["-rf", path]);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
           }
@@ -510,9 +485,18 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
         config: RunloopConfig,
         options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams
       ) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error(
+            "Missing Runloop API key for blueprint template creation"
+          );
+        }
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           const blueprint = await client.blueprints.create(options);
           return blueprint;
@@ -526,9 +510,18 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       },
 
       list: async (config: RunloopConfig, options?: { limit?: number }) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error(
+            "Missing Runloop API key for listing blueprint templates"
+          );
+        }
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           const listParams: any = {};
           if (options?.limit) {
@@ -547,9 +540,18 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       },
 
       delete: async (config: RunloopConfig, blueprintId: string) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error(
+            "Missing Runloop API key for blueprint template deletion"
+          );
+        }
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           await client.blueprints.delete(blueprintId);
         } catch (error) {
@@ -569,9 +571,16 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
         sandboxId: string,
         options?: CreateSnapshotOptions
       ) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error("Missing Runloop API key for snapshot creation");
+        }
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           const snapshotParams: any = {};
           if (options?.name) {
@@ -599,9 +608,16 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
         config: RunloopConfig,
         options?: ListSnapshotsOptions
       ) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error("Missing Runloop API key for listing snapshots");
+        }
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           const listParams: any = {};
           if (options?.limit) {
@@ -620,9 +636,16 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       },
 
       delete: async (config: RunloopConfig, snapshotId: string) => {
-        const client = getClient(config);
+        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+
+        if (!apiKey) {
+          throw new Error("Missing Runloop API key for snapshot deletion");
+        }
 
         try {
+          const client = new Runloop({
+            bearerToken: apiKey,
+          });
 
           await client.devboxes.deleteDiskSnapshot(snapshotId);
         } catch (error) {
@@ -635,8 +658,4 @@ export const runloop = (userConfig: RunloopConfig = {}) => {
       },
     },
   },
-  });
-
-  // Call the provider factory with the user config
-  return providerFactory(userConfig);
-};
+});
