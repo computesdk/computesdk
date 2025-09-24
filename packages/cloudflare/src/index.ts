@@ -23,7 +23,7 @@ import type {
  */
 export interface CloudflareConfig {
   /** Cloudflare Sandbox binding from Workers environment - the Durable Object binding */
-  sandboxBinding?: any;
+  sandboxBinding: any;
   /** Default runtime environment */
   runtime?: Runtime;
   /** Execution timeout in milliseconds */
