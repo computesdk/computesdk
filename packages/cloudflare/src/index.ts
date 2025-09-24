@@ -5,8 +5,11 @@
  * Leverages Cloudflare's edge network and Durable Objects for sandboxed execution.
  */
 
-import { getSandbox } from '@cloudflare/sandbox';
+import { getSandbox, Sandbox } from '@cloudflare/sandbox';
 import { createProvider } from 'computesdk';
+
+// Re-export Sandbox as CFSandbox for easier worker integration
+export { Sandbox as CFSandbox };
 import type { 
   ExecutionResult, 
   SandboxInfo, 
