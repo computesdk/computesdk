@@ -77,6 +77,7 @@ export default {
 ## Basic Usage
 
 ```typescript
+import { createCompute } from 'computesdk';
 import { cloudflare } from '@computesdk/cloudflare';
 
 export { CFSandbox } from '@computesdk/cloudflare';
@@ -87,18 +88,18 @@ interface Env {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    // Initialize the provider with your Durable Object binding
-    const provider = cloudflare({
+    // Create compute instance with Cloudflare provider
+    const compute = createCompute(cloudflare({
       sandboxBinding: env.Sandbox,
       runtime: 'python',
       timeout: 300000,
       envVars: {
         MY_VAR: 'hello world'
       }
-    });
+    }));
 
     // Create a sandbox
-    const sandbox = await provider.sandbox.create();
+    const sandbox = await compute.sandbox.create();
 
     try {
       // Execute Python code
@@ -108,18 +109,10 @@ print(f"Python version: {sys.version}")
 print("Hello from Cloudflare!")
 `);
 
-      // Execute shell commands
-      const cmdResult = await sandbox.runCommand('ls', ['-la']);
-
-      // File operations
-      await sandbox.filesystem.writeFile('/tmp/hello.txt', 'Hello Cloudflare!');
-      const content = await sandbox.filesystem.readFile('/tmp/hello.txt');
-
       // Return results
       return new Response(JSON.stringify({
-        pythonOutput: result.stdout,
-        lsOutput: cmdResult.stdout,
-        fileContent: content
+        output: result.stdout,
+        success: result.exitCode === 0
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
