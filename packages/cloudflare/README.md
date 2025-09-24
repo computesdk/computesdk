@@ -89,14 +89,16 @@ interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Create compute instance with Cloudflare provider
-    const compute = createCompute(cloudflare({
-      sandboxBinding: env.Sandbox,
-      runtime: 'python',
-      timeout: 300000,
-      envVars: {
-        MY_VAR: 'hello world'
-      }
-    }));
+    const compute = createCompute({ 
+      provider: cloudflare({
+        sandboxBinding: env.Sandbox,
+        runtime: 'python',
+        timeout: 300000,
+        envVars: {
+          MY_VAR: 'hello world'
+        }
+      })
+    });
 
     // Create a sandbox
     const sandbox = await compute.sandbox.create();
