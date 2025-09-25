@@ -6,7 +6,7 @@
  */
 
 import { e2b } from '@computesdk/e2b';
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -19,7 +19,7 @@ async function main() {
 
   try {
     // Configure compute with E2B provider
-    compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
+    const compute = createCompute({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
 
     // Create sandbox using compute singleton
     const sandbox = await compute.sandbox.create();
@@ -46,21 +46,18 @@ async function main() {
     const files = await sandbox.filesystem.readdir('/tmp');
     console.log('Files in /tmp:', files.map(f => f.name));
 
-    // Data science example
-    console.log('\n--- Data Science ---');
-    
-    const dataResult = await sandbox.runCode(PYTHON_SNIPPETS.DATA_SCIENCE);
-    
-    console.log('Data Science Output:', dataResult.stdout);
-
     // Clean up
     await sandbox.kill();
     console.log('\nSandbox cleaned up successfully');
 
   } catch (error) {
-    console.error('Error:', error.message);
-    if (error.message.includes('API key')) {
-      console.error('Get your E2B API key from https://e2b.dev/');
+    if (error instanceof Error) {
+      console.error('Error:', error.message);
+      if (error.message.includes('API key')) {
+        console.error('Get your E2B API key from https://e2b.dev/');
+      }
+    } else {
+      console.error('Unknown error:', error);
     }
   }
 }

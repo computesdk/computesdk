@@ -18,7 +18,7 @@ import { daytona } from '@computesdk/daytona';
 
 // Set as default provider
 const compute = createCompute({ 
-  defaultProvider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
+  provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
 });
 
 // Create sandbox
