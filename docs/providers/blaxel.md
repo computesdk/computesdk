@@ -17,11 +17,11 @@ npm install @computesdk/blaxel
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { blaxel } from '@computesdk/blaxel';
 
 // Set as default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   provider: blaxel({ 
     apiKey: process.env.BLAXEL_API_KEY,
     workspace: process.env.BLAXEL_WORKSPACE 
