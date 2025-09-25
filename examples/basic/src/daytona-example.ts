@@ -114,17 +114,18 @@ print(f"Sum: {df.sum().sum()}")
     console.log('\nDaytona sandbox terminated successfully');
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('❌ Error:', errorMessage);
     
-    if (error.message.includes('API key') || error.message.includes('authentication')) {
+    if (errorMessage.includes('API key') || errorMessage.includes('authentication')) {
       console.error('\n💡 Authentication failed:');
       console.error('- Get your Daytona API key from https://daytona.io/');
       console.error('- Set it as: export DAYTONA_API_KEY=your_key_here');
-    } else if (error.message.includes('quota') || error.message.includes('limit')) {
+    } else if (errorMessage.includes('quota') || errorMessage.includes('limit')) {
       console.error('\n💡 Usage limit reached:');
       console.error('- Check your Daytona usage dashboard');
       console.error('- Consider upgrading your plan if needed');
-    } else if (error.message.includes('not implemented')) {
+    } else if (errorMessage.includes('not implemented')) {
       console.error('\n💡 Feature not yet implemented:');
       console.error('- Some Daytona features are still in development');
       console.error('- Check the Daytona documentation for current capabilities');

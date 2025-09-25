@@ -77,10 +77,14 @@ async function main() {
     console.log('\nSandboxes cleaned up successfully');
 
   } catch (error) {
-    console.error('Error:', error.message);
-    if (error.message.includes('token')) {
-      console.error('Get your Modal token from https://modal.com/');
-      console.error('Run: modal token new');
+    if (error instanceof Error) {
+      console.error('Error:', error.message);
+      if (error.message.includes('token')) {
+        console.error('Get your Modal token from https://modal.com/');
+        console.error('Run: modal token new');
+      }
+    } else {
+      console.error('An unknown error occurred:', error);
     }
   }
 }
