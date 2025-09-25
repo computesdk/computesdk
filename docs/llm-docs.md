@@ -7,7 +7,7 @@ ComputeSDK provides AI-optimized documentation files specifically designed for t
 
 ## Available Files
 
-### [llms.txt](/llms.txt)
+### [llms-small.txt](/llms-small.txt)
 A minimal version containing essential information about ComputeSDK, perfect for quick AI context.
 
 ### [llms-full.txt](/llms-full.txt) 
