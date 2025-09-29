@@ -5,8 +5,11 @@
  * Leverages Cloudflare's edge network and Durable Objects for sandboxed execution.
  */
 
-import { getSandbox } from '@cloudflare/sandbox';
+import { getSandbox, Sandbox } from '@cloudflare/sandbox';
 import { createProvider } from 'computesdk';
+
+// Re-export Sandbox as CFSandbox for easier worker integration
+export { Sandbox as CFSandbox };
 import type { 
   ExecutionResult, 
   SandboxInfo, 
@@ -20,7 +23,9 @@ import type {
  */
 export interface CloudflareConfig {
   /** Cloudflare Sandbox binding from Workers environment - the Durable Object binding */
-  sandboxBinding?: any;
+  sandboxBinding: DurableObjectNamespace<Sandbox>;
+  /** Hostname for port exposure (e.g., your worker domain) */
+  hostname?: string;
   /** Default runtime environment */
   runtime?: Runtime;
   /** Execution timeout in milliseconds */
@@ -37,6 +42,7 @@ export interface CloudflareConfig {
 interface CloudflareSandbox {
   sandbox: any; // The actual Cloudflare Sandbox instance from getSandbox()
   sandboxId: string;
+  hostname?: string; // Hostname for port exposure
   exposedPorts: Map<number, string>; // Track exposed ports and their URLs
 }
 
@@ -80,11 +86,19 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
     sandbox: {
       // Collection operations (map to compute.sandbox.*)
       create: async (config: CloudflareConfig, options?: CreateSandboxOptions) => {
+        // Validate Cloudflare Workers environment
+        if (typeof globalThis.caches === 'undefined' || typeof globalThis.Request === 'undefined') {
+          throw new Error(
+            `Cloudflare provider can only be used within a Cloudflare Worker environment. ` +
+            `Make sure you're running this code in a Worker, not in Node.js or browser.`
+          );
+        }
+
         // Validate Cloudflare Workers environment binding
         if (!config.sandboxBinding) {
           throw new Error(
             `Missing Cloudflare Sandbox binding. Provide 'sandboxBinding' in config with the Durable Object binding from your Cloudflare Workers environment (env.Sandbox). ` +
-            `See https://developers.cloudflare.com/durable-objects/get-started/ for setup instructions.`
+            `Make sure your wrangler.toml includes the Sandbox binding. See https://developers.cloudflare.com/durable-objects/get-started/ for setup instructions.`
           );
         }
 
@@ -102,6 +116,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
           const cloudflareSandbox: CloudflareSandbox = {
             sandbox,
             sandboxId,
+            hostname: config.hostname,
             exposedPorts: new Map()
           };
 
@@ -113,18 +128,27 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('binding')) {
               throw new Error(
-                `Cloudflare Sandbox binding failed. Ensure your Durable Object binding is properly configured in wrangler.toml. ` +
+                `Cloudflare Sandbox binding failed. Ensure your Durable Object binding "Sandbox" is properly configured in wrangler.toml with the correct class_name. ` +
+                `Check that your binding matches: { name = "Sandbox", class_name = "Sandbox" }. ` +
                 `See https://developers.cloudflare.com/durable-objects/get-started/ for setup instructions.`
               );
             }
             if (error.message.includes('quota') || error.message.includes('limit')) {
               throw new Error(
-                `Cloudflare resource limits exceeded. Check your usage at https://dash.cloudflare.com/`
+                `Cloudflare resource limits exceeded. You may have reached the container or Durable Object limits for your plan. ` +
+                `Check your usage at https://dash.cloudflare.com/ and consider upgrading your plan if needed.`
+              );
+            }
+            if (error.message.includes('container') || error.message.includes('image')) {
+              throw new Error(
+                `Cloudflare container configuration error. Ensure your Dockerfile and container binding are correctly set up. ` +
+                `Verify your wrangler.toml includes the [[containers]] section with the correct image path.`
               );
             }
           }
           throw new Error(
-            `Failed to create Cloudflare sandbox: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to create Cloudflare sandbox: ${error instanceof Error ? error.message : String(error)}. ` +
+            `Common issues: missing wrangler.toml configuration, incorrect binding names, or network connectivity problems.`
           );
         }
       },
@@ -148,6 +172,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
           const cloudflareSandbox: CloudflareSandbox = {
             sandbox,
             sandboxId,
+            hostname: config.hostname,
             exposedPorts: new Map()
           };
 
@@ -333,7 +358,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
 
       getUrl: async (cloudflareSandbox: CloudflareSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
-          const { sandbox, exposedPorts } = cloudflareSandbox;
+          const { sandbox, exposedPorts, hostname } = cloudflareSandbox;
           const { port, protocol = 'https' } = options;
 
           // Check if port is already exposed
@@ -341,8 +366,9 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
             return exposedPorts.get(port)!;
           }
 
-          // Expose the port using Cloudflare's exposePort method
-          const preview = await sandbox.exposePort(port);
+          // Expose the port using Cloudflare's exposePort method with hostname if provided
+          const exposeOptions = hostname ? { hostname } : {};
+          const preview = await sandbox.exposePort(port, exposeOptions);
           const url = `${protocol}://${preview.url}`;
           
           // Cache the exposed URL

@@ -62,12 +62,10 @@ image = "./Dockerfile"
 max_instances = 1
 ```
 
-3. **Export the Sandbox class in your Worker**:
+3. **Export the CFSandbox class in your Worker**:
 ```typescript
-import { getSandbox } from "@cloudflare/sandbox";
-
-// Export the Sandbox class in your Worker
-export { Sandbox } from "@cloudflare/sandbox";
+// Export the CFSandbox class in your Worker (no need to install @cloudflare/sandbox separately)
+export { CFSandbox } from "@computesdk/cloudflare";
 
 export default {
   async fetch(request: Request, env: Env) {
@@ -79,56 +77,54 @@ export default {
 ## Basic Usage
 
 ```typescript
+import { createCompute } from 'computesdk';
 import { cloudflare } from '@computesdk/cloudflare';
 
-// Initialize the provider with your Durable Object binding
-const provider = cloudflare({
-  sandboxBinding: env.Sandbox, // Your Durable Object binding
-  runtime: 'python',
-  timeout: 300000,
-  envVars: {
-    MY_VAR: 'hello world'
-  }
-});
+export { CFSandbox } from '@computesdk/cloudflare';
 
-// Create a sandbox
-const sandbox = await provider.sandbox.create();
+interface Env {
+  Sandbox: any; // Your Durable Object binding
+}
 
-// Execute Python code
-const result = await sandbox.runCode(`
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Create compute instance with Cloudflare provider
+    const compute = createCompute({ 
+      provider: cloudflare({
+        sandboxBinding: env.Sandbox,
+        runtime: 'python',
+        timeout: 300000,
+        envVars: {
+          MY_VAR: 'hello world'
+        }
+      })
+    });
+
+    // Create a sandbox
+    const sandbox = await compute.sandbox.create();
+
+    try {
+      // Execute Python code
+      const result = await sandbox.runCode(`
 import sys
 print(f"Python version: {sys.version}")
 print("Hello from Cloudflare!")
 `);
 
-console.log(result.stdout);
+      // Return results
+      return new Response(JSON.stringify({
+        output: result.stdout,
+        success: result.exitCode === 0
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
 
-// Execute shell commands
-const cmdResult = await sandbox.runCommand('ls', ['-la']);
-console.log(cmdResult.stdout);
-
-// File operations
-await sandbox.filesystem.writeFile('/tmp/hello.txt', 'Hello Cloudflare!');
-const content = await sandbox.filesystem.readFile('/tmp/hello.txt');
-console.log(content); // "Hello Cloudflare!"
-
-// Expose a web service
-await sandbox.runCode(`
-import http.server
-import socketserver
-PORT = 3000
-Handler = http.server.SimpleHTTPRequestHandler
-with socketserver.TCPServer(("", PORT), Handler) as httpd:
-    print(f"Server running on port {PORT}")
-    httpd.serve_forever()
-`);
-
-// Get the public URL
-const url = await sandbox.getUrl({ port: 3000 });
-console.log(`Service available at: ${url}`);
-
-// Clean up
-await sandbox.destroy();
+    } finally {
+      // Clean up
+      await sandbox.destroy();
+    }
+  },
+};
 ```
 
 ## Advanced Usage
