@@ -9,8 +9,9 @@
  */
 
 import { daytona } from '@computesdk/daytona';
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { config } from 'dotenv';
+import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
 
 async function main() {
@@ -25,28 +26,17 @@ async function main() {
 
   try {
     // Configure compute with Daytona provider
-    compute.setConfig({ provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) });
+    const compute = createCompute({ provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) });
 
     // Create sandbox using compute singleton
     const sandbox = await compute.sandbox.create();
 
     console.log('Created Daytona sandbox:', sandbox.sandboxId);
 
+    
+
     // Execute Python code
-    const result = await sandbox.runCode(`
-import sys
-print(f"Python version: {sys.version}")
-print("Hello from Daytona!")
-
-# Calculate fibonacci
-def fibonacci(n):
-    if n <= 1:
-        return n
-    return fibonacci(n-1) + fibonacci(n-2)
-
-for i in range(5):
-    print(f"fibonacci({i}) = {fibonacci(i)}")
-    `);
+    const result = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
 
     console.log('Output:', result.stdout);
     console.log('Execution time:', result.executionTime, 'ms');
@@ -80,34 +70,6 @@ print("This script was written via filesystem!")
     await sandbox.filesystem.mkdir('/tmp/data');
     const files = await sandbox.filesystem.readdir('/tmp');
     console.log('Files in /tmp:', files.map((f: any) => f.name));
-
-    // Data science example
-    console.log('\n--- Data Science Example ---');
-    
-    const dataResult = await sandbox.runCode(`
-import pandas as pd
-import numpy as np
-
-# Create sample data
-data = {'A': [1, 2, 3], 'B': [4, 5, 6]}
-df = pd.DataFrame(data)
-print("DataFrame:")
-print(df)
-print(f"Sum: {df.sum().sum()}")
-    `);
-    
-    console.log('Data Science Output:', dataResult.stdout);
-
-    // Note about Daytona capabilities
-    console.log('\n--- Daytona Features ---');
-    console.log('Daytona provides:');
-    console.log('- Fast development environment provisioning');
-    console.log('- Pre-configured development containers');
-    console.log('- Integrated development tools');
-    console.log('- Team collaboration features');
-    console.log('- Filesystem operations (read/write/mkdir/readdir)');
-    console.log('- Code execution in isolated environments');
-    console.log('- No terminal operations (by design)');
 
     // Clean up
     await sandbox.kill();
