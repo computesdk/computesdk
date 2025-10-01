@@ -6,7 +6,7 @@
  */
 
 import { codesandbox } from '@computesdk/codesandbox';
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -19,7 +19,7 @@ async function main() {
 
   try {
     // Configure compute with CodeSandbox provider
-    compute.setConfig({ provider: codesandbox({ apiKey: process.env.CSB_API_KEY }) });
+    const compute = createCompute({ provider: codesandbox({ apiKey: process.env.CSB_API_KEY }) });
 
     // Create sandbox using compute singleton
     const sandbox = await compute.sandbox.create();

@@ -18,7 +18,7 @@ import { codesandbox } from '@computesdk/codesandbox';
 
 // Set as default provider
 const compute = createCompute({ 
-  defaultProvider: codesandbox({ apiKey: process.env.CODESANDBOX_API_KEY }) 
+  provider: codesandbox({ apiKey: process.env.CODESANDBOX_API_KEY }) 
 });
 
 // Create sandbox

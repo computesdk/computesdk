@@ -1,6 +1,10 @@
 # Blaxel
 
-Blaxel provider for ComputeSDK - Execute code with AI-powered assistance and ultra-fast 25ms boot times.
+Blaxel provider for ComputeSDK 
+
+# @computesdk/blaxel
+
+Blaxel provider for ComputeSDK - Execute code in secure Blaxel sandboxes with 25ms cold starts and real-time preview URLs.
 
 ## Installation
 
@@ -18,24 +22,21 @@ import { blaxel } from '@computesdk/blaxel';
 
 // Set as default provider
 const compute = createCompute({ 
-  defaultProvider: blaxel({ 
+  provider: blaxel({ 
     apiKey: process.env.BLAXEL_API_KEY,
-    workspace: process.env.BLAXEL_WORKSPACE
+    workspace: process.env.BLAXEL_WORKSPACE 
   }) 
 });
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Get instance
-const instance = sandbox.getInstance();
-
 // Execute code
-const result = await sandbox.runCode('print("Hello from Blaxel!")');
+const result = await sandbox.runCode('console.log("Hello from Blaxel!")');
 console.log(result.stdout); // "Hello from Blaxel!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ### Direct Usage
@@ -43,15 +44,26 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 ```typescript
 import { blaxel } from '@computesdk/blaxel';
 
-// Create provider
+// Create provider with configuration
 const provider = blaxel({ 
-  apiKey: 'your-api-key',
   workspace: 'your-workspace',
-  persistentStorage: true
+  apiKey: 'your-api-key',
+  image: 'blaxel/prod-py-app:latest',  // Python image
+  memory: 8192,                         // 8GB RAM
+  ports: [3000, 8080]                  // Exposed ports
 });
 
 // Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
+const sandbox = await compute.sandbox.create({ 
+  provider,
+  options: {
+    runtime: 'python',  // Runtime specified at creation time
+    timeout: 3600000,   // 1 hour timeout
+    envs: { 
+      DEBUG: 'true' 
+    }
+  }
+});
 ```
 
 ## Configuration
@@ -59,64 +71,71 @@ const sandbox = await compute.sandbox.create({ provider });
 ### Environment Variables
 
 ```bash
-export BLAXEL_API_KEY=your_blaxel_api_key_here
-export BLAXEL_WORKSPACE=your_workspace_name_here
+export BL_WORKSPACE=your_workspace_id
+export BL_API_KEY=your_api_key_here
 ```
 
 ### Configuration Options
 
 ```typescript
 interface BlaxelConfig {
-  /** Blaxel API key - if not provided, will use BLAXEL_API_KEY env var */
-  apiKey?: string;
-  /** Workspace name - if not provided, will use BLAXEL_WORKSPACE env var */
+  /** Blaxel workspace ID - fallback to BL_WORKSPACE env var */
   workspace?: string;
-  /** Enable persistent storage across sessions */
-  persistentStorage?: boolean;
-  /** Enable AI code assistance */
-  aiAssistance?: boolean;
-  /** Auto-scale to zero after inactivity */
-  autoScale?: boolean;
-  /** Execution timeout in milliseconds */
-  timeout?: number;
-  /** Base URL for Blaxel API */
-  baseUrl?: string;
+  /** Blaxel API key - fallback to BL_API_KEY env var */
+  apiKey?: string;
+  /** Default image for sandboxes */
+  image?: string;
+  /** Default region for sandbox deployment */
+  region?: string;
+  /** Default memory allocation in MB (default: 4096) */
+  memory?: number;
+  /** Default ports for sandbox (default: [3000]) */
+  ports?: number[];
 }
 ```
+
+> 💡 **Note:** For persistent storage across sandbox sessions, see [Mounting & using sandbox volumes](https://docs.blaxel.ai/Sandboxes/Volumes)
+
+### Default Images
+
+The provider automatically selects images based on runtime:
+- **Python:** `blaxel/prod-py-app:latest`
+- **Node.js:** `blaxel/prod-ts-app:latest`
+- **Default:** `blaxel/prod-base:latest`
+
+## Features
+
+- ✅ **Code Execution** - Python and Node.js runtime support with proper stdout/stderr streaming
+- ✅ **Command Execution** - Run shell commands with background support
+- ✅ **Filesystem Operations** - Full file system access (read, write, mkdir, ls, rm)
+- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js from code patterns
+- ✅ **Custom Images** - Support for custom Docker images
+- ✅ **Memory Configuration** - Configurable memory allocation
+- ✅ **Preview URLs** - Public/private preview URLs with TTL, custom domains, and headers
+- ✅ **Environment Variables** - Pass custom environment variables to sandboxes
+- ✅ **Metadata Labels** - Attach custom metadata to sandboxes
+- ✅ **Multi-Port Support** - Configure multiple ports for sandbox access
+- ✅ **Status Detection** - Automatic conversion of Blaxel status to standard format
+
+> 📚 For more details, see the [Sandbox technical guide](https://docs.blaxel.ai/Sandboxes/Overview)
 
 ## API Reference
 
 ### Code Execution
 
 ```typescript
-// Execute Python code with AI assistance
+// Execute Python code
 const result = await sandbox.runCode(`
 import json
-# AI helps optimize this code automatically
-data = {"message": "AI-enhanced Python execution"}
+data = {"message": "Hello from Python"}
 print(json.dumps(data))
 `, 'python');
 
 // Execute Node.js code  
 const result = await sandbox.runCode(`
-const data = { message: "Hello from Node.js", aiPowered: true };
+const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
 `, 'node');
-
-// Execute TypeScript code
-const result = await sandbox.runCode(`
-interface Message {
-  text: string;
-  timestamp: number;
-}
-
-const message: Message = {
-  text: "TypeScript with AI assistance",
-  timestamp: Date.now()
-};
-
-console.log(JSON.stringify(message));
-`, 'typescript');
 
 // Auto-detection (based on code patterns)
 const result = await sandbox.runCode('print("Auto-detected as Python")');
@@ -128,33 +147,37 @@ const result = await sandbox.runCode('print("Auto-detected as Python")');
 // List files
 const result = await sandbox.runCommand('ls', ['-la']);
 
-// Install packages with AI suggestions
-const result = await sandbox.runCommand('pip', ['install', 'pandas', 'numpy']);
+// Install packages
+const result = await sandbox.runCommand('pip', ['install', 'requests']);
 
-// Run scripts
-const result = await sandbox.runCommand('python', ['script.py']);
+// Run background process
+const bgResult = await sandbox.runCommand('npm', ['start'], { background: true });
+console.log('Process started in background');
 ```
 
 ### Filesystem Operations
 
+> 📚 For detailed filesystem API documentation, see the [Sandbox API reference](https://docs.blaxel.ai/api-reference/filesystem/get-file-or-directory-information)
+
 ```typescript
-// Write file (persists across sessions)
-await sandbox.filesystem.writeFile('/persistent/data.py', 'print("Persistent file")');
+// Write file
+await sandbox.filesystem.writeFile('/tmp/hello.py', 'print("Hello World")');
 
 // Read file
-const content = await sandbox.filesystem.readFile('/persistent/data.py');
+const content = await sandbox.filesystem.readFile('/tmp/hello.py');
 
 // Create directory
-await sandbox.filesystem.mkdir('/persistent/project');
+await sandbox.filesystem.mkdir('/tmp/data');
 
-// List directory contents
-const files = await sandbox.filesystem.readdir('/persistent');
+// List directory contents with metadata
+const files = await sandbox.filesystem.readdir('/tmp');
+// Returns FileEntry[] with name, path, isDirectory, size, lastModified
 
 // Check if file exists
-const exists = await sandbox.filesystem.exists('/persistent/data.py');
+const exists = await sandbox.filesystem.exists('/tmp/hello.py');
 
 // Remove file or directory
-await sandbox.filesystem.remove('/persistent/data.py');
+await sandbox.filesystem.remove('/tmp/hello.py');
 ```
 
 ### Sandbox Management
@@ -162,16 +185,186 @@ await sandbox.filesystem.remove('/persistent/data.py');
 ```typescript
 // Get sandbox info
 const info = await sandbox.getInfo();
-console.log(info.id, info.provider, info.status);
+console.log(info.id, info.provider, info.status, info.runtime);
+// Status: 'running', 'stopped', or 'error'
+// Runtime: Automatically detected from image name
 
-// List all sandboxes
-const sandboxes = await compute.sandbox.list();
+// Create with specific configuration
+const sandbox = await provider.sandbox.create({
+  runtime: 'python',              // Selects appropriate image
+  timeout: 1800000,               // 30 minutes in milliseconds (converted to "1800s")
+  envs: {                         // Environment variables
+    API_KEY: 'secret-key',
+    NODE_ENV: 'production'
+  },
+  metadata: {                     // Custom metadata labels
+    labels: {
+      project: 'my-project',
+      environment: 'staging'
+    }
+  }
+});
 
-// Get existing sandbox
-const existing = await compute.sandbox.getById('sandbox-id');
+// Create with custom memory and region
+const customSandbox = await provider.sandbox.create({
+  memory: 8192,                   // 8GB RAM
+  region: 'us-pdx-1',            // See regions documentation below
+  ports: [3000, 8080, 9000]      // Multiple ports
+});
 
-// Destroy sandbox (persistent data remains)
-await compute.sandbox.destroy('sandbox-id');
+> 📚 Learn more: [Deployment regions](https://docs.blaxel.ai/Infrastructure/Regions) | [Specifying region when creating sandboxes](https://docs.blaxel.ai/Sandboxes/Overview#create-a-sandbox)
+
+// Reconnect to existing sandbox
+const existing = await provider.sandbox.create({ 
+  sandboxId: 'blaxel-1234567890' 
+});
+
+// Get sandbox by ID
+const sandbox = await provider.sandbox.getById('blaxel-1234567890');
+
+// Destroy sandbox
+await provider.sandbox.destroy('blaxel-1234567890');
+```
+
+### Preview URLs
+
+> 📚 For a complete guide, see [Creating preview URLs & custom domains](https://docs.blaxel.ai/Sandboxes/Preview-url)
+
+```typescript
+// getUrl options interface
+interface GetUrlOptions {
+  port: number;                     // Port number to expose
+  ttl?: number;                     // Preview TTL in milliseconds
+  prefixUrl?: string;               // Custom prefix URL for the preview
+  customDomain?: string;            // Custom domain for the preview
+  headers?: {
+    response?: Record<string, string>;  // Response headers sent to clients
+    request?: Record<string, string>;   // Request headers for internal routing
+  };
+  authentication?: {
+    public?: boolean;               // Create public preview (default: true)
+    tokenExpiryMinutes?: number;    // Token expiry for private previews (default: 60)
+  };
+}
+
+// Create a public preview URL (default headers applied)
+const publicUrl = await sandbox.getUrl({ port: 3000 });
+console.log(publicUrl); // https://tkmu0oj2bf6iuoag6mmlt8.preview.bl.run
+
+// Create a private preview URL with authentication token
+const privateUrl = await sandbox.getUrl({ 
+  port: 3000,
+  authentication: {
+    public: false,
+    tokenExpiryMinutes: 30  // Token expires in 30 minutes (default: 60)
+  }
+});
+console.log(privateUrl); 
+// https://tkmu0oj2bf6iuoag6mmlt8.preview.bl.run?bl_preview_token=<token>
+
+// Create preview with custom TTL (Time To Live)
+const shortLivedUrl = await sandbox.getUrl({
+  port: 3000,
+  ttl: 300000  // Preview expires in 5 minutes (300,000 ms)
+});
+
+// Create preview with custom CORS headers (replaces all defaults)
+const customUrl = await sandbox.getUrl({
+  port: 3000,
+  headers: {
+    response: {
+      "Access-Control-Allow-Origin": "https://mydomain.com",
+      "Access-Control-Allow-Methods": "GET, POST",
+      "Access-Control-Allow-Credentials": "true",
+      "X-Custom-Header": "custom-value"
+    },
+    request: {
+      "X-Internal-Auth": "internal-token"
+    }
+  }
+});
+
+// Create preview with custom domain
+const customDomainUrl = await sandbox.getUrl({
+  port: 3000,
+  customDomain: "app.example.com"
+});
+
+// Create preview with custom prefix URL
+const prefixedUrl = await sandbox.getUrl({
+  port: 3000,
+  prefixUrl: "my-preview"
+});
+// https://my-preview-my-workspace.preview.bl.run
+
+// Full example with all options
+const advancedUrl = await sandbox.getUrl({
+  port: 3000,
+  ttl: 3600000,  // 1 hour TTL
+  prefixUrl: "my-preview",
+  customDomain: "preview.myapp.com",
+  headers: {
+    response: {
+      "Access-Control-Allow-Origin": "https://myapp.com",
+      "X-Frame-Options": "SAMEORIGIN"
+    },
+    request: {
+      "X-API-Version": "v2"
+    }
+  },
+  authentication: {
+    public: false,
+    tokenExpiryMinutes: 120  // 2 hour token
+  }
+});
+
+// The token is automatically appended to the URL for private previews
+// You can also pass the token as a header: X-Blaxel-Preview-Token
+```
+
+### Direct Instance Access
+
+> 📚 You can also [connect to sandboxes remotely from a terminal](https://docs.blaxel.ai/Sandboxes/Overview#connect-to-a-sandbox-with-a-terminal) for direct access
+
+```typescript
+import { createBlaxelCompute } from '@computesdk/blaxel';
+
+const compute = createBlaxelCompute({ 
+  workspace: 'your-workspace',
+  apiKey: 'your-key',
+  memory: 4096,
+  ports: [3000]
+});
+
+const sandbox = await compute.sandbox.create();
+const instance = sandbox.getInstance(); // Typed as SandboxInstance
+
+// Use Blaxel-specific features directly
+const result = await instance.process.exec({ 
+  command: 'ls -la'
+});
+
+// Stream logs from process
+const stream = instance.process.streamLogs(result.name, {
+  onStdout(data) { console.log('stdout:', data); },
+  onStderr(data) { console.error('stderr:', data); }
+});
+
+// Wait for completion
+await instance.process.wait(result.name);
+stream.close();
+
+// Access Blaxel filesystem API
+await instance.fs.write('/tmp/test.txt', 'Hello Blaxel');
+const content = await instance.fs.read('/tmp/test.txt');
+
+// Create preview with Blaxel API
+const preview = await instance.previews.create({
+  spec: {
+    port: 3000,
+    public: true
+  }
+});
 ```
 
 ## Runtime Detection
@@ -182,12 +375,7 @@ The provider automatically detects the runtime based on code patterns:
 - `print(` statements
 - `import` statements  
 - `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**TypeScript indicators:**
-- `interface`, `type` declarations
-- TypeScript-specific syntax (`:`, `<T>`, etc.)
-- `export`, `import` with types
+- Python-specific syntax (`f"`, `f'`, `__`, `sys.`, `json.`)
 
 **Default:** Node.js for all other cases
 
@@ -198,14 +386,19 @@ try {
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
-    console.error('Code has syntax errors - AI can help fix this');
-  } else if (error.message.includes('authentication failed')) {
-    console.error('Check your BLAXEL_API_KEY and BLAXEL_WORKSPACE');
-  } else if (error.message.includes('quota exceeded')) {
+    console.error('Code has syntax errors');
+  } else if (error.message.includes('authentication')) {
+    console.error('Check your BL_API_KEY');
+  } else if (error.message.includes('quota')) {
     console.error('Blaxel usage limits reached');
   }
 }
 ```
+
+### Exit Codes
+- `0` - Success
+- `1` - General error or runtime error
+- `127` - Command not found
 
 ## Web Framework Integration
 
@@ -218,309 +411,263 @@ import { blaxel } from '@computesdk/blaxel';
 export async function POST(request: Request) {
   return handleComputeRequest({
     request,
-    provider: blaxel({ 
-      apiKey: process.env.BLAXEL_API_KEY,
-      workspace: process.env.BLAXEL_WORKSPACE
-    })
+    provider: blaxel({ apiKey: process.env.BL_API_KEY })
   });
 }
 ```
 
 ## Examples
 
-### AI-Powered Data Analysis
+### Data Processing
 
 ```typescript
 const result = await sandbox.runCode(`
-# AI Context: Analyze sales data and provide insights
 import json
-import statistics
-from datetime import datetime
 
-print("🤖 AI-Powered Data Analysis")
-print("=" * 40)
-
-# Sample sales data (AI helps optimize this structure)
-sales_data = [
-    {"date": "2023-12-01", "product": "Laptop", "amount": 1200, "region": "US"},
-    {"date": "2023-12-01", "product": "Mouse", "amount": 50, "region": "EU"},
-    {"date": "2023-12-02", "product": "Laptop", "amount": 1200, "region": "EU"},
-    {"date": "2023-12-02", "product": "Keyboard", "amount": 80, "region": "US"},
-    {"date": "2023-12-03", "product": "Monitor", "amount": 300, "region": "US"}
-]
-
-# AI-enhanced analysis
-total_revenue = sum(sale["amount"] for sale in sales_data)
-avg_sale = statistics.mean(sale["amount"] for sale in sales_data)
-
-# Regional breakdown (AI suggests this analysis)
-regional_sales = {}
-for sale in sales_data:
-    region = sale["region"]
-    if region not in regional_sales:
-        regional_sales[region] = {"count": 0, "total": 0}
-    regional_sales[region]["count"] += 1
-    regional_sales[region]["total"] += sale["amount"]
-
-# AI-generated insights
-print(f"Total Revenue: ${total_revenue}")
-print(f"Average Sale: ${avg_sale:.2f}")
-print(f"Total Transactions: {len(sales_data)}")
-
-print("\\nRegional Performance:")
-for region, stats in regional_sales.items():
-    avg_regional = stats["total"] / stats["count"]
-    print(f"  {region}: {stats['count']} sales, ${stats['total']} total, ${avg_regional:.2f} avg")
-
-# AI confidence and recommendations
-ai_insights = {
-    "top_region": max(regional_sales.keys(), key=lambda x: regional_sales[x]["total"]),
-    "best_product": max(set(sale["product"] for sale in sales_data), 
-                       key=lambda x: sum(s["amount"] for s in sales_data if s["product"] == x)),
-    "ai_confidence": 0.94
+# Process data
+data = [1, 2, 3, 4, 5]
+result = {
+    "sum": sum(data),
+    "average": sum(data) / len(data),
+    "max": max(data)
 }
 
-print(f"\\n🧠 AI Insights:")
-print(f"  Top region: {ai_insights['top_region']}")
-print(f"  Best product: {ai_insights['best_product']}")
-print(f"  AI confidence: {ai_insights['ai_confidence']*100:.0f}%")
-
-# Save results with AI metadata
-results = {
-    "analysis_type": "AI Sales Analysis",
-    "total_revenue": total_revenue,
-    "avg_sale": avg_sale,
-    "regional_breakdown": regional_sales,
-    "ai_insights": ai_insights,
-    "generated_at": datetime.now().isoformat()
-}
-
-print("\\nFinal Results:", json.dumps(results, indent=2))
+print(json.dumps(result))
 `);
 
-console.log(result.stdout);
+const output = JSON.parse(result.stdout);
+console.log(output); // { sum: 15, average: 3, max: 5 }
 ```
 
-### TypeScript with AI Assistance
+### File Processing
 
 ```typescript
+// Create data file
+await sandbox.filesystem.writeFile('/tmp/data.json', 
+  JSON.stringify({ users: ['Alice', 'Bob', 'Charlie'] })
+);
+
+// Process file
 const result = await sandbox.runCode(`
-// AI-enhanced TypeScript execution
-interface SalesRecord {
-  id: string;
-  productName: string;
-  price: number;
-  quantity: number;
-  date: Date;
-}
+import json
 
-interface AnalysisResult {
-  totalRevenue: number;
-  averageOrderValue: number;
-  topProduct: string;
-  salesCount: number;
-}
+with open('/tmp/data.json', 'r') as f:
+    data = json.load(f)
 
-// AI helps with type-safe data generation
-function generateSalesData(): SalesRecord[] {
-  const products = ['Laptop', 'Mouse', 'Keyboard', 'Monitor', 'Tablet'];
-  const sales: SalesRecord[] = [];
-  
-  for (let i = 1; i <= 10; i++) {
-    sales.push({
-      id: \`SALE-\${i.toString().padStart(3, '0')}\`,
-      productName: products[Math.floor(Math.random() * products.length)],
-      price: Math.round((Math.random() * 1000 + 50) * 100) / 100,
-      quantity: Math.floor(Math.random() * 5) + 1,
-      date: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000)
-    });
-  }
-  
-  return sales;
-}
+# Process users
+user_count = len(data['users'])
+print(f"Found {user_count} users")
 
-// AI-optimized analysis function
-function analyzeSales(sales: SalesRecord[]): AnalysisResult {
-  const totalRevenue = sales.reduce((sum, sale) => 
-    sum + (sale.price * sale.quantity), 0
-  );
-  
-  const averageOrderValue = totalRevenue / sales.length;
-  
-  // Find top product by revenue
-  const productRevenue = new Map<string, number>();
-  sales.forEach(sale => {
-    const revenue = sale.price * sale.quantity;
-    const currentRevenue = productRevenue.get(sale.productName) || 0;
-    productRevenue.set(sale.productName, currentRevenue + revenue);
-  });
-  
-  const topProduct = Array.from(productRevenue.entries())
-    .sort(([,a], [,b]) => b - a)[0][0];
-  
-  return {
-    totalRevenue: Math.round(totalRevenue * 100) / 100,
-    averageOrderValue: Math.round(averageOrderValue * 100) / 100,
-    topProduct,
-    salesCount: sales.length
-  };
-}
+# Save result
+result = {"user_count": user_count, "processed": True}
+with open('/tmp/result.json', 'w') as f:
+    json.dump(result, f)
+`);
 
-// Execute AI-enhanced analysis
-console.log('🚀 AI-Enhanced TypeScript Analysis');
-console.log('='.repeat(50));
-
-const salesData = generateSalesData();
-const analysis = analyzeSales(salesData);
-
-console.log(\`📊 Analysis Results:\`);
-console.log(\`Total Revenue: $\${analysis.totalRevenue}\`);
-console.log(\`Average Order Value: $\${analysis.averageOrderValue}\`);
-console.log(\`Top Product: \${analysis.topProduct}\`);
-console.log(\`Total Sales: \${analysis.salesCount}\`);
-
-// AI recommendation
-const growthRate = analysis.averageOrderValue > 200 ? 'High' : 'Medium';
-console.log(\`\\n🧠 AI Recommendation: \${growthRate} growth potential detected\`);
-
-console.log('\\n✅ TypeScript analysis complete with AI assistance!');
-`, 'typescript');
-
-console.log(result.stdout);
+// Read result
+const resultData = await sandbox.filesystem.readFile('/tmp/result.json');
+console.log(JSON.parse(resultData));
 ```
 
-### Persistent Storage Demo
+### Web Scraping Example
 
 ```typescript
-// Create sandbox with persistence
-const sandbox = await compute.sandbox.create({
-  options: { 
-    persistent: true,
-    aiContext: "data persistence workflow"
+// Install dependencies
+await sandbox.runCommand('pip', ['install', 'requests', 'beautifulsoup4']);
+
+// Scrape website
+const result = await sandbox.runCode(`
+import requests
+from bs4 import BeautifulSoup
+import json
+
+# Fetch webpage
+response = requests.get('https://example.com')
+soup = BeautifulSoup(response.text, 'html.parser')
+
+# Extract title
+title = soup.find('title').text if soup.find('title') else 'No title'
+
+# Output result
+result = {
+    "status_code": response.status_code,
+    "title": title,
+    "content_length": len(response.text)
+}
+
+print(json.dumps(result))
+`);
+
+console.log(JSON.parse(result.stdout));
+```
+
+### API Development
+
+```typescript
+// Create a simple API server
+await sandbox.filesystem.writeFile('/tmp/server.js', `
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ 
+    message: 'Hello from Blaxel!',
+    timestamp: new Date().toISOString()
+  }));
+});
+
+server.listen(3000, () => {
+  console.log('Server running on port 3000');
+});
+`);
+
+// Start server in background
+await sandbox.runCommand('node', ['/tmp/server.js'], { background: true });
+
+// Get the preview URL (public by default)
+const url = await sandbox.getUrl({ port: 3000 });
+console.log(`API available at: ${url}`);
+// Example: https://tkmu0oj2bf6iuoag6mmlt8.preview.bl.run
+
+// Or create a private API endpoint with authentication
+const privateUrl = await sandbox.getUrl({ 
+  port: 3000,
+  authentication: {
+    public: false,
+    tokenExpiryMinutes: 120  // 2 hour token
+  }
+});
+console.log(`Private API: ${privateUrl}`);
+```
+
+## Authentication Methods
+
+1. **Automatic (when running on Blaxel)** - No configuration needed
+2. **Via Configuration** - Pass credentials directly
+3. **Via Environment Variables** - Set BL_WORKSPACE and BL_API_KEY
+4. **Via Blaxel CLI** - Run `bl login` for local development
+
+## Sandbox URLs
+
+Blaxel sandboxes are accessible via dynamically generated preview URLs:
+```
+https://{unique-id}.preview.bl.run or https://{unique-id}.{region}.preview.bl.run
+```
+
+Or with custom domain:
+```
+https://{unique-id}.{custom-domain}
+```
+
+> 📚 Learn more about [preview URLs and custom domains](https://docs.blaxel.ai/Sandboxes/Preview-url)
+
+### Public vs Private Previews
+
+**Public Previews** (default):
+- No authentication required
+- Accessible to anyone with the URL
+- Suitable for public demos and testing
+
+**Private Previews**:
+- Require authentication token
+- Token can be passed as `bl_preview_token` query parameter
+- Token can also be passed as `X-Blaxel-Preview-Token` header
+- Configurable token expiry time
+
+### Preview Configuration Options
+
+**TTL (Time To Live)**:
+- Controls how long the preview URL remains active
+- Specified in milliseconds
+- Automatically converted to Blaxel's format (e.g., "300s" for 5 minutes)
+
+**Custom Domain**:
+- Use your own domain for preview URLs
+- Must be configured in Blaxel settings
+
+**Prefix URL**:
+- Add a path prefix to all preview URLs
+- Useful for API versioning or routing
+
+**Headers**:
+- `response`: Headers sent to clients accessing the preview
+- `request`: Headers used for internal routing within Blaxel
+
+**Default Response Headers**:
+
+The provider applies these CORS headers by default when no custom response headers are provided:
+```javascript
+{
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-Blaxel-Preview-Token, X-Blaxel-Authorization",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Expose-Headers": "Content-Length, X-Request-Id",
+  "Access-Control-Max-Age": "86400",
+  "Vary": "Origin"
+}
+```
+
+**Note:** If you provide custom response headers, they completely replace the defaults. Make sure to include all necessary CORS headers when providing custom headers.
+
+Example:
+```typescript
+// Public preview with default headers and settings
+const url = await sandbox.getUrl({ port: 3000 });
+
+// Private preview with 2-hour token and 24-hour TTL
+const secureUrl = await sandbox.getUrl({ 
+  port: 3000,
+  ttl: 86400000,  // 24 hours in milliseconds
+  authentication: {
+    public: false,
+    tokenExpiryMinutes: 120
   }
 });
 
-// First execution - create persistent data
-await sandbox.runCode(`
-import json
-import os
-from datetime import datetime
-
-# Create persistent directory structure
-os.makedirs('/persistent/data', exist_ok=True)
-os.makedirs('/persistent/models', exist_ok=True)
-
-# Save session data
-session_data = {
-    "session_id": 1,
-    "created_at": datetime.now().isoformat(),
-    "message": "First session with AI assistance",
-    "ai_enabled": True
-}
-
-with open('/persistent/data/session_log.json', 'w') as f:
-    json.dump([session_data], f, indent=2)
-
-print("✅ Session 1: Data saved to persistent storage")
-print(f"Created session: {session_data['session_id']}")
-`);
-
-// Destroy and recreate sandbox (data persists)
-await compute.sandbox.destroy(sandbox.sandboxId);
-
-const newSandbox = await compute.sandbox.create({
-  options: { persistent: true }
+// Private preview with complete custom headers (replaces all defaults)
+const customSecureUrl = await sandbox.getUrl({
+  port: 3000,
+  authentication: {
+    public: false,
+    tokenExpiryMinutes: 60
+  },
+  headers: {
+    response: {
+      // Must include all necessary CORS headers when providing custom headers, if you want ot
+      "Access-Control-Allow-Origin": "https://app.example.com",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Blaxel-Preview-Token",
+      "Access-Control-Allow-Credentials": "true",
+      "X-Frame-Options": "SAMEORIGIN"
+    },
+    request: {
+      "X-Service-Name": "preview-service",
+      "X-Request-ID": "unique-request-id"
+    }
+  }
 });
-
-// Second execution - append to persistent data
-await newSandbox.runCode(`
-import json
-from datetime import datetime
-
-# Load existing data
-with open('/persistent/data/session_log.json', 'r') as f:
-    sessions = json.load(f)
-
-# Add new session
-new_session = {
-    "session_id": len(sessions) + 1,
-    "created_at": datetime.now().isoformat(),
-    "message": "Data persisted across sandbox recreation!",
-    "previous_sessions": len(sessions)
-}
-
-sessions.append(new_session)
-
-# Save updated data
-with open('/persistent/data/session_log.json', 'w') as f:
-    json.dump(sessions, f, indent=2)
-
-print(f"✅ Session {new_session['session_id']}: Found {len(sessions)-1} previous sessions")
-print("📁 Persistent storage working correctly!")
-print(f"Total sessions: {len(sessions)}")
-
-# Display session history
-print("\\nSession History:")
-for session in sessions:
-    print(f"  Session {session['session_id']}: {session['created_at']}")
-`);
 ```
 
-### Fast Iteration Development
+The provider automatically creates appropriate preview URLs with CORS headers configured for broad compatibility.
 
-```typescript
-console.log('⚡ Demonstrating 25ms boot times...');
+## Further Reading
 
-const iterations = 5;
-const results = [];
+### Core Documentation
+- [Sandbox technical guide](https://docs.blaxel.ai/Sandboxes/Overview) - Comprehensive overview of Blaxel sandboxes
+- [Sandbox API reference](https://docs.blaxel.ai/api-reference/filesystem/get-file-or-directory-information) - Complete API documentation for filesystem operations
+- [ComputeSDK documentation](https://github.com/computesdk/computesdk) - Main SDK documentation
 
-for (let i = 1; i <= iterations; i++) {
-  const startTime = Date.now();
-  
-  // Create sandbox
-  const sandbox = await compute.sandbox.create();
-  const bootTime = Date.now() - startTime;
-  
-  // Execute different AI-assisted tasks
-  const result = await sandbox.runCode(`
-print(f"⚡ Fast Iteration #{i} - Boot time: {bootTime}ms")
-print("AI-powered execution ready!")
+### Guides
+- [Creating preview URLs & custom domains](https://docs.blaxel.ai/Sandboxes/Preview-url) - Detailed guide on preview configuration
+- [Connecting to sandboxes remotely](https://docs.blaxel.ai/Sandboxes/Overview#connect-to-a-sandbox-with-a-terminal) - Terminal access to running sandboxes
+- [Deployment regions](https://docs.blaxel.ai/Infrastructure/Regions) - Available regions and selection guide
+- [Specifying regions for sandboxes](https://docs.blaxel.ai/Sandboxes/Overview#create-a-sandbox) - Region configuration during sandbox creation
+- [Mounting & using sandbox volumes](https://docs.blaxel.ai/Sandboxes/Volumes) - Persistent storage with volumes
 
-# Different AI task each iteration
-tasks = {
-    1: "Data validation with AI",
-    2: "Algorithm optimization", 
-    3: "Performance analysis",
-    4: "Error pattern detection",
-    5: "Code quality assessment"
-}
+### Support
+Feel free to reach out if you have any questions — we're here to help!
 
-current_task = tasks.get(${i}, "AI assistance")
-print(f"🤖 Current AI task: {current_task}")
+## License
 
-# Simulate AI work
-import time
-import random
-work_time = random.uniform(0.05, 0.2)
-time.sleep(work_time)
-
-print(f"✅ Task completed in {work_time:.3f}s with AI assistance")
-  `.replace('${i}', i.toString()).replace('{bootTime}', bootTime.toString()));
-  
-  const totalTime = Date.now() - startTime;
-  
-  results.push({
-    iteration: i,
-    bootTime,
-    totalTime,
-    output: result.stdout
-  });
-  
-  console.log(`Iteration ${i}: Boot ${bootTime}ms, Total ${totalTime}ms`);
-  console.log(result.stdout);
-  
-  await compute.sandbox.destroy(sandbox.sandboxId);
-}
-
-console.log(`\n📊 Average boot time: ${results.reduce((sum, r) => sum + r.bootTime, 0) / results.length}ms`);
-```
+MIT 

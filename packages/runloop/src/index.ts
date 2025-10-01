@@ -136,8 +136,14 @@ export const runloop = createProvider<
 
           const dbx = await client.devboxes.createAndAwaitRunning(devboxParams);
 
+          // Create a RunloopSandbox object that contains both devbox and client
+          const runloopSandbox = {
+            ...dbx,  // Spread all DevboxView properties
+            client: client  // Add client for method access
+          };
+
           return {
-            sandbox: dbx, 
+            sandbox: runloopSandbox, 
             sandboxId: dbx.id,
           };
         } catch (error) {
@@ -206,8 +212,99 @@ export const runloop = createProvider<
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (_sandbox: any, _code: string): Promise<ExecutionResult> => {
-        throw new Error("Please use runCommand instead");
+      runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+        const startTime = Date.now();
+        const devbox = sandbox;
+        const client = sandbox.client;
+
+        try {
+          // Auto-detect runtime if not specified
+          const effectiveRuntime = runtime || (
+            // Strong Python indicators
+            code.includes('print(') ||
+              code.includes('import ') ||
+              code.includes('def ') ||
+              code.includes('sys.') ||
+              code.includes('json.') ||
+              code.includes('__') ||
+              code.includes('f"') ||
+              code.includes("f'") ||
+              code.includes('raise ')
+              ? 'python'
+              // Default to Node.js for all other cases (including ambiguous)
+              : 'node'
+          );
+
+          // Use base64 encoding for both runtimes for reliability and consistency
+          const encoded = Buffer.from(code).toString('base64');
+
+          let command;
+          if (effectiveRuntime === 'python') {
+            command = `echo "${encoded}" | base64 -d | python3`;
+          } else {
+            command = `echo "${encoded}" | base64 -d | node`;
+          }
+
+          // Execute code using Runloop's executeAsync
+          const execution = await client.devboxes.executeAsync(devbox.id, {
+            command: command,
+          });
+
+          const executionResult = await client.devboxes.executions.awaitCompleted(
+            devbox.id,
+            execution.execution_id
+          );
+
+          // Check for syntax errors and throw them (similar to Vercel behavior)
+          if (executionResult.exit_status !== 0 && executionResult.stderr) {
+            // Check for common syntax error patterns
+            if (executionResult.stderr.includes('SyntaxError') ||
+              executionResult.stderr.includes('invalid syntax') ||
+              executionResult.stderr.includes('Unexpected token') ||
+              executionResult.stderr.includes('Unexpected identifier')) {
+              throw new Error(`Syntax error: ${executionResult.stderr.trim()}`);
+            }
+          }
+
+          return {
+            stdout: executionResult.stdout || "",
+            stderr: executionResult.stderr || "",
+            exitCode: executionResult.exit_status || 0,
+            executionTime: Date.now() - startTime,
+            sandboxId: devbox.id || "runloop-unknown",
+            provider: "runloop",
+          };
+        } catch (error) {
+          // Handle Runloop execution errors
+          if (error instanceof Error && error.message === 'exit status 1') {
+            const actualStderr = (error as any)?.result?.stderr || '';
+            const isSyntaxError = actualStderr.includes('SyntaxError');
+
+            if (isSyntaxError) {
+              // For syntax errors, throw
+              const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
+              throw new Error(`Syntax error: ${syntaxErrorLine}`);
+            } else {
+              // For runtime errors, return a result instead of throwing
+              return {
+                stdout: '',
+                stderr: actualStderr || 'Error: Runtime error occurred during execution',
+                exitCode: 1,
+                executionTime: Date.now() - startTime,
+                sandboxId: devbox.id || 'runloop-unknown',
+                provider: 'runloop'
+              };
+            }
+          }
+
+          // Re-throw syntax errors
+          if (error instanceof Error && error.message.includes('Syntax error')) {
+            throw error;
+          }
+          throw new Error(
+            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       runCommand: async (
@@ -216,7 +313,8 @@ export const runloop = createProvider<
         args: string[] = []
       ): Promise<ExecutionResult> => {
         const startTime = Date.now();
-        const { devbox, client } = sandbox;
+        const devbox = sandbox;
+        const client = sandbox.client;
 
         try {
           // Execute code using Runloop's executeAsync
@@ -278,7 +376,8 @@ export const runloop = createProvider<
         sandbox: any,
         options: { port: number }
       ): Promise<string> => {
-        const { devbox, client } = sandbox;
+        const devbox = sandbox;
+        const client = sandbox.client;
 
         try {
           const tunnel = await client.devboxes.createTunnel(devbox.id, {
@@ -297,14 +396,13 @@ export const runloop = createProvider<
 
       // Optional filesystem methods - using Runloop's file operations
       filesystem: {
-        readFile: async (sandbox: any, path: string): Promise<string> => {
-          const { devbox, client } = sandbox;
-
+        readFile: async (sandbox: any, path: string, runCommand: any): Promise<string> => {
           try {
-            const result = await client.devboxes.readFileContents(devbox.id, {
-              path: path,
-            });
-            return result.content || "";
+            const result = await runCommand(sandbox, 'cat', [path]);
+            if (result.exitCode !== 0) {
+              throw new Error(`File not found or unreadable: ${result.stderr}`);
+            }
+            return result.stdout;
           } catch (error) {
             throw new Error(
               `Failed to read file ${path}: ${
@@ -317,15 +415,17 @@ export const runloop = createProvider<
         writeFile: async (
           sandbox: any,
           path: string,
-          content: string
+          content: string,
+          runCommand: any
         ): Promise<void> => {
-          const { devbox, client } = sandbox;
-
           try {
-            await client.devboxes.writeFileContents(devbox.id, {
-              path: path,
-              content: content,
-            });
+            // Use command-based approach for file writing since API writeFileContents may have issues
+            const encoded = Buffer.from(content).toString('base64');
+            const result = await runCommand(sandbox, 'sh', ['-c', `echo "${encoded}" | base64 -d > "${path}"`]);
+            
+            if (result.exitCode !== 0) {
+              throw new Error(`Command failed: ${result.stderr}`);
+            }
           } catch (error) {
             throw new Error(
               `Failed to write file ${path}: ${
