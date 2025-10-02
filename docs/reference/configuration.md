@@ -5,14 +5,18 @@ ComputeSDK provides flexible configuration options for customizing sandbox behav
 ## Quick Start
 
 ```typescript
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
-// Basic configuration
-const sandbox = await compute('e2b', {
+const compute = createCompute({ 
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
+});
+
+// Create sandbox
+const sandbox = await compute.sandbox.create({
   template: 'python',
   timeoutMs: 30000,
   metadata: { project: 'my-app' }
-})
+});
 ```
 
 ## Configuration Hierarchy

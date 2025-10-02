@@ -5,12 +5,13 @@ ComputeSDK provides seamless integration with web frameworks and APIs, enabling 
 ## Quick Start
 
 ```typescript
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 import express from 'express'
 
 const app = express()
 
 app.post('/execute', async (req, res) => {
+  const compute = createCompute()
   const sandbox = await compute('e2b')
   
   try {
@@ -29,14 +30,15 @@ app.post('/execute', async (req, res) => {
 ### Basic API Endpoints
 
 ```typescript
-import express from 'express'
-import { compute } from 'computesdk'
+import express from 'express' 
+import { createCompute } from 'computesdk'
 
 const app = express()
 app.use(express.json())
 
 // Code execution endpoint
 app.post('/api/execute', async (req, res) => {
+  const compute = createCompute()
   const { code, language, provider = 'e2b' } = req.body
   
   try {
@@ -63,6 +65,7 @@ app.post('/api/execute', async (req, res) => {
 
 // File operations endpoint
 app.post('/api/files', async (req, res) => {
+  const compute = createCompute()
   const { action, path, content } = req.body
   const sandbox = await compute('e2b')
   
@@ -168,7 +171,7 @@ app.use(computeErrorHandler)
 ```typescript
 // pages/api/execute.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 export default async function handler(
   req: NextApiRequest,
@@ -181,6 +184,7 @@ export default async function handler(
   const { code, language } = req.body
   
   try {
+    const compute = createCompute()
     const sandbox = await compute('vercel', {
       template: language,
       region: 'iad1'
@@ -203,13 +207,13 @@ export default async function handler(
 
 ```typescript
 // app/api/execute/route.ts
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
     const { code, language } = await request.json()
-    
+    const compute = createCompute()
     const sandbox = await compute('vercel', {
       template: language
     })
@@ -235,13 +239,14 @@ export async function POST(request: NextRequest) {
 // app/actions.ts
 'use server'
 
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 export async function executeCode(formData: FormData) {
   const code = formData.get('code') as string
   const language = formData.get('language') as string
   
   try {
+    const compute = createCompute()
     const sandbox = await compute('vercel')
     const result = await sandbox[language](code)
     
@@ -263,7 +268,7 @@ export async function executeCode(formData: FormData) {
 
 ```typescript
 import Fastify from 'fastify'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 const fastify = Fastify({ logger: true })
 
@@ -319,7 +324,7 @@ fastify.post('/execute', {
 
 ```typescript
 import { ApolloServer, gql } from 'apollo-server-express'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 const typeDefs = gql`
   type ExecutionResult {
@@ -357,6 +362,7 @@ const typeDefs = gql`
 const resolvers = {
   Query: {
     listFiles: async (_, { path }) => {
+      const compute = createCompute()
       const sandbox = await compute('e2b')
       try {
         const files = await sandbox.listFiles(path)
@@ -367,6 +373,7 @@ const resolvers = {
     },
     
     readFile: async (_, { path }) => {
+      const compute = createCompute()
       const sandbox = await compute('e2b')
       try {
         const content = await sandbox.readFile(path)
@@ -384,6 +391,7 @@ const resolvers = {
   
   Mutation: {
     executeCode: async (_, { code, language, provider }) => {
+      const compute = createCompute()
       const sandbox = await compute(provider, {
         template: language,
         timeout: 30000
@@ -410,6 +418,7 @@ const resolvers = {
     },
     
     writeFile: async (_, { path, content }) => {
+      const compute = createCompute()
       const sandbox = await compute('e2b')
       try {
         await sandbox.writeFile(path, content)
@@ -432,7 +441,7 @@ const server = new ApolloServer({ typeDefs, resolvers })
 
 ```typescript
 import { WebSocketServer } from 'ws'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 const wss = new WebSocketServer({ port: 8080 })
 
@@ -455,6 +464,7 @@ wss.on('connection', (ws) => {
       
       switch (message.type) {
         case 'create-sandbox':
+          const compute = createCompute()
           client.sandbox = await compute(message.provider || 'e2b', {
             template: message.template
           })
@@ -529,7 +539,7 @@ wss.on('connection', (ws) => {
 
 ```typescript
 import { Server } from 'socket.io'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 const io = new Server(server, {
   cors: { origin: "*" }
@@ -547,6 +557,7 @@ io.on('connection', (socket) => {
   
   socket.on('start-session', async (config) => {
     try {
+      const compute = createCompute()
       session.sandbox = await compute(config.provider, {
         template: config.template,
         metadata: { userId: session.userId }
@@ -601,7 +612,7 @@ io.on('connection', (socket) => {
 ```typescript
 // api/compute.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 export default async function handler(
   req: VercelRequest,
@@ -614,6 +625,7 @@ export default async function handler(
   const { code, language } = req.body
   
   try {
+    const compute = createCompute()
     const sandbox = await compute('vercel', {
       template: language,
       region: process.env.VERCEL_REGION || 'iad1'
@@ -637,12 +649,13 @@ export default async function handler(
 
 ```typescript
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   try {
+    const compute = createCompute()
     const { code, language } = JSON.parse(event.body || '{}')
     
     const sandbox = await compute('modal', {
@@ -686,7 +699,7 @@ export const handler = async (
 
 ```typescript
 // worker.ts
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -695,6 +708,7 @@ export default {
     }
     
     try {
+      const compute = createCompute()
       const { code, language } = await request.json()
       
       const sandbox = await compute('cloudflare', {
@@ -735,7 +749,7 @@ export default {
 
 ```typescript
 import jwt from 'jsonwebtoken'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 // JWT middleware
 function authenticateToken(req: Request, res: Response, next: NextFunction) {
@@ -757,6 +771,7 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
 app.post('/api/secure/execute', authenticateToken, async (req, res) => {
   const user = req.user
   
+  const compute = createCompute()
   const sandbox = await compute('e2b', {
     metadata: {
       userId: user.id,
@@ -822,6 +837,7 @@ app.post('/api/execute',
       return res.status(403).json({ error: 'Provider not allowed' })
     }
     
+    const compute = createCompute()
     const sandbox = await compute(provider, {
       resources: permissions.resourceLimits,
       timeout: permissions.resourceLimits.maxExecutionTime
@@ -838,7 +854,7 @@ app.post('/api/execute',
 
 ```typescript
 import rateLimit from 'express-rate-limit'
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
 // Basic rate limiting
 const createRateLimit = (windowMs: number, max: number) => 
@@ -995,6 +1011,7 @@ app.get('/health', async (req, res) => {
   
   // Check sandbox connectivity
   try {
+    const compute = createCompute()
     const testSandbox = await compute('e2b', { timeout: 5000 })
     await testSandbox.exec('echo "health check"')
     await testSandbox.destroy()

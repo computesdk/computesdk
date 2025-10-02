@@ -5,8 +5,9 @@ ComputeSDK provides powerful code execution capabilities across multiple languag
 ## Quick Start
 
 ```typescript
-import { compute } from 'computesdk'
+import { createCompute } from 'computesdk'
 
+const compute = createCompute()
 const sandbox = await compute('e2b')
 
 // Execute a simple command

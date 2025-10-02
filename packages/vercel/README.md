@@ -40,11 +40,11 @@ Get your token from [Vercel Account Tokens](https://vercel.com/account/tokens)
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { vercel } from '@computesdk/vercel';
 
 // Set as default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   provider: vercel({ runtime: 'node' }) 
 });
 

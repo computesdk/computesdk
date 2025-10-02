@@ -25,11 +25,11 @@ export MODAL_TOKEN_SECRET=your_token_secret_here
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { modal } from '@computesdk/modal';
 
 // Set as default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   provider: modal({ 
     tokenId: process.env.MODAL_TOKEN_ID,
     tokenSecret: process.env.MODAL_TOKEN_SECRET
