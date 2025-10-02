@@ -22,13 +22,7 @@ async function main() {
     const compute = createCompute({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
 
     // Create sandbox using compute singleton
-    const sandbox = await compute.sandbox.create({
-      options: {
-        templateId: 'python',
-        timeout: 30000,
-        metadata: { project: 'my-app' }
-      }
-    });
+    const sandbox = await compute.sandbox.create();
 
     console.log('Created E2B sandbox:', sandbox.sandboxId);
 
