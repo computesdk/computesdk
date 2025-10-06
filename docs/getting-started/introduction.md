@@ -15,18 +15,17 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 
 - **Code execution platforms** - Run user-submitted code safely
 - **Educational tools** - Interactive coding environments
-- **Data analysis applications** - Process code with full filesystem access
+- **Data analysis applications** - Process code with filesystem access
 - **AI-powered development tools** - Let AI agents write and execute code
 - **Testing & CI/CD systems** - Isolated test environments
 
 ## Features
 
 🚀 **Multi-provider support** - E2B, Vercel, Daytona, Modal, CodeSandbox, Blaxel, and more  
-📁 **Filesystem operations** - Read, write, create directories across providers  
+📁 **Filesystem operations** - Read, write, create directories 
 ⚡ **Command execution** - Run shell commands directly  
 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling  
 📦 **Modular** - Install only the providers you need  
-🔧 **Extensible** - Easy to add custom providers  
 🌐 **Web Framework Integration** - Built-in request handlers for Next.js, Nuxt, SvelteKit, etc.  
 🎨 **Frontend Integration** - Client-side hooks and utilities via @computesdk/ui
 

@@ -22,11 +22,11 @@ export CSB_API_KEY=your_api_key_here
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { codesandbox } from '@computesdk/codesandbox';
 
 // Set as default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   provider: codesandbox({ apiKey: process.env.CSB_API_KEY }) 
 });
 
