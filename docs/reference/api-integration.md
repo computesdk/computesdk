@@ -143,25 +143,6 @@ const files = await sandbox.filesystem.readdir('/')
 const exists = await sandbox.filesystem.exists('/path/to/check')
 ```
 
-## Advanced Usage
-
-### Custom Providers
-
-```typescript
-import { createProvider } from 'computesdk'
-
-const customProvider = createProvider({
-  // Implement required methods
-  async createSandbox(options) {
-    // Implementation
-  },
-  // ... other methods
-})
-
-const compute = createCompute({
-  defaultProvider: customProvider
-})
-```
 
 ## Best Practices
 
@@ -170,79 +151,7 @@ const compute = createCompute({
 3. **Timeouts**: Set appropriate timeouts for operations
 4. **Cleanup**: Implement proper cleanup in error handlers
 5. **Logging**: Add logging for debugging and monitoring
-app.post('/api/files', async (req, res) => {
-  // Create a compute instance with the provider configuration
-  const compute = createCompute({
-    defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY })
-  });
-  
-  const { action, path, content } = req.body;
-  let sandbox;
-  
-  try {
-    // Create a sandbox instance
-    sandbox = await compute.sandbox.create({
-      // Any sandbox options can go here
-      timeout: 30000
-    });
 
-    switch (action) {
-      case 'read':
-        const fileContent = await sandbox.filesystem.readFile(path);
-        res.json({ 
-          content: fileContent,
-          success: true
-        });
-        break;
-
-      case 'write':
-        await sandbox.filesystem.writeFile(path, content);
-        res.json({ success: true });
-        break;
-
-      case 'list':
-        const entries = await sandbox.filesystem.readdir(path);
-        res.json({ 
-          files: entries,
-          success: true
-        });
-        break;
-
-      case 'mkdir':
-        await sandbox.filesystem.mkdir(path);
-        res.json({ success: true });
-        break;
-
-      case 'remove':
-        await sandbox.filesystem.remove(path);
-        res.json({ success: true });
-        break;
-
-      case 'exists':
-        const exists = await sandbox.filesystem.exists(path);
-        res.json({ 
-          exists,
-          success: true 
-        });
-        break;
-
-      default:
-        res.status(400).json({ 
-          error: 'Invalid action',
-          success: false 
-        });
-    }
-  } catch (error) {
-    res.status(500).json({ 
-      error: error.message,
-      success: false
-    });
-  } finally {
-    if (sandbox) {
-      await sandbox.destroy();
-    }
-  }
-});
 
 ## Sandbox Options
 

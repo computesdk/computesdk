@@ -20,11 +20,8 @@ ComputeSDK supports multiple execution backends (see providers for details)
 
 ## Key Features
 
-### 1. Run Node.js & Python code
-Execute code in multiple languages with automatic runtime detection:
-- Python
-- Node.js
-- Shell commands
+### 1. Run Node.js, Python, and more
+Execute code in multiple languages with automatic runtime detection.
 
 [Learn about code execution →](./code-execution.md)
 
@@ -52,7 +49,7 @@ yarn add computesdk
 import { createCompute } from 'computesdk';
 
 // Initialize with default provider (E2B)
-const compute = createCompute();
+const compute = createCompute({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
 
 // Create a sandbox
 const sandbox = await compute.sandbox.create({

@@ -10,11 +10,11 @@ import { e2b } from '@computesdk/e2b'
 
 // Create a compute instance with the provider configuration
 const compute = createCompute({
-  defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY })
+  provider: e2b({ apiKey: process.env.E2B_API_KEY })
 })
 
 const sandbox = await compute.sandbox.create({
-  runtime: 'python3.9',
+  runtime: 'python',
   timeout: 300000,  // 5 minutes
   metadata: {
     userId: 'user-123',
