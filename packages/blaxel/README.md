@@ -19,6 +19,11 @@ import { blaxel } from '@computesdk/blaxel';
 // Set as default provider
 const compute = createCompute({ 
   provider: blaxel({ apiKey: process.env.BL_API_KEY }) 
+compute.setConfig({ 
+  provider: blaxel({ 
+    apiKey: process.env.BLAXEL_API_KEY,
+    workspace: process.env.BLAXEL_WORKSPACE 
+  }) 
 });
 
 // Create sandbox
