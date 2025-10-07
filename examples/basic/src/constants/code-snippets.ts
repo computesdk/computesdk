@@ -96,7 +96,7 @@ print("This code was executed automatically.")
 // NODE.JS CODE SNIPPETS
 // ============================================================================
 
-export const NODEJS_SNIPPETS = {
+export const NODE_SNIPPETS = {
   // Basic hello world with system info
   HELLO_WORLD: `
 console.log('Node.js version:', process.version);
@@ -200,13 +200,13 @@ export const CODE_UTILS = {
     if (runtime === 'python') {
       return PYTHON_SNIPPETS.SIMPLE_GREETING(provider);
     } else {
-      return NODEJS_SNIPPETS.SIMPLE_GREETING(provider);
+      return NODE_SNIPPETS.SIMPLE_GREETING(provider);
     }
   },
 
   // Get hello world code based on runtime
   getHelloWorldCode: (runtime: 'python' | 'node' = 'python') => {
-    return runtime === 'python' ? PYTHON_SNIPPETS.HELLO_WORLD : NODEJS_SNIPPETS.HELLO_WORLD;
+    return runtime === 'python' ? PYTHON_SNIPPETS.HELLO_WORLD : NODE_SNIPPETS.HELLO_WORLD;
   },
 
   // Format JSON for file writing
