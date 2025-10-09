@@ -632,20 +632,3 @@ export async function POST(request: Request) {
   })
 }
 ```
-
-## Examples
-
-See the [ComputeSDK examples](../../examples/) for complete framework integrations:
-
-- [Next.js](../../examples/nextjs/)
-- [Nuxt](../../examples/nuxt/)  
-- [SvelteKit](../../examples/sveltekit/)
-- [Remix](../../examples/remix/)
-- [Astro](../../examples/astro/)
-
-## Related Documentation
-
-- [Overview](./overview.md) - SDK architecture and concepts
-- [Configuration](./configuration.md) - Global configuration options
-- [Code Execution](./code-execution.md) - Running code and commands
-- [Providers](../providers/) - Provider-specific documentation
