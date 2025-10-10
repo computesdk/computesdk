@@ -11,41 +11,40 @@ A sandbox is an isolated environment where your code executes securely. Each san
 - Resource limits
 - Clean environment for each execution
 
-Jump to [Quick Start →](.getting-started/quick-start)
+Jump to [Quick Start →](/docs/getting-started/quick-start)
 
-Or learn more about [managing sandboxes →](./sandbox-management)
+Or learn more about [managing sandboxes →](/docs/reference/sandbox-management)
 
 ### Providers: Powering Your Sandboxes
 ComputeSDK supports multiple execution backends (see providers for details)
 
-[Configure your provider →](./configuration)
+[Configure your provider →](/docs/reference/configuration)
 
 ## Key Features
 
 ### 1. Run Node.js, Python, and more
 Execute code in multiple languages with automatic runtime detection.
 
-[Learn about code execution →](./code-execution)
+[Learn about code execution →](/docs/reference/code-execution)
 
 ### 2. Full Filesystem Access
 Interact with files in your sandbox:
 
-[Explore filesystem operations →](./filesystem)
+[Explore filesystem operations →](/docs/reference/filesystem)
 
 ### 3. Web Integration & UI Package
 Build interactive web applications using our UI package:
 
-[Learn about web integration →](./api-integration#web-integration)
+[Learn about web integration →](/docs/reference/api-integration#web-integration)
 
-[See UI package →](./ui-package)
+[See UI package →](/docs/reference/ui-package)
 
 ### 4. Sandbox Options
 Configure your sandbox with options to customize its behavior.
 
-[Learn about sandbox options →](./api-integration#sandbox-options)
+[Learn about sandbox options →](/docs/reference/api-integration#sandbox-options)
 
 ### 5. Error Handling
 Handle errors and exceptions in your code.
 
-[Learn about error handling →](./api-integration#error-handling)
-
+[Learn about error handling →](/docs/reference/api-integration#error-handling)
