@@ -39,7 +39,7 @@ const compute = createCompute({
 - **[Code Execution](https://www.computesdk.com/docs/reference/code-execution)** - Execute code snippets in various runtimes
 - **[Command Execution](https://www.computesdk.com/docs/reference/code-execution#runcommand-method)** - Run shell commands and scripts
 - **[Filesystem Operations](https://www.computesdk.com/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
-- **[Sandbox Management](https://www.computesdk.com/docs/reference/sandbox-management.md)** - Create, list, and destroy sandboxes
+- **[Sandbox Management](https://www.computesdk.com/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
 
 
 ## Web Framework Integration
