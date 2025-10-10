@@ -11,7 +11,7 @@ A sandbox is an isolated environment where your code executes securely. Each san
 - Resource limits
 - Clean environment for each execution
 
-Jump to [Quick Start →](./quick-start)
+Jump to [Quick Start →](.getting-started/quick-start)
 
 Or learn more about [managing sandboxes →](./sandbox-management)
 
