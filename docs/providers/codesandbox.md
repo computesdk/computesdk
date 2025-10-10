@@ -50,6 +50,8 @@ export CODESANDBOX_API_KEY=your_codesandbox_api_key_here
 interface CodeSandboxConfig {
   /** CodeSandbox API key - if not provided, will use CODESANDBOX_API_KEY env var */
   apiKey?: string;
+   /** Project template to use */
+  template?: 'react' | 'vue' | 'angular' | 'nextjs' | 'node' | 'vanilla';
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Enable public access to sandbox */
