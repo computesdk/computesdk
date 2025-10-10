@@ -1,9 +1,5 @@
 # Blaxel
 
-Blaxel provider for ComputeSDK 
-
-# @computesdk/blaxel
-
 Blaxel provider for ComputeSDK - Execute code in secure Blaxel sandboxes with 25ms cold starts and real-time preview URLs.
 
 ## Installation
@@ -39,49 +35,22 @@ console.log(result.stdout); // "Hello from Blaxel!"
 await sandbox.destroy();
 ```
 
-### Direct Usage
-
-```typescript
-import { blaxel } from '@computesdk/blaxel';
-
-// Create provider with configuration
-const provider = blaxel({ 
-  workspace: 'your-workspace',
-  apiKey: 'your-api-key',
-  image: 'blaxel/prod-py-app:latest',  // Python image
-  memory: 8192,                         // 8GB RAM
-  ports: [3000, 8080]                  // Exposed ports
-});
-
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ 
-  provider,
-  options: {
-    runtime: 'python',  // Runtime specified at creation time
-    timeout: 3600000,   // 1 hour timeout
-    envs: { 
-      DEBUG: 'true' 
-    }
-  }
-});
-```
-
 ## Configuration
 
 ### Environment Variables
 
 ```bash
-export BL_WORKSPACE=your_workspace_id
-export BL_API_KEY=your_api_key_here
+export BLAXEL_WORKSPACE=your_workspace_id
+export BLAXEL_API_KEY=your_api_key_here
 ```
 
 ### Configuration Options
 
 ```typescript
 interface BlaxelConfig {
-  /** Blaxel workspace ID - fallback to BL_WORKSPACE env var */
+  /** Blaxel workspace ID - fallback to BLAXEL_WORKSPACE env var */
   workspace?: string;
-  /** Blaxel API key - fallback to BL_API_KEY env var */
+  /** Blaxel API key - fallback to BLAXEL_API_KEY env var */
   apiKey?: string;
   /** Default image for sandboxes */
   image?: string;
@@ -322,57 +291,12 @@ const advancedUrl = await sandbox.getUrl({
 // You can also pass the token as a header: X-Blaxel-Preview-Token
 ```
 
-### Direct Instance Access
-
-> 📚 You can also [connect to sandboxes remotely from a terminal](https://docs.blaxel.ai/Sandboxes/Overview#connect-to-a-sandbox-with-a-terminal) for direct access
-
-```typescript
-import { createBlaxelCompute } from '@computesdk/blaxel';
-
-const compute = createBlaxelCompute({ 
-  workspace: 'your-workspace',
-  apiKey: 'your-key',
-  memory: 4096,
-  ports: [3000]
-});
-
-const sandbox = await compute.sandbox.create();
-const instance = sandbox.getInstance(); // Typed as SandboxInstance
-
-// Use Blaxel-specific features directly
-const result = await instance.process.exec({ 
-  command: 'ls -la'
-});
-
-// Stream logs from process
-const stream = instance.process.streamLogs(result.name, {
-  onStdout(data) { console.log('stdout:', data); },
-  onStderr(data) { console.error('stderr:', data); }
-});
-
-// Wait for completion
-await instance.process.wait(result.name);
-stream.close();
-
-// Access Blaxel filesystem API
-await instance.fs.write('/tmp/test.txt', 'Hello Blaxel');
-const content = await instance.fs.read('/tmp/test.txt');
-
-// Create preview with Blaxel API
-const preview = await instance.previews.create({
-  spec: {
-    port: 3000,
-    public: true
-  }
-});
-```
-
 ## Runtime Detection
 
 The provider automatically detects the runtime based on code patterns:
 
 **Python indicators:**
-- `print(` statements
+- `print` statements
 - `import` statements  
 - `def` function definitions
 - Python-specific syntax (`f"`, `f'`, `__`, `sys.`, `json.`)
@@ -388,7 +312,7 @@ try {
   if (error.message.includes('Syntax error')) {
     console.error('Code has syntax errors');
   } else if (error.message.includes('authentication')) {
-    console.error('Check your BL_API_KEY');
+    console.error('Check your BLAXEL_API_KEY');
   } else if (error.message.includes('quota')) {
     console.error('Blaxel usage limits reached');
   }
