@@ -36,10 +36,10 @@ const compute = createCompute({
 
 ### See also:
 
-- **[Code Execution](https://www.computesdk.com/docs/reference/code-execution)** - Execute code snippets in various runtimes
-- **[Command Execution](https://www.computesdk.com/docs/reference/code-execution#runcommand-method)** - Run shell commands and scripts
-- **[Filesystem Operations](https://www.computesdk.com/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
-- **[Sandbox Management](https://www.computesdk.com/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
+- **[Code Execution](/docs/reference/code-execution)** - Execute code snippets in various runtimes
+- **[Command Execution](/docs/reference/code-execution#basic-code-execution)** - Run shell commands and scripts
+- **[Filesystem Operations](/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
+- **[Sandbox Management](/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
 
 
 ## Web Framework Integration

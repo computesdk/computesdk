@@ -54,4 +54,4 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 
 ## Next Steps
 
-Ready to get started? Check out our [installation guide](https://www.computesdk.com/docs/getting-started/installation) or dive into the [quick start](https://www.computesdk.com/docs/getting-started/quick-start) to begin building with ComputeSDK.
+Ready to get started? Check out our [installation guide](/docs/getting-started/installation) or dive into the [quick start](/docs/getting-started/quick-start) to begin building with ComputeSDK.

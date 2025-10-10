@@ -92,9 +92,9 @@ The provider automatically detects the runtime based on code patterns:
 
 ## SDK Reference Links:
 
-- **[Code Execution](https://www.computesdk.com/docs/reference/code-execution)** - Execute code snippets in various runtimes
-- **[Command Execution](https://www.computesdk.com/docs/reference/code-execution#runcommand-method)** - Run shell commands and scripts
-- **[Filesystem Operations](https://www.computesdk.com/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
-- **[Sandbox Management](https://www.computesdk.com/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
-- **[Error Handling](https://www.computesdk.com/docs/reference/api-integration#error-handling)** - Handle command failures and runtime errors
-- **[Web Framework Integration](https://www.computesdk.com/docs/reference/api-integration#web-framework-integration)** - Integrate with Express, Next.js, and other frameworks
+- **[Code Execution](/docs/reference/code-execution)** - Execute code snippets in various runtimes
+- **[Command Execution](/docs/reference/code-execution#basic-code-execution)** - Run shell commands and scripts
+- **[Filesystem Operations](/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
+- **[Sandbox Management](/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
+- **[Error Handling](/docs/reference/api-integration#error-handling)** - Handle command failures and runtime errors
+- **[Web Framework Integration](/docs/reference/api-integration#web-framework-integration)** - Integrate with Express, Next.js, and other frameworks
