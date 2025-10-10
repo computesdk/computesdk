@@ -82,7 +82,7 @@ interface VercelConfig {
 The provider automatically detects the runtime based on code patterns:
 
 **Python indicators:**
-- `print(` statements
+- `print` statements
 - `import` statements  
 - `def` function definitions
 - Python-specific syntax (`f"`, `__`, etc.)

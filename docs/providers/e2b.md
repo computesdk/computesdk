@@ -35,21 +35,6 @@ console.log(result.stdout); // "Hello from E2B!"
 await compute.sandbox.destroy(sandbox.sandboxId);
 ```
 
-### Direct Usage
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-// Create provider
-const provider = e2b({ 
-  apiKey: 'your-api-key',
-  template: 'base'
-});
-
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
-```
-
 ## Configuration
 
 ### Environment Variables

@@ -12,11 +12,12 @@ A sandbox is an isolated environment where your code executes securely. Each san
 - Clean environment for each execution
 
 Jump to [Quick Start →](./quick-start)
+
 Or learn more about [managing sandboxes →](./sandbox-management)
 
 ### Providers: Powering Your Sandboxes
 ComputeSDK supports multiple execution backends (see providers for details)
-s
+
 [Configure your provider →](./configuration)
 
 ## Key Features
@@ -35,6 +36,7 @@ Interact with files in your sandbox:
 Build interactive web applications using our UI package:
 
 [Learn about web integration →](./api-integration#web-integration)
+
 [See UI package →](./ui-package)
 
 ### 4. Sandbox Options

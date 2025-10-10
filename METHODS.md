@@ -400,3 +400,145 @@ Each provider implements:
 - **Optional template/snapshot managers** (infrastructure exists but not exposed in compute API)
 
 The core SDK handles all the boilerplate class generation, error handling, and provides sensible defaults while allowing providers to focus on their unique integration logic.
+
+
+-----
+## UI Package Methods
+
+The `@computesdk/ui` package provides frontend integration utilities for ComputeSDK. Located in: `packages/ui/src/`
+
+### **Factory Functions**
+
+| Method | Location | Purpose |
+|--------|----------|---------|
+| `createCompute(config?: ComputeConfig)` | `core/factories.ts:355` | Main factory for compute environment management with sandbox operations |
+| `createSandbox(config: SandboxConfig)` | `core/factories.ts:29` | Creates a UI sandbox instance with execution and filesystem methods |
+| `createSandboxConsole(config: SandboxConsoleConfig)` | `core/factories.ts:120` | Creates REPL-style console with history tracking and context persistence |
+| `createSandboxFilesystem(config: SandboxFilesystemConfig)` | `core/factories.ts:260` | Creates enhanced filesystem interface with better error handling |
+
+### **API Utilities**
+
+| Method | Location | Purpose |
+|--------|----------|---------|
+| `executeComputeRequest(request, endpoint?)` | `utils/api.ts:20` | Generic function for making compute API requests via fetch |
+| `APIError` | `utils/api.ts:6` | Error class for compute operations with status and code properties |
+
+### **Formatting Utilities**
+
+| Method | Location | Purpose |
+|--------|----------|---------|
+| `formatExecutionTime(milliseconds)` | `utils/api.ts:72` | Formats execution time for display (e.g., "1.2s", "2m 30s") |
+| `formatOutput(output)` | `utils/api.ts:90` | Formats output string for display (trims whitespace) |
+| `isComputeError(response)` | `utils/api.ts:97` | Checks if a compute response indicates an error |
+| `getErrorMessage(response)` | `utils/api.ts:104` | Extracts error message from compute response |
+
+### **Validation Utilities**
+
+| Method | Location | Purpose |
+|--------|----------|---------|
+| `validateCode(code)` | `utils/validation.ts:6` | Validates code input (checks for string, non-empty, length limits) |
+| `validateRuntime(runtime)` | `utils/validation.ts:30` | Validates runtime selection (must be 'python' or 'node') |
+| `validateApiEndpoint(endpoint)` | `utils/validation.ts:49` | Validates API endpoint format (must start with "/") |
+| `validateComputeConfig(config)` | `utils/validation.ts:69` | Validates compute configuration object |
+| `validateComputeRequest(request)` | `utils/validation.ts:113` | Validates compute request structure |
+
+### **Factory Method Details**
+
+#### `createCompute()` Sandbox Operations
+```typescript
+const compute = createCompute({ apiEndpoint: '/api/compute', defaultRuntime: 'python' })
+
+// Available methods:
+compute.sandbox.create(options?)     // Create new sandbox
+compute.sandbox.get(sandboxId)       // Get existing sandbox by ID  
+compute.sandbox.list()               // List all sandboxes
+compute.sandbox.destroy(sandboxId)   // Destroy a sandbox
+```
+
+#### `createSandbox()` Instance Methods
+```typescript
+const sandbox = createSandbox(config)
+
+// Code execution:
+sandbox.runCode(code, runtime?)      // Execute code
+sandbox.runCommand(command, args?)   // Run shell commands
+sandbox.getInfo()                    // Get sandbox information
+sandbox.destroy()                    // Destroy sandbox
+
+// Filesystem operations:
+sandbox.filesystem.readFile(path)
+sandbox.filesystem.writeFile(path, content)
+sandbox.filesystem.mkdir(path)
+sandbox.filesystem.readdir(path)
+sandbox.filesystem.exists(path)
+sandbox.filesystem.remove(path)
+```
+
+#### `createSandboxConsole()` REPL Methods
+```typescript
+const console = createSandboxConsole(config)
+
+// REPL operations:
+console.runCode(code, runtime?)      // Execute code with history tracking
+console.runCommand(command, args?)   // Run commands with history
+console.clear()                      // Clear console history
+console.getContext()                 // Get execution context
+
+// Properties:
+console.sandboxId                    // Sandbox ID
+console.history                      // Array of ConsoleEntry objects
+console.isRunning                    // Boolean execution state
+console.currentRuntime               // Current runtime environment
+```
+
+#### `createSandboxFilesystem()` Enhanced Methods
+```typescript
+const fs = createSandboxFilesystem(config)
+
+// Enhanced filesystem operations (with better error handling):
+fs.readFile(path): Promise<string>              // Returns string directly, throws on error
+fs.writeFile(path, content): Promise<void>      // Throws on error
+fs.mkdir(path): Promise<void>                   // Throws on error
+fs.readdir(path): Promise<FileEntry[]>          // Returns file array directly
+fs.exists(path): Promise<boolean>               // Returns boolean directly
+fs.remove(path): Promise<void>                  // Throws on error
+```
+
+### **TypeScript Types & Interfaces**
+
+**Core Types:**
+- `Runtime` - 'node' | 'python'
+- `SandboxStatus` - 'running' | 'stopped' | 'error'
+
+**Request/Response Types:**
+- `ComputeRequest` - API request structure with action-based routing
+- `ComputeResponse` - API response structure with success/error handling
+
+**UI Component Types:**
+- `UISandbox` - Frontend sandbox interface
+- `UIConsole` - REPL-style console interface  
+- `UIFilesystem` - Enhanced filesystem interface
+
+**Configuration Types:**
+- `ComputeConfig` - Main compute configuration
+- `SandboxConfig` - Sandbox creation config
+- `SandboxConsoleConfig` - Console creation config
+- `SandboxFilesystemConfig` - Filesystem creation config
+
+**Console Types:**
+- `ConsoleEntry` - Individual history entry structure
+- `ConsoleResult` - Execution result structure
+
+**Utility Types:**
+- `ValidationResult` - Validation result structure with errors array
+- `Theme` - UI theme configuration for components
+
+### **Usage Patterns**
+
+The UI package is framework-agnostic and provides:
+1. **15 utility functions** for API integration, validation, and formatting
+2. **20+ TypeScript types/interfaces** for type safety
+3. **4 factory functions** for creating compute instances
+4. **Enhanced error handling** with throws-on-error pattern for filesystem
+5. **REPL-style console** with execution history and context persistence
+6. **Validation utilities** for input sanitization and API endpoint checking
