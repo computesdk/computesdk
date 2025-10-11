@@ -1,6 +1,6 @@
 # UI Package
 
-The `@computesdk/ui` package provides React components and utilities for integrating ComputeSDK into your frontend applications. It offers both UI components for user interaction and headless hooks for building custom interfaces.
+The `@computesdk/ui` package provides framework-agnostic factory functions and types for integrating ComputeSDK into your frontend applications. It offers TypeScript definitions, API utilities, and validation helpers for building compute-enabled interfaces.
 
 ## Installation
 
@@ -12,456 +12,623 @@ pnpm add @computesdk/ui
 yarn add @computesdk/ui
 ```
 
-## Quick Start
+## What's Included
 
-```tsx
-import { ComputeProvider, Terminal } from '@computesdk/ui'
+### Types
+Complete TypeScript definitions for ComputeSDK API integration:
 
-export default function App() {
-  return (
-    <ComputeProvider provider="e2b" apiKey="your-api-key">
-      <Terminal />
-    </ComputeProvider>
+```typescript
+import type { 
+  ComputeRequest, 
+  ComputeResponse, 
+  Runtime,
+  UIConsole,
+  UISandbox,
+  UIFilesystem
+} from '@computesdk/ui'
+```
+
+### Factory Functions
+Framework-agnostic functions for creating compute instances:
+
+```typescript
+import { createCompute, createSandboxConsole } from '@computesdk/ui'
+
+// Main compute management
+const compute = createCompute({
+  apiEndpoint: '/api/compute',
+  defaultRuntime: 'python'
+})
+
+// Create sandbox
+const sandbox = await compute.sandbox.create()
+
+// REPL-style console with history
+const console = createSandboxConsole({
+  sandboxId: sandbox.id,
+  apiEndpoint: '/api/compute'
+})
+
+await console.runCode('x = 42')
+await console.runCode('print(x)')  // Maintains context
+console.history  // View execution history
+```
+
+### API Utilities
+Helper functions for making requests to ComputeSDK APIs:
+
+```typescript
+import { executeComputeRequest, APIError } from '@computesdk/ui'
+
+const response = await executeComputeRequest({
+  action: 'compute.sandbox.runCode',
+  code: 'print("Hello World!")',
+  runtime: 'python'
+}, '/api/compute')
+```
+
+### Validation Utilities
+Input validation for compute operations:
+
+```typescript
+import { 
+  validateCode,
+  validateRuntime,
+  validateComputeRequest 
+} from '@computesdk/ui'
+
+const codeValidation = validateCode('print("hello")')
+if (!codeValidation.isValid) {
+  console.error(codeValidation.errors)
+}
+```
+
+## Core Factory Functions
+
+### createCompute
+
+Main factory for compute environment management:
+
+```typescript
+import { createCompute } from '@computesdk/ui'
+
+const compute = createCompute({
+  apiEndpoint: '/api/compute',    // Default: '/api/compute'
+  defaultRuntime: 'python'       // Default: 'python'
+})
+
+// Create a new sandbox
+const sandbox = await compute.sandbox.create({
+  runtime: 'python',
+  timeout: 300000
+})
+
+// Get existing sandbox
+const existingSandbox = await compute.sandbox.get('sandbox-id')
+
+// List all sandboxes
+const sandboxes = await compute.sandbox.list()
+
+// Destroy sandbox
+await compute.sandbox.destroy('sandbox-id')
+```
+
+### createSandbox
+
+Create a sandbox instance for direct operations:
+
+```typescript
+import { createSandbox } from '@computesdk/ui'
+
+const sandbox = createSandbox({
+  sandboxId: 'my-sandbox',
+  provider: 'e2b',
+  runtime: 'python',
+  status: 'running',
+  apiEndpoint: '/api/compute'
+})
+
+// Execute code
+const result = await sandbox.runCode('print("Hello World!")')
+
+// Run shell commands
+const cmdResult = await sandbox.runCommand('ls', ['-la'])
+
+// Filesystem operations
+await sandbox.filesystem.writeFile('/app/script.py', 'print("Hello")')
+const content = await sandbox.filesystem.readFile('/app/script.py')
+const files = await sandbox.filesystem.readdir('/app')
+
+// Get sandbox info
+const info = await sandbox.getInfo()
+
+// Destroy sandbox
+await sandbox.destroy()
+```
+
+### createSandboxConsole
+
+Create a REPL-style console with execution history:
+
+```typescript
+import { createSandboxConsole } from '@computesdk/ui'
+
+const console = createSandboxConsole({
+  sandboxId: 'my-sandbox',
+  apiEndpoint: '/api/compute',
+  defaultRuntime: 'python'
+})
+
+// Execute code with context persistence
+await console.runCode('x = 42')
+await console.runCode('y = x * 2')
+await console.runCode('print(f"Result: {y}")')
+
+// Run shell commands
+await console.runCommand('pip', ['install', 'requests'])
+
+// Access execution history
+console.history.forEach(entry => {
+  console.log(`${entry.type}: ${entry.content}`)
+})
+
+// Clear history
+console.clear()
+
+// Check execution state
+if (console.isRunning) {
+  console.log('Code is currently executing...')
+}
+```
+
+### createSandboxFilesystem
+
+Create a filesystem interface with enhanced UX:
+
+```typescript
+import { createSandboxFilesystem } from '@computesdk/ui'
+
+const fs = createSandboxFilesystem({
+  sandboxId: 'my-sandbox',
+  apiEndpoint: '/api/compute'
+})
+
+// File operations with error handling
+try {
+  await fs.writeFile('/app/config.json', JSON.stringify({ api: 'v1' }))
+  const content = await fs.readFile('/app/config.json')
+  console.log('Config:', JSON.parse(content))
+  
+  const files = await fs.readdir('/app')
+  files.forEach(file => {
+    console.log(`${file.name} (${file.isDirectory ? 'dir' : 'file'})`)
+  })
+  
+  const exists = await fs.exists('/app/config.json')
+  if (exists) {
+    await fs.remove('/app/config.json')
+  }
+} catch (error) {
+  console.error('Filesystem error:', error.message)
+}
+```
+
+## Core Types
+
+### ComputeRequest
+
+Request structure for all compute operations:
+
+```typescript
+interface ComputeRequest {
+  action: 
+    | 'compute.sandbox.create' 
+    | 'compute.sandbox.destroy' 
+    | 'compute.sandbox.getInfo'
+    | 'compute.sandbox.list'
+    | 'compute.sandbox.runCode'
+    | 'compute.sandbox.runCommand'
+    | 'compute.sandbox.filesystem.readFile'
+    | 'compute.sandbox.filesystem.writeFile'
+    | 'compute.sandbox.filesystem.mkdir'
+    | 'compute.sandbox.filesystem.readdir'
+    | 'compute.sandbox.filesystem.exists'
+    | 'compute.sandbox.filesystem.remove'
+  
+  sandboxId?: string
+  code?: string
+  command?: string
+  args?: string[]
+  runtime?: Runtime
+  path?: string
+  content?: string
+  options?: {
+    runtime?: Runtime
+    timeout?: number
+    sandboxId?: string
+  }
+}
+```
+
+### ComputeResponse
+
+Response structure from compute operations:
+
+```typescript
+interface ComputeResponse {
+  success: boolean
+  error?: string
+  sandboxId: string
+  provider: string
+  
+  result?: {
+    stdout: string
+    stderr: string
+    exitCode: number
+    executionTime: number
+  }
+  
+  info?: {
+    id: string
+    provider: string
+    runtime: Runtime
+    status: SandboxStatus
+    createdAt: string
+    timeout: number
+    metadata?: Record<string, unknown>
+  }
+  
+  fileContent?: string
+  files?: Array<{
+    name: string
+    path: string
+    isDirectory: boolean
+    size: number
+    lastModified: string
+  }>
+  exists?: boolean
+  sandboxes?: Array<{
+    sandboxId: string
+    provider: string
+  }>
+}
+```
+
+### UIConsole
+
+REPL-style console interface:
+
+```typescript
+interface UIConsole {
+  sandboxId: string
+  runCode: (code: string, runtime?: Runtime) => Promise<ConsoleResult>
+  runCommand: (command: string, args?: string[]) => Promise<ConsoleResult>
+  history: ConsoleEntry[]
+  isRunning: boolean
+  currentRuntime: Runtime
+  clear: () => void
+  getContext: () => Promise<Record<string, unknown>>
+}
+```
+
+### ConsoleEntry
+
+Individual console history entry:
+
+```typescript
+interface ConsoleEntry {
+  id: string
+  type: 'input' | 'output' | 'error'
+  content: string
+  runtime?: Runtime
+  timestamp: Date
+  result?: {
+    stdout: string
+    stderr: string
+    exitCode: number
+    executionTime: number
+  }
+}
+```
+
+## Utility Functions
+
+### executeComputeRequest
+
+Generic function for any compute operation:
+
+```typescript
+async function executeComputeRequest(
+  request: ComputeRequest,
+  endpoint?: string
+): Promise<ComputeResponse>
+
+// Example usage
+const response = await executeComputeRequest({
+  action: 'compute.sandbox.runCode',
+  sandboxId: 'my-sandbox',
+  code: 'print("Hello")',
+  runtime: 'python'
+}, '/api/compute')
+```
+
+### APIError
+
+Error class for compute operations:
+
+```typescript
+class APIError extends Error {
+  constructor(
+    message: string,
+    public status?: number,
+    public code?: string
   )
 }
 ```
 
-## Core Components
+### Validation Functions
 
-### ComputeProvider
+Input validation utilities:
 
-The root provider component that manages the ComputeSDK instance and provides context to child components.
+```typescript
+// Validate code input
+function validateCode(code: string): ValidationResult
 
-```tsx
-import { ComputeProvider } from '@computesdk/ui'
+// Validate runtime selection
+function validateRuntime(runtime: string): ValidationResult
 
-interface ComputeProviderProps {
-  provider: 'e2b' | 'vercel' | 'codesandbox' | 'blaxel' | 'daytona' | 'modal'
-  apiKey?: string
-  config?: ComputeConfig
-  children: React.ReactNode
-}
+// Validate API endpoint
+function validateApiEndpoint(endpoint: string): ValidationResult
 
-function App() {
-  return (
-    <ComputeProvider 
-      provider="e2b" 
-      apiKey={process.env.E2B_API_KEY}
-      config={{
-        template: 'base',
-        metadata: { project: 'my-app' }
-      }}
-    >
-      <YourApp />
-    </ComputeProvider>
-  )
-}
+// Validate full compute configuration
+function validateComputeConfig(config: ComputeConfig): ValidationResult
+
+// Validate compute request structure
+function validateComputeRequest(request: ComputeRequest): ValidationResult
 ```
 
-### Terminal
+### Formatting Utilities
 
-Interactive terminal component with full shell access.
+Display helpers:
 
-```tsx
-import { Terminal } from '@computesdk/ui'
+```typescript
+// Format execution time for display
+function formatExecutionTime(milliseconds: number): string
 
-function CodeEditor() {
-  return (
-    <div className="h-96">
-      <Terminal 
-        onCommand={(command) => console.log('Executed:', command)}
-        onOutput={(output) => console.log('Output:', output)}
-        className="h-full"
-      />
-    </div>
-  )
-}
+// Format output for display
+function formatOutput(output: string): string
+
+// Check if response indicates error
+function isComputeError(response: ComputeResponse): boolean
+
+// Get error message from response
+function getErrorMessage(response: ComputeResponse): string
 ```
 
-#### Terminal Props
+## Framework Integration
 
-```tsx
-interface TerminalProps {
-  onCommand?: (command: string) => void
-  onOutput?: (output: string) => void
-  onError?: (error: string) => void
-  className?: string
-  placeholder?: string
-  disabled?: boolean
-  autoFocus?: boolean
-}
-```
+This package is framework-agnostic. Use it with any frontend framework:
 
-### FileExplorer
+### React Example
 
-File tree component for browsing and managing sandbox files.
+```typescript
+import React, { useState } from 'react'
+import { createCompute, type ComputeResponse } from '@computesdk/ui'
 
-```tsx
-import { FileExplorer } from '@computesdk/ui'
-
-function IDE() {
-  return (
-    <div className="flex h-screen">
-      <div className="w-64 border-r">
-        <FileExplorer 
-          onFileSelect={(path) => console.log('Selected:', path)}
-          onFileCreate={(path) => console.log('Created:', path)}
-          onFileDelete={(path) => console.log('Deleted:', path)}
-        />
-      </div>
-      <div className="flex-1">
-        {/* Code editor */}
-      </div>
-    </div>
-  )
-}
-```
-
-#### FileExplorer Props
-
-```tsx
-interface FileExplorerProps {
-  onFileSelect?: (path: string) => void
-  onFileCreate?: (path: string) => void
-  onFileDelete?: (path: string) => void
-  onFolderToggle?: (path: string, expanded: boolean) => void
-  allowCreate?: boolean
-  allowDelete?: boolean
-  className?: string
-}
-```
-
-### CodeRunner
-
-Component for executing code with output display.
-
-```tsx
-import { CodeRunner } from '@computesdk/ui'
-
-function Playground() {
-  return (
-    <CodeRunner
-      language="python"
-      initialCode="print('Hello, World!')"
-      onExecute={(code) => console.log('Executing:', code)}
-      onResult={(result) => console.log('Result:', result)}
-      showLineNumbers
-      theme="dark"
-    />
-  )
-}
-```
-
-#### CodeRunner Props
-
-```tsx
-interface CodeRunnerProps {
-  language?: string
-  initialCode?: string
-  onExecute?: (code: string) => void
-  onResult?: (result: ExecutionResult) => void
-  showLineNumbers?: boolean
-  theme?: 'light' | 'dark'
-  className?: string
-  readOnly?: boolean
-}
-```
-
-## Hooks
-
-### useCompute
-
-Core hook for accessing the ComputeSDK instance.
-
-```tsx
-import { useCompute } from '@computesdk/ui'
-
-function CustomComponent() {
-  const { 
-    compute,
-    connected,
-    connecting,
-    error,
-    connect,
-    disconnect
-  } = useCompute()
-
-  React.useEffect(() => {
-    if (!connected) {
-      connect()
+function CodeExecutor() {
+  const [code, setCode] = useState('print("Hello World!")')
+  const [result, setResult] = useState<ComputeResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  
+  const compute = createCompute({
+    apiEndpoint: '/api/compute',
+    defaultRuntime: 'python'
+  })
+  
+  const executeCode = async () => {
+    setLoading(true)
+    try {
+      const sandbox = await compute.sandbox.create()
+      const response = await sandbox.runCode(code)
+      setResult(response)
+      await sandbox.destroy()
+    } catch (error) {
+      console.error('Execution failed:', error)
+    } finally {
+      setLoading(false)
     }
-  }, [connected, connect])
-
-  if (connecting) return <div>Connecting...</div>
-  if (error) return <div>Error: {error.message}</div>
-
-  return (
-    <button onClick={() => compute.exec('ls -la')}>
-      List Files
-    </button>
-  )
-}
-```
-
-### useTerminal
-
-Hook for terminal functionality without the UI component.
-
-```tsx
-import { useTerminal } from '@computesdk/ui'
-
-function CustomTerminal() {
-  const {
-    output,
-    input,
-    setInput,
-    execute,
-    clear,
-    history
-  } = useTerminal()
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    execute(input)
-    setInput('')
   }
-
+  
   return (
     <div>
-      <pre>{output}</pre>
-      <form onSubmit={handleSubmit}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Enter command..."
-        />
-      </form>
-    </div>
-  )
-}
-```
-
-### useFileSystem
-
-Hook for file operations.
-
-```tsx
-import { useFileSystem } from '@computesdk/ui'
-
-function FileManager() {
-  const {
-    files,
-    currentPath,
-    readFile,
-    writeFile,
-    deleteFile,
-    createFolder,
-    navigate
-  } = useFileSystem()
-
-  const handleFileRead = async (path: string) => {
-    const content = await readFile(path)
-    console.log(content)
-  }
-
-  return (
-    <div>
-      <div>Current: {currentPath}</div>
-      {files.map(file => (
-        <div key={file.path}>
-          <span onClick={() => handleFileRead(file.path)}>
-            {file.name}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-```
-
-### useCodeExecution
-
-Hook for running code with execution state management.
-
-```tsx
-import { useCodeExecution } from '@computesdk/ui'
-
-function CodePlayground() {
-  const {
-    execute,
-    result,
-    loading,
-    error,
-    history
-  } = useCodeExecution()
-
-  const runCode = async () => {
-    await execute('python', 'print("Hello from Python!")')
-  }
-
-  return (
-    <div>
-      <button onClick={runCode} disabled={loading}>
-        {loading ? 'Running...' : 'Run Code'}
+      <textarea 
+        value={code} 
+        onChange={(e) => setCode(e.target.value)}
+        rows={10}
+        cols={50}
+      />
+      <button onClick={executeCode} disabled={loading}>
+        {loading ? 'Executing...' : 'Execute'}
       </button>
       {result && (
-        <pre>{result.stdout}</pre>
-      )}
-      {error && (
-        <div style={{ color: 'red' }}>{error.message}</div>
+        <pre>
+          {result.success ? result.result?.stdout : result.error}
+        </pre>
       )}
     </div>
   )
 }
 ```
 
-## TypeScript Interfaces
+### Vue Example
 
-```tsx
-interface ComputeConfig {
-  template?: string
-  metadata?: Record<string, any>
-  timeoutMs?: number
-  keepAlive?: boolean
-}
+```typescript
+import { ref, computed } from 'vue'
+import { createCompute, type ComputeResponse } from '@computesdk/ui'
 
-interface ExecutionResult {
-  stdout: string
-  stderr: string
-  exitCode: number
-  executionTime: number
-}
-
-interface FileSystemItem {
-  name: string
-  path: string
-  type: 'file' | 'directory'
-  size?: number
-  modified?: Date
-}
-
-interface TerminalSession {
-  id: string
-  output: string[]
-  history: string[]
-  workingDirectory: string
+export function useCodeExecution() {
+  const code = ref('print("Hello World!")')
+  const result = ref<ComputeResponse | null>(null)
+  const loading = ref(false)
+  
+  const compute = createCompute({
+    apiEndpoint: '/api/compute',
+    defaultRuntime: 'python'
+  })
+  
+  const output = computed(() => {
+    if (!result.value) return ''
+    return result.value.success 
+      ? result.value.result?.stdout || ''
+      : result.value.error || 'Unknown error'
+  })
+  
+  const execute = async () => {
+    loading.value = true
+    try {
+      const sandbox = await compute.sandbox.create()
+      result.value = await sandbox.runCode(code.value)
+      await sandbox.destroy()
+    } catch (error) {
+      console.error('Execution failed:', error)
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  return { code, result, loading, output, execute }
 }
 ```
 
-## Styling
+### Svelte Example
 
-### Default Styles
+```typescript
+import { writable, get } from 'svelte/store'
+import { createCompute, type ComputeResponse } from '@computesdk/ui'
 
-The UI components come with minimal default styling. Import the base styles:
+export const code = writable('print("Hello World!")')
+export const result = writable<ComputeResponse | null>(null)
+export const loading = writable(false)
 
-```tsx
-import '@computesdk/ui/styles.css'
+const compute = createCompute({
+  apiEndpoint: '/api/compute',
+  defaultRuntime: 'python'
+})
+
+export async function execute() {
+  loading.set(true)
+  try {
+    const sandbox = await compute.sandbox.create()
+    const response = await sandbox.runCode(get(code))
+    result.set(response)
+    await sandbox.destroy()
+  } catch (error) {
+    console.error('Execution failed:', error)
+  } finally {
+    loading.set(false)
+  }
+}
 ```
 
-### Custom Styling
+## REPL Console Example
 
-All components accept `className` props for custom styling:
+Build a persistent code execution environment:
 
-```tsx
-<Terminal 
-  className="border rounded-lg p-4 bg-black text-green-400 font-mono"
-/>
+```typescript
+import { createSandboxConsole } from '@computesdk/ui'
 
-<FileExplorer 
-  className="bg-gray-100 dark:bg-gray-800"
-/>
-```
+class CodeREPL {
+  private console: UIConsole
+  
+  constructor(sandboxId: string) {
+    this.console = createSandboxConsole({
+      sandboxId,
+      apiEndpoint: '/api/compute',
+      defaultRuntime: 'python'
+    })
+  }
+  
+  async executeCode(code: string) {
+    const result = await this.console.runCode(code)
+    
+    if (result.success) {
+      console.log('Output:', result.stdout)
+      if (result.stderr) {
+        console.warn('Warnings:', result.stderr)
+      }
+    } else {
+      console.error('Error:', result.error)
+    }
+    
+    return result
+  }
+  
+  getHistory() {
+    return this.console.history.map(entry => ({
+      type: entry.type,
+      content: entry.content,
+      timestamp: entry.timestamp
+    }))
+  }
+  
+  clearHistory() {
+    this.console.clear()
+  }
+}
 
-### Theme Support
-
-Components support light/dark themes:
-
-```tsx
-<ComputeProvider theme="dark">
-  <Terminal />
-</ComputeProvider>
+// Usage
+const repl = new CodeREPL('my-sandbox')
+await repl.executeCode('x = 42')
+await repl.executeCode('y = x * 2')
+await repl.executeCode('print(f"Result: {y}")')
+console.log('History:', repl.getHistory())
 ```
 
 ## Error Handling
 
-```tsx
-import { ComputeErrorBoundary } from '@computesdk/ui'
+```typescript
+import { createCompute, APIError, isComputeError, getErrorMessage } from '@computesdk/ui'
 
-function App() {
-  return (
-    <ComputeErrorBoundary
-      fallback={({ error, retry }) => (
-        <div>
-          <h2>Something went wrong</h2>
-          <p>{error.message}</p>
-          <button onClick={retry}>Try Again</button>
-        </div>
-      )}
-    >
-      <ComputeProvider provider="e2b">
-        <YourApp />
-      </ComputeProvider>
-    </ComputeErrorBoundary>
-  )
+const compute = createCompute()
+
+try {
+  const sandbox = await compute.sandbox.create()
+  const result = await sandbox.runCode('invalid python code')
+  
+  if (isComputeError(result)) {
+    console.error('Compute error:', getErrorMessage(result))
+  } else {
+    console.log('Success:', result.result?.stdout)
+  }
+} catch (error) {
+  if (error instanceof APIError) {
+    console.error('API Error:', error.message, 'Status:', error.status)
+  } else {
+    console.error('Unexpected error:', error)
+  }
 }
 ```
 
-## Best Practices
+## Server-Side Integration
 
-1. **Provider Placement**: Place `ComputeProvider` at the root of your compute-enabled components
-2. **Connection Management**: Use the `useCompute` hook to manage connection state
-3. **Error Boundaries**: Always wrap compute components with error boundaries
-4. **Resource Cleanup**: Components automatically handle cleanup on unmount
-5. **Performance**: Use React.memo for components that render frequently
+Your server should implement the ComputeSDK request handler:
 
-## Framework Integration
+```typescript
+// /api/compute endpoint
+import { handleComputeRequest } from 'computesdk'
+import { e2b } from '@computesdk/e2b'
 
-### Next.js
+export async function GET(request: Request) {
+  return handleComputeRequest({
+    request,
+    provider: e2b({ apiKey: process.env.E2B_API_KEY })
+  })
+}
 
-```tsx
-// pages/_app.tsx
-import { ComputeProvider } from '@computesdk/ui'
-import '@computesdk/ui/styles.css'
-
-export default function App({ Component, pageProps }) {
-  return (
-    <ComputeProvider provider="vercel" apiKey={process.env.VERCEL_API_KEY}>
-      <Component {...pageProps} />
-    </ComputeProvider>
-  )
+export async function POST(request: Request) {
+  return handleComputeRequest({
+    request,
+    provider: e2b({ apiKey: process.env.E2B_API_KEY })
+  })
 }
 ```
-
-### Vite/React
-
-```tsx
-// main.tsx
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { ComputeProvider } from '@computesdk/ui'
-import App from './App'
-import '@computesdk/ui/styles.css'
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ComputeProvider provider="e2b" apiKey={import.meta.env.VITE_E2B_API_KEY}>
-      <App />
-    </ComputeProvider>
-  </StrictMode>
-)
-```
-
-## Examples
-
-Check out complete examples in our [examples directory](../../examples/):
-
-- [Next.js Integration](../../examples/nextjs/)
-- [Vite + React](../../examples/basic/)
-- [Custom IDE](../../examples/ide/)
-
-## Related Documentation
-
-- [Overview](./overview.md) - SDK architecture and concepts
-- [Configuration](./configuration.md) - Global configuration options
-- [Code Execution](./code-execution.md) - Running code and commands
-- [Providers](../providers/) - Provider-specific documentation

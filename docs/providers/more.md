@@ -6,10 +6,10 @@ We welcome contributions to the Compute SDK! If you have a provider you'd like t
 
 ### Providers
 
-- [Daytona](/providers/daytona)
-- [E2B](/providers/e2b)
-- [Vercel](/providers/vercel)
-- [Modal](/providers/modal)
-- [CodeSandbox](/providers/codesandbox)
-- [Blaxel](/providers/blaxel)
-- [More](/providers/more)
+- [Blaxel](/docs/providers/blaxel/)
+- [CodeSandbox](/docs/providers/codesandbox)
+- [Daytona](/docs/providers/daytona)
+- [E2B](/docs/providers/e2b)
+- [Modal](/docs/providers/modal)
+- [Runloop](/docs/providers/runloop)
+- [Vercel](/docs/providers/vercel)
