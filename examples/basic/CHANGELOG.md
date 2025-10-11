@@ -1,5 +1,22 @@
 # @computesdk/example-basic
 
+## 0.3.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
+### Patch Changes
+
+- Updated dependencies [c9cef90]
+  - @computesdk/codesandbox@1.3.0
+  - @computesdk/daytona@1.4.0
+  - @computesdk/runloop@1.1.0
+  - @computesdk/blaxel@1.1.0
+  - @computesdk/vercel@1.4.0
+  - @computesdk/modal@1.3.0
+  - @computesdk/e2b@1.5.0
+
 ## 0.2.6
 
 ### Patch Changes

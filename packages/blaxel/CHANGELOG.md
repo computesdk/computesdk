@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.1.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
 ## 1.0.0
 
 ### Major Changes
@@ -12,4 +18,4 @@
   - Optional filesystem operations
 - Full TypeScript support with proper type inference
 - Environment variable support for API key configuration
-- Error handling for authentication, quota, and execution errors 
+- Error handling for authentication, quota, and execution errors
