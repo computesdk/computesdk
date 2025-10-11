@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "computesdk": "workspace:*",
-    "@blaxel/core": "0.2.42"
+    "@blaxel/core": "^0.2.42"
   },
   "keywords": [
     "blaxel",
