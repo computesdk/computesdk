@@ -1,5 +1,11 @@
 # @computesdk/modal
 
+## 1.3.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
 ## 1.2.5
 
 ### Patch Changes
