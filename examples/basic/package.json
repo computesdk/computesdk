@@ -11,6 +11,7 @@
     "codesandbox": "tsx src/codesandbox-example.ts",
     "blaxel": "tsx src/blaxel-example.ts",
     "runloop": "tsx src/runloop-example.ts",
+    "docker": "tsx src/docker-example.ts",
     "launch": "tsx src/launch-example.ts"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "@computesdk/codesandbox": "workspace:*",
     "@computesdk/blaxel": "workspace:*",
     "@computesdk/runloop": "workspace:*",
+    "@computesdk/docker": "workspace:*",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
