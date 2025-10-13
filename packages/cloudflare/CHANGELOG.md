@@ -1,8 +1,15 @@
 # @computesdk/cloudflare
 
+## 1.1.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
 ## [1.0.0] - 2024-01-XX
 
 ### Added
+
 - Initial release of Cloudflare provider for ComputeSDK
 - Full Cloudflare Sandbox SDK integration using `@cloudflare/sandbox`
 - Complete implementation of all ComputeSDK provider methods:
@@ -30,6 +37,7 @@
 - Detailed documentation and usage examples
 
 ### Features
+
 - **Edge-Native Execution**: Runs on Cloudflare's global network
 - **Durable Objects Integration**: Persistent sandbox state
 - **Code Interpreter**: Python and JavaScript execution
@@ -41,6 +49,7 @@
 - **Real-time Streaming**: Support for streaming command output
 
 ### Documentation
+
 - Complete README with setup instructions
 - Configuration examples for wrangler.toml and Dockerfile
 - Usage examples for all major features
