@@ -171,7 +171,10 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
               },
               sandboxId: options.sandboxId,
             };
-          } catch { /* fall through */ }
+          } catch (err) {
+            // Failed to reattach to existing container; will create a new one.
+            console.warn(`Could not reattach to Docker container with ID ${options.sandboxId}:`, err);
+          }
         }
 
         // Choose image based on runtime if needed
