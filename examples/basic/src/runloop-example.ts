@@ -1,8 +1,8 @@
 /**
- * CodeSandbox Provider Example
+ * Runloop Provider Example
  * 
- * This example shows how to use the CodeSandbox provider for Python code execution
- * with filesystem support (but without terminal methods as CodeSandbox doesn't expose terminals in the same way).
+ * This example shows how to use the Runloop provider for Python code execution
+ * with filesystem support (but without terminal methods as Runloop doesn't expose terminals in the same way).
  */
 
 import { runloop } from '@computesdk/runloop';
@@ -35,16 +35,17 @@ async function main() {
     // Filesystem operations
     console.log('\n--- Filesystem Operations ---');
 
-    // Write and execute a Python script
-    await sandbox.filesystem.writeFile('/project/workspace/script.py', PYTHON_SNIPPETS.FILE_PROCESSOR);
+    // Create directory first and write a Python script
+    await sandbox.filesystem.mkdir('/tmp');
+    await sandbox.filesystem.writeFile('/tmp/script.py', PYTHON_SNIPPETS.FILE_PROCESSOR);
 
-    const scriptResult = await sandbox.runCommand('python', ['project/workspace/script.py']);
+    const scriptResult = await sandbox.runCommand('python3', ['/tmp/script.py']);
     console.log('Script output:', scriptResult.stdout);
 
     // Create directory and list files
-    await sandbox.filesystem.mkdir('/project/workspace/data');
-    const files = await sandbox.filesystem.readdir('/project/workspace');
-    console.log('Files in /project/workspace:', files.map(f => f.name));
+    await sandbox.filesystem.mkdir('/tmp/data');
+    const files = await sandbox.filesystem.readdir('/tmp');
+    console.log('Files in /tmp:', files.map(f => f.name));
 
     // Clean up
     await sandbox.kill();

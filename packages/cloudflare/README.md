@@ -80,6 +80,8 @@ export default {
 
 ```typescript
 import { cloudflare } from '@computesdk/cloudflare';
+import { createCompute } from 'computesdk';
+
 
 // Initialize the provider with your Durable Object binding
 const provider = cloudflare({
@@ -91,8 +93,11 @@ const provider = cloudflare({
   }
 });
 
+// Create a compute instance
+const compute = createCompute({ provider });
+
 // Create a sandbox
-const sandbox = await provider.sandbox.create();
+const sandbox = await compute.sandbox.create();
 
 // Execute Python code
 const result = await sandbox.runCode(`

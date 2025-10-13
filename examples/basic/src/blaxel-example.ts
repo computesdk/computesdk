@@ -23,13 +23,11 @@ async function main() {
 
   try {
     // Configure compute with Blaxel provider
-    const blaxelProvider = blaxel({
-      apiKey: process.env.BL_API_KEY,
-      workspace: process.env.BL_WORKSPACE
-    });
-
     const compute = createCompute({ 
-      defaultProvider: blaxelProvider
+      provider: blaxel({
+        apiKey: process.env.BL_API_KEY,
+        workspace: process.env.BL_WORKSPACE
+      })
     });
 
     // Create Python sandbox
@@ -69,57 +67,6 @@ async function main() {
       
       const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
       console.log('Node.js Output:', nodeResult.stdout);
-
-      // Data science example (Python) - install pandas first or use simple example
-      console.log('\n--- Data Science ---');
-      
-      // Try to install pandas first
-      try {
-        console.log('Installing pandas...');
-        const installResult = await sandbox.runCommand('pip', ['install', 'pandas', 'numpy']);
-        console.log('Pandas installation result:', installResult.stdout);
-        
-        // Now run the data science code
-        const dataResult = await sandbox.runCode(PYTHON_SNIPPETS.DATA_SCIENCE);
-        console.log('Data Science Output:', dataResult.stdout);
-      } catch (installError) {
-        console.log('Could not install pandas, using simple data processing instead...');
-        
-        // Simple data processing without external libraries
-        const simpleDataCode = `
-# Simple data processing without external libraries
-import json
-from statistics import mean
-
-# Create sample data
-data = [
-    {'name': 'Alice', 'age': 25, 'score': 85},
-    {'name': 'Bob', 'age': 30, 'score': 92},
-    {'name': 'Charlie', 'age': 35, 'score': 78}
-]
-
-print("Data Processing Results:")
-print("=" * 30)
-
-# Print all records
-for person in data:
-    print(f"Name: {person['name']}, Age: {person['age']}, Score: {person['score']}")
-
-# Calculate statistics
-ages = [person['age'] for person in data]
-scores = [person['score'] for person in data]
-
-print(f"\\nStatistics:")
-print(f"Average age: {mean(ages):.1f}")
-print(f"Average score: {mean(scores):.1f}")
-print(f"Total records: {len(data)}")
-print(f"Age range: {min(ages)}-{max(ages)}")
-print(f"Score range: {min(scores)}-{max(scores)}")
-        `.trim();
-        
-        const simpleResult = await sandbox.runCode(simpleDataCode);
-        console.log('Simple Data Processing Output:', simpleResult.stdout);
-      }
 
       // Clean up
       await sandbox.kill();

@@ -6,7 +6,7 @@
  */
 
 import { modal } from '@computesdk/modal';
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS, NODEJS_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -20,7 +20,7 @@ async function main() {
 
   try {
     // Configure compute with Modal provider
-    compute.setConfig({ 
+    const compute = createCompute({ 
       provider: modal({ 
         tokenId: process.env.MODAL_TOKEN_ID,
         tokenSecret: process.env.MODAL_TOKEN_SECRET 
@@ -63,13 +63,6 @@ async function main() {
     
     const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
     console.log('Node.js Output:', nodeResult.stdout);
-
-    // Data science example (Python)
-    console.log('\n--- Data Science ---');
-    
-    const dataResult = await sandbox.runCode(PYTHON_SNIPPETS.DATA_SCIENCE);
-    
-    console.log('Data Science Output:', dataResult.stdout);
 
     // Clean up
     await sandbox.kill();
