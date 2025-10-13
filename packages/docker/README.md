@@ -145,7 +145,7 @@ Type: `DockerConfig`
     workdir: '/workspace',
     env: {},
     autoRemove: true,
-    tty: true,
+    tty: false,
     openStdin: false,
     resources: { memory: 512 * 1024 * 1024 },
   },
