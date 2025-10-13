@@ -159,8 +159,8 @@ export const defaultDockerConfig: DockerConfig = {
   container: {
     workdir: '/workspace',
     env: {},
-    autoRemove: false, // ⬅ keep container around for exec/FS/background
-    tty: false,        // ⬅ non-tty so we can demux stdout/stderr
+    autoRemove: false, // Keep container around for exec/FS/background
+    tty: false,        // Non-tty so we can demux stdout/stderr
     openStdin: false,
     resources: { memory: 512 * 1024 * 1024 },
   },
