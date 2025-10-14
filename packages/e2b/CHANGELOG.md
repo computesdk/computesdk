@@ -1,5 +1,11 @@
 # @computesdk/e2b
 
+## 1.5.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
 ## 1.4.3
 
 ### Patch Changes
