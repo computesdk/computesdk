@@ -5,10 +5,15 @@
  * sandboxes through API endpoints at ${sandboxId}.preview.computesdk.co
  */
 
-import { WebSocketManager, WebSocketManagerConfig } from './websocket';
+import { WebSocketManager } from './websocket';
+import { Terminal } from './terminal';
+import { FileWatcher } from './file-watcher';
+import { SignalService } from './signal-service';
 
-// Re-export WebSocket types
-export * from './websocket';
+// Re-export high-level classes and types
+export { Terminal } from './terminal';
+export { FileWatcher, type FileChangeEvent } from './file-watcher';
+export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type SignalEvent } from './signal-service';
 
 // ============================================================================
 // Type Definitions
@@ -248,18 +253,13 @@ export interface ErrorResponse {
  * ```typescript
  * import { ComputeClient } from '@computesdk/client'
  *
- * // Create client (will auto-generate token on first request)
+ * // Create client and authenticate
  * const client = new ComputeClient({
  *   apiUrl: 'https://sandbox-123.preview.computesdk.co'
  * });
+ * await client.generateToken();
  *
- * // Or provide token explicitly
- * const clientWithToken = new ComputeClient({
- *   apiUrl: 'https://sandbox-123.preview.computesdk.co',
- *   token: 'your-jwt-token'
- * });
- *
- * // Execute a command
+ * // Execute a one-off command
  * const result = await client.execute({ command: 'ls -la' });
  * console.log(result.data.stdout);
  *
@@ -268,19 +268,40 @@ export interface ErrorResponse {
  * await client.writeFile('/home/project/test.txt', 'Hello, World!');
  * const content = await client.readFile('/home/project/test.txt');
  *
- * // Create a terminal
+ * // Create a terminal with real-time output
  * const terminal = await client.createTerminal();
- * const execResult = await client.executeInTerminal(terminal.data.id, 'echo "Hello"');
+ * terminal.on('output', (data) => console.log(data));
+ * terminal.write('ls -la\n');
+ * await terminal.execute('echo "Hello"');
+ * await terminal.destroy();
  *
- * // Watch files
+ * // Watch for file changes
  * const watcher = await client.createWatcher('/home/project', {
  *   ignored: ['node_modules', '.git']
  * });
+ * watcher.on('change', (event) => {
+ *   console.log(`${event.event}: ${event.path}`);
+ * });
+ * await watcher.destroy();
+ *
+ * // Monitor system signals
+ * const signals = await client.startSignals();
+ * signals.on('port', (event) => {
+ *   console.log(`Port ${event.port} opened: ${event.url}`);
+ * });
+ * await signals.stop();
+ *
+ * // Clean up
+ * await client.disconnect();
  * ```
  */
 export class ComputeClient {
   private config: Required<ComputeClientConfig>;
   private _token: string | null = null;
+  private _ws: WebSocketManager | null = null;
+  private _terminals: Map<string, Terminal> = new Map();
+  private _watchers: Map<string, FileWatcher> = new Map();
+  private _signalService: SignalService | null = null;
 
   constructor(config: ComputeClientConfig) {
     this.config = {
@@ -293,6 +314,20 @@ export class ComputeClient {
     if (config.token) {
       this._token = config.token;
     }
+  }
+
+  /**
+   * Get or create internal WebSocket manager
+   */
+  private async ensureWebSocket(): Promise<WebSocketManager> {
+    if (!this._ws || this._ws.getState() === 'closed') {
+      this._ws = new WebSocketManager({
+        url: this.getWebSocketUrl(),
+        autoReconnect: true,
+      });
+      await this._ws.connect();
+    }
+    return this._ws;
   }
 
   // ============================================================================
@@ -492,42 +527,53 @@ export class ComputeClient {
   // ============================================================================
 
   /**
-   * Create a new persistent terminal session
+   * Create a new persistent terminal session with WebSocket integration
+   * @returns Terminal instance with event handling
    */
-  async createTerminal(shell?: string): Promise<TerminalResponse> {
-    return this.request<TerminalResponse>('/terminals', {
+  async createTerminal(shell?: string): Promise<Terminal> {
+    // Ensure WebSocket is connected
+    const ws = await this.ensureWebSocket();
+
+    // Create terminal via REST API
+    const response = await this.request<TerminalResponse>('/terminals', {
       method: 'POST',
       body: JSON.stringify(shell ? { shell } : {}),
     });
-  }
 
-  /**
-   * Get terminal details
-   */
-  async getTerminal(id: string): Promise<TerminalResponse> {
-    return this.request<TerminalResponse>(`/terminals/${id}`);
-  }
+    // Create Terminal instance
+    const terminal = new Terminal(
+      response.data.id,
+      response.data.status,
+      response.data.channel,
+      ws,
+      () => this._terminals.delete(response.data.id)
+    );
 
-  /**
-   * Delete a terminal session
-   */
-  async deleteTerminal(id: string): Promise<void> {
-    return this.request<void>(`/terminals/${id}`, {
-      method: 'DELETE',
+    // Set up terminal handlers
+    terminal.setExecuteHandler(async (command: string) => {
+      return this.request<CommandExecutionResponse>(`/terminals/${response.data.id}/execute`, {
+        method: 'POST',
+        body: JSON.stringify({ command }),
+      });
     });
+
+    terminal.setDestroyHandler(async () => {
+      await this.request<void>(`/terminals/${response.data.id}`, {
+        method: 'DELETE',
+      });
+    });
+
+    // Track terminal
+    this._terminals.set(response.data.id, terminal);
+
+    return terminal;
   }
 
   /**
-   * Execute a command in an existing terminal session
+   * Get all active terminals
    */
-  async executeInTerminal(
-    id: string,
-    command: string
-  ): Promise<CommandExecutionResponse> {
-    return this.request<CommandExecutionResponse>(`/terminals/${id}/execute`, {
-      method: 'POST',
-      body: JSON.stringify({ command }),
-    });
+  getTerminals(): Terminal[] {
+    return Array.from(this._terminals.values());
   }
 
   // ============================================================================
@@ -535,14 +581,8 @@ export class ComputeClient {
   // ============================================================================
 
   /**
-   * List all active file watchers
-   */
-  async listWatchers(): Promise<WatchersListResponse> {
-    return this.request<WatchersListResponse>('/watchers');
-  }
-
-  /**
-   * Create a new file watcher
+   * Create a new file watcher with WebSocket integration
+   * @returns FileWatcher instance with event handling
    */
   async createWatcher(
     path: string,
@@ -550,27 +590,46 @@ export class ComputeClient {
       includeContent?: boolean;
       ignored?: string[];
     }
-  ): Promise<WatcherResponse> {
-    return this.request<WatcherResponse>('/watchers', {
+  ): Promise<FileWatcher> {
+    // Ensure WebSocket is connected
+    const ws = await this.ensureWebSocket();
+
+    // Create watcher via REST API
+    const response = await this.request<WatcherResponse>('/watchers', {
       method: 'POST',
       body: JSON.stringify({ path, ...options }),
     });
-  }
 
-  /**
-   * Get file watcher details
-   */
-  async getWatcher(id: string): Promise<WatcherResponse> {
-    return this.request<WatcherResponse>(`/watchers/${id}`);
-  }
+    // Create FileWatcher instance
+    const watcher = new FileWatcher(
+      response.data.id,
+      response.data.path,
+      response.data.status,
+      response.data.channel,
+      response.data.includeContent,
+      response.data.ignored,
+      ws,
+      () => this._watchers.delete(response.data.id)
+    );
 
-  /**
-   * Delete a file watcher
-   */
-  async deleteWatcher(id: string): Promise<void> {
-    return this.request<void>(`/watchers/${id}`, {
-      method: 'DELETE',
+    // Set up watcher handlers
+    watcher.setDestroyHandler(async () => {
+      await this.request<void>(`/watchers/${response.data.id}`, {
+        method: 'DELETE',
+      });
     });
+
+    // Track watcher
+    this._watchers.set(response.data.id, watcher);
+
+    return watcher;
+  }
+
+  /**
+   * Get all active file watchers
+   */
+  getWatchers(): FileWatcher[] {
+    return Array.from(this._watchers.values());
   }
 
   // ============================================================================
@@ -578,28 +637,44 @@ export class ComputeClient {
   // ============================================================================
 
   /**
-   * Start the signal service for monitoring system events
+   * Start the signal service with WebSocket integration
+   * @returns SignalService instance with event handling
    */
-  async startSignals(): Promise<SignalServiceResponse> {
-    return this.request<SignalServiceResponse>('/signals/start', {
+  async startSignals(): Promise<SignalService> {
+    // Ensure WebSocket is connected
+    const ws = await this.ensureWebSocket();
+
+    // Start signal service via REST API
+    const response = await this.request<SignalServiceResponse>('/signals/start', {
       method: 'POST',
     });
+
+    // Create SignalService instance
+    const signalService = new SignalService(
+      response.data.status,
+      response.data.channel,
+      ws,
+      () => { this._signalService = null; }
+    );
+
+    // Set up signal service handlers
+    signalService.setStopHandler(async () => {
+      await this.request<SignalServiceResponse>('/signals/stop', {
+        method: 'POST',
+      });
+    });
+
+    // Track signal service
+    this._signalService = signalService;
+
+    return signalService;
   }
 
   /**
-   * Stop the signal service
+   * Get the active signal service (if any)
    */
-  async stopSignals(): Promise<SignalServiceResponse> {
-    return this.request<SignalServiceResponse>('/signals/stop', {
-      method: 'POST',
-    });
-  }
-
-  /**
-   * Get signal service status
-   */
-  async getSignalsStatus(): Promise<SignalServiceResponse> {
-    return this.request<SignalServiceResponse>('/signals/status');
+  getSignalService(): SignalService | null {
+    return this._signalService;
   }
 
   /**
@@ -693,14 +768,14 @@ export class ComputeClient {
   }
 
   // ============================================================================
-  // WebSocket Connection
+  // WebSocket Connection (Internal)
   // ============================================================================
 
   /**
    * Get WebSocket URL for real-time communication
-   * Use this URL to establish a WebSocket connection for terminals, watchers, and signals
+   * @private
    */
-  getWebSocketUrl(): string {
+  private getWebSocketUrl(): string {
     const wsProtocol = this.config.apiUrl.startsWith('https') ? 'wss' : 'ws';
     const url = this.config.apiUrl.replace(/^https?:/, wsProtocol);
     const token = this._token ? `?token=${this._token}` : '';
@@ -708,42 +783,32 @@ export class ComputeClient {
   }
 
   /**
-   * Create a WebSocket connection (raw)
-   * @returns WebSocket instance ready for communication
-   * @deprecated Use createWebSocketManager() for a higher-level API with automatic reconnection and event handling
+   * Disconnect WebSocket and clean up all resources
    */
-  createWebSocket(): WebSocket {
-    return new WebSocket(this.getWebSocketUrl());
-  }
+  async disconnect(): Promise<void> {
+    // Clean up terminals
+    for (const terminal of this._terminals.values()) {
+      await terminal.destroy();
+    }
+    this._terminals.clear();
 
-  /**
-   * Create a WebSocket manager with automatic reconnection and event handling
-   * @param options - Optional configuration overrides
-   * @returns WebSocketManager instance
-   *
-   * @example
-   * ```typescript
-   * const client = new ComputeClient({ apiUrl: 'https://sandbox-123.preview.computesdk.co' });
-   * await client.generateToken();
-   *
-   * const ws = client.createWebSocketManager({ debug: true });
-   * await ws.connect();
-   *
-   * // Subscribe to terminal
-   * ws.subscribe('terminal:term_abc123');
-   * ws.on('terminal:output', (msg) => {
-   *   console.log(msg.data.output);
-   * });
-   *
-   * // Send input
-   * ws.sendTerminalInput('term_abc123', 'ls -la\n');
-   * ```
-   */
-  createWebSocketManager(options?: Partial<WebSocketManagerConfig>): WebSocketManager {
-    return new WebSocketManager({
-      url: this.getWebSocketUrl(),
-      ...options,
-    });
+    // Clean up watchers
+    for (const watcher of this._watchers.values()) {
+      await watcher.destroy();
+    }
+    this._watchers.clear();
+
+    // Clean up signal service
+    if (this._signalService) {
+      await this._signalService.stop();
+      this._signalService = null;
+    }
+
+    // Disconnect WebSocket
+    if (this._ws) {
+      this._ws.disconnect();
+      this._ws = null;
+    }
   }
 }
 
