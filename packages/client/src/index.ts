@@ -5,6 +5,11 @@
  * sandboxes through API endpoints at ${sandboxId}.preview.computesdk.co
  */
 
+import { WebSocketManager, WebSocketManagerConfig } from './websocket';
+
+// Re-export WebSocket types
+export * from './websocket';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -703,11 +708,42 @@ export class ComputeClient {
   }
 
   /**
-   * Create a WebSocket connection
+   * Create a WebSocket connection (raw)
    * @returns WebSocket instance ready for communication
+   * @deprecated Use createWebSocketManager() for a higher-level API with automatic reconnection and event handling
    */
   createWebSocket(): WebSocket {
     return new WebSocket(this.getWebSocketUrl());
+  }
+
+  /**
+   * Create a WebSocket manager with automatic reconnection and event handling
+   * @param options - Optional configuration overrides
+   * @returns WebSocketManager instance
+   *
+   * @example
+   * ```typescript
+   * const client = new ComputeClient({ apiUrl: 'https://sandbox-123.preview.computesdk.co' });
+   * await client.generateToken();
+   *
+   * const ws = client.createWebSocketManager({ debug: true });
+   * await ws.connect();
+   *
+   * // Subscribe to terminal
+   * ws.subscribe('terminal:term_abc123');
+   * ws.on('terminal:output', (msg) => {
+   *   console.log(msg.data.output);
+   * });
+   *
+   * // Send input
+   * ws.sendTerminalInput('term_abc123', 'ls -la\n');
+   * ```
+   */
+  createWebSocketManager(options?: Partial<WebSocketManagerConfig>): WebSocketManager {
+    return new WebSocketManager({
+      url: this.getWebSocketUrl(),
+      ...options,
+    });
   }
 }
 
