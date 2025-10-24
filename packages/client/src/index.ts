@@ -1,20 +1,19 @@
 /**
- * ComputeSDK Client - Browser Client Implementation
+ * ComputeSDK Client - Universal Client Implementation
  *
- * This package provides a browser-friendly client for interacting with ComputeSDK
- * sandboxes through API endpoints at ${sandboxId}.preview.computesdk.co
+ * This package provides a client for interacting with ComputeSDK sandboxes
+ * through API endpoints at ${sandboxId}.preview.computesdk.co
+ *
+ * Works in both browser and Node.js environments.
  */
 
-// Auto-setup polyfills for Node.js and other environments
-import crossFetch from 'cross-fetch';
-import WebSocketPolyfill from 'isomorphic-ws';
-
-// Setup polyfills if needed
-if (typeof globalThis.fetch === 'undefined') {
-  globalThis.fetch = crossFetch as any;
-}
-if (typeof globalThis.WebSocket === 'undefined') {
-  globalThis.WebSocket = WebSocketPolyfill as any;
+// Setup WebSocket for Node.js environment
+// In browser, native WebSocket and fetch are used automatically
+// In Node.js 18+, native fetch is used, but WebSocket needs the ws library
+if (typeof window === 'undefined' && typeof globalThis.WebSocket === 'undefined') {
+  // We're in Node.js - use ws library
+  const WS = require('ws');
+  globalThis.WebSocket = WS;
 }
 
 import { WebSocketManager } from './websocket';

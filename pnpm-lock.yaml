@@ -342,12 +342,6 @@ importers:
 
   packages/client:
     dependencies:
-      cross-fetch:
-        specifier: ^4.0.0
-        version: 4.1.0
-      isomorphic-ws:
-        specifier: ^5.0.0
-        version: 5.0.0(ws@8.18.3)
       ws:
         specifier: ^8.18.0
         version: 8.18.3

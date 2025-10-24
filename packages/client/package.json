@@ -28,8 +28,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "cross-fetch": "^4.0.0",
-    "isomorphic-ws": "^5.0.0",
     "ws": "^8.18.0"
   },
   "keywords": [
