@@ -12,6 +12,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
+    },
+    "./polyfills": {
+      "types": "./dist/polyfills.d.ts",
+      "import": "./dist/polyfills.mjs",
+      "require": "./dist/polyfills.js"
+    },
+    "./polyfills/auto": {
+      "types": "./dist/polyfills-auto.d.ts",
+      "import": "./dist/polyfills-auto.mjs",
+      "require": "./dist/polyfills-auto.js"
     }
   },
   "files": [
@@ -27,7 +37,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
-  "dependencies": {},
+  "dependencies": {
+    "cross-fetch": "^4.0.0",
+    "isomorphic-ws": "^5.0.0",
+    "ws": "^8.18.0"
+  },
   "keywords": [
     "client",
     "browser",
@@ -48,6 +62,7 @@
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",

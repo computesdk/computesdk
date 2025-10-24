@@ -342,9 +342,15 @@ importers:
 
   packages/client:
     dependencies:
-      computesdk:
-        specifier: workspace:*
-        version: link:../computesdk
+      cross-fetch:
+        specifier: ^4.0.0
+        version: 4.1.0
+      isomorphic-ws:
+        specifier: ^5.0.0
+        version: 5.0.0(ws@8.18.3)
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -352,6 +358,9 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: ^1.0.0
         version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
@@ -3856,6 +3865,9 @@ packages:
 
   '@types/ws@7.4.7':
     resolution: {integrity: sha512-JQbbmxZTZehdc2iszGKs5oC3NFnjeay7mtAWrdt7qNtAVK0g19muApzAy4bm9byz79xa2ZnO/BOBC2R8RC5Lww==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -14491,6 +14503,10 @@ snapshots:
   '@types/uuid@9.0.8': {}
 
   '@types/ws@7.4.7':
+    dependencies:
+      '@types/node': 20.19.5
+
+  '@types/ws@8.18.1':
     dependencies:
       '@types/node': 20.19.5
 
