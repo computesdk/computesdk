@@ -7,17 +7,21 @@
 
 import { ComputeClient } from './dist/index.mjs';
 
-const sandboxId = process.argv[2];
+const input = process.argv[2];
 
-if (!sandboxId) {
-  console.error('Usage: node test-manual.js <sandboxId>');
+if (!input) {
+  console.error('Usage: node test-manual.js <sandboxId|url>');
+  console.error('Examples:');
+  console.error('  node test-manual.js cool-giraffe-huk3uj');
+  console.error('  node test-manual.js https://cool-giraffe-huk3uj.preview.computesdk.com');
   process.exit(1);
 }
 
 async function main() {
   console.log('🚀 Testing @computesdk/client\n');
 
-  const apiUrl = `https://${sandboxId}.preview.computesdk.co`;
+  // Accept either full URL or just subdomain
+  const apiUrl = input.startsWith('http') ? input : `https://${input}.preview.computesdk.co`;
   console.log(`📡 Connecting to: ${apiUrl}\n`);
 
   const client = new ComputeClient({ apiUrl });

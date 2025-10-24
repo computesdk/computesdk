@@ -363,9 +363,13 @@ export class ComputeClient {
 
     try {
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
         ...this.config.headers,
       };
+
+      // Only set Content-Type if there's a body
+      if (options.body) {
+        headers['Content-Type'] = 'application/json';
+      }
 
       // Add authentication if token is available
       if (this._token) {
