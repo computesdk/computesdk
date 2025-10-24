@@ -12,16 +12,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
-    },
-    "./polyfills": {
-      "types": "./dist/polyfills.d.ts",
-      "import": "./dist/polyfills.mjs",
-      "require": "./dist/polyfills.js"
-    },
-    "./polyfills/auto": {
-      "types": "./dist/polyfills-auto.d.ts",
-      "import": "./dist/polyfills-auto.mjs",
-      "require": "./dist/polyfills-auto.js"
     }
   },
   "files": [

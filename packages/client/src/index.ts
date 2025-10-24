@@ -5,6 +5,18 @@
  * sandboxes through API endpoints at ${sandboxId}.preview.computesdk.co
  */
 
+// Auto-setup polyfills for Node.js and other environments
+import crossFetch from 'cross-fetch';
+import WebSocketPolyfill from 'isomorphic-ws';
+
+// Setup polyfills if needed
+if (typeof globalThis.fetch === 'undefined') {
+  globalThis.fetch = crossFetch as any;
+}
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = WebSocketPolyfill as any;
+}
+
 import { WebSocketManager } from './websocket';
 import { Terminal } from './terminal';
 import { FileWatcher } from './file-watcher';
