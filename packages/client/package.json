@@ -27,7 +27,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "ws": "^8.18.0"
   },
   "keywords": [

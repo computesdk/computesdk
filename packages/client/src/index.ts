@@ -10,10 +10,19 @@
 // Setup WebSocket for Node.js environment
 // In browser, native WebSocket and fetch are used automatically
 // In Node.js 18+, native fetch is used, but WebSocket needs the ws library
-if (typeof window === 'undefined' && typeof globalThis.WebSocket === 'undefined') {
-  // We're in Node.js - use ws library
-  const WS = require('ws');
-  globalThis.WebSocket = WS;
+let wsPolyfillPromise: Promise<void> | null = null;
+
+async function setupWebSocketPolyfill(): Promise<void> {
+  if (typeof window === 'undefined' && typeof globalThis.WebSocket === 'undefined') {
+    // We're in Node.js - use ws library
+    if (!wsPolyfillPromise) {
+      wsPolyfillPromise = (async () => {
+        const { default: WS } = await import('ws');
+        globalThis.WebSocket = WS as any;
+      })();
+    }
+    await wsPolyfillPromise;
+  }
 }
 
 import { WebSocketManager } from './websocket';
@@ -332,6 +341,9 @@ export class ComputeClient {
    */
   private async ensureWebSocket(): Promise<WebSocketManager> {
     if (!this._ws || this._ws.getState() === 'closed') {
+      // Ensure WebSocket polyfill is loaded (Node.js only)
+      await setupWebSocketPolyfill();
+
       this._ws = new WebSocketManager({
         url: this.getWebSocketUrl(),
         autoReconnect: true,
