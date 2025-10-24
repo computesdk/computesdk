@@ -53,7 +53,6 @@ export class FileWatcher {
   private ignored: string[];
   private ws: WebSocketManager;
   private eventHandlers: Map<keyof FileWatcherEventHandler, Set<Function>> = new Map();
-  private onDestroy?: () => void;
 
   constructor(
     id: string,
@@ -62,8 +61,7 @@ export class FileWatcher {
     channel: string,
     includeContent: boolean,
     ignored: string[],
-    ws: WebSocketManager,
-    onDestroy?: () => void
+    ws: WebSocketManager
   ) {
     this.id = id;
     this.path = path;
@@ -72,7 +70,6 @@ export class FileWatcher {
     this.includeContent = includeContent;
     this.ignored = ignored;
     this.ws = ws;
-    this.onDestroy = onDestroy;
 
     // Subscribe to watcher channel
     this.ws.subscribe(this.channel);
@@ -187,11 +184,6 @@ export class FileWatcher {
 
     // Clear event handlers
     this.eventHandlers.clear();
-
-    // Call onDestroy callback
-    if (this.onDestroy) {
-      this.onDestroy();
-    }
   }
 
   /**

@@ -39,20 +39,17 @@ export class Terminal {
   private channel: string;
   private ws: WebSocketManager;
   private eventHandlers: Map<keyof TerminalEventHandler, Set<Function>> = new Map();
-  private onDestroy?: () => void;
 
   constructor(
     id: string,
     status: 'running' | 'stopped',
     channel: string,
-    ws: WebSocketManager,
-    onDestroy?: () => void
+    ws: WebSocketManager
   ) {
     this.id = id;
     this.status = status;
     this.channel = channel;
     this.ws = ws;
-    this.onDestroy = onDestroy;
 
     // Subscribe to terminal channel
     this.ws.subscribe(this.channel);
@@ -192,11 +189,6 @@ export class Terminal {
 
     // Clear event handlers
     this.eventHandlers.clear();
-
-    // Call onDestroy callback
-    if (this.onDestroy) {
-      this.onDestroy();
-    }
   }
 
   /**

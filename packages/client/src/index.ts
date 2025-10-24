@@ -319,9 +319,6 @@ export class ComputeClient {
   private config: Required<ComputeClientConfig>;
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
-  private _terminals: Map<string, Terminal> = new Map();
-  private _watchers: Map<string, FileWatcher> = new Map();
-  private _signalService: SignalService | null = null;
 
   constructor(config: ComputeClientConfig) {
     this.config = {
@@ -563,13 +560,12 @@ export class ComputeClient {
       body: JSON.stringify(shell ? { shell } : {}),
     });
 
-    // Create Terminal instance
+    // Create Terminal instance (no cleanup callback needed)
     const terminal = new Terminal(
       response.data.id,
       response.data.status,
       response.data.channel,
-      ws,
-      () => this._terminals.delete(response.data.id)
+      ws
     );
 
     // Set up terminal handlers
@@ -586,17 +582,22 @@ export class ComputeClient {
       });
     });
 
-    // Track terminal
-    this._terminals.set(response.data.id, terminal);
-
     return terminal;
   }
 
   /**
-   * Get all active terminals
+   * List all active terminals (fetches from API)
    */
-  getTerminals(): Terminal[] {
-    return Array.from(this._terminals.values());
+  async listTerminals(): Promise<TerminalResponse[]> {
+    const response = await this.request<{ message: string; data: { terminals: TerminalResponse[] } }>('/terminals');
+    return response.data.terminals;
+  }
+
+  /**
+   * Get terminal by ID
+   */
+  async getTerminal(id: string): Promise<TerminalResponse> {
+    return this.request<TerminalResponse>(`/terminals/${id}`);
   }
 
   // ============================================================================
@@ -623,7 +624,7 @@ export class ComputeClient {
       body: JSON.stringify({ path, ...options }),
     });
 
-    // Create FileWatcher instance
+    // Create FileWatcher instance (no cleanup callback needed)
     const watcher = new FileWatcher(
       response.data.id,
       response.data.path,
@@ -631,8 +632,7 @@ export class ComputeClient {
       response.data.channel,
       response.data.includeContent,
       response.data.ignored,
-      ws,
-      () => this._watchers.delete(response.data.id)
+      ws
     );
 
     // Set up watcher handlers
@@ -642,17 +642,21 @@ export class ComputeClient {
       });
     });
 
-    // Track watcher
-    this._watchers.set(response.data.id, watcher);
-
     return watcher;
   }
 
   /**
-   * Get all active file watchers
+   * List all active file watchers (fetches from API)
    */
-  getWatchers(): FileWatcher[] {
-    return Array.from(this._watchers.values());
+  async listWatchers(): Promise<WatchersListResponse> {
+    return this.request<WatchersListResponse>('/watchers');
+  }
+
+  /**
+   * Get file watcher by ID
+   */
+  async getWatcher(id: string): Promise<WatcherResponse> {
+    return this.request<WatcherResponse>(`/watchers/${id}`);
   }
 
   // ============================================================================
@@ -672,12 +676,11 @@ export class ComputeClient {
       method: 'POST',
     });
 
-    // Create SignalService instance
+    // Create SignalService instance (no cleanup callback needed)
     const signalService = new SignalService(
       response.data.status,
       response.data.channel,
-      ws,
-      () => { this._signalService = null; }
+      ws
     );
 
     // Set up signal service handlers
@@ -687,17 +690,14 @@ export class ComputeClient {
       });
     });
 
-    // Track signal service
-    this._signalService = signalService;
-
     return signalService;
   }
 
   /**
-   * Get the active signal service (if any)
+   * Get the signal service status (fetches from API)
    */
-  getSignalService(): SignalService | null {
-    return this._signalService;
+  async getSignalStatus(): Promise<SignalServiceResponse> {
+    return this.request<SignalServiceResponse>('/signals/status');
   }
 
   /**
@@ -806,27 +806,13 @@ export class ComputeClient {
   }
 
   /**
-   * Disconnect WebSocket and clean up all resources
+   * Disconnect WebSocket
+   *
+   * Note: This only disconnects the WebSocket. Terminals, watchers, and signals
+   * will continue running on the server until explicitly destroyed via their
+   * respective destroy() methods or the DELETE endpoints.
    */
   async disconnect(): Promise<void> {
-    // Clean up terminals
-    for (const terminal of this._terminals.values()) {
-      await terminal.destroy();
-    }
-    this._terminals.clear();
-
-    // Clean up watchers
-    for (const watcher of this._watchers.values()) {
-      await watcher.destroy();
-    }
-    this._watchers.clear();
-
-    // Clean up signal service
-    if (this._signalService) {
-      await this._signalService.stop();
-      this._signalService = null;
-    }
-
     // Disconnect WebSocket
     if (this._ws) {
       this._ws.disconnect();

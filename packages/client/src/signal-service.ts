@@ -63,18 +63,15 @@ export class SignalService {
   private channel: string;
   private ws: WebSocketManager;
   private eventHandlers: Map<keyof SignalServiceEventHandler, Set<Function>> = new Map();
-  private onStop?: () => void;
 
   constructor(
     status: 'active' | 'stopped',
     channel: string,
-    ws: WebSocketManager,
-    onStop?: () => void
+    ws: WebSocketManager
   ) {
     this.status = status;
     this.channel = channel;
     this.ws = ws;
-    this.onStop = onStop;
 
     // Subscribe to signals channel
     this.ws.subscribe(this.channel);
@@ -165,11 +162,6 @@ export class SignalService {
 
     // Clear event handlers
     this.eventHandlers.clear();
-
-    // Call onStop callback
-    if (this.onStop) {
-      this.onStop();
-    }
   }
 
   /**
