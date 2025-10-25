@@ -344,6 +344,7 @@ export class ComputeClient {
       this._ws = new WebSocketManager({
         url: this.getWebSocketUrl(),
         autoReconnect: true,
+        debug: true,
       });
       await this._ws.connect();
     }
@@ -804,7 +805,7 @@ export class ComputeClient {
    */
   private getWebSocketUrl(): string {
     const wsProtocol = this.config.apiUrl.startsWith('https') ? 'wss' : 'ws';
-    const url = this.config.apiUrl.replace(/^https?:/, wsProtocol);
+    const url = this.config.apiUrl.replace(/^https?:/, `${wsProtocol}:`);
     const token = this._token ? `?token=${this._token}` : '';
     return `${url}/ws${token}`;
   }

@@ -35,8 +35,16 @@ async function main() {
 
     // Test 2: Token generation
     console.log('2️⃣  Testing token generation...');
-    const tokenResponse = await client.generateToken();
-    console.log('   ✅ Token generated:', tokenResponse.data.token.substring(0, 20) + '...');
+    try {
+      const tokenResponse = await client.generateToken();
+      console.log('   ✅ Token generated:', tokenResponse.data.token.substring(0, 20) + '...');
+    } catch (error) {
+      if (error.message.includes('409')) {
+        console.log('   ⚠️  Token already claimed (expected for reused sandbox)');
+      } else {
+        throw error;
+      }
+    }
     console.log();
 
     // Test 3: Execute a simple command

@@ -297,6 +297,7 @@ export class WebSocketManager {
     return new Promise((resolve, reject) => {
       try {
         this.isManualClose = false;
+        this.log('Connecting to WebSocket URL:', this.config.url);
         this.ws = new WebSocket(this.config.url);
 
         this.ws.onopen = () => {
