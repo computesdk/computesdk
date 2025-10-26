@@ -202,9 +202,13 @@ export type IncomingMessage =
 // WebSocket Manager Configuration
 // ============================================================================
 
+export type WebSocketConstructor = new (url: string) => WebSocket;
+
 export interface WebSocketManagerConfig {
   /** WebSocket URL (will be generated from client config if not provided) */
   url: string;
+  /** WebSocket implementation */
+  WebSocket: WebSocketConstructor;
   /** Enable automatic reconnection on disconnect (default: true) */
   autoReconnect?: boolean;
   /** Reconnection delay in milliseconds (default: 1000) */
@@ -279,6 +283,7 @@ export class WebSocketManager {
   constructor(config: WebSocketManagerConfig) {
     this.config = {
       url: config.url,
+      WebSocket: config.WebSocket,
       autoReconnect: config.autoReconnect ?? true,
       reconnectDelay: config.reconnectDelay ?? 1000,
       maxReconnectAttempts: config.maxReconnectAttempts ?? 5,
@@ -298,7 +303,7 @@ export class WebSocketManager {
       try {
         this.isManualClose = false;
         this.log('Connecting to WebSocket URL:', this.config.url);
-        this.ws = new WebSocket(this.config.url);
+        this.ws = new this.config.WebSocket(this.config.url);
 
         this.ws.onopen = () => {
           this.log('Connected to WebSocket server');

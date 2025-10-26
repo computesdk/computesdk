@@ -1,29 +1,13 @@
 /**
- * ComputeSDK Client - Universal Client Implementation
+ * ComputeSDK Adapter - Universal Adapter Implementation
  *
- * This package provides a client for interacting with ComputeSDK sandboxes
+ * This package provides an adapter for interacting with ComputeSDK sandboxes
  * through API endpoints at ${sandboxId}.preview.computesdk.co
  *
- * Works in both browser and Node.js environments.
+ * Works in browser, Node.js, and edge runtimes.
+ * Browser: Uses native WebSocket and fetch
+ * Node.js: Pass WebSocket implementation (e.g., 'ws' library)
  */
-
-// Setup WebSocket for Node.js environment
-// In browser, native WebSocket and fetch are used automatically
-// In Node.js 18+, native fetch is used, but WebSocket needs the ws library
-let wsPolyfillPromise: Promise<void> | null = null;
-
-async function setupWebSocketPolyfill(): Promise<void> {
-  if (typeof window === 'undefined' && typeof globalThis.WebSocket === 'undefined') {
-    // We're in Node.js - use ws library
-    if (!wsPolyfillPromise) {
-      wsPolyfillPromise = (async () => {
-        const { default: WS } = await import('ws');
-        globalThis.WebSocket = WS as any;
-      })();
-    }
-    await wsPolyfillPromise;
-  }
-}
 
 import { WebSocketManager } from './websocket';
 import { Terminal } from './terminal';
@@ -40,9 +24,14 @@ export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type Signal
 // ============================================================================
 
 /**
- * Configuration options for the ComputeSDK client
+ * WebSocket constructor type
  */
-export interface ComputeClientConfig {
+export type WebSocketConstructor = new (url: string) => WebSocket;
+
+/**
+ * Configuration options for the ComputeSDK adapter
+ */
+export interface ComputeAdapterConfig {
   /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.co) */
   apiUrl: string;
   /** Optional JWT token for authentication */
@@ -51,6 +40,8 @@ export interface ComputeClientConfig {
   headers?: Record<string, string>;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
+  /** WebSocket implementation (optional, uses global WebSocket if not provided) */
+  WebSocket?: WebSocketConstructor;
 }
 
 /**
@@ -315,18 +306,30 @@ export interface ErrorResponse {
  * await client.disconnect();
  * ```
  */
-export class ComputeClient {
-  private config: Required<ComputeClientConfig>;
+export class ComputeAdapter {
+  private config: Required<Omit<ComputeAdapterConfig, 'WebSocket'>>;
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
+  private WebSocketImpl: WebSocketConstructor;
 
-  constructor(config: ComputeClientConfig) {
+  constructor(config: ComputeAdapterConfig) {
     this.config = {
       apiUrl: config.apiUrl.replace(/\/$/, ''), // Remove trailing slash
       token: config.token || '',
       headers: config.headers || {},
       timeout: config.timeout || 30000,
     };
+
+    // Use provided WebSocket or fall back to global
+    this.WebSocketImpl = config.WebSocket || (globalThis.WebSocket as any);
+
+    if (!this.WebSocketImpl) {
+      throw new Error(
+        'WebSocket is not available. In Node.js, pass WebSocket implementation:\n' +
+        'import WebSocket from "ws";\n' +
+        'new ComputeAdapter({ apiUrl: "...", WebSocket })'
+      );
+    }
 
     if (config.token) {
       this._token = config.token;
@@ -338,11 +341,9 @@ export class ComputeClient {
    */
   private async ensureWebSocket(): Promise<WebSocketManager> {
     if (!this._ws || this._ws.getState() === 'closed') {
-      // Ensure WebSocket polyfill is loaded (Node.js only)
-      await setupWebSocketPolyfill();
-
       this._ws = new WebSocketManager({
         url: this.getWebSocketUrl(),
+        WebSocket: this.WebSocketImpl,
         autoReconnect: true,
         debug: true,
       });
@@ -844,6 +845,11 @@ export class ComputeClient {
  * const result = await client.execute({ command: 'ls -la' });
  * ```
  */
-export function createClient(config: ComputeClientConfig): ComputeClient {
-  return new ComputeClient(config);
+export function createAdapter(config: ComputeAdapterConfig): ComputeAdapter {
+  return new ComputeAdapter(config);
 }
+
+// Backwards compatibility alias
+export const createClient = createAdapter;
+export type ComputeClient = ComputeAdapter;
+export type ComputeClientConfig = ComputeAdapterConfig;
