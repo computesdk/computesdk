@@ -119,7 +119,7 @@ export class Terminal {
    */
   write(input: string): void {
     if (!this.isRunning()) {
-      throw new Error('Terminal is not running');
+      console.warn('[Terminal] Warning: Terminal status is not "running", but attempting to write anyway. Status:', this.status);
     }
     this.ws.sendTerminalInput(this.id, input);
   }
