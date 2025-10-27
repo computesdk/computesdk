@@ -523,8 +523,13 @@ export class ComputeAdapter {
    */
   async readFile(path: string): Promise<string> {
     const params = new URLSearchParams({ content: 'true' });
+    // Encode each path segment separately to handle special characters in filenames
+    // while preserving forward slashes as path separators
+    const pathWithoutLeadingSlash = path.startsWith('/') ? path.slice(1) : path;
+    const segments = pathWithoutLeadingSlash.split('/');
+    const encodedPath = segments.map(s => encodeURIComponent(s)).join('/');
     const response = await this.request<FileResponse>(
-      `/files/${encodeURIComponent(path)}?${params}`
+      `/files/${encodedPath}?${params}`
     );
     return response.data.content || '';
   }
@@ -533,9 +538,9 @@ export class ComputeAdapter {
    * Write file content (creates or updates)
    */
   async writeFile(path: string, content: string): Promise<FileResponse> {
-    return this.request<FileResponse>(`/files/${encodeURIComponent(path)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content }),
+    return this.request<FileResponse>('/files', {
+      method: 'POST',
+      body: JSON.stringify({ path, content }),
     });
   }
 
