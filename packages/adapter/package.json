@@ -1,0 +1,60 @@
+{
+  "name": "@computesdk/adapter",
+  "version": "0.0.1",
+  "description": "Universal adapter for ComputeSDK - works in browser, Node.js, and edge runtimes",
+  "author": "Garrison",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "echo 'No tests yet'",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "adapter",
+    "browser",
+    "node",
+    "sandbox",
+    "code-execution",
+    "cloud",
+    "compute"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/adapter"
+  },
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/adapter",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0",
+    "ws": "^8.18.0"
+  }
+}
