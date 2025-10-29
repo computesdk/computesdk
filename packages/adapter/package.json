@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
+    },
+    "./webcontainer": {
+      "types": "./dist/webcontainer-polyfill.d.ts",
+      "import": "./dist/webcontainer-polyfill.mjs",
+      "require": "./dist/webcontainer-polyfill.js"
     }
   },
   "files": [
@@ -34,7 +39,10 @@
     "sandbox",
     "code-execution",
     "cloud",
-    "compute"
+    "compute",
+    "webcontainer",
+    "polyfill",
+    "remote-sandbox"
   ],
   "repository": {
     "type": "git",

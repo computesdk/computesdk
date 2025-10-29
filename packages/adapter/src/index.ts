@@ -19,6 +19,21 @@ export { Terminal } from './terminal';
 export { FileWatcher, type FileChangeEvent } from './file-watcher';
 export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type SignalEvent } from './signal-service';
 
+// Re-export WebContainer polyfill
+export {
+  WebContainer,
+  WebContainerProcess,
+  FileSystemAPI,
+  type BootOptions,
+  type SpawnOptions,
+  type FileSystemTree,
+  type FileNode,
+  type DirectoryNode,
+  type SymlinkNode,
+  type DirEnt,
+  type BufferEncoding
+} from './webcontainer-polyfill';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
