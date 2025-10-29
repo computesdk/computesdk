@@ -2,6 +2,8 @@
 
 Universal adapter for ComputeSDK - works in browser, Node.js, and edge runtimes.
 
+**Now includes WebContainer API polyfill!** Run the WebContainer API on remote sandboxes instead of in-browser. Perfect drop-in replacement for `@webcontainer/api`. [Learn more →](./WEBCONTAINER_POLYFILL.md)
+
 ## Installation
 
 ```bash
@@ -51,6 +53,42 @@ const result = await adapter.execute({ command: 'ls -la' });
 - **WebSocket**: Real-time terminal output, file watching, system signals
 - **High-level API**: Terminal, FileWatcher, SignalService classes
 - **Universal**: Browser, Node.js, Deno, Bun, Cloudflare Workers, etc.
+- **WebContainer Polyfill**: Drop-in replacement for `@webcontainer/api` ✨
+
+## WebContainer API Polyfill
+
+Run the WebContainer API on remote sandboxes! Works everywhere, not just in browsers.
+
+```typescript
+import { WebContainer } from '@computesdk/adapter/webcontainer';
+
+// Same API as @webcontainer/api!
+const wc = await WebContainer.boot({
+  apiUrl: 'https://sandbox-123.preview.computesdk.co'
+});
+
+await wc.fs.writeFile('/hello.js', 'console.log("Hello!")');
+const process = await wc.spawn('node', ['hello.js']);
+
+// Listen for output
+const reader = process.output.getReader();
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  console.log(value);
+}
+
+await wc.teardown();
+```
+
+**Why use this over native WebContainers?**
+- ✅ Works **anywhere** - Browser, Node.js, edge runtimes
+- ✅ **No COEP headers** required
+- ✅ **Multiple sandboxes** - Not limited to one
+- ✅ **Any language** - Python, Node.js, etc.
+- ✅ **More powerful** - Full Linux environment
+
+**[Read the full WebContainer polyfill docs →](./WEBCONTAINER_POLYFILL.md)**
 
 ## API
 
