@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { handleComputeRequest, handleHttpComputeRequest } from '../request-handler.js'
 import type { ComputeRequest } from '../request-handler.js'
-import { MockProvider } from './test-utils.js'
+import { MockProvider, MOCK_SUPPORTED_RUNTIMES } from './test-utils.js'
 
 describe('Request Handler', () => {
   let mockProvider: MockProvider
@@ -276,6 +276,7 @@ describe('Request Handler', () => {
       it('should handle provider errors', async () => {
         const errorProvider = {
           ...mockProvider,
+          getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
           sandbox: {
             ...mockProvider.sandbox,
             create: vi.fn().mockRejectedValue(new Error('Provider error'))

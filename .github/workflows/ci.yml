@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened]
 
 jobs:
   test:
@@ -12,6 +13,10 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        # For pull requests, checkout the PR head ref
+        # For pushes, checkout the pushed ref (default behavior)
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
     
     - name: Install pnpm
       uses: pnpm/action-setup@v4
@@ -58,6 +63,9 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        # Integration tests only run on main branch, so use default checkout
+        ref: ${{ github.sha }}
     
     - name: Install pnpm
       uses: pnpm/action-setup@v4

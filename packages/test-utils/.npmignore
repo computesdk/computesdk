@@ -1,0 +1,38 @@
+# Development files
+src/
+
+# Build configuration directory (development only)
+build/
+
+# TypeScript configuration files
+tsconfig.json
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Build configuration
+tsup.config.ts
+.tsup/
+
+# Test files
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+__tests__/
+test/
+tests/
+
+# Development dependencies and config
+node_modules/
+.git/
+.gitignore
+.editorconfig
+.eslintrc*
+.prettierrc*
+.nvmrc
+
+# Logs and temp files
+*.log
+*.tmp
+.cache/
+.DS_Store

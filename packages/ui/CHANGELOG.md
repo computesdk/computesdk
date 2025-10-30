@@ -1,5 +1,11 @@
 # @computesdk/ui
 
+## 0.6.0
+
+### Minor Changes
+
+- fdb1271: Releasing sandbox instances via getInstance method
+
 ## 0.5.0
 
 ### Minor Changes

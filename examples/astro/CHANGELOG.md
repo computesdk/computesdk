@@ -1,5 +1,88 @@
 # @computesdk/example-astro
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [c9cef90]
+  - @computesdk/daytona@1.4.0
+  - @computesdk/vercel@1.4.0
+  - @computesdk/e2b@1.5.0
+
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [763a9a7]
+  - computesdk@1.7.0
+  - @computesdk/daytona@1.3.5
+  - @computesdk/e2b@1.4.3
+  - @computesdk/vercel@1.3.5
+
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [19e4fe6]
+  - computesdk@1.6.0
+  - @computesdk/daytona@1.3.4
+  - @computesdk/e2b@1.4.2
+  - @computesdk/vercel@1.3.4
+
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [ede314a]
+  - computesdk@1.5.0
+  - @computesdk/daytona@1.3.3
+  - @computesdk/e2b@1.4.1
+  - @computesdk/vercel@1.3.3
+
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [3b23385]
+  - computesdk@1.4.0
+  - @computesdk/e2b@1.4.0
+  - @computesdk/daytona@1.3.2
+  - @computesdk/vercel@1.3.2
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [be556c2]
+  - computesdk@1.3.1
+  - @computesdk/daytona@1.3.1
+  - @computesdk/e2b@1.3.1
+  - @computesdk/vercel@1.3.1
+
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [fdb1271]
+  - computesdk@1.3.0
+  - @computesdk/daytona@1.3.0
+  - @computesdk/e2b@1.3.0
+  - @computesdk/ui@0.6.0
+  - @computesdk/vercel@1.3.0
+
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [1fa3690]
+- Updated dependencies [485f706]
+- Updated dependencies [2b537df]
+- Updated dependencies [8d807e6]
+  - computesdk@1.2.0
+  - @computesdk/daytona@1.2.0
+  - @computesdk/vercel@1.2.0
+  - @computesdk/e2b@1.2.0
+
 ## 0.1.3
 
 ### Patch Changes

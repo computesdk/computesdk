@@ -8,7 +8,7 @@
 export * from './types';
 
 // Export compute singleton - the main API
-export { compute } from './compute';
+export { compute, createCompute } from './compute';
 
 // Export request handler for web framework integration
 export { handleComputeRequest } from './request-handler';
@@ -23,8 +23,10 @@ export type {
 
 
 // Export provider factory for creating custom providers
-export { createProvider } from './factory';
-export type { ProviderConfig, SandboxMethods } from './factory';
+export { createProvider, createBackgroundCommand } from './factory';
+export type { ProviderConfig, SandboxMethods, TemplateMethods, SnapshotMethods } from './factory';
 
+// Export error handling utilities (explicitly for clarity)
+export { CommandExitError, isCommandExitError } from './types/sandbox';
 
 // Test suite is available separately via @computesdk/test-utils package

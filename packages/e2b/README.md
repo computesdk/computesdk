@@ -22,11 +22,11 @@ export E2B_API_KEY=e2b_your_api_key_here
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 // Set as default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
 

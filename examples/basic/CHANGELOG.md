@@ -1,5 +1,114 @@
 # @computesdk/example-basic
 
+## 0.3.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
+### Patch Changes
+
+- Updated dependencies [c9cef90]
+  - @computesdk/codesandbox@1.3.0
+  - @computesdk/daytona@1.4.0
+  - @computesdk/runloop@1.1.0
+  - @computesdk/blaxel@1.1.0
+  - @computesdk/vercel@1.4.0
+  - @computesdk/modal@1.3.0
+  - @computesdk/e2b@1.5.0
+
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [763a9a7]
+  - computesdk@1.7.0
+  - @computesdk/codesandbox@1.2.5
+  - @computesdk/daytona@1.3.5
+  - @computesdk/e2b@1.4.3
+  - @computesdk/modal@1.2.5
+  - @computesdk/vercel@1.3.5
+
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [19e4fe6]
+  - computesdk@1.6.0
+  - @computesdk/codesandbox@1.2.4
+  - @computesdk/daytona@1.3.4
+  - @computesdk/e2b@1.4.2
+  - @computesdk/modal@1.2.4
+  - @computesdk/vercel@1.3.4
+
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [ede314a]
+  - computesdk@1.5.0
+  - @computesdk/codesandbox@1.2.3
+  - @computesdk/daytona@1.3.3
+  - @computesdk/e2b@1.4.1
+  - @computesdk/modal@1.2.3
+  - @computesdk/vercel@1.3.3
+
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [3b23385]
+  - computesdk@1.4.0
+  - @computesdk/e2b@1.4.0
+  - @computesdk/codesandbox@1.2.2
+  - @computesdk/daytona@1.3.2
+  - @computesdk/modal@1.2.2
+  - @computesdk/vercel@1.3.2
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [be556c2]
+  - computesdk@1.3.1
+  - @computesdk/codesandbox@1.2.1
+  - @computesdk/daytona@1.3.1
+  - @computesdk/e2b@1.3.1
+  - @computesdk/modal@1.2.1
+  - @computesdk/vercel@1.3.1
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [fdb1271]
+  - @computesdk/codesandbox@1.2.0
+  - computesdk@1.3.0
+  - @computesdk/daytona@1.3.0
+  - @computesdk/e2b@1.3.0
+  - @computesdk/modal@1.2.0
+  - @computesdk/vercel@1.3.0
+
+## 0.2.0
+
+### Minor Changes
+
+- 2b537df: improving standard methods on provider
+
+### Patch Changes
+
+- Updated dependencies [1fa3690]
+- Updated dependencies [485f706]
+- Updated dependencies [2b537df]
+- Updated dependencies [8d807e6]
+- Updated dependencies [d272ac1]
+  - @computesdk/codesandbox@1.1.0
+  - computesdk@1.2.0
+  - @computesdk/daytona@1.2.0
+  - @computesdk/vercel@1.2.0
+  - @computesdk/modal@1.1.0
+  - @computesdk/e2b@1.2.0
+
 ## 0.1.2
 
 ### Patch Changes

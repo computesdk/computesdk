@@ -13,11 +13,11 @@ npm install @computesdk/daytona
 ### With ComputeSDK
 
 ```typescript
-import { compute } from 'computesdk';
+import { createCompute } from 'computesdk';
 import { daytona } from '@computesdk/daytona';
 
 // Set as default provider
-compute.setConfig({ 
+const compute = createCompute({ 
   provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
 });
 

@@ -3,16 +3,14 @@
     "target": "es2020",
     "module": "commonjs",
     "declaration": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "sourceMap": true,
-    "lib": ["es2020", "dom"]
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "**/*.test.ts", "dist"]
+    "lib": ["es2020", "dom"],
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true
+  }
 }

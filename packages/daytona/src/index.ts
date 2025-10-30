@@ -6,8 +6,8 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { createProvider, createBackgroundCommand } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 /**
  * Daytona-specific configuration options
@@ -148,7 +148,8 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
             code.includes('json.') ||
             code.includes('__') ||
             code.includes('f"') ||
-            code.includes("f'")
+            code.includes("f'") ||
+            code.includes('raise ')
               ? 'python'
               // Default to Node.js for all other cases (including ambiguous)
               : 'node'
@@ -205,12 +206,15 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
+          // Handle background command execution
+          const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
+          
           // Construct full command with arguments
-          const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+          const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
 
           // Execute command using Daytona's process.executeCommand method
           const response = await sandbox.process.executeCommand(fullCommand);
@@ -221,7 +225,10 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
             exitCode: response.exitCode || 0,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.id,
-            provider: 'daytona'
+            provider: 'daytona',
+            isBackground,
+            // For background commands, we can't get a real PID, but we can indicate it's running
+            ...(isBackground && { pid: -1 })
           };
         } catch (error) {
           throw new Error(
@@ -242,6 +249,27 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
             daytonaSandboxId: sandbox.id
           }
         };
+      },
+
+      getUrl: async (sandbox: DaytonaSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        try {
+          // Use Daytona's built-in getPreviewLink method
+          const previewInfo = await sandbox.getPreviewLink(options.port);
+          let url = previewInfo.url;
+          
+          // If a specific protocol is requested, replace the URL's protocol
+          if (options.protocol) {
+            const urlObj = new URL(url);
+            urlObj.protocol = options.protocol + ':';
+            url = urlObj.toString();
+          }
+          
+          return url;
+        } catch (error) {
+          throw new Error(
+            `Failed to get Daytona preview URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       // Filesystem operations via terminal commands
@@ -343,9 +371,15 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
             throw new Error(`Failed to remove ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
-      }
+      },
+
+      // Provider-specific typed getInstance method
+      getInstance: (sandbox: DaytonaSandbox): DaytonaSandbox => {
+        return sandbox;
+      },
 
       // Terminal operations not implemented - Daytona session API needs verification
+
     }
   }
 });

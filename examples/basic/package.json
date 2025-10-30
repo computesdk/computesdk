@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-basic",
-  "version": "0.1.2",
+  "version": "0.3.0",
   "private": true,
   "description": "Basic usage examples for ComputeSDK",
   "scripts": {
@@ -9,6 +9,9 @@
     "daytona": "tsx src/daytona-example.ts",
     "modal": "tsx src/modal-example.ts",
     "codesandbox": "tsx src/codesandbox-example.ts",
+    "blaxel": "tsx src/blaxel-example.ts",
+    "runloop": "tsx src/runloop-example.ts",
+    "docker": "tsx src/docker-example.ts",
     "launch": "tsx src/launch-example.ts"
   },
   "dependencies": {
@@ -17,6 +20,9 @@
     "@computesdk/daytona": "workspace:*",
     "@computesdk/modal": "workspace:*",
     "@computesdk/codesandbox": "workspace:*",
+    "@computesdk/blaxel": "workspace:*",
+    "@computesdk/runloop": "workspace:*",
+    "@computesdk/docker": "workspace:*",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
