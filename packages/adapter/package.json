@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/adapter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Universal adapter for ComputeSDK - works in browser, Node.js, and edge runtimes",
   "author": "Garrison",
   "license": "MIT",
