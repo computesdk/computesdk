@@ -3,21 +3,25 @@
  *
  * This demonstrates using the WebContainer API with remote sandboxes.
  * Perfect drop-in replacement for @webcontainer/api!
+ *
+ * Sandboxes are automatically created and cleaned up for you!
  */
 
 import { WebContainer } from '../src/webcontainer-polyfill';
 
 async function main() {
   console.log('🚀 Booting WebContainer polyfill...');
+  console.log('📦 Creating new sandbox automatically...\n');
 
   // Boot WebContainer (same API as @webcontainer/api!)
+  // Sandbox is created automatically - no need to pre-create!
   const wc = await WebContainer.boot({
-    apiUrl: process.env.SANDBOX_URL || 'https://sandbox-123.preview.computesdk.co',
+    apiUrl: process.env.API_URL || 'https://api.computesdk.co',
     // Optional: pass WebSocket for Node.js
     WebSocket: require('ws')
   });
 
-  console.log('✅ WebContainer ready!\n');
+  console.log('✅ WebContainer ready with new sandbox!\n');
 
   // ============================================================================
   // Example 1: Mount a file tree
@@ -234,11 +238,13 @@ console.log('Platform:', process.platform);
   // Kill server
   serverProcess.kill();
 
-  // Teardown WebContainer
+  // Teardown WebContainer (automatically deletes the sandbox)
+  console.log('🗑️  Deleting sandbox...');
   await wc.teardown();
 
   console.log('✅ Done!\n');
   console.log('🎉 WebContainer polyfill works perfectly!');
+  console.log('💡 Sandbox was automatically created and cleaned up!');
 }
 
 // Run example

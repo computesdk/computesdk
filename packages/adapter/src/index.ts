@@ -586,6 +586,23 @@ export class ComputeAdapter {
       body: JSON.stringify(shell ? { shell } : {}),
     });
 
+    // Wait for terminal:created event to ensure terminal is ready
+    await new Promise<void>((resolve) => {
+      const handler = (msg: any) => {
+        if (msg.data?.id === response.data.id) {
+          ws.off('terminal:created', handler);
+          resolve();
+        }
+      };
+      ws.on('terminal:created', handler);
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        ws.off('terminal:created', handler);
+        resolve();
+      }, 5000);
+    });
+
     // Create Terminal instance (no cleanup callback needed)
     const terminal = new Terminal(
       response.data.id,
