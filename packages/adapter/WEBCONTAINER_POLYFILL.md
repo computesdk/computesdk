@@ -29,14 +29,14 @@ npm install @computesdk/adapter
 
 ## Usage
 
-### Basic Example
+### Basic Example (Auto-Create Sandbox)
 
 ```typescript
 import { WebContainer } from '@computesdk/adapter/webcontainer';
 
-// Drop-in replacement for @webcontainer/api!
+// Automatically creates a new sandbox for you!
 const wc = await WebContainer.boot({
-  apiUrl: 'https://sandbox-abc123.preview.computesdk.co'
+  apiUrl: 'https://api.computesdk.co'
 });
 
 // Use the same API as WebContainer
@@ -51,14 +51,25 @@ while (true) {
   console.log(value);
 }
 
+// Automatically deletes the sandbox on teardown
 await wc.teardown();
+```
+
+### Using an Existing Sandbox
+
+```typescript
+// If you want to use an existing sandbox instead
+const wc = await WebContainer.boot({
+  apiUrl: 'https://sandbox-abc123.preview.computesdk.co',
+  createSandbox: false
+});
 ```
 
 ### Mounting a File Tree
 
 ```typescript
 const wc = await WebContainer.boot({
-  apiUrl: 'https://sandbox-abc123.preview.computesdk.co'
+  apiUrl: 'https://api.computesdk.co'
 });
 
 // Mount files using WebContainer's FileSystemTree format
@@ -116,6 +127,7 @@ import { WebContainer } from '@webcontainer/api';
 
 const wc = await WebContainer.boot();
 // ... rest of your code
+await wc.teardown();
 ```
 
 **After (polyfill):**
@@ -123,27 +135,50 @@ const wc = await WebContainer.boot();
 import { WebContainer } from '@computesdk/adapter/webcontainer';
 
 const wc = await WebContainer.boot({
-  apiUrl: 'https://your-sandbox.preview.computesdk.co'
+  apiUrl: 'https://api.computesdk.co' // Base API URL - sandbox created automatically
 });
 // ... rest of your code stays the same!
+await wc.teardown(); // Automatically cleans up the sandbox
 ```
 
-That's it! The API is identical.
+That's it! The API is identical, and sandboxes are managed automatically for you.
 
 ## API Reference
 
 ### `WebContainer.boot(options)`
 
-Boot a WebContainer instance.
+Boot a WebContainer instance. By default, automatically creates a new sandbox.
 
 **Options:**
-- `apiUrl` (required): Your ComputeSDK sandbox URL
+- `apiUrl` (required): Your ComputeSDK base API URL (e.g., `https://api.computesdk.co`)
+- `createSandbox` (optional, default: `true`): Automatically create a new sandbox
+- `deleteSandboxOnTeardown` (optional, default: same as `createSandbox`): Delete sandbox on teardown
 - `token` (optional): JWT token for authentication
 - `headers` (optional): Additional headers for requests
 - `timeout` (optional): Request timeout in milliseconds
 - `WebSocket` (optional): WebSocket implementation (for Node.js)
 
 **Returns:** `Promise<WebContainer>`
+
+**Examples:**
+```typescript
+// Auto-create sandbox (default)
+const wc = await WebContainer.boot({
+  apiUrl: 'https://api.computesdk.co'
+});
+
+// Use existing sandbox
+const wc = await WebContainer.boot({
+  apiUrl: 'https://sandbox-123.preview.computesdk.co',
+  createSandbox: false
+});
+
+// Create sandbox but keep it after teardown
+const wc = await WebContainer.boot({
+  apiUrl: 'https://api.computesdk.co',
+  deleteSandboxOnTeardown: false
+});
+```
 
 ### `webContainer.fs`
 
