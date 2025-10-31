@@ -23,7 +23,7 @@ Works out of the box with native WebSocket:
 import { ComputeAdapter } from '@computesdk/adapter';
 
 const adapter = new ComputeAdapter({
-  apiUrl: 'https://sandbox-123.preview.computesdk.com'
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com'
 });
 
 await adapter.generateToken();
@@ -39,7 +39,7 @@ import { ComputeAdapter } from '@computesdk/adapter';
 import WebSocket from 'ws';
 
 const adapter = new ComputeAdapter({
-  apiUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   WebSocket // Pass ws implementation
 });
 
@@ -64,7 +64,7 @@ import { WebContainer } from '@computesdk/adapter/webcontainer';
 
 // Same API as @webcontainer/api!
 const wc = await WebContainer.boot({
-  apiUrl: 'https://sandbox-123.preview.computesdk.co'
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com'
 });
 
 await wc.fs.writeFile('/hello.js', 'console.log("Hello!")');
@@ -87,8 +87,6 @@ await wc.teardown();
 - ✅ **Multiple sandboxes** - Not limited to one
 - ✅ **Any language** - Python, Node.js, etc.
 - ✅ **More powerful** - Full Linux environment
-
-**[Read the full WebContainer polyfill docs →](./WEBCONTAINER_POLYFILL.md)**
 
 ## API
 
@@ -125,6 +123,3 @@ signals.on('port', (event) => {
 await signals.stop();
 ```
 
-## License
-
-MIT

@@ -10,7 +10,7 @@
  *
  * // Drop-in replacement for @webcontainer/api!
  * const wc = await WebContainer.boot({
- *   apiUrl: 'https://sandbox-123.preview.computesdk.co'
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com'
  * });
  *
  * await wc.fs.writeFile('/hello.js', 'console.log("Hello!")');

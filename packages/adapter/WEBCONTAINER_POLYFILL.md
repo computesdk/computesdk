@@ -36,7 +36,7 @@ import { WebContainer } from '@computesdk/adapter/webcontainer';
 
 // Drop-in replacement for @webcontainer/api!
 const wc = await WebContainer.boot({
-  apiUrl: 'https://sandbox-abc123.preview.computesdk.co'
+  sandboxUrl: 'https://sandbox-abc123.preview.computesdk.com'
 });
 
 // Use the same API as WebContainer
@@ -58,7 +58,7 @@ await wc.teardown();
 
 ```typescript
 const wc = await WebContainer.boot({
-  apiUrl: 'https://sandbox-abc123.preview.computesdk.co'
+  sandboxUrl: 'https://sandbox-abc123.preview.computesdk.com'
 });
 
 // Mount files using WebContainer's FileSystemTree format
@@ -123,7 +123,7 @@ const wc = await WebContainer.boot();
 import { WebContainer } from '@computesdk/adapter/webcontainer';
 
 const wc = await WebContainer.boot({
-  apiUrl: 'https://your-sandbox.preview.computesdk.co'
+  sandboxUrl: 'https://your-sandbox.preview.computesdk.com'
 });
 // ... rest of your code stays the same!
 ```
@@ -137,7 +137,7 @@ That's it! The API is identical.
 Boot a WebContainer instance.
 
 **Options:**
-- `apiUrl` (required): Your ComputeSDK sandbox URL
+- `sandboxUrl` (required): Your ComputeSDK sandbox URL
 - `token` (optional): JWT token for authentication
 - `headers` (optional): Additional headers for requests
 - `timeout` (optional): Request timeout in milliseconds
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
   const { code } = await req.json();
 
   const wc = await WebContainer.boot({
-    apiUrl: process.env.SANDBOX_URL!
+    sandboxUrl: process.env.SANDBOX_URL!
   });
 
   await wc.fs.writeFile('/code.js', code);
@@ -227,7 +227,7 @@ Works in Cloudflare Workers, Vercel Edge, etc.:
 export default {
   async fetch(request: Request) {
     const wc = await WebContainer.boot({
-      apiUrl: 'https://sandbox.example.com'
+      sandboxUrl: 'https://sandbox.example.com'
     });
 
     // Execute code in edge runtime
@@ -244,8 +244,8 @@ export default {
 Unlike native WebContainers, run multiple sandboxes:
 
 ```typescript
-const sandbox1 = await WebContainer.boot({ apiUrl: 'https://sandbox-1.example.com' });
-const sandbox2 = await WebContainer.boot({ apiUrl: 'https://sandbox-2.example.com' });
+const sandbox1 = await WebContainer.boot({ sandboxUrl: 'https://sandbox-1.example.com' });
+const sandbox2 = await WebContainer.boot({ sandboxUrl: 'https://sandbox-2.example.com' });
 
 // Run different code in parallel
 const [result1, result2] = await Promise.all([
@@ -260,7 +260,7 @@ Run Python code (not possible with native WebContainers):
 
 ```typescript
 const wc = await WebContainer.boot({
-  apiUrl: 'https://sandbox.example.com'
+  sandboxUrl: 'https://sandbox.example.com'
 });
 
 await wc.fs.writeFile('/analysis.py', `

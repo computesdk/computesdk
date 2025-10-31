@@ -30,7 +30,7 @@ export type FileWatcherEventHandler = {
  *
  * @example
  * ```typescript
- * const client = new ComputeClient({ apiUrl: '...' });
+ * const client = new ComputeClient({ sandboxUrl: '...' });
  * await client.generateToken();
  *
  * const watcher = await client.createWatcher('/home/project', {

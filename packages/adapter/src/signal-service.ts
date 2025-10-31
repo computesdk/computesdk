@@ -42,7 +42,7 @@ export type SignalServiceEventHandler = {
  *
  * @example
  * ```typescript
- * const client = new ComputeClient({ apiUrl: '...' });
+ * const client = new ComputeClient({ sandboxUrl: '...' });
  * await client.generateToken();
  *
  * const signals = await client.startSignals();
