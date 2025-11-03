@@ -2,7 +2,7 @@
  * ComputeSDK Adapter - Universal Adapter Implementation
  *
  * This package provides an adapter for interacting with ComputeSDK sandboxes
- * through API endpoints at ${sandboxId}.preview.computesdk.co
+ * through API endpoints at ${sandboxId}.preview.computesdk.com
  *
  * Works in browser, Node.js, and edge runtimes.
  * Browser: Uses native WebSocket and fetch
@@ -47,8 +47,8 @@ export type WebSocketConstructor = new (url: string) => WebSocket;
  * Configuration options for the ComputeSDK adapter
  */
 export interface ComputeAdapterConfig {
-  /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.co) */
-  apiUrl: string;
+  /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.com) */
+  sandboxUrl: string;
   /** Optional JWT token for authentication */
   token?: string;
   /** Optional headers to include with all requests */
@@ -281,7 +281,7 @@ export interface ErrorResponse {
  *
  * // Create client and authenticate
  * const client = new ComputeClient({
- *   apiUrl: 'https://sandbox-123.preview.computesdk.co'
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com'
  * });
  * await client.generateToken();
  *
@@ -329,7 +329,7 @@ export class ComputeAdapter {
 
   constructor(config: ComputeAdapterConfig) {
     this.config = {
-      apiUrl: config.apiUrl.replace(/\/$/, ''), // Remove trailing slash
+      sandboxUrl: config.sandboxUrl.replace(/\/$/, ''), // Remove trailing slash
       token: config.token || '',
       headers: config.headers || {},
       timeout: config.timeout || 30000,
@@ -342,7 +342,7 @@ export class ComputeAdapter {
       throw new Error(
         'WebSocket is not available. In Node.js, pass WebSocket implementation:\n' +
         'import WebSocket from "ws";\n' +
-        'new ComputeAdapter({ apiUrl: "...", WebSocket })'
+        'new ComputeAdapter({ sandboxUrl: "...", WebSocket })'
       );
     }
 
@@ -393,7 +393,7 @@ export class ComputeAdapter {
         headers['Authorization'] = `Bearer ${this._token}`;
       }
 
-      const response = await fetch(`${this.config.apiUrl}${endpoint}`, {
+      const response = await fetch(`${this.config.sandboxUrl}${endpoint}`, {
         ...options,
         headers: {
           ...headers,
@@ -842,8 +842,8 @@ export class ComputeAdapter {
    * @private
    */
   private getWebSocketUrl(): string {
-    const wsProtocol = this.config.apiUrl.startsWith('https') ? 'wss' : 'ws';
-    const url = this.config.apiUrl.replace(/^https?:/, `${wsProtocol}:`);
+    const wsProtocol = this.config.sandboxUrl.startsWith('https') ? 'wss' : 'ws';
+    const url = this.config.sandboxUrl.replace(/^https?:/, `${wsProtocol}:`);
     const token = this._token ? `?token=${this._token}` : '';
     return `${url}/ws${token}`;
   }
@@ -872,7 +872,7 @@ export class ComputeAdapter {
  * import { createClient } from '@computesdk/client'
  *
  * const client = createClient({
- *   apiUrl: 'https://sandbox-123.preview.computesdk.co'
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com'
  * });
  *
  * // Generate token (first client wins)

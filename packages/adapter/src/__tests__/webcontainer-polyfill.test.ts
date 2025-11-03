@@ -4,12 +4,12 @@ import WebSocket from 'ws';
 
 describe('WebContainer Polyfill', () => {
   let wc: WebContainer;
-  const testApiUrl = process.env.TEST_SANDBOX_URL || 'http://localhost:3000';
+  const testSandboxUrl = process.env.TEST_SANDBOX_URL || 'http://localhost:3000';
 
   beforeAll(async () => {
     // Boot WebContainer for all tests
     wc = await WebContainer.boot({
-      apiUrl: testApiUrl,
+      sandboxUrl: testSandboxUrl,
       createSandbox: false, // Use existing sandbox
       WebSocket: WebSocket as any,
     });

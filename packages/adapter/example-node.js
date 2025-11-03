@@ -13,7 +13,7 @@ console.log('🚀 ComputeAdapter Example (Node.js)\n');
 console.log(`📡 Connecting to: ${url}\n`);
 
 const adapter = new ComputeAdapter({
-  apiUrl: url,
+  sandboxUrl: url,
   WebSocket // Pass ws implementation for Node.js
 });
 

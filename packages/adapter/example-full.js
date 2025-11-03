@@ -19,7 +19,7 @@ console.log('🚀 ComputeSDK Adapter - Full Example\n');
 console.log(`📡 Connecting to: ${url}\n`);
 
 const adapter = new ComputeAdapter({
-  apiUrl: url,
+  sandboxUrl: url,
   WebSocket // Required for Node.js
 });
 

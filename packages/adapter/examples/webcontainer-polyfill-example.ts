@@ -16,7 +16,7 @@ async function main() {
   // Boot WebContainer (same API as @webcontainer/api!)
   // Sandbox is created automatically - no need to pre-create!
   const wc = await WebContainer.boot({
-    apiUrl: process.env.API_URL || 'https://api.computesdk.co',
+    sandboxUrl: process.env.SANDBOX_URL || 'https://sandbox-123.preview.computesdk.co',
     // Optional: pass WebSocket for Node.js
     WebSocket: require('ws')
   });

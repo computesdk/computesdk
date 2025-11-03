@@ -36,7 +36,7 @@ import { WebContainer } from '@computesdk/adapter/webcontainer';
 
 // Automatically creates a new sandbox for you!
 const wc = await WebContainer.boot({
-  apiUrl: 'https://api.computesdk.co'
+  sandboxUrl: 'https://sandbox-abc123.preview.computesdk.com'
 });
 
 // Use the same API as WebContainer
@@ -69,7 +69,7 @@ const wc = await WebContainer.boot({
 
 ```typescript
 const wc = await WebContainer.boot({
-  apiUrl: 'https://api.computesdk.co'
+  sandboxUrl: 'https://sandbox-abc123.preview.computesdk.com'
 });
 
 // Mount files using WebContainer's FileSystemTree format
@@ -135,7 +135,7 @@ await wc.teardown();
 import { WebContainer } from '@computesdk/adapter/webcontainer';
 
 const wc = await WebContainer.boot({
-  apiUrl: 'https://api.computesdk.co' // Base API URL - sandbox created automatically
+  sandboxUrl: 'https://your-sandbox.preview.computesdk.com'
 });
 // ... rest of your code stays the same!
 await wc.teardown(); // Automatically cleans up the sandbox
@@ -150,9 +150,7 @@ That's it! The API is identical, and sandboxes are managed automatically for you
 Boot a WebContainer instance. By default, automatically creates a new sandbox.
 
 **Options:**
-- `apiUrl` (required): Your ComputeSDK base API URL (e.g., `https://api.computesdk.co`)
-- `createSandbox` (optional, default: `true`): Automatically create a new sandbox
-- `deleteSandboxOnTeardown` (optional, default: same as `createSandbox`): Delete sandbox on teardown
+- `sandboxUrl` (required): Your ComputeSDK sandbox URL
 - `token` (optional): JWT token for authentication
 - `headers` (optional): Additional headers for requests
 - `timeout` (optional): Request timeout in milliseconds
@@ -243,7 +241,7 @@ export async function POST(req: Request) {
   const { code } = await req.json();
 
   const wc = await WebContainer.boot({
-    apiUrl: process.env.SANDBOX_URL!
+    sandboxUrl: process.env.SANDBOX_URL!
   });
 
   await wc.fs.writeFile('/code.js', code);
@@ -262,7 +260,7 @@ Works in Cloudflare Workers, Vercel Edge, etc.:
 export default {
   async fetch(request: Request) {
     const wc = await WebContainer.boot({
-      apiUrl: 'https://sandbox.example.com'
+      sandboxUrl: 'https://sandbox.example.com'
     });
 
     // Execute code in edge runtime
@@ -279,8 +277,8 @@ export default {
 Unlike native WebContainers, run multiple sandboxes:
 
 ```typescript
-const sandbox1 = await WebContainer.boot({ apiUrl: 'https://sandbox-1.example.com' });
-const sandbox2 = await WebContainer.boot({ apiUrl: 'https://sandbox-2.example.com' });
+const sandbox1 = await WebContainer.boot({ sandboxUrl: 'https://sandbox-1.example.com' });
+const sandbox2 = await WebContainer.boot({ sandboxUrl: 'https://sandbox-2.example.com' });
 
 // Run different code in parallel
 const [result1, result2] = await Promise.all([
@@ -295,7 +293,7 @@ Run Python code (not possible with native WebContainers):
 
 ```typescript
 const wc = await WebContainer.boot({
-  apiUrl: 'https://sandbox.example.com'
+  sandboxUrl: 'https://sandbox.example.com'
 });
 
 await wc.fs.writeFile('/analysis.py', `

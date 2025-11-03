@@ -23,7 +23,7 @@ export type TerminalEventHandler = {
  *
  * @example
  * ```typescript
- * const client = new ComputeClient({ apiUrl: '...' });
+ * const client = new ComputeClient({ sandboxUrl: '...' });
  * await client.generateToken();
  *
  * const terminal = await client.createTerminal();

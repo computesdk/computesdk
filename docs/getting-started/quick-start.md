@@ -2,6 +2,27 @@
 
 Welcome to ComputeSDK! This guide will get you up and running with secure, isolated code execution across multiple cloud providers using a unified TypeScript interface.
 
+<br />
+
+<div style="background: #3a3a3aff; border-left: 4px solid #dedfdfff; padding: 12px; margin: 12px 0; border-radius: 4px;">
+  <strong>Want a quick interactive demo of the SDK in action?</strong><br><br>
+  
+  ```bash
+  curl -fsSL https://computesdk.com/install.sh | sh
+  ```
+</div>
+
+<br />
+
+## Get an API Key
+
+1) Visit https://console.computesdk.com/register to create an account and get your ComputeSDK API key.
+2) Next create a .env file in the root of your project and add your API key (this is where you will store your API keys for each of your providers):
+
+```bash
+COMPUTESDK_API_KEY=your_api_key_here
+```
+
 ## Installation
 
 ```bash
