@@ -57,12 +57,12 @@ const result = await adapter.execute({ command: 'ls -la' });
 
 ## WebContainer API Polyfill
 
-Run the WebContainer API on remote sandboxes! Works everywhere, not just in browsers.
+Run the WebContainer API on remote sandboxes! Works everywhere, not just in browsers. **Sandboxes are automatically created and cleaned up for you.**
 
 ```typescript
 import { WebContainer } from '@computesdk/adapter/webcontainer';
 
-// Same API as @webcontainer/api!
+// Same API as @webcontainer/api - sandbox created automatically!
 const wc = await WebContainer.boot({
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com'
 });
@@ -78,6 +78,7 @@ while (true) {
   console.log(value);
 }
 
+// Automatically cleans up the sandbox
 await wc.teardown();
 ```
 

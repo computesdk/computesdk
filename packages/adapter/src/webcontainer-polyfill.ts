@@ -65,6 +65,10 @@ export interface BootOptions extends ComputeAdapterConfig {
   coep?: 'require-corp' | 'credentialless' | 'none';
   workdirName?: string;
   forwardPreviewErrors?: boolean | 'exceptions-only';
+  /** Whether to create a new sandbox automatically (default: true) */
+  createSandbox?: boolean;
+  /** Whether to delete the sandbox on teardown (default: true if createSandbox is true) */
+  deleteSandboxOnTeardown?: boolean;
 }
 
 /**
@@ -322,6 +326,9 @@ export class WebContainer {
   private adapter: ComputeAdapter;
   private signalService: SignalService | null = null;
   private eventHandlers: Map<string, Set<Function>> = new Map();
+  private sandboxSubdomain: string | null = null;
+  private deleteSandboxOnTeardown: boolean = false;
+  private mainSandboxUrl: string | null = null;
 
   /** File system API */
   public fs: FileSystemAPI;
@@ -342,35 +349,77 @@ export class WebContainer {
    * This is the main entry point - compatible with WebContainer.boot()
    */
   static async boot(options: BootOptions): Promise<WebContainer> {
-    // Create adapter
-    const adapter = new ComputeAdapter(options);
+    const { createSandbox = true, deleteSandboxOnTeardown, ...adapterOptions } = options;
 
-    // Generate token (first-come-first-served auth)
+    let finalApiUrl = adapterOptions.apiUrl;
+    let sandboxSubdomain: string | null = null;
+
+    // Create a new sandbox if requested (default behavior)
+    if (createSandbox) {
+      // Create adapter for main sandbox to create child sandbox
+      const mainAdapter = new ComputeAdapter(adapterOptions);
+
+      // Generate token for main sandbox if needed
+      try {
+        await mainAdapter.generateToken();
+      } catch (error) {
+        // Token might already be claimed or not needed (open-claim), continue
+        console.warn('Token generation skipped:', error);
+      }
+
+      // Create the child sandbox via main sandbox
+      const sandboxInfo = await mainAdapter.createSandbox();
+      sandboxSubdomain = sandboxInfo.subdomain;
+
+      // Use the URL from the response (e.g., https://child-subdomain.preview.computesdk.com)
+      finalApiUrl = sandboxInfo.url;
+
+      // Disconnect main adapter
+      await mainAdapter.disconnect();
+    }
+
+    // Create adapter with the final URL (either existing or newly created child sandbox)
+    const adapter = new ComputeAdapter({
+      ...adapterOptions,
+      apiUrl: finalApiUrl
+    });
+
+    // Generate token for the sandbox (open-claim auth doesn't require this, but doesn't hurt)
     try {
       await adapter.generateToken();
     } catch (error) {
-      // Token might already be claimed, try to use existing connection
-      console.warn('Failed to generate token, using existing connection');
+      // With open-claim auth, this isn't needed. Safe to ignore.
+      console.warn('Token generation skipped:', error);
     }
 
     const container = new WebContainer(adapter);
+    container.sandboxSubdomain = sandboxSubdomain;
+    container.mainSandboxUrl = createSandbox ? adapterOptions.apiUrl : null;
 
-    // Start signal service to monitor ports
-    container.signalService = await adapter.startSignals();
+    // Default to deleting sandbox on teardown if we created it
+    container.deleteSandboxOnTeardown = deleteSandboxOnTeardown ?? createSandbox;
 
-    // Forward signal events to WebContainer event handlers
-    container.signalService.on('port', (event) => {
-      if (event.type === 'open') {
-        container.emit('port', event.port, 'open', event.url);
-        container.emit('server-ready', event.port, event.url);
-      } else {
-        container.emit('port', event.port, 'close', event.url);
-      }
-    });
+    // Start signal service to monitor ports (optional - may already be running)
+    try {
+      container.signalService = await adapter.startSignals();
 
-    container.signalService.on('error', (event) => {
-      container.emit('error', { message: event.message });
-    });
+      // Forward signal events to WebContainer event handlers
+      container.signalService.on('port', (event) => {
+        if (event.type === 'open') {
+          container.emit('port', event.port, 'open', event.url);
+          container.emit('server-ready', event.port, event.url);
+        } else {
+          container.emit('port', event.port, 'close', event.url);
+        }
+      });
+
+      container.signalService.on('error', (event) => {
+        container.emit('error', { message: event.message });
+      });
+    } catch (error) {
+      // Signal service may already be active, that's okay
+      console.warn('Signal service not started (may already be active):', error);
+    }
 
     return container;
   }
@@ -455,10 +504,13 @@ export class WebContainer {
     // Build full command with args
     const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
 
-    // Execute command in terminal
+    // Create process FIRST to set up output handlers before sending command
+    const process = new WebContainerProcess(terminal);
+
+    // THEN execute command in terminal
     terminal.write(fullCommand + '\n');
 
-    return new WebContainerProcess(terminal);
+    return process;
   }
 
   /**
@@ -547,8 +599,31 @@ export class WebContainer {
       await this.signalService.stop();
     }
 
-    // Disconnect adapter
+    // Disconnect child sandbox adapter
     await this.adapter.disconnect();
+
+    // Delete sandbox if it was auto-created and deletion is enabled
+    if (this.deleteSandboxOnTeardown && this.sandboxSubdomain && this.mainSandboxUrl) {
+      try {
+        // Create temporary adapter to main sandbox for deletion
+        const mainAdapter = new ComputeAdapter({ apiUrl: this.mainSandboxUrl });
+
+        // Authenticate with main sandbox if needed
+        try {
+          await mainAdapter.generateToken();
+        } catch (error) {
+          // Open-claim doesn't need this, safe to ignore
+        }
+
+        // Delete the child sandbox
+        await mainAdapter.deleteSandbox(this.sandboxSubdomain, true);
+
+        // Disconnect main adapter
+        await mainAdapter.disconnect();
+      } catch (error) {
+        console.warn('Failed to delete sandbox on teardown:', error);
+      }
+    }
 
     // Clear event handlers
     this.eventHandlers.clear();

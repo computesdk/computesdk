@@ -43,7 +43,7 @@ export interface UnsubscribeMessage {
 export interface TerminalInputMessage {
   type: 'terminal:input';
   data: {
-    terminalId: string;
+    terminal_id: string;
     input: string;
   };
 }
@@ -54,7 +54,7 @@ export interface TerminalInputMessage {
 export interface TerminalResizeMessage {
   type: 'terminal:resize';
   data: {
-    terminalId: string;
+    terminal_id: string;
     cols: number;
     rows: number;
   };
@@ -451,7 +451,7 @@ export class WebSocketManager {
   sendTerminalInput(terminalId: string, input: string): void {
     this.sendRaw({
       type: 'terminal:input',
-      data: { terminalId, input },
+      data: { terminal_id: terminalId, input },
     });
   }
 
@@ -461,7 +461,7 @@ export class WebSocketManager {
   resizeTerminal(terminalId: string, cols: number, rows: number): void {
     this.sendRaw({
       type: 'terminal:resize',
-      data: { terminalId, cols, rows },
+      data: { terminal_id: terminalId, cols, rows },
     });
   }
 
