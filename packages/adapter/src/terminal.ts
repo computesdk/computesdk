@@ -35,19 +35,20 @@ export type TerminalEventHandler = {
  */
 export class Terminal {
   private id: string;
-  private status: 'running' | 'stopped';
+  private status: 'running' | 'stopped' | 'active';
   private channel: string;
   private ws: WebSocketManager;
   private eventHandlers: Map<keyof TerminalEventHandler, Set<Function>> = new Map();
 
   constructor(
     id: string,
-    status: 'running' | 'stopped',
+    status: 'running' | 'stopped' | 'active',
     channel: string,
     ws: WebSocketManager
   ) {
     this.id = id;
-    this.status = status;
+    // Normalize 'active' to 'running' for consistency
+    this.status = status === 'active' ? 'running' : status;
     this.channel = channel;
     this.ws = ws;
 
@@ -96,7 +97,7 @@ export class Terminal {
   /**
    * Get terminal status
    */
-  getStatus(): 'running' | 'stopped' {
+  getStatus(): 'running' | 'stopped' | 'active' {
     return this.status;
   }
 
