@@ -351,7 +351,7 @@ export class WebContainer {
   static async boot(options: BootOptions): Promise<WebContainer> {
     const { createSandbox = true, deleteSandboxOnTeardown, ...adapterOptions } = options;
 
-    let finalApiUrl = adapterOptions.apiUrl;
+    let finalApiUrl = adapterOptions.sandboxUrl;
     let sandboxSubdomain: string | null = null;
 
     // Create a new sandbox if requested (default behavior)
@@ -381,7 +381,7 @@ export class WebContainer {
     // Create adapter with the final URL (either existing or newly created child sandbox)
     const adapter = new ComputeAdapter({
       ...adapterOptions,
-      apiUrl: finalApiUrl
+      sandboxUrl: finalApiUrl
     });
 
     // Generate token for the sandbox (open-claim auth doesn't require this, but doesn't hurt)
@@ -394,7 +394,7 @@ export class WebContainer {
 
     const container = new WebContainer(adapter);
     container.sandboxSubdomain = sandboxSubdomain;
-    container.mainSandboxUrl = createSandbox ? adapterOptions.apiUrl : null;
+    container.mainSandboxUrl = createSandbox ? adapterOptions.sandboxUrl : null;
 
     // Default to deleting sandbox on teardown if we created it
     container.deleteSandboxOnTeardown = deleteSandboxOnTeardown ?? createSandbox;
@@ -606,7 +606,7 @@ export class WebContainer {
     if (this.deleteSandboxOnTeardown && this.sandboxSubdomain && this.mainSandboxUrl) {
       try {
         // Create temporary adapter to main sandbox for deletion
-        const mainAdapter = new ComputeAdapter({ apiUrl: this.mainSandboxUrl });
+        const mainAdapter = new ComputeAdapter({ sandboxUrl: this.mainSandboxUrl });
 
         // Authenticate with main sandbox if needed
         try {
