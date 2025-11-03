@@ -4,8 +4,8 @@ Welcome to ComputeSDK! This guide will get you up and running with secure, isola
 
 <br />
 
-<div style="background: #3a3a3aff; border-left: 4px solid #dedfdfff; padding: 12px; margin: 12px 0; border-radius: 4px;">
-  <strong>Want a quick interactive demo of the SDK in action?</strong><br><br>
+<div class="bg-emerald-100/20 border-l-4 border-emerald-800/20 dark:bg-emerald-800/30 dark:border-emerald-100/20 p-6 my-2 rounded flex flex-col gap-4">
+  <strong>For a quick interactive demo of the SDK in action:</strong>
   
   ```bash
   curl -fsSL https://computesdk.com/install.sh | sh
