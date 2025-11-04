@@ -1,6 +1,6 @@
 # ComputeSDK Adapter
 
-ComputeSDK comes with a universal adapter that works in browser, Node.js, and edge runtimes. Provides direct API access (and a WebContainer API polyfill) for use when you want direct interaction with the sandbox.
+ComputeSDK comes with a universal adapter that works in browser, Node.js, and edge runtimes. Provides direct API access for use when you want direct interaction with the sandbox from the browser or server.
 
 ## Installation
 

@@ -44,11 +44,15 @@ export {
 export type WebSocketConstructor = new (url: string) => WebSocket;
 
 /**
- * Configuration options for the ComputeSDK adapter
+ * Configuration options for the ComputeSDK client
  */
-export interface ComputeAdapterConfig {
+export interface ComputeClientConfig {
   /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.com) */
   sandboxUrl: string;
+  /** Sandbox ID (required for Sandbox interface operations) */
+  sandboxId?: string;
+  /** Provider name (e.g., 'e2b', 'vercel') (required for Sandbox interface operations) */
+  provider?: string;
   /** Optional JWT token for authentication */
   token?: string;
   /** Optional headers to include with all requests */
@@ -321,15 +325,37 @@ export interface ErrorResponse {
  * await client.disconnect();
  * ```
  */
-export class ComputeAdapter {
-  private config: Required<Omit<ComputeAdapterConfig, 'WebSocket'>>;
+export class ComputeClient {
+  readonly sandboxId: string | undefined;
+  readonly provider: string | undefined;
+  readonly filesystem: {
+    readFile: (path: string) => Promise<string>;
+    writeFile: (path: string, content: string) => Promise<void>;
+    mkdir: (path: string) => Promise<void>;
+    readdir: (path: string) => Promise<Array<{
+      name: string;
+      path: string;
+      isDirectory: boolean;
+      size: number;
+      lastModified: Date;
+    }>>;
+    exists: (path: string) => Promise<boolean>;
+    remove: (path: string) => Promise<void>;
+  };
+
+  private config: Required<Omit<ComputeClientConfig, 'WebSocket'>>;
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
 
-  constructor(config: ComputeAdapterConfig) {
+  constructor(config: ComputeClientConfig) {
+    this.sandboxId = config.sandboxId;
+    this.provider = config.provider;
+
     this.config = {
       sandboxUrl: config.sandboxUrl.replace(/\/$/, ''), // Remove trailing slash
+      sandboxId: config.sandboxId || '',
+      provider: config.provider || '',
       token: config.token || '',
       headers: config.headers || {},
       timeout: config.timeout || 30000,
@@ -342,13 +368,41 @@ export class ComputeAdapter {
       throw new Error(
         'WebSocket is not available. In Node.js, pass WebSocket implementation:\n' +
         'import WebSocket from "ws";\n' +
-        'new ComputeAdapter({ sandboxUrl: "...", WebSocket })'
+        'new ComputeClient({ sandboxUrl: "...", WebSocket })'
       );
     }
 
     if (config.token) {
       this._token = config.token;
     }
+
+    // Initialize filesystem interface
+    this.filesystem = {
+      readFile: async (path: string) => this.readFile(path),
+      writeFile: async (path: string, content: string) => {
+        await this.writeFile(path, content);
+      },
+      mkdir: async (path: string) => {
+        await this.execute({ command: `mkdir -p ${path}` });
+      },
+      readdir: async (path: string) => {
+        const response = await this.listFiles(path);
+        return response.data.files.map(f => ({
+          name: f.name,
+          path: f.path,
+          isDirectory: f.is_dir,
+          size: f.size,
+          lastModified: new Date(f.modified_at)
+        }));
+      },
+      exists: async (path: string) => {
+        const result = await this.execute({ command: `test -e ${path}` });
+        return result.data.exit_code === 0;
+      },
+      remove: async (path: string) => {
+        await this.deleteFile(path);
+      }
+    };
   }
 
   /**
@@ -848,6 +902,132 @@ export class ComputeAdapter {
     return `${url}/ws${token}`;
   }
 
+  // ============================================================================
+  // Sandbox Interface Implementation
+  // ============================================================================
+
+  /**
+   * Execute code in the sandbox (Sandbox interface method)
+   */
+  async runCode(code: string, runtime?: 'node' | 'python'): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    executionTime: number;
+    sandboxId: string;
+    provider: string;
+  }> {
+    const command = runtime === 'python' ? 'python3' : 'node';
+    const result = await this.execute({
+      command: `${command} -c ${JSON.stringify(code)}`
+    });
+
+    return {
+      stdout: result.data.stdout,
+      stderr: result.data.stderr,
+      exitCode: result.data.exit_code,
+      executionTime: result.data.duration_ms,
+      sandboxId: this.sandboxId || '',
+      provider: this.provider || ''
+    };
+  }
+
+  /**
+   * Execute shell commands (Sandbox interface method)
+   */
+  async runCommand(command: string, args?: string[], _options?: { background?: boolean }): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    executionTime: number;
+    sandboxId: string;
+    provider: string;
+  }> {
+    const fullCommand = args && args.length > 0
+      ? `${command} ${args.join(' ')}`
+      : command;
+
+    const result = await this.execute({ command: fullCommand });
+
+    return {
+      stdout: result.data.stdout,
+      stderr: result.data.stderr,
+      exitCode: result.data.exit_code,
+      executionTime: result.data.duration_ms,
+      sandboxId: this.sandboxId || '',
+      provider: this.provider || ''
+    };
+  }
+
+  /**
+   * Get sandbox information (Sandbox interface method)
+   */
+  async getInfo(): Promise<{
+    id: string;
+    provider: string;
+    runtime: 'node' | 'python';
+    status: 'running' | 'stopped' | 'error';
+    createdAt: Date;
+    timeout: number;
+    metadata?: Record<string, any>;
+  }> {
+    // Return basic info - the client doesn't track all these details
+    return {
+      id: this.sandboxId || '',
+      provider: this.provider || '',
+      runtime: 'node', // Default runtime
+      status: 'running',
+      createdAt: new Date(),
+      timeout: this.config.timeout
+    };
+  }
+
+  /**
+   * Get URL for accessing sandbox on a specific port (Sandbox interface method)
+   */
+  async getUrl(options: { port: number; protocol?: string }): Promise<string> {
+    const protocol = options.protocol || 'https';
+    // Extract subdomain from sandboxUrl
+    const url = new URL(this.config.sandboxUrl);
+    return `${protocol}://${url.host}:${options.port}`;
+  }
+
+  /**
+   * Get provider instance (Sandbox interface method)
+   * Note: Not available when using ComputeClient directly
+   */
+  getProvider(): never {
+    throw new Error(
+      'getProvider() is not available when using ComputeClient. ' +
+      'The client abstracts away the underlying provider.'
+    );
+  }
+
+  /**
+   * Get native provider instance (Sandbox interface method)
+   * Note: Not available when using ComputeClient directly
+   */
+  getInstance(): never {
+    throw new Error(
+      'getInstance() is not available when using ComputeClient. ' +
+      'The client provides a unified interface across all providers.'
+    );
+  }
+
+  /**
+   * Kill the sandbox (Sandbox interface method)
+   */
+  async kill(): Promise<void> {
+    await this.destroy();
+  }
+
+  /**
+   * Destroy the sandbox (Sandbox interface method)
+   */
+  async destroy(): Promise<void> {
+    await this.disconnect();
+  }
+
   /**
    * Disconnect WebSocket
    *
@@ -882,11 +1062,6 @@ export class ComputeAdapter {
  * const result = await client.execute({ command: 'ls -la' });
  * ```
  */
-export function createAdapter(config: ComputeAdapterConfig): ComputeAdapter {
-  return new ComputeAdapter(config);
+export function createClient(config: ComputeClientConfig): ComputeClient {
+  return new ComputeClient(config);
 }
-
-// Backwards compatibility alias
-export const createClient = createAdapter;
-export type ComputeClient = ComputeAdapter;
-export type ComputeClientConfig = ComputeAdapterConfig;

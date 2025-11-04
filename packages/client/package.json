@@ -1,7 +1,7 @@
 {
-  "name": "@computesdk/adapter",
+  "name": "@computesdk/client",
   "version": "0.2.0",
-  "description": "Universal adapter for ComputeSDK - works in browser, Node.js, and edge runtimes",
+  "description": "Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -33,7 +33,7 @@
     "lint": "eslint"
   },
   "keywords": [
-    "adapter",
+    "client",
     "browser",
     "node",
     "sandbox",
@@ -47,9 +47,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/adapter"
+    "directory": "packages/client"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/adapter",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/client",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
