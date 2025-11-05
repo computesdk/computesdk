@@ -1,5 +1,11 @@
 # @computesdk/adapter
 
+## 0.2.1
+
+### Patch Changes
+
+- 567f763: Updates to client
+
 ## 0.2.0
 
 ### Minor Changes

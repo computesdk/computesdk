@@ -1,5 +1,14 @@
 # @computesdk/example-astro
 
+## 0.1.12
+
+### Patch Changes
+
+- computesdk@1.7.1
+- @computesdk/daytona@1.4.1
+- @computesdk/e2b@1.5.1
+- @computesdk/vercel@1.4.1
+
 ## 0.1.11
 
 ### Patch Changes
