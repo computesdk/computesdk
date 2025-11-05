@@ -1,7 +1,7 @@
 /**
- * ComputeSDK Adapter - Universal Adapter Implementation
+ * ComputeSDK Client - Universal Client Implementation
  *
- * This package provides an adapter for interacting with ComputeSDK sandboxes
+ * This package provides a Client for interacting with ComputeSDK sandboxes
  * through API endpoints at ${sandboxId}.preview.computesdk.com
  *
  * Works in browser, Node.js, and edge runtimes.

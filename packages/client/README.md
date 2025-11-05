@@ -1,13 +1,13 @@
-# @computesdk/adapter
+# @computesdk/client
 
-Universal adapter for ComputeSDK - works in browser, Node.js, and edge runtimes.
+Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes.
 
 **Now includes WebContainer API polyfill!** Run the WebContainer API on remote sandboxes instead of in-browser. Perfect drop-in replacement for `@webcontainer/api`. [Learn more →](./WEBCONTAINER_POLYFILL.md)
 
 ## Installation
 
 ```bash
-npm install @computesdk/adapter
+npm install @computesdk/client
 
 # For Node.js, also install ws
 npm install ws
@@ -20,14 +20,14 @@ npm install ws
 Works out of the box with native WebSocket:
 
 ```typescript
-import { ComputeAdapter } from '@computesdk/adapter';
+import { ComputeClient } from '@computesdk/client';
 
-const adapter = new ComputeAdapter({
+const client = new ComputeClient({
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com'
 });
 
-await adapter.generateToken();
-const result = await adapter.execute({ command: 'ls -la' });
+await client.generateToken();
+const result = await client.execute({ command: 'ls -la' });
 ```
 
 ### Node.js
@@ -35,16 +35,16 @@ const result = await adapter.execute({ command: 'ls -la' });
 Pass WebSocket implementation:
 
 ```typescript
-import { ComputeAdapter } from '@computesdk/adapter';
+import { ComputeClient } from '@computesdk/client';
 import WebSocket from 'ws';
 
-const adapter = new ComputeAdapter({
+const client = new ComputeClient({
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   WebSocket // Pass ws implementation
 });
 
-await adapter.generateToken();
-const result = await adapter.execute({ command: 'ls -la' });
+await client.generateToken();
+const result = await client.execute({ command: 'ls -la' });
 ```
 
 ### Features
@@ -60,7 +60,7 @@ const result = await adapter.execute({ command: 'ls -la' });
 Run the WebContainer API on remote sandboxes! Works everywhere, not just in browsers. **Sandboxes are automatically created and cleaned up for you.**
 
 ```typescript
-import { WebContainer } from '@computesdk/adapter/webcontainer';
+import { WebContainer } from '@computesdk/client/webcontainer';
 
 // Same API as @webcontainer/api - sandbox created automatically!
 const wc = await WebContainer.boot({
@@ -95,20 +95,20 @@ See TypeScript types for full API documentation.
 
 ```typescript
 // Execute commands
-const result = await adapter.execute({ command: 'echo "Hello"' });
+const result = await client.execute({ command: 'echo "Hello"' });
 
 // Work with files
-await adapter.writeFile('/path/to/file.txt', 'content');
-const content = await adapter.readFile('/path/to/file.txt');
+await client.writeFile('/path/to/file.txt', 'content');
+const content = await client.readFile('/path/to/file.txt');
 
 // Interactive terminal
-const terminal = await adapter.createTerminal();
+const terminal = await client.createTerminal();
 terminal.on('output', (data) => console.log(data));
 terminal.write('ls -la\n');
 await terminal.destroy();
 
 // Watch files
-const watcher = await adapter.createWatcher('/path', {
+const watcher = await client.createWatcher('/path', {
   ignored: ['node_modules', '.git']
 });
 watcher.on('change', (event) => {
@@ -117,7 +117,7 @@ watcher.on('change', (event) => {
 await watcher.destroy();
 
 // Monitor signals
-const signals = await adapter.startSignals();
+const signals = await client.startSignals();
 signals.on('port', (event) => {
   console.log(`Port ${event.port}: ${event.url}`);
 });

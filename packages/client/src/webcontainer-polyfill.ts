@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { WebContainer } from '@computesdk/adapter/webcontainer';
+ * import { WebContainer } from '@computesdk/client/webcontainer';
  *
  * // Drop-in replacement for @webcontainer/api!
  * const wc = await WebContainer.boot({
@@ -184,7 +184,7 @@ export class WebContainerProcess {
  * File system API - compatible with WebContainer fs.promises API
  */
 export class FileSystemAPI {
-  constructor(private adapter: ComputeClient) {}
+  constructor(private client: ComputeClient) {}
 
   /**
    * Create a directory
@@ -192,7 +192,7 @@ export class FileSystemAPI {
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     // For recursive, we'd need to create parent directories
     // For now, just create the directory via a file operation
-    await this.adapter.createFile(path + '/.keep', '');
+    await this.client.createFile(path + '/.keep', '');
   }
 
   /**
@@ -202,7 +202,7 @@ export class FileSystemAPI {
     path: string,
     options?: { encoding?: BufferEncoding; withFileTypes?: boolean }
   ): Promise<string[] | DirEnt[]> {
-    const response = await this.adapter.listFiles(path);
+    const response = await this.client.listFiles(path);
     const files = response.data.files;
 
     if (options?.withFileTypes) {
@@ -228,7 +228,7 @@ export class FileSystemAPI {
     path: string,
     encoding?: BufferEncoding | null
   ): Promise<string | Uint8Array> {
-    const content = await this.adapter.readFile(path);
+    const content = await this.client.readFile(path);
 
     if (encoding === null || encoding === undefined) {
       // Return as Uint8Array
@@ -255,7 +255,7 @@ export class FileSystemAPI {
       content = data;
     }
 
-    await this.adapter.writeFile(path, content);
+    await this.client.writeFile(path, content);
   }
 
   /**
@@ -277,7 +277,7 @@ export class FileSystemAPI {
    */
   async rm(path: string, options?: { force?: boolean; recursive?: boolean }): Promise<void> {
     try {
-      await this.adapter.deleteFile(path);
+      await this.client.deleteFile(path);
     } catch (error) {
       if (!options?.force) {
         throw error;
@@ -296,7 +296,7 @@ export class FileSystemAPI {
     let watcher: any = null;
 
     // Start watching
-    this.adapter.createWatcher(path, {
+    this.client.createWatcher(path, {
       includeContent: false,
       ignored: []
     }).then(w => {
@@ -323,7 +323,7 @@ export class FileSystemAPI {
  * WebContainer - main class that polyfills the WebContainer API
  */
 export class WebContainer {
-  private adapter: ComputeClient;
+  private client: ComputeClient;
   private signalService: SignalService | null = null;
   private eventHandlers: Map<string, Set<Function>> = new Map();
   private sandboxSubdomain: string | null = null;
@@ -339,9 +339,9 @@ export class WebContainer {
   /** PATH environment variable */
   public path: string = '/usr/local/bin:/usr/bin:/bin';
 
-  private constructor(adapter: ComputeClient) {
-    this.adapter = adapter;
-    this.fs = new FileSystemAPI(adapter);
+  private constructor(client: ComputeClient) {
+    this.client = client;
+    this.fs = new FileSystemAPI(client);
   }
 
   /**
@@ -349,59 +349,59 @@ export class WebContainer {
    * This is the main entry point - compatible with WebContainer.boot()
    */
   static async boot(options: BootOptions): Promise<WebContainer> {
-    const { createSandbox = true, deleteSandboxOnTeardown, ...adapterOptions } = options;
+    const { createSandbox = true, deleteSandboxOnTeardown, ...clientOptions } = options;
 
-    let finalApiUrl = adapterOptions.sandboxUrl;
+    let finalApiUrl = clientOptions.sandboxUrl;
     let sandboxSubdomain: string | null = null;
 
     // Create a new sandbox if requested (default behavior)
     if (createSandbox) {
-      // Create adapter for main sandbox to create child sandbox
-      const mainAdapter = new ComputeClient(adapterOptions);
+      // Create client for main sandbox to create child sandbox
+      const mainClient = new ComputeClient(clientOptions);
 
       // Generate token for main sandbox if needed
       try {
-        await mainAdapter.generateToken();
+        await mainClient.generateToken();
       } catch (error) {
         // Token might already be claimed or not needed (open-claim), continue
         console.warn('Token generation skipped:', error);
       }
 
       // Create the child sandbox via main sandbox
-      const sandboxInfo = await mainAdapter.createSandbox();
+      const sandboxInfo = await mainClient.createSandbox();
       sandboxSubdomain = sandboxInfo.subdomain;
 
       // Use the URL from the response (e.g., https://child-subdomain.preview.computesdk.com)
       finalApiUrl = sandboxInfo.url;
 
-      // Disconnect main adapter
-      await mainAdapter.disconnect();
+      // Disconnect main client
+      await mainClient.disconnect();
     }
 
-    // Create adapter with the final URL (either existing or newly created child sandbox)
-    const adapter = new ComputeClient({
-      ...adapterOptions,
+    // Create client with the final URL (either existing or newly created child sandbox)
+    const client = new ComputeClient({
+      ...clientOptions,
       sandboxUrl: finalApiUrl
     });
 
     // Generate token for the sandbox (open-claim auth doesn't require this, but doesn't hurt)
     try {
-      await adapter.generateToken();
+      await client.generateToken();
     } catch (error) {
       // With open-claim auth, this isn't needed. Safe to ignore.
       console.warn('Token generation skipped:', error);
     }
 
-    const container = new WebContainer(adapter);
+    const container = new WebContainer(client);
     container.sandboxSubdomain = sandboxSubdomain;
-    container.mainSandboxUrl = createSandbox ? adapterOptions.sandboxUrl : null;
+    container.mainSandboxUrl = createSandbox ? clientOptions.sandboxUrl : null;
 
     // Default to deleting sandbox on teardown if we created it
     container.deleteSandboxOnTeardown = deleteSandboxOnTeardown ?? createSandbox;
 
     // Start signal service to monitor ports (optional - may already be running)
     try {
-      container.signalService = await adapter.startSignals();
+      container.signalService = await client.startSignals();
 
       // Forward signal events to WebContainer event handlers
       container.signalService.on('port', (event) => {
@@ -495,7 +495,7 @@ export class WebContainer {
     }
 
     // Create terminal with proper dimensions
-    const terminal = await this.adapter.createTerminal();
+    const terminal = await this.client.createTerminal();
 
     if (spawnOptions.terminal) {
       terminal.resize(spawnOptions.terminal.cols, spawnOptions.terminal.rows);
@@ -599,27 +599,27 @@ export class WebContainer {
       await this.signalService.stop();
     }
 
-    // Disconnect child sandbox adapter
-    await this.adapter.disconnect();
+    // Disconnect child sandbox client
+    await this.client.disconnect();
 
     // Delete sandbox if it was auto-created and deletion is enabled
     if (this.deleteSandboxOnTeardown && this.sandboxSubdomain && this.mainSandboxUrl) {
       try {
-        // Create temporary adapter to main sandbox for deletion
-        const mainAdapter = new ComputeClient({ sandboxUrl: this.mainSandboxUrl });
+        // Create temporary client to main sandbox for deletion
+        const mainClient = new ComputeClient({ sandboxUrl: this.mainSandboxUrl });
 
         // Authenticate with main sandbox if needed
         try {
-          await mainAdapter.generateToken();
+          await mainClient.generateToken();
         } catch (error) {
           // Open-claim doesn't need this, safe to ignore
         }
 
         // Delete the child sandbox
-        await mainAdapter.deleteSandbox(this.sandboxSubdomain, true);
+        await mainClient.deleteSandbox(this.sandboxSubdomain, true);
 
-        // Disconnect main adapter
-        await mainAdapter.disconnect();
+        // Disconnect main client
+        await mainClient.disconnect();
       } catch (error) {
         console.warn('Failed to delete sandbox on teardown:', error);
       }
