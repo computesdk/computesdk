@@ -1,5 +1,11 @@
 # @computesdk/daytona
 
+## 1.4.1
+
+### Patch Changes
+
+- computesdk@1.7.1
+
 ## 1.4.0
 
 ### Minor Changes
