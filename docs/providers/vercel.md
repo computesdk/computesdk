@@ -22,7 +22,8 @@ const compute = createCompute({
     token: process.env.VERCEL_TOKEN,
     teamId: process.env.VERCEL_TEAM_ID,
     projectId: process.env.VERCEL_PROJECT_ID,
-  }) 
+  }),
+  apiKey: process.env.COMPUTESDK_API_KEY 
 });
 
 // Create sandbox

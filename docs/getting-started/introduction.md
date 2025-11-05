@@ -37,7 +37,8 @@ import { e2b } from '@computesdk/e2b';
 
 // Set default provider
 const compute = createCompute({ 
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
+  apiKey: process.env.COMPUTESDK_API_KEY
 });
 
 // Create a sandbox
