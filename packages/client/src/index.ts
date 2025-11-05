@@ -414,7 +414,7 @@ export class ComputeClient {
         url: this.getWebSocketUrl(),
         WebSocket: this.WebSocketImpl,
         autoReconnect: true,
-        debug: true,
+        debug: false,
       });
       await this._ws.connect();
     }
