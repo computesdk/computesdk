@@ -18,7 +18,7 @@
  * ```
  */
 
-import { ComputeAdapter, type ComputeAdapterConfig } from './index';
+import { ComputeClient, type ComputeClientConfig } from './index';
 import type { Terminal } from './terminal';
 import type { SignalService } from './signal-service';
 
@@ -61,7 +61,7 @@ export interface FileSystemTree {
 /**
  * Options for booting a WebContainer
  */
-export interface BootOptions extends ComputeAdapterConfig {
+export interface BootOptions extends ComputeClientConfig {
   coep?: 'require-corp' | 'credentialless' | 'none';
   workdirName?: string;
   forwardPreviewErrors?: boolean | 'exceptions-only';
@@ -184,7 +184,7 @@ export class WebContainerProcess {
  * File system API - compatible with WebContainer fs.promises API
  */
 export class FileSystemAPI {
-  constructor(private adapter: ComputeAdapter) {}
+  constructor(private adapter: ComputeClient) {}
 
   /**
    * Create a directory
@@ -323,7 +323,7 @@ export class FileSystemAPI {
  * WebContainer - main class that polyfills the WebContainer API
  */
 export class WebContainer {
-  private adapter: ComputeAdapter;
+  private adapter: ComputeClient;
   private signalService: SignalService | null = null;
   private eventHandlers: Map<string, Set<Function>> = new Map();
   private sandboxSubdomain: string | null = null;
@@ -339,7 +339,7 @@ export class WebContainer {
   /** PATH environment variable */
   public path: string = '/usr/local/bin:/usr/bin:/bin';
 
-  private constructor(adapter: ComputeAdapter) {
+  private constructor(adapter: ComputeClient) {
     this.adapter = adapter;
     this.fs = new FileSystemAPI(adapter);
   }
@@ -357,7 +357,7 @@ export class WebContainer {
     // Create a new sandbox if requested (default behavior)
     if (createSandbox) {
       // Create adapter for main sandbox to create child sandbox
-      const mainAdapter = new ComputeAdapter(adapterOptions);
+      const mainAdapter = new ComputeClient(adapterOptions);
 
       // Generate token for main sandbox if needed
       try {
@@ -379,7 +379,7 @@ export class WebContainer {
     }
 
     // Create adapter with the final URL (either existing or newly created child sandbox)
-    const adapter = new ComputeAdapter({
+    const adapter = new ComputeClient({
       ...adapterOptions,
       sandboxUrl: finalApiUrl
     });
@@ -606,7 +606,7 @@ export class WebContainer {
     if (this.deleteSandboxOnTeardown && this.sandboxSubdomain && this.mainSandboxUrl) {
       try {
         // Create temporary adapter to main sandbox for deletion
-        const mainAdapter = new ComputeAdapter({ sandboxUrl: this.mainSandboxUrl });
+        const mainAdapter = new ComputeClient({ sandboxUrl: this.mainSandboxUrl });
 
         // Authenticate with main sandbox if needed
         try {
@@ -631,4 +631,4 @@ export class WebContainer {
 }
 
 // Export additional helpers
-export { ComputeAdapter as __ComputeAdapter };
+export { ComputeClient as __ComputeClient };

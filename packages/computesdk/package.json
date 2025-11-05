@@ -47,6 +47,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
+    "@computesdk/client": "workspace:*",
     "zod": "^3.22.0",
     "uuid": "^9.0.0"
   },
