@@ -1,11 +1,11 @@
-# ComputeSDK Adapter
+# ComputeSDK Client
 
 ComputeSDK comes with a universal adapter that works in browser, Node.js, and edge runtimes. Provides direct API access for use when you want direct interaction with the sandbox from the browser or server.
 
 ## Installation
 
 ```bash
-npm install @computesdk/adapter
+npm install @computesdk/client
 
 # For Node.js, also install ws
 npm install ws
@@ -16,35 +16,35 @@ npm install ws
 ### Browser
 
 ```typescript
-import { ComputeAdapter } from '@computesdk/adapter';
+import { ComputeClient } from '@computesdk/client';
 
-const adapter = new ComputeAdapter({
+const client = new ComputeClient({
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com'
 });
 
-await adapter.generateToken();
-const result = await adapter.execute({ command: 'ls -la' });
+await client.generateToken();
+const result = await client.execute({ command: 'ls -la' });
 ```
 
 ### Node.js
 
 ```typescript
-import { ComputeAdapter } from '@computesdk/adapter';
+import { ComputeClient } from '@computesdk/client';
 import WebSocket from 'ws';
 
-const adapter = new ComputeAdapter({
+const client = new ComputeClient({
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   WebSocket // Required for Node.js
 });
 
-await adapter.generateToken();
-const result = await adapter.execute({ command: 'ls -la' });
+await client.generateToken();
+const result = await client.execute({ command: 'ls -la' });
 ```
 
 ## Configuration
 
 ```typescript
-interface ComputeAdapterConfig {
+interface ComputeClientConfig {
   sandboxUrl: string;                    // Sandbox endpoint URL
   token?: string;                    // Optional JWT token
   headers?: Record<string, string>;  // Additional headers
@@ -59,7 +59,7 @@ interface ComputeAdapterConfig {
 
 ```typescript
 // Check service health
-const health = await adapter.health();
+const health = await client.health();
 console.log(health.status); // "ok"
 ```
 
@@ -67,26 +67,26 @@ console.log(health.status); // "ok"
 
 ```typescript
 // Generate token (first-come-first-served)
-const tokenResponse = await adapter.generateToken();
+const tokenResponse = await client.generateToken();
 
 // Check token status
-const status = await adapter.getTokenStatus();
+const status = await client.getTokenStatus();
 
 // Get authentication information
-const authInfo = await adapter.getAuthInfo();
+const authInfo = await client.getAuthInfo();
 
 // Set token manually
-adapter.setToken('your-jwt-token');
+client.setToken('your-jwt-token');
 
 // Get current token
-const currentToken = adapter.getToken();
+const currentToken = client.getToken();
 ```
 
 ### Command Execution
 
 ```typescript
 // Execute one-off command
-const result = await adapter.execute({ 
+const result = await client.execute({ 
   command: 'echo "Hello World"',
   shell: '/bin/bash' // optional
 });
@@ -99,35 +99,35 @@ console.log(result.data.exit_code); // 0
 
 ```typescript
 // List files
-const files = await adapter.listFiles('/home/project');
+const files = await client.listFiles('/home/project');
 
 // Create file
-await adapter.createFile('/path/to/file.txt', 'Initial content');
+await client.createFile('/path/to/file.txt', 'Initial content');
 
 // Get file metadata
-const fileInfo = await adapter.getFile('/path/to/file.txt');
+const fileInfo = await client.getFile('/path/to/file.txt');
 
 // Read file
-const content = await adapter.readFile('/path/to/file.txt');
+const content = await client.readFile('/path/to/file.txt');
 
 // Write file
-await adapter.writeFile('/path/to/file.txt', 'Hello, World!');
+await client.writeFile('/path/to/file.txt', 'Hello, World!');
 
 // Delete file
-await adapter.deleteFile('/path/to/file.txt');
+await client.deleteFile('/path/to/file.txt');
 ```
 
 ### Terminal Sessions
 
 ```typescript
 // Create persistent terminal
-const terminal = await adapter.createTerminal();
+const terminal = await client.createTerminal();
 
 // List all terminals
-const terminals = await adapter.listTerminals();
+const terminals = await client.listTerminals();
 
 // Get specific terminal
-const terminalInfo = await adapter.getTerminal(terminal.getId());
+const terminalInfo = await client.getTerminal(terminal.getId());
 
 // Listen for output
 terminal.on('output', (data) => console.log(data));
@@ -146,16 +146,16 @@ await terminal.destroy();
 
 ```typescript
 // Create file watcher
-const watcher = await adapter.createWatcher('/home/project', {
+const watcher = await client.createWatcher('/home/project', {
   ignored: ['node_modules', '.git'],
   includeContent: false
 });
 
 // List all watchers
-const watchers = await adapter.listWatchers();
+const watchers = await client.listWatchers();
 
 // Get specific watcher
-const watcherInfo = await adapter.getWatcher(watcher.getId());
+const watcherInfo = await client.getWatcher(watcher.getId());
 
 // Listen for changes
 watcher.on('change', (event) => {
@@ -170,10 +170,10 @@ await watcher.destroy();
 
 ```typescript
 // Start signal service for port monitoring
-const signals = await adapter.startSignals();
+const signals = await client.startSignals();
 
 // Get signal service status
-const status = await adapter.getSignalStatus();
+const status = await client.getSignalStatus();
 
 // Listen for port events
 signals.on('port', (event) => {
@@ -181,9 +181,9 @@ signals.on('port', (event) => {
 });
 
 // Emit signals manually
-await adapter.emitPortSignal(3000, 'open', 'http://localhost:3000');
-await adapter.emitErrorSignal('Something went wrong');
-await adapter.emitServerReadySignal(3000, 'http://localhost:3000');
+await client.emitPortSignal(3000, 'open', 'http://localhost:3000');
+await client.emitErrorSignal('Something went wrong');
+await client.emitServerReadySignal(3000, 'http://localhost:3000');
 
 // Stop service
 await signals.stop();
@@ -193,16 +193,16 @@ await signals.stop();
 
 ```typescript
 // Create a new sandbox
-const sandbox = await adapter.createSandbox();
+const sandbox = await client.createSandbox();
 
 // List all sandboxes
-const sandboxes = await adapter.listSandboxes();
+const sandboxes = await client.listSandboxes();
 
 // Get specific sandbox
-const sandboxInfo = await adapter.getSandbox('sandbox-123');
+const sandboxInfo = await client.getSandbox('sandbox-123');
 
 // Delete sandbox
-await adapter.deleteSandbox('sandbox-123', true); // deleteFiles = true
+await client.deleteSandbox('sandbox-123', true); // deleteFiles = true
 ```
 
 
@@ -227,7 +227,7 @@ await adapter.deleteSandbox('sandbox-123', true); // deleteFiles = true
 
 ```typescript
 // Disconnect WebSocket connections
-await adapter.disconnect();
+await client.disconnect();
 ```
 
 ## Additional API Methods
@@ -235,16 +235,16 @@ await adapter.disconnect();
 ### Helper Functions
 
 ```typescript
-// Create adapter instance (alternative to constructor)
-import { createAdapter } from '@computesdk/adapter';
-const adapter = createAdapter({ sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com' });
+// Create client instance (alternative to constructor)
+import { createClient } from '@computesdk/client';
+const client = createClient({ sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com' });
 
 // Backwards compatibility aliases
-import { createClient, ComputeClient } from '@computesdk/adapter';
+import { createClient, ComputeClient } from '@computesdk/client';
 const client = createClient({ sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com' });
 
 // Alternative port signal emission (using path parameters)
-await adapter.emitPortSignalAlt(3000, 'open');
+await client.emitPortSignalAlt(3000, 'open');
 ```
 
 ### Type Exports
@@ -253,7 +253,7 @@ The package exports comprehensive TypeScript types for all API responses:
 
 ```typescript
 import type {
-  ComputeAdapterConfig,
+  ComputeClientConfig,
   HealthResponse,
   TokenResponse,
   TokenStatusResponse,
@@ -270,12 +270,12 @@ import type {
   ErrorSignalEvent,
   SandboxInfo,
   SandboxesListResponse
-} from '@computesdk/adapter';
+} from '@computesdk/client';
 ```
 
 ## Error Handling
 
-The adapter throws errors for:
+The client throws errors for:
 - Network failures
 - Authentication issues
 - Invalid requests

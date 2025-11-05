@@ -1,4 +1,4 @@
-# @computesdk/adapter
+# @computesdk/client
 
 ## 0.2.1
 

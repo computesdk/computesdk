@@ -24,7 +24,7 @@ This polyfill provides a WebContainer-compatible API that's backed by ComputeSDK
 ## Installation
 
 ```bash
-npm install @computesdk/adapter
+npm install @computesdk/client
 ```
 
 ## Usage
@@ -32,7 +32,7 @@ npm install @computesdk/adapter
 ### Basic Example (Auto-Create Sandbox)
 
 ```typescript
-import { WebContainer } from '@computesdk/adapter/webcontainer';
+import { WebContainer } from '@computesdk/client/webcontainer';
 
 // Automatically creates a new sandbox for you!
 const wc = await WebContainer.boot({
@@ -132,7 +132,7 @@ await wc.teardown();
 
 **After (polyfill):**
 ```typescript
-import { WebContainer } from '@computesdk/adapter/webcontainer';
+import { WebContainer } from '@computesdk/client/webcontainer';
 
 const wc = await WebContainer.boot({
   sandboxUrl: 'https://your-sandbox.preview.computesdk.com'
@@ -331,7 +331,7 @@ const process = await wc.spawn('python3', ['analysis.py']);
          ↓
 ┌─────────────────┐
 │ @computesdk/    │
-│   adapter       │ → REST API + WebSocket
+│   client       │ → REST API + WebSocket
 └────────┬────────┘
          │
          ↓
