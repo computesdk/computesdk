@@ -22,11 +22,7 @@
 ComputeSDK is a free and open-source toolkit for running other people's code in your applications. Think of it as the "AI SDK for compute" - providing a consistent TypeScript interface whether you're using Blaxel, E2B, Vercel, or Daytona.
 
 **Why ComputeSDK?**
-<<<<<<< HEAD
-- 🔄 **Provider-agnostic** - Switch between E2B, Vercel, Daytona, Modal, CodeSandbox and more without code changes
-=======
-- 🔄 **Provider-agnostic** - Switch between Blaxel, E2B, Vercel, Daytona and more (coming soon) without code changes
->>>>>>> origin/main
+- 🔄 **Provider-agnostic** - Switch between Blaxel, E2B, Vercel, Daytona, Modal, CodeSandbox and more without code changes
 - 🛡️ **Security-first** - Isolated sandboxes protect your infrastructure
 - ⚡ **Developer experience** - Simple, TypeScript-native API
 - 🌍 **Production-ready** - Used by teams building the next generation of developer tools
@@ -40,11 +36,7 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 
 ## Features
 
-<<<<<<< HEAD
-- 🚀 **Multi-provider support** - E2B, Vercel, Daytona, Modal, CodeSandbox
-=======
-- 🚀 **Multi-provider support** - Blaxel, E2B, Vercel, Daytona
->>>>>>> origin/main
+- 🚀 **Multi-provider support** - Blaxel, E2B, Vercel, Daytona, Modal, CodeSandbox
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - ⚡ **Command execution** - Run shell commands directly
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
@@ -110,9 +102,6 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 
 ## Provider Setup
 
-<<<<<<< HEAD
-### E2B
-=======
 ### Blaxel - AI-Powered Code Execution
 
 Blaxel provides intelligent code execution with AI assistance:
@@ -126,11 +115,11 @@ export BLAXEL_WORKSPACE=your_workspace_here
 import { compute } from 'computesdk';
 import { blaxel } from '@computesdk/blaxel';
 
-compute.setConfig({ 
-  provider: blaxel({ 
+compute.setConfig({
+  provider: blaxel({
     apiKey: process.env.BLAXEL_API_KEY,
     workspace: process.env.BLAXEL_WORKSPACE
-  }) 
+  })
 });
 
 const sandbox = await compute.sandbox.create({});
@@ -147,9 +136,7 @@ print(json.dumps(data, indent=2))
 console.log(result.stdout);
 ```
 
-### E2B - Full Development Environment
-
-E2B provides full filesystem and terminal support:
+### E2B
 
 ```bash
 export E2B_API_KEY=e2b_your_api_key_here
@@ -687,31 +674,19 @@ import type {
 
 ## Provider Comparison
 
-<<<<<<< HEAD
-| Provider | Code Execution | Filesystem | Use Cases |
-|----------|----------------|------------|-----------|
-| **E2B** | Python, Node.js | ✅ Full | Data science, AI/ML, interactive development |
-| **Vercel** | Node.js, Python | ✅ Full | Web apps, APIs, serverless functions |
-| **Daytona** | Python, Node.js | ✅ Full | Development workspaces, custom environments |
-| **Modal** | Python | ✅ Full | GPU computing, ML inference, large-scale Python workloads |
-| **CodeSandbox** | JavaScript, Python | ✅ Full | Collaborative development, web development, prototyping |
-
-### Key Differences
-
-- **E2B**: Full development environment with data science libraries
-=======
 | Provider | Code Execution | Filesystem | Terminal | Use Cases |
 |----------|----------------|------------|----------|-----------|
-| **Blaxel** | Python, Node.js, TypeScript | ✅ Full | ❌ |  AI code generation, AI code review, AI data analysis |
+| **Blaxel** | Python, Node.js, TypeScript | ✅ Full | ❌ | AI code generation, AI code review, AI data analysis |
 | **E2B** | Python, Node.js | ✅ Full | ✅ PTY | Data science, AI/ML, interactive development |
 | **Vercel** | Node.js, Python | ✅ Full | ❌ | Web apps, APIs, serverless functions |
 | **Daytona** | Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
+| **Modal** | Python | ✅ Full | ❌ | GPU computing, ML inference, large-scale Python workloads |
+| **CodeSandbox** | JavaScript, Python | ✅ Full | ❌ | Collaborative development, web development, prototyping |
 
 ### Key Differences
 
 - **Blaxel**: Sandboxes with 25ms boot times, autoscale-to-zero after 5s inactivity, and persistent storage
 - **E2B**: Full development environment with data science libraries and interactive terminals
->>>>>>> origin/main
 - **Vercel**: Ephemeral sandboxes optimized for serverless execution (up to 45 minutes)
 - **Daytona**: Development workspaces with persistent environments
 - **Modal**: GPU-accelerated cloud compute optimized for ML and data-intensive Python workloads

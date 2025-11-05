@@ -1,6 +1,6 @@
 {
   "name": "computesdk",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "A free and open-source toolkit for running other people's code in your applications.",
   "author": "Garrison",
   "license": "MIT",
@@ -47,6 +47,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
+    "@computesdk/client": "workspace:*",
     "zod": "^3.22.0",
     "uuid": "^9.0.0"
   },
