@@ -162,6 +162,7 @@ export interface TerminalResponse {
     status: 'running' | 'stopped';
     channel: string;
     ws_url: string;
+    encoding?: 'raw' | 'base64';
   };
 }
 
@@ -191,6 +192,7 @@ export interface WatcherInfo {
   ignored: string[];
   status: 'active' | 'stopped';
   channel: string;
+  encoding?: 'raw' | 'base64';
 }
 
 /**
@@ -628,16 +630,22 @@ export class ComputeClient {
 
   /**
    * Create a new persistent terminal session with WebSocket integration
+   * @param shell - Shell to use (e.g., '/bin/bash', '/bin/sh')
+   * @param encoding - Encoding for terminal I/O: 'raw' (default) or 'base64' (binary-safe)
    * @returns Terminal instance with event handling
    */
-  async createTerminal(shell?: string): Promise<Terminal> {
+  async createTerminal(shell?: string, encoding?: 'raw' | 'base64'): Promise<Terminal> {
     // Ensure WebSocket is connected
     const ws = await this.ensureWebSocket();
 
     // Create terminal via REST API
+    const body: { shell?: string; encoding?: 'raw' | 'base64' } = {};
+    if (shell) body.shell = shell;
+    if (encoding) body.encoding = encoding;
+
     const response = await this.request<TerminalResponse>('/terminals', {
       method: 'POST',
-      body: JSON.stringify(shell ? { shell } : {}),
+      body: JSON.stringify(body),
     });
 
     // Wait for terminal:created event to ensure terminal is ready
@@ -662,7 +670,8 @@ export class ComputeClient {
       response.data.id,
       response.data.status,
       response.data.channel,
-      ws
+      ws,
+      response.data.encoding || 'raw'
     );
 
     // Set up terminal handlers
@@ -703,6 +712,11 @@ export class ComputeClient {
 
   /**
    * Create a new file watcher with WebSocket integration
+   * @param path - Path to watch
+   * @param options - Watcher options
+   * @param options.includeContent - Include file content in change events
+   * @param options.ignored - Patterns to ignore
+   * @param options.encoding - Encoding for file content: 'raw' (default) or 'base64' (binary-safe)
    * @returns FileWatcher instance with event handling
    */
   async createWatcher(
@@ -710,6 +724,7 @@ export class ComputeClient {
     options?: {
       includeContent?: boolean;
       ignored?: string[];
+      encoding?: 'raw' | 'base64';
     }
   ): Promise<FileWatcher> {
     // Ensure WebSocket is connected
@@ -729,7 +744,8 @@ export class ComputeClient {
       response.data.channel,
       response.data.includeContent,
       response.data.ignored,
-      ws
+      ws,
+      response.data.encoding || 'raw'
     );
 
     // Set up watcher handlers

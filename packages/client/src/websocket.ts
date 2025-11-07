@@ -39,6 +39,7 @@ export interface UnsubscribeMessage {
 
 /**
  * Send input to a terminal
+ * Note: input is sent as-is (not encoded by client SDK)
  */
 export interface TerminalInputMessage {
   type: 'terminal:input';
@@ -84,12 +85,14 @@ export interface TerminalCreatedMessage {
 
 /**
  * Terminal output data
+ * Note: output field may be base64 encoded depending on encoding field
  */
 export interface TerminalOutputMessage {
   type: 'terminal:output';
   channel: string;
   data: {
-    output: string;
+    output: string; // raw string or base64 encoded, check encoding field
+    encoding?: 'raw' | 'base64'; // indicates how output is encoded
   };
 }
 
@@ -129,6 +132,7 @@ export interface WatcherCreatedMessage {
 
 /**
  * File change event
+ * Note: content field may be base64 encoded depending on encoding field
  */
 export interface FileChangedMessage {
   type: 'file:changed';
@@ -136,7 +140,8 @@ export interface FileChangedMessage {
   data: {
     event: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir';
     path: string;
-    content?: string;
+    content?: string; // raw string or base64 encoded, check encoding field
+    encoding?: 'raw' | 'base64'; // indicates how content is encoded
   };
 }
 
@@ -446,7 +451,7 @@ export class WebSocketManager {
   }
 
   /**
-   * Send input to a terminal
+   * Send input to a terminal (sent as-is, not encoded)
    */
   sendTerminalInput(terminalId: string, input: string): void {
     this.sendRaw({

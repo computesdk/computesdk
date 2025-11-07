@@ -8,6 +8,24 @@ import type {
   WatcherDestroyedMessage,
 } from './websocket';
 
+// ============================================================================
+// Base64 Utility Functions
+// ============================================================================
+
+/**
+ * Decode base64 to string (cross-platform: browser and Node.js)
+ */
+function decodeBase64(str: string): string {
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    // Browser environment
+    return window.atob(str);
+  } else if (typeof Buffer !== 'undefined') {
+    // Node.js environment
+    return Buffer.from(str, 'base64').toString('utf-8');
+  }
+  throw new Error('No base64 decoding available');
+}
+
 /**
  * File change event data
  */
@@ -51,6 +69,7 @@ export class FileWatcher {
   private channel: string;
   private includeContent: boolean;
   private ignored: string[];
+  private encoding: 'raw' | 'base64';
   private ws: WebSocketManager;
   private eventHandlers: Map<keyof FileWatcherEventHandler, Set<Function>> = new Map();
 
@@ -61,7 +80,8 @@ export class FileWatcher {
     channel: string,
     includeContent: boolean,
     ignored: string[],
-    ws: WebSocketManager
+    ws: WebSocketManager,
+    encoding: 'raw' | 'base64' = 'raw'
   ) {
     this.id = id;
     this.path = path;
@@ -69,6 +89,7 @@ export class FileWatcher {
     this.channel = channel;
     this.includeContent = includeContent;
     this.ignored = ignored;
+    this.encoding = encoding;
     this.ws = ws;
 
     // Subscribe to watcher channel
@@ -82,13 +103,18 @@ export class FileWatcher {
    * Set up WebSocket event handlers
    */
   private setupWebSocketHandlers(): void {
-    // Handle file changes
+    // Handle file changes (decode content based on encoding field)
     this.ws.on('file:changed', (msg: FileChangedMessage) => {
       if (msg.channel === this.channel) {
+        const encoding = msg.data.encoding || this.encoding;
+        const content = msg.data.content && encoding === 'base64'
+          ? decodeBase64(msg.data.content)
+          : msg.data.content;
+
         this.emit('change', {
           event: msg.data.event,
           path: msg.data.path,
-          content: msg.data.content,
+          content: content,
         });
       }
     });
