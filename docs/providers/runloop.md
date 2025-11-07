@@ -18,7 +18,8 @@ import { runloop } from '@computesdk/runloop';
 
 // Set as default provider
 const compute = createCompute({ 
-  provider: runloop({ apiKey: process.env.RUNLOOP_API_KEY }) 
+  provider: runloop({ apiKey: process.env.RUNLOOP_API_KEY }),
+  apiKey: process.env.COMPUTESDK_API_KEY 
 });
 
 // Create devbox
