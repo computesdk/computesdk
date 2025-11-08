@@ -1,5 +1,14 @@
 # @computesdk/example-remix
 
+## 0.1.11
+
+### Patch Changes
+
+- computesdk@1.7.2
+- @computesdk/daytona@1.4.2
+- @computesdk/e2b@1.5.2
+- @computesdk/vercel@1.4.2
+
 ## 0.1.10
 
 ### Patch Changes

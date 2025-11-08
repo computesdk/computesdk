@@ -1,5 +1,11 @@
 # @computesdk/docker
 
+## 1.0.2
+
+### Patch Changes
+
+- computesdk@1.7.2
+
 ## 1.0.1
 
 ### Patch Changes

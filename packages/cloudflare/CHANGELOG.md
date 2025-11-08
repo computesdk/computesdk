@@ -1,5 +1,11 @@
 # @computesdk/cloudflare
 
+## 1.1.2
+
+### Patch Changes
+
+- computesdk@1.7.2
+
 ## 1.1.1
 
 ### Patch Changes

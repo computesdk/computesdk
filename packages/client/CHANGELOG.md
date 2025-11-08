@@ -1,5 +1,11 @@
 # @computesdk/client
 
+## 0.2.2
+
+### Patch Changes
+
+- 9e239be: quieting logs
+
 ## 0.2.1
 
 ### Patch Changes
