@@ -1,5 +1,11 @@
 # @computesdk/client
 
+## 0.2.3
+
+### Patch Changes
+
+- 7d21636: Fixing auth
+
 ## 0.2.2
 
 ### Patch Changes
