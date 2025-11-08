@@ -1,5 +1,12 @@
 # computesdk
 
+## 1.7.3
+
+### Patch Changes
+
+- Updated dependencies [7d21636]
+  - @computesdk/client@0.2.3
+
 ## 1.7.2
 
 ### Patch Changes
