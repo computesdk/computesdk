@@ -9,6 +9,24 @@ import type {
   TerminalDestroyedMessage,
 } from './websocket';
 
+// ============================================================================
+// Base64 Utility Functions
+// ============================================================================
+
+/**
+ * Decode base64 to string (cross-platform: browser and Node.js)
+ */
+function decodeBase64(str: string): string {
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    // Browser environment
+    return window.atob(str);
+  } else if (typeof Buffer !== 'undefined') {
+    // Node.js environment
+    return Buffer.from(str, 'base64').toString('utf-8');
+  }
+  throw new Error('No base64 decoding available');
+}
+
 /**
  * Terminal event handlers
  */
@@ -38,19 +56,22 @@ export class Terminal {
   private status: 'running' | 'stopped' | 'active';
   private channel: string;
   private ws: WebSocketManager;
+  private encoding: 'raw' | 'base64';
   private eventHandlers: Map<keyof TerminalEventHandler, Set<Function>> = new Map();
 
   constructor(
     id: string,
     status: 'running' | 'stopped' | 'active',
     channel: string,
-    ws: WebSocketManager
+    ws: WebSocketManager,
+    encoding: 'raw' | 'base64' = 'raw'
   ) {
     this.id = id;
     // Normalize 'active' to 'running' for consistency
     this.status = status === 'active' ? 'running' : status;
     this.channel = channel;
     this.ws = ws;
+    this.encoding = encoding;
 
     // Subscribe to terminal channel
     this.ws.subscribe(this.channel);
@@ -63,10 +84,14 @@ export class Terminal {
    * Set up WebSocket event handlers
    */
   private setupWebSocketHandlers(): void {
-    // Handle terminal output
+    // Handle terminal output (decode based on encoding field)
     this.ws.on('terminal:output', (msg: TerminalOutputMessage) => {
       if (msg.channel === this.channel) {
-        this.emit('output', msg.data.output);
+        const encoding = msg.data.encoding || this.encoding;
+        const output = encoding === 'base64'
+          ? decodeBase64(msg.data.output)
+          : msg.data.output;
+        this.emit('output', output);
       }
     });
 

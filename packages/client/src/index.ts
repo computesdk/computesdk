@@ -19,21 +19,6 @@ export { Terminal } from './terminal';
 export { FileWatcher, type FileChangeEvent } from './file-watcher';
 export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type SignalEvent } from './signal-service';
 
-// Re-export WebContainer polyfill
-export {
-  WebContainer,
-  WebContainerProcess,
-  FileSystemAPI,
-  type BootOptions,
-  type SpawnOptions,
-  type FileSystemTree,
-  type FileNode,
-  type DirectoryNode,
-  type SymlinkNode,
-  type DirEnt,
-  type BufferEncoding
-} from './webcontainer-polyfill';
-
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -72,30 +57,57 @@ export interface HealthResponse {
 }
 
 /**
- * Authentication token response
+ * Access token response
  */
-export interface TokenResponse {
+export interface AccessTokenResponse {
   message: string;
   data: {
+    id: string;
     token: string;
+    description?: string;
+    created_at: string;
+    expires_at: string;
     expires_in: number;
-    usage: {
-      recommended: string;
-      alternative: string;
-      security_note: string;
-    };
   };
 }
 
 /**
- * Token status response
+ * Access token list response
  */
-export interface TokenStatusResponse {
+export interface AccessTokenListResponse {
   message: string;
   data: {
-    token_issued: boolean;
-    status: 'available' | 'claimed';
-    available: boolean;
+    tokens: Array<{
+      id: string;
+      description?: string;
+      created_at: string;
+      expires_at: string;
+      last_used_at?: string;
+    }>;
+  };
+}
+
+/**
+ * Magic link response
+ */
+export interface MagicLinkResponse {
+  message: string;
+  data: {
+    magic_url: string;
+    expires_at: string;
+    redirect_url: string;
+  };
+}
+
+/**
+ * Authentication status response
+ */
+export interface AuthStatusResponse {
+  message: string;
+  data: {
+    authenticated: boolean;
+    token_type?: 'license_jwt' | 'access_token';
+    expires_at?: string;
   };
 }
 
@@ -107,14 +119,14 @@ export interface AuthInfoResponse {
   data: {
     message: string;
     instructions: string;
-    usage: {
-      header: string;
-      query: string;
-    };
     endpoints: {
-      generate_token: string;
-      check_status: string;
-      info: string;
+      create_access_token: string;
+      list_access_tokens: string;
+      get_access_token: string;
+      revoke_access_token: string;
+      create_magic_link: string;
+      auth_status: string;
+      auth_info: string;
     };
   };
 }
@@ -162,6 +174,7 @@ export interface TerminalResponse {
     status: 'running' | 'stopped';
     channel: string;
     ws_url: string;
+    encoding?: 'raw' | 'base64';
   };
 }
 
@@ -191,6 +204,7 @@ export interface WatcherInfo {
   ignored: string[];
   status: 'active' | 'stopped';
   channel: string;
+  encoding?: 'raw' | 'base64';
 }
 
 /**
@@ -277,17 +291,29 @@ export interface ErrorResponse {
 // ============================================================================
 
 /**
- * ComputeSDK Client for browser environments
+ * ComputeSDK Client for browser and Node.js environments
  *
  * @example
  * ```typescript
  * import { ComputeClient } from '@computesdk/client'
  *
- * // Create client and authenticate
- * const client = new ComputeClient({
- *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com'
+ * // Pattern 1: Admin operations (requires license JWT)
+ * const adminClient = new ComputeClient({
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   token: licenseJWT, // From license server
  * });
- * await client.generateToken();
+ *
+ * // Create access token for regular operations
+ * const accessToken = await adminClient.createAccessToken({
+ *   description: 'My Application',
+ *   expiresIn: 604800, // 7 days
+ * });
+ *
+ * // Pattern 2: Regular operations (access token works)
+ * const client = new ComputeClient({
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   token: accessToken.data.token,
+ * });
  *
  * // Execute a one-off command
  * const result = await client.execute({ command: 'ls -la' });
@@ -498,44 +524,106 @@ export class ComputeClient {
   // ============================================================================
 
   /**
-   * Generate authentication token (first-come-first-served)
-   * The first client to call this endpoint will receive a token.
-   * Subsequent calls will fail with a 409 Conflict error.
+   * Create an access token (requires license JWT)
+   *
+   * Access tokens are delegated credentials that can authenticate API requests
+   * without exposing your license JWT. Only license JWTs can create access tokens.
+   *
+   * @param options - Token configuration
+   * @throws {Error} 403 Forbidden if called with an access token
    */
-  async generateToken(): Promise<TokenResponse> {
-    const response = await this.request<TokenResponse>('/auth/token', {
+  async createAccessToken(options?: {
+    description?: string;
+    expiresIn?: number; // seconds, default 7 days (604800)
+  }): Promise<AccessTokenResponse> {
+    return this.request<AccessTokenResponse>('/auth/tokens', {
       method: 'POST',
+      body: JSON.stringify(options || {}),
     });
-
-    // Store token for future requests
-    this._token = response.data.token;
-
-    return response;
   }
 
   /**
-   * Check token status
+   * List all access tokens (requires license JWT)
+   *
+   * @throws {Error} 403 Forbidden if called with an access token
    */
-  async getTokenStatus(): Promise<TokenStatusResponse> {
-    return this.request<TokenStatusResponse>('/auth/status');
+  async listAccessTokens(): Promise<AccessTokenListResponse> {
+    return this.request<AccessTokenListResponse>('/auth/tokens');
   }
 
   /**
-   * Get authentication information
+   * Get details of a specific access token (requires license JWT)
+   *
+   * @param tokenId - The token ID
+   * @throws {Error} 403 Forbidden if called with an access token
+   */
+  async getAccessToken(tokenId: string): Promise<AccessTokenResponse> {
+    return this.request<AccessTokenResponse>(`/auth/tokens/${tokenId}`);
+  }
+
+  /**
+   * Revoke an access token (requires license JWT)
+   *
+   * @param tokenId - The token ID to revoke
+   * @throws {Error} 403 Forbidden if called with an access token
+   */
+  async revokeAccessToken(tokenId: string): Promise<void> {
+    return this.request<void>(`/auth/tokens/${tokenId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Generate a magic link for browser authentication (requires license JWT)
+   *
+   * Magic links are one-time URLs that automatically create an access token
+   * and set it as a cookie in the user's browser. This provides an easy way
+   * to authenticate users in browser-based applications.
+   *
+   * The generated link:
+   * - Expires after 5 minutes or first use (whichever comes first)
+   * - Automatically creates a new access token (7 day expiry)
+   * - Sets the access token as an HttpOnly cookie
+   * - Redirects to the specified URL
+   *
+   * @param options - Magic link configuration
+   * @throws {Error} 403 Forbidden if called with an access token
+   */
+  async createMagicLink(options?: {
+    redirectUrl?: string; // default: /play/
+  }): Promise<MagicLinkResponse> {
+    return this.request<MagicLinkResponse>('/auth/magic-link', {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
+    });
+  }
+
+  /**
+   * Check authentication status
+   * Does not require authentication
+   */
+  async getAuthStatus(): Promise<AuthStatusResponse> {
+    return this.request<AuthStatusResponse>('/auth/status');
+  }
+
+  /**
+   * Get authentication information and usage instructions
+   * Does not require authentication
    */
   async getAuthInfo(): Promise<AuthInfoResponse> {
     return this.request<AuthInfoResponse>('/auth/info');
   }
 
   /**
-   * Set token manually
+   * Set authentication token manually
+   * @param token - License JWT or access token
    */
   setToken(token: string): void {
     this._token = token;
   }
 
   /**
-   * Get current token
+   * Get current authentication token
    */
   getToken(): string | null {
     return this._token;
@@ -628,16 +716,22 @@ export class ComputeClient {
 
   /**
    * Create a new persistent terminal session with WebSocket integration
+   * @param shell - Shell to use (e.g., '/bin/bash', '/bin/sh')
+   * @param encoding - Encoding for terminal I/O: 'raw' (default) or 'base64' (binary-safe)
    * @returns Terminal instance with event handling
    */
-  async createTerminal(shell?: string): Promise<Terminal> {
+  async createTerminal(shell?: string, encoding?: 'raw' | 'base64'): Promise<Terminal> {
     // Ensure WebSocket is connected
     const ws = await this.ensureWebSocket();
 
     // Create terminal via REST API
+    const body: { shell?: string; encoding?: 'raw' | 'base64' } = {};
+    if (shell) body.shell = shell;
+    if (encoding) body.encoding = encoding;
+
     const response = await this.request<TerminalResponse>('/terminals', {
       method: 'POST',
-      body: JSON.stringify(shell ? { shell } : {}),
+      body: JSON.stringify(body),
     });
 
     // Wait for terminal:created event to ensure terminal is ready
@@ -662,7 +756,8 @@ export class ComputeClient {
       response.data.id,
       response.data.status,
       response.data.channel,
-      ws
+      ws,
+      response.data.encoding || 'raw'
     );
 
     // Set up terminal handlers
@@ -703,6 +798,11 @@ export class ComputeClient {
 
   /**
    * Create a new file watcher with WebSocket integration
+   * @param path - Path to watch
+   * @param options - Watcher options
+   * @param options.includeContent - Include file content in change events
+   * @param options.ignored - Patterns to ignore
+   * @param options.encoding - Encoding for file content: 'raw' (default) or 'base64' (binary-safe)
    * @returns FileWatcher instance with event handling
    */
   async createWatcher(
@@ -710,6 +810,7 @@ export class ComputeClient {
     options?: {
       includeContent?: boolean;
       ignored?: string[];
+      encoding?: 'raw' | 'base64';
     }
   ): Promise<FileWatcher> {
     // Ensure WebSocket is connected
@@ -729,7 +830,8 @@ export class ComputeClient {
       response.data.channel,
       response.data.includeContent,
       response.data.ignored,
-      ws
+      ws,
+      response.data.encoding || 'raw'
     );
 
     // Set up watcher handlers
@@ -1051,12 +1153,11 @@ export class ComputeClient {
  * ```typescript
  * import { createClient } from '@computesdk/client'
  *
+ * // Create client with access token
  * const client = createClient({
- *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com'
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   token: accessToken, // Access token from createAccessToken()
  * });
- *
- * // Generate token (first client wins)
- * await client.generateToken();
  *
  * // Execute commands
  * const result = await client.execute({ command: 'ls -la' });
