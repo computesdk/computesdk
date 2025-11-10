@@ -18,6 +18,7 @@ import { SignalService } from './signal-service';
 export { Terminal } from './terminal';
 export { FileWatcher, type FileChangeEvent } from './file-watcher';
 export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type SignalEvent } from './signal-service';
+export { encodeBinaryMessage, decodeBinaryMessage, isBinaryData, blobToArrayBuffer, MessageType } from './protocol';
 
 // ============================================================================
 // Type Definitions
@@ -46,6 +47,8 @@ export interface ComputeClientConfig {
   timeout?: number;
   /** WebSocket implementation (optional, uses global WebSocket if not provided) */
   WebSocket?: WebSocketConstructor;
+  /** WebSocket protocol: 'binary' (default, recommended) or 'json' (for debugging) */
+  protocol?: 'json' | 'binary';
 }
 
 /**
@@ -309,10 +312,18 @@ export interface ErrorResponse {
  *   expiresIn: 604800, // 7 days
  * });
  *
- * // Pattern 2: Delegated operations (session token works)
+ * // Pattern 2: Delegated operations (binary protocol by default)
  * const client = new ComputeClient({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
  *   token: sessionToken.data.token,
+ *   // protocol: 'binary' is the default (50-90% size reduction)
+ * });
+ *
+ * // Pattern 3: JSON protocol for debugging (if needed)
+ * const debugClient = new ComputeClient({
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   token: sessionToken.data.token,
+ *   protocol: 'json', // Use JSON for browser DevTools inspection
  * });
  *
  * // Execute a one-off command
@@ -385,6 +396,7 @@ export class ComputeClient {
       token: config.token || '',
       headers: config.headers || {},
       timeout: config.timeout || 30000,
+      protocol: config.protocol || 'binary',
     };
 
     // Use provided WebSocket or fall back to global
@@ -441,6 +453,7 @@ export class ComputeClient {
         WebSocket: this.WebSocketImpl,
         autoReconnect: true,
         debug: false,
+        protocol: this.config.protocol,
       });
       await this._ws.connect();
     }
@@ -592,7 +605,7 @@ export class ComputeClient {
   async createMagicLink(options?: {
     redirectUrl?: string; // default: /play/
   }): Promise<MagicLinkResponse> {
-    return this.request<MagicLinkResponse>('/auth/magic-link', {
+    return this.request<MagicLinkResponse>('/auth/magic-links', {
       method: 'POST',
       body: JSON.stringify(options || {}),
     });
@@ -1000,8 +1013,19 @@ export class ComputeClient {
   private getWebSocketUrl(): string {
     const wsProtocol = this.config.sandboxUrl.startsWith('https') ? 'wss' : 'ws';
     const url = this.config.sandboxUrl.replace(/^https?:/, `${wsProtocol}:`);
-    const token = this._token ? `?access_token=${this._token}` : '';
-    return `${url}/ws${token}`;
+
+    // Build query parameters
+    const params = new URLSearchParams();
+    if (this._token) {
+      params.set('access_token', this._token);
+    }
+    // Only add protocol param if explicitly set to json (binary is server default)
+    if (this.config.protocol === 'json') {
+      params.set('protocol', 'json');
+    }
+
+    const queryString = params.toString();
+    return `${url}/ws${queryString ? `?${queryString}` : ''}`;
   }
 
   // ============================================================================
