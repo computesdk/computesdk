@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/client",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes",
   "author": "Garrison",
   "license": "MIT",

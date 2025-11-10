@@ -1,5 +1,11 @@
 # @computesdk/modal
 
+## 1.3.4
+
+### Patch Changes
+
+- computesdk@1.7.4
+
 ## 1.3.3
 
 ### Patch Changes
