@@ -1,5 +1,11 @@
 # @computesdk/client
 
+## 0.2.4
+
+### Patch Changes
+
+- 356f7ab: adding support for magic links, binary protocol, and renaming tokens
+
 ## 0.2.3
 
 ### Patch Changes

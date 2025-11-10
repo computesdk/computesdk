@@ -1,5 +1,14 @@
 # @computesdk/example-nuxt
 
+## 0.1.15
+
+### Patch Changes
+
+- computesdk@1.7.4
+- @computesdk/daytona@1.4.4
+- @computesdk/e2b@1.5.4
+- @computesdk/vercel@1.4.4
+
 ## 0.1.14
 
 ### Patch Changes
