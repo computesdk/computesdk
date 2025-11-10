@@ -4,6 +4,13 @@
  * Handles real-time bidirectional communication with sandbox API
  */
 
+import {
+  encodeBinaryMessage,
+  decodeBinaryMessage,
+  isBinaryData,
+  blobToArrayBuffer,
+} from './protocol';
+
 // ============================================================================
 // WebSocket Message Types
 // ============================================================================
@@ -222,6 +229,8 @@ export interface WebSocketManagerConfig {
   maxReconnectAttempts?: number;
   /** Enable debug logging (default: false) */
   debug?: boolean;
+  /** WebSocket protocol: 'binary' (default, recommended) or 'json' (for debugging) */
+  protocol?: 'json' | 'binary';
 }
 
 // ============================================================================
@@ -293,6 +302,7 @@ export class WebSocketManager {
       reconnectDelay: config.reconnectDelay ?? 1000,
       maxReconnectAttempts: config.maxReconnectAttempts ?? 5,
       debug: config.debug ?? false,
+      protocol: config.protocol ?? 'binary',
     };
   }
 
@@ -326,10 +336,27 @@ export class WebSocketManager {
           resolve();
         };
 
-        this.ws.onmessage = (event) => {
+        this.ws.onmessage = async (event) => {
           try {
-            const message = JSON.parse(event.data) as IncomingMessage;
-            this.log('Received message:', message);
+            let message: IncomingMessage;
+
+            // Check if message is binary
+            if (this.config.protocol === 'binary' && isBinaryData(event.data)) {
+              // Handle binary message
+              let buffer: ArrayBuffer;
+              if (event.data instanceof Blob) {
+                buffer = await blobToArrayBuffer(event.data);
+              } else {
+                buffer = event.data;
+              }
+              message = decodeBinaryMessage(buffer) as IncomingMessage;
+              this.log('Received binary message:', message);
+            } else {
+              // Handle JSON message
+              message = JSON.parse(event.data) as IncomingMessage;
+              this.log('Received JSON message:', message);
+            }
+
             this.handleMessage(message);
           } catch (error) {
             this.log('Failed to parse message:', error);
@@ -446,8 +473,16 @@ export class WebSocketManager {
       throw new Error('WebSocket is not connected');
     }
 
-    this.ws!.send(JSON.stringify(message));
-    this.log('Sent message:', message);
+    if (this.config.protocol === 'binary') {
+      // Send as binary message
+      const buffer = encodeBinaryMessage(message);
+      this.ws!.send(buffer);
+      this.log('Sent binary message:', message);
+    } else {
+      // Send as JSON message
+      this.ws!.send(JSON.stringify(message));
+      this.log('Sent JSON message:', message);
+    }
   }
 
   /**

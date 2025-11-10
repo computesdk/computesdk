@@ -18,6 +18,7 @@ import { SignalService } from './signal-service';
 export { Terminal } from './terminal';
 export { FileWatcher, type FileChangeEvent } from './file-watcher';
 export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type SignalEvent } from './signal-service';
+export { encodeBinaryMessage, decodeBinaryMessage, isBinaryData, blobToArrayBuffer, MessageType } from './protocol';
 
 // ============================================================================
 // Type Definitions
@@ -38,7 +39,7 @@ export interface ComputeClientConfig {
   sandboxId?: string;
   /** Provider name (e.g., 'e2b', 'vercel') (required for Sandbox interface operations) */
   provider?: string;
-  /** Optional JWT token for authentication */
+  /** Access token or session token for authentication */
   token?: string;
   /** Optional headers to include with all requests */
   headers?: Record<string, string>;
@@ -46,6 +47,8 @@ export interface ComputeClientConfig {
   timeout?: number;
   /** WebSocket implementation (optional, uses global WebSocket if not provided) */
   WebSocket?: WebSocketConstructor;
+  /** WebSocket protocol: 'binary' (default, recommended) or 'json' (for debugging) */
+  protocol?: 'json' | 'binary';
 }
 
 /**
@@ -57,9 +60,9 @@ export interface HealthResponse {
 }
 
 /**
- * Access token response
+ * Session token response
  */
-export interface AccessTokenResponse {
+export interface SessionTokenResponse {
   message: string;
   data: {
     id: string;
@@ -72,9 +75,9 @@ export interface AccessTokenResponse {
 }
 
 /**
- * Access token list response
+ * Session token list response
  */
-export interface AccessTokenListResponse {
+export interface SessionTokenListResponse {
   message: string;
   data: {
     tokens: Array<{
@@ -106,7 +109,7 @@ export interface AuthStatusResponse {
   message: string;
   data: {
     authenticated: boolean;
-    token_type?: 'license_jwt' | 'access_token';
+    token_type?: 'access_token' | 'session_token';
     expires_at?: string;
   };
 }
@@ -120,10 +123,10 @@ export interface AuthInfoResponse {
     message: string;
     instructions: string;
     endpoints: {
-      create_access_token: string;
-      list_access_tokens: string;
-      get_access_token: string;
-      revoke_access_token: string;
+      create_session_token: string;
+      list_session_tokens: string;
+      get_session_token: string;
+      revoke_session_token: string;
       create_magic_link: string;
       auth_status: string;
       auth_info: string;
@@ -297,22 +300,30 @@ export interface ErrorResponse {
  * ```typescript
  * import { ComputeClient } from '@computesdk/client'
  *
- * // Pattern 1: Admin operations (requires license JWT)
+ * // Pattern 1: Admin operations (requires access token)
  * const adminClient = new ComputeClient({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
- *   token: licenseJWT, // From license server
+ *   token: accessToken, // From edge service
  * });
  *
- * // Create access token for regular operations
- * const accessToken = await adminClient.createAccessToken({
+ * // Create session token for delegated operations
+ * const sessionToken = await adminClient.createSessionToken({
  *   description: 'My Application',
  *   expiresIn: 604800, // 7 days
  * });
  *
- * // Pattern 2: Regular operations (access token works)
+ * // Pattern 2: Delegated operations (binary protocol by default)
  * const client = new ComputeClient({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
- *   token: accessToken.data.token,
+ *   token: sessionToken.data.token,
+ *   // protocol: 'binary' is the default (50-90% size reduction)
+ * });
+ *
+ * // Pattern 3: JSON protocol for debugging (if needed)
+ * const debugClient = new ComputeClient({
+ *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   token: sessionToken.data.token,
+ *   protocol: 'json', // Use JSON for browser DevTools inspection
  * });
  *
  * // Execute a one-off command
@@ -385,6 +396,7 @@ export class ComputeClient {
       token: config.token || '',
       headers: config.headers || {},
       timeout: config.timeout || 30000,
+      protocol: config.protocol || 'binary',
     };
 
     // Use provided WebSocket or fall back to global
@@ -441,6 +453,7 @@ export class ComputeClient {
         WebSocket: this.WebSocketImpl,
         autoReconnect: true,
         debug: false,
+        protocol: this.config.protocol,
       });
       await this._ws.connect();
     }
@@ -524,75 +537,75 @@ export class ComputeClient {
   // ============================================================================
 
   /**
-   * Create an access token (requires license JWT)
+   * Create a session token (requires access token)
    *
-   * Access tokens are delegated credentials that can authenticate API requests
-   * without exposing your license JWT. Only license JWTs can create access tokens.
+   * Session tokens are delegated credentials that can authenticate API requests
+   * without exposing your access token. Only access tokens can create session tokens.
    *
    * @param options - Token configuration
-   * @throws {Error} 403 Forbidden if called with an access token
+   * @throws {Error} 403 Forbidden if called with a session token
    */
-  async createAccessToken(options?: {
+  async createSessionToken(options?: {
     description?: string;
     expiresIn?: number; // seconds, default 7 days (604800)
-  }): Promise<AccessTokenResponse> {
-    return this.request<AccessTokenResponse>('/auth/tokens', {
+  }): Promise<SessionTokenResponse> {
+    return this.request<SessionTokenResponse>('/auth/session_tokens', {
       method: 'POST',
       body: JSON.stringify(options || {}),
     });
   }
 
   /**
-   * List all access tokens (requires license JWT)
+   * List all session tokens (requires access token)
    *
-   * @throws {Error} 403 Forbidden if called with an access token
+   * @throws {Error} 403 Forbidden if called with a session token
    */
-  async listAccessTokens(): Promise<AccessTokenListResponse> {
-    return this.request<AccessTokenListResponse>('/auth/tokens');
+  async listSessionTokens(): Promise<SessionTokenListResponse> {
+    return this.request<SessionTokenListResponse>('/auth/session_tokens');
   }
 
   /**
-   * Get details of a specific access token (requires license JWT)
+   * Get details of a specific session token (requires access token)
    *
    * @param tokenId - The token ID
-   * @throws {Error} 403 Forbidden if called with an access token
+   * @throws {Error} 403 Forbidden if called with a session token
    */
-  async getAccessToken(tokenId: string): Promise<AccessTokenResponse> {
-    return this.request<AccessTokenResponse>(`/auth/tokens/${tokenId}`);
+  async getSessionToken(tokenId: string): Promise<SessionTokenResponse> {
+    return this.request<SessionTokenResponse>(`/auth/session_tokens/${tokenId}`);
   }
 
   /**
-   * Revoke an access token (requires license JWT)
+   * Revoke a session token (requires access token)
    *
    * @param tokenId - The token ID to revoke
-   * @throws {Error} 403 Forbidden if called with an access token
+   * @throws {Error} 403 Forbidden if called with a session token
    */
-  async revokeAccessToken(tokenId: string): Promise<void> {
-    return this.request<void>(`/auth/tokens/${tokenId}`, {
+  async revokeSessionToken(tokenId: string): Promise<void> {
+    return this.request<void>(`/auth/session_tokens/${tokenId}`, {
       method: 'DELETE',
     });
   }
 
   /**
-   * Generate a magic link for browser authentication (requires license JWT)
+   * Generate a magic link for browser authentication (requires access token)
    *
-   * Magic links are one-time URLs that automatically create an access token
+   * Magic links are one-time URLs that automatically create a session token
    * and set it as a cookie in the user's browser. This provides an easy way
    * to authenticate users in browser-based applications.
    *
    * The generated link:
    * - Expires after 5 minutes or first use (whichever comes first)
-   * - Automatically creates a new access token (7 day expiry)
-   * - Sets the access token as an HttpOnly cookie
+   * - Automatically creates a new session token (7 day expiry)
+   * - Sets the session token as an HttpOnly cookie
    * - Redirects to the specified URL
    *
    * @param options - Magic link configuration
-   * @throws {Error} 403 Forbidden if called with an access token
+   * @throws {Error} 403 Forbidden if called with a session token
    */
   async createMagicLink(options?: {
     redirectUrl?: string; // default: /play/
   }): Promise<MagicLinkResponse> {
-    return this.request<MagicLinkResponse>('/auth/magic-link', {
+    return this.request<MagicLinkResponse>('/auth/magic-links', {
       method: 'POST',
       body: JSON.stringify(options || {}),
     });
@@ -616,7 +629,7 @@ export class ComputeClient {
 
   /**
    * Set authentication token manually
-   * @param token - License JWT or access token
+   * @param token - Access token or session token
    */
   setToken(token: string): void {
     this._token = token;
@@ -1000,8 +1013,19 @@ export class ComputeClient {
   private getWebSocketUrl(): string {
     const wsProtocol = this.config.sandboxUrl.startsWith('https') ? 'wss' : 'ws';
     const url = this.config.sandboxUrl.replace(/^https?:/, `${wsProtocol}:`);
-    const token = this._token ? `?token=${this._token}` : '';
-    return `${url}/ws${token}`;
+
+    // Build query parameters
+    const params = new URLSearchParams();
+    if (this._token) {
+      params.set('access_token', this._token);
+    }
+    // Only add protocol param if explicitly set to json (binary is server default)
+    if (this.config.protocol === 'json') {
+      params.set('protocol', 'json');
+    }
+
+    const queryString = params.toString();
+    return `${url}/ws${queryString ? `?${queryString}` : ''}`;
   }
 
   // ============================================================================
@@ -1153,10 +1177,10 @@ export class ComputeClient {
  * ```typescript
  * import { createClient } from '@computesdk/client'
  *
- * // Create client with access token
+ * // Create client with access token or session token
  * const client = createClient({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
- *   token: accessToken, // Access token from createAccessToken()
+ *   token: accessToken, // Access token from edge service or session token from createSessionToken()
  * });
  *
  * // Execute commands
