@@ -60,18 +60,29 @@ export interface HealthResponse {
 }
 
 /**
+ * Server info response
+ */
+export interface InfoResponse {
+  message: string;
+  data: {
+    auth_enabled: boolean;
+    main_subdomain: string;
+    sandbox_count: number;
+    sandbox_url: string;
+    version: string;
+  };
+}
+
+/**
  * Session token response
  */
 export interface SessionTokenResponse {
-  message: string;
-  data: {
-    id: string;
-    token: string;
-    description?: string;
-    created_at: string;
-    expires_at: string;
-    expires_in: number;
-  };
+  id: string;
+  token: string;
+  description?: string;
+  createdAt: string;
+  expiresAt: string;
+  expiresIn: number;
 }
 
 /**
@@ -1135,26 +1146,11 @@ export class ComputeClient {
   }
 
   /**
-   * Get sandbox information (Sandbox interface method)
+   * Get server information
+   * Returns details about the server including auth status, main subdomain, sandbox count, and version
    */
-  async getInfo(): Promise<{
-    id: string;
-    provider: string;
-    runtime: 'node' | 'python';
-    status: 'running' | 'stopped' | 'error';
-    createdAt: Date;
-    timeout: number;
-    metadata?: Record<string, any>;
-  }> {
-    // Return basic info - the client doesn't track all these details
-    return {
-      id: this.sandboxId || '',
-      provider: this.provider || '',
-      runtime: 'node', // Default runtime
-      status: 'running',
-      createdAt: new Date(),
-      timeout: this.config.timeout
-    };
+  async getInfo(): Promise<InfoResponse> {
+    return this.request<InfoResponse>('/info');
   }
 
   /**
