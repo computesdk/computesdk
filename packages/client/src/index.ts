@@ -33,13 +33,13 @@ export type WebSocketConstructor = new (url: string) => WebSocket;
  * Configuration options for the ComputeSDK client
  */
 export interface ComputeClientConfig {
-  /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.com) */
-  sandboxUrl: string;
+  /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.com). Optional in browser - can be auto-detected from URL query param or localStorage */
+  sandboxUrl?: string;
   /** Sandbox ID (required for Sandbox interface operations) */
   sandboxId?: string;
   /** Provider name (e.g., 'e2b', 'vercel') (required for Sandbox interface operations) */
   provider?: string;
-  /** Access token or session token for authentication */
+  /** Access token or session token for authentication. Optional in browser - can be auto-detected from URL query param or localStorage */
   token?: string;
   /** Optional headers to include with all requests */
   headers?: Record<string, string>;
@@ -60,18 +60,29 @@ export interface HealthResponse {
 }
 
 /**
+ * Server info response
+ */
+export interface InfoResponse {
+  message: string;
+  data: {
+    auth_enabled: boolean;
+    main_subdomain: string;
+    sandbox_count: number;
+    sandbox_url: string;
+    version: string;
+  };
+}
+
+/**
  * Session token response
  */
 export interface SessionTokenResponse {
-  message: string;
-  data: {
-    id: string;
-    token: string;
-    description?: string;
-    created_at: string;
-    expires_at: string;
-    expires_in: number;
-  };
+  id: string;
+  token: string;
+  description?: string;
+  createdAt: string;
+  expiresAt: string;
+  expiresIn: number;
 }
 
 /**
@@ -385,12 +396,49 @@ export class ComputeClient {
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
 
-  constructor(config: ComputeClientConfig) {
+  constructor(config: ComputeClientConfig = {}) {
     this.sandboxId = config.sandboxId;
     this.provider = config.provider;
 
+    // Auto-detect sandbox_url and session_token from URL/localStorage in browser environments
+    let sandboxUrlResolved = config.sandboxUrl;
+    let tokenFromUrl: string | null = null;
+    let sandboxUrlFromUrl: string | null = null;
+
+    if (typeof window !== 'undefined' && window.location && typeof localStorage !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+
+      // Check URL parameters
+      tokenFromUrl = params.get('session_token');
+      sandboxUrlFromUrl = params.get('sandbox_url');
+
+      // Clean up URL if any params were found
+      let urlChanged = false;
+      if (tokenFromUrl) {
+        params.delete('session_token');
+        localStorage.setItem('session_token', tokenFromUrl);
+        urlChanged = true;
+      }
+      if (sandboxUrlFromUrl) {
+        params.delete('sandbox_url');
+        localStorage.setItem('sandbox_url', sandboxUrlFromUrl);
+        urlChanged = true;
+      }
+
+      if (urlChanged) {
+        const search = params.toString() ? `?${params.toString()}` : '';
+        const newUrl = `${window.location.pathname}${search}${window.location.hash}`;
+        window.history.replaceState({}, '', newUrl);
+      }
+
+      // Resolve sandboxUrl: config > URL > localStorage
+      if (!config.sandboxUrl) {
+        sandboxUrlResolved = sandboxUrlFromUrl || localStorage.getItem('sandbox_url') || '';
+      }
+    }
+
     this.config = {
-      sandboxUrl: config.sandboxUrl.replace(/\/$/, ''), // Remove trailing slash
+      sandboxUrl: (sandboxUrlResolved || '').replace(/\/$/, ''), // Remove trailing slash
       sandboxId: config.sandboxId || '',
       provider: config.provider || '',
       token: config.token || '',
@@ -410,8 +458,13 @@ export class ComputeClient {
       );
     }
 
+    // Priority for token: config.token > URL > localStorage
     if (config.token) {
       this._token = config.token;
+    } else if (tokenFromUrl) {
+      this._token = tokenFromUrl;
+    } else if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      this._token = localStorage.getItem('session_token');
     }
 
     // Initialize filesystem interface
@@ -640,6 +693,13 @@ export class ComputeClient {
    */
   getToken(): string | null {
     return this._token;
+  }
+
+  /**
+   * Get current sandbox URL
+   */
+  getSandboxUrl(): string {
+    return this.config.sandboxUrl;
   }
 
   // ============================================================================
@@ -1083,6 +1143,14 @@ export class ComputeClient {
       sandboxId: this.sandboxId || '',
       provider: this.provider || ''
     };
+  }
+
+  /**
+   * Get server information
+   * Returns details about the server including auth status, main subdomain, sandbox count, and version
+   */
+  async getServerInfo(): Promise<InfoResponse> {
+    return this.request<InfoResponse>('/info');
   }
 
   /**
