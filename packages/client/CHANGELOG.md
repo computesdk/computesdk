@@ -1,5 +1,11 @@
 # @computesdk/client
 
+## 0.2.5
+
+### Patch Changes
+
+- 97e01e2: Adding a getInfo end point magica for tokens
+
 ## 0.2.4
 
 ### Patch Changes
