@@ -1,5 +1,11 @@
 # @computesdk/vercel
 
+## 1.4.6
+
+### Patch Changes
+
+- computesdk@1.7.6
+
 ## 1.4.5
 
 ### Patch Changes

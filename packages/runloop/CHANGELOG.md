@@ -1,5 +1,11 @@
 # @computesdk/runloop
 
+## 1.1.6
+
+### Patch Changes
+
+- computesdk@1.7.6
+
 ## 1.1.5
 
 ### Patch Changes
