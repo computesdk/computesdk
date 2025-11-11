@@ -1149,8 +1149,31 @@ export class ComputeClient {
    * Get server information
    * Returns details about the server including auth status, main subdomain, sandbox count, and version
    */
-  async getInfo(): Promise<InfoResponse> {
+  async getServerInfo(): Promise<InfoResponse> {
     return this.request<InfoResponse>('/info');
+  }
+
+  /**
+   * Get sandbox information (Sandbox interface method)
+   */
+  async getInfo(): Promise<{
+    id: string;
+    provider: string;
+    runtime: 'node' | 'python';
+    status: 'running' | 'stopped' | 'error';
+    createdAt: Date;
+    timeout: number;
+    metadata?: Record<string, any>;
+  }> {
+    // Return basic info - the client doesn't track all these details
+    return {
+      id: this.sandboxId || '',
+      provider: this.provider || '',
+      runtime: 'node', // Default runtime
+      status: 'running',
+      createdAt: new Date(),
+      timeout: this.config.timeout
+    };
   }
 
   /**
