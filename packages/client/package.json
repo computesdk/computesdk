@@ -1,17 +1,18 @@
 {
   "name": "@computesdk/client",
   "version": "0.2.5",
+  "type": "module",
   "description": "Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes",
   "author": "Garrison",
   "license": "MIT",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [
