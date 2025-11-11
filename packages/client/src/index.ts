@@ -559,6 +559,17 @@ export class ComputeClient {
 
       if (!response.ok) {
         const error = (data as ErrorResponse).error || response.statusText;
+
+        // Provide helpful error message for 403 on auth endpoints
+        if (response.status === 403 && endpoint.startsWith('/auth/')) {
+          if (endpoint.includes('/session_tokens') || endpoint.includes('/magic-links')) {
+            throw new Error(
+              `Access token required. This operation requires an access token, not a session token.\n` +
+              `API request failed (${response.status}): ${error}`
+            );
+          }
+        }
+
         throw new Error(`API request failed (${response.status}): ${error}`);
       }
 
