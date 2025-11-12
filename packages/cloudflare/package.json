@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cloudflare",
-  "version": "1.1.6",
+  "version": "1.2.0",
   "description": "Cloudflare provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",

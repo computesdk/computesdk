@@ -1,5 +1,16 @@
 # computesdk
 
+## 1.8.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - @computesdk/client@0.3.0
+
 ## 1.7.6
 
 ### Patch Changes

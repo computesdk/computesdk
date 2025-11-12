@@ -1,5 +1,16 @@
 # @computesdk/daytona
 
+## 1.5.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - computesdk@1.8.0
+
 ## 1.4.6
 
 ### Patch Changes
