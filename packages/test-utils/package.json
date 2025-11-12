@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/test-utils",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Test utilities for ComputeSDK providers",
   "type": "module",
   "main": "./dist/index.js",

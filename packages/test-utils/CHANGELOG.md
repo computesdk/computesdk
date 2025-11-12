@@ -1,5 +1,11 @@
 # @computesdk/test-utils
 
+## 1.4.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
 ## 1.3.1
 
 ### Patch Changes

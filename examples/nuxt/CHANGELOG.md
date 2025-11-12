@@ -1,5 +1,20 @@
 # @computesdk/example-nuxt
 
+## 0.2.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - computesdk@1.8.0
+  - @computesdk/daytona@1.5.0
+  - @computesdk/e2b@1.6.0
+  - @computesdk/ui@0.7.0
+  - @computesdk/vercel@1.5.0
+
 ## 0.1.17
 
 ### Patch Changes

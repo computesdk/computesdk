@@ -1,5 +1,24 @@
 # @computesdk/example-basic
 
+## 0.4.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - @computesdk/blaxel@1.2.0
+  - @computesdk/codesandbox@1.4.0
+  - computesdk@1.8.0
+  - @computesdk/daytona@1.5.0
+  - @computesdk/docker@1.1.0
+  - @computesdk/e2b@1.6.0
+  - @computesdk/modal@1.4.0
+  - @computesdk/runloop@1.2.0
+  - @computesdk/vercel@1.5.0
+
 ## 0.3.6
 
 ### Patch Changes
