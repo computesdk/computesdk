@@ -1,5 +1,12 @@
 # computesdk
 
+## 1.8.1
+
+### Patch Changes
+
+- Updated dependencies [3ebbbc2]
+  - @computesdk/client@0.3.1
+
 ## 1.8.0
 
 ### Minor Changes
