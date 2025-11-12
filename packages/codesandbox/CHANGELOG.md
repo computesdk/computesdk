@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+
+### Patch Changes
+
+- computesdk@1.8.1
+
 ## 1.4.0
 
 ### Minor Changes

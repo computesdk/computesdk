@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.2.1
+
+### Patch Changes
+
+- computesdk@1.8.1
+
 ## 1.2.0
 
 ### Minor Changes
