@@ -365,4 +365,136 @@ describe('Binary Protocol', () => {
       expect(MessageType.Connected).toBe(0x05);
     });
   });
+
+  describe('key-value encoding', () => {
+    it('should encode and decode boolean values', () => {
+      const message = {
+        type: 'terminal:input',
+        data: {
+          enabled: true,
+          disabled: false,
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data.enabled).toBe(true);
+      expect(decoded.data.disabled).toBe(false);
+    });
+
+    it('should encode and decode number values', () => {
+      const message = {
+        type: 'terminal:resize',
+        data: {
+          cols: 80,
+          rows: 24,
+          pid: 12345,
+          temperature: 98.6,
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data.cols).toBe(80);
+      expect(decoded.data.rows).toBe(24);
+      expect(decoded.data.pid).toBe(12345);
+      expect(decoded.data.temperature).toBe(98.6);
+    });
+
+    it('should encode and decode mixed types', () => {
+      const message = {
+        type: 'terminal:input',
+        data: {
+          terminal_id: 'term_123',
+          cols: 120,
+          rows: 40,
+          active: true,
+          encoding: 'utf-8',
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data.terminal_id).toBe('term_123');
+      expect(decoded.data.cols).toBe(120);
+      expect(decoded.data.rows).toBe(40);
+      expect(decoded.data.active).toBe(true);
+      expect(decoded.data.encoding).toBe('utf-8');
+    });
+
+    it('should encode and decode Uint8Array values', () => {
+      const binaryData = new Uint8Array([0x01, 0x02, 0x03, 0xff]);
+      const message = {
+        type: 'file:changed',
+        data: {
+          path: '/test/file.bin',
+          content: binaryData,
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data.path).toBe('/test/file.bin');
+      expect(decoded.data.content).toBeInstanceOf(Uint8Array);
+      expect(Array.from(decoded.data.content)).toEqual([0x01, 0x02, 0x03, 0xff]);
+    });
+
+    it('should handle zero and negative numbers', () => {
+      const message = {
+        type: 'terminal:input',
+        data: {
+          zero: 0,
+          negative: -42,
+          decimal: -3.14159,
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data.zero).toBe(0);
+      expect(decoded.data.negative).toBe(-42);
+      expect(decoded.data.decimal).toBeCloseTo(-3.14159);
+    });
+
+    it('should handle empty strings', () => {
+      const message = {
+        type: 'terminal:input',
+        data: {
+          empty: '',
+          text: 'not empty',
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data.empty).toBe('');
+      expect(decoded.data.text).toBe('not empty');
+    });
+
+    it('should handle special number values', () => {
+      const message = {
+        type: 'terminal:input',
+        data: {
+          infinity: Infinity,
+          negInfinity: -Infinity,
+          maxSafe: Number.MAX_SAFE_INTEGER,
+          minSafe: Number.MIN_SAFE_INTEGER,
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data.infinity).toBe(Infinity);
+      expect(decoded.data.negInfinity).toBe(-Infinity);
+      expect(decoded.data.maxSafe).toBe(Number.MAX_SAFE_INTEGER);
+      expect(decoded.data.minSafe).toBe(Number.MIN_SAFE_INTEGER);
+    });
+  });
 });

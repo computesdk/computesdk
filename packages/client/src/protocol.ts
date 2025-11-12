@@ -11,7 +11,16 @@
  * [2 bytes: msg type length (uint16, big-endian)]
  * [N bytes: msg type string (UTF-8)]
  * [4 bytes: data length (uint32, big-endian)]
- * [N bytes: data (JSON)]
+ * [N bytes: data (key-value encoded for complex objects, raw bytes for binary data)]
+ *
+ * Key-Value Encoding Format:
+ * [2 bytes: num_fields (uint16, big-endian)]
+ * For each field:
+ *   [2 bytes: key_length (uint16, big-endian)]
+ *   [N bytes: key string (UTF-8)]
+ *   [1 byte: value_type (0x01=string, 0x02=number, 0x03=boolean, 0x04=bytes)]
+ *   [4 bytes: value_length (uint32, big-endian)]
+ *   [N bytes: value data]
  */
 
 // ============================================================================
@@ -26,6 +35,16 @@ export enum MessageType {
   Connected = 0x05,
 }
 
+/**
+ * Value types for binary key-value encoding
+ */
+enum ValueType {
+  String = 0x01,
+  Number = 0x02,
+  Boolean = 0x03,
+  Bytes = 0x04,
+}
+
 // ============================================================================
 // Binary Message Structure
 // ============================================================================
@@ -35,6 +54,196 @@ export interface BinaryMessage {
   channel: string;
   msgType: string;
   data: any;
+}
+
+// ============================================================================
+// Key-Value Encoding Functions
+// ============================================================================
+
+// Reusable encoder/decoder instances for better performance
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+/**
+ * Get the size in bytes of a value
+ */
+function getValueSize(value: any): number {
+  if (typeof value === 'string') {
+    return textEncoder.encode(value).length;
+  } else if (typeof value === 'number') {
+    return 8; // float64
+  } else if (typeof value === 'boolean') {
+    return 1;
+  } else if (value instanceof Uint8Array) {
+    return value.length;
+  }
+  return 0;
+}
+
+/**
+ * Encode a key-value object to binary format
+ * Format:
+ * [2 bytes: num_fields (uint16, big-endian)]
+ * For each field:
+ *   [2 bytes: key_length (uint16, big-endian)]
+ *   [N bytes: key string (UTF-8)]
+ *   [1 byte: value_type]
+ *   [4 bytes: value_length (uint32, big-endian)]
+ *   [N bytes: value data]
+ */
+function encodeKeyValue(data: Record<string, any>): Uint8Array {
+
+  // Calculate total size
+  let totalSize = 2; // num_fields
+  const fields = Object.entries(data);
+
+  for (const [key, value] of fields) {
+    const keyBytes = textEncoder.encode(key);
+    totalSize += 2; // key_length
+    totalSize += keyBytes.length; // key
+    totalSize += 1; // value_type
+    totalSize += 4; // value_length
+    totalSize += getValueSize(value); // value
+  }
+
+  const buffer = new Uint8Array(totalSize);
+  const view = new DataView(buffer.buffer);
+  let offset = 0;
+
+  // Write number of fields
+  view.setUint16(offset, fields.length, false); // big-endian
+  offset += 2;
+
+  // Write each field
+  for (const [key, value] of fields) {
+    // Write key
+    const keyBytes = textEncoder.encode(key);
+    view.setUint16(offset, keyBytes.length, false);
+    offset += 2;
+    buffer.set(keyBytes, offset);
+    offset += keyBytes.length;
+
+    // Write value type and data
+    if (typeof value === 'string') {
+      buffer[offset] = ValueType.String;
+      offset++;
+      const valueBytes = textEncoder.encode(value);
+      view.setUint32(offset, valueBytes.length, false);
+      offset += 4;
+      buffer.set(valueBytes, offset);
+      offset += valueBytes.length;
+    } else if (typeof value === 'number') {
+      buffer[offset] = ValueType.Number;
+      offset++;
+      view.setUint32(offset, 8, false); // float64 is 8 bytes
+      offset += 4;
+      view.setFloat64(offset, value, false); // big-endian
+      offset += 8;
+    } else if (typeof value === 'boolean') {
+      buffer[offset] = ValueType.Boolean;
+      offset++;
+      view.setUint32(offset, 1, false);
+      offset += 4;
+      buffer[offset] = value ? 0x01 : 0x00;
+      offset++;
+    } else if (value instanceof Uint8Array) {
+      buffer[offset] = ValueType.Bytes;
+      offset++;
+      view.setUint32(offset, value.length, false);
+      offset += 4;
+      buffer.set(value, offset);
+      offset += value.length;
+    } else {
+      throw new Error(`Unsupported value type for key ${key}: ${typeof value}`);
+    }
+  }
+
+  return buffer;
+}
+
+/**
+ * Decode binary key-value format to object
+ */
+function decodeKeyValue(data: Uint8Array): Record<string, any> {
+  if (data.length < 2) {
+    throw new Error('Data too short for key-value encoding');
+  }
+
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const result: Record<string, any> = {};
+  let offset = 0;
+
+  // Read number of fields
+  const numFields = view.getUint16(offset, false); // big-endian
+  offset += 2;
+
+  // Read each field
+  for (let i = 0; i < numFields; i++) {
+    // Read key
+    if (offset + 2 > data.length) {
+      throw new Error(`Invalid key length at field ${i}`);
+    }
+    const keyLen = view.getUint16(offset, false);
+    offset += 2;
+
+    if (offset + keyLen > data.length) {
+      throw new Error(`Key data truncated at field ${i}`);
+    }
+    const key = textDecoder.decode(data.slice(offset, offset + keyLen));
+    offset += keyLen;
+
+    // Read value type
+    if (offset + 1 > data.length) {
+      throw new Error(`Invalid value type at field ${i}`);
+    }
+    const valueType = data[offset];
+    offset++;
+
+    // Read value length
+    if (offset + 4 > data.length) {
+      throw new Error(`Invalid value length at field ${i}`);
+    }
+    const valueLen = view.getUint32(offset, false);
+    offset += 4;
+
+    // Read value data
+    if (offset + valueLen > data.length) {
+      throw new Error(`Value data truncated at field ${i}`);
+    }
+    const valueData = data.slice(offset, offset + valueLen);
+    offset += valueLen;
+
+    // Decode value based on type
+    switch (valueType) {
+      case ValueType.String:
+        result[key] = textDecoder.decode(valueData);
+        break;
+
+      case ValueType.Number:
+        if (valueData.length !== 8) {
+          throw new Error(`Invalid number length for field ${key}`);
+        }
+        const valueView = new DataView(valueData.buffer, valueData.byteOffset);
+        result[key] = valueView.getFloat64(0, false); // big-endian
+        break;
+
+      case ValueType.Boolean:
+        if (valueData.length !== 1) {
+          throw new Error(`Invalid boolean length for field ${key}`);
+        }
+        result[key] = valueData[0] !== 0x00;
+        break;
+
+      case ValueType.Bytes:
+        result[key] = valueData;
+        break;
+
+      default:
+        throw new Error(`Unknown value type 0x${valueType.toString(16)} for field ${key}`);
+    }
+  }
+
+  return result;
 }
 
 // ============================================================================
@@ -74,8 +283,21 @@ export function encodeBinaryMessage(message: any): ArrayBuffer {
   // Convert strings to UTF-8 bytes
   const channelBytes = encodeUTF8(channel);
   const msgTypeBytes = encodeUTF8(msgType);
-  const dataJSON = JSON.stringify(data);
-  const dataBytes = encodeUTF8(dataJSON);
+
+  // Encode data field (if present)
+  let dataBytes: Uint8Array;
+  if (data === undefined || data === null) {
+    dataBytes = new Uint8Array(0);
+  } else if (typeof data === 'string') {
+    dataBytes = encodeUTF8(data);
+  } else if (data instanceof Uint8Array) {
+    dataBytes = data;
+  } else if (typeof data === 'object') {
+    // Complex object - use key-value encoding
+    dataBytes = encodeKeyValue(data);
+  } else {
+    throw new Error(`Unsupported data type: ${typeof data}`);
+  }
 
   // Calculate total size
   const totalSize = 1 + 2 + channelBytes.length + 2 + msgTypeBytes.length + 4 + dataBytes.length;
@@ -158,14 +380,27 @@ export function decodeBinaryMessage(buffer: ArrayBuffer | Uint8Array): any {
   const dataLength = view.getUint32(offset, false);
   offset += 4;
 
-  // Read data bytes and parse JSON
+  // Read data bytes
   const dataBytes = uint8View.slice(offset, offset + dataLength);
-  const dataJSON = decodeUTF8(dataBytes);
+
+  // Try to decode as key-value for message types that expect structured data
+  const shouldTryKeyValue = ['terminal:input', 'terminal:resize', 'file:changed', 'terminal:output', 'test'].includes(msgType);
+
   let data: any;
-  try {
-    data = JSON.parse(dataJSON);
-  } catch (error) {
+  if (dataBytes.length === 0) {
+    // Empty data
     data = {};
+  } else if (shouldTryKeyValue) {
+    try {
+      // Try to decode as key-value
+      data = decodeKeyValue(dataBytes);
+    } catch {
+      // If key-value decode fails, fall back to raw bytes
+      data = dataBytes;
+    }
+  } else {
+    // For other message types, keep as raw bytes
+    data = dataBytes;
   }
 
   // Construct message object based on message type

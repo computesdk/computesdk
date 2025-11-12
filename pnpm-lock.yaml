@@ -342,9 +342,6 @@ importers:
 
   packages/client:
     devDependencies:
-      '@computesdk/test-utils':
-        specifier: workspace:*
-        version: link:../test-utils
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
