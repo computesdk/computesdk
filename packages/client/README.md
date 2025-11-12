@@ -43,7 +43,7 @@ const client = new ComputeClient();
 
 // Or provide configuration explicitly
 const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: 'your-session-token'
 });
 
@@ -65,7 +65,7 @@ console.log(content);
 import { ComputeClient } from '@computesdk/client';
 
 const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: 'your-session-token'
   // WebSocket is automatically available in Node 21+
 });
@@ -81,7 +81,7 @@ import { ComputeClient } from '@computesdk/client';
 import WebSocket from 'ws';
 
 const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: 'your-session-token',
   WebSocket // Required for Node.js < 21
 });
@@ -101,7 +101,7 @@ Access tokens have full administrative permissions and are the **only tokens tha
 ```typescript
 // Initialize client with access token
 const adminClient = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: accessToken // REQUIRED: Must be an access token (not a session token)
 });
 
@@ -125,7 +125,7 @@ Session tokens are delegated credentials with limited permissions. They cannot c
 
 ```typescript
 const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: sessionToken.token
 });
 
@@ -228,7 +228,7 @@ Create interactive terminal sessions with real-time I/O:
 // Node.js < 21: import WebSocket from 'ws';
 
 const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: sessionToken,
   // WebSocket // Only needed for Node.js < 21
 });
@@ -241,9 +241,9 @@ terminal.on('output', (data) => {
   console.log('Terminal output:', data);
 });
 
-// Listen for exit
-terminal.on('exit', (exitCode) => {
-  console.log('Process exited with code:', exitCode);
+// Listen for terminal destruction
+terminal.on('destroyed', () => {
+  console.log('Terminal destroyed');
 });
 
 // Write to terminal
@@ -274,11 +274,6 @@ watcher.on('change', (event) => {
   if (event.content) {
     console.log('New content:', event.content);
   }
-});
-
-// Listen for errors
-watcher.on('error', (error) => {
-  console.error('Watcher error:', error);
 });
 
 // Stop watching
@@ -321,7 +316,7 @@ The binary protocol provides 50-90% size reduction compared to JSON:
 
 ```typescript
 const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: sessionToken,
   protocol: 'binary' // Default - explicit for clarity
 });
@@ -333,7 +328,7 @@ Use JSON protocol for easier debugging with browser DevTools:
 
 ```typescript
 const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: sessionToken,
   protocol: 'json' // Human-readable in DevTools
 });
@@ -416,7 +411,7 @@ interface ComputeClientConfig {
   // Request timeout in milliseconds (default: 30000)
   timeout?: number;
 
-  // WebSocket implementation (required for Node.js)
+  // WebSocket implementation (required for Node.js < 21)
   WebSocket?: WebSocketConstructor;
 
   // WebSocket protocol: 'binary' (default) or 'json'
@@ -438,10 +433,7 @@ terminal.on('error', (error) => {
   console.error('Terminal error:', error);
 });
 
-// Handle watcher errors
-watcher.on('error', (error) => {
-  console.error('Watcher error:', error);
-});
+// Watchers only emit 'change' and 'destroyed' events
 
 // Handle signal errors
 signals.on('error', (event) => {
@@ -476,14 +468,14 @@ import type {
   Terminal,
   FileWatcher,
   SignalService,
-  ExecutionResult,
   FileInfo,
   TerminalResponse,
   WatcherResponse,
   SignalServiceResponse,
   FileChangeEvent,
   PortSignalEvent,
-  ErrorSignalEvent
+  ErrorSignalEvent,
+  SignalEvent
 } from '@computesdk/client';
 ```
 
@@ -497,7 +489,7 @@ import { ComputeClient } from '@computesdk/client';
 async function runCodeEditor() {
   // Initialize client
   const client = new ComputeClient({
-    sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+    sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
     token: sessionToken
   });
 
