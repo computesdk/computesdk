@@ -30,7 +30,7 @@ info:
 
     Include tokens in requests via:
     - **Recommended**: `Authorization: Bearer <token>` header
-    - **Alternative**: `?access_token=<token>` query parameter (for WebSocket connections)
+    - **Alternative**: `?token=<token>` query parameter (for WebSocket connections)
 
     ## WebSocket Communication
 
@@ -407,14 +407,14 @@ paths:
         Establishes a WebSocket connection for real-time bidirectional communication.
 
         ## Authentication
-        Include your token as a query parameter: `/ws?access_token=<token>`
+        Include your token as a query parameter: `/ws?token=<token>`
 
         Accepts both access tokens and session tokens.
 
         ## Protocol
-        Choose between JSON (default) or binary protocol:
-        - `/ws?protocol=json` - JSON protocol (default, human-readable, good for debugging)
-        - `/ws?protocol=binary` - Binary protocol (high performance, 50-90% size reduction)
+        Choose between JSON or binary protocol:
+        - `/ws?protocol=json` - JSON protocol (human-readable, good for debugging)
+        - `/ws?protocol=binary` - Binary protocol (default, high performance, 50-90% size reduction)
 
         The binary protocol is recommended for production use, especially for:
         - Terminal applications with heavy I/O

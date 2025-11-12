@@ -48,7 +48,6 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
-    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.10",
     "@vitest/coverage-v8": "^1.0.0",

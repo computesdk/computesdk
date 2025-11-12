@@ -1088,12 +1088,10 @@ export class ComputeClient {
     // Build query parameters
     const params = new URLSearchParams();
     if (this._token) {
-      params.set('access_token', this._token);
+      params.set('token', this._token);
     }
-    // Only add protocol param if explicitly set to json (binary is server default)
-    if (this.config.protocol === 'json') {
-      params.set('protocol', 'json');
-    }
+    // Always send protocol parameter
+    params.set('protocol', this.config.protocol || 'binary');
 
     const queryString = params.toString();
     return `${url}/ws${queryString ? `?${queryString}` : ''}`;
