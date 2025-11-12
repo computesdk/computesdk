@@ -58,20 +58,14 @@ export VERCEL_PROJECT_ID=your_project_id_here
 
 ```typescript
 interface VercelConfig {
-  /** Runtime environment */
-  runtime?: 'node' | 'python';
   /** Vercel token - if not provided, will use env vars */
   token?: string;
   /** Team ID for team accounts */
   teamId?: string;
   /** Project ID */
   projectId?: string;
-  /** Use OIDC authentication */
-  useOIDC?: boolean;
-  /** Deployment region */
-  region?: string;
-  /** Memory allocation in MB */
-  memory?: number;
+  /** Runtime environment */
+  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }

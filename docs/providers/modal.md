@@ -56,16 +56,12 @@ interface ModalConfig {
   tokenId?: string;
   /** Modal token secret - if not provided, will use MODAL_TOKEN_SECRET env var */
   tokenSecret?: string;
-  /** GPU type for ML workloads */
-  gpu?: 'T4' | 'A10G' | 'A100';
-  /** CPU count */
-  cpu?: number;
-  /** Memory allocation in GB */
-  memory?: number;
+  /** Runtime to use */
+  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
-  /** Custom image for the environment */
-  image?: string;
+  /** Modal environment (sandbox or main) */
+  environment?: string;
 }
 ```
 ## SDK Reference Links:
