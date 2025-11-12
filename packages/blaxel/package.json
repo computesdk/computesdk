@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/blaxel",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Blaxel provider for ComputeSDK",
   "author": "ComputeSDK",
   "license": "MIT",
@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "computesdk": "workspace:*",
-    "@blaxel/core": "^0.2.38"
+    "@blaxel/core": "^0.2.42"
   },
   "keywords": [
     "blaxel",
@@ -57,4 +57,4 @@
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   }
-} 
+}

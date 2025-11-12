@@ -1,5 +1,11 @@
 # @computesdk/ui
 
+## 0.7.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
 ## 0.6.0
 
 ### Minor Changes

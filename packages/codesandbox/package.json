@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/codesandbox",
-  "version": "1.2.5",
+  "version": "1.4.0",
   "description": "CodeSandbox provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",

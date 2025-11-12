@@ -120,6 +120,10 @@ export interface ComputeConfig<TProvider extends Provider = Provider> {
   defaultProvider?: TProvider;
   /** @deprecated Use defaultProvider instead. Kept for backwards compatibility */
   provider?: TProvider;
+  /** API key for compute CLI authentication */
+  apiKey?: string;
+  /** JWT token for compute CLI authentication */
+  jwt?: string;
 }
 
 /**

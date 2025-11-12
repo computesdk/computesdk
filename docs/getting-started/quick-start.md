@@ -2,6 +2,27 @@
 
 Welcome to ComputeSDK! This guide will get you up and running with secure, isolated code execution across multiple cloud providers using a unified TypeScript interface.
 
+<br />
+
+<div class="bg-emerald-100/20 border-l-4 border-emerald-800/20 dark:bg-emerald-800/30 dark:border-emerald-100/20 p-6 my-2 rounded flex flex-col gap-4">
+  <strong>For a quick interactive demo of the SDK in action:</strong>
+  
+  ```bash
+  curl -fsSL https://computesdk.com/install.sh | sh
+  ```
+</div>
+
+<br />
+
+## Get an API Key
+
+1) Visit https://console.computesdk.com/register to create an account and get your ComputeSDK API key.
+2) Next create a .env file in the root of your project and add your API key (this is where you will store your API keys for each of your providers):
+
+```bash
+COMPUTESDK_API_KEY=your_api_key_here
+```
+
 ## Installation
 
 ```bash
@@ -28,7 +49,8 @@ import { e2b } from '@computesdk/e2b';
 
 // Set default provider
 const compute = createCompute({ 
-  defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }) 
+  defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }),
+  apiKey: process.env.COMPUTESDK_API_KEY 
 });
 
 // Create a sandbox

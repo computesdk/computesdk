@@ -1,8 +1,62 @@
 # @computesdk/cloudflare
 
+## 1.2.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - computesdk@1.8.0
+
+## 1.1.6
+
+### Patch Changes
+
+- computesdk@1.7.6
+
+## 1.1.5
+
+### Patch Changes
+
+- computesdk@1.7.5
+
+## 1.1.4
+
+### Patch Changes
+
+- computesdk@1.7.4
+
+## 1.1.3
+
+### Patch Changes
+
+- computesdk@1.7.3
+
+## 1.1.2
+
+### Patch Changes
+
+- computesdk@1.7.2
+
+## 1.1.1
+
+### Patch Changes
+
+- computesdk@1.7.1
+
+## 1.1.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
 ## [1.0.0] - 2024-01-XX
 
 ### Added
+
 - Initial release of Cloudflare provider for ComputeSDK
 - Full Cloudflare Sandbox SDK integration using `@cloudflare/sandbox`
 - Complete implementation of all ComputeSDK provider methods:
@@ -30,6 +84,7 @@
 - Detailed documentation and usage examples
 
 ### Features
+
 - **Edge-Native Execution**: Runs on Cloudflare's global network
 - **Durable Objects Integration**: Persistent sandbox state
 - **Code Interpreter**: Python and JavaScript execution
@@ -41,6 +96,7 @@
 - **Real-time Streaming**: Support for streaming command output
 
 ### Documentation
+
 - Complete README with setup instructions
 - Configuration examples for wrangler.toml and Dockerfile
 - Usage examples for all major features

@@ -21,7 +21,8 @@ const compute = createCompute({
   provider: modal({ 
     tokenId: process.env.MODAL_TOKEN_ID,
     tokenSecret: process.env.MODAL_TOKEN_SECRET
-  }) 
+  }),
+  apiKey: process.env.COMPUTESDK_API_KEY 
 });
 
 // Create sandbox

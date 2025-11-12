@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-nuxt",
-  "version": "0.1.10",
+  "version": "0.2.0",
   "private": true,
   "description": "Nuxt 3 example using ComputeSDK for server-side code execution",
   "scripts": {

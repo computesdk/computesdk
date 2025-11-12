@@ -1,5 +1,58 @@
 # @computesdk/e2b
 
+## 1.6.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - computesdk@1.8.0
+
+## 1.5.6
+
+### Patch Changes
+
+- computesdk@1.7.6
+
+## 1.5.5
+
+### Patch Changes
+
+- computesdk@1.7.5
+
+## 1.5.4
+
+### Patch Changes
+
+- computesdk@1.7.4
+
+## 1.5.3
+
+### Patch Changes
+
+- computesdk@1.7.3
+
+## 1.5.2
+
+### Patch Changes
+
+- computesdk@1.7.2
+
+## 1.5.1
+
+### Patch Changes
+
+- computesdk@1.7.1
+
+## 1.5.0
+
+### Minor Changes
+
+- c9cef90: Minor bump for all packages
+
 ## 1.4.3
 
 ### Patch Changes

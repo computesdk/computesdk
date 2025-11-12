@@ -1,5 +1,83 @@
 # @computesdk/example-nextjs
 
+## 0.2.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - computesdk@1.8.0
+  - @computesdk/daytona@1.5.0
+  - @computesdk/e2b@1.6.0
+  - @computesdk/ui@0.7.0
+  - @computesdk/vercel@1.5.0
+
+## 0.1.17
+
+### Patch Changes
+
+- computesdk@1.7.6
+- @computesdk/daytona@1.4.6
+- @computesdk/e2b@1.5.6
+- @computesdk/vercel@1.4.6
+
+## 0.1.16
+
+### Patch Changes
+
+- computesdk@1.7.5
+- @computesdk/daytona@1.4.5
+- @computesdk/e2b@1.5.5
+- @computesdk/vercel@1.4.5
+
+## 0.1.15
+
+### Patch Changes
+
+- computesdk@1.7.4
+- @computesdk/daytona@1.4.4
+- @computesdk/e2b@1.5.4
+- @computesdk/vercel@1.4.4
+
+## 0.1.14
+
+### Patch Changes
+
+- computesdk@1.7.3
+- @computesdk/daytona@1.4.3
+- @computesdk/e2b@1.5.3
+- @computesdk/vercel@1.4.3
+
+## 0.1.13
+
+### Patch Changes
+
+- computesdk@1.7.2
+- @computesdk/daytona@1.4.2
+- @computesdk/e2b@1.5.2
+- @computesdk/vercel@1.4.2
+
+## 0.1.12
+
+### Patch Changes
+
+- computesdk@1.7.1
+- @computesdk/daytona@1.4.1
+- @computesdk/e2b@1.5.1
+- @computesdk/vercel@1.4.1
+
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [c9cef90]
+  - @computesdk/daytona@1.4.0
+  - @computesdk/vercel@1.4.0
+  - @computesdk/e2b@1.5.0
+
 ## 0.1.10
 
 ### Patch Changes
