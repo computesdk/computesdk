@@ -845,10 +845,10 @@ export class ComputeClient {
     );
 
     // Set up terminal handlers
-    terminal.setExecuteHandler(async (command: string) => {
+    terminal.setExecuteHandler(async (command: string, async?: boolean) => {
       return this.request<CommandExecutionResponse>(`/terminals/${response.data.id}/execute`, {
         method: 'POST',
-        body: JSON.stringify({ command }),
+        body: JSON.stringify({ command, async }),
       });
     });
 
