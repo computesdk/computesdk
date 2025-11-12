@@ -852,6 +852,12 @@ paths:
       description: |
         Executes a command in an existing terminal session. The output is returned
         in the response and also broadcast to WebSocket subscribers.
+
+        When `async: true`, the command starts executing in the background and the
+        response is returned immediately. Output is streamed via WebSocket only.
+
+        When `async: false` (default), the endpoint waits for command completion
+        and returns the full output in the response (also broadcast via WebSocket).
       tags:
         - Terminals
       security:
@@ -877,6 +883,13 @@ paths:
                   type: string
                   description: The command to execute
                   example: "echo 'Hello, World!'"
+                async:
+                  type: boolean
+                  description: |
+                    If true, returns immediately without waiting for command completion.
+                    Output is streamed via WebSocket. Useful for long-running commands.
+                  default: false
+                  example: true
       responses:
         '200':
           description: Command executed successfully

@@ -164,23 +164,27 @@ export class Terminal {
    * Execute a command in the terminal (uses REST API, not WebSocket)
    * This is provided by the client via a callback
    */
-  private executeCommand?: (command: string) => Promise<any>;
+  private executeCommand?: (command: string, async?: boolean) => Promise<any>;
 
   /**
    * Set execute command handler (called by client)
    */
-  setExecuteHandler(handler: (command: string) => Promise<any>): void {
+  setExecuteHandler(handler: (command: string, async?: boolean) => Promise<any>): void {
     this.executeCommand = handler;
   }
 
   /**
-   * Execute a command and wait for result
+   * Execute a command in the terminal
+   * @param command - The command to execute
+   * @param options - Execution options
+   * @param options.async - If true, returns immediately without waiting for completion (default: false)
+   * @returns Promise that resolves when command completes (async: false) or immediately (async: true)
    */
-  async execute(command: string): Promise<any> {
+  async execute(command: string, options?: { async?: boolean }): Promise<any> {
     if (!this.executeCommand) {
       throw new Error('Execute handler not set');
     }
-    return this.executeCommand(command);
+    return this.executeCommand(command, options?.async);
   }
 
   /**
