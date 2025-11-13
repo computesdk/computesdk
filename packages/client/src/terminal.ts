@@ -147,6 +147,10 @@ export class Terminal {
     if (!this.isRunning()) {
       console.warn('[Terminal] Warning: Terminal status is not "running", but attempting to write anyway. Status:', this.status);
     }
+    if (!this.ws.isConnected()) {
+      console.warn('[Terminal] Warning: WebSocket is not connected, cannot write input');
+      return;
+    }
     this.ws.sendTerminalInput(this.id, input);
   }
 
@@ -156,6 +160,10 @@ export class Terminal {
   resize(cols: number, rows: number): void {
     if (!this.isRunning()) {
       throw new Error('Terminal is not running');
+    }
+    if (!this.ws.isConnected()) {
+      console.warn('[Terminal] Warning: WebSocket is not connected, cannot resize');
+      return;
     }
     this.ws.resizeTerminal(this.id, cols, rows);
   }
