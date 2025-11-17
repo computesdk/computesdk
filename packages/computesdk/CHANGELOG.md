@@ -1,5 +1,15 @@
 # computesdk
 
+## 1.8.4
+
+### Patch Changes
+
+- 11a3b8c: moving to access token
+- 11a3b8c: Adding enhanced sandbox
+- Updated dependencies [11a3b8c]
+- Updated dependencies [11a3b8c]
+  - @computesdk/client@0.3.3
+
 ## 1.8.3
 
 ### Patch Changes
