@@ -94,11 +94,30 @@ async function installComputeInSandbox(
       throw new Error(`Failed to install and start compute CLI: ${result.stderr}`);
     }
 
-    console.log('Compute CLI installed and started successfully');
+    console.log('Compute CLI installed successfully');
 
     return authResponse;
   } catch (error) {
     throw new Error(`Failed to install compute CLI in sandbox: ${error}`);
+  }
+}
+
+/**
+ * Wait for compute CLI to be ready by polling the health endpoint
+ */
+async function waitForComputeReady(client: ComputeClient, maxRetries = 10, delayMs = 1000): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await client.health();
+      console.log('Compute CLI is ready');
+      return;
+    } catch (error) {
+      if (i === maxRetries - 1) {
+        throw new Error(`Compute CLI failed to start after ${maxRetries} attempts: ${error}`);
+      }
+      console.log(`Waiting for compute CLI to start... (attempt ${i + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
   }
 }
 
@@ -171,13 +190,16 @@ class ComputeManager implements ComputeAPI {
    * Wrap a provider sandbox with ComputeClient while preserving the original sandbox
    * This adds powerful features like WebSocket terminals, file watchers, and signals
    */
-  private wrapWithComputeClient(originalSandbox: Sandbox, authResponse: AuthorizationResponse): ComputeEnhancedSandbox {
+  private async wrapWithComputeClient(originalSandbox: Sandbox, authResponse: AuthorizationResponse): Promise<ComputeEnhancedSandbox> {
     const client = new ComputeClient({
       sandboxUrl: authResponse.sandbox_url,
       sandboxId: originalSandbox.sandboxId,
       provider: originalSandbox.provider,
       token: authResponse.access_token
     });
+
+    // Wait for compute CLI to be ready before returning
+    await waitForComputeReady(client);
 
     // Store the original sandbox for getInstance() and getProvider() calls
     // We create a proxy-like object that delegates most calls to ComputeClient
@@ -226,7 +248,7 @@ class ComputeManager implements ComputeAPI {
       // Wrap with ComputeClient if we have authorization info
       // This adds features like createTerminal(), createWatcher(), startSignals()
       const finalSandbox = authResponse
-        ? this.wrapWithComputeClient(sandbox, authResponse)
+        ? await this.wrapWithComputeClient(sandbox, authResponse)
         : sandbox;
 
       return finalSandbox;
