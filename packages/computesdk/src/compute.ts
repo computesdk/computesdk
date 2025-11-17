@@ -38,7 +38,7 @@ async function authorizeApiKey(apiKey: string): Promise<AuthorizationResponse> {
 
     const data = await response.json();
 
-    if (!data.jwt) {
+    if (!data.access_token) {
       throw new Error('No JWT token received from license server');
     }
 
@@ -51,7 +51,7 @@ async function authorizeApiKey(apiKey: string): Promise<AuthorizationResponse> {
     }
 
     return {
-      jwt: data.jwt,
+      jwt: data.access_token,
       sandbox_url: data.sandbox_url,
       preview_url: data.preview_url
     };
