@@ -84,7 +84,7 @@ async function installComputeInSandbox(
     let installCommand = 'curl -fsSL https://computesdk.com/install.sh | sh';
 
     if (jwt) {
-      installCommand = `curl -fsSL https://computesdk.com/install.sh | sh -s -- --jwt ${jwt}`;
+      installCommand = `curl -fsSL https://computesdk.com/install.sh | sh -s -- --access-token ${jwt}`;
     }
 
     // Run the install script (it will handle installation and starting compute)
