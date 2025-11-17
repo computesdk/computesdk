@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/e2b",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "description": "E2B provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",

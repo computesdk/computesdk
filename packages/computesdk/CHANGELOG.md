@@ -1,5 +1,16 @@
 # computesdk
 
+## 1.8.5
+
+### Patch Changes
+
+- f0eef79: moving to access token
+- f0eef79: Adding enhanced sandbox
+- f0eef79: Waiting for a health server
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+  - @computesdk/client@0.3.4
+
 ## 1.8.4
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.5
+
+### Patch Changes
+
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+  - computesdk@1.8.5
+
 ## 1.4.4
 
 ### Patch Changes
