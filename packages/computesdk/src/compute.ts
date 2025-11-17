@@ -5,7 +5,7 @@
  */
 
 import { ComputeClient } from '@computesdk/client';
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI, ComputeEnhancedSandbox, TypedEnhancedSandbox } from './types';
 
 /**
  * Authorization response from license server
@@ -107,10 +107,6 @@ async function installComputeInSandbox(
  */
 class ComputeManager implements ComputeAPI {
   private config: ComputeConfig | null = null;
-  private typedState: {
-    isTyped: boolean;
-    provider: Provider | null;
-  } = { isTyped: false, provider: null };
   private computeAuth: { apiKey?: string; jwt?: string } = {};
 
   /**
@@ -141,12 +137,6 @@ class ComputeManager implements ComputeAPI {
       apiKey: config.apiKey,
       jwt: config.jwt
     };
-
-    // Store typed state for type-aware operations
-    this.typedState = {
-      isTyped: true,
-      provider: actualProvider
-    };
   }
 
   /**
@@ -176,6 +166,34 @@ class ComputeManager implements ComputeAPI {
     return provider;
   }
 
+  /**
+   * Wrap a provider sandbox with ComputeClient while preserving the original sandbox
+   * This adds powerful features like WebSocket terminals, file watchers, and signals
+   */
+  private wrapWithComputeClient(originalSandbox: Sandbox, authResponse: AuthorizationResponse): ComputeEnhancedSandbox {
+    const client = new ComputeClient({
+      sandboxUrl: authResponse.sandbox_url,
+      sandboxId: originalSandbox.sandboxId,
+      provider: originalSandbox.provider,
+      token: authResponse.jwt
+    });
+
+    // Store the original sandbox for getInstance() and getProvider() calls
+    // We create a proxy-like object that delegates most calls to ComputeClient
+    // but preserves access to the original provider sandbox
+    const wrappedSandbox = Object.assign(client, {
+      __originalSandbox: originalSandbox,
+
+      // Override getInstance to return the original provider's instance
+      getInstance: () => originalSandbox.getInstance(),
+
+      // Override getProvider to return the original provider
+      getProvider: () => originalSandbox.getProvider()
+    });
+
+    return wrappedSandbox as ComputeEnhancedSandbox;
+  }
+
   sandbox = {
     /**
      * Create a sandbox from a provider (or default provider if configured)
@@ -196,7 +214,7 @@ class ComputeManager implements ComputeAPI {
       * const sandbox2 = await compute.sandbox.create()
      * ```
      */
-    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox> => {
+    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox | ComputeEnhancedSandbox> => {
       const provider = params && 'provider' in params && params.provider ? params.provider : this.getDefaultProvider();
       const options = params?.options;
       const sandbox = await provider.sandbox.create(options);
@@ -204,22 +222,11 @@ class ComputeManager implements ComputeAPI {
       // Install compute CLI in the sandbox with auth credentials if available
       const authResponse = await installComputeInSandbox(sandbox, this.computeAuth);
 
-      // If we have authorization info, use ComputeClient instead of provider sandbox
-      let finalSandbox: Sandbox = sandbox;
-      if (authResponse) {
-        finalSandbox = new ComputeClient({
-          sandboxUrl: authResponse.sandbox_url,
-          sandboxId: sandbox.sandboxId,
-          provider: sandbox.provider,
-          token: authResponse.jwt
-        }) as Sandbox;
-      }
-
-      // If we have typed state and no explicit provider passed, cast to typed sandbox
-      // This enables proper type inference for getInstance() when using default provider
-      if (this.typedState.isTyped && (!params || !('provider' in params && params.provider))) {
-        return finalSandbox as TypedSandbox<any>;
-      }
+      // Wrap with ComputeClient if we have authorization info
+      // This adds features like createTerminal(), createWatcher(), startSignals()
+      const finalSandbox = authResponse
+        ? this.wrapWithComputeClient(sandbox, authResponse)
+        : sandbox;
 
       return finalSandbox;
     },
@@ -231,14 +238,7 @@ class ComputeManager implements ComputeAPI {
       if (typeof providerOrSandboxId === 'string') {
         // Called with just sandboxId, use default provider
         const provider = this.getDefaultProvider();
-        const sandbox = await provider.sandbox.getById(providerOrSandboxId);
-        
-        // If we have typed state, cast to typed sandbox for proper getInstance() typing
-        if (this.typedState.isTyped && sandbox) {
-          return sandbox as TypedSandbox<any>;
-        }
-        
-        return sandbox;
+        return await provider.sandbox.getById(providerOrSandboxId);
       } else {
         // Called with provider and sandboxId
         if (!sandboxId) {
@@ -253,14 +253,7 @@ class ComputeManager implements ComputeAPI {
      */
     list: async (provider?: Provider): Promise<Sandbox[]> => {
       const actualProvider = provider || this.getDefaultProvider();
-      const sandboxes = await actualProvider.sandbox.list();
-      
-      // If we have typed state and no explicit provider passed, cast to typed sandboxes
-      if (this.typedState.isTyped && !provider) {
-        return sandboxes as TypedSandbox<any>[];
-      }
-      
-      return sandboxes;
+      return await actualProvider.sandbox.list();
     },
 
     /**
@@ -323,10 +316,6 @@ export function createCompute<TProvider extends Provider>(config: ComputeConfig<
     apiKey: config.apiKey,
     jwt: config.jwt
   };
-  manager['typedState'] = {
-    isTyped: true,
-    provider: actualProvider
-  };
   manager['computeAuth'] = {
     apiKey: config.apiKey,
     jwt: config.jwt
@@ -340,17 +329,30 @@ export function createCompute<TProvider extends Provider>(config: ComputeConfig<
     sandbox: {
       create: async (params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>) => {
         const sandbox = await manager.sandbox.create(params);
-        // The sandbox should now have the correct getInstance typing from the generic Sandbox<TSandbox>
+        // If API key/JWT is configured, the sandbox will be enhanced with ComputeClient features
+        // Cast to the appropriate type based on whether it's enhanced or not
+        if (config.apiKey || config.jwt) {
+          return sandbox as TypedEnhancedSandbox<TProvider>;
+        }
         return sandbox as TypedSandbox<TProvider>;
       },
 
       getById: async (sandboxId: string) => {
         const sandbox = await manager.sandbox.getById(sandboxId);
-        return sandbox ? sandbox as TypedSandbox<TProvider> : null;
+        if (!sandbox) return null;
+        // Type depends on whether auth is configured
+        if (config.apiKey || config.jwt) {
+          return sandbox as TypedEnhancedSandbox<TProvider>;
+        }
+        return sandbox as TypedSandbox<TProvider>;
       },
 
       list: async () => {
         const sandboxes = await manager.sandbox.list();
+        // Type depends on whether auth is configured
+        if (config.apiKey || config.jwt) {
+          return sandboxes as TypedEnhancedSandbox<TProvider>[];
+        }
         return sandboxes as TypedSandbox<TProvider>[];
       },
 

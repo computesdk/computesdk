@@ -223,3 +223,81 @@ export interface TypedSandbox<TProvider extends Provider> extends Omit<Sandbox<E
   /** Get the native provider sandbox instance with proper typing */
   getInstance(): ExtractProviderSandboxType<TProvider>;
 }
+
+/**
+ * Enhanced sandbox type that includes ComputeClient features
+ *
+ * When a sandbox is created with an API key/JWT, it gets wrapped with ComputeClient
+ * which adds powerful features like WebSocket terminals, file watchers, and signals.
+ *
+ * @example
+ * ```typescript
+ * const sandbox = await compute.sandbox.create();
+ *
+ * // ComputeClient features (only available when API key is configured)
+ * const terminal = await sandbox.createTerminal();
+ * const watcher = await sandbox.createWatcher('/home/project');
+ * const signals = await sandbox.startSignals();
+ *
+ * // Original sandbox features still work
+ * await sandbox.runCommand('ls');
+ * const instance = sandbox.getInstance();
+ * ```
+ */
+export type ComputeEnhancedSandbox<TSandbox = any> = Sandbox<TSandbox> & {
+  /** The original provider sandbox instance */
+  __originalSandbox: Sandbox<TSandbox>;
+
+  // ComputeClient enhanced features
+  /** Create a persistent terminal session with WebSocket integration */
+  createTerminal(shell?: string, encoding?: 'raw' | 'base64'): Promise<import('@computesdk/client').Terminal>;
+  /** Create a file watcher with real-time change notifications */
+  createWatcher(path: string, options?: {
+    includeContent?: boolean;
+    ignored?: string[];
+    encoding?: 'raw' | 'base64';
+  }): Promise<import('@computesdk/client').FileWatcher>;
+  /** Start the signal service for port and error monitoring */
+  startSignals(): Promise<import('@computesdk/client').SignalService>;
+  /** Execute a one-off command without creating a persistent terminal */
+  execute(options: { command: string; shell?: string }): Promise<any>;
+  /** List all active terminals */
+  listTerminals(): Promise<any[]>;
+  /** Get terminal by ID */
+  getTerminal(id: string): Promise<any>;
+  /** List all active file watchers */
+  listWatchers(): Promise<any>;
+  /** Get file watcher by ID */
+  getWatcher(id: string): Promise<any>;
+  /** Get signal service status */
+  getSignalStatus(): Promise<any>;
+  /** Create a session token (requires access token) */
+  createSessionToken(options?: { description?: string; expiresIn?: number }): Promise<any>;
+  /** List all session tokens (requires access token) */
+  listSessionTokens(): Promise<any>;
+  /** Get session token details (requires access token) */
+  getSessionToken(tokenId: string): Promise<any>;
+  /** Revoke a session token (requires access token) */
+  revokeSessionToken(tokenId: string): Promise<void>;
+  /** Create a magic link for browser authentication (requires access token) */
+  createMagicLink(options?: { redirectUrl?: string }): Promise<any>;
+  /** Check authentication status */
+  getAuthStatus(): Promise<any>;
+  /** Get authentication information */
+  getAuthInfo(): Promise<any>;
+  /** Set authentication token manually */
+  setToken(token: string): void;
+  /** Get current authentication token */
+  getToken(): string | null;
+  /** Get current sandbox URL */
+  getSandboxUrl(): string;
+  /** Disconnect WebSocket connection */
+  disconnect(): Promise<void>;
+}
+
+/**
+ * Typed enhanced sandbox that preserves both provider typing and ComputeClient features
+ */
+export type TypedEnhancedSandbox<TProvider extends Provider> =
+  ComputeEnhancedSandbox<ExtractProviderSandboxType<TProvider>> &
+  Omit<TypedSandbox<TProvider>, keyof Sandbox>;
