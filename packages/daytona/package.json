@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/daytona",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Daytona provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
