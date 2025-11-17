@@ -1,5 +1,12 @@
 # @computesdk/runloop
 
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [66d50b9]
+  - computesdk@1.8.2
+
 ## 1.2.1
 
 ### Patch Changes
