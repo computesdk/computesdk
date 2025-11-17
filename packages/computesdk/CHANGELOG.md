@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.8.2
+
+### Patch Changes
+
+- 66d50b9: update jwt token variable to match license server json
+
 ## 1.8.1
 
 ### Patch Changes
