@@ -1,5 +1,15 @@
 # @computesdk/example-astro
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [483c700]
+  - computesdk@1.8.3
+  - @computesdk/daytona@1.5.3
+  - @computesdk/e2b@1.6.3
+  - @computesdk/vercel@1.5.3
+
 ## 0.2.2
 
 ### Patch Changes

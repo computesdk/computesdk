@@ -1,5 +1,12 @@
 # @computesdk/modal
 
+## 1.4.3
+
+### Patch Changes
+
+- Updated dependencies [483c700]
+  - computesdk@1.8.3
+
 ## 1.4.2
 
 ### Patch Changes
