@@ -1,5 +1,11 @@
 # @computesdk/client
 
+## 0.3.2
+
+### Patch Changes
+
+- 483c700: Adding enhanced sandbox
+
 ## 0.3.1
 
 ### Patch Changes

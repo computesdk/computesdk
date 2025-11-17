@@ -1,5 +1,12 @@
 # @computesdk/cloudflare
 
+## 1.2.3
+
+### Patch Changes
+
+- Updated dependencies [483c700]
+  - computesdk@1.8.3
+
 ## 1.2.2
 
 ### Patch Changes

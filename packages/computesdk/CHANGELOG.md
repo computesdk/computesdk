@@ -1,5 +1,13 @@
 # computesdk
 
+## 1.8.3
+
+### Patch Changes
+
+- 483c700: Adding enhanced sandbox
+- Updated dependencies [483c700]
+  - @computesdk/client@0.3.2
+
 ## 1.8.2
 
 ### Patch Changes
