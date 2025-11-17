@@ -1,5 +1,12 @@
 # @computesdk/client
 
+## 0.3.4
+
+### Patch Changes
+
+- f0eef79: moving to access token
+- f0eef79: Adding enhanced sandbox
+
 ## 0.3.3
 
 ### Patch Changes
