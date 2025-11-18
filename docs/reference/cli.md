@@ -13,15 +13,6 @@ Start the compute server (same as `compute start`).
 - `--help, -h` - Help for compute
 - `--version, -v` - Version for compute
 
-### `compute start`
-Start the compute server as a background daemon.
-
-**Flags:**
-- `--api-key <key>` - API key for authentication
-- `--access-token <token>` - Access token for authentication
-- `--auth` - Enable authentication for API endpoints (default: true)
-- `--verbose, -v` - Enable verbose logging (debug mode)
-
 ### `compute stop`
 Stop the running compute server.
 
