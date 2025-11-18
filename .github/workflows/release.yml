@@ -11,6 +11,7 @@ permissions:
   pull-requests: write
   issues: write
   repository-projects: write
+  packages: write
 
 jobs:
   # Wait for CI workflow to complete successfully
@@ -59,6 +60,27 @@ jobs:
 
       - name: Build packages
         run: pnpm build
+
+      - name: Build and Publish Railway Sandbox Docker Image
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          # Extract version from package.json
+          VERSION=$(node -p "require('./packages/railway/package.json').version")
+          
+          # Build sandbox server
+          cd packages/railway/sandbox-server
+          npm ci
+          npm run build
+          cd ../../../
+          
+          # Login to GitHub Container Registry
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # Build and push Docker images
+          docker build -t ghcr.io/computesdk/railway-sandbox:${VERSION} packages/railway/sandbox-server/
+          docker build -t ghcr.io/computesdk/railway-sandbox:latest packages/railway/sandbox-server/
+          docker push ghcr.io/computesdk/railway-sandbox:${VERSION}
+          docker push ghcr.io/computesdk/railway-sandbox:latest
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets

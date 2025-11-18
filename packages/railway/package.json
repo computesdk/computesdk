@@ -15,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "sandbox-server"
   ],
   "scripts": {
     "build": "tsup",
@@ -28,7 +29,8 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "node-fetch": "^3.3.2"
   },
   "keywords": [
     "railway",
