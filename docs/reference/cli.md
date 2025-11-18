@@ -60,5 +60,7 @@ Show help about any command.
 ## Configuration
 
 **Config Location:** `~/.compute/config.json`
+
 **Log Location:** `~/.compute/compute.log`
+
 **Sandboxes:** `~/.compute/sandboxes/`
