@@ -497,4 +497,92 @@ describe('Binary Protocol', () => {
       expect(decoded.data.minSafe).toBe(Number.MIN_SAFE_INTEGER);
     });
   });
+
+  describe('signal message encoding', () => {
+    it('should encode and decode port signal message', () => {
+      const message = {
+        type: 'signal',
+        channel: 'signals',
+        data: {
+          signal: 'port',
+          port: 3000,
+          url: 'http://localhost:3000',
+          type: 'open',
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.type).toBe('signal');
+      expect(decoded.channel).toBe('signals');
+      expect(decoded.data.signal).toBe('port');
+      expect(decoded.data.port).toBe(3000);
+      expect(decoded.data.url).toBe('http://localhost:3000');
+      expect(decoded.data.type).toBe('open');
+    });
+
+    it('should encode and decode server-ready signal message', () => {
+      const message = {
+        type: 'signal',
+        channel: 'signals',
+        data: {
+          signal: 'server-ready',
+          port: 8080,
+          url: 'https://example.com:8080',
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.type).toBe('signal');
+      expect(decoded.channel).toBe('signals');
+      expect(decoded.data.signal).toBe('server-ready');
+      expect(decoded.data.port).toBe(8080);
+      expect(decoded.data.url).toBe('https://example.com:8080');
+    });
+
+    it('should encode and decode error signal message', () => {
+      const message = {
+        type: 'signal',
+        channel: 'signals',
+        data: {
+          signal: 'error',
+          message: 'Connection failed',
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.type).toBe('signal');
+      expect(decoded.channel).toBe('signals');
+      expect(decoded.data.signal).toBe('error');
+      expect(decoded.data.message).toBe('Connection failed');
+    });
+
+    it('should handle signal messages with all optional fields', () => {
+      const message = {
+        type: 'signal',
+        channel: 'signals',
+        data: {
+          signal: 'port',
+          port: 5000,
+          url: 'ws://localhost:5000/ws',
+          type: 'close',
+        },
+      };
+
+      const buffer = encodeBinaryMessage(message);
+      const decoded = decodeBinaryMessage(buffer);
+
+      expect(decoded.data).toEqual({
+        signal: 'port',
+        port: 5000,
+        url: 'ws://localhost:5000/ws',
+        type: 'close',
+      });
+    });
+  });
 });

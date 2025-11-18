@@ -1,5 +1,47 @@
 # computesdk
 
+## 1.8.5
+
+### Patch Changes
+
+- f0eef79: moving to access token
+- f0eef79: Adding enhanced sandbox
+- f0eef79: Waiting for a health server
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+  - @computesdk/client@0.3.4
+
+## 1.8.4
+
+### Patch Changes
+
+- 11a3b8c: moving to access token
+- 11a3b8c: Adding enhanced sandbox
+- Updated dependencies [11a3b8c]
+- Updated dependencies [11a3b8c]
+  - @computesdk/client@0.3.3
+
+## 1.8.3
+
+### Patch Changes
+
+- 483c700: Adding enhanced sandbox
+- Updated dependencies [483c700]
+  - @computesdk/client@0.3.2
+
+## 1.8.2
+
+### Patch Changes
+
+- 66d50b9: update jwt token variable to match license server json
+
+## 1.8.1
+
+### Patch Changes
+
+- Updated dependencies [3ebbbc2]
+  - @computesdk/client@0.3.1
+
 ## 1.8.0
 
 ### Minor Changes
