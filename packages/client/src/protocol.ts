@@ -384,7 +384,7 @@ export function decodeBinaryMessage(buffer: ArrayBuffer | Uint8Array): any {
   const dataBytes = uint8View.slice(offset, offset + dataLength);
 
   // Try to decode as key-value for message types that expect structured data
-  const shouldTryKeyValue = ['terminal:input', 'terminal:resize', 'file:changed', 'terminal:output', 'test'].includes(msgType);
+  const shouldTryKeyValue = ['terminal:input', 'terminal:resize', 'file:changed', 'terminal:output', 'signal', 'test'].includes(msgType);
 
   let data: any;
   if (dataBytes.length === 0) {

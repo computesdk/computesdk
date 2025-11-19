@@ -1,5 +1,42 @@
 # @computesdk/modal
 
+## 1.4.5
+
+### Patch Changes
+
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+  - computesdk@1.8.5
+
+## 1.4.4
+
+### Patch Changes
+
+- Updated dependencies [11a3b8c]
+- Updated dependencies [11a3b8c]
+  - computesdk@1.8.4
+
+## 1.4.3
+
+### Patch Changes
+
+- Updated dependencies [483c700]
+  - computesdk@1.8.3
+
+## 1.4.2
+
+### Patch Changes
+
+- Updated dependencies [66d50b9]
+  - computesdk@1.8.2
+
+## 1.4.1
+
+### Patch Changes
+
+- computesdk@1.8.1
+
 ## 1.4.0
 
 ### Minor Changes
