@@ -5,7 +5,7 @@ The `compute` command provides a local development server for ComputeSDK with sa
 ## Commands
 
 ### `compute`
-Start the compute server (same as `compute start`).
+Start the compute server.
 
 **Flags:**
 - `--api-key <key>` - API key for authentication
@@ -13,15 +13,14 @@ Start the compute server (same as `compute start`).
 - `--help, -h` - Help for compute
 - `--version, -v` - Version for compute
 
+### `compute start`
+Start the compute server in the background using eixisting API key or access token.
+
 ### `compute stop`
 Stop the running compute server.
 
-**No flags**
-
 ### `compute status`
 Check the status of the compute server and show sandbox information.
-
-**No flags**
 
 **Shows:**
 - Running status and PID
@@ -32,7 +31,6 @@ Check the status of the compute server and show sandbox information.
 ### `compute restart`
 Stop and restart the compute server with saved configuration.
 
-**No flags**
 
 ### `compute logs`
 View compute server logs.
