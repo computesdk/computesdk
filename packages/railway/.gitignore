@@ -1,0 +1,9 @@
+.env
+.env.backup
+api-comparison.md
+BUILD_STATUS.md
+DOCKER_DECISION.md
+DOCKER_IMAGE_ANALYSIS.md
+IMPLEMENTATION_COMPLETE.md
+investigate-official-image.sh
+validate-docker.sh
