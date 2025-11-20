@@ -1,4 +1,4 @@
-import "../src/tailwindcss"
+import '../src/tailwind.css'
 
 import type { Preview } from '@storybook/react-vite'
 

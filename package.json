@@ -1,49 +1,33 @@
 {
   "name": "computesdk",
-  "version": "0.1.0",
   "private": true,
-  "description": "A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "build": "pnpm --filter '@computesdk/client' run build && pnpm --filter computesdk run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!@computesdk/client' run build",
-    "clean": "pnpm -r run clean",
-    "dev": "pnpm -r --parallel run dev",
-    "lint": "pnpm -r run lint",
-    "test": "pnpm -r run test",
-    "test:watch": "pnpm -r --parallel run test:watch",
-    "test:coverage": "pnpm -r run test:coverage",
-    "typecheck": "pnpm --filter './packages/*' run typecheck && pnpm --filter './examples/*' run typecheck",
-    "changeset": "changeset",
-    "version": "changeset version && pnpm install --no-frozen-lockfile",
-    "release": "pnpm run build && changeset publish",
-    "prepare": "husky"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
   },
-  "keywords": [
-    "sandbox",
-    "code-execution",
-    "cloud",
-    "e2b",
-    "vercel",
-    "daytona"
-  ],
-  "author": "Garrison",
-  "license": "MIT",
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
   "devDependencies": {
-    "@changesets/cli": "^2.26.0",
-    "@types/node": "^20.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.37.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.1.2",
-    "rimraf": "^5.0.0",
-    "tsup": "^8.0.0",
-    "tsx": "^4.0.0",
-    "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react-swc": "^4.2.2",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "npm:rolldown-vite@7.2.5"
   },
-  "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=9.0.0"
-  },
-  "packageManager": "pnpm@9.0.0"
+  "overrides": {
+    "vite": "npm:rolldown-vite@7.2.5"
+  }
 }
