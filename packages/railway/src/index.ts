@@ -13,7 +13,7 @@ import type {
   FileEntry,
   CreateSandboxOptions
 } from 'computesdk'
-import { RailwayClient } from './client'
+import { RailwayClient, type RailwayTokenType } from './client'
 import { RailwaySandbox } from './sandbox'
 
 export interface RailwayProviderConfig {
@@ -22,6 +22,7 @@ export interface RailwayProviderConfig {
   environmentId?: string
   baseImage?: string
   region?: string
+  tokenType?: RailwayTokenType
 }
 
 export const railway = createProvider<{ id: string; status: string }, RailwayProviderConfig>({

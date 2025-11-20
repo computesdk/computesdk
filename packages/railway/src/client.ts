@@ -17,14 +17,14 @@ export class RailwayClient {
   private tokenType: RailwayTokenType
   private baseUrl = 'https://backboard.railway.com/graphql/v2'
   
-  // ComputeSDK Railway sandbox image - extends official computesdk/compute with HTTP API
-  private readonly RAILWAY_SANDBOX_IMAGE = 'ghcr.io/computesdk/railway-sandbox:latest'
+  // Use node:alpine image to match the curl commands
+  private readonly RAILWAY_SANDBOX_IMAGE = 'node:alpine'
   
   constructor(config: RailwayProviderConfig) {
     this.apiKey = config.apiKey
     this.projectId = config.projectId
     this.environmentId = config.environmentId || 'production'
-    this.tokenType = config.tokenType || this.detectTokenType(config.apiKey)
+    this.tokenType = config.tokenType || 'team'
   }
   
   async createService(name: string, env: Record<string, string> = {}): Promise<any> {
@@ -41,13 +41,11 @@ export class RailwayClient {
       input: {
         name,
         projectId: this.projectId,
+        environmentId: this.environmentId,
         source: {
           image: this.RAILWAY_SANDBOX_IMAGE
         },
-        variables: Object.entries(env).map(([key, value]) => ({
-          name: key,
-          value
-        }))
+        variables: []  // Empty array - environment variables may cause issues
       }
     }
     
@@ -155,8 +153,8 @@ export class RailwayClient {
         headers['Team-Access-Token'] = this.apiKey
         break
       default:
-        // Default to Bearer for backward compatibility
-        headers['Authorization'] = `Bearer ${this.apiKey}`
+        // Default to Team token
+        headers['Team-Access-Token'] = this.apiKey
     }
     
     return headers
@@ -167,7 +165,7 @@ export class RailwayClient {
     // This is a fallback - explicit tokenType should be preferred
     
     if (!apiKey || typeof apiKey !== 'string') {
-      return 'personal' // Safe default
+      return 'team' // Default to team token
     }
     
     // Railway project tokens are typically UUIDs (36 chars with dashes)
@@ -175,8 +173,8 @@ export class RailwayClient {
       return 'project'
     }
     
-    // Default to personal token for other formats
-    return 'personal'
+    // Default to team token for other formats
+    return 'team'
   }
 
   private async graphqlRequest(query: string, variables: any): Promise<any> {
