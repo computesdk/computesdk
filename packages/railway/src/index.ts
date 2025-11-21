@@ -23,27 +23,68 @@ export interface RailwayConfig {
   environmentId?: string;
 }
 
-export const envCheck = (apiKey: string, projectId: string, environmentId: string) => {
-        if (!apiKey) {
-          throw new Error(
-            'Missing Railway API key. Provide apiKey in config or set RAILWAY_API_KEY environment variable.'
-          );
-        }
+export const getAndValidateCredentials = (config: RailwayConfig) => {
+  const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.RAILWAY_API_KEY) || '';
+  const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.RAILWAY_PROJECT_ID) || '';
+  const environmentId = config.environmentId || (typeof process !== 'undefined' && process.env?.RAILWAY_ENVIRONMENT_ID) || '';
 
-        if (!projectId) {
-          throw new Error(
-            'Missing Railway Project ID. Provide projectId in config or set RAILWAY_PROJECT_ID environment variable.'
-          );
-        }
+  if (!apiKey) {
+    throw new Error(
+      'Missing Railway API key. Provide apiKey in config or set RAILWAY_API_KEY environment variable.'
+    );
+  }
 
-        if (!environmentId) {
-          throw new Error(
-            'Missing Railway Environment ID. Provide environmentId in config or set RAILWAY_ENVIRONMENT_ID environment variable.'
-          );
-        }
-}
+  if (!projectId) {
+    throw new Error(
+      'Missing Railway Project ID. Provide projectId in config or set RAILWAY_PROJECT_ID environment variable.'
+    );
+  }
 
-export const checkResponse = async (apiKey: string, mutation: any) => {
+  if (!environmentId) {
+    throw new Error(
+      'Missing Railway Environment ID. Provide environmentId in config or set RAILWAY_ENVIRONMENT_ID environment variable.'
+    );
+  }
+
+  return { apiKey, projectId, environmentId };
+};
+
+const GRAPHQL_QUERIES = {
+  CREATE_SERVICE: `mutation ServiceCreate($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }`,
+  GET_SERVICE: `query Service($serviceId: String!) { service(id: $serviceId) { id name createdAt } }`,
+  LIST_SERVICES: `query Project($projectId: String!) { project(id: $projectId) { services { edges { node { id name createdAt updatedAt } } } } }`,
+  DELETE_SERVICE: `mutation ServiceDelete($id: String!) { serviceDelete(id: $id) }`
+};
+
+const handleGraphQLErrors = (data: any, operation: string) => {
+  if (data.errors) {
+    throw new Error(`Railway GraphQL error (${operation}): ${data.errors.map((e: any) => e.message).join(', ')}`);
+  }
+};
+
+const handleGetByIdErrors = (data: any) => {
+  if (data.errors) {
+    // Railway returns "Not Authorized" for non-existent services
+    const isNotAuthorized = data.errors.some((error: any) => 
+      error.message === 'Not Authorized' && error.path && error.path.includes('service')
+    );
+    if (isNotAuthorized) return null;
+    throw new Error(`Railway GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
+  }
+  return false;
+};
+
+const wrapRailwayOperation = async <T>(operation: string, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    throw new Error(
+      `Failed to ${operation}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+
+export const fetchRailway = async (apiKey: string, mutation: any) => {
     const response = await fetch('https://backboard.railway.com/graphql/v2', {
     method: 'POST',
     headers: {
@@ -68,17 +109,12 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
   methods: {
     sandbox: {
       // Collection operations (compute.sandbox.*)
-      create: async (config: RailwayConfig, options?: CreateSandboxOptions) => {
-        // Validate API credentials
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.RAILWAY_API_KEY) || '';
-        const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.RAILWAY_PROJECT_ID) || '';
-        const environmentId = config.environmentId || (typeof process !== 'undefined' && process.env?.RAILWAY_ENVIRONMENT_ID) || '';
+      create: async (config: RailwayConfig, options?: CreateSandboxOptions) => 
+        wrapRailwayOperation('create Railway sandbox', async () => {
+          const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
 
-        envCheck(apiKey, projectId, environmentId);
-
-        try {
           const mutation = {
-            query: `mutation ServiceCreate($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }`,
+            query: GRAPHQL_QUERIES.CREATE_SERVICE,
             variables: {
               input: {
                 projectId,
@@ -90,13 +126,10 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const response = await checkResponse(apiKey, mutation);
-
+          const response = await fetchRailway(apiKey, mutation);
           const data = await response.json();
           
-          if (data.errors) {
-            throw new Error(`Railway GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
-          }
+          handleGraphQLErrors(data, 'create service');
 
           const service = data.data.serviceCreate;
           const railwaySandbox: RailwaySandbox = {
@@ -109,46 +142,24 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             sandbox: railwaySandbox,
             sandboxId: service.id
           };
-        } catch (error) {
-          throw new Error(
-            `Failed to create Railway sandbox: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
+        }),
 
-      getById: async (config: RailwayConfig, sandboxId: string) => {
-        // Validate API credentials
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.RAILWAY_API_KEY) || '';
-        const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.RAILWAY_PROJECT_ID) || '';
-        const environmentId = config.environmentId || (typeof process !== 'undefined' && process.env?.RAILWAY_ENVIRONMENT_ID) || '';
+      getById: async (config: RailwayConfig, sandboxId: string) => 
+        wrapRailwayOperation('get Railway sandbox', async () => {
+          const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
 
-        envCheck(apiKey, projectId, environmentId);
-
-        try {
           const mutation = {
-            query: `query Service($serviceId: String!) { service(id: $serviceId) { id name createdAt } }`,
+            query: GRAPHQL_QUERIES.GET_SERVICE,
             variables: {
               serviceId: sandboxId
             }
           };
- 
 
-          const response = await checkResponse(apiKey, mutation);
-
+          const response = await fetchRailway(apiKey, mutation);
           const data = await response.json();
           
-          if (data.errors) {
-            // Railway returns "Not Authorized" for non-existent services
-            const isNotAuthorized = data.errors.some((error: any) => 
-              error.message === 'Not Authorized' && error.path && error.path.includes('service')
-            );
-            
-            if (isNotAuthorized) {
-              return null;
-            }
-            
-            throw new Error(`Railway GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
-          }
+          const errorResult = handleGetByIdErrors(data);
+          if (errorResult === null) return null;
 
           // If service doesn't exist, Railway returns null
           if (!data.data || !data.data.service) {
@@ -166,38 +177,57 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             sandbox: railwaySandbox,
             sandboxId: service.id
           };
-        } catch (error) {
-          throw new Error(
-            `Failed to get Railway sandbox: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
+        }),
       
-      list: async (_config: RailwayConfig) => {
-        throw new Error('list method not implemented yet');
-      },
+      list: async (config: RailwayConfig) => 
+        wrapRailwayOperation('list Railway sandboxes', async () => {
+          const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
+
+          const query = {
+            query: GRAPHQL_QUERIES.LIST_SERVICES,
+            variables: {
+              projectId
+            }
+          };
+
+          const response = await fetchRailway(apiKey, query);
+          const data = await response.json();
+          
+          handleGraphQLErrors(data, 'list services');
+
+          // Extract services from the nested GraphQL response structure
+          const services = data.data?.project?.services?.edges || [];
+          
+          // Transform each service into the expected format
+          const sandboxes = services.map((edge: any) => {
+            const service = edge.node;
+            const railwaySandbox: RailwaySandbox = {
+              serviceId: service.id,
+              projectId,
+              environmentId,
+            };
+
+            return {
+              sandbox: railwaySandbox,
+              sandboxId: service.id
+            };
+          });
+
+          return sandboxes;
+        }),
 
       destroy: async (config: RailwayConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.RAILWAY_API_KEY) || '';
-
-        if (!apiKey) {
-          throw new Error(
-            'Missing Railway API key. Provide apiKey in config or set RAILWAY_API_KEY environment variable.'
-          );
-        }
+        const { apiKey } = getAndValidateCredentials(config);
 
         try {
           const mutation = {
-            query: `mutation ServiceDelete($id: String!) { 
-              serviceDelete(id: $id) 
-            }`,
+            query: GRAPHQL_QUERIES.DELETE_SERVICE,
             variables: {
               id: sandboxId
             }
           };
 
-          const response = await checkResponse(apiKey, mutation);
-
+          const response = await fetchRailway(apiKey, mutation);
           const data = await response.json();
           
           if (data.errors) {
