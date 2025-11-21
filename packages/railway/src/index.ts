@@ -97,25 +97,9 @@ export const fetchRailway = async (
 
   const data = await response.json();
   
-  // Special handling for getById operations
-  if (operation === 'get service') {
-    const errorResult = handleGetByIdErrors(data);
-    if (errorResult === null) return null;
-  } else {
-    handleGraphQLErrors(data, operation);
-  }
+  handleGraphQLErrors(data, operation);
 
-  // Extract the specific data based on the path
-  if (extractPath) {
-    const pathParts = extractPath.split('.');
-    let result = data.data;
-    for (const part of pathParts) {
-      result = result?.[part];
-    }
-    return result;
-  }
-
-  return data; // For destroy or custom handling
+  return data.data; // For destroy or custom handling
 };
 
 /**
@@ -143,7 +127,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const service = await fetchRailway(apiKey, mutation, 'create service', 'serviceCreate');
+          const service = await fetchRailway(apiKey, mutation, 'create service');
           const railwaySandbox: RailwaySandbox = {
             serviceId: service.id,
             projectId,
@@ -172,7 +156,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const service = await fetchRailway(apiKey, mutation, 'get service', 'service');
+          const service = await fetchRailway(apiKey, mutation, 'get service');
           
           // If service doesn't exist, Railway returns null (handled by fetchRailway)
           if (service === null) {
@@ -206,7 +190,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const services = await fetchRailway(apiKey, mutation, 'list services', 'project.services.edges') || [];
+          const services = await fetchRailway(apiKey, mutation, 'list services') || [];
           
           // Transform each service into the expected format
           const sandboxes = services.map((edge: any) => {
