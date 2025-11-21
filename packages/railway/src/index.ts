@@ -23,20 +23,7 @@ export interface RailwayConfig {
   environmentId?: string;
 }
 
-/**
- * Create a Railway provider instance using the factory pattern
- */
-export const railway = createProvider<RailwaySandbox, RailwayConfig>({
-  name: 'railway',
-  methods: {
-    sandbox: {
-      // Collection operations (compute.sandbox.*)
-      create: async (config: RailwayConfig, options?: CreateSandboxOptions) => {
-        // Validate API credentials
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.RAILWAY_API_KEY) || '';
-        const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.RAILWAY_PROJECT_ID) || '';
-        const environmentId = config.environmentId || (typeof process !== 'undefined' && process.env?.RAILWAY_ENVIRONMENT_ID) || '';
-
+export const envCheck = (apiKey: string, projectId: string, environmentId: string) => {
         if (!apiKey) {
           throw new Error(
             'Missing Railway API key. Provide apiKey in config or set RAILWAY_API_KEY environment variable.'
@@ -54,14 +41,46 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             'Missing Railway Environment ID. Provide environmentId in config or set RAILWAY_ENVIRONMENT_ID environment variable.'
           );
         }
+}
+
+export const checkResponse = async (apiKey: string, mutation: any) => {
+    const response = await fetch('https://backboard.railway.com/graphql/v2', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(mutation)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Railway API error: ${response.status} ${response.statusText}`);
+  }
+
+  return response;
+}
+
+/**
+ * Create a Railway provider instance using the factory pattern
+ */
+export const railway = createProvider<RailwaySandbox, RailwayConfig>({
+  name: 'railway',
+  methods: {
+    sandbox: {
+      // Collection operations (compute.sandbox.*)
+      create: async (config: RailwayConfig, options?: CreateSandboxOptions) => {
+        // Validate API credentials
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.RAILWAY_API_KEY) || '';
+        const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.RAILWAY_PROJECT_ID) || '';
+        const environmentId = config.environmentId || (typeof process !== 'undefined' && process.env?.RAILWAY_ENVIRONMENT_ID) || '';
+
+        envCheck(apiKey, projectId, environmentId);
 
         try {
-          const sandboxName = `sandbox-${Date.now()}`;
           const mutation = {
             query: `mutation ServiceCreate($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }`,
             variables: {
               input: {
-                name: sandboxName,
                 projectId,
                 environmentId,
                 source: {
@@ -71,18 +90,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const response = await fetch('https://backboard.railway.com/graphql/v2', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(mutation)
-          });
-
-          if (!response.ok) {
-            throw new Error(`Railway API error: ${response.status} ${response.statusText}`);
-          }
+          const response = await checkResponse(apiKey, mutation);
 
           const data = await response.json();
           
@@ -114,44 +122,18 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
         const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.RAILWAY_PROJECT_ID) || '';
         const environmentId = config.environmentId || (typeof process !== 'undefined' && process.env?.RAILWAY_ENVIRONMENT_ID) || '';
 
-        if (!apiKey) {
-          throw new Error(
-            'Missing Railway API key. Provide apiKey in config or set RAILWAY_API_KEY environment variable.'
-          );
-        }
-
-        if (!projectId) {
-          throw new Error(
-            'Missing Railway Project ID. Provide projectId in config or set RAILWAY_PROJECT_ID environment variable.'
-          );
-        }
-
-        if (!environmentId) {
-          throw new Error(
-            'Missing Railway Environment ID. Provide environmentId in config or set RAILWAY_ENVIRONMENT_ID environment variable.'
-          );
-        }
+        envCheck(apiKey, projectId, environmentId);
 
         try {
-          const query = {
+          const mutation = {
             query: `query Service($serviceId: String!) { service(id: $serviceId) { id name createdAt } }`,
             variables: {
               serviceId: sandboxId
             }
           };
+ 
 
-          const response = await fetch('https://backboard.railway.com/graphql/v2', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(query)
-          });
-
-          if (!response.ok) {
-            throw new Error(`Railway API error: ${response.status} ${response.statusText}`);
-          }
+          const response = await checkResponse(apiKey, mutation);
 
           const data = await response.json();
           
@@ -214,18 +196,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const response = await fetch('https://backboard.railway.com/graphql/v2', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(mutation)
-          });
-
-          if (!response.ok) {
-            throw new Error(`Railway API error: ${response.status} ${response.statusText}`);
-          }
+          const response = await checkResponse(apiKey, mutation);
 
           const data = await response.json();
           
@@ -256,9 +227,6 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
         throw new Error('Railway getUrl method not implemented yet');
       },
 
-      },
-
-
-
-    }
+    },
+  },
 });

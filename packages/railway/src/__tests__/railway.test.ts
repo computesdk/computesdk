@@ -21,7 +21,7 @@ describe('Railway Provider Integration Test', () => {
     
     // Create sandbox
     const provider = railway(config);
-    const sandbox = await provider.sandbox.create({ runtime: 'node' });
+    const sandbox = await provider.sandbox.create();
     
     console.log(`✅ Sandbox created with ID: ${sandbox.sandboxId}`);
     
