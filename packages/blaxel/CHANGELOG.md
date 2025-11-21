@@ -1,5 +1,13 @@
 # @computesdk/blaxel
 
+## 1.2.6
+
+### Patch Changes
+
+- 51b9259: Adding support for Compute CLI
+- Updated dependencies [51b9259]
+  - computesdk@1.8.6
+
 ## 1.2.5
 
 ### Patch Changes

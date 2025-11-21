@@ -1,5 +1,11 @@
 # @computesdk/client
 
+## 0.3.5
+
+### Patch Changes
+
+- 51b9259: Adding support for Compute CLI
+
 ## 0.3.4
 
 ### Patch Changes
