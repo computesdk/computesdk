@@ -1,5 +1,13 @@
 # computesdk
 
+## 1.8.6
+
+### Patch Changes
+
+- 51b9259: Adding support for Compute CLI
+- Updated dependencies [51b9259]
+  - @computesdk/client@0.3.5
+
 ## 1.8.5
 
 ### Patch Changes
