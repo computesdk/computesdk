@@ -61,6 +61,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             query: `mutation ServiceCreate($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }`,
             variables: {
               input: {
+                name: sandboxName,
                 projectId,
                 environmentId,
                 source: {
@@ -107,8 +108,87 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
         }
       },
 
-      getById: async (_config: RailwayConfig, _sandboxId: string) => {
-        throw new Error('getById method not implemented yet');
+      getById: async (config: RailwayConfig, sandboxId: string) => {
+        // Validate API credentials
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.RAILWAY_API_KEY) || '';
+        const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.RAILWAY_PROJECT_ID) || '';
+        const environmentId = config.environmentId || (typeof process !== 'undefined' && process.env?.RAILWAY_ENVIRONMENT_ID) || '';
+
+        if (!apiKey) {
+          throw new Error(
+            'Missing Railway API key. Provide apiKey in config or set RAILWAY_API_KEY environment variable.'
+          );
+        }
+
+        if (!projectId) {
+          throw new Error(
+            'Missing Railway Project ID. Provide projectId in config or set RAILWAY_PROJECT_ID environment variable.'
+          );
+        }
+
+        if (!environmentId) {
+          throw new Error(
+            'Missing Railway Environment ID. Provide environmentId in config or set RAILWAY_ENVIRONMENT_ID environment variable.'
+          );
+        }
+
+        try {
+          const query = {
+            query: `query Service($serviceId: String!) { service(id: $serviceId) { id name createdAt } }`,
+            variables: {
+              serviceId: sandboxId
+            }
+          };
+
+          const response = await fetch('https://backboard.railway.com/graphql/v2', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify(query)
+          });
+
+          if (!response.ok) {
+            throw new Error(`Railway API error: ${response.status} ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          
+          if (data.errors) {
+            // Railway returns "Not Authorized" for non-existent services
+            const isNotAuthorized = data.errors.some((error: any) => 
+              error.message === 'Not Authorized' && error.path && error.path.includes('service')
+            );
+            
+            if (isNotAuthorized) {
+              return null;
+            }
+            
+            throw new Error(`Railway GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
+          }
+
+          // If service doesn't exist, Railway returns null
+          if (!data.data || !data.data.service) {
+            return null;
+          }
+
+          const service = data.data.service;
+          const railwaySandbox: RailwaySandbox = {
+            serviceId: service.id,
+            projectId,
+            environmentId,
+          };
+
+          return {
+            sandbox: railwaySandbox,
+            sandboxId: service.id
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to get Railway sandbox: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
       
       list: async (_config: RailwayConfig) => {

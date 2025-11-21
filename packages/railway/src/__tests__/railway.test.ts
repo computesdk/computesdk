@@ -29,6 +29,15 @@ describe('Railway Provider Integration Test', () => {
     expect(sandbox.sandboxId).toBeDefined();
     expect(typeof sandbox.sandboxId).toBe('string');
     
+    // Test getById with existing sandbox
+    console.log('🔍 Testing getById method with existing sandbox...');
+    const retrievedSandbox = await provider.sandbox.getById(sandbox.sandboxId);
+    
+    expect(retrievedSandbox).toBeDefined();
+    expect(retrievedSandbox!.sandboxId).toBe(sandbox.sandboxId);
+    console.log('✅ getById method works with existing sandbox');
+    console.log(`📄 Retrieved sandbox details: ID=${retrievedSandbox!.sandboxId}, Provider=${retrievedSandbox!.provider}`);
+    
     // Wait 60 seconds
     console.log('⏰ Waiting 60 seconds...');
     await new Promise(resolve => setTimeout(resolve, 60000));
@@ -38,6 +47,13 @@ describe('Railway Provider Integration Test', () => {
     console.log('🗑️  Destroying sandbox...');
     await provider.sandbox.destroy(sandbox.sandboxId);
     console.log('✅ Sandbox destroyed successfully');
+    
+    // Test getById with non-existent sandbox (use invalid ID)
+    console.log('🔍 Testing getById method with non-existent sandbox...');
+    const nonExistentSandbox = await provider.sandbox.getById('non-existent-service-id');
+    
+    expect(nonExistentSandbox).toBeNull();
+    console.log('✅ getById method correctly returns null for non-existent sandbox');
     
     // Test passes if no errors are thrown
     expect(true).toBe(true);
