@@ -94,7 +94,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
     
     // Create sandbox and execute code
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     const result = await sandbox.runCode(code, runtime);
     
     // Clean up
@@ -357,7 +357,7 @@ export const POST: APIRoute = async ({ request }) => {
       provider: e2b({ apiKey: import.meta.env.E2B_API_KEY! }) 
     });
     
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     
     // Save CSV data
     await sandbox.filesystem.writeFile('/data/input.csv', csvData);
@@ -630,7 +630,7 @@ try {
     provider: e2b({ apiKey: import.meta.env.E2B_API_KEY! }) 
   });
   
-  const sandbox = await compute.sandbox.create({});
+  const sandbox = await compute.sandbox.create();
   
   // Generate data on the server
   const result = await sandbox.runCode(`
