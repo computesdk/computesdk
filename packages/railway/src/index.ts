@@ -74,18 +74,15 @@ const handleGetByIdErrors = (data: any) => {
   return false;
 };
 
-const wrapRailwayOperation = async <T>(operation: string, fn: () => Promise<T>): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    throw new Error(
-      `Failed to ${operation}: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-};
 
-export const fetchRailway = async (apiKey: string, mutation: any) => {
-    const response = await fetch('https://backboard.railway.com/graphql/v2', {
+
+export const fetchRailway = async (
+  apiKey: string, 
+  mutation: any, 
+  operation: string, 
+  extractPath?: string
+) => {
+  const response = await fetch('https://backboard.railway.com/graphql/v2', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -98,8 +95,28 @@ export const fetchRailway = async (apiKey: string, mutation: any) => {
     throw new Error(`Railway API error: ${response.status} ${response.statusText}`);
   }
 
-  return response;
-}
+  const data = await response.json();
+  
+  // Special handling for getById operations
+  if (operation === 'get service') {
+    const errorResult = handleGetByIdErrors(data);
+    if (errorResult === null) return null;
+  } else {
+    handleGraphQLErrors(data, operation);
+  }
+
+  // Extract the specific data based on the path
+  if (extractPath) {
+    const pathParts = extractPath.split('.');
+    let result = data.data;
+    for (const part of pathParts) {
+      result = result?.[part];
+    }
+    return result;
+  }
+
+  return data; // For destroy or custom handling
+};
 
 /**
  * Create a Railway provider instance using the factory pattern
@@ -109,10 +126,10 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
   methods: {
     sandbox: {
       // Collection operations (compute.sandbox.*)
-      create: async (config: RailwayConfig, options?: CreateSandboxOptions) => 
-        wrapRailwayOperation('create Railway sandbox', async () => {
-          const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
+      create: async (config: RailwayConfig, options?: CreateSandboxOptions) => {
+        const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
 
+        try {
           const mutation = {
             query: GRAPHQL_QUERIES.CREATE_SERVICE,
             variables: {
@@ -126,12 +143,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const response = await fetchRailway(apiKey, mutation);
-          const data = await response.json();
-          
-          handleGraphQLErrors(data, 'create service');
-
-          const service = data.data.serviceCreate;
+          const service = await fetchRailway(apiKey, mutation, 'create service', 'serviceCreate');
           const railwaySandbox: RailwaySandbox = {
             serviceId: service.id,
             projectId,
@@ -142,12 +154,17 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             sandbox: railwaySandbox,
             sandboxId: service.id
           };
-        }),
+        } catch (error) {
+          throw new Error(
+            `Failed to create Railway sandbox: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
 
-      getById: async (config: RailwayConfig, sandboxId: string) => 
-        wrapRailwayOperation('get Railway sandbox', async () => {
-          const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
+      getById: async (config: RailwayConfig, sandboxId: string) => {
+        const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
 
+        try {
           const mutation = {
             query: GRAPHQL_QUERIES.GET_SERVICE,
             variables: {
@@ -155,18 +172,12 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const response = await fetchRailway(apiKey, mutation);
-          const data = await response.json();
+          const service = await fetchRailway(apiKey, mutation, 'get service', 'service');
           
-          const errorResult = handleGetByIdErrors(data);
-          if (errorResult === null) return null;
-
-          // If service doesn't exist, Railway returns null
-          if (!data.data || !data.data.service) {
+          // If service doesn't exist, Railway returns null (handled by fetchRailway)
+          if (service === null) {
             return null;
           }
-
-          const service = data.data.service;
           const railwaySandbox: RailwaySandbox = {
             serviceId: service.id,
             projectId,
@@ -177,26 +188,25 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             sandbox: railwaySandbox,
             sandboxId: service.id
           };
-        }),
+        } catch (error) {
+          throw new Error(
+            `Failed to get Railway sandbox: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
       
-      list: async (config: RailwayConfig) => 
-        wrapRailwayOperation('list Railway sandboxes', async () => {
-          const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
+      list: async (config: RailwayConfig) => {
+        const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
 
-          const query = {
+        try {
+          const mutation = {
             query: GRAPHQL_QUERIES.LIST_SERVICES,
             variables: {
               projectId
             }
           };
 
-          const response = await fetchRailway(apiKey, query);
-          const data = await response.json();
-          
-          handleGraphQLErrors(data, 'list services');
-
-          // Extract services from the nested GraphQL response structure
-          const services = data.data?.project?.services?.edges || [];
+          const services = await fetchRailway(apiKey, mutation, 'list services', 'project.services.edges') || [];
           
           // Transform each service into the expected format
           const sandboxes = services.map((edge: any) => {
@@ -214,7 +224,12 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
           });
 
           return sandboxes;
-        }),
+        } catch (error) {
+          throw new Error(
+            `Failed to list Railway sandboxes: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
 
       destroy: async (config: RailwayConfig, sandboxId: string) => {
         const { apiKey } = getAndValidateCredentials(config);
@@ -227,8 +242,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const response = await fetchRailway(apiKey, mutation);
-          const data = await response.json();
+          const data = await fetchRailway(apiKey, mutation, 'delete service');
           
           if (data.errors) {
             // Log errors but don't throw for destroy operations
