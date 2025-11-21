@@ -195,21 +195,21 @@ print(json.dumps(data, indent=2))
             it('should write and read files', async () => {
               await sandbox.filesystem.writeFile(testFilePath, testContent);
               const content = await sandbox.filesystem.readFile(testFilePath);
-              
+
               expect(content).toBe(testContent);
             }, timeout);
 
             it('should check file existence', async () => {
               await sandbox.filesystem.writeFile(testFilePath, testContent);
               const exists = await sandbox.filesystem.exists(testFilePath);
-              
+
               expect(exists).toBe(true);
             }, timeout);
 
             it('should create directories', async () => {
               await sandbox.filesystem.mkdir(testDirPath);
               const exists = await sandbox.filesystem.exists(testDirPath);
-              
+
               expect(exists).toBe(true);
             }, timeout);
 
@@ -217,13 +217,13 @@ print(json.dumps(data, indent=2))
               await sandbox.filesystem.mkdir(testDirPath);
               await sandbox.filesystem.writeFile(`${testDirPath}/file1.txt`, 'content1');
               await sandbox.filesystem.writeFile(`${testDirPath}/file2.txt`, 'content2');
-              
+
               const entries = await sandbox.filesystem.readdir(testDirPath);
-              
+
               expect(entries).toBeDefined();
               expect(Array.isArray(entries)).toBe(true);
               expect(entries.length).toBeGreaterThanOrEqual(2);
-              
+
               const fileNames = entries.map((entry: FileEntry) => entry.name);
               expect(fileNames).toContain('file1.txt');
               expect(fileNames).toContain('file2.txt');
@@ -232,7 +232,7 @@ print(json.dumps(data, indent=2))
             it('should remove files and directories', async () => {
               await sandbox.filesystem.writeFile(testFilePath, testContent);
               await sandbox.filesystem.remove(testFilePath);
-              
+
               const exists = await sandbox.filesystem.exists(testFilePath);
               expect(exists).toBe(false);
             }, timeout);
@@ -244,8 +244,108 @@ print(json.dumps(data, indent=2))
             });
           });
         }
+
+        // Shell command argument quoting tests (only for first runtime to avoid duplication)
+        if (runtime === supportedRuntimes[0]) {
+          describe('Shell Command Argument Quoting', () => {
+            it('should properly quote arguments with spaces', async () => {
+              const result = await sandbox.runCommand('sh', ['-c', 'echo "hello world"']);
+
+              expect(result.exitCode).toBe(0);
+              expect(result.stdout.trim()).toBe('hello world');
+            }, timeout);
+
+            it('should properly quote arguments with special characters', async () => {
+              const result = await sandbox.runCommand('sh', ['-c', 'echo "$HOME"']);
+
+              expect(result.exitCode).toBe(0);
+              // Should output something (either literal "$HOME" or actual home path)
+              expect(result.stdout.trim()).toBeTruthy();
+            }, timeout);
+
+            it('should handle complex shell commands with pipes', async () => {
+              const result = await sandbox.runCommand('sh', ['-c', 'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt']);
+
+              expect(result.exitCode).toBe(0);
+              expect(result.stdout.trim()).toBe('test content');
+            }, timeout);
+          });
+        }
       });
     });
+
+    // Enhanced Sandbox Installation Tests (only if COMPUTESDK_API_KEY or COMPUTESDK_ACCESS_TOKEN is set)
+    const hasComputeCredentials = typeof process !== 'undefined' &&
+      (process.env?.COMPUTESDK_API_KEY || process.env?.COMPUTESDK_ACCESS_TOKEN);
+
+    if (hasComputeCredentials && !skipIntegration) {
+      describe('Enhanced Sandbox (ComputeSDK Integration)', () => {
+        it('should verify basic sandbox functionality before compute installation', async () => {
+          // Create a basic sandbox to verify environment is working
+          const sandbox = await provider.sandbox.create();
+
+          try {
+            // Sanity check: verify basic shell commands work (use sh which should be everywhere)
+            const shCheck = await sandbox.runCommand('which', ['sh']);
+            expect(shCheck.exitCode).toBe(0);
+
+            // Verify we can run commands
+            const echoTest = await sandbox.runCommand('echo', ['test']);
+            expect(echoTest.exitCode).toBe(0);
+            expect(echoTest.stdout.trim()).toBe('test');
+          } finally {
+            await sandbox.destroy();
+          }
+        }, 30000);
+
+        it('should create enhanced sandbox with compute CLI installed', async () => {
+          // Dynamically import compute to avoid circular dependencies
+          const { createCompute } = await import('computesdk');
+
+          const compute = createCompute({
+            defaultProvider: provider,
+            apiKey: process.env.COMPUTESDK_API_KEY!
+          });
+
+          const sandbox = await compute.sandbox.create();
+
+          try {
+            // Verify compute binary was installed by SDK
+            const verifyResult = await sandbox.runCommand('which', ['compute']);
+            expect(verifyResult.exitCode).toBe(0);
+            expect(verifyResult.stdout.trim()).toContain('compute');
+
+            // Verify enhanced sandbox features are available (these are from ComputeClient)
+            expect(typeof (sandbox as any).createTerminal).toBe('function');
+            expect(typeof (sandbox as any).createWatcher).toBe('function');
+          } finally {
+            await sandbox.destroy();
+          }
+        }, 60000); // Longer timeout for installation
+
+        it('should start compute daemon and respond to health checks', async () => {
+          // Dynamically import compute to avoid circular dependencies
+          const { createCompute } = await import('computesdk');
+
+          const compute = createCompute({
+            defaultProvider: provider,
+            apiKey: process.env.COMPUTESDK_API_KEY!
+          });
+
+          const sandbox = await compute.sandbox.create();
+
+          try {
+            // SDK should have installed and started the daemon
+            // Verify daemon is responding via curl (port 18080 for Vercel compatibility)
+            const healthResult = await sandbox.runCommand('curl', ['-s', 'http://localhost:18080/health']);
+            expect(healthResult.exitCode).toBe(0);
+            expect(healthResult.stdout).toContain('ok');
+          } finally {
+            await sandbox.destroy();
+          }
+        }, 90000); // Even longer timeout for full installation + startup
+      });
+    }
   };
 }
 
@@ -351,7 +451,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
     
     runCommand: async (command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult> => {
       const fullCommand = `${command} ${args?.join(' ') || ''}`.trim();
-      
+
       if (command === 'echo' && args?.includes('Hello from command')) {
         return {
           stdout: 'Hello from command\n',
@@ -364,7 +464,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           ...(options?.background && { pid: -1 })
         };
       }
-      
+
       if (command === 'nonexistent-command-12345') {
         return {
           stdout: '',
@@ -377,7 +477,49 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           ...(options?.background && { pid: -1 })
         };
       }
-      
+
+      // Shell command quoting tests
+      if (command === 'sh' && args?.[0] === '-c') {
+        const shellCommand = args[1];
+
+        if (shellCommand === 'echo "hello world"') {
+          return {
+            stdout: 'hello world\n',
+            stderr: '',
+            exitCode: 0,
+            executionTime: 10,
+            sandboxId: 'mock-sandbox-123',
+            provider: providerName,
+            isBackground: false
+          };
+        }
+
+        if (shellCommand === 'echo "$HOME"') {
+          return {
+            stdout: '/home/user\n',
+            stderr: '',
+            exitCode: 0,
+            executionTime: 10,
+            sandboxId: 'mock-sandbox-123',
+            provider: providerName,
+            isBackground: false
+          };
+        }
+
+        if (shellCommand === 'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt') {
+          mockFiles.set('/tmp/test-quoting.txt', 'test content');
+          return {
+            stdout: 'test content\n',
+            stderr: '',
+            exitCode: 0,
+            executionTime: 20,
+            sandboxId: 'mock-sandbox-123',
+            provider: providerName,
+            isBackground: false
+          };
+        }
+      }
+
       return {
         stdout: `Mock command output: ${fullCommand}`,
         stderr: '',

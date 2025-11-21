@@ -214,9 +214,17 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
         try {
           // Connect to the sandbox client using sandbox.connect()
           const client = await sandbox.connect();
-          
-          // Construct full command with arguments
-          const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
+
+          // Construct full command with arguments, properly quoting each arg
+          const quotedArgs = finalArgs.map(arg => {
+            // Quote arguments that contain spaces or special characters
+            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
+              // Escape any double quotes in the argument and wrap in double quotes
+              return `"${arg.replace(/"/g, '\\"')}"`;
+            }
+            return arg;
+          });
+          const fullCommand = quotedArgs.length > 0 ? `${finalCommand} ${quotedArgs.join(' ')}` : finalCommand;
 
           // Execute command using CodeSandbox client.commands.run()
           // This returns the full output as a string
