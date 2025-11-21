@@ -47,13 +47,10 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@computesdk/client": "workspace:*",
-    "zod": "^3.22.0",
-    "uuid": "^9.0.0"
+    "@computesdk/client": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/uuid": "^9.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",

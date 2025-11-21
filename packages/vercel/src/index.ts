@@ -124,12 +124,10 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
               `Vercel provider does not support reconnecting to existing sandboxes. Vercel sandboxes are ephemeral and must be created fresh each time.`
             );
           } else {
-            // Create new Vercel sandbox using the appropriate authentication method
+            // Create new Vercel sandbox
             if (oidcToken) {
-              // Use OIDC token method (simpler, recommended)
               sandbox = await VercelSandbox.create();
             } else {
-              // Use traditional method (token + teamId + projectId)
               sandbox = await VercelSandbox.create({
                 token,
                 teamId,

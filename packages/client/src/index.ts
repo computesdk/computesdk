@@ -555,7 +555,17 @@ export class ComputeClient {
         return undefined as T;
       }
 
-      const data = await response.json();
+      // Get response text first, then parse JSON with better error handling
+      const text = await response.text();
+      let data: T;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonError) {
+        throw new Error(
+          `Failed to parse JSON response from ${endpoint}: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}\n` +
+          `Response body (first 200 chars): ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}`
+        );
+      }
 
       if (!response.ok) {
         const error = (data as ErrorResponse).error || response.statusText;

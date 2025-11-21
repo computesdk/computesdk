@@ -33,7 +33,8 @@ async function authorizeApiKey(apiKey: string): Promise<AuthorizationResponse> {
     });
 
     if (!response.ok) {
-      throw new Error(`License authorization failed: ${response.statusText}`);
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(`License authorization failed (${response.status}): ${errorText}`);
     }
 
     const data = await response.json();
@@ -56,66 +57,188 @@ async function authorizeApiKey(apiKey: string): Promise<AuthorizationResponse> {
       preview_url: data.preview_url
     };
   } catch (error) {
-    throw new Error(`Failed to authorize API key: ${error}`);
+    if (error instanceof Error && error.message.includes('License authorization failed')) {
+      throw error; // Re-throw our formatted error
+    }
+    // Network or other errors
+    throw new Error(`Failed to authorize API key (network error): ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Check if a command is available in the sandbox
+ */
+async function isCommandAvailable(sandbox: Sandbox, command: string): Promise<boolean> {
+  const result = await sandbox.runCommand('sh', ['-c', `command -v ${command}`]);
+  return result.exitCode === 0;
+}
+
+/**
+ * Detect package manager available in the sandbox
+ */
+async function detectPackageManager(sandbox: Sandbox): Promise<'apk' | 'apt' | null> {
+  // Try Alpine's apk first (most common in minimal containers)
+  if (await isCommandAvailable(sandbox, 'apk')) {
+    return 'apk';
+  }
+
+  // Fall back to Debian/Ubuntu apt
+  if (await isCommandAvailable(sandbox, 'apt-get')) {
+    return 'apt';
+  }
+
+  return null;
+}
+
+/**
+ * Install required dependencies (curl and bash) if missing
+ */
+async function ensureDependencies(sandbox: Sandbox): Promise<void> {
+  const hasCurl = await isCommandAvailable(sandbox, 'curl');
+  const hasBash = await isCommandAvailable(sandbox, 'bash');
+
+  // If both are available, nothing to do
+  if (hasCurl && hasBash) {
+    return;
+  }
+
+  const packageManager = await detectPackageManager(sandbox);
+
+  if (!packageManager) {
+    throw new Error(
+      `Missing required tools (curl: ${hasCurl}, bash: ${hasBash}), but no supported package manager found.\n` +
+      `Supported package managers: apk (Alpine), apt-get (Debian/Ubuntu).\n` +
+      `Please use a sandbox image that includes curl and bash, or install them manually first.`
+    );
+  }
+
+  let installResult;
+
+  if (packageManager === 'apk') {
+    // Alpine Linux
+    installResult = await sandbox.runCommand('sh', ['-c', 'apk add --no-cache curl bash 2>&1']);
+  } else {
+    // Debian/Ubuntu
+    installResult = await sandbox.runCommand('sh', ['-c', 'apt-get update -qq && apt-get install -qq -y curl bash 2>&1']);
+  }
+
+  if (installResult.exitCode !== 0) {
+    throw new Error(
+      `Failed to install curl and bash using ${packageManager}.\n` +
+      `Install output: ${installResult.stderr || installResult.stdout}\n` +
+      `Please install curl and bash manually or use a different sandbox image.`
+    );
+  }
+}
+
+/**
+ * Check if compute CLI is already installed in the sandbox
+ */
+async function isComputeInstalled(sandbox: Sandbox): Promise<boolean> {
+  const result = await sandbox.runCommand('sh', ['-c', 'test -f /usr/local/bin/compute && echo "exists" || echo "missing"']);
+  return result.stdout?.trim() === 'exists';
+}
+
+/**
+ * Download the compute install script
+ */
+async function downloadInstallScript(sandbox: Sandbox): Promise<void> {
+  const downloadResult = await sandbox.runCommand('sh', ['-c', 'curl -fsSL https://computesdk.com/install.sh -o /tmp/compute-install.sh 2>&1']);
+
+  if (downloadResult.exitCode !== 0) {
+    const errorOutput = downloadResult.stderr || downloadResult.stdout || 'unknown error';
+    throw new Error(
+      `Failed to download install script from https://computesdk.com/install.sh: ${errorOutput}`
+    );
+  }
+}
+
+/**
+ * Run the compute install script
+ */
+async function runInstallScript(sandbox: Sandbox, accessToken?: string): Promise<void> {
+  const installCommand = accessToken
+    ? `bash /tmp/compute-install.sh --non-interactive --access-token "${accessToken}" --location /usr/local/bin`
+    : `bash /tmp/compute-install.sh --non-interactive --location /usr/local/bin`;
+
+  const installResult = await sandbox.runCommand('bash', ['-c', installCommand]);
+
+  if (installResult.exitCode !== 0) {
+    const errorOutput = installResult.stderr || installResult.stdout || 'unknown error';
+    throw new Error(`Failed to install compute CLI: ${errorOutput}`);
   }
 }
 
 /**
  * Install and start compute CLI inside a sandbox
+ *
+ * This is the main installation orchestrator that:
+ * 1. Checks if compute is already installed
+ * 2. Ensures curl and bash are available (installs if needed)
+ * 3. Downloads the install script
+ * 4. Runs the install script with proper credentials
+ * 5. Verifies the installation succeeded
  */
 async function installComputeInSandbox(
   sandbox: Sandbox,
   config?: { apiKey?: string; accessToken?: string }
 ): Promise<AuthorizationResponse | null> {
-  try {
-    console.log('Installing and starting compute CLI in sandbox...');
+  // Get access token and URLs from API key if provided
+  let authResponse: AuthorizationResponse | null = null;
+  let accessToken = config?.accessToken;
 
-    // Get access token and URLs from API key if provided
-    let authResponse: AuthorizationResponse | null = null;
-    let accessToken = config?.accessToken;
-
-    if (config?.apiKey && !accessToken) {
-      console.log('Authorizing API key and getting access token...');
-      authResponse = await authorizeApiKey(config.apiKey);
-      accessToken = authResponse.access_token;
-    }
-
-    // Build install command with authentication
-    let installCommand = 'curl -fsSL https://computesdk.com/install.sh | sh';
-
-    if (accessToken) {
-      installCommand = `curl -fsSL https://computesdk.com/install.sh | sh -s -- --access-token ${accessToken}`;
-    }
-
-    // Run the install script (it will handle installation and starting compute)
-    const result = await sandbox.runCommand('sh', ['-c', installCommand]);
-
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to install and start compute CLI: ${result.stderr}`);
-    }
-
-    console.log('Compute CLI installed successfully');
-
-    return authResponse;
-  } catch (error) {
-    throw new Error(`Failed to install compute CLI in sandbox: ${error}`);
+  if (config?.apiKey && !accessToken) {
+    authResponse = await authorizeApiKey(config.apiKey);
+    accessToken = authResponse.access_token;
   }
+
+  // Check if compute is already installed
+  if (await isComputeInstalled(sandbox)) {
+    return authResponse;
+  }
+
+  // Ensure required dependencies are available
+  await ensureDependencies(sandbox);
+
+  // Download install script
+  await downloadInstallScript(sandbox);
+
+  // Run install script with credentials
+  await runInstallScript(sandbox, accessToken);
+
+  // Verify installation succeeded
+  if (!await isComputeInstalled(sandbox)) {
+    throw new Error('Compute binary not found at /usr/local/bin/compute after installation');
+  }
+
+  return authResponse;
 }
 
 /**
  * Wait for compute CLI to be ready by polling the health endpoint
  */
-async function waitForComputeReady(client: ComputeClient, maxRetries = 10, delayMs = 1000): Promise<void> {
+async function waitForComputeReady(client: ComputeClient, maxRetries = 30, delayMs = 2000): Promise<void> {
+  let lastError: Error | null = null;
+
   for (let i = 0; i < maxRetries; i++) {
     try {
       await client.health();
-      console.log('Compute CLI is ready');
       return;
     } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Only log on last attempt to avoid noise
       if (i === maxRetries - 1) {
-        throw new Error(`Compute CLI failed to start after ${maxRetries} attempts: ${error}`);
+        throw new Error(
+          `Compute CLI failed to start after ${maxRetries} attempts (${maxRetries * delayMs / 1000}s).\n` +
+          `Last error: ${lastError.message}\n` +
+          `This could indicate:\n` +
+          `  1. The compute daemon failed to start in the sandbox\n` +
+          `  2. The sandbox_url is incorrect or unreachable\n` +
+          `  3. The sandbox is taking longer than expected to initialize`
+        );
       }
-      console.log(`Waiting for compute CLI to start... (attempt ${i + 1}/${maxRetries})`);
+
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
@@ -195,7 +318,8 @@ class ComputeManager implements ComputeAPI {
       sandboxUrl: authResponse.sandbox_url,
       sandboxId: originalSandbox.sandboxId,
       provider: originalSandbox.provider,
-      token: authResponse.access_token
+      token: authResponse.access_token,
+      WebSocket: globalThis.WebSocket
     });
 
     // Wait for compute CLI to be ready before returning
@@ -242,16 +366,19 @@ class ComputeManager implements ComputeAPI {
       const options = params?.options;
       const sandbox = await provider.sandbox.create(options);
 
-      // Install compute CLI in the sandbox with auth credentials if available
-      const authResponse = await installComputeInSandbox(sandbox, this.computeAuth);
+      // Install compute CLI and wrap with ComputeClient if auth is configured
+      if (this.computeAuth.apiKey || this.computeAuth.accessToken) {
+        // Install compute CLI in the sandbox with auth credentials
+        const authResponse = await installComputeInSandbox(sandbox, this.computeAuth);
 
-      // Wrap with ComputeClient if we have authorization info
-      // This adds features like createTerminal(), createWatcher(), startSignals()
-      const finalSandbox = authResponse
-        ? await this.wrapWithComputeClient(sandbox, authResponse)
-        : sandbox;
+        // Wrap with ComputeClient if we have authorization info
+        // This adds features like createTerminal(), createWatcher(), startSignals()
+        if (authResponse) {
+          return await this.wrapWithComputeClient(sandbox, authResponse);
+        }
+      }
 
-      return finalSandbox;
+      return sandbox;
     },
 
     /**

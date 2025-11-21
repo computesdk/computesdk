@@ -61,8 +61,8 @@ function detectRuntime(code: string): Runtime {
     return 'node';
   }
 
-  // Strong Python indicators  
-  if (code.includes('print(') || 
+  // Strong Python indicators
+  if (code.includes('print(') ||
       code.includes('import ') ||
       code.includes('def ') ||
       code.includes('sys.') ||
@@ -73,8 +73,8 @@ function detectRuntime(code: string): Runtime {
     return 'python';
   }
 
-  // Default to Python for Modal
-  return 'python';
+  // Default to Node.js for Modal (now using Node.js base image)
+  return 'node';
 }
 
 /**
@@ -108,9 +108,9 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             sandbox = await Sandbox.fromId(options.sandboxId);
             sandboxId = options.sandboxId;
           } else {
-            // Create new Modal sandbox using working pattern from debug
+            // Create new Modal sandbox with Node.js (more appropriate for a Node.js SDK)
             const app = await App.lookup('computesdk-modal', { createIfMissing: true });
-            const image = await app.imageFromRegistry('python:3.13-slim');
+            const image = await app.imageFromRegistry('node:20-alpine');
             sandbox = await app.createSandbox(image);
             sandboxId = sandbox.sandboxId;
           }
@@ -191,22 +191,22 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         try {
           // Auto-detect runtime from code if not specified
           const detectedRuntime = runtime || detectRuntime(code);
-          
+
           // Create appropriate sandbox and command for the runtime
           let executionSandbox = modalSandbox.sandbox;
           let command: string[];
           let shouldCleanupSandbox = false;
-          
+
           if (detectedRuntime === 'node') {
-            // For Node.js execution, create a Node.js sandbox dynamically
-            const app = await App.lookup('computesdk-modal', { createIfMissing: true });
-            const nodeImage = await app.imageFromRegistry('node:20-alpine');
-            executionSandbox = await app.createSandbox(nodeImage);
+            // Use existing Node.js sandbox (now the default)
             command = ['node', '-e', code];
-            shouldCleanupSandbox = true; // Clean up temporary Node.js sandbox
           } else {
-            // Use existing Python sandbox for Python code
+            // For Python execution, create a Python sandbox dynamically
+            const app = await App.lookup('computesdk-modal', { createIfMissing: true });
+            const pythonImage = await app.imageFromRegistry('python:3.13-slim');
+            executionSandbox = await app.createSandbox(pythonImage);
             command = ['python3', '-c', code];
+            shouldCleanupSandbox = true; // Clean up temporary Python sandbox
           }
 
           const process = await executionSandbox.exec(command, {
@@ -221,8 +221,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
           ]);
 
           const exitCode = await process.wait();
-          
-          // Clean up temporary Node.js sandbox if created
+
+          // Clean up temporary Python sandbox if created
           if (shouldCleanupSandbox && executionSandbox !== modalSandbox.sandbox) {
             try {
               await executionSandbox.terminate();
@@ -233,7 +233,7 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
           // Check for syntax errors in stderr
           if (exitCode !== 0 && stderr && (
-            stderr.includes('SyntaxError') || 
+            stderr.includes('SyntaxError') ||
             stderr.includes('invalid syntax')
           )) {
             throw new Error(`Syntax error: ${stderr.trim()}`);
@@ -252,7 +252,7 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
           if (error instanceof Error && error.message.includes('Syntax error')) {
             throw error; // Re-throw syntax errors
           }
-          
+
           throw new Error(
             `Modal execution failed: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -322,7 +322,7 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         return {
           id: modalSandbox.sandboxId,
           provider: 'modal',
-          runtime: 'python', // Modal default
+          runtime: 'node', // Modal default (now using Node.js)
           status,
           createdAt: new Date(),
           timeout: 300000,
@@ -468,7 +468,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
         readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
           try {
-            const process = await modalSandbox.sandbox.exec(['ls', '-la', '--time-style=iso', path], {
+            // Use simple -l flag for BusyBox compatibility (Alpine/node:20-alpine uses BusyBox ls)
+            const process = await modalSandbox.sandbox.exec(['ls', '-la', path], {
               stdout: 'pipe',
               stderr: 'pipe'
             });
