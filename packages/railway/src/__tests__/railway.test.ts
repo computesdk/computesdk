@@ -38,6 +38,18 @@ describe('Railway Provider Integration Test', () => {
     console.log('✅ getById method works with existing sandbox');
     console.log(`📄 Retrieved sandbox details: ID=${retrievedSandbox!.sandboxId}, Provider=${retrievedSandbox!.provider}`);
     
+    // Test list method
+    console.log('📋 Testing list method...');
+    const sandboxList = await provider.sandbox.list();
+    
+    expect(sandboxList).toBeDefined();
+    expect(Array.isArray(sandboxList)).toBe(true);
+    // The created sandbox should be in the list
+    const foundSandbox = sandboxList.find(s => s.sandboxId === sandbox.sandboxId);
+    expect(foundSandbox).toBeDefined();
+    expect(foundSandbox!.sandboxId).toBe(sandbox.sandboxId);
+    console.log(`✅ list method works - found ${sandboxList.length} sandbox(es), including our created sandbox`);
+    
     // Wait 60 seconds
     console.log('⏰ Waiting 60 seconds...');
     await new Promise(resolve => setTimeout(resolve, 60000));

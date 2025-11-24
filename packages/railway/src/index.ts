@@ -62,25 +62,12 @@ const handleGraphQLErrors = (data: any) => {
   }
 };
 
-const handleGetByIdErrors = (data: any) => {
-  if (data.errors) {
-    // Railway returns "Not Authorized" for non-existent services
-    const isNotAuthorized = data.errors.some((error: any) => 
-      error.message === 'Not Authorized' && error.path && error.path.includes('service')
-    );
-    if (isNotAuthorized) return null;
-    throw new Error(`Railway GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
-  }
-  return false;
-};
-
-
 
 export const fetchRailway = async (
   apiKey: string, 
   mutation: any,
-  useGetByIdErrorHandling: boolean = false
 ) => {
+  
   const response = await fetch('https://backboard.railway.com/graphql/v2', {
     method: 'POST',
     headers: {
@@ -95,14 +82,6 @@ export const fetchRailway = async (
   }
 
   const data = await response.json();
-  
-  // Use specialized error handling for getById operations
-  if (useGetByIdErrorHandling) {
-    const nullResult = handleGetByIdErrors(data);
-    if (nullResult === null) {
-      return null;
-    }
-  }
 
   // Standard error handling for all operations
   handleGraphQLErrors(data);
@@ -178,7 +157,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const responseData = await fetchRailway(apiKey, mutation, true);
+          const responseData = await fetchRailway(apiKey, mutation);
           
           // If service doesn't exist, fetchRailway returns null when useGetByIdErrorHandling=true
           if (responseData === null) {
@@ -219,7 +198,10 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const services = await fetchRailway(apiKey, mutation) || [];
+          const responseData = await fetchRailway(apiKey, mutation);
+          
+          // Extract services from the project.services.edges structure
+          const services = responseData?.project?.services?.edges || [];
           
           // Transform each service into the expected format
           const sandboxes = services.map((edge: any) => {
