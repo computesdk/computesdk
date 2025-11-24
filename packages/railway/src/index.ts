@@ -56,9 +56,9 @@ const GRAPHQL_QUERIES = {
   DELETE_SERVICE: `mutation ServiceDelete($id: String!) { serviceDelete(id: $id) }`
 };
 
-const handleGraphQLErrors = (data: any, operation: string) => {
+const handleGraphQLErrors = (data: any) => {
   if (data.errors) {
-    throw new Error(`Railway GraphQL error (${operation}): ${data.errors.map((e: any) => e.message).join(', ')}`);
+    throw new Error(`Railway GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
   }
 };
 
@@ -78,9 +78,8 @@ const handleGetByIdErrors = (data: any) => {
 
 export const fetchRailway = async (
   apiKey: string, 
-  mutation: any, 
-  operation: string, 
-  extractPath?: string
+  mutation: any,
+  useGetByIdErrorHandling: boolean = false
 ) => {
   const response = await fetch('https://backboard.railway.com/graphql/v2', {
     method: 'POST',
@@ -97,10 +96,21 @@ export const fetchRailway = async (
 
   const data = await response.json();
   
-  handleGraphQLErrors(data, operation);
+  // Use specialized error handling for getById operations
+  if (useGetByIdErrorHandling) {
+    const nullResult = handleGetByIdErrors(data);
+    if (nullResult === null) {
+      return null;
+    }
+  }
 
-  return data.data; // For destroy or custom handling
+  // Standard error handling for all operations
+  handleGraphQLErrors(data);
+
+  return data.data;
 };
+
+
 
 /**
  * Create a Railway provider instance using the factory pattern
@@ -127,7 +137,19 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const service = await fetchRailway(apiKey, mutation, 'create service');
+          const responseData = await fetchRailway(apiKey, mutation);
+          
+          // Extract service from the expected serviceCreate response
+          const service = responseData?.serviceCreate;
+          
+          if (!service) {
+            throw new Error('No service returned from Railway API - responseData.serviceCreate is undefined');
+          }
+          
+          if (!service.id) {
+            throw new Error(`Service ID is undefined. Full service object: ${JSON.stringify(service, null, 2)}`);
+          }
+
           const railwaySandbox: RailwaySandbox = {
             serviceId: service.id,
             projectId,
@@ -156,11 +178,18 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const service = await fetchRailway(apiKey, mutation, 'get service');
+          const responseData = await fetchRailway(apiKey, mutation, true);
           
-          // If service doesn't exist, Railway returns null (handled by fetchRailway)
-          if (service === null) {
+          // If service doesn't exist, fetchRailway returns null when useGetByIdErrorHandling=true
+          if (responseData === null) {
             return null;
+          }
+          
+          const service = responseData?.service;
+          
+          // Service should be defined if we get here (non-existent services return null above)
+          if (!service) {
+            throw new Error('Service data is missing from Railway response');
           }
           const railwaySandbox: RailwaySandbox = {
             serviceId: service.id,
@@ -190,7 +219,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const services = await fetchRailway(apiKey, mutation, 'list services') || [];
+          const services = await fetchRailway(apiKey, mutation) || [];
           
           // Transform each service into the expected format
           const sandboxes = services.map((edge: any) => {
@@ -226,7 +255,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
             }
           };
 
-          const data = await fetchRailway(apiKey, mutation, 'delete service');
+          const data = await fetchRailway(apiKey, mutation);
           
           if (data.errors) {
             // Log errors but don't throw for destroy operations
