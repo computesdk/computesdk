@@ -68,11 +68,28 @@ export interface TerminalResizeMessage {
   };
 }
 
+/**
+ * Ping message (application-level keepalive)
+ */
+export interface PingMessage {
+  type: 'ping';
+  data?: any;
+}
+
+/**
+ * Pong message (application-level keepalive response)
+ */
+export interface PongMessage {
+  type: 'pong';
+  data?: any;
+}
+
 export type OutgoingMessage =
   | SubscribeMessage
   | UnsubscribeMessage
   | TerminalInputMessage
-  | TerminalResizeMessage;
+  | TerminalResizeMessage
+  | PingMessage;
 
 // ============================================================================
 // Incoming Message Types (Server → Client)
@@ -208,7 +225,8 @@ export type IncomingMessage =
   | WatcherDestroyedMessage
   | SignalMessage
   | SandboxCreatedMessage
-  | SandboxDeletedMessage;
+  | SandboxDeletedMessage
+  | PongMessage;
 
 // ============================================================================
 // WebSocket Manager Configuration
@@ -231,6 +249,8 @@ export interface WebSocketManagerConfig {
   debug?: boolean;
   /** WebSocket protocol: 'binary' (default, recommended) or 'json' (for debugging) */
   protocol?: 'json' | 'binary';
+  /** Ping interval in milliseconds to keep connection alive (default: 10000, 0 = disabled) */
+  pingInterval?: number;
 }
 
 // ============================================================================
@@ -293,6 +313,8 @@ export class WebSocketManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private subscribedChannels: Set<string> = new Set();
   private isManualClose = false;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private lastPongTime: number = Date.now();
 
   constructor(config: WebSocketManagerConfig) {
     this.config = {
@@ -303,6 +325,7 @@ export class WebSocketManager {
       maxReconnectAttempts: config.maxReconnectAttempts ?? 5,
       debug: config.debug ?? false,
       protocol: config.protocol ?? 'binary',
+      pingInterval: config.pingInterval ?? 10000,
     };
   }
 
@@ -323,6 +346,9 @@ export class WebSocketManager {
         this.ws.onopen = () => {
           this.log('Connected to WebSocket server');
           this.reconnectAttempts = 0;
+
+          // Start ping timer to keep connection alive
+          this.startPingTimer();
 
           // Resubscribe to channels after reconnection
           if (this.subscribedChannels.size > 0) {
@@ -371,6 +397,10 @@ export class WebSocketManager {
 
         this.ws.onclose = () => {
           this.log('WebSocket connection closed');
+
+          // Stop ping timer
+          this.stopPingTimer();
+
           this.emit('close');
 
           // Attempt reconnection if enabled and not manually closed
@@ -389,6 +419,9 @@ export class WebSocketManager {
    */
   disconnect(): void {
     this.isManualClose = true;
+
+    // Stop ping timer
+    this.stopPingTimer();
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -431,6 +464,49 @@ export class WebSocketManager {
     }, this.config.reconnectDelay);
   }
 
+  /**
+   * Start sending periodic ping messages to keep connection alive
+   * @private
+   */
+  private startPingTimer(): void {
+    // Stop existing timer if any
+    this.stopPingTimer();
+
+    // Don't start if ping is disabled (interval = 0)
+    if (this.config.pingInterval === 0) {
+      return;
+    }
+
+    this.log(`Starting ping timer with interval: ${this.config.pingInterval}ms`);
+    this.lastPongTime = Date.now();
+
+    this.pingTimer = setInterval(() => {
+      if (this.isConnected()) {
+        this.log('Sending ping');
+        this.sendRaw({ type: 'ping', data: {} });
+      }
+    }, this.config.pingInterval);
+  }
+
+  /**
+   * Stop ping timer
+   * @private
+   */
+  private stopPingTimer(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+      this.log('Stopped ping timer');
+    }
+  }
+
+  /**
+   * Get time since last pong received (in milliseconds)
+   */
+  getTimeSinceLastPong(): number {
+    return Date.now() - this.lastPongTime;
+  }
+
   // ============================================================================
   // Channel Subscription
   // ============================================================================
@@ -468,20 +544,27 @@ export class WebSocketManager {
   /**
    * Send raw message to server
    */
-  private sendRaw(message: OutgoingMessage): void {
+  private sendRaw(message: OutgoingMessage): boolean {
     if (!this.isConnected()) {
-      throw new Error('WebSocket is not connected');
+      this.log('Cannot send message, WebSocket is not connected:', message.type);
+      return false;
     }
 
-    if (this.config.protocol === 'binary') {
-      // Send as binary message
-      const buffer = encodeBinaryMessage(message);
-      this.ws!.send(buffer);
-      this.log('Sent binary message:', message);
-    } else {
-      // Send as JSON message
-      this.ws!.send(JSON.stringify(message));
-      this.log('Sent JSON message:', message);
+    try {
+      if (this.config.protocol === 'binary') {
+        // Send as binary message
+        const buffer = encodeBinaryMessage(message);
+        this.ws!.send(buffer);
+        this.log('Sent binary message:', message);
+      } else {
+        // Send as JSON message
+        this.ws!.send(JSON.stringify(message));
+        this.log('Sent JSON message:', message);
+      }
+      return true;
+    } catch (error) {
+      this.log('Failed to send message:', error);
+      return false;
     }
   }
 
@@ -573,6 +656,12 @@ export class WebSocketManager {
    * Handle incoming message
    */
   private handleMessage(message: IncomingMessage): void {
+    // Handle pong messages (update last pong time)
+    if (message.type === 'pong') {
+      this.lastPongTime = Date.now();
+      this.log('Received pong from server');
+    }
+
     // Emit message type event
     this.emit(message.type, message);
 
