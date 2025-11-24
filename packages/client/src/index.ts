@@ -555,7 +555,17 @@ export class ComputeClient {
         return undefined as T;
       }
 
-      const data = await response.json();
+      // Get response text first, then parse JSON with better error handling
+      const text = await response.text();
+      let data: T;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonError) {
+        throw new Error(
+          `Failed to parse JSON response from ${endpoint}: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}\n` +
+          `Response body (first 200 chars): ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}`
+        );
+      }
 
       if (!response.ok) {
         const error = (data as ErrorResponse).error || response.statusText;
@@ -1190,9 +1200,23 @@ export class ComputeClient {
    */
   async getUrl(options: { port: number; protocol?: string }): Promise<string> {
     const protocol = options.protocol || 'https';
-    // Extract subdomain from sandboxUrl
+    // Extract components from sandboxUrl
     const url = new URL(this.config.sandboxUrl);
-    return `${protocol}://${url.host}:${options.port}`;
+    const parts = url.hostname.split('.');
+    const subdomain = parts[0]; // Extract "sandbox-123" or "abc"
+    const baseDomain = parts.slice(1).join('.'); // Extract "sandbox.computesdk.com" or "preview.computesdk.com"
+
+    // ComputeSDK has two domains:
+    // - sandbox.computesdk.com: Management/control plane
+    // - preview.computesdk.com: Preview URLs for services
+    // When getting a URL for a port, we need the preview domain
+    const previewDomain = baseDomain.replace('sandbox.computesdk.com', 'preview.computesdk.com');
+
+    // ComputeSDK URL pattern: ${subdomain}-${port}.${previewDomain}
+    // Examples:
+    //   - https://abc.sandbox.computesdk.com → https://abc-3000.preview.computesdk.com
+    //   - https://sandbox-123.preview.computesdk.com → https://sandbox-123-3000.preview.computesdk.com
+    return `${protocol}://${subdomain}-${options.port}.${previewDomain}`;
   }
 
   /**

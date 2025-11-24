@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/runloop",
-  "version": "1.2.1",
+  "version": "1.2.6",
   "description": "Runloop provider for ComputeSDK",
   "author": "Runloop",
   "license": "MIT",

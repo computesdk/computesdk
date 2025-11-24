@@ -452,19 +452,10 @@ importers:
       '@computesdk/client':
         specifier: workspace:*
         version: link:../client
-      uuid:
-        specifier: ^9.0.0
-        version: 9.0.1
-      zod:
-        specifier: ^3.22.0
-        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
-      '@types/uuid':
-        specifier: ^9.0.0
-        version: 9.0.8
       '@vitest/coverage-v8':
         specifier: ^1.0.0
         version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))

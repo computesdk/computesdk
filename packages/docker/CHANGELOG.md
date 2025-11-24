@@ -1,5 +1,44 @@
 # @computesdk/docker
 
+## 1.1.6
+
+### Patch Changes
+
+- 51b9259: Adding support for Compute CLI
+- Updated dependencies [51b9259]
+  - computesdk@1.8.6
+
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+  - computesdk@1.8.5
+
+## 1.1.4
+
+### Patch Changes
+
+- Updated dependencies [11a3b8c]
+- Updated dependencies [11a3b8c]
+  - computesdk@1.8.4
+
+## 1.1.3
+
+### Patch Changes
+
+- Updated dependencies [483c700]
+  - computesdk@1.8.3
+
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies [66d50b9]
+  - computesdk@1.8.2
+
 ## 1.1.1
 
 ### Patch Changes
