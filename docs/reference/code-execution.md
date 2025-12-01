@@ -10,7 +10,11 @@ import { createCompute } from 'computesdk'
 const compute = createCompute()
 const sandbox = await compute.sandbox.create()
 
-// Execute a simple command
+// Execute code directly (auto-detects runtime)
+const result = await sandbox.runCode('print("Hello, World!")')
+console.log(result.stdout) // "Hello, World!"
+
+// Execute a shell command
 const result = await sandbox.runCommand('python', ['-c', 'print("Hello, World!")'])
 console.log(result.stdout) // "Hello, World!"
 
@@ -56,6 +60,112 @@ const result = await sandbox.runCommand('python', ['script.py', 'arg1', 'arg2'])
 const result = await sandbox.runCommand('long-running-command', [], {
   background: true
 })
+
+### runCode() Method
+
+Execute code directly in the sandbox with automatic runtime detection:
+
+```typescript
+// Execute JavaScript/Node.js code
+const result = await sandbox.runCode('console.log("Hello from Node.js!")')
+console.log(result.stdout) // "Hello from Node.js!"
+
+// Execute Python code  
+const result = await sandbox.runCode('print("Hello from Python!")')
+console.log(result.stdout) // "Hello from Python!"
+
+// Specify runtime explicitly
+const result = await sandbox.runCode('console.log("Hello")', 'node')
+const result = await sandbox.runCode('print("Hello")', 'python')
+```
+
+#### Runtime Auto-Detection
+
+When no runtime is specified, `runCode` automatically detects the language:
+
+```typescript
+// Auto-detected as Python
+await sandbox.runCode('print("Hello World")')
+await sandbox.runCode('import json; print(json.dumps({"key": "value"}))')
+
+// Auto-detected as Node.js
+await sandbox.runCode('console.log("Hello World")')
+await sandbox.runCode('const fs = require("fs"); console.log("Node.js")')
+
+// Multi-line code execution
+const result = await sandbox.runCode(`
+  const data = [1, 2, 3, 4, 5];
+  const sum = data.reduce((acc, val) => acc + val, 0);
+  console.log('Sum:', sum);
+`)
+```
+
+#### Error Handling
+
+```typescript
+// Handle execution errors
+const result = await sandbox.runCode('console.log("test")')
+
+if (result.exitCode === 0) {
+  console.log('Success:', result.stdout)
+} else {
+  console.log('Error:', result.stderr)
+}
+
+// Syntax errors throw exceptions
+try {
+  await sandbox.runCode('print("missing quote)')
+} catch (error) {
+  console.log('Syntax error:', error.message)
+}
+```
+
+#### JavaScript/Node.js Examples
+
+```typescript
+// File operations
+await sandbox.runCode(`
+  const fs = require('fs');
+  const data = { message: 'Hello World', timestamp: Date.now() };
+  fs.writeFileSync('output.json', JSON.stringify(data, null, 2));
+  console.log('File written successfully');
+`)
+
+// API calls (if modules are available)
+await sandbox.runCode(`
+  const https = require('https');
+  console.log('Making API request...');
+  // API logic here
+`)
+```
+
+#### Python Examples  
+
+```typescript
+// Data processing
+await sandbox.runCode(`
+import json
+import math
+
+data = [1, 2, 3, 4, 5]
+stats = {
+    'sum': sum(data),
+    'average': sum(data) / len(data),
+    'max': max(data),
+    'min': min(data)
+}
+
+print(json.dumps(stats, indent=2))
+`)
+
+// File operations
+await sandbox.runCode(`
+with open('data.txt', 'w') as f:
+    f.write('Hello from Python!')
+    
+print('File created successfully')
+`)
+```
 
 ## Execution Result Interface
 
