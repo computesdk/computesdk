@@ -43,7 +43,6 @@ const result = await sandbox.runCommand('npm', ['install'], {
 })
 ```
 
-
 ### runCode() Method
 
 Execute code directly in the sandbox with automatic runtime detection:
@@ -106,6 +105,16 @@ try {
 #### JavaScript/Node.js Examples
 
 ```typescript
+// Execute JavaScript/Node.js code
+const result = await sandbox.runCommand('node', ['-e', `
+const fs = require('fs')
+const data = { message: 'Hello from Node.js' }
+fs.writeFileSync('output.json', JSON.stringify(data))
+console.log('File written successfully')
+`)
+
+
+```typescript
 // File operations
 await sandbox.runCode(`
   const fs = require('fs');
@@ -123,6 +132,33 @@ await sandbox.runCode(`
 ```
 
 #### Python Examples  
+You can run Python code using the `runCommand` method with the Python interpreter:
+
+```typescript
+// Execute a simple Python one-liner
+const result = await sandbox.runCommand('python', [
+  '-c',
+  'print("Hello from Python!"); import math; print(f"Square root of 16 is {math.sqrt(16)}")'
+]);
+console.log(result.stdout);
+// Output:
+// Hello from Python!
+// Square root of 16 is 4.0
+
+// Run a Python script from a file
+const scriptResult = await sandbox.runCommand('python', ['script.py']);
+
+// Run Python with arguments
+const argsResult = await sandbox.runCommand('python', [
+  'process_data.py',
+  '--input', 'data.csv',
+  '--output', 'result.json'
+]);
+
+// Install Python packages and run a script
+await sandbox.runCommand('pip', ['install', 'numpy', 'pandas']);
+const analysisResult = await sandbox.runCommand('python', ['analyze.py']);
+```
 
 ```typescript
 // Data processing
@@ -148,6 +184,18 @@ with open('data.txt', 'w') as f:
     
 print('File created successfully')
 `)
+```
+
+#### Virtual Environments
+
+To use a Python virtual environment, you can activate it before running your commands:
+
+```typescript
+// Activate virtual environment and run a script
+const venvResult = await sandbox.runCommand('bash', [
+  '-c',
+  'source /path/to/venv/bin/activate && python script.py'
+]);
 ```
 
 ## Execution Result Interface
@@ -179,56 +227,3 @@ interface ExecutionResult {
   pid?: number;
 }
 ```
-
-## Running Python Code
-
-You can run Python code using the `runCommand` method with the Python interpreter:
-
-```typescript
-// Execute a simple Python one-liner
-const result = await sandbox.runCommand('python', [
-  '-c',
-  'print("Hello from Python!"); import math; print(f"Square root of 16 is {math.sqrt(16)}")'
-]);
-console.log(result.stdout);
-// Output:
-// Hello from Python!
-// Square root of 16 is 4.0
-
-// Run a Python script from a file
-const scriptResult = await sandbox.runCommand('python', ['script.py']);
-
-// Run Python with arguments
-const argsResult = await sandbox.runCommand('python', [
-  'process_data.py',
-  '--input', 'data.csv',
-  '--output', 'result.json'
-]);
-
-// Install Python packages and run a script
-await sandbox.runCommand('pip', ['install', 'numpy', 'pandas']);
-const analysisResult = await sandbox.runCommand('python', ['analyze.py']);
-```
-
-### Virtual Environments
-
-To use a Python virtual environment, you can activate it before running your commands:
-
-```typescript
-// Activate virtual environment and run a script
-const venvResult = await sandbox.runCommand('bash', [
-  '-c',
-  'source /path/to/venv/bin/activate && python script.py'
-]);
-```
-
-### Node.js
-
-```typescript
-// Execute JavaScript/Node.js code
-const result = await sandbox.runCommand('node', ['-e', `
-const fs = require('fs')
-const data = { message: 'Hello from Node.js' }
-fs.writeFileSync('output.json', JSON.stringify(data))
-console.log('File written successfully')
-`)
