@@ -23,6 +23,8 @@ export interface VercelConfig {
   runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Ports to expose */
+  ports?: number[];
 }
 
 
@@ -126,12 +128,19 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           } else {
             // Create new Vercel sandbox
             if (oidcToken) {
-              sandbox = await VercelSandbox.create();
+              sandbox = await VercelSandbox.create(
+                {
+                  ports: config.ports,
+                  timeout,
+                }
+              );
             } else {
               sandbox = await VercelSandbox.create({
                 token,
                 teamId,
                 projectId,
+                ports: config.ports,
+                timeout,
               });
             }
           }
