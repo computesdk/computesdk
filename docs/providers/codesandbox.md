@@ -52,13 +52,11 @@ interface CodeSandboxConfig {
   /** CodeSandbox API key - if not provided, will use CODESANDBOX_API_KEY env var */
   apiKey?: string;
    /** Project template to use */
-  template?: 'react' | 'vue' | 'angular' | 'nextjs' | 'node' | 'vanilla';
+  templateId?: string;
+  /** Runtime to use */
+  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
-  /** Enable public access to sandbox */
-  publicAccess?: boolean;
-  /** Base URL for CodeSandbox API */
-  baseUrl?: string;
 }
 ```
 

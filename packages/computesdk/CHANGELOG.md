@@ -1,5 +1,101 @@
 # computesdk
 
+## 1.8.6
+
+### Patch Changes
+
+- 51b9259: Adding support for Compute CLI
+- Updated dependencies [51b9259]
+  - @computesdk/client@0.3.5
+
+## 1.8.5
+
+### Patch Changes
+
+- f0eef79: moving to access token
+- f0eef79: Adding enhanced sandbox
+- f0eef79: Waiting for a health server
+- Updated dependencies [f0eef79]
+- Updated dependencies [f0eef79]
+  - @computesdk/client@0.3.4
+
+## 1.8.4
+
+### Patch Changes
+
+- 11a3b8c: moving to access token
+- 11a3b8c: Adding enhanced sandbox
+- Updated dependencies [11a3b8c]
+- Updated dependencies [11a3b8c]
+  - @computesdk/client@0.3.3
+
+## 1.8.3
+
+### Patch Changes
+
+- 483c700: Adding enhanced sandbox
+- Updated dependencies [483c700]
+  - @computesdk/client@0.3.2
+
+## 1.8.2
+
+### Patch Changes
+
+- 66d50b9: update jwt token variable to match license server json
+
+## 1.8.1
+
+### Patch Changes
+
+- Updated dependencies [3ebbbc2]
+  - @computesdk/client@0.3.1
+
+## 1.8.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+### Patch Changes
+
+- Updated dependencies [99b807c]
+  - @computesdk/client@0.3.0
+
+## 1.7.6
+
+### Patch Changes
+
+- Updated dependencies [6296b62]
+  - @computesdk/client@0.2.6
+
+## 1.7.5
+
+### Patch Changes
+
+- Updated dependencies [97e01e2]
+  - @computesdk/client@0.2.5
+
+## 1.7.4
+
+### Patch Changes
+
+- Updated dependencies [356f7ab]
+  - @computesdk/client@0.2.4
+
+## 1.7.3
+
+### Patch Changes
+
+- Updated dependencies [7d21636]
+  - @computesdk/client@0.2.3
+
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [9e239be]
+  - @computesdk/client@0.2.2
+
 ## 1.7.1
 
 ### Patch Changes

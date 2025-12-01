@@ -1,5 +1,17 @@
 # @computesdk/test-utils
 
+## 1.4.1
+
+### Patch Changes
+
+- 51b9259: Adding support for Compute CLI
+
+## 1.4.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
 ## 1.3.1
 
 ### Patch Changes

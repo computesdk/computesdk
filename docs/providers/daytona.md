@@ -51,11 +51,9 @@ interface DaytonaConfig {
   /** Daytona API key - if not provided, will use DAYTONA_API_KEY env var */
   apiKey?: string;
   /** Default runtime environment */
-  runtime?: 'python' | 'node';
+  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
-  /** Base URL for Daytona API */
-  baseUrl?: string;
 }
 ```
 

@@ -1,22 +1,18 @@
 {
   "name": "@computesdk/client",
-  "version": "0.2.1",
+  "version": "0.3.5",
+  "type": "module",
   "description": "Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes",
   "author": "Garrison",
   "license": "MIT",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
-    },
-    "./webcontainer": {
-      "types": "./dist/webcontainer-polyfill.d.ts",
-      "import": "./dist/webcontainer-polyfill.mjs",
-      "require": "./dist/webcontainer-polyfill.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [
@@ -26,7 +22,7 @@
     "build": "tsup",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
-    "test": "echo 'No tests yet'",
+    "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
@@ -40,8 +36,6 @@
     "code-execution",
     "cloud",
     "compute",
-    "webcontainer",
-    "polyfill",
     "remote-sandbox"
   ],
   "repository": {
@@ -54,7 +48,6 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
-    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.10",
     "@vitest/coverage-v8": "^1.0.0",

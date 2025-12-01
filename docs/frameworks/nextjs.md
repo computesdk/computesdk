@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     });
     
     // Create sandbox and execute code
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     const result = await sandbox.runCode(code, runtime);
     
     // Clean up
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
       provider: e2b({ apiKey: process.env.E2B_API_KEY! }) 
     });
     
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     
     // Save CSV data
     await sandbox.filesystem.writeFile('/data/input.csv', csvData);
@@ -421,7 +421,7 @@ export async function executeCode(code: string, runtime: 'python' | 'node') {
       provider: e2b({ apiKey: process.env.E2B_API_KEY! }) 
     });
     
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     const result = await sandbox.runCode(code, runtime);
     
     await compute.sandbox.destroy(sandbox.sandboxId);

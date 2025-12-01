@@ -7,12 +7,30 @@ info:
 
     ## Authentication
 
-    The API uses JWT-based authentication with a first-come-first-served bootstrap model:
+    The API supports flexible authentication with multiple token types:
 
-    1. The first client to call `POST /auth/token` receives a JWT token
-    2. Subsequent requests must include this token via:
-       - **Recommended**: `Authorization: Bearer <token>` header
-       - **Alternative**: `?token=<token>` query parameter (primarily for WebSocket connections)
+    ### Token Hierarchy
+
+    1. **Access Token** (Primary) - Obtained from the edge service using your API key
+       - Used by the Compute daemon for API communication
+       - Required to create session tokens and magic links
+       - Long-lived (default: 7 days)
+
+    2. **Session Tokens** - Delegated tokens for end-user sessions
+       - Created via `POST /auth/session_tokens` (requires access token)
+       - Used for browser-based and programmatic access
+       - Configurable expiration (default: 7 days)
+
+    3. **Magic Links** - One-time authentication URLs
+       - Generated via `POST /auth/magic-links` (requires access token)
+       - Automatically creates a session token when redeemed
+       - Expires in 5 minutes, perfect for quick browser access
+
+    ### Authentication Methods
+
+    Include tokens in requests via:
+    - **Recommended**: `Authorization: Bearer <token>` header
+    - **Alternative**: `?token=<token>` query parameter (for WebSocket connections)
 
     ## WebSocket Communication
 
@@ -134,6 +152,254 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthInfoResponse'
 
+  /auth/session_tokens:
+    post:
+      summary: Create session token
+      description: |
+        Creates a new session token for delegated access. Session tokens allow you to grant
+        temporary access to users or applications without sharing your access token.
+
+        **Requires**: Access token authentication
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                  description: Optional description for this token
+                  example: "VS Code Extension"
+                expires_in:
+                  type: integer
+                  description: Token expiration in seconds (default: 604800 = 7 days)
+                  example: 604800
+      responses:
+        '201':
+          description: Session token created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Session token created successfully"
+                  data:
+                    $ref: '#/components/schemas/SessionToken'
+        '401':
+          description: Unauthorized - Access token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: List session tokens
+      description: |
+        Returns a list of all session tokens for the current instance.
+
+        **Requires**: Access token authentication
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Session tokens retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  data:
+                    type: object
+                    properties:
+                      tokens:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SessionToken'
+        '401':
+          description: Unauthorized - Access token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/session_tokens/{id}:
+    get:
+      summary: Get session token
+      description: |
+        Retrieves details of a specific session token by ID.
+
+        **Requires**: Access token authentication
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Session token ID
+      responses:
+        '200':
+          description: Session token retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  data:
+                    $ref: '#/components/schemas/SessionToken'
+        '404':
+          description: Session token not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - Access token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Revoke session token
+      description: |
+        Revokes a session token, making it invalid for future requests.
+
+        **Requires**: Access token authentication
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Session token ID
+      responses:
+        '200':
+          description: Session token revoked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Session token revoked successfully"
+        '404':
+          description: Session token not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - Access token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/magic-links:
+    post:
+      summary: Create magic link
+      description: |
+        Generates a one-time magic link for browser-based authentication. When a user visits
+        the magic link, they automatically receive a session token via HTTP-only cookie.
+
+        Magic links expire after 5 minutes and can only be used once.
+
+        **Requires**: Access token authentication
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Magic link created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Magic link created successfully"
+                  data:
+                    type: object
+                    properties:
+                      magic_url:
+                        type: string
+                        format: uri
+                        example: "http://localhost:8080/auth/magic?token=eyJhbGc..."
+                      expires_at:
+                        type: string
+                        format: date-time
+                        example: "2025-01-15T10:05:00Z"
+        '401':
+          description: Unauthorized - Access token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/magic:
+    get:
+      summary: Redeem magic link
+      description: |
+        Redeems a one-time magic link token. This endpoint is automatically visited when
+        users click on magic links. Upon success, sets an HTTP-only session cookie and
+        redirects to the landing page.
+
+        **No authentication required** (uses magic link token from query parameter)
+      tags:
+        - Authentication
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Magic link token
+      responses:
+        '302':
+          description: Magic link redeemed successfully, redirects to landing page
+        '400':
+          description: Invalid or expired magic link
+          content:
+            text/html:
+              schema:
+                type: string
+                example: "<html><body>Invalid or expired magic link</body></html>"
+
   /ws:
     get:
       summary: WebSocket connection
@@ -141,7 +407,19 @@ paths:
         Establishes a WebSocket connection for real-time bidirectional communication.
 
         ## Authentication
-        Include the JWT token as a query parameter: `/ws?token=<token>`
+        Include your token as a query parameter: `/ws?token=<token>`
+
+        Accepts both access tokens and session tokens.
+
+        ## Protocol
+        Choose between JSON or binary protocol:
+        - `/ws?protocol=json` - JSON protocol (human-readable, good for debugging)
+        - `/ws?protocol=binary` - Binary protocol (default, high performance, 50-90% size reduction)
+
+        The binary protocol is recommended for production use, especially for:
+        - Terminal applications with heavy I/O
+        - Real-time development tools (Vite HMR, live reload)
+        - Low-bandwidth or high-latency connections
 
         ## Channels
         After establishing a connection, subscribe to channels to receive events:
@@ -168,6 +446,20 @@ paths:
         - `sandbox.deleted` - Sandbox deleted notification
       tags:
         - WebSocket
+      parameters:
+        - name: protocol
+          in: query
+          description: |
+            WebSocket communication protocol. Choose 'binary' for high performance (recommended for production)
+            or 'json' for human-readable debugging (default).
+          required: false
+          schema:
+            type: string
+            enum:
+              - json
+              - binary
+            default: json
+          example: binary
       security:
         - tokenQuery: []
       responses:
@@ -560,6 +852,12 @@ paths:
       description: |
         Executes a command in an existing terminal session. The output is returned
         in the response and also broadcast to WebSocket subscribers.
+
+        When `async: true`, the command starts executing in the background and the
+        response is returned immediately. Output is streamed via WebSocket only.
+
+        When `async: false` (default), the endpoint waits for command completion
+        and returns the full output in the response (also broadcast via WebSocket).
       tags:
         - Terminals
       security:
@@ -585,6 +883,13 @@ paths:
                   type: string
                   description: The command to execute
                   example: "echo 'Hello, World!'"
+                async:
+                  type: boolean
+                  description: |
+                    If true, returns immediately without waiting for command completion.
+                    Output is streamed via WebSocket. Useful for long-running commands.
+                  default: false
+                  example: true
       responses:
         '200':
           description: Command executed successfully
@@ -1578,6 +1883,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SandboxInfo'
+
+    SessionToken:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique token identifier
+          example: "tok_abc123xyz789"
+        token:
+          type: string
+          description: JWT token string (only returned on creation)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        description:
+          type: string
+          description: Optional description
+          example: "VS Code Extension"
+        created_at:
+          type: string
+          format: date-time
+          description: Token creation timestamp
+          example: "2025-01-15T10:00:00Z"
+        expires_at:
+          type: string
+          format: date-time
+          description: Token expiration timestamp
+          example: "2025-01-22T10:00:00Z"
 
     ErrorResponse:
       type: object

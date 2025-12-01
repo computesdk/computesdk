@@ -263,9 +263,17 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
 
         try {
           const { sandbox, sandboxId } = cloudflareSandbox;
-          
-          // Construct full command with arguments
-          const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+
+          // Construct full command with arguments, properly quoting each arg
+          const quotedArgs = args.map(arg => {
+            // Quote arguments that contain spaces or special characters
+            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
+              // Escape any double quotes in the argument and wrap in double quotes
+              return `"${arg.replace(/"/g, '\\"')}"`;
+            }
+            return arg;
+          });
+          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
 
           // Execute command using Cloudflare's exec method
           const execResult = await sandbox.exec(fullCommand);

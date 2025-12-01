@@ -51,11 +51,9 @@ interface E2BConfig {
   /** E2B API key - if not provided, will use E2B_API_KEY env var */
   apiKey?: string;
   /** Environment template to use */
-  template?: string;
+  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
-  /** Custom API URL */
-  apiUrl?: string;
 }
 ```
 

@@ -212,9 +212,17 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         try {
           // Handle background command execution
           const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-          
-          // Construct full command with arguments
-          const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
+
+          // Construct full command with arguments, properly quoting each arg
+          const quotedArgs = finalArgs.map(arg => {
+            // Quote arguments that contain spaces or special characters
+            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
+              // Escape any double quotes in the argument and wrap in double quotes
+              return `"${arg.replace(/"/g, '\\"')}"`;
+            }
+            return arg;
+          });
+          const fullCommand = quotedArgs.length > 0 ? `${finalCommand} ${quotedArgs.join(' ')}` : finalCommand;
 
           // Execute command using Daytona's process.executeCommand method
           const response = await sandbox.process.executeCommand(fullCommand);
