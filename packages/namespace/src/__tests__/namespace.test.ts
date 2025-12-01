@@ -16,10 +16,6 @@ describe('Namespace Provider Integration Tests', () => {
   };
 
   it('should complete full CRUD workflow: create → deploy → getById → list → destroy', async () => {
-    if (!process.env.NSC_TOKEN) {
-      console.log('⏭️ Skipping test - no NSC_TOKEN');
-      return;
-    }
 
     console.log('🚀 Starting Namespace provider integration test...');
     const provider = namespace(namespaceConfig);
@@ -86,17 +82,9 @@ describe('Namespace Provider Integration Tests', () => {
   }, 150000); // 150 seconds timeout (30s deploy + API calls + buffer)
 
 
-  it('should fail without NSC_TOKEN', () => {
-    const originalToken = process.env.NSC_TOKEN;
-    delete process.env.NSC_TOKEN;
-    
-    try {
-      const provider = namespace({});
-      expect(() => provider.sandbox.create({ runtime: 'node' })).rejects.toThrow('Missing Namespace token');
-    } finally {
-      if (originalToken) {
-        process.env.NSC_TOKEN = originalToken;
-      }
-    }
+  it('should fail without token', async () => {
+    const provider = namespace({});
+    await expect(provider.sandbox.create({ runtime: 'node' }))
+      .rejects.toThrow('Missing Namespace token.');
   });
 });

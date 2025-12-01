@@ -4,6 +4,8 @@
 
 import { createProvider, createBackgroundCommand } from 'computesdk';
 import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+// @ts-expect-error
+import { loadDefaults } from "@namespacelabs/sdk/auth";
 
 /**
  * Namespace sandbox interface
@@ -30,12 +32,14 @@ export interface NamespaceConfig {
   destroyReason?: string;
 }
 
-export const getAndValidateCredentials = (config: NamespaceConfig) => {
-  const token = config.token || (typeof process !== 'undefined' && process.env?.NSC_TOKEN) || '';
+export const getAndValidateCredentials = async (config: NamespaceConfig) => {
+  const tokenSource = await loadDefaults();
+  const issuedToken = await tokenSource.issueToken(5 * 60 * 1000); // 5 minutes
+  const token = config.token || issuedToken;
 
   if (!token) {
     throw new Error(
-      'Missing Namespace token. Provide token in config or set NSC_TOKEN environment variable.'
+      'Missing Namespace token.'
     );
   }
 
@@ -91,7 +95,7 @@ export const namespace = createProvider<NamespaceSandbox, NamespaceConfig>({
     sandbox: {
       // Collection operations (compute.sandbox.*)
       create: async (config: NamespaceConfig, options?: CreateSandboxOptions) => {
-        const { token } = getAndValidateCredentials(config);
+        const { token } = await getAndValidateCredentials(config);
 
         try {
           // Get image based on runtime
@@ -144,7 +148,7 @@ export const namespace = createProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       getById: async (config: NamespaceConfig, sandboxId: string) => {
-        const { token } = getAndValidateCredentials(config);
+        const { token } = await getAndValidateCredentials(config);
 
         try {
           const requestBody = {
@@ -186,7 +190,7 @@ export const namespace = createProvider<NamespaceSandbox, NamespaceConfig>({
       },
       
       list: async (config: NamespaceConfig) => {
-        const { token } = getAndValidateCredentials(config);
+        const { token } = await getAndValidateCredentials(config);
 
         try {
           const responseData = await fetchNamespace(token, API_ENDPOINTS.LIST_INSTANCES, {
@@ -228,7 +232,7 @@ export const namespace = createProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       destroy: async (config: NamespaceConfig, sandboxId: string) => {
-        const { token } = getAndValidateCredentials(config);
+        const { token } = await getAndValidateCredentials(config);
 
         try {
           const requestBody = {
