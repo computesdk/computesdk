@@ -43,23 +43,6 @@ const result = await sandbox.runCommand('npm', ['install'], {
 })
 ```
 
-### runCommand() Method
-
-Execute commands and scripts in the sandbox:
-
-```typescript
-// Basic command execution
-const result = await sandbox.runCommand('ls', ['-la'])
-console.log(result.stdout)
-
-// Run a Python script with arguments
-const result = await sandbox.runCommand('python', ['script.py', 'arg1', 'arg2'])
-
-// Run a command in the background (non-blocking)
-// Note: The command will still complete and return a result when done
-const result = await sandbox.runCommand('long-running-command', [], {
-  background: true
-})
 
 ### runCode() Method
 
