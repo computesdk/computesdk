@@ -43,6 +43,7 @@ async function main() {
         token: process.env.VERCEL_TOKEN,
         teamId: process.env.VERCEL_TEAM_ID,
         projectId: process.env.VERCEL_PROJECT_ID,
+        ports: [3000] // Example port exposure
       }) 
     });
     
