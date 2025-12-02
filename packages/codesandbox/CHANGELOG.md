@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.7
+
+### Patch Changes
+
+- Updated dependencies [04ffecf]
+  - computesdk@1.8.7
+
 ## 1.4.6
 
 ### Patch Changes

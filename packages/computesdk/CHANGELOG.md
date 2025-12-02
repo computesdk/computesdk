@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.8.7
+
+### Patch Changes
+
+- 04ffecf: Minor refactoring
+
 ## 1.8.6
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @computesdk/example-nextjs
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [04ffecf]
+  - computesdk@1.8.7
+  - @computesdk/vercel@1.5.7
+  - @computesdk/daytona@1.5.7
+  - @computesdk/e2b@1.6.7
+
 ## 0.2.6
 
 ### Patch Changes
