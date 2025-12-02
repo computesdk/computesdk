@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/modal",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "Modal provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
