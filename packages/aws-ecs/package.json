@@ -1,7 +1,7 @@
 {
-  "name": "@computesdk/aws",
+  "name": "@computesdk/aws-ecs",
   "version": "1.0.1",
-  "description": "AWS provider for ComputeSDK",
+  "description": "AWS ECS provider for ComputeSDK",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -37,14 +37,15 @@
     "code-execution",
     "cloud",
     "compute",
-    "containers"
+    "containers",
+    "ecs"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/aws"
+    "directory": "packages/aws-ecs"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/aws",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/aws-ecs",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
