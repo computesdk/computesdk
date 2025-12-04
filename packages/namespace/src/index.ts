@@ -4,8 +4,7 @@
 
 import { createProvider, createBackgroundCommand } from 'computesdk';
 import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
-// @ts-expect-error
-import { loadDefaults } from "@namespacelabs/sdk/auth";
+import { loadDefaults } from "@namespacelabs/sdk";
 
 /**
  * Namespace sandbox interface

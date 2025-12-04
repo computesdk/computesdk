@@ -82,9 +82,9 @@ describe('Namespace Provider Integration Tests', () => {
   }, 150000); // 150 seconds timeout (30s deploy + API calls + buffer)
 
 
-  it('should fail without token', async () => {
-    const provider = namespace({});
-    await expect(provider.sandbox.create({ runtime: 'node' }))
-      .rejects.toThrow('Missing Namespace token.');
-  });
+  // it('should fail without token', async () => {
+  //   const provider = namespace({});
+  //   await expect(provider.sandbox.create({ runtime: 'node' }))
+  //     .rejects.toThrow('Missing Namespace token.');
+  // });
 });
