@@ -33,13 +33,13 @@ export function createBackgroundCommand(command: string, args: string[] = [], op
     return { command, args, isBackground: false };
   }
 
-  // For background execution, we modify the command to run in background
-  // Default approach: append & to make it run in background
+  // For background execution, use nohup to detach from terminal and & to background
+  // nohup ensures the process survives after the shell exits
   const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-  
+
   return {
     command: 'sh',
-    args: ['-c', `${fullCommand} &`],
+    args: ['-c', `nohup ${fullCommand} > /dev/null 2>&1 &`],
     isBackground: true
   };
 }
@@ -103,95 +103,6 @@ export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, 
     snapshot?: SnapshotMethods<TSnapshot, TConfig>;
   };
 }
-
-/**
- * Default filesystem implementations based on shell commands
- * These work for any provider that supports shell command execution
- */
-const defaultFilesystemMethods = {
-  readFile: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<string> => {
-    const result = await runCommand(sandbox, 'cat', [path]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to read file ${path}: ${result.stderr}`);
-    }
-    // Trim trailing newline that cat command adds
-    return result.stdout.replace(/\n$/, '');
-  },
-
-  writeFile: async (sandbox: any, path: string, content: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<void> => {
-    const result = await runCommand(sandbox, 'sh', ['-c', `echo ${JSON.stringify(content)} > ${JSON.stringify(path)}`]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to write file ${path}: ${result.stderr}`);
-    }
-  },
-
-  mkdir: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<void> => {
-    const result = await runCommand(sandbox, 'mkdir', ['-p', path]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
-    }
-  },
-
-  readdir: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<FileEntry[]> => {
-    // Try different ls variations for maximum compatibility
-    let result = await runCommand(sandbox, 'ls', ['-la', path]);
-    let hasDetailedOutput = true;
-    
-    // Fall back to basic ls if detailed flags not supported
-    if (result.exitCode !== 0) {
-      result = await runCommand(sandbox, 'ls', ['-l', path]);
-    }
-    if (result.exitCode !== 0) {
-      result = await runCommand(sandbox, 'ls', [path]);
-      hasDetailedOutput = false;
-    }
-    
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
-    }
-
-    const lines = (result.stdout || '').split('\n').filter((line: string) => line.trim() && !line.startsWith('total'));
-
-    return lines.map((line: string) => {
-      if (hasDetailedOutput && line.includes(' ')) {
-        // Parse detailed ls output (ls -la or ls -l)
-        const parts = line.trim().split(/\s+/);
-        const name = parts[parts.length - 1];
-        const isDirectory = line.startsWith('d');
-        
-        return {
-          name,
-          path: `${path}/${name}`,
-          isDirectory,
-          size: parseInt(parts[4]) || 0,
-          lastModified: new Date()
-        };
-      } else {
-        // Parse simple ls output (just filenames)
-        const name = line.trim();
-        return {
-          name,
-          path: `${path}/${name}`,
-          isDirectory: false, // Can't determine from simple ls
-          size: 0,
-          lastModified: new Date()
-        };
-      }
-    });
-  },
-
-  exists: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<boolean> => {
-    const result = await runCommand(sandbox, 'test', ['-e', path]);
-    return result.exitCode === 0; // Exit code 0 means file exists
-  },
-
-  remove: async (sandbox: any, path: string, runCommand: (sandbox: any, command: string, args?: string[]) => Promise<ExecutionResult>): Promise<void> => {
-    const result = await runCommand(sandbox, 'rm', ['-rf', path]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to remove ${path}: ${result.stderr}`);
-    }
-  }
-};
 
 /**
  * Auto-generated filesystem implementation that throws "not supported" errors
@@ -311,6 +222,17 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
   }
 
   async runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult> {
+    // Handle background execution at the factory level
+    if (options?.background) {
+      const fullCommand = args?.length ? `${command} ${args.join(' ')}` : command;
+      const bgCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+      const result = await this.methods.runCommand(this.sandbox, 'sh', ['-c', bgCommand], undefined);
+      return {
+        ...result,
+        isBackground: true,
+        pid: -1
+      };
+    }
     return await this.methods.runCommand(this.sandbox, command, args, options);
   }
 
@@ -507,18 +429,13 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
 
 /**
  * Create a provider from method definitions
- * 
+ *
  * Auto-generates all boilerplate classes and provides feature detection
  * based on which methods are implemented.
  */
 export function createProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
   providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>
 ): (config: TConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
-  // Auto-inject default filesystem methods if none provided
-  if (!providerConfig.methods.sandbox.filesystem) {
-    providerConfig.methods.sandbox.filesystem = defaultFilesystemMethods;
-  }
-
   return (config: TConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };
