@@ -37,7 +37,7 @@ export const getAndValidateCredentials = (config: FlyConfig) => {
   const org = config.org || (typeof process !== 'undefined' && process.env?.FLY_ORG) || 'personal';
   const region = config.region || (typeof process !== 'undefined' && process.env?.FLY_REGION) || 'iad';
   const apiHostname = config.apiHostname || 'https://api.machines.dev';
-  const appName = config.appName || 'compute-sdk';
+  const appName = config.appName || 'computesdk';
 
   if (!apiToken) {
     throw new Error(
