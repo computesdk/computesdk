@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions, Runtime } from 'computesdk';
+import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
