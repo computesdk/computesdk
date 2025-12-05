@@ -6,8 +6,8 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { createProvider } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
 
 /**
  * Codesandbox-specific configuration options
@@ -205,29 +205,23 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
         }
       },
 
-      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
         const startTime = Date.now();
-
-        // Handle background command execution outside try block so it's accessible everywhere
-        const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
 
         try {
           // Connect to the sandbox client using sandbox.connect()
           const client = await sandbox.connect();
 
           // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = finalArgs.map(arg => {
-            // Quote arguments that contain spaces or special characters
+          const quotedArgs = args.map((arg: string) => {
             if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              // Escape any double quotes in the argument and wrap in double quotes
               return `"${arg.replace(/"/g, '\\"')}"`;
             }
             return arg;
           });
-          const fullCommand = quotedArgs.length > 0 ? `${finalCommand} ${quotedArgs.join(' ')}` : finalCommand;
+          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
 
           // Execute command using CodeSandbox client.commands.run()
-          // This returns the full output as a string
           const output = await client.commands.run(fullCommand);
 
           return {
@@ -236,21 +230,16 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
             exitCode: 0,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.id,
-            provider: 'codesandbox',
-            isBackground,
-            // For background commands, we can't get a real PID, but we can indicate it's running
-            ...(isBackground && { pid: -1 })
+            provider: 'codesandbox'
           };
         } catch (error) {
-          // For command failures, return error info instead of throwing
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127, // Command not found exit code
+            exitCode: 127,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.id,
-            provider: 'codesandbox',
-            isBackground  // Use the same value even for errors
+            provider: 'codesandbox'
           };
         }
       },

@@ -6,7 +6,7 @@
  */
 
 import { Sandbox as E2BSandbox } from 'e2b';
-import { createProvider, createBackgroundCommand } from 'computesdk';
+import { createProvider } from 'computesdk';
 
 
 import type {
@@ -14,8 +14,7 @@ import type {
   SandboxInfo,
   Runtime,
   CreateSandboxOptions,
-  FileEntry,
-  RunCommandOptions
+  FileEntry
 } from 'computesdk';
 
 /**
@@ -250,25 +249,19 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
-          // Handle background command execution
-          const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-
           // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = finalArgs.map(arg => {
-            // Quote arguments that contain spaces or special characters
+          const quotedArgs = args.map((arg: string) => {
             if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              // Escape any double quotes in the argument and wrap in double quotes
               return `"${arg.replace(/"/g, '\\"')}"`;
             }
             return arg;
           });
-          const fullCommand = quotedArgs.length > 0 ? `${finalCommand} ${quotedArgs.join(' ')}` : finalCommand;
+          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
 
-          // Execute command using E2B's bash execution via Python subprocess
           const execution = await sandbox.commands.run(fullCommand);
 
           return {
@@ -277,17 +270,13 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             exitCode: execution.exitCode,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.sandboxId || 'e2b-unknown',
-            provider: 'e2b',
-            isBackground,
-            // For background commands, we can't get a real PID, but we can indicate it's running
-            ...(isBackground && { pid: -1 })
+            provider: 'e2b'
           };
         } catch (error) {
-          // For command failures, return error info instead of throwing
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127, // Command not found exit code
+            exitCode: 127,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.sandboxId || 'e2b-unknown',
             provider: 'e2b'

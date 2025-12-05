@@ -1,5 +1,15 @@
 # @computesdk/example-nuxt
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [a146b97]
+  - computesdk@1.8.8
+  - @computesdk/daytona@1.5.8
+  - @computesdk/vercel@1.5.8
+  - @computesdk/e2b@1.6.8
+
 ## 0.2.7
 
 ### Patch Changes
