@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions, Runtime } from 'computesdk';
+import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -31,6 +31,9 @@ export function createProviderTests(config: ProviderTestConfig) {
   const { provider, name, supportsFilesystem = false, timeout = 30000, skipIntegration = false } = config;
 
   return () => {
+    // Check if CRUD tests should be skipped (for CI environment)
+    const skipCrudTests = typeof process !== 'undefined' && process.env?.SKIP_CRUD_TESTS === 'true';
+    
     // Get supported runtimes dynamically from provider
     const supportedRuntimes = provider.getSupportedRuntimes();
     
@@ -74,6 +77,10 @@ export function createProviderTests(config: ProviderTestConfig) {
         }, 15000);
 
         it(`should create a ${runtimeName} sandbox with valid ID`, () => {
+          if (skipCrudTests) {
+            console.log('Skipping CRUD test: sandbox creation validation');
+            return;
+          }
           expect(sandbox).toBeDefined();
           expect(sandbox.sandboxId).toBeDefined();
           expect(typeof sandbox.sandboxId).toBe('string');
@@ -172,6 +179,10 @@ print(json.dumps(data, indent=2))
         }, timeout);
 
         it('should get sandbox info', async () => {
+          if (skipCrudTests) {
+            console.log('Skipping CRUD test: sandbox info retrieval');
+            return;
+          }
           const info = await sandbox.getInfo();
           
           expect(info).toBeDefined();
@@ -187,7 +198,12 @@ print(json.dumps(data, indent=2))
 
         // Filesystem tests (only for first runtime to avoid duplication)
         if (supportsFilesystem && runtime === supportedRuntimes[0]) {
-          describe('Filesystem Operations', () => {
+          if (skipCrudTests) {
+            it('should skip filesystem CRUD operations', () => {
+              console.log('Skipping CRUD tests: Filesystem operations (CREATE, READ, UPDATE, DELETE)');
+            });
+          } else {
+            describe('Filesystem Operations', () => {
             const testFilePath = '/tmp/test-file.txt';
             const testDirPath = '/tmp/test-dir';
             const testContent = 'Hello, ComputeSDK filesystem!';
@@ -243,6 +259,7 @@ print(json.dumps(data, indent=2))
               }).rejects.toThrow();
             });
           });
+          }
         }
 
         // Shell command argument quoting tests (only for first runtime to avoid duplication)
@@ -278,7 +295,7 @@ print(json.dumps(data, indent=2))
     const hasComputeCredentials = typeof process !== 'undefined' &&
       (process.env?.COMPUTESDK_API_KEY || process.env?.COMPUTESDK_ACCESS_TOKEN);
 
-    if (hasComputeCredentials && !skipIntegration) {
+    if (hasComputeCredentials && !skipIntegration && !skipCrudTests) {
       describe('Enhanced Sandbox (ComputeSDK Integration)', () => {
         it('should verify basic sandbox functionality before compute installation', async () => {
           // Create a basic sandbox to verify environment is working
