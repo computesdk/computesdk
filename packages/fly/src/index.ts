@@ -339,7 +339,10 @@ export const fly = createProvider<FlyMachine, FlyConfig>({
                 
                 await waitForMachineState(apiToken, apiHostname, appName, machineId, 'stopped', 10000);
 
-              } catch {
+              } catch (forceStopError) {
+                // Force stop errors are ignored because the machine may already be stopped or in a terminal state.
+                // Log at debug level for troubleshooting.
+                console.debug(`Fly.io force stop warning: ${forceStopError instanceof Error ? forceStopError.message : String(forceStopError)}`);
               }
             }
           }

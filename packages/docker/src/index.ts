@@ -1,6 +1,6 @@
 import Docker from 'dockerode';
 import { PassThrough } from 'stream';
-import { createProvider, createBackgroundCommand } from 'computesdk';
+import { createProvider } from 'computesdk';
 import type {
   Runtime,
   ExecutionResult,
@@ -345,31 +345,10 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
       runCommand: async (
         handle: DockerSandboxHandle,
         command: string,
-        args: string[] = [],
-        options?: RunCommandOptions
+        args: string[] = []
       ): Promise<ExecutionResult> => {
         const start = Date.now();
-        const { command: finalCmd, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-        let shell = finalArgs.length ? `${finalCmd} ${finalArgs.join(' ')}` : finalCmd;
-
-        let pid: number | undefined;
-
-        if (isBackground) {
-          shell = `(${shell}) & echo $!`;
-          const r = await runExec(handle, shell);
-          const m = r.stdout.trim().split(/\s+/).pop();
-          pid = m && /^\d+$/.test(m) ? Number(m) : undefined;
-          return {
-            stdout: r.stdout,
-            stderr: r.stderr,
-            exitCode: r.exitCode,
-            executionTime: Date.now() - start,
-            sandboxId: handle.containerId,
-            provider: PROVIDER,
-            isBackground: true,
-            ...(pid ? { pid } : {}),
-          };
-        }
+        const shell = args.length ? `${command} ${args.join(' ')}` : command;
 
         const { stdout, stderr, exitCode } = await runExec(handle, shell);
 
