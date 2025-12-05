@@ -27,7 +27,6 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling  
 📦 **Modular** - Install only the providers you need  
 🌐 **Web Framework Integration** - Built-in request handlers for Next.js, Nuxt, SvelteKit, etc.  
-🎨 **Frontend Integration** - Client-side hooks and utilities via @computesdk/ui
 
 ## Quick Example
 
