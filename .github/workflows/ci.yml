@@ -86,13 +86,13 @@ jobs:
     - name: Build packages
       run: pnpm build
         
-     - name: Run E2B Integration Tests
-       if: matrix.provider == 'e2b'
-       env:
+    - name: Run E2B Integration Tests
+      if: matrix.provider == 'e2b'
+      env:
          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
          COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
          SKIP_CRUD_TESTS: "true"
-       run: |
+      run: |
          if [ -n "$E2B_API_KEY" ]; then
            echo "Running E2B integration tests with real API..."
            pnpm --filter @computesdk/e2b test
@@ -100,15 +100,15 @@ jobs:
            echo "Skipping E2B integration tests - no API key provided"
          fi
         
-     - name: Run Vercel Integration Tests
-       if: matrix.provider == 'vercel'
-       env:
-         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-         VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
-         SKIP_CRUD_TESTS: "true"
-       run: |
+    - name: Run Vercel Integration Tests
+      if: matrix.provider == 'vercel'
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+        SKIP_CRUD_TESTS: "true"
+      run: |
          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_TEAM_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
            echo "Running Vercel integration tests with real API..."
            pnpm --filter @computesdk/vercel test
@@ -116,13 +116,13 @@ jobs:
            echo "Skipping Vercel integration tests - missing required secrets"
          fi
         
-     - name: Run Daytona Integration Tests
-       if: matrix.provider == 'daytona'
-       env:
-         DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
-         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
-         SKIP_CRUD_TESTS: "true"
-       run: |
+    - name: Run Daytona Integration Tests
+      if: matrix.provider == 'daytona'
+      env:
+        DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+        SKIP_CRUD_TESTS: "true"
+      run: |
          if [ -n "$DAYTONA_API_KEY" ]; then
            echo "Running Daytona integration tests with real API..."
            pnpm --filter @computesdk/daytona test
@@ -130,14 +130,14 @@ jobs:
            echo "Skipping Daytona integration tests - no API key provided"
          fi
         
-     - name: Run Modal Integration Tests
-       if: matrix.provider == 'modal'
-       env:
-         MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
-         SKIP_CRUD_TESTS: "true"
-       run: |
+    - name: Run Modal Integration Tests
+      if: matrix.provider == 'modal'
+      env:
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+        SKIP_CRUD_TESTS: "true"
+      run: |
          if [ -n "$MODAL_TOKEN_ID" ] && [ -n "$MODAL_TOKEN_SECRET" ]; then
            echo "Running Modal integration tests with real API..."
            pnpm --filter @computesdk/modal test
