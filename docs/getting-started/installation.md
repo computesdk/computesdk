@@ -52,8 +52,6 @@ npm install @computesdk/modal
 # CodeSandbox
 npm install @computesdk/codesandbox
 
-# Frontend integration (optional)
-npm install @computesdk/ui
 ```
 
 ## Provider Setup
