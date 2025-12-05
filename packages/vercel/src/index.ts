@@ -7,7 +7,7 @@
 
 import { Sandbox as VercelSandbox } from '@vercel/sandbox';
 import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
 
 /**
  * Vercel sandbox provider configuration
@@ -314,6 +314,40 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           throw new Error(
             `Failed to get Vercel domain for port ${options.port}: ${error instanceof Error ? error.message : String(error)}. Ensure the port has an associated route.`
           );
+        }
+      },
+
+      filesystem: {
+        readFile: async (sandbox: VercelSandbox, path: string): Promise<string> => {
+          const stream = await sandbox.readFile({ path });
+          if (!stream) {
+            throw new Error(`File not found: ${path}`);
+          }
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          return Buffer.concat(chunks).toString('utf-8');
+        },
+
+        writeFile: async (sandbox: VercelSandbox, path: string, content: string): Promise<void> => {
+          await sandbox.writeFiles([{ path, content: Buffer.from(content) }]);
+        },
+
+        mkdir: async (sandbox: VercelSandbox, path: string): Promise<void> => {
+          await sandbox.mkDir(path);
+        },
+
+        readdir: async (_sandbox: VercelSandbox, _path: string): Promise<FileEntry[]> => {
+          throw new Error('Vercel sandbox does not support readdir. Use runCommand to list directory contents.');
+        },
+
+        exists: async (_sandbox: VercelSandbox, _path: string): Promise<boolean> => {
+          throw new Error('Vercel sandbox does not support exists. Use runCommand to check file existence.');
+        },
+
+        remove: async (_sandbox: VercelSandbox, _path: string): Promise<void> => {
+          throw new Error('Vercel sandbox does not support remove. Use runCommand to delete files.');
         }
       },
 
