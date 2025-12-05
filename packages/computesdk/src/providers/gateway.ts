@@ -2,26 +2,30 @@
  * Gateway Provider
  *
  * Built-in provider that communicates with the ComputeSDK gateway for sandbox lifecycle
- * and uses ComputeClient for all sandbox operations.
+ * and uses ClientSandbox for all sandbox operations.
  *
  * This enables zero-config usage where users don't need provider-specific packages.
  *
  * Architecture:
  * - Lifecycle operations (create/destroy) → Gateway API
- * - Sandbox operations (runCode, filesystem, terminals, etc.) → ComputeClient
- * - ComputeClient talks directly to the compute daemon running in the sandbox
+ * - Sandbox operations (runCode, filesystem, terminals, etc.) → ClientSandbox
+ * - ClientSandbox talks directly to the compute daemon running in the sandbox
  */
 
-import { ComputeClient } from '@computesdk/client';
+import { Sandbox as ClientSandbox } from '@computesdk/client';
 import { createProvider } from '../factory';
 import { waitForComputeReady } from '../compute-daemon/lifecycle';
 import type { Runtime, ExecutionResult, SandboxInfo, FileEntry } from '../types';
 
 /**
- * Internal sandbox state - holds ComputeClient and gateway metadata
+ * Internal sandbox state - holds the full Sandbox (from client) and gateway metadata
+ *
+ * The `client` is the full Sandbox from @computesdk/client with all features:
+ * - terminals, watchers, signals
+ * - runCode, runCommand, filesystem
  */
 interface GatewaySandboxInternal {
-  client: ComputeClient;
+  client: ClientSandbox;
   sandboxId: string;
   url: string;
   backendProvider: string;
@@ -48,14 +52,14 @@ const DEFAULT_GATEWAY_URL = 'https://gateway.computesdk.com';
  * Gateway Provider factory
  *
  * This provider is built into computesdk (not a separate package) and provides
- * zero-config gateway mode functionality with full ComputeClient capabilities.
+ * zero-config gateway mode functionality with full ClientSandbox capabilities.
  */
 export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
   name: 'gateway',
   methods: {
     sandbox: {
       /**
-       * Create sandbox via gateway, then initialize ComputeClient
+       * Create sandbox via gateway, then initialize ClientSandbox
        */
       create: async (config, options) => {
         const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
@@ -87,8 +91,8 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
         const sandboxUrl = data.data.url;
         const backendProvider = data.data.provider;
 
-        // Create ComputeClient connected to the sandbox
-        const client = new ComputeClient({
+        // Create ClientSandbox connected to the sandbox
+        const client = new ClientSandbox({
           sandboxUrl: sandboxUrl,
           sandboxId: sandboxId,
           provider: backendProvider,
@@ -111,7 +115,7 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
       },
 
       /**
-       * Get sandbox by ID via gateway, then initialize ComputeClient
+       * Get sandbox by ID via gateway, then initialize ClientSandbox
        */
       getById: async (config, sandboxId) => {
         const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
@@ -142,8 +146,8 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
         const sandboxUrl = data.data.url;
         const backendProvider = data.data.provider;
 
-        // Create ComputeClient connected to the sandbox
-        const client = new ComputeClient({
+        // Create ClientSandbox connected to the sandbox
+        const client = new ClientSandbox({
           sandboxUrl: sandboxUrl,
           sandboxId: sandboxId,
           provider: backendProvider,
@@ -189,11 +193,11 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
           return [];
         }
 
-        // Note: We don't initialize ComputeClient for list results
+        // Note: We don't initialize ClientSandbox for list results
         // Use getById to get a fully functional sandbox
         return data.data.map((item: any) => ({
           sandbox: {
-            client: null as unknown as ComputeClient, // Not initialized for list
+            client: null as unknown as ClientSandbox, // Not initialized for list
             sandboxId: item.sandboxId,
             url: item.url,
             backendProvider: item.provider,
@@ -225,7 +229,7 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
       },
 
       /**
-       * Run code via ComputeClient
+       * Run code via ClientSandbox
        */
       runCode: async (sandbox: GatewaySandboxInternal, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
         const result = await sandbox.client.runCode(code, runtime);
@@ -240,7 +244,7 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
       },
 
       /**
-       * Run command via ComputeClient
+       * Run command via ClientSandbox
        */
       runCommand: async (sandbox: GatewaySandboxInternal, command: string, args?: string[]): Promise<ExecutionResult> => {
         const result = await sandbox.client.runCommand(command, args);
@@ -277,7 +281,7 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
       },
 
       /**
-       * Filesystem operations via ComputeClient
+       * Filesystem operations via ClientSandbox
        */
       filesystem: {
         readFile: async (sandbox: GatewaySandboxInternal, path: string): Promise<string> => {
@@ -306,17 +310,28 @@ export const gateway = createProvider<GatewaySandboxInternal, GatewayConfig>({
       },
 
       /**
-       * Get the underlying ComputeClient instance
-       * For gateway provider, this returns the ComputeClient that communicates with the sandbox
+       * Get the internal gateway sandbox state
+       *
+       * For gateway provider, this returns an object with:
+       * - `client`: The full Sandbox from @computesdk/client (with terminals, watchers, signals)
+       * - `sandboxId`, `url`, `backendProvider`, `metadata`
+       *
+       * @example
+       * ```typescript
+       * const sandbox = await compute.sandbox.create();
+       * const instance = sandbox.getInstance();
+       *
+       * // Access the full Sandbox with all features
+       * const terminal = await instance.client.createTerminal();
+       * const watcher = await instance.client.createWatcher('/home');
+       * ```
        */
       getInstance: (sandbox: GatewaySandboxInternal): GatewaySandboxInternal => {
-        // Return the full internal state - the factory expects TSandbox -> TSandbox
-        // Users can access sandbox.client for the ComputeClient directly
         return sandbox;
       }
     }
   }
 });
 
-// Re-export ComputeClient type for users who want to work with it
-export type { ComputeClient } from '@computesdk/client';
+// Re-export Sandbox type from client for users who want to work with it
+export { Sandbox } from '@computesdk/client';

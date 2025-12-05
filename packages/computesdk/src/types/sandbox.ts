@@ -1,8 +1,16 @@
 /**
  * Sandbox Types
- * 
+ *
  * Types related to sandbox execution, filesystem, terminal operations
+ *
+ * Key types:
+ * - Sandbox: The full-featured sandbox from @computesdk/client (terminals, watchers, signals)
+ * - ProviderSandbox: Base interface that provider implementations return (e2b, railway, etc.)
  */
+
+// Re-export the full Sandbox from @computesdk/client
+// This is THE Sandbox that users interact with
+export { Sandbox, type SandboxConfig } from '@computesdk/client';
 
 // Forward declaration to avoid circular dependency
 interface Provider {
@@ -15,7 +23,7 @@ interface Provider {
  * Manually defined for known providers since declaration merging isn't working reliably
  */
 export interface ProviderSandboxTypeMap {
-  e2b: any; // We can't import the E2B type directly, but we'll handle it differently
+  e2b: any;
   vercel: any;
   daytona: any;
 }
@@ -24,9 +32,9 @@ export interface ProviderSandboxTypeMap {
  * Utility type to extract the native instance type from a provider
  * Uses provider name and manual type inference
  */
-export type ExtractSandboxInstanceType<TProvider extends Provider> = 
+export type ExtractSandboxInstanceType<TProvider extends Provider> =
   TProvider extends { readonly name: 'e2b' }
-    ? any // For now, let's just try to make the runtime casting work
+    ? any
     : TProvider extends { readonly name: 'vercel' }
       ? any
       : TProvider extends { readonly name: 'daytona' }
@@ -175,14 +183,35 @@ export function isCommandExitError(error: unknown): error is CommandExitError {
   );
 }
 
-
-
-
+// ============================================================================
+// Provider Sandbox - Base interface for provider implementations
+// ============================================================================
 
 /**
- * Base sandbox interface - what developers interact with
+ * Provider sandbox interface - what external providers (e2b, railway, etc.) return
+ *
+ * This is the base interface that all provider sandboxes must implement.
+ * The gateway provider returns the full Sandbox from @computesdk/client which
+ * extends this with ComputeClient features (terminals, watchers, signals).
+ *
+ * @example Provider implementation
+ * ```typescript
+ * // In @computesdk/e2b
+ * const e2bProvider = createProvider<E2BSandbox, E2BConfig>({
+ *   name: 'e2b',
+ *   methods: {
+ *     sandbox: {
+ *       create: async (config, options) => {
+ *         const sandbox = await E2BSandbox.create({ ... });
+ *         return { sandbox, sandboxId: sandbox.id };
+ *       },
+ *       // ... other methods
+ *     }
+ *   }
+ * });
+ * ```
  */
-export interface Sandbox<TSandbox = any> {
+export interface ProviderSandbox<TSandbox = any> {
   /** Unique identifier for the sandbox */
   readonly sandboxId: string;
   /** Provider that created this sandbox */
@@ -209,17 +238,27 @@ export interface Sandbox<TSandbox = any> {
   readonly filesystem: SandboxFileSystem;
 }
 
+// ============================================================================
+// Typed Variants
+// ============================================================================
+
 /**
  * Extract the sandbox type from a provider
  */
 type ExtractProviderSandboxType<TProvider extends Provider> = TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
 
 /**
- * Typed sandbox interface that preserves the provider's native instance type
+ * Typed provider sandbox interface that preserves the provider's native instance type
  */
-export interface TypedSandbox<TProvider extends Provider> extends Omit<Sandbox<ExtractProviderSandboxType<TProvider>>, 'getProvider'> {
+export interface TypedProviderSandbox<TProvider extends Provider> extends Omit<ProviderSandbox<ExtractProviderSandboxType<TProvider>>, 'getProvider'> {
   /** Get the provider instance that created this sandbox with proper typing */
   getProvider(): TProvider;
   /** Get the native provider sandbox instance with proper typing */
   getInstance(): ExtractProviderSandboxType<TProvider>;
 }
+
+/**
+ * Typed sandbox interface - alias for TypedProviderSandbox for backwards compatibility
+ * @deprecated Use TypedProviderSandbox for provider sandboxes, or Sandbox for gateway sandboxes
+ */
+export type TypedSandbox<TProvider extends Provider> = TypedProviderSandbox<TProvider>;

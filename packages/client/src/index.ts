@@ -1,7 +1,7 @@
 /**
- * ComputeSDK Client - Universal Client Implementation
+ * ComputeSDK Client - Universal Sandbox Implementation
  *
- * This package provides a Client for interacting with ComputeSDK sandboxes
+ * This package provides a Sandbox for interacting with ComputeSDK sandboxes
  * through API endpoints at ${sandboxId}.preview.computesdk.com
  *
  * Works in browser, Node.js, and edge runtimes.
@@ -30,15 +30,15 @@ export { encodeBinaryMessage, decodeBinaryMessage, isBinaryData, blobToArrayBuff
 export type WebSocketConstructor = new (url: string) => WebSocket;
 
 /**
- * Configuration options for the ComputeSDK client
+ * Configuration options for creating a Sandbox
  */
-export interface ComputeClientConfig {
+export interface SandboxConfig {
   /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.com). Optional in browser - can be auto-detected from URL query param or localStorage */
   sandboxUrl?: string;
-  /** Sandbox ID (required for Sandbox interface operations) */
-  sandboxId?: string;
-  /** Provider name (e.g., 'e2b', 'vercel') (required for Sandbox interface operations) */
-  provider?: string;
+  /** Sandbox ID */
+  sandboxId: string;
+  /** Provider name (e.g., 'e2b', 'gateway') */
+  provider: string;
   /** Access token or session token for authentication. Optional in browser - can be auto-detected from URL query param or localStorage */
   token?: string;
   /** Optional headers to include with all requests */
@@ -301,60 +301,59 @@ export interface ErrorResponse {
 }
 
 // ============================================================================
-// ComputeSDK Client
+// Sandbox
 // ============================================================================
 
 /**
- * ComputeSDK Client for browser and Node.js environments
+ * Sandbox - Full-featured sandbox with WebSocket terminals, file watchers, and signals
+ *
+ * This is THE Sandbox class - the primary interface for interacting with ComputeSDK sandboxes.
+ * It provides all the features needed for code execution, file operations, and real-time communication.
  *
  * @example
  * ```typescript
- * import { ComputeClient } from '@computesdk/client'
+ * import { Sandbox } from '@computesdk/client'
  *
  * // Pattern 1: Admin operations (requires access token)
- * const adminClient = new ComputeClient({
+ * const sandbox = new Sandbox({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
  *   token: accessToken, // From edge service
  * });
  *
  * // Create session token for delegated operations
- * const sessionToken = await adminClient.createSessionToken({
+ * const sessionToken = await sandbox.createSessionToken({
  *   description: 'My Application',
  *   expiresIn: 604800, // 7 days
  * });
  *
  * // Pattern 2: Delegated operations (binary protocol by default)
- * const client = new ComputeClient({
+ * const sandbox2 = new Sandbox({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
  *   token: sessionToken.data.token,
  *   // protocol: 'binary' is the default (50-90% size reduction)
  * });
  *
- * // Pattern 3: JSON protocol for debugging (if needed)
- * const debugClient = new ComputeClient({
- *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
- *   token: sessionToken.data.token,
- *   protocol: 'json', // Use JSON for browser DevTools inspection
- * });
- *
  * // Execute a one-off command
- * const result = await client.execute({ command: 'ls -la' });
+ * const result = await sandbox.execute({ command: 'ls -la' });
  * console.log(result.data.stdout);
  *
+ * // Run code
+ * const codeResult = await sandbox.runCode('console.log("Hello!")', 'node');
+ *
  * // Work with files
- * const files = await client.listFiles('/home/project');
- * await client.writeFile('/home/project/test.txt', 'Hello, World!');
- * const content = await client.readFile('/home/project/test.txt');
+ * const files = await sandbox.listFiles('/home/project');
+ * await sandbox.writeFile('/home/project/test.txt', 'Hello, World!');
+ * const content = await sandbox.readFile('/home/project/test.txt');
  *
  * // Create a terminal with real-time output
- * const terminal = await client.createTerminal();
+ * const terminal = await sandbox.createTerminal();
  * terminal.on('output', (data) => console.log(data));
  * terminal.write('ls -la\n');
  * await terminal.execute('echo "Hello"');
  * await terminal.destroy();
  *
  * // Watch for file changes
- * const watcher = await client.createWatcher('/home/project', {
+ * const watcher = await sandbox.createWatcher('/home/project', {
  *   ignored: ['node_modules', '.git']
  * });
  * watcher.on('change', (event) => {
@@ -363,19 +362,19 @@ export interface ErrorResponse {
  * await watcher.destroy();
  *
  * // Monitor system signals
- * const signals = await client.startSignals();
+ * const signals = await sandbox.startSignals();
  * signals.on('port', (event) => {
  *   console.log(`Port ${event.port} opened: ${event.url}`);
  * });
  * await signals.stop();
  *
  * // Clean up
- * await client.disconnect();
+ * await sandbox.disconnect();
  * ```
  */
-export class ComputeClient {
-  readonly sandboxId: string | undefined;
-  readonly provider: string | undefined;
+export class Sandbox {
+  readonly sandboxId: string;
+  readonly provider: string;
   readonly filesystem: {
     readFile: (path: string) => Promise<string>;
     writeFile: (path: string, content: string) => Promise<void>;
@@ -391,12 +390,12 @@ export class ComputeClient {
     remove: (path: string) => Promise<void>;
   };
 
-  private config: Required<Omit<ComputeClientConfig, 'WebSocket'>>;
+  private config: Required<Omit<SandboxConfig, 'WebSocket'>>;
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
 
-  constructor(config: ComputeClientConfig = {}) {
+  constructor(config: SandboxConfig) {
     this.sandboxId = config.sandboxId;
     this.provider = config.provider;
 
@@ -454,7 +453,7 @@ export class ComputeClient {
       throw new Error(
         'WebSocket is not available. In Node.js, pass WebSocket implementation:\n' +
         'import WebSocket from "ws";\n' +
-        'new ComputeClient({ sandboxUrl: "...", WebSocket })'
+        'new Sandbox({ sandboxUrl: "...", WebSocket })'
       );
     }
 
@@ -1220,25 +1219,22 @@ export class ComputeClient {
   }
 
   /**
-   * Get provider instance (Sandbox interface method)
-   * Note: Not available when using ComputeClient directly
+   * Get provider instance
+   * Note: Not available when using Sandbox directly - only available through gateway provider
    */
   getProvider(): never {
     throw new Error(
-      'getProvider() is not available when using ComputeClient. ' +
-      'The client abstracts away the underlying provider.'
+      'getProvider() is not available on Sandbox. ' +
+      'This method is only available when using provider sandboxes through the gateway.'
     );
   }
 
   /**
-   * Get native provider instance (Sandbox interface method)
-   * Note: Not available when using ComputeClient directly
+   * Get native provider instance
+   * Returns the Sandbox itself since this IS the sandbox implementation
    */
-  getInstance(): never {
-    throw new Error(
-      'getInstance() is not available when using ComputeClient. ' +
-      'The client provides a unified interface across all providers.'
-    );
+  getInstance(): this {
+    return this;
   }
 
   /**
@@ -1272,22 +1268,35 @@ export class ComputeClient {
 }
 
 /**
- * Create a new ComputeSDK client instance
+ * Create a new Sandbox instance
  *
  * @example
  * ```typescript
- * import { createClient } from '@computesdk/client'
+ * import { createSandbox } from '@computesdk/client'
  *
- * // Create client with access token or session token
- * const client = createClient({
+ * // Create sandbox with access token or session token
+ * const sandbox = createSandbox({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
- *   token: accessToken, // Access token from edge service or session token from createSessionToken()
+ *   token: accessToken,
  * });
  *
  * // Execute commands
- * const result = await client.execute({ command: 'ls -la' });
+ * const result = await sandbox.execute({ command: 'ls -la' });
  * ```
  */
-export function createClient(config: ComputeClientConfig): ComputeClient {
-  return new ComputeClient(config);
+export function createSandbox(config: SandboxConfig): Sandbox {
+  return new Sandbox(config);
 }
+
+// ============================================================================
+// Backwards Compatibility Aliases
+// ============================================================================
+
+/** @deprecated Use SandboxConfig instead */
+export type ComputeClientConfig = SandboxConfig;
+
+/** @deprecated Use Sandbox instead */
+export { Sandbox as ComputeClient };
+
+/** @deprecated Use createSandbox instead */
+export { createSandbox as createClient };

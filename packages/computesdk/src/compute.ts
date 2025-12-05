@@ -4,7 +4,7 @@
  * Provides the unified compute.* API and delegates to specialized managers
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI } from './types';
 import { autoConfigureCompute } from './auto-detect';
 
 /**
@@ -113,7 +113,7 @@ class ComputeManager implements ComputeAPI {
       * const sandbox2 = await compute.sandbox.create()
      * ```
      */
-    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox> => {
+    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<ProviderSandbox> => {
       const provider = params && 'provider' in params && params.provider ? params.provider : this.getDefaultProvider();
       const options = params?.options;
       return await provider.sandbox.create(options);
@@ -122,7 +122,7 @@ class ComputeManager implements ComputeAPI {
     /**
      * Get an existing sandbox by ID from a provider (or default provider if configured)
      */
-    getById: async (providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null> => {
+    getById: async (providerOrSandboxId: Provider | string, sandboxId?: string): Promise<ProviderSandbox | null> => {
       if (typeof providerOrSandboxId === 'string') {
         // Called with just sandboxId, use default provider
         const provider = this.getDefaultProvider();
@@ -139,7 +139,7 @@ class ComputeManager implements ComputeAPI {
     /**
      * List all active sandboxes from a provider (or default provider if configured)
      */
-    list: async (provider?: Provider): Promise<Sandbox[]> => {
+    list: async (provider?: Provider): Promise<ProviderSandbox[]> => {
       const actualProvider = provider || this.getDefaultProvider();
       return await actualProvider.sandbox.list();
     },
@@ -222,18 +222,18 @@ export function createCompute<TProvider extends Provider>(
     sandbox: {
       create: async (params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>) => {
         const sandbox = await manager.sandbox.create(params);
-        return sandbox as TypedSandbox<TProvider>;
+        return sandbox as TypedProviderSandbox<TProvider>;
       },
 
       getById: async (sandboxId: string) => {
         const sandbox = await manager.sandbox.getById(sandboxId);
         if (!sandbox) return null;
-        return sandbox as TypedSandbox<TProvider>;
+        return sandbox as TypedProviderSandbox<TProvider>;
       },
 
       list: async () => {
         const sandboxes = await manager.sandbox.list();
-        return sandboxes as TypedSandbox<TProvider>[];
+        return sandboxes as TypedProviderSandbox<TProvider>[];
       },
 
       destroy: async (sandboxId: string) => {

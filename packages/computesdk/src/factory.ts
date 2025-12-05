@@ -10,7 +10,7 @@ import type {
   ProviderSandboxManager,
   ProviderTemplateManager,
   ProviderSnapshotManager,
-  Sandbox,
+  ProviderSandbox,
   SandboxFileSystem,
   SandboxInfo,
   ExecutionResult,
@@ -181,9 +181,9 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 
 
 /**
- * Generated sandbox class - implements the Sandbox interface
+ * Generated sandbox class - implements the ProviderSandbox interface
  */
-class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
+class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
@@ -272,7 +272,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     private providerInstance: Provider
   ) {}
 
-  async create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>> {
+  async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
     // Default to 'node' runtime if not specified for consistency across providers
     const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
     const result = await this.methods.create(this.config, optionsWithDefaults);
@@ -290,7 +290,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async getById(sandboxId: string): Promise<Sandbox<TSandbox> | null> {
+  async getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null> {
     // Check active sandboxes first
     const existing = this.activeSandboxes.get(sandboxId);
     if (existing) {
@@ -317,9 +317,9 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async list(): Promise<Sandbox<TSandbox>[]> {
+  async list(): Promise<ProviderSandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
-    const sandboxes: Sandbox[] = [];
+    const sandboxes: ProviderSandbox[] = [];
 
     for (const result of results) {
       let sandbox = this.activeSandboxes.get(result.sandboxId);
