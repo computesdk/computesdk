@@ -6,3 +6,4 @@ import path from 'path';
 config({ path: path.resolve(__dirname, '../../../.env') });
 
 export * from './provider-test-suite';
+export * from './provider-crud-test';

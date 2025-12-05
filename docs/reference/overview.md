@@ -32,19 +32,19 @@ Interact with files in your sandbox:
 
 [Explore filesystem operations →](/docs/reference/filesystem)
 
-### 3. Web Integration & UI Package
+<!-- ### 3. Web Integration & UI Package
 Build interactive web applications using our UI package:
 
 [Learn about web integration →](/docs/reference/api-integration#web-integration)
 
-[See UI package →](/docs/reference/ui-package)
+[See UI package →](/docs/reference/ui-package) -->
 
-### 4. Sandbox Options
+### 3. Sandbox Options
 Configure your sandbox with options to customize its behavior.
 
 [Learn about sandbox options →](/docs/reference/api-integration#sandbox-options)
 
-### 5. Error Handling
+### 4. Error Handling
 Handle errors and exceptions in your code.
 
 [Learn about error handling →](/docs/reference/api-integration#error-handling)
