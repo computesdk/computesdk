@@ -57,9 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test  # Only run if basic tests pass
     # Run on main branch pushes AND all pull requests
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      github.event_name == 'pull_request'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
 
     strategy:
       matrix:
