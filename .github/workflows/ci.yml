@@ -44,8 +44,6 @@ jobs:
         DAYTONA_API_KEY: ""
         MODAL_TOKEN_ID: ""
         MODAL_TOKEN_SECRET: ""
-        # Skip CRUD tests in CI
-        SKIP_CRUD_TESTS: "true"
     
     - name: Run type checking
       run: pnpm typecheck
@@ -91,7 +89,6 @@ jobs:
       env:
          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
          COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
-         SKIP_CRUD_TESTS: "true"
       run: |
          if [ -n "$E2B_API_KEY" ]; then
            echo "Running E2B integration tests with real API..."
@@ -107,7 +104,6 @@ jobs:
         VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
-        SKIP_CRUD_TESTS: "true"
       run: |
          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_TEAM_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
            echo "Running Vercel integration tests with real API..."
@@ -121,7 +117,6 @@ jobs:
       env:
         DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
-        SKIP_CRUD_TESTS: "true"
       run: |
          if [ -n "$DAYTONA_API_KEY" ]; then
            echo "Running Daytona integration tests with real API..."
@@ -136,7 +131,6 @@ jobs:
         MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
-        SKIP_CRUD_TESTS: "true"
       run: |
          if [ -n "$MODAL_TOKEN_ID" ] && [ -n "$MODAL_TOKEN_SECRET" ]; then
            echo "Running Modal integration tests with real API..."

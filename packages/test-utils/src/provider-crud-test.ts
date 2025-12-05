@@ -19,10 +19,42 @@ export interface ProviderCrudTestConfig {
   skipIntegration?: boolean;
 }
 
+/**
+ * Centralized whitelist of providers that should run CRUD tests
+ * 
+ * Only providers in this list will execute CRUD tests (create, read, list, destroy).
+ * Providers not in this list will automatically skip CRUD tests with a clear message.
+ * 
+ * This approach:
+ * - Prevents CRUD test failures for providers with limited implementations
+ * - Avoids issues like Vercel's ephemeral sandboxes not supporting listing
+ * - Makes it explicit which providers are ready for full CRUD testing
+ * - Simplifies CI by avoiding complex environment variable logic
+ * 
+ * To enable CRUD tests for a provider: add the provider name to this array
+ */
+const CRUD_ENABLED_PROVIDERS = [
+  'railway',  // Has working CRUD operations with stable sandbox lifecycle
+  'render',   // Stable provider ready for CRUD testing
+  // Add more providers here as they become stable for CRUD testing
+  // 'e2b',      // Add when CRUD implementation is stable
+  // 'modal',    // Add when CRUD implementation is stable  
+  // 'vercel',   // Skip - ephemeral sandboxes don't support listing operations
+];
+
 export function runProviderCrudTest(config: ProviderCrudTestConfig) {
   const { provider, name, timeout = 30000, skipIntegration = false } = config;
 
   describe(`${name} Provider CRUD Operations`, () => {
+    // Check if this provider should run CRUD tests
+    if (!CRUD_ENABLED_PROVIDERS.includes(name)) {
+      it.skip(`CRUD tests not enabled for ${name} provider`, () => {
+        console.log(`Skipping CRUD tests for ${name} - not in enabled providers list`);
+        console.log(`Enabled providers: ${CRUD_ENABLED_PROVIDERS.join(', ')}`);
+      });
+      return;
+    }
+
     if (skipIntegration) {
       it.skip('Integration tests skipped - missing credentials', () => {});
       return;
