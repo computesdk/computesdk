@@ -176,32 +176,22 @@ export interface ComputeAPI {
 
 /**
  * Typed Compute API interface that preserves provider type information
- * When auth (apiKey/accessToken) is configured, returns enhanced sandboxes with ComputeClient features
  */
-export interface TypedComputeAPI<TProvider extends Provider, TIsEnhanced extends boolean = boolean> extends Omit<ComputeAPI, 'sandbox' | 'setConfig'> {
+export interface TypedComputeAPI<TProvider extends Provider> extends Omit<ComputeAPI, 'sandbox' | 'setConfig'> {
   /** Configuration management that returns typed compute instance */
   setConfig<T extends Provider>(config: ComputeConfig<T>): TypedComputeAPI<T>;
 
   sandbox: {
     /** Create a sandbox from the configured provider with proper typing */
     create(params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>): Promise<
-      TIsEnhanced extends true
-        ? import('./sandbox').TypedEnhancedSandbox<TProvider>
-        : import('./sandbox').TypedSandbox<TProvider>
+      import('./sandbox').TypedSandbox<TProvider>
     >;
     /** Get an existing sandbox by ID from the configured provider with proper typing */
     getById(sandboxId: string): Promise<
-      TIsEnhanced extends true
-        ? import('./sandbox').TypedEnhancedSandbox<TProvider>
-        : import('./sandbox').TypedSandbox<TProvider>
-      | null
+      import('./sandbox').TypedSandbox<TProvider> | null
     >;
     /** List all active sandboxes from the configured provider with proper typing */
-    list(): Promise<
-      TIsEnhanced extends true
-        ? import('./sandbox').TypedEnhancedSandbox<TProvider>[]
-        : import('./sandbox').TypedSandbox<TProvider>[]
-    >;
+    list(): Promise<import('./sandbox').TypedSandbox<TProvider>[]>;
     /** Destroy a sandbox via the configured provider */
     destroy(sandboxId: string): Promise<void>;
   };
