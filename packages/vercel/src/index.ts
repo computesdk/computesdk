@@ -221,7 +221,9 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           : `echo "${encoded}" | base64 -d | node`;
 
         const result = await sandbox.runCommand('sh', ['-c', commandString]);
-        const [stdout, stderr] = await Promise.all([result.stdout(), result.stderr()]);
+        // Call stdout/stderr sequentially to avoid "Multiple consumers for logs" warning
+        const stdout = await result.stdout();
+        const stderr = await result.stderr();
 
         // Check for syntax errors and throw them
         if (result.exitCode !== 0 && stderr) {
@@ -257,7 +259,9 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
 
           const result = await sandbox.runCommand('sh', ['-c', fullCommand]);
-          const [stdout, stderr] = await Promise.all([result.stdout(), result.stderr()]);
+          // Call stdout/stderr sequentially to avoid "Multiple consumers for logs" warning
+          const stdout = await result.stdout();
+          const stderr = await result.stderr();
 
           return {
             stdout,
