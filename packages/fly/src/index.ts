@@ -2,8 +2,9 @@
  * Fly.io Provider - Factory-based Implementation
  * FLY_API_TOKEN=
  * FLY_API_HOSTNAME="https://api.machines.dev"
-APP_NAME="computesdk"
-ORG="computesdk"
+ * FLY_APP_NAME=
+ * FLY_ORG=
+ * FLY_REGION=
  */
 
 import { createProvider } from 'computesdk';
@@ -37,7 +38,7 @@ export const getAndValidateCredentials = (config: FlyConfig) => {
   const org = config.org || (typeof process !== 'undefined' && process.env?.FLY_ORG) || 'personal';
   const region = config.region || (typeof process !== 'undefined' && process.env?.FLY_REGION) || 'iad';
   const apiHostname = config.apiHostname || 'https://api.machines.dev';
-  const appName = config.appName || 'compute-sdk';
+  const appName = config.appName || (typeof process !== 'undefined' && process.env?.FLY_APP_NAME) || 'compute-sdk';
 
   if (!apiToken) {
     throw new Error(
