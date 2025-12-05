@@ -1,5 +1,13 @@
 # @computesdk/vercel
 
+## 1.5.7
+
+### Patch Changes
+
+- 04ffecf: Minor refactoring
+- Updated dependencies [04ffecf]
+  - computesdk@1.8.7
+
 ## 1.5.6
 
 ### Patch Changes
