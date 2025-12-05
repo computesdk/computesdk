@@ -306,7 +306,7 @@ importers:
         specifier: ^4.4.2
         version: 4.5.14(@types/node@20.19.5)(terser@5.43.1)
 
-  packages/aws:
+  packages/aws-ecs:
     dependencies:
       '@aws-sdk/client-ecs':
         specifier: ^3.943.0
