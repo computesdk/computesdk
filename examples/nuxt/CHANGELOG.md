@@ -1,5 +1,12 @@
 # @computesdk/example-nuxt
 
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [556169b]
+  - @computesdk/vercel@1.5.9
+
 ## 0.2.8
 
 ### Patch Changes

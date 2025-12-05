@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/vercel",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "description": "Vercel Sandbox provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
