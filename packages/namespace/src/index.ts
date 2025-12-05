@@ -2,8 +2,8 @@
  * Namespace Provider - Factory-based Implementation
  */
 
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { createProvider } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
 
 /**
  * Namespace sandbox interface

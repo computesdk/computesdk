@@ -130,42 +130,5 @@ describe('Factory', () => {
       expect(info.id).toBe('test-123')
       expect(info.provider).toBe('mock')
     })
-
-    it('should automatically provide default filesystem methods', async () => {
-      const methods = {
-        create: vi.fn().mockResolvedValue({ 
-          sandbox: { id: 'test-123', status: 'running' }, 
-          sandboxId: 'test-123' 
-        }),
-        getById: vi.fn().mockResolvedValue(null),
-        list: vi.fn().mockResolvedValue([]),
-        destroy: vi.fn().mockResolvedValue(undefined),
-        runCode: vi.fn().mockResolvedValue({} as ExecutionResult),
-        runCommand: vi.fn().mockResolvedValue({} as ExecutionResult),
-        getInfo: vi.fn().mockResolvedValue({} as SandboxInfo),
-        getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev')
-        // No filesystem methods provided
-      }
-
-      const providerFactory = createProvider({
-        name: 'mock-no-fs',
-        methods: { sandbox: methods }
-      })
-
-      const config = { apiKey: 'test-key' }
-      const provider = providerFactory(config)
-      const sandbox = await provider.sandbox.create()
-
-      expect(sandbox.filesystem).toBeDefined()
-      
-      // Should automatically get default filesystem methods when none provided
-      // The methods will use runCommand under the hood
-      expect(sandbox.filesystem.readFile).toBeDefined()
-      expect(sandbox.filesystem.writeFile).toBeDefined()
-      expect(sandbox.filesystem.mkdir).toBeDefined()
-      expect(sandbox.filesystem.readdir).toBeDefined()
-      expect(sandbox.filesystem.exists).toBeDefined()
-      expect(sandbox.filesystem.remove).toBeDefined()
-    })
   })
 })

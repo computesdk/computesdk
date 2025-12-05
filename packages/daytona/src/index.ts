@@ -6,8 +6,8 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { createProvider } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
 
 /**
  * Daytona-specific configuration options
@@ -206,37 +206,29 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
-          // Handle background command execution
-          const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-
           // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = finalArgs.map(arg => {
-            // Quote arguments that contain spaces or special characters
+          const quotedArgs = args.map((arg: string) => {
             if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              // Escape any double quotes in the argument and wrap in double quotes
               return `"${arg.replace(/"/g, '\\"')}"`;
             }
             return arg;
           });
-          const fullCommand = quotedArgs.length > 0 ? `${finalCommand} ${quotedArgs.join(' ')}` : finalCommand;
+          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
 
           // Execute command using Daytona's process.executeCommand method
           const response = await sandbox.process.executeCommand(fullCommand);
 
           return {
             stdout: response.result || '',
-            stderr: '', // Daytona doesn't separate stderr in the response
+            stderr: '',
             exitCode: response.exitCode || 0,
             executionTime: Date.now() - startTime,
             sandboxId: sandbox.id,
-            provider: 'daytona',
-            isBackground,
-            // For background commands, we can't get a real PID, but we can indicate it's running
-            ...(isBackground && { pid: -1 })
+            provider: 'daytona'
           };
         } catch (error) {
           throw new Error(

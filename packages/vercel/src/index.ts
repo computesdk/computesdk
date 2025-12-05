@@ -6,8 +6,8 @@
  */
 
 import { Sandbox as VercelSandbox } from '@vercel/sandbox';
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { createProvider } from 'computesdk';
+import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions } from 'computesdk';
 
 /**
  * Vercel sandbox provider configuration
@@ -29,51 +29,6 @@ export interface VercelConfig {
 
 
 
-/**
- * Shared command execution logic for Vercel provider
- * This eliminates duplication between runCode and runCommand
- */
-async function executeVercelCommand(sandbox: VercelSandbox, command: string, args: string[] = []): Promise<ExecutionResult> {
-  const startTime = Date.now();
-
-  try {
-    // Execute command directly (non-detached returns CommandFinished)
-    const finishedCommand = await sandbox.runCommand(command, args);
-
-    // Use single logs() iteration to avoid "multiple consumers" warning
-    let stdout = '';
-    let stderr = '';
-
-    // Single iteration over logs - this is the most reliable approach
-    for await (const log of finishedCommand.logs()) {
-      if (log.stream === 'stdout') {
-        stdout += log.data;
-      } else if (log.stream === 'stderr') {
-        stderr += log.data;
-      }
-    }
-
-    return {
-      stdout,
-      stderr,
-      exitCode: finishedCommand.exitCode,
-      executionTime: Date.now() - startTime,
-      sandboxId: sandbox.sandboxId,
-      provider: 'vercel'
-    };
-  } catch (error) {
-    // For command execution, return error result instead of throwing
-    // This handles cases like "command not found" where Vercel API returns 400
-    return {
-      stdout: '',
-      stderr: error instanceof Error ? error.message : String(error),
-      exitCode: 127, // Standard "command not found" exit code
-      executionTime: Date.now() - startTime,
-      sandboxId: sandbox.sandboxId,
-      provider: 'vercel'
-    };
-  }
-}
 
 /**
  * Create a Vercel provider instance using the factory pattern
@@ -113,7 +68,6 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
           }
         }
 
-        const runtime = options?.runtime || config.runtime || 'node';
         const timeout = config.timeout || 300000;
 
         try {
@@ -243,74 +197,86 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime, config?: VercelConfig): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
-        try {
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || config?.runtime || (
-            // Strong Python indicators
-            code.includes('print(') ||
-              code.includes('import ') ||
-              code.includes('def ') ||
-              code.includes('sys.') ||
-              code.includes('json.') ||
-              code.includes('__') ||
-              code.includes('f"') ||
-              code.includes("f'") ||
-              code.includes('raise ')
-              ? 'python'
-              // Default to Node.js for all other cases (including ambiguous)
-              : 'node'
-          );
+        // Auto-detect runtime if not specified
+        const effectiveRuntime = runtime || config?.runtime || (
+          // Strong Python indicators
+          code.includes('print(') ||
+            code.includes('import ') ||
+            code.includes('def ') ||
+            code.includes('sys.') ||
+            code.includes('json.') ||
+            code.includes('__') ||
+            code.includes('f"') ||
+            code.includes("f'") ||
+            code.includes('raise ')
+            ? 'python'
+            // Default to Node.js for all other cases (including ambiguous)
+            : 'node'
+        );
 
-          // Use base64 encoding for both runtimes for reliability and consistency
-          const encoded = Buffer.from(code).toString('base64');
-          let commandString;
+        // Use base64 encoding for both runtimes for reliability and consistency
+        const encoded = Buffer.from(code).toString('base64');
+        const commandString = effectiveRuntime === 'python'
+          ? `echo "${encoded}" | base64 -d | python3`
+          : `echo "${encoded}" | base64 -d | node`;
 
-          if (effectiveRuntime === 'python') {
-            // Execute Python code with base64 encoding
-            commandString = `echo "${encoded}" | base64 -d | python3`;
-          } else {
-            // Execute Node.js code with base64 encoding
-            commandString = `echo "${encoded}" | base64 -d | node`;
+        const result = await sandbox.runCommand('sh', ['-c', commandString]);
+        const [stdout, stderr] = await Promise.all([result.stdout(), result.stderr()]);
+
+        // Check for syntax errors and throw them
+        if (result.exitCode !== 0 && stderr) {
+          if (stderr.includes('SyntaxError') ||
+            stderr.includes('invalid syntax') ||
+            stderr.includes('Unexpected token') ||
+            stderr.includes('Unexpected identifier')) {
+            throw new Error(`Syntax error: ${stderr.trim()}`);
           }
-
-          // Use shared command execution logic
-          const result = await executeVercelCommand(sandbox, 'sh', ['-c', commandString]);
-
-          // Check for syntax errors and throw them
-          if (result.exitCode !== 0 && result.stderr) {
-            // Check for common syntax error patterns
-            if (result.stderr.includes('SyntaxError') ||
-              result.stderr.includes('invalid syntax') ||
-              result.stderr.includes('Unexpected token') ||
-              result.stderr.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${result.stderr.trim()}`);
-            }
-          }
-
-          return result;
-        } catch (error) {
-          // Re-throw syntax errors
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `Vercel execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
         }
+
+        return {
+          stdout,
+          stderr,
+          exitCode: result.exitCode,
+          executionTime: Date.now() - startTime,
+          sandboxId: sandbox.sandboxId,
+          provider: 'vercel'
+        };
       },
 
-      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
-        // Handle background command execution
-        const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-        
-        const result = await executeVercelCommand(sandbox, finalCommand, finalArgs);
-        
-        return {
-          ...result,
-          isBackground,
-          // For background commands, we can't get a real PID, but we can indicate it's running
-          ...(isBackground && { pid: -1 })
-        };
+      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+        const startTime = Date.now();
+
+        try {
+          // Construct full command with arguments, properly quoting each arg
+          const quotedArgs = args.map((arg: string) => {
+            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
+              return `"${arg.replace(/"/g, '\\"')}"`;
+            }
+            return arg;
+          });
+          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+
+          const result = await sandbox.runCommand('sh', ['-c', fullCommand]);
+          const [stdout, stderr] = await Promise.all([result.stdout(), result.stderr()]);
+
+          return {
+            stdout,
+            stderr,
+            exitCode: result.exitCode,
+            executionTime: Date.now() - startTime,
+            sandboxId: sandbox.sandboxId,
+            provider: 'vercel'
+          };
+        } catch (error) {
+          return {
+            stdout: '',
+            stderr: error instanceof Error ? error.message : String(error),
+            exitCode: 127,
+            executionTime: Date.now() - startTime,
+            sandboxId: sandbox.sandboxId,
+            provider: 'vercel'
+          };
+        }
       },
 
       getInfo: async (sandbox: VercelSandbox): Promise<SandboxInfo> => {
