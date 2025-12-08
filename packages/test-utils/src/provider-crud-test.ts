@@ -36,6 +36,7 @@ export interface ProviderCrudTestConfig {
 const CRUD_ENABLED_PROVIDERS = [
   'railway',  // Has working CRUD operations with stable sandbox lifecycle
   'render',   // Stable provider ready for CRUD testing
+  'lambda',   // Lambda provider with instance lifecycle management
   // Add more providers here as they become stable for CRUD testing
   // 'e2b',      // Add when CRUD implementation is stable
   // 'modal',    // Add when CRUD implementation is stable  
