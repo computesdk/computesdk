@@ -1138,20 +1138,63 @@ export class Sandbox {
 
   /**
    * Execute shell commands (Sandbox interface method)
+   * Accepts either (command, args?, options?) or ([command, ...args], options?)
    */
-  async runCommand(command: string, args?: string[], _options?: { background?: boolean }): Promise<{
+  async runCommand(
+    commandOrArray: string | [string, ...string[]],
+    argsOrOptions?: string[] | { background?: boolean; cwd?: string },
+    maybeOptions?: { background?: boolean; cwd?: string }
+  ): Promise<{
     stdout: string;
     stderr: string;
     exitCode: number;
     executionTime: number;
     sandboxId: string;
     provider: string;
+    isBackground?: boolean;
   }> {
-    const fullCommand = args && args.length > 0
-      ? `${command} ${args.join(' ')}`
-      : command;
+    // Parse overloaded arguments
+    let command: string;
+    let args: string[];
+    let options: { background?: boolean; cwd?: string } | undefined;
+
+    if (Array.isArray(commandOrArray)) {
+      // Array form: runCommand(['npm', 'install'], { cwd: '/app' })
+      [command, ...args] = commandOrArray;
+      options = argsOrOptions as { background?: boolean; cwd?: string } | undefined;
+    } else {
+      // Traditional form: runCommand('npm', ['install'], { cwd: '/app' })
+      command = commandOrArray;
+      args = (Array.isArray(argsOrOptions) ? argsOrOptions : []) as string[];
+      options = Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as { background?: boolean; cwd?: string } | undefined;
+    }
+
+    // Build the full command with args
+    let fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+
+    // Apply nohup first, then cd - so nohup wraps the command, not cd
+    if (options?.background) {
+      fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+    }
+
+    if (options?.cwd) {
+      const escapedCwd = options.cwd.replace(/"/g, '\\"');
+      fullCommand = `cd "${escapedCwd}" && ${fullCommand}`;
+    }
 
     const result = await this.execute({ command: fullCommand });
+
+    if (options?.background) {
+      return {
+        stdout: result.data.stdout,
+        stderr: result.data.stderr,
+        exitCode: result.data.exit_code,
+        executionTime: result.data.duration_ms,
+        sandboxId: this.sandboxId || '',
+        provider: this.provider || '',
+        isBackground: true
+      };
+    }
 
     return {
       stdout: result.data.stdout,

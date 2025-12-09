@@ -57,6 +57,8 @@ export type SandboxStatus = 'running' | 'stopped' | 'error';
 export interface RunCommandOptions {
   /** Run command in background (non-blocking) */
   background?: boolean;
+  /** Working directory for the command */
+  cwd?: string;
 }
 
 /**
@@ -219,8 +221,12 @@ export interface ProviderSandbox<TSandbox = any> {
 
   /** Execute code in the sandbox */
   runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  /** Execute shell commands */
-  runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult>;
+  /** Execute shell commands - accepts either (command, args?, options?) or ([command, ...args], options?) */
+  runCommand(
+    commandOrArray: string | [string, ...string[]],
+    argsOrOptions?: string[] | RunCommandOptions,
+    maybeOptions?: RunCommandOptions
+  ): Promise<ExecutionResult>;
   /** Get information about the sandbox */
   getInfo(): Promise<SandboxInfo>;
   /** Get URL for accessing the sandbox on a specific port */
