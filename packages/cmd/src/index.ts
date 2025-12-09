@@ -17,7 +17,7 @@
 export type { Command, ShellOptions } from './types.js';
 
 // Re-export utilities
-export { esc } from './utils.js';
+export { esc, shellEscape, escapeArgs, buildShellCommand } from './utils.js';
 
 // Re-export shell wrappers
 export { shell, sh, bash, zsh } from './shell.js';
@@ -33,7 +33,7 @@ import * as archive from './commands/archive.js';
 import * as system from './commands/system.js';
 
 import type { Command } from './types.js';
-import { esc } from './utils.js';
+import { buildShellCommand } from './utils.js';
 
 /**
  * Command builders for common shell operations - callable with shell wrapper + command methods
@@ -41,7 +41,7 @@ import { esc } from './utils.js';
  * @example
  * // As shell wrapper (default: sh)
  * cmd(npm.install(), { cwd: '/app' })
- * // => ['sh', '-c', 'cd "/app" && npm install']
+ * // => ['sh', '-c', 'cd '/app' && npm install']
  *
  * @example
  * // As command builders
@@ -51,19 +51,7 @@ import { esc } from './utils.js';
 export const cmd = Object.assign(
   // Callable: shell wrapper with sh default
   (command: Command, options?: { cwd?: string; background?: boolean }): Command => {
-    if (!options?.cwd && !options?.background) {
-      return command;
-    }
-    let cmdStr = command.join(' ');
-    // Apply nohup first, then cd - so nohup wraps the command, not cd
-    if (options.background) {
-      cmdStr = `nohup ${cmdStr} > /dev/null 2>&1 &`;
-    }
-    if (options.cwd) {
-      const escapedCwd = esc(options.cwd);
-      cmdStr = `cd "${escapedCwd}" && ${cmdStr}`;
-    }
-    return ['sh', '-c', cmdStr];
+    return buildShellCommand('sh', command, options);
   },
   {
     // Filesystem

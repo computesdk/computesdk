@@ -375,6 +375,10 @@ importers:
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/client:
+    dependencies:
+      '@computesdk/cmd':
+        specifier: workspace:*
+        version: link:../cmd
     devDependencies:
       '@types/node':
         specifier: ^20.0.0

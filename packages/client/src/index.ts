@@ -13,6 +13,8 @@ import { WebSocketManager } from './websocket';
 import { Terminal } from './terminal';
 import { FileWatcher } from './file-watcher';
 import { SignalService } from './signal-service';
+import { cmd, escapeArgs } from '@computesdk/cmd';
+import type { Command } from '@computesdk/cmd';
 
 // Re-export high-level classes and types
 export { Terminal } from './terminal';
@@ -49,6 +51,8 @@ export interface SandboxConfig {
   WebSocket?: WebSocketConstructor;
   /** WebSocket protocol: 'binary' (default, recommended) or 'json' (for debugging) */
   protocol?: 'json' | 'binary';
+  /** Optional metadata associated with the sandbox */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -390,7 +394,7 @@ export class Sandbox {
     remove: (path: string) => Promise<void>;
   };
 
-  private config: Required<Omit<SandboxConfig, 'WebSocket'>>;
+  private config: Required<Omit<SandboxConfig, 'WebSocket' | 'metadata'>> & { metadata?: Record<string, unknown> };
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
@@ -444,6 +448,7 @@ export class Sandbox {
       headers: config.headers || {},
       timeout: config.timeout || 30000,
       protocol: config.protocol || 'binary',
+      metadata: config.metadata,
     };
 
     // Use provided WebSocket or fall back to global
@@ -1154,33 +1159,28 @@ export class Sandbox {
     isBackground?: boolean;
   }> {
     // Parse overloaded arguments
-    let command: string;
-    let args: string[];
+    let commandParts: string[];
     let options: { background?: boolean; cwd?: string } | undefined;
 
     if (Array.isArray(commandOrArray)) {
       // Array form: runCommand(['npm', 'install'], { cwd: '/app' })
-      [command, ...args] = commandOrArray;
+      commandParts = commandOrArray;
       options = argsOrOptions as { background?: boolean; cwd?: string } | undefined;
     } else {
       // Traditional form: runCommand('npm', ['install'], { cwd: '/app' })
-      command = commandOrArray;
-      args = (Array.isArray(argsOrOptions) ? argsOrOptions : []) as string[];
+      const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
+      commandParts = [commandOrArray, ...args];
       options = Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as { background?: boolean; cwd?: string } | undefined;
     }
 
-    // Build the full command with args
-    let fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+    // Use cmd() to build the command with proper escaping and shell wrapping
+    const finalCommand = cmd(commandParts as Command, options);
 
-    // Apply nohup first, then cd - so nohup wraps the command, not cd
-    if (options?.background) {
-      fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-    }
-
-    if (options?.cwd) {
-      const escapedCwd = options.cwd.replace(/"/g, '\\"');
-      fullCommand = `cd "${escapedCwd}" && ${fullCommand}`;
-    }
+    // cmd() returns ['sh', '-c', 'escaped command'] if options provided,
+    // or the raw array if no options - in which case we need to escape args
+    const fullCommand = (options?.cwd || options?.background)
+      ? finalCommand.join(' ')
+      : escapeArgs(finalCommand);
 
     const result = await this.execute({ command: fullCommand });
 
@@ -1226,14 +1226,14 @@ export class Sandbox {
     timeout: number;
     metadata?: Record<string, any>;
   }> {
-    // Return basic info - the client doesn't track all these details
     return {
       id: this.sandboxId || '',
       provider: this.provider || '',
-      runtime: 'node', // Default runtime
-      status: 'running',
+      runtime: 'node' as const,
+      status: 'running' as const,
       createdAt: new Date(),
-      timeout: this.config.timeout
+      timeout: this.config.timeout,
+      metadata: this.config.metadata
     };
   }
 
