@@ -32,9 +32,10 @@ export interface NamespaceConfig {
 }
 
 export const getAndValidateCredentials = async (config: NamespaceConfig) => {
-  const tokenSource = await loadDefaults();
-  const issuedToken = await tokenSource.issueToken(5 * 60 * 1000); // 5 minutes
-  const token = config.token || issuedToken;
+  // const tokenSource = await loadDefaults();
+  // const issuedToken = await tokenSource.issueToken(5 * 60 * 1000); // 5 minutes
+  // const token = config.token || issuedToken;
+  const token = config.token || process.env.NSC_TOKEN;
 
   if (!token) {
     throw new Error(
