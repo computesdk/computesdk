@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@bufbuild/protobuf@>1.10.0': 1.10.0
-  '@connectrpc/connect@>1.7.0': 1.7.0
-  '@connectrpc/connect-node@>1.7.0': 1.7.0
-
 importers:
 
   .:
@@ -1562,8 +1557,8 @@ packages:
     resolution: {integrity: sha512-NsvuZJqbjKtK+RjCjFsGdlKZOetyq1A7auPHGEhc1kUXhwrDcXCtcWKQpiUXS4P9LRocynSvWP/CsH1tDR2X/A==}
     engines: {node: '>=18'}
 
-  '@bufbuild/protobuf@1.10.0':
-    resolution: {integrity: sha512-QDdVFLoN93Zjg36NoQPZfsVH9tZew7wKDKyV5qRdj8ntT4wQCOradQjRaTdwMhWUYsgKsvCINKKm87FdEk96Ag==}
+  '@bufbuild/protobuf@2.10.1':
+    resolution: {integrity: sha512-ckS3+vyJb5qGpEYv/s1OebUHDi/xSNtfgw1wqKZo7MR9F2z+qXr0q5XagafAG/9O0QPVIUfST0smluYSTpYFkg==}
 
   '@changesets/apply-release-plan@7.0.12':
     resolution: {integrity: sha512-EaET7As5CeuhTzvXTQCRZeBUcisoYPDDcXvgTE/2jmmypKp0RC7LxKj/yzqeh/1qFTZI7oDGFcL1PHRuQuketQ==}
@@ -1713,28 +1708,16 @@ packages:
     resolution: {integrity: sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA==}
     engines: {node: '>=0.1.90'}
 
-  '@connectrpc/connect-node@1.7.0':
-    resolution: {integrity: sha512-6vaPIkG/NyhxlYgytLoR9KYbPhczEboFB2OYWkA9qvUz1K7efXfeGrlRxoLtpa+r8VxyIOw73w5ktNe743nD+A==}
-    engines: {node: '>=16.0.0'}
-    peerDependencies:
-      '@bufbuild/protobuf': 1.10.0
-      '@connectrpc/connect': 1.7.0
-
   '@connectrpc/connect-web@2.0.0-rc.3':
     resolution: {integrity: sha512-w88P8Lsn5CCsA7MFRl2e6oLY4J/5toiNtJns/YJrlyQaWOy3RO8pDgkz+iIkG98RPMhj2thuBvsd3Cn4DKKCkw==}
     peerDependencies:
-      '@bufbuild/protobuf': 1.10.0
+      '@bufbuild/protobuf': ^2.2.0
       '@connectrpc/connect': 2.0.0-rc.3
-
-  '@connectrpc/connect@1.7.0':
-    resolution: {integrity: sha512-iNKdJRi69YP3mq6AePRT8F/HrxWCewrhxnLMNm0vpqXAR8biwzRtO6Hjx80C6UvtKJ5sFmffQT7I4Baecz389w==}
-    peerDependencies:
-      '@bufbuild/protobuf': 1.10.0
 
   '@connectrpc/connect@2.0.0-rc.3':
     resolution: {integrity: sha512-ARBt64yEyKbanyRETTjcjJuHr2YXorzQo0etyS5+P6oSeW8xEuzajA9g+zDnMcj1hlX2dQE93foIWQGfpru7gQ==}
     peerDependencies:
-      '@bufbuild/protobuf': 1.10.0
+      '@bufbuild/protobuf': ^2.2.0
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2929,13 +2912,6 @@ packages:
   '@msgpack/msgpack@3.1.2':
     resolution: {integrity: sha512-JEW4DEtBzfe8HvUYecLU9e6+XJnKDlUAIve8FvPzF3Kzs6Xo/KuZkZJsDH0wJXl/qEZbeeE7edxDNY3kMs39hQ==}
     engines: {node: '>= 18'}
-
-  '@namespacelabs/sdk@0.2.0':
-    resolution: {integrity: sha512-ZthfpdLp00/Ixf5ZmT6dl+sRddS6bEDnbCXpwEMcFIApjCF/bUuhWvBBEn0cIG0rcH/Tx0NXh0s0dr2F6kxupw==}
-    peerDependencies:
-      '@bufbuild/protobuf': 1.10.0
-      '@connectrpc/connect': 1.7.0
-      '@connectrpc/connect-node': 1.7.0
 
   '@napi-rs/wasm-runtime@0.2.12':
     resolution: {integrity: sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ==}
@@ -12770,7 +12746,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@bufbuild/protobuf@1.10.0': {}
+  '@bufbuild/protobuf@2.10.1': {}
 
   '@changesets/apply-release-plan@7.0.12':
     dependencies:
@@ -13068,24 +13044,14 @@ snapshots:
 
   '@colors/colors@1.6.0': {}
 
-  '@connectrpc/connect-node@1.7.0(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0))':
+  '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.10.1)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.10.1))':
     dependencies:
-      '@bufbuild/protobuf': 1.10.0
-      '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.0)
-      undici: 5.29.0
+      '@bufbuild/protobuf': 2.10.1
+      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.10.1)
 
-  '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@1.10.0))':
+  '@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.10.1)':
     dependencies:
-      '@bufbuild/protobuf': 1.10.0
-      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@1.10.0)
-
-  '@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0)':
-    dependencies:
-      '@bufbuild/protobuf': 1.10.0
-
-  '@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@1.10.0)':
-    dependencies:
-      '@bufbuild/protobuf': 1.10.0
+      '@bufbuild/protobuf': 2.10.1
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -13927,12 +13893,6 @@ snapshots:
   '@msgpack/msgpack@2.8.0': {}
 
   '@msgpack/msgpack@3.1.2': {}
-
-  '@namespacelabs/sdk@0.2.0(@bufbuild/protobuf@1.10.0)(@connectrpc/connect-node@1.7.0(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0)))(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0))':
-    dependencies:
-      '@bufbuild/protobuf': 1.10.0
-      '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.0)
-      '@connectrpc/connect-node': 1.7.0(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0))
 
   '@napi-rs/wasm-runtime@0.2.12':
     dependencies:
@@ -17986,9 +17946,9 @@ snapshots:
 
   e2b@2.0.1:
     dependencies:
-      '@bufbuild/protobuf': 1.10.0
-      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@1.10.0)
-      '@connectrpc/connect-web': 2.0.0-rc.3(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@1.10.0))
+      '@bufbuild/protobuf': 2.10.1
+      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.10.1)
+      '@connectrpc/connect-web': 2.0.0-rc.3(@bufbuild/protobuf@2.10.1)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.10.1))
       compare-versions: 6.1.1
       openapi-fetch: 0.9.8
       platform: 1.3.6
