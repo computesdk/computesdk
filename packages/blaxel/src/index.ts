@@ -5,14 +5,13 @@
  */
 
 import { SandboxInstance, settings } from '@blaxel/core';
-import { createProvider, createBackgroundCommand } from 'computesdk';
+import { createProvider } from 'computesdk';
 import type {
 	ExecutionResult,
 	SandboxInfo,
 	Runtime,
 	CreateSandboxOptions,
 	FileEntry,
-	RunCommandOptions,
 	SandboxStatus
 } from 'computesdk';
 
@@ -207,7 +206,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						? `python3 -c "${escapedCode}"`
 						: `node -e "${escapedCode}"`;
 
-					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, false, command);
+					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, command);
 
 					// Check for syntax errors and throw them
 					if (exitCode !== 0 && stderr) {
@@ -246,25 +245,20 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 				}
 			},
 
-			runCommand: async (sandbox: SandboxInstance, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+			runCommand: async (sandbox: SandboxInstance, command: string, args: string[] = []): Promise<ExecutionResult> => {
 				const startTime = Date.now();
 
 				try {
-					// Handle background command execution
-					const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-
 					// Construct full command with arguments, properly quoting each arg
-					const quotedArgs = finalArgs.map(arg => {
-						// Quote arguments that contain spaces or special characters
+					const quotedArgs = args.map((arg: string) => {
 						if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-							// Escape any double quotes in the argument and wrap in double quotes
 							return `"${arg.replace(/"/g, '\\"')}"`;
 						}
 						return arg;
 					});
-					const fullCommand = quotedArgs.length > 0 ? `${finalCommand} ${quotedArgs.join(' ')}` : finalCommand;
+					const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
 
-					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, isBackground, fullCommand);
+					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand);
 
 					return {
 						stdout,
@@ -272,16 +266,13 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						exitCode,
 						executionTime: Date.now() - startTime,
 						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel',
-						isBackground,
-						...(isBackground && { pid: -1 })
+						provider: 'blaxel'
 					};
 				} catch (error) {
-					// For command failures, return error info instead of throwing
 					return {
 						stdout: '',
 						stderr: error instanceof Error ? error.message : String(error),
-						exitCode: 127, // Command not found exit code
+						exitCode: 127,
 						executionTime: Date.now() - startTime,
 						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
 						provider: 'blaxel'
@@ -556,21 +547,17 @@ function convertSandboxStatus(status: string | undefined): SandboxStatus {
  */
 async function executeWithStreaming(
 	sandbox: SandboxInstance,
-	isBackground: boolean,
 	command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 	// Execute the command
 	const result = await sandbox.process.exec({ command });
 
-	if (!isBackground) {
-		// Wait for process completion
-		await sandbox.process.wait(result.name);
-	}
+	// Wait for process completion
+	await sandbox.process.wait(result.name);
 
 	// Get final process result for exit code
 	const processResult = await sandbox.process.get(result.name);
 
-	// TODO: Handle proper stdout/stderr streaming
 	return {
 		stdout: processResult.logs,
 		stderr: processResult.logs,

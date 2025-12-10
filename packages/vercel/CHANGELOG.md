@@ -1,5 +1,27 @@
 # @computesdk/vercel
 
+## 1.5.9
+
+### Patch Changes
+
+- 556169b: adding in basic fs
+
+## 1.5.8
+
+### Patch Changes
+
+- a146b97: Adding in proper background command via background: true
+- Updated dependencies [a146b97]
+  - computesdk@1.8.8
+
+## 1.5.7
+
+### Patch Changes
+
+- 04ffecf: Minor refactoring
+- Updated dependencies [04ffecf]
+  - computesdk@1.8.7
+
 ## 1.5.6
 
 ### Patch Changes

@@ -37,8 +37,6 @@ npm install @computesdk/e2b        # E2B provider
 npm install @computesdk/modal      # Modal provider
 npm install @computesdk/vercel     # Vercel provider  
 
-# Frontend integration (optional)
-npm install @computesdk/ui         # React hooks and utilities
 ```
 
 ## Basic Usage

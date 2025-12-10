@@ -1,5 +1,20 @@
 # @computesdk/docker
 
+## 1.1.8
+
+### Patch Changes
+
+- a146b97: Adding in proper background command via background: true
+- Updated dependencies [a146b97]
+  - computesdk@1.8.8
+
+## 1.1.7
+
+### Patch Changes
+
+- Updated dependencies [04ffecf]
+  - computesdk@1.8.7
+
 ## 1.1.6
 
 ### Patch Changes

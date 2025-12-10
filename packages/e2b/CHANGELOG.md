@@ -1,5 +1,20 @@
 # @computesdk/e2b
 
+## 1.6.8
+
+### Patch Changes
+
+- a146b97: Adding in proper background command via background: true
+- Updated dependencies [a146b97]
+  - computesdk@1.8.8
+
+## 1.6.7
+
+### Patch Changes
+
+- Updated dependencies [04ffecf]
+  - computesdk@1.8.7
+
 ## 1.6.6
 
 ### Patch Changes
