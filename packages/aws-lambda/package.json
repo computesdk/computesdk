@@ -1,0 +1,65 @@
+{
+  "name": "@computesdk/aws-lambda",
+  "version": "1.0.0",
+  "description": "AWS Lambda provider for ComputeSDK",
+  "author": "ComputeSDK Team",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.948.0",
+    "computesdk": "workspace:*",
+    "jszip": "^3.10.1"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "sandbox",
+    "code-execution",
+    "cloud",
+    "compute",
+    "serverless"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/aws-lambda"
+  },
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/aws-lambda",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/jszip": "^3.4.1",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "dotenv": "^17.2.1",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

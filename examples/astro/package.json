@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-astro",
-  "version": "0.2.6",
+  "version": "0.2.9",
   "private": true,
   "description": "Astro example using ComputeSDK for server-side code execution",
   "type": "module",

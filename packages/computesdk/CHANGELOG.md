@@ -1,5 +1,17 @@
 # computesdk
 
+## 1.8.8
+
+### Patch Changes
+
+- a146b97: Adding in proper background command via background: true
+
+## 1.8.7
+
+### Patch Changes
+
+- 04ffecf: Minor refactoring
+
 ## 1.8.6
 
 ### Patch Changes

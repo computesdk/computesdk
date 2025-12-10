@@ -231,54 +231,6 @@ exists: async (sandbox: SandboxInstance, path: string)
 remove: async (sandbox: SandboxInstance, path: string)
 ```
 
-## Default Filesystem Implementation
-
-The core SDK provides default filesystem implementations for providers that don't have native filesystem APIs:
-
-```typescript
-// Located in: packages/computesdk/src/factory.ts:111-194
-const defaultFilesystemMethods = {
-  readFile: async (sandbox: any, path: string, runCommand: Function) => {
-    const result = await runCommand(sandbox, 'cat', [path]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to read file ${path}: ${result.stderr}`);
-    }
-    return result.stdout.replace(/\n$/, ''); // Remove trailing newline
-  },
-
-  writeFile: async (sandbox: any, path: string, content: string, runCommand: Function) => {
-    const result = await runCommand(sandbox, 'sh', ['-c', `echo ${JSON.stringify(content)} > ${JSON.stringify(path)}`]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to write file ${path}: ${result.stderr}`);
-    }
-  },
-
-  mkdir: async (sandbox: any, path: string, runCommand: Function) => {
-    const result = await runCommand(sandbox, 'mkdir', ['-p', path]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
-    }
-  },
-
-  readdir: async (sandbox: any, path: string, runCommand: Function) => {
-    // Tries ls -la, falls back to ls -l, then ls for maximum compatibility
-    // Parses output to create FileEntry objects with metadata
-  },
-
-  exists: async (sandbox: any, path: string, runCommand: Function) => {
-    const result = await runCommand(sandbox, 'test', ['-e', path]);
-    return result.exitCode === 0;
-  },
-
-  remove: async (sandbox: any, path: string, runCommand: Function) => {
-    const result = await runCommand(sandbox, 'rm', ['-rf', path]);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to remove ${path}: ${result.stderr}`);
-    }
-  }
-};
-```
-
 ## Type Definitions
 
 ### Core Interfaces

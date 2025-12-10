@@ -8,14 +8,13 @@
  * foundation but may need updates as the Modal API evolves.
  */
 
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { 
-  ExecutionResult, 
-  SandboxInfo, 
+import { createProvider } from 'computesdk';
+import type {
+  ExecutionResult,
+  SandboxInfo,
   Runtime,
   CreateSandboxOptions,
-  FileEntry,
-  RunCommandOptions
+  FileEntry
 } from 'computesdk';
 
 // Import Modal SDK
@@ -259,15 +258,12 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         }
       },
 
-      runCommand: async (modalSandbox: ModalSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+      runCommand: async (modalSandbox: ModalSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
         const startTime = Date.now();
 
         try {
-          // Handle background command execution
-          const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-          
           // Execute command using Modal's exec method with working pattern
-          const process = await modalSandbox.sandbox.exec([finalCommand, ...finalArgs], {
+          const process = await modalSandbox.sandbox.exec([command, ...args], {
             stdout: 'pipe',
             stderr: 'pipe'
           });
@@ -286,21 +282,16 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             exitCode: exitCode || 0,
             executionTime: Date.now() - startTime,
             sandboxId: modalSandbox.sandboxId,
-            provider: 'modal',
-            isBackground,
-            // For background commands, we can't get a real PID, but we can indicate it's running
-            ...(isBackground && { pid: -1 })
+            provider: 'modal'
           };
         } catch (error) {
-          // For command failures, return error info instead of throwing
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127, // Command not found exit code
+            exitCode: 127,
             executionTime: Date.now() - startTime,
             sandboxId: modalSandbox.sandboxId,
-            provider: 'modal',
-            isBackground: false // Error case, command didn't run as background
+            provider: 'modal'
           };
         }
       },

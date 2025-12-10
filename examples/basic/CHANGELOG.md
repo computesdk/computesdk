@@ -1,5 +1,42 @@
 # @computesdk/example-basic
 
+## 0.4.9
+
+### Patch Changes
+
+- Updated dependencies [556169b]
+  - @computesdk/vercel@1.5.9
+
+## 0.4.8
+
+### Patch Changes
+
+- Updated dependencies [a146b97]
+  - @computesdk/codesandbox@1.4.8
+  - computesdk@1.8.8
+  - @computesdk/daytona@1.5.8
+  - @computesdk/blaxel@1.2.8
+  - @computesdk/docker@1.1.8
+  - @computesdk/vercel@1.5.8
+  - @computesdk/modal@1.4.8
+  - @computesdk/e2b@1.6.8
+  - @computesdk/runloop@1.2.8
+
+## 0.4.7
+
+### Patch Changes
+
+- Updated dependencies [04ffecf]
+  - computesdk@1.8.7
+  - @computesdk/vercel@1.5.7
+  - @computesdk/blaxel@1.2.7
+  - @computesdk/codesandbox@1.4.7
+  - @computesdk/daytona@1.5.7
+  - @computesdk/docker@1.1.7
+  - @computesdk/e2b@1.6.7
+  - @computesdk/modal@1.4.7
+  - @computesdk/runloop@1.2.7
+
 ## 0.4.6
 
 ### Patch Changes
