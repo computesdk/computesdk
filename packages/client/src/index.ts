@@ -304,6 +304,130 @@ export interface ErrorResponse {
   error: string;
 }
 
+/**
+ * Server status types
+ */
+export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped';
+
+/**
+ * Server information
+ */
+export interface ServerInfo {
+  name: string;
+  command: string;
+  path: string;
+  original_path?: string;
+  env_file?: string;
+  port?: number;
+  url?: string;
+  status: ServerStatus;
+  pid?: number;
+  terminal_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Servers list response
+ */
+export interface ServersListResponse {
+  status: string;
+  message: string;
+  data: {
+    servers: ServerInfo[];
+  };
+}
+
+/**
+ * Server response
+ */
+export interface ServerResponse {
+  status: string;
+  message: string;
+  data: {
+    server: ServerInfo;
+  };
+}
+
+/**
+ * Server stop response
+ */
+export interface ServerStopResponse {
+  status: string;
+  message: string;
+  data: {
+    name: string;
+  };
+}
+
+/**
+ * Server status update response
+ */
+export interface ServerStatusUpdateResponse {
+  status: string;
+  message: string;
+  data: {
+    name: string;
+    status: ServerStatus;
+  };
+}
+
+/**
+ * Environment variables response
+ */
+export interface EnvGetResponse {
+  status: string;
+  message: string;
+  data: {
+    file: string;
+    variables: Record<string, string>;
+  };
+}
+
+/**
+ * Environment set response
+ */
+export interface EnvSetResponse {
+  status: string;
+  message: string;
+  data: {
+    file: string;
+    keys: string[];
+  };
+}
+
+/**
+ * Environment delete response
+ */
+export interface EnvDeleteResponse {
+  status: string;
+  message: string;
+  data: {
+    file: string;
+    keys: string[];
+  };
+}
+
+/**
+ * Batch file write result
+ */
+export interface BatchWriteResult {
+  path: string;
+  success: boolean;
+  error?: string;
+  file?: FileInfo;
+}
+
+/**
+ * Batch file write response
+ */
+export interface BatchWriteResponse {
+  message: string;
+  data: {
+    results: BatchWriteResult[];
+  };
+}
+
 // ============================================================================
 // Sandbox
 // ============================================================================
@@ -808,6 +932,52 @@ export class Sandbox {
     });
   }
 
+  /**
+   * Check if a file exists (HEAD request)
+   * @returns true if file exists, false otherwise
+   */
+  async checkFileExists(path: string): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+      const headers: Record<string, string> = {
+        ...this.config.headers,
+      };
+      if (this._token) {
+        headers['Authorization'] = `Bearer ${this._token}`;
+      }
+
+      const response = await fetch(
+        `${this.config.sandboxUrl}/files/${encodeURIComponent(path)}`,
+        {
+          method: 'HEAD',
+          headers,
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Batch write multiple files atomically
+   * @param files - Array of files to write
+   * @returns Results for each file write operation
+   */
+  async batchWriteFiles(
+    files: Array<{ path: string; content?: string }>
+  ): Promise<BatchWriteResponse> {
+    return this.request<BatchWriteResponse>('/files/batch', {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    });
+  }
+
   // ============================================================================
   // Terminal Management
   // ============================================================================
@@ -1044,6 +1214,158 @@ export class Sandbox {
       method: 'POST',
       body: JSON.stringify({ port, url }),
     });
+  }
+
+  // ============================================================================
+  // Environment Variables
+  // ============================================================================
+
+  /**
+   * Get environment variables from a .env file
+   * @param file - Path to the .env file (relative to sandbox root)
+   */
+  async getEnv(file: string): Promise<EnvGetResponse> {
+    const params = new URLSearchParams({ file });
+    return this.request<EnvGetResponse>(`/env?${params}`);
+  }
+
+  /**
+   * Set (merge) environment variables in a .env file
+   * @param file - Path to the .env file (relative to sandbox root)
+   * @param variables - Key-value pairs to set
+   */
+  async setEnv(
+    file: string,
+    variables: Record<string, string>
+  ): Promise<EnvSetResponse> {
+    const params = new URLSearchParams({ file });
+    return this.request<EnvSetResponse>(`/env?${params}`, {
+      method: 'POST',
+      body: JSON.stringify({ variables }),
+    });
+  }
+
+  /**
+   * Delete environment variables from a .env file
+   * @param file - Path to the .env file (relative to sandbox root)
+   * @param keys - Keys to delete
+   */
+  async deleteEnv(file: string, keys: string[]): Promise<EnvDeleteResponse> {
+    const params = new URLSearchParams({ file });
+    return this.request<EnvDeleteResponse>(`/env?${params}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ keys }),
+    });
+  }
+
+  /**
+   * Check if an environment file exists (HEAD request)
+   * @param file - Path to the .env file (relative to sandbox root)
+   * @returns true if file exists, false otherwise
+   */
+  async checkEnvFile(file: string): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+      const headers: Record<string, string> = {
+        ...this.config.headers,
+      };
+      if (this._token) {
+        headers['Authorization'] = `Bearer ${this._token}`;
+      }
+
+      const params = new URLSearchParams({ file });
+      const response = await fetch(`${this.config.sandboxUrl}/env?${params}`, {
+        method: 'HEAD',
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // Server Management
+  // ============================================================================
+
+  /**
+   * List all managed servers
+   */
+  async listServers(): Promise<ServersListResponse> {
+    return this.request<ServersListResponse>('/servers');
+  }
+
+  /**
+   * Start a new managed server
+   * @param options - Server configuration
+   */
+  async startServer(options: {
+    name: string;
+    command: string;
+    path?: string;
+    env_file?: string;
+  }): Promise<ServerResponse> {
+    return this.request<ServerResponse>('/servers', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  /**
+   * Get information about a specific server
+   * @param name - Server name
+   */
+  async getServer(name: string): Promise<ServerResponse> {
+    return this.request<ServerResponse>(`/servers/${encodeURIComponent(name)}`);
+  }
+
+  /**
+   * Stop a managed server
+   * @param name - Server name
+   */
+  async stopServer(name: string): Promise<ServerStopResponse> {
+    return this.request<ServerStopResponse>(
+      `/servers/${encodeURIComponent(name)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  /**
+   * Restart a managed server
+   * @param name - Server name
+   */
+  async restartServer(name: string): Promise<ServerResponse> {
+    return this.request<ServerResponse>(
+      `/servers/${encodeURIComponent(name)}/restart`,
+      {
+        method: 'POST',
+      }
+    );
+  }
+
+  /**
+   * Update server status (internal use)
+   * @param name - Server name
+   * @param status - New server status
+   */
+  async updateServerStatus(
+    name: string,
+    status: ServerStatus
+  ): Promise<ServerStatusUpdateResponse> {
+    return this.request<ServerStatusUpdateResponse>(
+      `/servers/${encodeURIComponent(name)}/status`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }
+    );
   }
 
   // ============================================================================
