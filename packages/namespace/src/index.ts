@@ -4,7 +4,7 @@
 
 import { createProvider, createBackgroundCommand } from 'computesdk';
 import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
-import { loadDefaults } from "@namespacelabs/sdk";
+// import { loadDefaults } from "@namespacelabs/sdk";
 
 /**
  * Namespace sandbox interface
