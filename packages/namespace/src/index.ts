@@ -2,9 +2,9 @@
  * Namespace Provider - Factory-based Implementation
  */
 
-import { createProvider, createBackgroundCommand } from 'computesdk';
+import { createProvider } from 'computesdk';
 import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
-// import { loadDefaults } from "@namespacelabs/sdk";
+
 
 /**
  * Namespace sandbox interface
@@ -32,9 +32,6 @@ export interface NamespaceConfig {
 }
 
 export const getAndValidateCredentials = async (config: NamespaceConfig) => {
-  // const tokenSource = await loadDefaults();
-  // const issuedToken = await tokenSource.issueToken(5 * 60 * 1000); // 5 minutes
-  // const token = config.token || issuedToken;
   const token = config.token || process.env.NSC_TOKEN;
 
   if (!token) {

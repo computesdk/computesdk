@@ -28,11 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@namespacelabs/sdk": "^0.2.0",
-    "computesdk": "workspace:*",
-    "@bufbuild/protobuf": "1.10.0",
-    "@connectrpc/connect": "1.7.0",
-    "@connectrpc/connect-node": "1.7.0"
+    "computesdk": "workspace:*"
   },
   "keywords": [
     "namespace",
