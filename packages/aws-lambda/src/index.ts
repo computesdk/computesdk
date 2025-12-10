@@ -230,9 +230,14 @@ export const awsLambda = createProvider<LambdaSandbox, LambdaConfig>({
 
           const functions = response.Functions || [];
 
+          function hasFunctionNameAndArn(
+            func: typeof functions[number]
+          ): func is { FunctionName: string; FunctionArn: string } & typeof func {
+            return !!(func.FunctionName && func.FunctionArn);
+          }
+
           const sandboxes = functions
-            .filter((func): func is Required<Pick<typeof func, 'FunctionName' | 'FunctionArn'>> & typeof func => 
-              !!(func.FunctionName && func.FunctionArn))
+            .filter(hasFunctionNameAndArn)
             .map(func => {
               const lambdaSandbox: LambdaSandbox = {
                 functionName: func.FunctionName,
