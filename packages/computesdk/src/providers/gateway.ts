@@ -42,7 +42,7 @@ async function gatewayFetch<T>(
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'X-ComputeSDK-API-Key': config.apiKey,
+      'X-API-Key': config.apiKey,
       'X-Provider': config.provider,
       ...(config.providerHeaders || {}),
       ...options.headers,
@@ -131,32 +131,10 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
         return { sandbox, sandboxId };
       },
 
-      list: async (config) => {
-        const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
-
-        const result = await gatewayFetch<Array<{
-          sandboxId: string;
-          url: string;
-          provider: string;
-          metadata?: Record<string, unknown>;
-        }>>(`${gatewayUrl}/sandbox`, config);
-
-        if (!result.success || !Array.isArray(result.data)) {
-          return [];
-        }
-
-        // Note: ClientSandbox not fully initialized for list results
-        // Use getById to get a fully functional sandbox
-        return result.data.map((item) => ({
-          sandbox: new ClientSandbox({
-            sandboxUrl: item.url,
-            sandboxId: item.sandboxId,
-            provider: item.provider,
-            token: config.apiKey,
-            metadata: item.metadata,
-          }),
-          sandboxId: item.sandboxId,
-        }));
+      list: async () => {
+        throw new Error(
+          'Gateway provider does not support listing sandboxes. Use getById() with a known sandbox ID instead.'
+        );
       },
 
       destroy: async (config, sandboxId) => {
