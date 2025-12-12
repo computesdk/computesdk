@@ -45,7 +45,15 @@ export class EventsPubSubClient extends EventEmitter {
       ? parseInt(process.env.COMPUTESDK_PUBSUB_PORT, 10)
       : null;
     const configPort = config.port;
-    const resolvedPort = configPort || (envPort && !isNaN(envPort) && envPort > 0 && envPort <= 65535 ? envPort : DEFAULT_PUBSUB_PORT);
+
+    let resolvedPort: number;
+    if (typeof configPort === 'number' && configPort > 0 && configPort <= 65535) {
+      resolvedPort = configPort;
+    } else if (typeof envPort === 'number' && !isNaN(envPort) && envPort > 0 && envPort <= 65535) {
+      resolvedPort = envPort;
+    } else {
+      resolvedPort = DEFAULT_PUBSUB_PORT;
+    }
     this.port = resolvedPort;
 
     this.accessToken = config.accessToken;

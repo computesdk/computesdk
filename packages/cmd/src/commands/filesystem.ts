@@ -16,9 +16,9 @@ export const mkdir = (path: string, options?: { recursive?: boolean }): Command 
  */
 export const rm = (path: string, options?: { recursive?: boolean; force?: boolean }): Command => {
   const flags: string[] = [];
-  if (options?.recursive) flags.push('-r');
-  if (options?.force) flags.push('-f');
-  return flags.length > 0 ? ['rm', flags.join(''), path] : ['rm', path];
+  if (options?.recursive) flags.push('r');
+  if (options?.force) flags.push('f');
+  return flags.length > 0 ? ['rm', `-${flags.join('')}`, path] : ['rm', path];
 };
 
 /**

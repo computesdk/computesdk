@@ -70,8 +70,7 @@ describe('filesystem commands', () => {
     });
 
     it('supports both recursive and force', () => {
-      // Implementation joins flags: '-r' + '-f' = '-r-f'
-      expect(rm('/tmp/dir', { recursive: true, force: true })).toEqual(['rm', '-r-f', '/tmp/dir']);
+      expect(rm('/tmp/dir', { recursive: true, force: true })).toEqual(['rm', '-rf', '/tmp/dir']);
     });
   });
 
@@ -318,10 +317,11 @@ describe('archive commands', () => {
     });
 
     it('creates create command', () => {
-      const result = tar.create('archive.tar.gz', ['file1', 'file2']);
+      const result = tar.create('archive.tar.gz', '/app/dist');
       expect(result[0]).toBe('tar');
       expect(result[1]).toBe('-czf');
       expect(result[2]).toBe('archive.tar.gz');
+      expect(result[3]).toBe('/app/dist');
     });
   });
 });

@@ -185,19 +185,19 @@ export function autoConfigureCompute(): Provider | null {
     );
   }
 
-  const gateway = process.env.COMPUTESDK_GATEWAY || GATEWAY_URL;
+  const gatewayUrl = process.env.COMPUTESDK_GATEWAY || GATEWAY_URL;
   const computesdkApiKey = process.env.COMPUTESDK_API_KEY!;
   const providerHeaders = getProviderHeaders(provider);
 
   // Debug logging if enabled
   if (process.env.COMPUTESDK_DEBUG) {
     console.log(`✨ ComputeSDK: Auto-detected ${provider} provider`);
-    console.log(`🌐 Gateway: ${gateway}`);
+    console.log(`🌐 Gateway: ${gatewayUrl}`);
     console.log(`🔑 Provider headers:`, Object.keys(providerHeaders).join(', '));
   }
 
   return gatewayProvider({
-    gatewayUrl: gateway,
+    gatewayUrl,
     apiKey: computesdkApiKey,
     provider,
     providerHeaders
