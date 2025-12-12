@@ -59,8 +59,8 @@ await provider.sandbox.destroy(sandbox.sandboxId);
 Creates a new AVM sandbox with the specified configuration.
 
 **Options:**
-- `name` (string, optional) - Sandbox name (defaults to `avm-sandbox-{timestamp}`)
-- `image` (string, optional) - Docker image to use (defaults to `avmcodes/avm-default-sandbox`)
+- `name` (string, optional) - Sandbox name (defaults to `computesdk-{timestamp}`)
+- `image` (string, optional) - Docker image to use (defaults to `node:alpine`)
 - `resources` (object, optional) - Resource allocation
   - `cpus` (number) - CPU allocation (default: 0.25)
   - `memory` (number) - Memory in MB (default: 512)
@@ -150,7 +150,7 @@ The following methods are planned for future releases:
 ## Notes
 
 - Sandboxes are created with the specified resource allocation
-- Default image is `avmcodes/avm-default-sandbox`
+- Default image is `node:alpine`
 - Default resources: 0.25 CPUs, 512 MB memory
 - Sandbox names are auto-generated with timestamp if not provided
 - All operations use AVM's REST API v1
