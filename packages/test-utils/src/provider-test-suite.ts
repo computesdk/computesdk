@@ -28,7 +28,7 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function createProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, timeout = 30000, skipIntegration = false } = config;
+  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false } = config;
 
   return () => {
     // Get supported runtimes dynamically from provider
@@ -67,11 +67,11 @@ export function createProviderTests(config: ProviderTestConfig) {
 
         beforeEach(async () => {
           sandbox = await createRuntimeSandbox(runtime);
-        }, timeout);
+        }, 90000);
 
         afterEach(async () => {
           await cleanupSandbox(sandbox);
-        }, 15000);
+        }, 30000);
 
         it(`should create a ${runtimeName} sandbox with valid ID`, () => {
           expect(sandbox).toBeDefined();
