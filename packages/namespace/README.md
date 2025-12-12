@@ -13,7 +13,7 @@ npm install @computesdk/namespace
 The Namespace provider requires the following environment variable:
 
 ```bash
-NAMESPACE_TOKEN=your_namespace_token
+NSC_TOKEN=your_namespace_token
 ```
 
 ## Usage
