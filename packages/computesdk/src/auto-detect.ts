@@ -28,6 +28,31 @@ function hasProviderEnv(provider: ProviderName): boolean {
 }
 
 /**
+ * Get detailed status of provider credentials
+ */
+function getProviderEnvStatus(provider: ProviderName): {
+  provider: string;
+  present: string[];
+  missing: string[];
+  isComplete: boolean;
+} {
+  if (typeof process === 'undefined') {
+    return { provider, present: [], missing: [...PROVIDER_ENV_VARS[provider]], isComplete: false };
+  }
+  
+  const requiredVars = PROVIDER_ENV_VARS[provider];
+  const present = requiredVars.filter(varName => !!process.env?.[varName]);
+  const missing = requiredVars.filter(varName => !process.env?.[varName]);
+  
+  return {
+    provider,
+    present: [...present],
+    missing: [...missing],
+    isComplete: missing.length === 0
+  };
+}
+
+/**
  * Detect which provider to use from environment variables
  * 
  * Detection order:
@@ -167,9 +192,30 @@ export function autoConfigureCompute(): Provider | null {
 
   const provider = detectProvider();
   if (!provider) {
+    // Build detailed diagnostic information
+    const detectionResults = PROVIDER_PRIORITY.map(p => getProviderEnvStatus(p));
+    
+    // Create status indicators
+    const statusLines = detectionResults.map(result => {
+      const status = result.isComplete ? '✅' : 
+                     result.present.length > 0 ? '⚠️ ' : '❌';
+      const ratio = `${result.present.length}/${result.present.length + result.missing.length}`;
+      let line = `  ${status} ${result.provider.padEnd(12)} ${ratio} credentials`;
+      
+      // Show what's missing for partial matches
+      if (result.present.length > 0 && result.missing.length > 0) {
+        line += ` (missing: ${result.missing.join(', ')})`;
+      }
+      
+      return line;
+    });
+    
     throw new Error(
       `COMPUTESDK_API_KEY is set but no provider detected.\n\n` +
-      `Please set one of the following provider credentials:\n` +
+      `Provider detection results:\n` +
+      statusLines.join('\n') +
+      `\n\n` +
+      `To fix this, set one of the following:\n\n` +
       `  E2B:        export E2B_API_KEY=xxx\n` +
       `  Railway:    export RAILWAY_API_KEY=xxx RAILWAY_PROJECT_ID=xxx RAILWAY_ENVIRONMENT_ID=xxx\n` +
       `  Daytona:    export DAYTONA_API_KEY=xxx\n` +
