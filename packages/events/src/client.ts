@@ -84,7 +84,11 @@ export class EventsClient {
     const params = new URLSearchParams();
     if (options.type) params.set('type', options.type);
     if (options.since) params.set('since', options.since.toString());
-    if (options.limit) params.set('limit', options.limit.toString());
+    if (options.limit != null) {
+      // Clamp limit to valid range (1-1000)
+      const limit = Math.min(Math.max(1, options.limit), 1000);
+      params.set('limit', limit.toString());
+    }
 
     const queryString = params.toString();
     const url = `/events/${sandboxId}${queryString ? `?${queryString}` : ''}`;

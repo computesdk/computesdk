@@ -13,6 +13,9 @@ import {
   DEFAULT_RECONNECT_DELAY,
 } from './constants';
 
+/** Maximum buffer size (1MB) to prevent unbounded memory growth */
+const MAX_BUFFER_SIZE = 1024 * 1024;
+
 /**
  * TCP Pub/Sub client for real-time event streaming (Node.js only)
  *
@@ -30,16 +33,21 @@ export class EventsPubSubClient extends EventEmitter {
   private state: ConnectionState = 'disconnected';
   private buffer = '';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectionPromise: Promise<void> | null = null;
 
   constructor(config: PubSubClientConfig) {
     super();
     this.host =
       config.host || process.env.COMPUTESDK_PUBSUB_HOST || DEFAULT_PUBSUB_HOST;
-    this.port =
-      config.port ||
-      (process.env.COMPUTESDK_PUBSUB_PORT
-        ? parseInt(process.env.COMPUTESDK_PUBSUB_PORT, 10)
-        : DEFAULT_PUBSUB_PORT);
+
+    // Validate and parse port
+    const envPort = process.env.COMPUTESDK_PUBSUB_PORT
+      ? parseInt(process.env.COMPUTESDK_PUBSUB_PORT, 10)
+      : null;
+    const configPort = config.port;
+    const resolvedPort = configPort || (envPort && !isNaN(envPort) && envPort > 0 && envPort <= 65535 ? envPort : DEFAULT_PUBSUB_PORT);
+    this.port = resolvedPort;
+
     this.accessToken = config.accessToken;
     this.sandboxId = config.sandboxId;
     this.autoReconnect = config.autoReconnect ?? true;
@@ -50,13 +58,19 @@ export class EventsPubSubClient extends EventEmitter {
    * Connect to the pub/sub server and subscribe to events
    */
   async connect(): Promise<void> {
-    if (this.state === 'connected' || this.state === 'connecting') {
+    // Already connected
+    if (this.state === 'connected') {
       return;
+    }
+
+    // Connection in progress - wait for it
+    if (this.connectionPromise) {
+      return this.connectionPromise;
     }
 
     this.state = 'connecting';
 
-    return new Promise((resolve, reject) => {
+    this.connectionPromise = new Promise<void>((resolve, reject) => {
       this.socket = net.createConnection(
         { host: this.host, port: this.port },
         () => {
@@ -72,6 +86,7 @@ export class EventsPubSubClient extends EventEmitter {
 
       this.socket.on('error', (error) => {
         this.state = 'error';
+        this.connectionPromise = null;
         this.emit('error', error);
         reject(new EventsPubSubError(`Connection error: ${error.message}`));
       });
@@ -80,6 +95,7 @@ export class EventsPubSubClient extends EventEmitter {
         const wasConnected = this.state === 'connected';
         this.state = 'disconnected';
         this.socket = null;
+        this.connectionPromise = null;
 
         if (wasConnected) {
           this.emit('disconnect');
@@ -87,6 +103,12 @@ export class EventsPubSubClient extends EventEmitter {
         }
       });
     });
+
+    try {
+      await this.connectionPromise;
+    } finally {
+      this.connectionPromise = null;
+    }
   }
 
   /**
@@ -147,6 +169,16 @@ export class EventsPubSubClient extends EventEmitter {
     rejectConnect?: (reason: Error) => void
   ): void {
     this.buffer += data;
+
+    // Prevent unbounded buffer growth (DoS protection)
+    if (this.buffer.length > MAX_BUFFER_SIZE) {
+      const error = new EventsPubSubError('Buffer overflow - connection terminated');
+      this.emit('error', error);
+      this.socket?.destroy();
+      this.buffer = '';
+      rejectConnect?.(error);
+      return;
+    }
 
     // Process complete lines
     let newlineIndex: number;

@@ -13,7 +13,7 @@ import { WebSocketManager } from './websocket';
 import { Terminal } from './terminal';
 import { FileWatcher } from './file-watcher';
 import { SignalService } from './signal-service';
-import { cmd, escapeArgs } from '@computesdk/cmd';
+import { cmd, escapeArgs, shellEscape } from '@computesdk/cmd';
 import type { Command } from '@computesdk/cmd';
 
 // Re-export high-level classes and types
@@ -602,7 +602,7 @@ export class Sandbox {
         await this.writeFile(path, content);
       },
       mkdir: async (path: string) => {
-        await this.execute({ command: `mkdir -p ${path}` });
+        await this.execute({ command: `mkdir -p ${shellEscape(path)}` });
       },
       readdir: async (path: string) => {
         const response = await this.listFiles(path);
@@ -615,7 +615,7 @@ export class Sandbox {
         }));
       },
       exists: async (path: string) => {
-        const result = await this.execute({ command: `test -e ${path}` });
+        const result = await this.execute({ command: `test -e ${shellEscape(path)}` });
         return result.data.exit_code === 0;
       },
       remove: async (path: string) => {
@@ -1499,10 +1499,10 @@ export class Sandbox {
     const finalCommand = cmd(commandParts as Command, options);
 
     // cmd() returns ['sh', '-c', 'escaped command'] if options provided,
-    // or the raw array if no options - in which case we need to escape args
-    const fullCommand = (options?.cwd || options?.background)
-      ? finalCommand.join(' ')
-      : escapeArgs(finalCommand);
+    // or the raw array if no options. Either way, escapeArgs handles it safely:
+    // - For ['sh', '-c', 'cmd'] -> "sh -c 'cmd'" (inner cmd already escaped by buildShellCommand)
+    // - For ['npm', 'install'] -> "npm install" (each arg escaped as needed)
+    const fullCommand = escapeArgs(finalCommand);
 
     const result = await this.execute({ command: fullCommand });
 
