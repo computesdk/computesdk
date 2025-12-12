@@ -1,29 +1,7 @@
-# Build outputs
-dist/
-*.tsbuildinfo
-
-# Dependencies
-node_modules/
-
-# Environment variables
+node_modules
+dist
+.DS_Store
+coverage
+*.log
 .env
 .env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-
-# Logs
-*.log
-
-# Coverage
-coverage/
-.nyc_output
-
-# Cache
-.eslintcache
-.cache
