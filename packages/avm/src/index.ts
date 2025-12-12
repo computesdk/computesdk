@@ -120,7 +120,8 @@ export const avm = createProvider<AVMSandbox, AVMConfig>({
               cpus: options?.resources?.cpus || 0.25,
               memory: options?.resources?.memory || 512
             },
-            ...(options?.volumes && { volumes: options.volumes })
+            ...(options?.volumes && { volumes: options.volumes }),
+            ...(options?.envs && { env_vars: options.envs })
           };
 
           const responseData = await fetchAVM(apiKey, '/sandboxes/create', {
