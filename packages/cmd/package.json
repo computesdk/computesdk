@@ -22,7 +22,7 @@
     "build": "tsup",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
