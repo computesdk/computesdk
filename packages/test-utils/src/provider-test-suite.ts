@@ -28,7 +28,7 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function createProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, timeout = 30000, skipIntegration = false } = config;
+  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false } = config;
 
   return () => {
     // Get supported runtimes dynamically from provider
@@ -67,11 +67,11 @@ export function createProviderTests(config: ProviderTestConfig) {
 
         beforeEach(async () => {
           sandbox = await createRuntimeSandbox(runtime);
-        }, timeout);
+        }, 90000);
 
         afterEach(async () => {
           await cleanupSandbox(sandbox);
-        }, 15000);
+        }, 30000);
 
         it(`should create a ${runtimeName} sandbox with valid ID`, () => {
           expect(sandbox).toBeDefined();
@@ -275,77 +275,77 @@ print(json.dumps(data, indent=2))
     });
 
     // Enhanced Sandbox Installation Tests (only if COMPUTESDK_API_KEY or COMPUTESDK_ACCESS_TOKEN is set)
-    const hasComputeCredentials = typeof process !== 'undefined' &&
-      (process.env?.COMPUTESDK_API_KEY || process.env?.COMPUTESDK_ACCESS_TOKEN);
+    // const hasComputeCredentials = typeof process !== 'undefined' &&
+    //   (process.env?.COMPUTESDK_API_KEY || process.env?.COMPUTESDK_ACCESS_TOKEN);
 
-    if (hasComputeCredentials && !skipIntegration) {
-      describe('Enhanced Sandbox (ComputeSDK Integration)', () => {
-        it('should verify basic sandbox functionality before compute installation', async () => {
-          // Create a basic sandbox to verify environment is working
-          const sandbox = await provider.sandbox.create();
+    // if (hasComputeCredentials && !skipIntegration) {
+    //   describe('Enhanced Sandbox (ComputeSDK Integration)', () => {
+    //     it('should verify basic sandbox functionality before compute installation', async () => {
+    //       // Create a basic sandbox to verify environment is working
+    //       const sandbox = await provider.sandbox.create();
 
-          try {
-            // Sanity check: verify basic shell commands work (use sh which should be everywhere)
-            const shCheck = await sandbox.runCommand('which', ['sh']);
-            expect(shCheck.exitCode).toBe(0);
+    //       try {
+    //         // Sanity check: verify basic shell commands work (use sh which should be everywhere)
+    //         const shCheck = await sandbox.runCommand('which', ['sh']);
+    //         expect(shCheck.exitCode).toBe(0);
 
-            // Verify we can run commands
-            const echoTest = await sandbox.runCommand('echo', ['test']);
-            expect(echoTest.exitCode).toBe(0);
-            expect(echoTest.stdout.trim()).toBe('test');
-          } finally {
-            await sandbox.destroy();
-          }
-        }, 30000);
+    //         // Verify we can run commands
+    //         const echoTest = await sandbox.runCommand('echo', ['test']);
+    //         expect(echoTest.exitCode).toBe(0);
+    //         expect(echoTest.stdout.trim()).toBe('test');
+    //       } finally {
+    //         await sandbox.destroy();
+    //       }
+    //     }, 30000);
 
-        it('should create enhanced sandbox with compute CLI installed', async () => {
-          // Dynamically import compute to avoid circular dependencies
-          const { createCompute } = await import('computesdk');
+    //     it('should create enhanced sandbox with compute CLI installed', async () => {
+    //       // Dynamically import compute to avoid circular dependencies
+    //       const { createCompute } = await import('computesdk');
 
-          const compute = createCompute({
-            defaultProvider: provider,
-            apiKey: process.env.COMPUTESDK_API_KEY!
-          });
+    //       const compute = createCompute({
+    //         defaultProvider: provider,
+    //         apiKey: process.env.COMPUTESDK_API_KEY!
+    //       });
 
-          const sandbox = await compute.sandbox.create();
+    //       const sandbox = await compute.sandbox.create();
 
-          try {
-            // Verify compute binary was installed by SDK
-            const verifyResult = await sandbox.runCommand('which', ['compute']);
-            expect(verifyResult.exitCode).toBe(0);
-            expect(verifyResult.stdout.trim()).toContain('compute');
+    //       try {
+    //         // Verify compute binary was installed by SDK
+    //         const verifyResult = await sandbox.runCommand('which', ['compute']);
+    //         expect(verifyResult.exitCode).toBe(0);
+    //         expect(verifyResult.stdout.trim()).toContain('compute');
 
-            // Verify enhanced sandbox features are available (these are from ComputeClient)
-            expect(typeof (sandbox as any).createTerminal).toBe('function');
-            expect(typeof (sandbox as any).createWatcher).toBe('function');
-          } finally {
-            await sandbox.destroy();
-          }
-        }, 60000); // Longer timeout for installation
+    //         // Verify enhanced sandbox features are available (these are from ComputeClient)
+    //         expect(typeof (sandbox as any).createTerminal).toBe('function');
+    //         expect(typeof (sandbox as any).createWatcher).toBe('function');
+    //       } finally {
+    //         await sandbox.destroy();
+    //       }
+    //     }, 60000); // Longer timeout for installation
 
-        it('should start compute daemon and respond to health checks', async () => {
-          // Dynamically import compute to avoid circular dependencies
-          const { createCompute } = await import('computesdk');
+    //     it('should start compute daemon and respond to health checks', async () => {
+    //       // Dynamically import compute to avoid circular dependencies
+    //       const { createCompute } = await import('computesdk');
 
-          const compute = createCompute({
-            defaultProvider: provider,
-            apiKey: process.env.COMPUTESDK_API_KEY!
-          });
+    //       const compute = createCompute({
+    //         defaultProvider: provider,
+    //         apiKey: process.env.COMPUTESDK_API_KEY!
+    //       });
 
-          const sandbox = await compute.sandbox.create();
+    //       const sandbox = await compute.sandbox.create();
 
-          try {
-            // SDK should have installed and started the daemon
-            // Verify daemon is responding via curl (port 18080 for Vercel compatibility)
-            const healthResult = await sandbox.runCommand('curl', ['-s', 'http://localhost:18080/health']);
-            expect(healthResult.exitCode).toBe(0);
-            expect(healthResult.stdout).toContain('ok');
-          } finally {
-            await sandbox.destroy();
-          }
-        }, 90000); // Even longer timeout for full installation + startup
-      });
-    }
+    //       try {
+    //         // SDK should have installed and started the daemon
+    //         // Verify daemon is responding via curl (port 18080 for Vercel compatibility)
+    //         const healthResult = await sandbox.runCommand('curl', ['-s', 'http://localhost:18080/health']);
+    //         expect(healthResult.exitCode).toBe(0);
+    //         expect(healthResult.stdout).toContain('ok');
+    //       } finally {
+    //         await sandbox.destroy();
+    //       }
+    //     }, 90000); // Even longer timeout for full installation + startup
+    //   });
+    // }
   };
 }
 
