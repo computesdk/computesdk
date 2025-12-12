@@ -30,7 +30,7 @@ const provider = avm({
 // Create a sandbox
 const sandbox = await provider.sandbox.create({
   name: 'my-sandbox',
-  image: 'avmcodes/avm-default-sandbox',
+  image: 'node:alpine',
   resources: {
     cpus: 0.25,
     memory: 512

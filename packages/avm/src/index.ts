@@ -37,7 +37,7 @@ export interface AVMConfig {
  * Extended create options for AVM sandboxes
  */
 export interface AVMCreateOptions extends CreateSandboxOptions {
-  /** Custom Docker image (defaults to avmcodes/avm-default-sandbox) */
+  /** Custom Docker image (defaults to node:alpine) */
   image?: string;
   /** Sandbox name (defaults to avm-sandbox-{timestamp}) */
   name?: string;
