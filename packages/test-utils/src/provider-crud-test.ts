@@ -38,6 +38,7 @@ const CRUD_ENABLED_PROVIDERS = [
   'render',   // Stable provider ready for CRUD testing
   'lambda',   // Lambda provider with instance lifecycle management
   'namespace', 
+  'avm'
   // Add more providers here as they become stable for CRUD testing
   // 'e2b',      // Add when CRUD implementation is stable
   // 'modal',    // Add when CRUD implementation is stable  
@@ -105,6 +106,9 @@ export function runProviderCrudTest(config: ProviderCrudTestConfig) {
 
     it('should destroy the sandbox', async () => {
       expect(createdSandboxId).toBeDefined();
+
+      // Wait for 15 seconds before destroying
+      await new Promise(resolve => setTimeout(resolve, 15000));
       
       // Destroy should not throw an error
       await expect(provider.sandbox.destroy(createdSandboxId)).resolves.not.toThrow();
