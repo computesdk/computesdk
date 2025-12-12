@@ -4,7 +4,7 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { Sandbox, CreateSandboxOptions, Runtime } from './sandbox';
+import type { Sandbox, ProviderSandbox, CreateSandboxOptions, Runtime } from './sandbox';
 
 /**
  * Common options for creating snapshots
@@ -48,14 +48,17 @@ export interface ListTemplatesOptions {
 
 /**
  * Provider sandbox manager interface - handles sandbox lifecycle
+ *
+ * For most providers (e2b, railway, etc.), this returns ProviderSandbox.
+ * The gateway provider returns the full Sandbox with ComputeClient features.
  */
 export interface ProviderSandboxManager<TSandbox = any> {
   /** Create a new sandbox */
-  create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>>;
+  create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>>;
   /** Get an existing sandbox by ID */
-  getById(sandboxId: string): Promise<Sandbox<TSandbox> | null>;
+  getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null>;
   /** List all active sandboxes */
-  list(): Promise<Sandbox<TSandbox>[]>;
+  list(): Promise<ProviderSandbox<TSandbox>[]>;
   /** Destroy a sandbox */
   destroy(sandboxId: string): Promise<void>;
 }
@@ -150,24 +153,28 @@ export interface CreateSandboxParamsWithOptionalProvider {
 
 /**
  * Base Compute API interface (non-generic)
+ *
+ * Returns ProviderSandbox which is the common interface for all sandboxes.
+ * When using gateway provider, the returned sandbox will have full Sandbox
+ * capabilities (terminals, watchers, signals) accessible via getInstance().
  */
 export interface ComputeAPI {
   /** Configuration management */
   setConfig<TProvider extends Provider>(config: ComputeConfig<TProvider>): void;
   getConfig(): ComputeConfig | null;
   clearConfig(): void;
-  
+
   sandbox: {
     /** Create a sandbox from a provider (or default provider if configured) */
-    create(params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox>;
+    create(params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<ProviderSandbox>;
     /** Get an existing sandbox by ID from a provider (or default provider if configured) */
-    getById(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null>;
+    getById(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<ProviderSandbox | null>;
     /** List all active sandboxes from a provider (or default provider if configured) */
-    list(provider?: Provider): Promise<Sandbox[]>;
+    list(provider?: Provider): Promise<ProviderSandbox[]>;
     /** Destroy a sandbox via a provider (or default provider if configured) */
     destroy(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<void>;
   };
-  
+
   // Future resource APIs will be added here:
   // blob: ProviderBlobAPI;
   // git: ProviderGitAPI;
@@ -176,32 +183,25 @@ export interface ComputeAPI {
 
 /**
  * Typed Compute API interface that preserves provider type information
- * When auth (apiKey/accessToken) is configured, returns enhanced sandboxes with ComputeClient features
+ *
+ * When using gateway provider, returns full Sandbox with ComputeClient features.
+ * When using other providers, returns TypedProviderSandbox.
  */
-export interface TypedComputeAPI<TProvider extends Provider, TIsEnhanced extends boolean = boolean> extends Omit<ComputeAPI, 'sandbox' | 'setConfig'> {
+export interface TypedComputeAPI<TProvider extends Provider> extends Omit<ComputeAPI, 'sandbox' | 'setConfig'> {
   /** Configuration management that returns typed compute instance */
   setConfig<T extends Provider>(config: ComputeConfig<T>): TypedComputeAPI<T>;
 
   sandbox: {
     /** Create a sandbox from the configured provider with proper typing */
     create(params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>): Promise<
-      TIsEnhanced extends true
-        ? import('./sandbox').TypedEnhancedSandbox<TProvider>
-        : import('./sandbox').TypedSandbox<TProvider>
+      import('./sandbox').TypedProviderSandbox<TProvider>
     >;
     /** Get an existing sandbox by ID from the configured provider with proper typing */
     getById(sandboxId: string): Promise<
-      TIsEnhanced extends true
-        ? import('./sandbox').TypedEnhancedSandbox<TProvider>
-        : import('./sandbox').TypedSandbox<TProvider>
-      | null
+      import('./sandbox').TypedProviderSandbox<TProvider> | null
     >;
     /** List all active sandboxes from the configured provider with proper typing */
-    list(): Promise<
-      TIsEnhanced extends true
-        ? import('./sandbox').TypedEnhancedSandbox<TProvider>[]
-        : import('./sandbox').TypedSandbox<TProvider>[]
-    >;
+    list(): Promise<import('./sandbox').TypedProviderSandbox<TProvider>[]>;
     /** Destroy a sandbox via the configured provider */
     destroy(sandboxId: string): Promise<void>;
   };

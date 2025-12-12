@@ -10,7 +10,7 @@ import type {
   ProviderSandboxManager,
   ProviderTemplateManager,
   ProviderSnapshotManager,
-  Sandbox,
+  ProviderSandbox,
   SandboxFileSystem,
   SandboxInfo,
   ExecutionResult,
@@ -23,6 +23,7 @@ import type {
   CreateTemplateOptions,
   ListTemplatesOptions,
 } from './types/index.js';
+import { cmd, type Command } from '@computesdk/cmd';
 
 /**
  * Helper function to handle background command execution
@@ -181,9 +182,9 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 
 
 /**
- * Generated sandbox class - implements the Sandbox interface
+ * Generated sandbox class - implements the ProviderSandbox interface
  */
-class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
+class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
@@ -221,18 +222,49 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
     return await this.methods.runCode(this.sandbox, code, runtime, this.config);
   }
 
-  async runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult> {
-    // Handle background execution at the factory level
-    if (options?.background) {
-      const fullCommand = args?.length ? `${command} ${args.join(' ')}` : command;
-      const bgCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-      const result = await this.methods.runCommand(this.sandbox, 'sh', ['-c', bgCommand], undefined);
-      return {
-        ...result,
-        isBackground: true,
-        pid: -1
-      };
+  async runCommand(
+    commandOrArray: string | [string, ...string[]],
+    argsOrOptions?: string[] | RunCommandOptions,
+    maybeOptions?: RunCommandOptions
+  ): Promise<ExecutionResult> {
+    // Parse overloaded arguments
+    let command: string;
+    let args: string[];
+    let options: RunCommandOptions | undefined;
+
+    if (Array.isArray(commandOrArray)) {
+      // Array form: runCommand(['npm', 'install'], { cwd: '/app' })
+      [command, ...args] = commandOrArray;
+      options = argsOrOptions as RunCommandOptions | undefined;
+    } else {
+      // Traditional form: runCommand('npm', ['install'], { cwd: '/app' })
+      command = commandOrArray;
+      args = (Array.isArray(argsOrOptions) ? argsOrOptions : []) as string[];
+      options = Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as RunCommandOptions | undefined;
     }
+
+    // Build the command tuple
+    const baseCommand: Command = args.length > 0 ? [command, ...args] : [command];
+
+    // Use cmd() helper to handle cwd and background options
+    if (options?.cwd || options?.background) {
+      const wrappedCommand = cmd(baseCommand, {
+        cwd: options.cwd,
+        background: options.background,
+      });
+      const [wrappedCmd, ...wrappedArgs] = wrappedCommand;
+      const result = await this.methods.runCommand(this.sandbox, wrappedCmd, wrappedArgs, undefined);
+
+      if (options.background) {
+        return {
+          ...result,
+          isBackground: true,
+          pid: -1
+        };
+      }
+      return result;
+    }
+
     return await this.methods.runCommand(this.sandbox, command, args, options);
   }
 
@@ -272,7 +304,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     private providerInstance: Provider
   ) {}
 
-  async create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>> {
+  async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
     // Default to 'node' runtime if not specified for consistency across providers
     const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
     const result = await this.methods.create(this.config, optionsWithDefaults);
@@ -290,7 +322,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async getById(sandboxId: string): Promise<Sandbox<TSandbox> | null> {
+  async getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null> {
     // Check active sandboxes first
     const existing = this.activeSandboxes.get(sandboxId);
     if (existing) {
@@ -317,9 +349,9 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     return sandbox;
   }
 
-  async list(): Promise<Sandbox<TSandbox>[]> {
+  async list(): Promise<ProviderSandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
-    const sandboxes: Sandbox[] = [];
+    const sandboxes: ProviderSandbox[] = [];
 
     for (const result of results) {
       let sandbox = this.activeSandboxes.get(result.sandboxId);

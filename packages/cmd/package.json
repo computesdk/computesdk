@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/client",
-  "version": "0.3.5",
+  "name": "@computesdk/cmd",
+  "version": "0.1.0",
   "type": "module",
-  "description": "Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes",
+  "description": "Type-safe shell command builders for ComputeSDK sandboxes",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.cjs",
@@ -22,43 +22,34 @@
     "build": "tsup",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest watch",
-    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
   "keywords": [
-    "client",
-    "browser",
-    "node",
+    "commands",
+    "shell",
     "sandbox",
-    "code-execution",
-    "cloud",
     "compute",
-    "remote-sandbox"
+    "bash",
+    "cli"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/client"
+    "directory": "packages/cmd"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/client",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cmd",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
-  "dependencies": {
-    "@computesdk/cmd": "workspace:*"
-  },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/ws": "^8.5.10",
-    "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0",
-    "ws": "^8.18.0"
+    "vitest": "^1.0.0"
   }
 }

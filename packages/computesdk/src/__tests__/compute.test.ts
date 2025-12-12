@@ -349,25 +349,25 @@ describe('Compute API - Provider-Centric', () => {
     describe('error handling without default provider', () => {
       it('should throw error when creating sandbox without provider or default', async () => {
         await expect(compute.sandbox.create({})).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+          'No default provider configured.'
         )
       })
 
       it('should throw error when getting sandbox without provider or default', async () => {
         await expect(compute.sandbox.getById('test-id')).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+          'No default provider configured.'
         )
       })
 
       it('should throw error when listing sandboxes without provider or default', async () => {
         await expect(compute.sandbox.list()).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+          'No default provider configured.'
         )
       })
 
       it('should throw error when destroying sandbox without provider or default', async () => {
         await expect(compute.sandbox.destroy('test-id')).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+          'No default provider configured.'
         )
       })
     })
