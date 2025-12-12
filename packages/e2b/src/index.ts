@@ -77,12 +77,14 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
                 apiKey: apiKey,
                 timeoutMs: timeout,
                 domain: options.domain,
+                envs: options?.envs,
               });
             } else {
               sandbox = await E2BSandbox.create({
                 apiKey: apiKey,
                 timeoutMs: timeout,
                 domain: options?.domain,
+                envs: options?.envs,
               });
             }
             sandboxId = sandbox.sandboxId || `e2b-${Date.now()}`;
