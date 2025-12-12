@@ -54,7 +54,8 @@ export function buildShellCommand(shellBin: string, command: Command, options?: 
 
   let cmdStr = escapeArgs(command);
 
-  // Apply nohup first, then cd - so nohup wraps the command, not cd
+  // Build command: first wrap with nohup if background, then prepend cd if cwd
+  // Result: cd '/path' && nohup cmd > /dev/null 2>&1 &
   if (options.background) {
     cmdStr = `nohup ${cmdStr} > /dev/null 2>&1 &`;
   }

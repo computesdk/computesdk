@@ -6,6 +6,7 @@
  */
 
 import { GATEWAY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
+import { gateway as gatewayProvider } from './providers/gateway';
 import type { Provider } from './types';
 
 /**
@@ -155,7 +156,7 @@ export function getProviderHeaders(provider: string): Record<string, string> {
 /**
  * Main auto-configuration function
  * Returns configured HTTP provider or null if auto-detection not possible
- * 
+ *
  * @throws Error if COMPUTESDK_API_KEY is set but no provider detected
  */
 export function autoConfigureCompute(): Provider | null {
@@ -163,7 +164,7 @@ export function autoConfigureCompute(): Provider | null {
   if (!isGatewayModeEnabled()) {
     return null;
   }
-  
+
   const provider = detectProvider();
   if (!provider) {
     throw new Error(
@@ -183,20 +184,17 @@ export function autoConfigureCompute(): Provider | null {
       `Docs: https://computesdk.com/docs/quickstart`
     );
   }
-  
+
   const gateway = process.env.COMPUTESDK_GATEWAY || GATEWAY_URL;
   const computesdkApiKey = process.env.COMPUTESDK_API_KEY!;
   const providerHeaders = getProviderHeaders(provider);
-  
+
   // Debug logging if enabled
   if (process.env.COMPUTESDK_DEBUG) {
     console.log(`✨ ComputeSDK: Auto-detected ${provider} provider`);
     console.log(`🌐 Gateway: ${gateway}`);
     console.log(`🔑 Provider headers:`, Object.keys(providerHeaders).join(', '));
   }
-  
-  // Lazy import to avoid circular dependency
-  const { gateway: gatewayProvider } = require('./providers/gateway');
 
   return gatewayProvider({
     gatewayUrl: gateway,
