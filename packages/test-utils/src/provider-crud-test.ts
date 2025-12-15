@@ -38,7 +38,8 @@ const CRUD_ENABLED_PROVIDERS = [
   'render',   // Stable provider ready for CRUD testing
   'lambda',   // Lambda provider with instance lifecycle management
   'namespace', 
-  'avm'
+  'avm',
+  'kernel'
   // Add more providers here as they become stable for CRUD testing
   // 'e2b',      // Add when CRUD implementation is stable
   // 'modal',    // Add when CRUD implementation is stable  
