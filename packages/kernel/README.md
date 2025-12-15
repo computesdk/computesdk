@@ -141,6 +141,58 @@ interface KernelSession {
 - **headless** - Run browser without GUI (default: false)
 - **stealth** - Enable stealth mode for bot detection avoidance (default: false)
 
+### Filesystem Operations (Requires Startup or Enterprise Plan)
+
+The Kernel provider includes full filesystem API support for managing files and directories within browser sessions:
+
+- **readFile(path)** - Read file contents
+- **writeFile(path, content)** - Write or create a file
+- **mkdir(path)** - Create a directory
+- **readdir(path)** - List directory contents
+- **exists(path)** - Check if a file or directory exists
+- **remove(path)** - Delete a file or directory
+
+**Plan Requirement:**
+Filesystem features require a Kernel Startup or Enterprise plan. If you attempt to use filesystem methods without the required plan, you'll receive an `insufficient_plan` error. Visit [Kernel Billing](https://dashboard.onkernel.com/billing/choose-a-plan) to upgrade.
+
+**Example:**
+```typescript
+const provider = kernel({ apiKey: 'your_api_key' });
+const session = await provider.sandbox.create();
+
+// Write a file
+await session.filesystem.writeFile('/tmp/test.txt', 'Hello, world!');
+
+// Read it back
+const content = await session.filesystem.readFile('/tmp/test.txt');
+console.log(content); // "Hello, world!"
+
+// List directory
+const files = await session.filesystem.readdir('/tmp');
+console.log(files);
+
+// Clean up
+await session.filesystem.remove('/tmp/test.txt');
+```
+
+## Error Handling
+
+The Kernel provider parses API error responses and provides detailed error messages. Common error codes include:
+
+- **`insufficient_plan`** - Feature requires plan upgrade
+  - **Solution:** Upgrade at https://dashboard.onkernel.com/billing/choose-a-plan
+  
+- **`not_found`** - Browser session or resource not found
+  - **Solution:** Verify session ID is correct and session hasn't expired
+  
+- **`bad_request`** - Invalid request parameters
+  - **Solution:** Check API documentation and validate input
+
+**Example error message:**
+```
+Failed to create directory: [insufficient_plan] File system features require a startup or enterprise plan. Please visit https://dashboard.onkernel.com/billing/choose-a-plan to upgrade!
+```
+
 ## Not Yet Implemented
 
 The following methods are planned for future releases:

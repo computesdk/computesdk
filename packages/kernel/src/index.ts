@@ -10,7 +10,7 @@
  */
 
 import { createProvider } from 'computesdk';
-import type { Runtime, CreateSandboxOptions, RunCommandOptions } from 'computesdk';
+import type { Runtime, CreateSandboxOptions, RunCommandOptions, FileEntry } from 'computesdk';
 
 /**
  * Kernel browser session interface matching the API response structure
@@ -110,12 +110,34 @@ export const fetchKernel = async (
 };
 
 /**
+ * Parse Kernel API error response and format error message
+ */
+const parseKernelApiError = async (response: Response, defaultPrefix: string): Promise<string> => {
+  let errorMessage = `${response.status} ${response.statusText}`;
+  
+  try {
+    const errorData = await response.json();
+    if (errorData.code && errorData.message) {
+      errorMessage = `[${errorData.code}] ${errorData.message}`;
+    }
+  } catch {
+    // If JSON parsing fails, use status text
+  }
+  
+  return `${defaultPrefix}: ${errorMessage}`;
+};
+
+/**
  * Create a Kernel provider instance using the factory pattern
  */
-export const kernel = createProvider<KernelSession, KernelConfig>({
-  name: 'kernel',
-  methods: {
-    sandbox: {
+export const kernel = (config: KernelConfig) => {
+  // Validate credentials once when provider is created
+  const { apiKey } = getAndValidateCredentials(config);
+  
+  return createProvider<KernelSession, KernelConfig>({
+    name: 'kernel',
+    methods: {
+      sandbox: {
       // Collection operations (compute.sandbox.*)
       create: async (config: KernelConfig, options?: KernelCreateOptions) => {
         const { apiKey } = getAndValidateCredentials(config);
@@ -255,6 +277,200 @@ export const kernel = createProvider<KernelSession, KernelConfig>({
         }
       },
 
+      // Filesystem operations - using apiKey from closure
+      filesystem: {
+        readFile: async (sandbox: KernelSession, path: string): Promise<string> => {
+          try {
+            const response = await fetch(
+              `https://api.onkernel.com/browsers/${sandbox.session_id}/fs/read_file?path=${encodeURIComponent(path)}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`
+                }
+              }
+            );
+            
+            if (!response.ok) {
+              const errorMsg = await parseKernelApiError(response, 'Failed to read file');
+              throw new Error(errorMsg);
+            }
+            
+            return await response.text();
+          } catch (error) {
+            throw new Error(
+              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        },
+
+        writeFile: async (sandbox: KernelSession, path: string, content: string): Promise<void> => {
+          try {
+            const response = await fetch(
+              `https://api.onkernel.com/browsers/${sandbox.session_id}/fs/write_file?path=${encodeURIComponent(path)}`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/octet-stream'
+                },
+                body: content
+              }
+            );
+            
+            if (!response.ok) {
+              const errorMsg = await parseKernelApiError(response, 'Failed to write file');
+              throw new Error(errorMsg);
+            }
+          } catch (error) {
+            throw new Error(
+              `Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        },
+
+        mkdir: async (sandbox: KernelSession, path: string): Promise<void> => {
+          try {
+            const response = await fetch(
+              `https://api.onkernel.com/browsers/${sandbox.session_id}/fs/create_directory`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path })
+              }
+            );
+            
+            if (!response.ok) {
+              const errorMsg = await parseKernelApiError(response, 'Failed to create directory');
+              throw new Error(errorMsg);
+            }
+          } catch (error) {
+            throw new Error(
+              `Failed to create directory ${path}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        },
+
+        readdir: async (sandbox: KernelSession, path: string): Promise<FileEntry[]> => {
+          try {
+            const response = await fetch(
+              `https://api.onkernel.com/browsers/${sandbox.session_id}/fs/list_files?path=${encodeURIComponent(path)}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`
+                }
+              }
+            );
+            
+            if (!response.ok) {
+              const errorMsg = await parseKernelApiError(response, 'Failed to list directory');
+              throw new Error(errorMsg);
+            }
+            
+            const data = await response.json();
+            const entries: FileEntry[] = [];
+            
+            // Process files
+            if (data.files && Array.isArray(data.files)) {
+              for (const file of data.files) {
+                entries.push({
+                  name: file.name,
+                  path: `${path}/${file.name}`.replace(/\/+/g, '/'),
+                  isDirectory: false,
+                  size: file.size || 0,
+                  lastModified: file.lastModified ? new Date(file.lastModified) : new Date()
+                });
+              }
+            }
+            
+            // Process directories
+            if (data.directories && Array.isArray(data.directories)) {
+              for (const dir of data.directories) {
+                entries.push({
+                  name: dir.name || dir,
+                  path: `${path}/${dir.name || dir}`.replace(/\/+/g, '/'),
+                  isDirectory: true,
+                  size: 0,
+                  lastModified: new Date()
+                });
+              }
+            }
+            
+            return entries;
+          } catch (error) {
+            throw new Error(
+              `Failed to read directory ${path}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        },
+
+        exists: async (sandbox: KernelSession, path: string): Promise<boolean> => {
+          try {
+            const response = await fetch(
+              `https://api.onkernel.com/browsers/${sandbox.session_id}/fs/file_info?path=${encodeURIComponent(path)}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`
+                }
+              }
+            );
+            
+            // 200 = exists, 404 = not found
+            return response.ok;
+          } catch (error) {
+            // If fetch fails for any reason, assume doesn't exist
+            return false;
+          }
+        },
+
+        remove: async (sandbox: KernelSession, path: string): Promise<void> => {
+          // First check if it's a file or directory
+          try {
+            const response = await fetch(
+              `https://api.onkernel.com/browsers/${sandbox.session_id}/fs/file_info?path=${encodeURIComponent(path)}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`
+                }
+              }
+            );
+            
+            if (!response.ok) {
+              const errorMsg = await parseKernelApiError(response, 'Failed to get file info');
+              throw new Error(errorMsg);
+            }
+            
+            const fileInfo = await response.json();
+            const isDirectory = fileInfo.is_directory || fileInfo.isDirectory || false;
+            
+            // Use appropriate delete endpoint
+            const endpoint = isDirectory ? 'delete_directory' : 'delete_file';
+            const deleteResponse = await fetch(
+              `https://api.onkernel.com/browsers/${sandbox.session_id}/fs/${endpoint}`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path })
+              }
+            );
+            
+            if (!deleteResponse.ok) {
+              const errorMsg = await parseKernelApiError(deleteResponse, 'Failed to delete');
+              throw new Error(errorMsg);
+            }
+          } catch (error) {
+            throw new Error(
+              `Failed to remove ${path}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+      },
+
       // Instance operations (minimal stubs - not implemented yet)
       runCode: async (_sandbox: KernelSession, _code: string, _runtime?: Runtime) => {
         throw new Error('Kernel runCode method not implemented yet');
@@ -274,4 +490,5 @@ export const kernel = createProvider<KernelSession, KernelConfig>({
 
     },
   },
-});
+  })(config);
+};
