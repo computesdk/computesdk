@@ -6,18 +6,8 @@ import { kernel } from '../index';
 import '@computesdk/test-utils';
 
 /**
- * NOTE: These tests are currently skipped because filesystem API access requires
- * a Kernel Startup or Enterprise plan.
- * 
- * The filesystem implementation is complete and correct, but will return error:
+ * NOTE: The filesystem implementation is complete and correct, but will return error:
  * {"code":"insufficient_plan","message":"File system features require a startup or enterprise plan..."}
- * 
- * To enable these tests:
- * 1. Upgrade your Kernel plan at https://dashboard.onkernel.com/billing/choose-a-plan
- * 2. Remove the `.skipIf` from each test below
- * 
- * The implementation follows the Kernel API specification and will work once
- * your account has filesystem API access.
  */
 describe('Kernel Filesystem Operations', () => {
   let provider: ReturnType<typeof kernel>;
