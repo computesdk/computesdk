@@ -131,8 +131,8 @@ const parseKernelApiError = async (response: Response, defaultPrefix: string): P
  * Create a Kernel provider instance using the factory pattern
  */
 export const kernel = (config: KernelConfig) => {
-  // Validate credentials once when provider is created
-  const { apiKey } = getAndValidateCredentials(config);
+  // Get API key from config or environment (validation happens lazily in individual methods)
+  const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.KERNEL_API_KEY) || '';
   
   return createProvider<KernelSession, KernelConfig>({
     name: 'kernel',
