@@ -47,7 +47,8 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@computesdk/client": "workspace:*"
+    "@computesdk/client": "workspace:*",
+    "@computesdk/cmd": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

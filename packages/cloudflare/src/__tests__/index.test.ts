@@ -183,7 +183,7 @@ describe('Standardized Test Suite', () => {
     // Only test sandbox creation in unit test mode
     if (skipIntegration) {
       try {
-        const result = await testProvider.sandbox.create({});
+        const result = await testProvider.sandbox.create();
         expect(result).toBeDefined();
         expect(result.sandboxId).toBeDefined();
       } catch (error) {

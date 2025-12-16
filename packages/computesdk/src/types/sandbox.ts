@@ -1,8 +1,16 @@
 /**
  * Sandbox Types
- * 
+ *
  * Types related to sandbox execution, filesystem, terminal operations
+ *
+ * Key types:
+ * - Sandbox: The full-featured sandbox from @computesdk/client (terminals, watchers, signals)
+ * - ProviderSandbox: Base interface that provider implementations return (e2b, railway, etc.)
  */
+
+// Re-export the full Sandbox from @computesdk/client
+// This is THE Sandbox that users interact with
+export { Sandbox, type SandboxConfig } from '@computesdk/client';
 
 // Forward declaration to avoid circular dependency
 interface Provider {
@@ -15,7 +23,7 @@ interface Provider {
  * Manually defined for known providers since declaration merging isn't working reliably
  */
 export interface ProviderSandboxTypeMap {
-  e2b: any; // We can't import the E2B type directly, but we'll handle it differently
+  e2b: any;
   vercel: any;
   daytona: any;
 }
@@ -24,9 +32,9 @@ export interface ProviderSandboxTypeMap {
  * Utility type to extract the native instance type from a provider
  * Uses provider name and manual type inference
  */
-export type ExtractSandboxInstanceType<TProvider extends Provider> = 
+export type ExtractSandboxInstanceType<TProvider extends Provider> =
   TProvider extends { readonly name: 'e2b' }
-    ? any // For now, let's just try to make the runtime casting work
+    ? any
     : TProvider extends { readonly name: 'vercel' }
       ? any
       : TProvider extends { readonly name: 'daytona' }
@@ -49,6 +57,8 @@ export type SandboxStatus = 'running' | 'stopped' | 'error';
 export interface RunCommandOptions {
   /** Run command in background (non-blocking) */
   background?: boolean;
+  /** Working directory for the command */
+  cwd?: string;
 }
 
 /**
@@ -175,14 +185,35 @@ export function isCommandExitError(error: unknown): error is CommandExitError {
   );
 }
 
-
-
-
+// ============================================================================
+// Provider Sandbox - Base interface for provider implementations
+// ============================================================================
 
 /**
- * Base sandbox interface - what developers interact with
+ * Provider sandbox interface - what external providers (e2b, railway, etc.) return
+ *
+ * This is the base interface that all provider sandboxes must implement.
+ * The gateway provider returns the full Sandbox from @computesdk/client which
+ * extends this with ComputeClient features (terminals, watchers, signals).
+ *
+ * @example Provider implementation
+ * ```typescript
+ * // In @computesdk/e2b
+ * const e2bProvider = createProvider<E2BSandbox, E2BConfig>({
+ *   name: 'e2b',
+ *   methods: {
+ *     sandbox: {
+ *       create: async (config, options) => {
+ *         const sandbox = await E2BSandbox.create({ ... });
+ *         return { sandbox, sandboxId: sandbox.id };
+ *       },
+ *       // ... other methods
+ *     }
+ *   }
+ * });
+ * ```
  */
-export interface Sandbox<TSandbox = any> {
+export interface ProviderSandbox<TSandbox = any> {
   /** Unique identifier for the sandbox */
   readonly sandboxId: string;
   /** Provider that created this sandbox */
@@ -190,8 +221,12 @@ export interface Sandbox<TSandbox = any> {
 
   /** Execute code in the sandbox */
   runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  /** Execute shell commands */
-  runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult>;
+  /** Execute shell commands - accepts either (command, args?, options?) or ([command, ...args], options?) */
+  runCommand(
+    commandOrArray: string | [string, ...string[]],
+    argsOrOptions?: string[] | RunCommandOptions,
+    maybeOptions?: RunCommandOptions
+  ): Promise<ExecutionResult>;
   /** Get information about the sandbox */
   getInfo(): Promise<SandboxInfo>;
   /** Get URL for accessing the sandbox on a specific port */
@@ -209,15 +244,19 @@ export interface Sandbox<TSandbox = any> {
   readonly filesystem: SandboxFileSystem;
 }
 
+// ============================================================================
+// Typed Variants
+// ============================================================================
+
 /**
  * Extract the sandbox type from a provider
  */
 type ExtractProviderSandboxType<TProvider extends Provider> = TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
 
 /**
- * Typed sandbox interface that preserves the provider's native instance type
+ * Typed provider sandbox interface that preserves the provider's native instance type
  */
-export interface TypedSandbox<TProvider extends Provider> extends Omit<Sandbox<ExtractProviderSandboxType<TProvider>>, 'getProvider'> {
+export interface TypedProviderSandbox<TProvider extends Provider> extends Omit<ProviderSandbox<ExtractProviderSandboxType<TProvider>>, 'getProvider'> {
   /** Get the provider instance that created this sandbox with proper typing */
   getProvider(): TProvider;
   /** Get the native provider sandbox instance with proper typing */
@@ -225,79 +264,7 @@ export interface TypedSandbox<TProvider extends Provider> extends Omit<Sandbox<E
 }
 
 /**
- * Enhanced sandbox type that includes ComputeClient features
- *
- * When a sandbox is created with an API key/JWT, it gets wrapped with ComputeClient
- * which adds powerful features like WebSocket terminals, file watchers, and signals.
- *
- * @example
- * ```typescript
- * const sandbox = await compute.sandbox.create();
- *
- * // ComputeClient features (only available when API key is configured)
- * const terminal = await sandbox.createTerminal();
- * const watcher = await sandbox.createWatcher('/home/project');
- * const signals = await sandbox.startSignals();
- *
- * // Original sandbox features still work
- * await sandbox.runCommand('ls');
- * const instance = sandbox.getInstance();
- * ```
+ * Typed sandbox interface - alias for TypedProviderSandbox for backwards compatibility
+ * @deprecated Use TypedProviderSandbox for provider sandboxes, or Sandbox for gateway sandboxes
  */
-export type ComputeEnhancedSandbox<TSandbox = any> = Sandbox<TSandbox> & {
-  /** The original provider sandbox instance */
-  __originalSandbox: Sandbox<TSandbox>;
-
-  // ComputeClient enhanced features
-  /** Create a persistent terminal session with WebSocket integration */
-  createTerminal(shell?: string, encoding?: 'raw' | 'base64'): Promise<import('@computesdk/client').Terminal>;
-  /** Create a file watcher with real-time change notifications */
-  createWatcher(path: string, options?: {
-    includeContent?: boolean;
-    ignored?: string[];
-    encoding?: 'raw' | 'base64';
-  }): Promise<import('@computesdk/client').FileWatcher>;
-  /** Start the signal service for port and error monitoring */
-  startSignals(): Promise<import('@computesdk/client').SignalService>;
-  /** Execute a one-off command without creating a persistent terminal */
-  execute(options: { command: string; shell?: string }): Promise<any>;
-  /** List all active terminals */
-  listTerminals(): Promise<any[]>;
-  /** Get terminal by ID */
-  getTerminal(id: string): Promise<any>;
-  /** List all active file watchers */
-  listWatchers(): Promise<any>;
-  /** Get file watcher by ID */
-  getWatcher(id: string): Promise<any>;
-  /** Get signal service status */
-  getSignalStatus(): Promise<any>;
-  /** Create a session token (requires access token) */
-  createSessionToken(options?: { description?: string; expiresIn?: number }): Promise<any>;
-  /** List all session tokens (requires access token) */
-  listSessionTokens(): Promise<any>;
-  /** Get session token details (requires access token) */
-  getSessionToken(tokenId: string): Promise<any>;
-  /** Revoke a session token (requires access token) */
-  revokeSessionToken(tokenId: string): Promise<void>;
-  /** Create a magic link for browser authentication (requires access token) */
-  createMagicLink(options?: { redirectUrl?: string }): Promise<any>;
-  /** Check authentication status */
-  getAuthStatus(): Promise<any>;
-  /** Get authentication information */
-  getAuthInfo(): Promise<any>;
-  /** Set authentication token manually */
-  setToken(token: string): void;
-  /** Get current authentication token */
-  getToken(): string | null;
-  /** Get current sandbox URL */
-  getSandboxUrl(): string;
-  /** Disconnect WebSocket connection */
-  disconnect(): Promise<void>;
-}
-
-/**
- * Typed enhanced sandbox that preserves both provider typing and ComputeClient features
- */
-export type TypedEnhancedSandbox<TProvider extends Provider> =
-  ComputeEnhancedSandbox<ExtractProviderSandboxType<TProvider>> &
-  Omit<TypedSandbox<TProvider>, keyof Sandbox>;
+export type TypedSandbox<TProvider extends Provider> = TypedProviderSandbox<TProvider>;

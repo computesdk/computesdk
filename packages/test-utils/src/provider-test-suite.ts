@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
+import type { Provider, ProviderSandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -43,7 +43,7 @@ export function createProviderTests(config: ProviderTestConfig) {
       }
     };
 
-    const cleanupSandbox = async (sandbox: Sandbox) => {
+    const cleanupSandbox = async (sandbox: ProviderSandbox) => {
       if (sandbox && !skipIntegration) {
         try {
           await Promise.race([
@@ -63,7 +63,7 @@ export function createProviderTests(config: ProviderTestConfig) {
       const runtimeName = runtime.charAt(0).toUpperCase() + runtime.slice(1);
       
       describe(`${runtimeName} Runtime`, () => {
-        let sandbox: Sandbox;
+        let sandbox: ProviderSandbox;
 
         beforeEach(async () => {
           sandbox = await createRuntimeSandbox(runtime);
@@ -360,7 +360,7 @@ export function runProviderTestSuite(config: ProviderTestConfig) {
 /**
  * Creates a mock sandbox for unit testing
  */
-function createMockSandbox(config: ProviderTestConfig): Sandbox {
+function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
   const providerName = config.name.toLowerCase();
   
   // Mock state to simulate realistic behavior
@@ -615,7 +615,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       }
     },
     
-    getProvider: () => {
+    getProvider: (): Provider => {
       // Return a mock provider for testing
       return {
         name: providerName,
@@ -627,7 +627,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           list: async () => { throw new Error('Not implemented in mock'); },
           destroy: async () => { throw new Error('Not implemented in mock'); }
         }
-      };
+      } as Provider;
     }
 
   };

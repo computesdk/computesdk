@@ -22,7 +22,8 @@
 ComputeSDK is a free and open-source toolkit for running other people's code in your applications. Think of it as the "AI SDK for compute" - providing a consistent TypeScript interface whether you're using Blaxel, E2B, Vercel, or Daytona.
 
 **Why ComputeSDK?**
-- 🔄 **Provider-agnostic** - Switch between Blaxel, E2B, Vercel, Daytona and more (coming soon) without code changes
+- 🔄 **Provider-agnostic** - Switch between Blaxel, E2B, Vercel, Daytona, Modal, CodeSandbox and more without code changes
+- ⚡ **Zero-config mode** - Auto-detect provider from environment variables
 - 🛡️ **Security-first** - Isolated sandboxes protect your infrastructure
 - ⚡ **Developer experience** - Simple, TypeScript-native API
 - 🌍 **Production-ready** - Used by teams building the next generation of developer tools
@@ -36,10 +37,12 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 
 ## Features
 
-- 🚀 **Multi-provider support** - Blaxel, E2B, Vercel, Daytona
+- 🚀 **Multi-provider support** - Blaxel, E2B, Vercel, Daytona, Modal, CodeSandbox
+- ⚡ **Zero-config mode** - Auto-detect provider from environment variables
 - 📁 **Filesystem operations** - Read, write, create directories across providers
-- 🖥️ **Terminal support** - Interactive PTY terminals (E2B)
-- ⚡ **Command execution** - Run shell commands directly
+- 🖥️ **Terminal support** - Interactive PTY terminals with exec mode
+- ⚡ **Command execution** - Run shell commands with PTY or exec mode
+- 🔧 **Type-safe commands** - Build shell commands with `@computesdk/cmd`
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
 - 📦 **Modular** - Install only the providers you need
 - 🔧 **Extensible** - Easy to add custom providers
@@ -55,8 +58,10 @@ npm install computesdk
 # Add your preferred provider
 npm install @computesdk/blaxel     # For AI-powered code execution
 npm install @computesdk/e2b        # For data science and Python
-npm install @computesdk/vercel     # For web-scale Node.js/Python  
+npm install @computesdk/vercel     # For web-scale Node.js/Python
 npm install @computesdk/daytona    # For development workspaces
+npm install @computesdk/modal      # For GPU-accelerated Python workloads
+npm install @computesdk/codesandbox # For collaborative sandboxes
 
 # Frontend integration (optional)
 npm install @computesdk/ui         # React hooks and utilities
@@ -70,6 +75,8 @@ export BLAXEL_WORKSPACE=your_workspace
 # or E2B_API_KEY=your_api_key
 # or VERCEL_TOKEN=your_token
 # or DAYTONA_API_KEY=your_key
+# or MODAL_TOKEN_ID=your_token_id and MODAL_TOKEN_SECRET=your_token_secret
+# or CODESANDBOX_TOKEN=your_token
 ```
 
 ## Quick Start
@@ -79,15 +86,15 @@ import { compute } from 'computesdk';
 import { blaxel } from '@computesdk/blaxel';
 
 // Set default provider
-compute.setConfig({ 
-  provider: blaxel({ 
+compute.setConfig({
+  provider: blaxel({
     apiKey: process.env.BLAXEL_API_KEY,
     workspace: process.env.BLAXEL_WORKSPACE
-  }) 
+  })
 });
 
 // Create a sandbox
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello World!")');
@@ -95,6 +102,37 @@ console.log(result.stdout); // "Hello World!"
 
 // Clean up
 await compute.sandbox.destroy(sandbox.sandboxId);
+```
+
+## Zero-Config Mode
+
+ComputeSDK can automatically detect and configure your provider from environment variables:
+
+```bash
+# Set your ComputeSDK API key
+export COMPUTESDK_API_KEY=your_computesdk_api_key
+
+# Set credentials for your provider (auto-detected)
+export E2B_API_KEY=your_e2b_key
+# or export DAYTONA_API_KEY=your_daytona_key
+# or export MODAL_TOKEN_ID=xxx MODAL_TOKEN_SECRET=xxx
+```
+
+```typescript
+import { compute } from 'computesdk';
+
+// No provider configuration needed - auto-detected from environment!
+const sandbox = await compute.sandbox.create();
+const result = await sandbox.runCode('print("Hello World!")');
+console.log(result.stdout);
+```
+
+Provider detection order: E2B → Railway → Daytona → Modal → Runloop → Vercel → Cloudflare → CodeSandbox → Blaxel
+
+You can also explicitly set the provider:
+
+```bash
+export COMPUTESDK_PROVIDER=e2b
 ```
 
 ## Provider Setup
@@ -119,7 +157,7 @@ compute.setConfig({
   }) 
 });
 
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute code with AI assistance
 const result = await sandbox.runCode(`
@@ -149,7 +187,7 @@ compute.setConfig({
   provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
 });
 
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute Python with data science libraries
 const result = await sandbox.runCode(`
@@ -192,7 +230,7 @@ compute.setConfig({
   provider: vercel({ runtime: 'node' }) 
 });
 
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute Node.js or Python
 const result = await sandbox.runCode(`
@@ -220,7 +258,7 @@ compute.setConfig({
   provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
 });
 
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute in development workspace
 const result = await sandbox.runCode(`
@@ -424,7 +462,7 @@ function CodeExecutor() {
 
 ```typescript
 try {
-  const sandbox = await compute.sandbox.create({});
+  const sandbox = await compute.sandbox.create();
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
   console.error('Execution failed:', error.message);
@@ -441,7 +479,7 @@ import { e2b } from '@computesdk/e2b';
 
 compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
 
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Create project structure
 await sandbox.filesystem.mkdir('/analysis');
@@ -512,7 +550,7 @@ import { daytona } from '@computesdk/daytona';
 async function processData(provider: any) {
   compute.setConfig({ provider });
   
-  const sandbox = await compute.sandbox.create({});
+  const sandbox = await compute.sandbox.create();
   
   // Create workspace
   await sandbox.filesystem.mkdir('/workspace');
@@ -565,12 +603,55 @@ console.log('Daytona result:', daytonaResult);
 ComputeSDK uses separate provider packages:
 
 ```bash
+npm install @computesdk/blaxel     # Blaxel provider
 npm install @computesdk/e2b        # E2B provider
-npm install @computesdk/vercel     # Vercel provider  
+npm install @computesdk/vercel     # Vercel provider
 npm install @computesdk/daytona    # Daytona provider
+npm install @computesdk/modal      # Modal provider
+npm install @computesdk/codesandbox # CodeSandbox provider
 ```
 
 Each provider implements the same interface but may support different capabilities (filesystem, terminal, etc.).
+
+## Utility Packages
+
+Additional packages for enhanced functionality:
+
+```bash
+npm install @computesdk/cmd        # Type-safe shell command builders
+npm install @computesdk/client     # Universal sandbox client (browser/Node.js)
+npm install @computesdk/events     # Event storage and real-time streaming
+npm install @computesdk/workbench  # Interactive REPL for sandbox testing
+```
+
+### @computesdk/cmd - Type-Safe Commands
+
+Build shell commands with full TypeScript support:
+
+```typescript
+import { npm, git, mkdir, cmd } from '@computesdk/cmd';
+
+// Type-safe command builders
+await sandbox.runCommand(npm.install('express'));
+await sandbox.runCommand(git.clone('https://github.com/user/repo'));
+await sandbox.runCommand(mkdir('/app/src'));
+
+// With options
+await sandbox.runCommand(cmd(npm.run('dev'), { cwd: '/app', background: true }));
+```
+
+### @computesdk/workbench - Interactive REPL
+
+Test sandbox operations interactively:
+
+```bash
+npx workbench
+
+# Commands autocomplete!
+workbench> npm.install('express')
+workbench> git.clone('https://github.com/user/repo')
+workbench> ls('/home')
+```
 
 ## Custom Providers
 

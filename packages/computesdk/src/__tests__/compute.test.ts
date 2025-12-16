@@ -1,10 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { compute } from '../compute'
 import { handleComputeRequest, type ComputeRequest } from '../request-handler'
 import { MockProvider } from './test-utils.js'
 describe('Compute API - Provider-Centric', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    // Clear config and reset auto-configuration state
+    compute.clearConfig()
+    // Reset autoConfigured flag by accessing private property
+    ;(compute as any).autoConfigured = false
+    // Stub env vars to prevent auto-configuration from real env
+    vi.stubEnv('COMPUTESDK_API_KEY', '')
+    vi.stubEnv('E2B_API_KEY', '')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   describe('Provider interface (direct usage)', () => {
@@ -244,29 +255,20 @@ describe('Compute API - Provider-Centric', () => {
       it('should create sandbox using default provider', async () => {
         const provider = new MockProvider()
         compute.setConfig({ provider })
-        
-        const sandbox = await compute.sandbox.create({})
-        
+
+        const sandbox = await compute.sandbox.create()
+
         expect(sandbox.provider).toBe('mock')
       })
 
       it('should create sandbox with options using default provider', async () => {
         const provider = new MockProvider()
         compute.setConfig({ provider })
-        
-        const sandbox = await compute.sandbox.create({ 
+
+        const sandbox = await compute.sandbox.create({
           options: { runtime: 'python' }
         })
-        
-        expect(sandbox.provider).toBe('mock')
-      })
 
-      it('should create sandbox with no parameters using default provider', async () => {
-        const provider = new MockProvider()
-        compute.setConfig({ provider })
-        
-        const sandbox = await compute.sandbox.create()
-        
         expect(sandbox.provider).toBe('mock')
       })
 
@@ -348,26 +350,26 @@ describe('Compute API - Provider-Centric', () => {
 
     describe('error handling without default provider', () => {
       it('should throw error when creating sandbox without provider or default', async () => {
-        await expect(compute.sandbox.create({})).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+        await expect(compute.sandbox.create()).rejects.toThrow(
+          'No default provider configured.'
         )
       })
 
       it('should throw error when getting sandbox without provider or default', async () => {
         await expect(compute.sandbox.getById('test-id')).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+          'No default provider configured.'
         )
       })
 
       it('should throw error when listing sandboxes without provider or default', async () => {
         await expect(compute.sandbox.list()).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+          'No default provider configured.'
         )
       })
 
       it('should throw error when destroying sandbox without provider or default', async () => {
         await expect(compute.sandbox.destroy('test-id')).rejects.toThrow(
-          'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+          'No default provider configured.'
         )
       })
     })
@@ -398,7 +400,7 @@ describe('Compute API - Provider-Centric', () => {
         compute.setConfig({ provider: defaultProvider })
         
         // Use default provider
-        const sandbox1 = await compute.sandbox.create({})
+        const sandbox1 = await compute.sandbox.create()
         expect(sandbox1.provider).toBe('mock')
         
         // Use explicit provider

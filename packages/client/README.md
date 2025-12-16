@@ -1,13 +1,14 @@
 # @computesdk/client
 
-Universal client for ComputeSDK - connect to sandboxes from browser, Node.js, and edge runtimes.
+Universal sandbox client for ComputeSDK - connect to sandboxes from browser, Node.js, and edge runtimes.
 
 ## Features
 
 - 🌐 **Universal** - Works in browser, Node.js, Deno, Bun, Cloudflare Workers, and edge runtimes
 - 🔌 **WebSocket Support** - Real-time terminals, file watchers, and signal monitoring
 - 📁 **File Operations** - Read, write, and manage files in remote sandboxes
-- ⚡ **Command Execution** - Run commands and get execution results
+- ⚡ **Command Execution** - Run commands with PTY or exec mode
+- 🖥️ **Server Management** - Start, stop, and manage long-running servers
 - 🔐 **Authentication** - Access tokens and session tokens with magic link support
 - 🎯 **Type-Safe** - Full TypeScript support with comprehensive types
 - 📦 **Binary Protocol** - Efficient binary WebSocket protocol (50-90% size reduction)
@@ -31,29 +32,26 @@ npm install ws
 
 ### Browser Usage
 
-In the browser, the client auto-detects configuration from URL parameters or localStorage:
+In the browser, the sandbox auto-detects configuration from URL parameters or localStorage:
 
 ```typescript
-import { ComputeClient } from '@computesdk/client';
+import { Sandbox } from '@computesdk/client';
 
-// Auto-detects sandboxUrl and token from:
-// 1. URL params: ?sandbox_url=...&session_token=...
-// 2. localStorage: sandbox_url, session_token
-const client = new ComputeClient();
-
-// Or provide configuration explicitly
-const client = new ComputeClient({
+// Provide configuration explicitly
+const sandbox = new Sandbox({
+  sandboxId: 'sandbox-123',
+  provider: 'gateway',
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: 'your-session-token'
 });
 
 // Execute commands
-const result = await client.execute({ command: 'ls -la' });
-console.log(result.data.stdout);
+const result = await sandbox.runCommand('ls -la');
+console.log(result.stdout);
 
 // Work with files
-await client.writeFile('/home/project/hello.txt', 'Hello World!');
-const content = await client.readFile('/home/project/hello.txt');
+await sandbox.writeFile('/home/project/hello.txt', 'Hello World!');
+const content = await sandbox.readFile('/home/project/hello.txt');
 console.log(content);
 ```
 
@@ -62,213 +60,163 @@ console.log(content);
 **Node.js 21+** (native WebSocket):
 
 ```typescript
-import { ComputeClient } from '@computesdk/client';
+import { Sandbox } from '@computesdk/client';
 
-const client = new ComputeClient({
+const sandbox = new Sandbox({
+  sandboxId: 'sandbox-123',
+  provider: 'gateway',
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: 'your-session-token'
-  // WebSocket is automatically available in Node 21+
 });
 
-const result = await client.execute({ command: 'node --version' });
-console.log(result.data.stdout);
+const result = await sandbox.runCommand('node --version');
+console.log(result.stdout);
 ```
 
 **Node.js < 21** (requires `ws` package):
 
 ```typescript
-import { ComputeClient } from '@computesdk/client';
+import { Sandbox } from '@computesdk/client';
 import WebSocket from 'ws';
 
-const client = new ComputeClient({
+const sandbox = new Sandbox({
+  sandboxId: 'sandbox-123',
+  provider: 'gateway',
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
   token: 'your-session-token',
   WebSocket // Required for Node.js < 21
 });
 
-const result = await client.execute({ command: 'node --version' });
+const result = await sandbox.runCommand('node --version');
+console.log(result.stdout);
+```
+
+## Resource Namespaces
+
+The Sandbox class provides resource namespaces for organized API access:
+
+### Terminals (`sandbox.terminals`)
+
+```typescript
+// Create a PTY terminal (interactive shell with WebSocket)
+const ptyTerminal = await sandbox.terminals.create({
+  pty: true,
+  shell: '/bin/bash'
+});
+ptyTerminal.on('output', (data) => console.log(data));
+ptyTerminal.write('ls -la\n');
+
+// Create an exec terminal (command tracking without WebSocket)
+const execTerminal = await sandbox.terminals.create({ pty: false });
+const result = await execTerminal.execute('npm test');
 console.log(result.data.stdout);
+
+// List all terminals
+const terminals = await sandbox.terminals.list();
+
+// Retrieve a specific terminal
+const terminal = await sandbox.terminals.retrieve('terminal-id');
+
+// Destroy a terminal
+await sandbox.terminals.destroy('terminal-id');
 ```
 
-## Authentication
+### Commands (`sandbox.commands`)
 
-The client supports two types of tokens:
-
-### Access Tokens
-
-Access tokens have full administrative permissions and are the **only tokens that can create session tokens**. They're typically obtained from your edge service or ComputeSDK provider.
+One-shot command execution without managing terminals:
 
 ```typescript
-// Initialize client with access token
-const adminClient = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
-  token: accessToken // REQUIRED: Must be an access token (not a session token)
+// Run a command and wait for completion
+const result = await sandbox.commands.run('npm test');
+console.log(result.stdout);
+console.log(result.exitCode);
+console.log(result.durationMs);
+
+// Run in background (returns immediately)
+const bgResult = await sandbox.commands.run('npm install', {
+  background: true
 });
-
-// Create a session token for delegated access (requires access token)
-const sessionToken = await adminClient.createSessionToken({
-  description: 'My Application',
-  expiresIn: 604800 // 7 days in seconds
-});
-
-console.log('Session token:', sessionToken.token);
 ```
 
-**Important:** Only access tokens can create session tokens. Attempting to call `createSessionToken()` with a session token will throw a clear error:
-```
-Error: Access token required. This operation requires an access token, not a session token.
-```
+### Servers (`sandbox.servers`)
 
-### Session Tokens
-
-Session tokens are delegated credentials with limited permissions. They cannot create other session tokens.
+Manage long-running server processes:
 
 ```typescript
-const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
-  token: sessionToken.token
+// Start a server
+const server = await sandbox.servers.start({
+  name: 'api',
+  command: 'npm start',
+  path: '/app',
+  env_file: '.env'
 });
 
-// Use for regular operations
-const result = await client.execute({ command: 'ls' });
+// List all servers
+const servers = await sandbox.servers.list();
+
+// Get server info
+const info = await sandbox.servers.retrieve('api');
+console.log(info.status); // 'starting' | 'running' | 'ready' | 'failed' | 'stopped'
+console.log(info.url);    // Server URL when ready
+
+// Stop a server
+await sandbox.servers.stop('api');
+
+// Restart a server
+await sandbox.servers.restart('api');
 ```
 
-### Magic Links
+### Environment Variables (`sandbox.env`)
 
-Magic links provide easy browser authentication:
+Manage `.env` files in the sandbox:
 
 ```typescript
-// Create magic link (requires access token)
-const magicLink = await client.createMagicLink({
-  redirectUrl: '/dashboard'
+// Get environment variables
+const vars = await sandbox.env.retrieve('.env');
+console.log(vars); // { API_KEY: 'secret', DEBUG: 'true' }
+
+// Update environment variables (merges with existing)
+await sandbox.env.update('.env', {
+  API_KEY: 'new-secret',
+  NEW_VAR: 'value'
 });
 
-console.log('Magic URL:', magicLink.data.magic_url);
-// Send this URL to users - they'll be automatically authenticated
+// Remove environment variables
+await sandbox.env.remove('.env', ['OLD_KEY', 'DEPRECATED']);
+
+// Check if env file exists
+const exists = await sandbox.env.exists('.env');
 ```
 
-## Core Operations
+### Files (`sandbox.files`)
 
-### Command Execution
-
-Execute one-off commands without creating a persistent terminal:
-
-```typescript
-const result = await client.execute({
-  command: 'npm install',
-  shell: '/bin/bash' // optional
-});
-
-console.log('Exit code:', result.data.exit_code);
-console.log('Output:', result.data.stdout);
-console.log('Errors:', result.data.stderr);
-console.log('Duration:', result.data.duration_ms, 'ms');
-```
-
-### File Operations
-
-```typescript
-// List files
-const files = await client.listFiles('/home/project');
-console.log(files.data.files);
-
-// Read file
-const content = await client.readFile('/home/project/package.json');
-console.log(content);
-
-// Write file
-await client.writeFile('/home/project/hello.js', 'console.log("Hello!");');
-
-// Create file
-await client.createFile('/home/project/new.txt', 'Initial content');
-
-// Delete file
-await client.deleteFile('/home/project/old.txt');
-
-// Get file metadata
-const fileInfo = await client.getFile('/home/project/package.json');
-console.log('Size:', fileInfo.data.file.size);
-console.log('Modified:', fileInfo.data.file.modified_at);
-```
-
-### Filesystem Interface
-
-The client provides a convenient filesystem interface:
+File operations via the resource namespace:
 
 ```typescript
 // Read file
-const content = await client.filesystem.readFile('/home/project/test.txt');
+const content = await sandbox.files.read('/app/config.json');
 
 // Write file
-await client.filesystem.writeFile('/home/project/test.txt', 'Hello!');
-
-// Create directory
-await client.filesystem.mkdir('/home/project/data');
+await sandbox.files.write('/app/config.json', '{"key": "value"}');
 
 // List directory
-const files = await client.filesystem.readdir('/home/project');
-for (const file of files) {
-  console.log(file.name, file.isDirectory ? '(dir)' : '(file)');
-}
+const files = await sandbox.files.list('/app');
 
-// Check existence
-const exists = await client.filesystem.exists('/home/project/test.txt');
-
-// Remove file or directory
-await client.filesystem.remove('/home/project/old.txt');
+// Delete file
+await sandbox.files.delete('/app/old-file.txt');
 ```
 
-## Real-Time Features
+### Watchers (`sandbox.watchers`)
 
-### Terminals
-
-Create interactive terminal sessions with real-time I/O:
+Real-time file system monitoring:
 
 ```typescript
-// Node.js < 21: import WebSocket from 'ws';
-
-const client = new ComputeClient({
-  sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
-  token: sessionToken,
-  // WebSocket // Only needed for Node.js < 21
+// Create a file watcher
+const watcher = await sandbox.watchers.create('/home/project', {
+  ignored: ['node_modules', '.git'],
+  includeContent: true
 });
 
-// Create terminal
-const terminal = await client.createTerminal('/bin/bash');
-
-// Listen for output
-terminal.on('output', (data) => {
-  console.log('Terminal output:', data);
-});
-
-// Listen for terminal destruction
-terminal.on('destroyed', () => {
-  console.log('Terminal destroyed');
-});
-
-// Write to terminal
-terminal.write('ls -la\n');
-terminal.write('echo "Hello"\n');
-
-// Execute command and wait for result
-const result = await terminal.execute('npm --version');
-console.log('npm version:', result.data.stdout);
-
-// Clean up
-await terminal.destroy();
-```
-
-### File Watchers
-
-Monitor file system changes in real-time:
-
-```typescript
-const watcher = await client.createWatcher('/home/project', {
-  ignored: ['node_modules', '.git', 'dist'],
-  includeContent: true // Include file content in events
-});
-
-// Listen for changes
 watcher.on('change', (event) => {
   console.log(`${event.event}: ${event.path}`);
   if (event.content) {
@@ -276,133 +224,226 @@ watcher.on('change', (event) => {
   }
 });
 
-// Stop watching
-await watcher.destroy();
+// Destroy watcher
+await sandbox.watchers.destroy(watcher.id);
 ```
 
-### Signal Service
+### Signals (`sandbox.signals`)
 
-Monitor system events like port openings:
+Monitor system events:
 
 ```typescript
-const signals = await client.startSignals();
+// Start signal monitoring
+const signals = await sandbox.signals.start();
 
-// Listen for port events
 signals.on('port', (event) => {
   console.log(`Port ${event.port} ${event.type}: ${event.url}`);
 });
 
-// Listen for errors
 signals.on('error', (event) => {
-  console.error('Error signal:', event.message);
+  console.error('Error:', event.message);
 });
 
-// Emit custom signals
-await client.emitPortSignal(3000, 'open', 'http://localhost:3000');
-await client.emitServerReadySignal(3000, 'http://localhost:3000');
-await client.emitErrorSignal('Something went wrong');
-
-// Stop signal service
-await signals.stop();
+// Stop signal monitoring
+await sandbox.signals.stop();
 ```
 
-## WebSocket Protocol
+### Session Tokens (`sandbox.sessionTokens`)
 
-The client supports two WebSocket protocols:
-
-### Binary Protocol (Default, Recommended)
-
-The binary protocol provides 50-90% size reduction compared to JSON:
+Manage delegated access (requires access token):
 
 ```typescript
-const client = new ComputeClient({
+// Create a session token
+const token = await sandbox.sessionTokens.create({
+  description: 'My Application',
+  expiresIn: 604800 // 7 days
+});
+
+// List session tokens
+const tokens = await sandbox.sessionTokens.list();
+
+// Revoke a token
+await sandbox.sessionTokens.revoke(tokenId);
+```
+
+### Magic Links (`sandbox.magicLinks`)
+
+Browser authentication (requires access token):
+
+```typescript
+// Create a magic link
+const link = await sandbox.magicLinks.create({
+  redirectUrl: '/dashboard'
+});
+console.log(link.magic_url);
+```
+
+## Direct Methods
+
+The Sandbox class also provides direct methods for common operations:
+
+### Command Execution
+
+```typescript
+// Run a shell command (supports string or array format)
+const result = await sandbox.runCommand('npm install');
+const result = await sandbox.runCommand(['npm', 'install', 'express']);
+
+// With options
+const result = await sandbox.runCommand('npm start', {
+  cwd: '/app',
+  background: true
+});
+
+// Execute in a specific terminal (low-level)
+const response = await sandbox.execute({
+  command: 'ls -la',
+  shell: '/bin/bash'
+});
+```
+
+### Code Execution
+
+```typescript
+// Run code with a specific runtime
+const result = await sandbox.runCode('console.log("Hello!")', 'node');
+const result = await sandbox.runCode('print("Hello!")', 'python');
+```
+
+### File Operations
+
+```typescript
+// Filesystem interface (ComputeSDK standard)
+await sandbox.filesystem.writeFile('/tmp/hello.txt', 'Hello!');
+const content = await sandbox.filesystem.readFile('/tmp/hello.txt');
+await sandbox.filesystem.mkdir('/tmp/mydir');
+const files = await sandbox.filesystem.readdir('/tmp');
+const exists = await sandbox.filesystem.exists('/tmp/hello.txt');
+await sandbox.filesystem.remove('/tmp/hello.txt');
+
+// Direct methods
+await sandbox.writeFile('/tmp/hello.txt', 'Hello!');
+const content = await sandbox.readFile('/tmp/hello.txt');
+const files = await sandbox.listFiles('/tmp');
+await sandbox.deleteFile('/tmp/hello.txt');
+```
+
+## Terminal Modes
+
+The client supports two terminal modes:
+
+### PTY Mode (Interactive)
+
+PTY terminals provide a full interactive shell with WebSocket streaming:
+
+```typescript
+const terminal = await sandbox.terminals.create({
+  pty: true,
+  shell: '/bin/bash',
+  encoding: 'raw' // or 'base64' for binary-safe
+});
+
+// Real-time output via WebSocket
+terminal.on('output', (data) => process.stdout.write(data));
+terminal.on('destroyed', () => console.log('Terminal closed'));
+
+// Write to terminal
+terminal.write('ls -la\n');
+terminal.write('cd /app && npm start\n');
+
+// Clean up
+await terminal.destroy();
+```
+
+### Exec Mode (Command Tracking)
+
+Exec terminals track individual commands with status and output:
+
+```typescript
+const terminal = await sandbox.terminals.create({ pty: false });
+
+// Run a command and get structured result
+const result = await terminal.execute('npm test');
+console.log(result.data.cmd_id);
+console.log(result.data.status);  // 'running' | 'completed' | 'failed'
+console.log(result.data.stdout);
+console.log(result.data.stderr);
+console.log(result.data.exit_code);
+
+// Run in background
+const bgResult = await terminal.execute('npm install', { background: true });
+console.log(bgResult.data.cmd_id); // Track this command
+
+// Check command status later
+const cmdStatus = await sandbox.getCommand(terminal.getId(), bgResult.data.cmd_id);
+
+// Wait for command to complete
+const finalResult = await sandbox.waitForCommand(
+  terminal.getId(),
+  bgResult.data.cmd_id,
+  { timeout: 60000 }
+);
+
+// List all commands in a terminal
+const commands = await sandbox.listCommands(terminal.getId());
+
+await terminal.destroy();
+```
+
+## Authentication
+
+### Access Tokens
+
+Access tokens have full permissions and can create session tokens:
+
+```typescript
+const sandbox = new Sandbox({
+  sandboxId: 'sandbox-123',
+  provider: 'gateway',
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
-  token: sessionToken,
-  protocol: 'binary' // Default - explicit for clarity
+  token: accessToken // From your edge service
+});
+
+// Create delegated session token
+const sessionToken = await sandbox.sessionTokens.create({
+  description: 'My Application',
+  expiresIn: 604800
 });
 ```
 
-### JSON Protocol (Debugging)
+### Session Tokens
 
-Use JSON protocol for easier debugging with browser DevTools:
+Session tokens are delegated credentials with limited permissions:
 
 ```typescript
-const client = new ComputeClient({
+const sandbox = new Sandbox({
+  sandboxId: 'sandbox-123',
+  provider: 'gateway',
   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
-  token: sessionToken,
-  protocol: 'json' // Human-readable in DevTools
+  token: sessionToken.token
 });
-```
 
-## Advanced Usage
+// Regular operations work
+const result = await sandbox.runCommand('ls');
 
-### Sandbox Management
-
-```typescript
-// Get server info
-const info = await client.getServerInfo();
-console.log('Server version:', info.data.version);
-console.log('Sandbox count:', info.data.sandbox_count);
-
-// Create new sandbox
-const sandbox = await client.createSandbox();
-console.log('Sandbox URL:', sandbox.url);
-
-// List all sandboxes
-const sandboxes = await client.listSandboxes();
-
-// Get sandbox details
-const details = await client.getSandbox('subdomain');
-
-// Delete sandbox
-await client.deleteSandbox('subdomain', true); // deleteFiles = true
-```
-
-### Health Checks
-
-```typescript
-const health = await client.health();
-console.log('Status:', health.status);
-console.log('Timestamp:', health.timestamp);
-```
-
-### Authentication Management
-
-```typescript
-// Check auth status
-const status = await client.getAuthStatus();
-console.log('Authenticated:', status.data.authenticated);
-console.log('Token type:', status.data.token_type);
-
-// Get auth info
-const authInfo = await client.getAuthInfo();
-console.log('Available endpoints:', authInfo.data.endpoints);
-
-// List session tokens (requires access token)
-const tokens = await client.listSessionTokens();
-console.log('Active tokens:', tokens.data.tokens);
-
-// Revoke session token (requires access token)
-await client.revokeSessionToken(tokenId);
-
-// Note: All session token operations require an access token
-// Using a session token will throw: "Access token required"
+// Cannot create session tokens (will throw)
+// await sandbox.sessionTokens.create(...) // Error!
 ```
 
 ## Configuration Options
 
 ```typescript
-interface ComputeClientConfig {
-  // Sandbox URL (auto-detected in browser from URL/localStorage)
+interface SandboxConfig {
+  // Sandbox ID (required)
+  sandboxId: string;
+
+  // Provider name, e.g., 'gateway', 'e2b' (required)
+  provider: string;
+
+  // API endpoint URL
   sandboxUrl?: string;
 
-  // Sandbox ID (for Sandbox interface compatibility)
-  sandboxId?: string;
-
-  // Provider name (for Sandbox interface compatibility)
-  provider?: string;
-
-  // Access or session token (auto-detected in browser from URL/localStorage)
+  // Access or session token
   token?: string;
 
   // Custom headers for all requests
@@ -416,26 +457,51 @@ interface ComputeClientConfig {
 
   // WebSocket protocol: 'binary' (default) or 'json'
   protocol?: 'json' | 'binary';
+
+  // Optional metadata
+  metadata?: Record<string, unknown>;
 }
+```
+
+## WebSocket Protocol
+
+### Binary Protocol (Default)
+
+50-90% size reduction compared to JSON:
+
+```typescript
+const sandbox = new Sandbox({
+  // ...
+  protocol: 'binary' // Default
+});
+```
+
+### JSON Protocol (Debugging)
+
+Use for browser DevTools inspection:
+
+```typescript
+const sandbox = new Sandbox({
+  // ...
+  protocol: 'json'
+});
 ```
 
 ## Error Handling
 
 ```typescript
 try {
-  const result = await client.execute({ command: 'invalid-command' });
+  const result = await sandbox.runCommand('invalid-command');
 } catch (error) {
   console.error('Command failed:', error.message);
 }
 
-// Handle terminal errors
+// Terminal errors
 terminal.on('error', (error) => {
   console.error('Terminal error:', error);
 });
 
-// Watchers only emit 'change' and 'destroyed' events
-
-// Handle signal errors
+// Signal errors
 signals.on('error', (event) => {
   console.error('Signal error:', event.message);
 });
@@ -445,7 +511,7 @@ signals.on('error', (event) => {
 
 ```typescript
 // Disconnect WebSocket
-await client.disconnect();
+await sandbox.disconnect();
 
 // Destroy terminals
 await terminal.destroy();
@@ -459,19 +525,21 @@ await signals.stop();
 
 ## TypeScript Types
 
-All types are fully documented and exported:
-
 ```typescript
 import type {
-  ComputeClient,
-  ComputeClientConfig,
+  Sandbox,
+  SandboxConfig,
   Terminal,
   FileWatcher,
   SignalService,
   FileInfo,
+  ServerInfo,
+  ServerStatus,
   TerminalResponse,
+  CommandExecutionResponse,
+  CommandDetailsResponse,
+  CommandResult,
   WatcherResponse,
-  SignalServiceResponse,
   FileChangeEvent,
   PortSignalEvent,
   ErrorSignalEvent,
@@ -479,70 +547,17 @@ import type {
 } from '@computesdk/client';
 ```
 
-## Examples
+## Backward Compatibility
 
-### Full Example: Interactive Code Editor
+The `ComputeClient` name is still exported as an alias:
 
 ```typescript
+// Both work
+import { Sandbox } from '@computesdk/client';
 import { ComputeClient } from '@computesdk/client';
 
-async function runCodeEditor() {
-  // Initialize client
-  const client = new ComputeClient({
-    sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
-    token: sessionToken
-  });
-
-  // Create project structure
-  await client.filesystem.writeFile(
-    '/home/project/index.js',
-    'console.log("Hello World!");'
-  );
-
-  // Watch for file changes
-  const watcher = await client.createWatcher('/home/project', {
-    ignored: ['node_modules'],
-    includeContent: true
-  });
-
-  watcher.on('change', async (event) => {
-    console.log(`File ${event.event}: ${event.path}`);
-
-    // Auto-run on save
-    if (event.path.endsWith('.js') && event.event === 'change') {
-      const result = await client.execute({
-        command: `node ${event.path}`
-      });
-      console.log('Output:', result.data.stdout);
-    }
-  });
-
-  // Monitor for server ports
-  const signals = await client.startSignals();
-  signals.on('port', (event) => {
-    if (event.type === 'open') {
-      console.log(`Server started on ${event.url}`);
-    }
-  });
-
-  // Create interactive terminal
-  const terminal = await client.createTerminal();
-  terminal.on('output', (data) => {
-    process.stdout.write(data);
-  });
-
-  // Run initial code
-  await terminal.execute('node /home/project/index.js');
-
-  // Cleanup on exit
-  process.on('SIGINT', async () => {
-    await watcher.destroy();
-    await signals.stop();
-    await terminal.destroy();
-    await client.disconnect();
-    process.exit(0);
-  });
-}
+// ComputeClient is an alias for Sandbox
+const sandbox = new ComputeClient({ ... }); // Works
 ```
 
 ## License

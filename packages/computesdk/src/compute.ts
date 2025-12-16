@@ -4,17 +4,15 @@
  * Provides the unified compute.* API and delegates to specialized managers
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI, ComputeEnhancedSandbox, TypedEnhancedSandbox } from './types';
-import { authorizeApiKey, type AuthorizationResponse } from './auth/license';
-import { installComputeDaemon } from './compute-daemon/installer';
-import { wrapWithComputeClient } from './sandbox/wrapper';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI } from './types';
+import { autoConfigureCompute } from './auto-detect';
 
 /**
  * Compute singleton implementation - orchestrates all compute operations
  */
 class ComputeManager implements ComputeAPI {
   private config: ComputeConfig | null = null;
-  private computeAuth: { apiKey?: string; accessToken?: string } = {};
+  private autoConfigured = false;
 
   /**
    * Set default configuration with generic type preservation
@@ -32,18 +30,9 @@ class ComputeManager implements ComputeAPI {
 
     // Normalize config to always have both fields for internal use (backward compatibility)
     const actualProvider = config.defaultProvider || config.provider!;
-    const accessToken = config.accessToken || config.jwt; // Support both accessToken and deprecated jwt
     this.config = {
       provider: actualProvider,
       defaultProvider: actualProvider,
-      apiKey: config.apiKey,
-      accessToken: accessToken
-    };
-
-    // Store compute auth credentials
-    this.computeAuth = {
-      apiKey: config.apiKey,
-      accessToken: accessToken
     };
   }
 
@@ -62,13 +51,42 @@ class ComputeManager implements ComputeAPI {
   }
 
   /**
+   * Lazy auto-configure from environment if not explicitly configured
+   */
+  private ensureConfigured(): void {
+    // Skip if already configured
+    if (this.config) return;
+
+    // Skip if already tried auto-detection
+    if (this.autoConfigured) return;
+
+    this.autoConfigured = true;
+
+    // Try auto-detection from environment
+    const provider = autoConfigureCompute();
+    if (provider) {
+      this.config = {
+        provider,
+        defaultProvider: provider,
+      };
+    }
+  }
+
+  /**
    * Get the default provider, throwing if not configured
    */
   private getDefaultProvider(): Provider {
+    // Try auto-configuration first
+    this.ensureConfigured();
+
     const provider = this.config?.defaultProvider || this.config?.provider;
     if (!provider) {
       throw new Error(
-        'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
+        'No default provider configured.\n\n' +
+        'Options:\n' +
+        '1. Zero-config mode: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)\n' +
+        '2. Explicit mode: Call compute.setConfig({ defaultProvider }) or pass provider to create()\n\n' +
+        'Docs: https://computesdk.com/docs/quickstart'
       );
     }
     return provider;
@@ -78,65 +96,32 @@ class ComputeManager implements ComputeAPI {
   sandbox = {
     /**
      * Create a sandbox from a provider (or default provider if configured)
-     * 
+     *
      * @example
      * ```typescript
      * import { e2b } from '@computesdk/e2b'
      * import { compute } from 'computesdk'
-     * 
+     *
      * // With explicit provider
      * const sandbox = await compute.sandbox.create({
      *   provider: e2b({ apiKey: 'your-key' })
      * })
-     * 
-      * // With default provider (both forms work)
+     *
+      * // With default provider
       * compute.setConfig({ defaultProvider: e2b({ apiKey: 'your-key' }) })
-      * const sandbox1 = await compute.sandbox.create({})
-      * const sandbox2 = await compute.sandbox.create()
+      * const sandbox = await compute.sandbox.create()
      * ```
      */
-    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox | ComputeEnhancedSandbox> => {
+    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<ProviderSandbox> => {
       const provider = params && 'provider' in params && params.provider ? params.provider : this.getDefaultProvider();
       const options = params?.options;
-      const sandbox = await provider.sandbox.create(options);
-
-      // Install compute daemon and wrap with ComputeClient if auth is configured
-      if (this.computeAuth.apiKey || this.computeAuth.accessToken) {
-        // Get access token from API key if needed
-        let authResponse: AuthorizationResponse | null = null;
-        let accessToken = this.computeAuth.accessToken;
-
-        if (this.computeAuth.apiKey && !accessToken) {
-          authResponse = await authorizeApiKey(this.computeAuth.apiKey);
-          accessToken = authResponse.access_token;
-        }
-
-        // Install compute daemon in the sandbox
-        await installComputeDaemon(sandbox, accessToken);
-
-        // Wrap with ComputeClient if we have authorization info
-        // This adds features like createTerminal(), createWatcher(), startSignals()
-        if (authResponse) {
-          return await wrapWithComputeClient(sandbox, authResponse);
-        } else if (accessToken) {
-          // If we only have access token (no API key), we still need sandbox_url and preview_url
-          // For now, we'll use default URLs - this could be improved
-          const defaultAuthResponse: AuthorizationResponse = {
-            access_token: accessToken,
-            sandbox_url: 'https://sandbox.computesdk.com',
-            preview_url: 'https://preview.computesdk.com'
-          };
-          return await wrapWithComputeClient(sandbox, defaultAuthResponse);
-        }
-      }
-
-      return sandbox;
+      return await provider.sandbox.create(options);
     },
 
     /**
      * Get an existing sandbox by ID from a provider (or default provider if configured)
      */
-    getById: async (providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null> => {
+    getById: async (providerOrSandboxId: Provider | string, sandboxId?: string): Promise<ProviderSandbox | null> => {
       if (typeof providerOrSandboxId === 'string') {
         // Called with just sandboxId, use default provider
         const provider = this.getDefaultProvider();
@@ -153,7 +138,7 @@ class ComputeManager implements ComputeAPI {
     /**
      * List all active sandboxes from a provider (or default provider if configured)
      */
-    list: async (provider?: Provider): Promise<Sandbox[]> => {
+    list: async (provider?: Provider): Promise<ProviderSandbox[]> => {
       const actualProvider = provider || this.getDefaultProvider();
       return await actualProvider.sandbox.list();
     },
@@ -175,20 +160,12 @@ class ComputeManager implements ComputeAPI {
       }
     }
   };
-
-  // Future: compute.blob.*, compute.database.*, compute.git.* will be added here
-  // blob = new BlobManager();
-  // database = new DatabaseManager();  
-  // git = new GitManager();
-
-
 }
 
 /**
  * Singleton instance - the main API (untyped)
  */
 export const compute: ComputeAPI = new ComputeManager();
-
 
 
 /**
@@ -199,55 +176,42 @@ export const compute: ComputeAPI = new ComputeManager();
  * import { e2b } from '@computesdk/e2b'
  * import { createCompute } from 'computesdk'
  *
- * // With API key (automatically gets access token from license server)
- * const compute = createCompute({
- *   defaultProvider: e2b({ apiKey: 'your-key' }),
- *   apiKey: 'computesdk_live_...' // Returns enhanced sandboxes
- * });
+ * // Zero-config mode (auto-detects from environment)
+ * const compute = createCompute();
+ * const sandbox = await compute.sandbox.create();
  *
- * // Or with direct access token
+ * // Explicit mode
  * const compute2 = createCompute({
  *   defaultProvider: e2b({ apiKey: 'your-key' }),
- *   accessToken: 'your-access-token' // Returns enhanced sandboxes
  * });
  *
- * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed E2B Sandbox!
- * await sandbox.createTerminal(); // ✅ Enhanced sandbox features!
+ * const sandbox2 = await compute2.sandbox.create();
+ * const instance = sandbox2.getInstance(); // ✅ Properly typed!
  * ```
  */
-export function createCompute<TProvider extends Provider>(
-  config: ComputeConfig<TProvider> & { apiKey: string }
-): TypedComputeAPI<TProvider, true>;
-export function createCompute<TProvider extends Provider>(
-  config: ComputeConfig<TProvider> & { accessToken: string }
-): TypedComputeAPI<TProvider, true>;
-export function createCompute<TProvider extends Provider>(
-  config: ComputeConfig<TProvider> & { jwt: string }
-): TypedComputeAPI<TProvider, true>;
+// Zero-config mode (no arguments)
+export function createCompute(): ComputeAPI;
+// Explicit mode with provider
 export function createCompute<TProvider extends Provider>(
   config: ComputeConfig<TProvider>
-): TypedComputeAPI<TProvider, false>;
+): TypedComputeAPI<TProvider>;
+// Implementation
 export function createCompute<TProvider extends Provider>(
-  config: ComputeConfig<TProvider>
-): TypedComputeAPI<TProvider, boolean> {
+  config?: ComputeConfig<TProvider>
+): TypedComputeAPI<TProvider> | ComputeAPI {
   const manager = new ComputeManager();
 
-  // Set config directly without calling the public setConfig method
+  // Zero-config mode: No config provided, will auto-detect on first use
+  if (!config) {
+    return manager as ComputeAPI;
+  }
+
+  // Explicit mode: Set config directly
   const actualProvider = config.defaultProvider || config.provider!;
-  const accessToken = config.accessToken || config.jwt; // Support both accessToken and deprecated jwt
   manager['config'] = {
     provider: actualProvider,
     defaultProvider: actualProvider,
-    apiKey: config.apiKey,
-    accessToken: accessToken
   };
-  manager['computeAuth'] = {
-    apiKey: config.apiKey,
-    accessToken: accessToken
-  };
-
-  const isEnhanced = !!(config.apiKey || config.accessToken || config.jwt);
 
   return {
     setConfig: <T extends Provider>(cfg: ComputeConfig<T>) => createCompute(cfg),
@@ -257,39 +221,23 @@ export function createCompute<TProvider extends Provider>(
     sandbox: {
       create: async (params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>) => {
         const sandbox = await manager.sandbox.create(params);
-        // If API key/JWT is configured, the sandbox will be enhanced with ComputeClient features
-        // Cast to the appropriate type based on whether it's enhanced or not
-        if (isEnhanced) {
-          return sandbox as TypedEnhancedSandbox<TProvider>;
-        }
-        return sandbox as TypedSandbox<TProvider>;
+        return sandbox as TypedProviderSandbox<TProvider>;
       },
 
       getById: async (sandboxId: string) => {
         const sandbox = await manager.sandbox.getById(sandboxId);
         if (!sandbox) return null;
-        // Type depends on whether auth is configured
-        if (isEnhanced) {
-          return sandbox as TypedEnhancedSandbox<TProvider>;
-        }
-        return sandbox as TypedSandbox<TProvider>;
+        return sandbox as TypedProviderSandbox<TProvider>;
       },
 
       list: async () => {
         const sandboxes = await manager.sandbox.list();
-        // Type depends on whether auth is configured
-        if (isEnhanced) {
-          return sandboxes as TypedEnhancedSandbox<TProvider>[];
-        }
-        return sandboxes as TypedSandbox<TProvider>[];
+        return sandboxes as TypedProviderSandbox<TProvider>[];
       },
 
       destroy: async (sandboxId: string) => {
         return await manager.sandbox.destroy(sandboxId);
       }
     }
-  } as TypedComputeAPI<TProvider, typeof isEnhanced>;
+  } as TypedComputeAPI<TProvider>;
 }
-
-
-

@@ -1,7 +1,7 @@
 /**
- * ComputeSDK Client - Universal Client Implementation
+ * ComputeSDK Client - Universal Sandbox Implementation
  *
- * This package provides a Client for interacting with ComputeSDK sandboxes
+ * This package provides a Sandbox for interacting with ComputeSDK sandboxes
  * through API endpoints at ${sandboxId}.preview.computesdk.com
  *
  * Works in browser, Node.js, and edge runtimes.
@@ -13,12 +13,38 @@ import { WebSocketManager } from './websocket';
 import { Terminal } from './terminal';
 import { FileWatcher } from './file-watcher';
 import { SignalService } from './signal-service';
+import { cmd, escapeArgs, mkdir, test } from '@computesdk/cmd';
+import type { Command } from '@computesdk/cmd';
+
+// Import resource namespaces
+import {
+  Terminals,
+  Servers,
+  Watchers,
+  SessionTokens,
+  MagicLinks,
+  Signals,
+  Files,
+  Env,
+  Auth,
+  SandboxCommands,
+  Children,
+} from './resources';
 
 // Re-export high-level classes and types
 export { Terminal } from './terminal';
 export { FileWatcher, type FileChangeEvent } from './file-watcher';
 export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type SignalEvent } from './signal-service';
 export { encodeBinaryMessage, decodeBinaryMessage, isBinaryData, blobToArrayBuffer, MessageType } from './protocol';
+
+// Re-export resource types
+export { Command } from './resources/command';
+export { TerminalCommands } from './resources/commands';
+export type { SessionTokenInfo } from './resources/session-tokens';
+export type { MagicLinkInfo } from './resources/magic-links';
+export type { SignalStatusInfo } from './resources/signals';
+export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
+export type { CommandResult } from './resources/sandbox-commands';
 
 // ============================================================================
 // Type Definitions
@@ -30,15 +56,15 @@ export { encodeBinaryMessage, decodeBinaryMessage, isBinaryData, blobToArrayBuff
 export type WebSocketConstructor = new (url: string) => WebSocket;
 
 /**
- * Configuration options for the ComputeSDK client
+ * Configuration options for creating a Sandbox
  */
-export interface ComputeClientConfig {
+export interface SandboxConfig {
   /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.com). Optional in browser - can be auto-detected from URL query param or localStorage */
   sandboxUrl?: string;
-  /** Sandbox ID (required for Sandbox interface operations) */
-  sandboxId?: string;
-  /** Provider name (e.g., 'e2b', 'vercel') (required for Sandbox interface operations) */
-  provider?: string;
+  /** Sandbox ID */
+  sandboxId: string;
+  /** Provider name (e.g., 'e2b', 'gateway') */
+  provider: string;
   /** Access token or session token for authentication. Optional in browser - can be auto-detected from URL query param or localStorage */
   token?: string;
   /** Optional headers to include with all requests */
@@ -49,6 +75,8 @@ export interface ComputeClientConfig {
   WebSocket?: WebSocketConstructor;
   /** WebSocket protocol: 'binary' (default, recommended) or 'json' (for debugging) */
   protocol?: 'json' | 'binary';
+  /** Optional metadata associated with the sandbox */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -185,9 +213,10 @@ export interface TerminalResponse {
   message: string;
   data: {
     id: string;
-    status: 'running' | 'stopped';
-    channel: string;
-    ws_url: string;
+    pty: boolean;
+    status: 'running' | 'stopped' | 'ready' | 'active';
+    channel?: string; // Only present for PTY mode (pty=true)
+    ws_url?: string; // Only present for PTY mode (pty=true)
     encoding?: 'raw' | 'base64';
   };
 }
@@ -199,12 +228,57 @@ export interface CommandExecutionResponse {
   message: string;
   data: {
     terminal_id?: string;
+    cmd_id?: string; // Present for exec mode commands
     command: string;
-    output: string;
+    output?: string; // Deprecated: combined stdout+stderr (backward compatibility)
     stdout: string;
     stderr: string;
-    exit_code: number;
-    duration_ms: number;
+    exit_code?: number; // May not be present for background commands
+    duration_ms?: number; // May not be present for background commands
+    status?: 'running' | 'completed' | 'failed'; // Present for exec mode
+    pty?: boolean; // Indicates terminal mode
+  };
+}
+
+/**
+ * Command details response
+ */
+export interface CommandDetailsResponse {
+  message: string;
+  data: {
+    cmd_id: string;
+    command: string;
+    status: 'running' | 'completed' | 'failed';
+    stdout: string;
+    stderr: string;
+    started_at: string;
+    finished_at?: string;
+    duration_ms?: number;
+    exit_code?: number;
+  };
+}
+
+/**
+ * Command list item
+ */
+export interface CommandListItem {
+  cmd_id: string;
+  command: string;
+  status: 'running' | 'completed' | 'failed';
+  started_at: string;
+  finished_at?: string;
+  duration_ms?: number;
+  exit_code?: number;
+}
+
+/**
+ * Commands list response
+ */
+export interface CommandsListResponse {
+  message: string;
+  data: {
+    commands: CommandListItem[];
+    count: number;
   };
 }
 
@@ -300,61 +374,219 @@ export interface ErrorResponse {
   error: string;
 }
 
+/**
+ * Terminal response
+ */
+export interface TerminalResponse {
+  message: string;
+  data: {
+    id: string;
+    pty: boolean;
+    status: 'running' | 'stopped' | 'ready' | 'active';
+    channel?: string; // Only present for PTY mode (pty=true)
+    ws_url?: string; // Only present for PTY mode (pty=true)
+    encoding?: 'raw' | 'base64';
+  };
+}
+
+/**
+ * Server status types
+ */
+export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped';
+
+/**
+ * Server information
+ */
+export interface ServerInfo {
+  slug: string;
+  command: string;
+  path: string;
+  original_path?: string;
+  env_file?: string;
+  port?: number;
+  url?: string;
+  status: ServerStatus;
+  pid?: number;
+  terminal_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Servers list response
+ */
+export interface ServersListResponse {
+  status: string;
+  message: string;
+  data: {
+    servers: ServerInfo[];
+  };
+}
+
+/**
+ * Server response
+ */
+export interface ServerResponse {
+  status: string;
+  message: string;
+  data: {
+    server: ServerInfo;
+  };
+}
+
+/**
+ * Server stop response
+ */
+export interface ServerStopResponse {
+  status: string;
+  message: string;
+  data: {
+    slug: string;
+  };
+}
+
+/**
+ * Server status update response
+ */
+export interface ServerStatusUpdateResponse {
+  status: string;
+  message: string;
+  data: {
+    slug: string;
+    status: ServerStatus;
+  };
+}
+
+/**
+ * Environment variables response
+ */
+export interface EnvGetResponse {
+  status: string;
+  message: string;
+  data: {
+    file: string;
+    variables: Record<string, string>;
+  };
+}
+
+/**
+ * Environment set response
+ */
+export interface EnvSetResponse {
+  status: string;
+  message: string;
+  data: {
+    file: string;
+    keys: string[];
+  };
+}
+
+/**
+ * Environment delete response
+ */
+export interface EnvDeleteResponse {
+  status: string;
+  message: string;
+  data: {
+    file: string;
+    keys: string[];
+  };
+}
+
+/**
+ * Batch file operation type
+ */
+export type BatchFileOperation = 'write' | 'delete';
+
+/**
+ * Batch file operation request
+ */
+export interface BatchFileRequest {
+  path: string;
+  operation: BatchFileOperation;
+  content?: string;
+}
+
+/**
+ * Batch file operation result
+ */
+export interface BatchWriteResult {
+  path: string;
+  success: boolean;
+  error?: string;
+  file?: FileInfo;
+}
+
+/**
+ * Batch file operation response
+ */
+export interface BatchWriteResponse {
+  message: string;
+  data: {
+    results: BatchWriteResult[];
+  };
+}
+
 // ============================================================================
-// ComputeSDK Client
+// Sandbox
 // ============================================================================
 
 /**
- * ComputeSDK Client for browser and Node.js environments
+ * Sandbox - Full-featured sandbox with WebSocket terminals, file watchers, and signals
+ *
+ * This is THE Sandbox class - the primary interface for interacting with ComputeSDK sandboxes.
+ * It provides all the features needed for code execution, file operations, and real-time communication.
  *
  * @example
  * ```typescript
- * import { ComputeClient } from '@computesdk/client'
+ * import { Sandbox } from '@computesdk/client'
  *
  * // Pattern 1: Admin operations (requires access token)
- * const adminClient = new ComputeClient({
+ * const sandbox = new Sandbox({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
  *   token: accessToken, // From edge service
  * });
  *
  * // Create session token for delegated operations
- * const sessionToken = await adminClient.createSessionToken({
+ * const sessionToken = await sandbox.createSessionToken({
  *   description: 'My Application',
  *   expiresIn: 604800, // 7 days
  * });
  *
  * // Pattern 2: Delegated operations (binary protocol by default)
- * const client = new ComputeClient({
+ * const sandbox2 = new Sandbox({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
  *   token: sessionToken.data.token,
  *   // protocol: 'binary' is the default (50-90% size reduction)
  * });
  *
- * // Pattern 3: JSON protocol for debugging (if needed)
- * const debugClient = new ComputeClient({
- *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
- *   token: sessionToken.data.token,
- *   protocol: 'json', // Use JSON for browser DevTools inspection
- * });
- *
  * // Execute a one-off command
- * const result = await client.execute({ command: 'ls -la' });
+ * const result = await sandbox.execute({ command: 'ls -la' });
  * console.log(result.data.stdout);
  *
- * // Work with files
- * const files = await client.listFiles('/home/project');
- * await client.writeFile('/home/project/test.txt', 'Hello, World!');
- * const content = await client.readFile('/home/project/test.txt');
+ * // Run code
+ * const codeResult = await sandbox.runCode('console.log("Hello!")', 'node');
  *
- * // Create a terminal with real-time output
- * const terminal = await client.createTerminal();
+ * // Work with files
+ * const files = await sandbox.listFiles('/home/project');
+ * await sandbox.writeFile('/home/project/test.txt', 'Hello, World!');
+ * const content = await sandbox.readFile('/home/project/test.txt');
+ *
+ * // Create a PTY terminal with real-time output (interactive shell)
+ * const terminal = await sandbox.createTerminal({ pty: true });
  * terminal.on('output', (data) => console.log(data));
  * terminal.write('ls -la\n');
- * await terminal.execute('echo "Hello"');
  * await terminal.destroy();
  *
+ * // Create an exec terminal for command tracking
+ * const execTerminal = await sandbox.createTerminal({ pty: false });
+ * const result = await execTerminal.execute('npm install', { background: true });
+ * const cmd = await sandbox.getCommand(execTerminal.getId(), result.data.cmd_id);
+ * console.log(cmd.data.status); // "running" | "completed" | "failed"
+ * await execTerminal.destroy();
+ *
  * // Watch for file changes
- * const watcher = await client.createWatcher('/home/project', {
+ * const watcher = await sandbox.createWatcher('/home/project', {
  *   ignored: ['node_modules', '.git']
  * });
  * watcher.on('change', (event) => {
@@ -363,19 +595,19 @@ export interface ErrorResponse {
  * await watcher.destroy();
  *
  * // Monitor system signals
- * const signals = await client.startSignals();
+ * const signals = await sandbox.startSignals();
  * signals.on('port', (event) => {
  *   console.log(`Port ${event.port} opened: ${event.url}`);
  * });
  * await signals.stop();
  *
  * // Clean up
- * await client.disconnect();
+ * await sandbox.disconnect();
  * ```
  */
-export class ComputeClient {
-  readonly sandboxId: string | undefined;
-  readonly provider: string | undefined;
+export class Sandbox {
+  readonly sandboxId: string;
+  readonly provider: string;
   readonly filesystem: {
     readFile: (path: string) => Promise<string>;
     writeFile: (path: string, content: string) => Promise<void>;
@@ -391,12 +623,25 @@ export class ComputeClient {
     remove: (path: string) => Promise<void>;
   };
 
-  private config: Required<Omit<ComputeClientConfig, 'WebSocket'>>;
+  // Resource namespaces
+  readonly terminals: Terminals;
+  readonly commands: SandboxCommands;
+  readonly servers: Servers;
+  readonly watchers: Watchers;
+  readonly sessionTokens: SessionTokens;
+  readonly magicLinks: MagicLinks;
+  readonly signals: Signals;
+  readonly files: Files;
+  readonly env: Env;
+  readonly auth: Auth;
+  readonly children: Children;
+
+  private config: Required<Omit<SandboxConfig, 'WebSocket' | 'metadata'>> & { metadata?: Record<string, unknown> };
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
 
-  constructor(config: ComputeClientConfig = {}) {
+  constructor(config: SandboxConfig) {
     this.sandboxId = config.sandboxId;
     this.provider = config.provider;
 
@@ -445,6 +690,7 @@ export class ComputeClient {
       headers: config.headers || {},
       timeout: config.timeout || 30000,
       protocol: config.protocol || 'binary',
+      metadata: config.metadata,
     };
 
     // Use provided WebSocket or fall back to global
@@ -454,7 +700,7 @@ export class ComputeClient {
       throw new Error(
         'WebSocket is not available. In Node.js, pass WebSocket implementation:\n' +
         'import WebSocket from "ws";\n' +
-        'new ComputeClient({ sandboxUrl: "...", WebSocket })'
+        'new Sandbox({ sandboxUrl: "...", WebSocket })'
       );
     }
 
@@ -474,7 +720,7 @@ export class ComputeClient {
         await this.writeFile(path, content);
       },
       mkdir: async (path: string) => {
-        await this.execute({ command: `mkdir -p ${path}` });
+        await this.runCommand(mkdir(path));
       },
       readdir: async (path: string) => {
         const response = await this.listFiles(path);
@@ -487,13 +733,103 @@ export class ComputeClient {
         }));
       },
       exists: async (path: string) => {
-        const result = await this.execute({ command: `test -e ${path}` });
-        return result.data.exit_code === 0;
+        const result = await this.runCommand(test.exists(path));
+        return result.exitCode === 0;
       },
       remove: async (path: string) => {
         await this.deleteFile(path);
       }
     };
+
+    // Initialize resource namespaces
+    this.terminals = new Terminals({
+      create: async (options) => this.createTerminal(options),
+      list: async () => this.listTerminals(),
+      retrieve: async (id) => this.getTerminal(id),
+      destroy: async (id) => {
+        await this.request<void>(`/terminals/${id}`, { method: 'DELETE' });
+      },
+    });
+
+    this.commands = new SandboxCommands({
+      run: async (command, options) => {
+        const result = await this.execute({ command, background: options?.background });
+        return {
+          stdout: result.data.stdout,
+          stderr: result.data.stderr,
+          exitCode: result.data.exit_code ?? 0,
+          durationMs: result.data.duration_ms ?? 0,
+        };
+      },
+    });
+
+    this.servers = new Servers({
+      start: async (options) => this.startServer(options),
+      list: async () => this.listServers(),
+      retrieve: async (slug) => this.getServer(slug),
+      stop: async (slug) => { await this.stopServer(slug); },
+      restart: async (slug) => this.restartServer(slug),
+      updateStatus: async (slug, status) => { await this.updateServerStatus(slug, status); },
+    });
+
+    this.watchers = new Watchers({
+      create: async (path, options) => this.createWatcher(path, options),
+      list: async () => this.listWatchers(),
+      retrieve: async (id) => this.getWatcher(id),
+      destroy: async (id) => {
+        await this.request<void>(`/watchers/${id}`, { method: 'DELETE' });
+      },
+    });
+
+    this.sessionTokens = new SessionTokens({
+      create: async (options) => this.createSessionToken(options),
+      list: async () => this.listSessionTokens(),
+      retrieve: async (id) => this.getSessionToken(id),
+      revoke: async (id) => this.revokeSessionToken(id),
+    });
+
+    this.magicLinks = new MagicLinks({
+      create: async (options) => this.createMagicLink(options),
+    });
+
+    this.signals = new Signals({
+      start: async () => this.startSignals(),
+      status: async () => this.getSignalStatus(),
+      stop: async () => {
+        await this.request<void>('/signals/stop', { method: 'POST' });
+      },
+      emitPort: async (port, type, url) => this.emitPortSignal(port, type, url),
+      emitError: async (message) => this.emitErrorSignal(message),
+      emitServerReady: async (port, url) => this.emitServerReadySignal(port, url),
+    });
+
+    this.files = new Files({
+      create: async (path, content) => this.createFile(path, content),
+      list: async (path) => this.listFiles(path),
+      retrieve: async (path) => this.readFile(path),
+      destroy: async (path) => this.deleteFile(path),
+      batchWrite: async (files) => this.batchWriteFiles(files),
+      exists: async (path) => this.checkFileExists(path),
+    });
+
+    this.env = new Env({
+      retrieve: async (file) => this.getEnv(file),
+      update: async (file, variables) => this.setEnv(file, variables),
+      remove: async (file, keys) => this.deleteEnv(file, keys),
+      exists: async (file) => this.checkEnvFile(file),
+    });
+
+    this.auth = new Auth({
+      status: async () => this.getAuthStatus(),
+      info: async () => this.getAuthInfo(),
+    });
+
+    this.children = new Children({
+      create: async () => this.createSandbox(),
+      list: async () => this.listSandboxes(),
+      retrieve: async (subdomain) => this.getSandbox(subdomain),
+      destroy: async (subdomain, deleteFiles) => this.deleteSandbox(subdomain, deleteFiles),
+    });
   }
 
   /**
@@ -729,10 +1065,26 @@ export class ComputeClient {
 
   /**
    * Execute a one-off command without creating a persistent terminal
+   * 
+   * @example
+   * ```typescript
+   * // Synchronous execution (waits for completion)
+   * const result = await sandbox.execute({ command: 'npm test' });
+   * console.log(result.data.exit_code);
+   * 
+   * // Background execution (returns immediately)
+   * const result = await sandbox.execute({ 
+   *   command: 'npm install',
+   *   background: true 
+   * });
+   * // Use result.data.terminal_id and result.data.cmd_id to track
+   * const cmd = await sandbox.getCommand(result.data.terminal_id!, result.data.cmd_id!);
+   * ```
    */
   async execute(options: {
     command: string;
     shell?: string;
+    background?: boolean;
   }): Promise<CommandExecutionResponse> {
     return this.request<CommandExecutionResponse>('/execute', {
       method: 'POST',
@@ -804,66 +1156,214 @@ export class ComputeClient {
     });
   }
 
+  /**
+   * Check if a file exists (HEAD request)
+   * @returns true if file exists, false otherwise
+   */
+  async checkFileExists(path: string): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+      const headers: Record<string, string> = {
+        ...this.config.headers,
+      };
+      if (this._token) {
+        headers['Authorization'] = `Bearer ${this._token}`;
+      }
+
+      const response = await fetch(
+        `${this.config.sandboxUrl}/files/${encodeURIComponent(path)}`,
+        {
+          method: 'HEAD',
+          headers,
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Batch file operations (write or delete multiple files)
+   *
+   * Features:
+   * - Deduplication: Last operation wins per path
+   * - File locking: Prevents race conditions
+   * - Deterministic ordering: Alphabetical path sorting
+   * - Partial failure handling: Returns 207 Multi-Status with per-file results
+   *
+   * @param files - Array of file operations
+   * @returns Results for each file operation
+   *
+   * @example
+   * ```typescript
+   * // Write multiple files
+   * const results = await sandbox.batchWriteFiles([
+   *   { path: '/app/file1.txt', operation: 'write', content: 'Hello' },
+   *   { path: '/app/file2.txt', operation: 'write', content: 'World' },
+   * ]);
+   *
+   * // Mixed operations (write and delete)
+   * const results = await sandbox.batchWriteFiles([
+   *   { path: '/app/new.txt', operation: 'write', content: 'New file' },
+   *   { path: '/app/old.txt', operation: 'delete' },
+   * ]);
+   * ```
+   */
+  async batchWriteFiles(
+    files: Array<{ path: string; operation: 'write' | 'delete'; content?: string }>
+  ): Promise<BatchWriteResponse> {
+    return this.request<BatchWriteResponse>('/files/batch', {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    });
+  }
+
   // ============================================================================
   // Terminal Management
   // ============================================================================
 
   /**
-   * Create a new persistent terminal session with WebSocket integration
-   * @param shell - Shell to use (e.g., '/bin/bash', '/bin/sh')
-   * @param encoding - Encoding for terminal I/O: 'raw' (default) or 'base64' (binary-safe)
+   * Create a new persistent terminal session
+   * 
+   * Terminal Modes:
+   * - **PTY mode** (pty: true): Interactive shell with real-time WebSocket streaming
+   *   - Use for: Interactive shells, vim/nano, real-time output
+   *   - Methods: write(), resize(), on('output')
+   * 
+   * - **Exec mode** (pty: false, default): Command tracking with HTTP polling
+   *   - Use for: CI/CD, automation, command tracking, exit codes
+   *   - Methods: execute(), getCommand(), listCommands(), waitForCommand()
+   * 
+   * @example
+   * ```typescript
+   * // PTY mode - Interactive shell
+   * const pty = await sandbox.createTerminal({ pty: true, shell: '/bin/bash' });
+   * pty.on('output', (data) => console.log(data));
+   * pty.write('npm install\n');
+   * 
+   * // Exec mode - Command tracking
+   * const exec = await sandbox.createTerminal({ pty: false });
+   * const result = await exec.execute('npm test', { background: true });
+   * const cmd = await sandbox.waitForCommand(exec.getId(), result.data.cmd_id);
+   * console.log(cmd.data.exit_code);
+   * 
+   * // Backward compatible - creates PTY terminal
+   * const terminal = await sandbox.createTerminal('/bin/bash');
+   * ```
+   * 
+   * @param options - Terminal creation options
+   * @param options.shell - Shell to use (e.g., '/bin/bash', '/bin/sh') - PTY mode only
+   * @param options.encoding - Encoding for terminal I/O: 'raw' (default) or 'base64' (binary-safe)
+   * @param options.pty - Terminal mode: true = PTY (interactive shell), false = exec (command tracking, default)
    * @returns Terminal instance with event handling
    */
-  async createTerminal(shell?: string, encoding?: 'raw' | 'base64'): Promise<Terminal> {
-    // Ensure WebSocket is connected
-    const ws = await this.ensureWebSocket();
+  async createTerminal(
+    shellOrOptions?: string | {
+      shell?: string;
+      encoding?: 'raw' | 'base64';
+      pty?: boolean;
+    },
+    encoding?: 'raw' | 'base64'
+  ): Promise<Terminal> {
+    // Backward compatibility: if first arg is string, treat as old signature
+    let pty: boolean;
+    let shell: string | undefined;
+    let enc: 'raw' | 'base64' | undefined;
+
+    if (typeof shellOrOptions === 'string') {
+      // Old signature: createTerminal(shell?, encoding?)
+      // Create PTY terminal for backward compatibility
+      pty = true;
+      shell = shellOrOptions;
+      enc = encoding;
+    } else {
+      // New signature: createTerminal(options?)
+      pty = shellOrOptions?.pty ?? false; // Default to exec mode
+      enc = shellOrOptions?.encoding;
+      shell = shellOrOptions?.shell;
+    }
 
     // Create terminal via REST API
-    const body: { shell?: string; encoding?: 'raw' | 'base64' } = {};
+    const body: { shell?: string; encoding?: 'raw' | 'base64'; pty?: boolean } = {};
     if (shell) body.shell = shell;
-    if (encoding) body.encoding = encoding;
+    if (enc) body.encoding = enc;
+    if (pty !== undefined) body.pty = pty;
 
     const response = await this.request<TerminalResponse>('/terminals', {
       method: 'POST',
       body: JSON.stringify(body),
     });
 
-    // Wait for terminal:created event to ensure terminal is ready
-    await new Promise<void>((resolve) => {
-      const handler = (msg: any) => {
-        if (msg.data?.id === response.data.id) {
-          ws.off('terminal:created', handler);
+    let ws: WebSocketManager | null = null;
+
+    // Only use WebSocket for PTY mode
+    if (response.data.pty) {
+      ws = await this.ensureWebSocket();
+
+      // Wait for terminal:created event to ensure terminal is ready
+      await new Promise<void>((resolve) => {
+        const handler = (msg: any) => {
+          if (msg.data?.id === response.data.id) {
+            if (ws) ws.off('terminal:created', handler);
+            resolve();
+          }
+        };
+        if (ws) {
+          ws.on('terminal:created', handler);
+
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            if (ws) ws.off('terminal:created', handler);
+            resolve();
+          }, 5000);
+        } else {
           resolve();
         }
-      };
-      ws.on('terminal:created', handler);
+      });
+    }
 
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        ws.off('terminal:created', handler);
-        resolve();
-      }, 5000);
-    });
-
-    // Create Terminal instance (no cleanup callback needed)
+    // Create Terminal instance
     const terminal = new Terminal(
       response.data.id,
+      response.data.pty,
       response.data.status,
-      response.data.channel,
+      response.data.channel || null,
       ws,
       response.data.encoding || 'raw'
     );
 
     // Set up terminal handlers
-    terminal.setExecuteHandler(async (command: string, async?: boolean) => {
-      return this.request<CommandExecutionResponse>(`/terminals/${response.data.id}/execute`, {
+    const terminalId = response.data.id;
+
+    terminal.setExecuteHandler(async (command: string, background?: boolean) => {
+      return this.request<CommandExecutionResponse>(`/terminals/${terminalId}/execute`, {
         method: 'POST',
-        body: JSON.stringify({ command, async }),
+        body: JSON.stringify({ command, background }),
       });
     });
 
+    terminal.setListCommandsHandler(async () => {
+      return this.request<CommandsListResponse>(`/terminals/${terminalId}/commands`);
+    });
+
+    terminal.setRetrieveCommandHandler(async (cmdId: string) => {
+      return this.request<CommandDetailsResponse>(`/terminals/${terminalId}/commands/${cmdId}`);
+    });
+
+    terminal.setWaitCommandHandler(async (cmdId: string, timeout?: number) => {
+      const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
+      const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
+      return this.request<CommandDetailsResponse>(endpoint);
+    });
+
     terminal.setDestroyHandler(async () => {
-      await this.request<void>(`/terminals/${response.data.id}`, {
+      await this.request<void>(`/terminals/${terminalId}`, {
         method: 'DELETE',
       });
     });
@@ -884,6 +1384,49 @@ export class ComputeClient {
    */
   async getTerminal(id: string): Promise<TerminalResponse> {
     return this.request<TerminalResponse>(`/terminals/${id}`);
+  }
+
+  // ============================================================================
+  // Command Tracking (Exec Mode Terminals)
+  // ============================================================================
+
+  /**
+   * List all commands executed in a terminal (exec mode only)
+   * @param terminalId - The terminal ID
+   * @returns List of all commands with their status
+   * @throws {Error} If terminal is in PTY mode (command tracking not available)
+   */
+  async listCommands(terminalId: string): Promise<CommandsListResponse> {
+    return this.request<CommandsListResponse>(`/terminals/${terminalId}/commands`);
+  }
+
+  /**
+   * Get details of a specific command execution (exec mode only)
+   * @param terminalId - The terminal ID
+   * @param cmdId - The command ID
+   * @returns Command execution details including stdout, stderr, and exit code
+   * @throws {Error} If terminal is in PTY mode or command not found
+   */
+  async getCommand(terminalId: string, cmdId: string): Promise<CommandDetailsResponse> {
+    return this.request<CommandDetailsResponse>(`/terminals/${terminalId}/commands/${cmdId}`);
+  }
+
+  /**
+   * Wait for a command to complete (HTTP long-polling, exec mode only)
+   * @param terminalId - The terminal ID
+   * @param cmdId - The command ID
+   * @param timeout - Optional timeout in seconds (0 = no timeout)
+   * @returns Command execution details when completed
+   * @throws {Error} If terminal is in PTY mode, command not found, or timeout occurs
+   */
+  async waitForCommand(
+    terminalId: string,
+    cmdId: string,
+    timeout?: number
+  ): Promise<CommandDetailsResponse> {
+    const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
+    const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
+    return this.request<CommandDetailsResponse>(endpoint);
   }
 
   // ============================================================================
@@ -1043,6 +1586,158 @@ export class ComputeClient {
   }
 
   // ============================================================================
+  // Environment Variables
+  // ============================================================================
+
+  /**
+   * Get environment variables from a .env file
+   * @param file - Path to the .env file (relative to sandbox root)
+   */
+  async getEnv(file: string): Promise<EnvGetResponse> {
+    const params = new URLSearchParams({ file });
+    return this.request<EnvGetResponse>(`/env?${params}`);
+  }
+
+  /**
+   * Set (merge) environment variables in a .env file
+   * @param file - Path to the .env file (relative to sandbox root)
+   * @param variables - Key-value pairs to set
+   */
+  async setEnv(
+    file: string,
+    variables: Record<string, string>
+  ): Promise<EnvSetResponse> {
+    const params = new URLSearchParams({ file });
+    return this.request<EnvSetResponse>(`/env?${params}`, {
+      method: 'POST',
+      body: JSON.stringify({ variables }),
+    });
+  }
+
+  /**
+   * Delete environment variables from a .env file
+   * @param file - Path to the .env file (relative to sandbox root)
+   * @param keys - Keys to delete
+   */
+  async deleteEnv(file: string, keys: string[]): Promise<EnvDeleteResponse> {
+    const params = new URLSearchParams({ file });
+    return this.request<EnvDeleteResponse>(`/env?${params}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ keys }),
+    });
+  }
+
+  /**
+   * Check if an environment file exists (HEAD request)
+   * @param file - Path to the .env file (relative to sandbox root)
+   * @returns true if file exists, false otherwise
+   */
+  async checkEnvFile(file: string): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+      const headers: Record<string, string> = {
+        ...this.config.headers,
+      };
+      if (this._token) {
+        headers['Authorization'] = `Bearer ${this._token}`;
+      }
+
+      const params = new URLSearchParams({ file });
+      const response = await fetch(`${this.config.sandboxUrl}/env?${params}`, {
+        method: 'HEAD',
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // Server Management
+  // ============================================================================
+
+  /**
+   * List all managed servers
+   */
+  async listServers(): Promise<ServersListResponse> {
+    return this.request<ServersListResponse>('/servers');
+  }
+
+  /**
+   * Start a new managed server
+   * @param options - Server configuration
+   */
+  async startServer(options: {
+    slug: string;
+    command: string;
+    path?: string;
+    env_file?: string;
+  }): Promise<ServerResponse> {
+    return this.request<ServerResponse>('/servers', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  /**
+   * Get information about a specific server
+   * @param slug - Server slug
+   */
+  async getServer(slug: string): Promise<ServerResponse> {
+    return this.request<ServerResponse>(`/servers/${encodeURIComponent(slug)}`);
+  }
+
+  /**
+   * Stop a managed server
+   * @param slug - Server slug
+   */
+  async stopServer(slug: string): Promise<ServerStopResponse> {
+    return this.request<ServerStopResponse>(
+      `/servers/${encodeURIComponent(slug)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  /**
+   * Restart a managed server
+   * @param slug - Server slug
+   */
+  async restartServer(slug: string): Promise<ServerResponse> {
+    return this.request<ServerResponse>(
+      `/servers/${encodeURIComponent(slug)}/restart`,
+      {
+        method: 'POST',
+      }
+    );
+  }
+
+  /**
+   * Update server status (internal use)
+   * @param slug - Server slug
+   * @param status - New server status
+   */
+  async updateServerStatus(
+    slug: string,
+    status: ServerStatus
+  ): Promise<ServerStatusUpdateResponse> {
+    return this.request<ServerStatusUpdateResponse>(
+      `/servers/${encodeURIComponent(slug)}/status`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }
+    );
+  }
+
+  // ============================================================================
   // Sandbox Management
   // ============================================================================
 
@@ -1130,8 +1825,8 @@ export class ComputeClient {
     return {
       stdout: result.data.stdout,
       stderr: result.data.stderr,
-      exitCode: result.data.exit_code,
-      executionTime: result.data.duration_ms,
+      exitCode: result.data.exit_code ?? 0,
+      executionTime: result.data.duration_ms ?? 0,
       sandboxId: this.sandboxId || '',
       provider: this.provider || ''
     };
@@ -1139,26 +1834,64 @@ export class ComputeClient {
 
   /**
    * Execute shell commands (Sandbox interface method)
+   * Accepts either (command, args?, options?) or ([command, ...args], options?)
    */
-  async runCommand(command: string, args?: string[], _options?: { background?: boolean }): Promise<{
+  async runCommand(
+    commandOrArray: string | [string, ...string[]],
+    argsOrOptions?: string[] | { background?: boolean; cwd?: string },
+    maybeOptions?: { background?: boolean; cwd?: string }
+  ): Promise<{
     stdout: string;
     stderr: string;
     exitCode: number;
     executionTime: number;
     sandboxId: string;
     provider: string;
+    isBackground?: boolean;
   }> {
-    const fullCommand = args && args.length > 0
-      ? `${command} ${args.join(' ')}`
-      : command;
+    // Parse overloaded arguments
+    let commandParts: string[];
+    let options: { background?: boolean; cwd?: string } | undefined;
+
+    if (Array.isArray(commandOrArray)) {
+      // Array form: runCommand(['npm', 'install'], { cwd: '/app' })
+      commandParts = commandOrArray;
+      options = argsOrOptions as { background?: boolean; cwd?: string } | undefined;
+    } else {
+      // Traditional form: runCommand('npm', ['install'], { cwd: '/app' })
+      const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
+      commandParts = [commandOrArray, ...args];
+      options = Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as { background?: boolean; cwd?: string } | undefined;
+    }
+
+    // Use cmd() to build the command with proper escaping and shell wrapping
+    const finalCommand = cmd(commandParts as Command, options);
+
+    // cmd() returns ['sh', '-c', 'escaped command'] if options provided,
+    // or the raw array if no options. Either way, escapeArgs handles it safely:
+    // - For ['sh', '-c', 'cmd'] -> "sh -c 'cmd'" (inner cmd already escaped by buildShellCommand)
+    // - For ['npm', 'install'] -> "npm install" (each arg escaped as needed)
+    const fullCommand = escapeArgs(finalCommand);
 
     const result = await this.execute({ command: fullCommand });
+
+    if (options?.background) {
+      return {
+        stdout: result.data.stdout,
+        stderr: result.data.stderr,
+        exitCode: result.data.exit_code ?? 0,
+        executionTime: result.data.duration_ms ?? 0,
+        sandboxId: this.sandboxId || '',
+        provider: this.provider || '',
+        isBackground: true
+      };
+    }
 
     return {
       stdout: result.data.stdout,
       stderr: result.data.stderr,
-      exitCode: result.data.exit_code,
-      executionTime: result.data.duration_ms,
+      exitCode: result.data.exit_code ?? 0,
+      executionTime: result.data.duration_ms ?? 0,
       sandboxId: this.sandboxId || '',
       provider: this.provider || ''
     };
@@ -1184,14 +1917,14 @@ export class ComputeClient {
     timeout: number;
     metadata?: Record<string, any>;
   }> {
-    // Return basic info - the client doesn't track all these details
     return {
       id: this.sandboxId || '',
       provider: this.provider || '',
-      runtime: 'node', // Default runtime
-      status: 'running',
+      runtime: 'node' as const,
+      status: 'running' as const,
       createdAt: new Date(),
-      timeout: this.config.timeout
+      timeout: this.config.timeout,
+      metadata: this.config.metadata
     };
   }
 
@@ -1220,25 +1953,22 @@ export class ComputeClient {
   }
 
   /**
-   * Get provider instance (Sandbox interface method)
-   * Note: Not available when using ComputeClient directly
+   * Get provider instance
+   * Note: Not available when using Sandbox directly - only available through gateway provider
    */
   getProvider(): never {
     throw new Error(
-      'getProvider() is not available when using ComputeClient. ' +
-      'The client abstracts away the underlying provider.'
+      'getProvider() is not available on Sandbox. ' +
+      'This method is only available when using provider sandboxes through the gateway.'
     );
   }
 
   /**
-   * Get native provider instance (Sandbox interface method)
-   * Note: Not available when using ComputeClient directly
+   * Get native provider instance
+   * Returns the Sandbox itself since this IS the sandbox implementation
    */
-  getInstance(): never {
-    throw new Error(
-      'getInstance() is not available when using ComputeClient. ' +
-      'The client provides a unified interface across all providers.'
-    );
+  getInstance(): this {
+    return this;
   }
 
   /**
@@ -1272,22 +2002,35 @@ export class ComputeClient {
 }
 
 /**
- * Create a new ComputeSDK client instance
+ * Create a new Sandbox instance
  *
  * @example
  * ```typescript
- * import { createClient } from '@computesdk/client'
+ * import { createSandbox } from '@computesdk/client'
  *
- * // Create client with access token or session token
- * const client = createClient({
+ * // Create sandbox with access token or session token
+ * const sandbox = createSandbox({
  *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
- *   token: accessToken, // Access token from edge service or session token from createSessionToken()
+ *   token: accessToken,
  * });
  *
  * // Execute commands
- * const result = await client.execute({ command: 'ls -la' });
+ * const result = await sandbox.execute({ command: 'ls -la' });
  * ```
  */
-export function createClient(config: ComputeClientConfig): ComputeClient {
-  return new ComputeClient(config);
+export function createSandbox(config: SandboxConfig): Sandbox {
+  return new Sandbox(config);
 }
+
+// ============================================================================
+// Backwards Compatibility Aliases
+// ============================================================================
+
+/** @deprecated Use SandboxConfig instead */
+export type ComputeClientConfig = SandboxConfig;
+
+/** @deprecated Use Sandbox instead */
+export { Sandbox as ComputeClient };
+
+/** @deprecated Use createSandbox instead */
+export { createSandbox as createClient };

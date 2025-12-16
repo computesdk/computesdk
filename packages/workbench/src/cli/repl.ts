@@ -1,0 +1,348 @@
+/**
+ * REPL setup and configuration
+ * 
+ * Creates Node.js REPL with:
+ * - Tab autocomplete for @computesdk/cmd functions
+ * - Smart command evaluation (auto-run Command arrays)
+ * - Workbench command injection
+ */
+
+import * as repl from 'repl';
+import * as cmd from '@computesdk/cmd';
+import type { WorkbenchState } from './state.js';
+import { runCommand, createProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose } from './commands.js';
+import { showHelp, showInfo } from './output.js';
+import { showProviders, showEnv, PROVIDER_NAMES } from './providers.js';
+import { isCommand } from './types.js';
+import * as path from 'path';
+import * as os from 'os';
+
+/**
+ * Create and configure REPL server
+ */
+export function createREPL(state: WorkbenchState): repl.REPLServer {
+  const replServer = repl.start({
+    prompt: 'workbench> ',
+    useColors: true,
+    terminal: true,
+    useGlobal: false,
+    ignoreUndefined: true,
+  });
+
+  // Inject cmd context for autocomplete
+  injectCmdContext(replServer);
+  
+  // Inject workbench commands
+  injectWorkbenchCommands(replServer, state);
+  
+  // Setup custom evaluator
+  setupSmartEvaluator(replServer, state);
+  
+  // Setup custom autocomplete
+  setupAutocomplete(replServer, state);
+  
+  // Setup command history
+  setupHistory(replServer);
+
+  return replServer;
+}
+
+/**
+ * Inject all @computesdk/cmd exports into REPL context for autocomplete
+ */
+function injectCmdContext(replServer: repl.REPLServer) {
+  // Package managers
+  replServer.context.npm = cmd.npm;
+  replServer.context.pnpm = cmd.pnpm;
+  replServer.context.yarn = cmd.yarn;
+  replServer.context.bun = cmd.bun;
+  replServer.context.pip = cmd.pip;
+  replServer.context.uv = cmd.uv;
+  replServer.context.poetry = cmd.poetry;
+  replServer.context.pipx = cmd.pipx;
+  
+  // Package runners
+  replServer.context.npx = cmd.npx;
+  replServer.context.bunx = cmd.bunx;
+  replServer.context.deno = cmd.deno;
+  
+  // Git
+  replServer.context.git = cmd.git;
+  
+  // Filesystem
+  replServer.context.mkdir = cmd.mkdir;
+  replServer.context.rm = cmd.rm;
+  replServer.context.cp = cmd.cp;
+  replServer.context.mv = cmd.mv;
+  replServer.context.ls = cmd.ls;
+  replServer.context.pwd = cmd.pwd;
+  replServer.context.chmod = cmd.chmod;
+  replServer.context.chown = cmd.chown;
+  replServer.context.touch = cmd.touch;
+  replServer.context.cat = cmd.cat;
+  replServer.context.ln = cmd.ln;
+  replServer.context.readlink = cmd.readlink;
+  replServer.context.test = cmd.test;
+  replServer.context.rsync = cmd.rsync;
+  
+  // Process
+  replServer.context.node = cmd.node;
+  replServer.context.python = cmd.python;
+  replServer.context.kill = cmd.kill;
+  replServer.context.pkill = cmd.pkill;
+  replServer.context.ps = cmd.ps;
+  replServer.context.timeout = cmd.timeout;
+  
+  // Network
+  replServer.context.curl = cmd.curl;
+  replServer.context.wget = cmd.wget;
+  replServer.context.port = cmd.port;
+  replServer.context.net = cmd.net;
+  
+  // Text processing
+  replServer.context.grep = cmd.grep;
+  replServer.context.sed = cmd.sed;
+  replServer.context.head = cmd.head;
+  replServer.context.tail = cmd.tail;
+  replServer.context.wc = cmd.wc;
+  replServer.context.sort = cmd.sort;
+  replServer.context.uniq = cmd.uniq;
+  replServer.context.jq = cmd.jq;
+  replServer.context.xargs = cmd.xargs;
+  replServer.context.awk = cmd.awk;
+  replServer.context.cut = cmd.cut;
+  replServer.context.tr = cmd.tr;
+  
+  // Archives
+  replServer.context.tar = cmd.tar;
+  replServer.context.unzip = cmd.unzip;
+  
+  // System
+  replServer.context.echo = cmd.echo;
+  replServer.context.env = cmd.env;
+  replServer.context.printenv = cmd.printenv;
+  replServer.context.which = cmd.which;
+  replServer.context.whoami = cmd.whoami;
+  replServer.context.uname = cmd.uname;
+  replServer.context.hostname = cmd.hostname;
+  replServer.context.df = cmd.df;
+  replServer.context.du = cmd.du;
+  replServer.context.sleep = cmd.sleep;
+  replServer.context.date = cmd.date;
+  replServer.context.find = cmd.find;
+  replServer.context.tee = cmd.tee;
+  replServer.context.diff = cmd.diff;
+  replServer.context.parallel = cmd.parallel;
+  replServer.context.raw = cmd.raw;
+  replServer.context.base64 = cmd.base64;
+  replServer.context.md5sum = cmd.md5sum;
+  replServer.context.sha256sum = cmd.sha256sum;
+  replServer.context.sha1sum = cmd.sha1sum;
+  
+  // Expose cmd namespace for cmd() wrapper
+  replServer.context.cmd = cmd.cmd;
+  
+  // Shell wrappers
+  replServer.context.shell = cmd.shell;
+  replServer.context.sh = cmd.sh;
+  replServer.context.bash = cmd.bash;
+  replServer.context.zsh = cmd.zsh;
+}
+
+/**
+ * Inject workbench-specific commands
+ */
+function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchState) {
+  // Provider management
+  replServer.context.provider = createProviderCommand(state);
+  replServer.context.providers = () => showProviders();
+  
+  // Mode management
+  replServer.context.mode = async (modeName?: 'gateway' | 'direct') => {
+    if (!modeName) {
+      showMode(state);
+    } else {
+      await toggleMode(state, modeName);
+    }
+  };
+  
+  // Sandbox operations
+  replServer.context.restart = async () => {
+    await restartSandbox(state);
+  };
+  
+  replServer.context.destroy = async () => {
+    await destroySandbox(state);
+  };
+  
+  replServer.context.info = () => showInfo(state);
+  
+  // Output control
+  replServer.context.verbose = () => {
+    toggleVerbose(state);
+    showVerbose(state);
+  };
+  
+  // Background execution helper - accepts string or Command
+  replServer.context.bg = (command: string | string[]) => {
+    const cmdArray = typeof command === 'string' 
+      ? ['sh', '-c', command]
+      : command;
+    return cmd.sh(cmdArray as any, { background: true });
+  };
+  
+  // Environment/help
+  replServer.context.env = () => showEnv();
+  replServer.context.help = showHelp;
+}
+
+/**
+ * Setup smart evaluator that auto-runs Command arrays and workbench commands
+ */
+function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState) {
+  const originalEval = replServer.eval;
+  
+  // Track workbench command names for auto-calling
+  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose']);
+  
+  (replServer as any).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
+    const trimmedCmd = cmd.trim();
+    
+    // Special handling for "provider <name>" syntax (without parentheses)
+    const providerMatch = trimmedCmd.match(/^provider\s+(\w+)$/);
+    if (providerMatch) {
+      const providerName = providerMatch[1];
+      const providerCmd = `await provider('${providerName}')`;
+      originalEval.call(this, providerCmd, context, filename, callback);
+      return;
+    }
+    
+    // Special handling for "mode <gateway|direct>" syntax
+    const modeMatch = trimmedCmd.match(/^mode\s+(gateway|direct)$/);
+    if (modeMatch) {
+      const modeName = modeMatch[1];
+      const modeCmd = `await mode('${modeName}')`;
+      originalEval.call(this, modeCmd, context, filename, callback);
+      return;
+    }
+    
+    // Use original eval to get the result
+    originalEval.call(this, cmd, context, filename, async (err, result) => {
+      if (err) {
+        callback(err, undefined);
+        return;
+      }
+      
+      // Check if result is a Command (string array from @computesdk/cmd)
+      if (isCommand(result)) {
+        try {
+          const output = await runCommand(state, result);
+          callback(null, output);
+        } catch (error) {
+          callback(error as Error, undefined);
+        }
+        return;
+      }
+      
+      // Check if it's a workbench command function that should be auto-called
+      if (typeof result === 'function' && workbenchCommands.has(trimmedCmd)) {
+        try {
+          const output = await result();
+          callback(null, output);
+        } catch (error) {
+          callback(error as Error, undefined);
+        }
+        return;
+      }
+      
+      // Not a command, return as-is
+      callback(null, result);
+    });
+  };
+}
+
+/**
+ * Setup custom autocomplete
+ */
+function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
+  const originalCompleter = replServer.completer as any;
+  
+  // Workbench commands with their argument suggestions
+  const workbenchCommands = {
+    'provider': [...PROVIDER_NAMES], // Use actual provider names from config
+    'mode': ['gateway', 'direct'],
+    'providers': [],
+    'restart': [],
+    'destroy': [],
+    'info': [],
+    'env': [],
+    'help': [],
+    'verbose': [],
+    'exit': [],
+    '.exit': [],
+  };
+  
+  (replServer as any).completer = function (line: string, callback: (err: Error | null, result: [string[], string]) => void) {
+    const trimmed = line.trim();
+    
+    // Complete workbench command names
+    if (!trimmed.includes(' ') && !trimmed.includes('.')) {
+      const commands = Object.keys(workbenchCommands);
+      const hits = commands.filter(cmd => cmd.startsWith(trimmed));
+      
+      // Also get context completions from original completer
+      if (originalCompleter) {
+        originalCompleter.call(replServer, line, (err: Error | null, [contextHits, partial]: [string[], string]) => {
+          if (err) {
+            callback(null, [hits, trimmed]);
+            return;
+          }
+
+          // Merge workbench commands with context completions
+          const allHits = [...new Set([...hits, ...contextHits])].sort();
+          callback(null, [allHits, partial]);
+        });
+        return;
+      }
+      
+      callback(null, [hits.length ? hits : commands, trimmed]);
+      return;
+    }
+    
+    // Complete command arguments (e.g., "provider e" -> "provider e2b")
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 2 && !trimmed.includes('.')) {
+      const [command, partial] = parts;
+      const suggestions = workbenchCommands[command as keyof typeof workbenchCommands];
+      
+      if (suggestions && suggestions.length > 0) {
+        const hits = suggestions
+          .filter(s => s.startsWith(partial))
+          .map(s => `${command} ${s}`);
+        
+        callback(null, [hits.length ? hits : suggestions.map(s => `${command} ${s}`), trimmed]);
+        return;
+      }
+    }
+    
+    // Fall back to original completer (this handles npm., git., etc.)
+    if (originalCompleter) {
+      originalCompleter.call(replServer, line, callback);
+    } else {
+      callback(null, [[], line]);
+    }
+  };
+}
+
+/**
+ * Setup command history
+ */
+function setupHistory(replServer: repl.REPLServer) {
+  const historyFile = path.join(os.homedir(), '.computesdk_workbench_history');
+  
+  replServer.setupHistory(historyFile, (err) => {
+    if (err) {
+      // Silent fail - history is nice-to-have
+    }
+  });
+}

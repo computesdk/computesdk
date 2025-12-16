@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'vitest'
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, Runtime } from '../types/index.js'
+import type { Provider, ProviderSandbox, ExecutionResult, SandboxInfo, FileEntry, Runtime } from '../types/index.js'
 
 /** Standard mock runtime support for testing */
 export const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
@@ -13,7 +13,7 @@ export const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
 /**
  * Mock sandbox implementation for testing
  */
-export class MockSandbox implements Sandbox {
+export class MockSandbox implements ProviderSandbox {
   readonly sandboxId = `mock-sandbox-${Math.random().toString(36).substr(2, 9)}`
   readonly provider = 'mock'
   private _mockInstance = {}  // Mock native instance
@@ -118,17 +118,17 @@ export class MockProvider implements Provider {
   }
 
   readonly sandbox = {
-    create: async (options?: any): Promise<Sandbox> => {
+    create: async (options?: any): Promise<ProviderSandbox> => {
       const sandbox = new MockSandbox()
       ;(sandbox as any)._mockProvider = this
       return sandbox
     },
-    getById: async (sandboxId: string): Promise<Sandbox | null> => {
+    getById: async (sandboxId: string): Promise<ProviderSandbox | null> => {
       const sandbox = new MockSandbox()
       ;(sandbox as any)._mockProvider = this
       return sandbox
     },
-    list: async (): Promise<Sandbox[]> => {
+    list: async (): Promise<ProviderSandbox[]> => {
       const sandbox = new MockSandbox()
       ;(sandbox as any)._mockProvider = this
       return [sandbox]
