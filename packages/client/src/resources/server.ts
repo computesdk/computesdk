@@ -1,5 +1,5 @@
 /**
- * Servers - Resource namespace for managed server operations
+ * Server - Resource namespace for managed server operations
  */
 
 import type {
@@ -11,31 +11,31 @@ import type {
 } from '../index';
 
 /**
- * Servers resource namespace
+ * Server resource namespace
  *
  * @example
  * ```typescript
  * // Start a new server
- * const server = await sandbox.servers.start({
+ * const server = await sandbox.server.start({
  *   slug: 'api',
  *   command: 'npm start',
  *   path: '/app',
  * });
  *
  * // List all servers
- * const servers = await sandbox.servers.list();
+ * const servers = await sandbox.server.list();
  *
  * // Retrieve a specific server
- * const server = await sandbox.servers.retrieve('api');
+ * const server = await sandbox.server.retrieve('api');
  *
  * // Stop a server
- * await sandbox.servers.stop('api');
+ * await sandbox.server.stop('api');
  *
  * // Restart a server
- * await sandbox.servers.restart('api');
+ * await sandbox.server.restart('api');
  * ```
  */
-export class Servers {
+export class Server {
   private startHandler: (options: {
     slug: string;
     command: string;

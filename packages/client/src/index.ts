@@ -10,7 +10,7 @@
  */
 
 import { WebSocketManager } from './websocket';
-import { Terminal } from './terminal';
+import { TerminalInstance } from './terminal';
 import { FileWatcher } from './file-watcher';
 import { SignalService } from './signal-service';
 import { cmd, escapeArgs, mkdir, test } from '@computesdk/cmd';
@@ -18,33 +18,35 @@ import type { Command } from '@computesdk/cmd';
 
 // Import resource namespaces
 import {
-  Terminals,
-  Servers,
-  Watchers,
-  SessionTokens,
-  MagicLinks,
-  Signals,
-  Files,
+  Terminal,
+  Server,
+  Watcher,
+  SessionToken,
+  MagicLink,
+  Signal,
+  File,
   Env,
   Auth,
-  SandboxCommands,
-  Children,
+  SandboxCommand,
+  Child,
 } from './resources';
 
 // Re-export high-level classes and types
-export { Terminal } from './terminal';
+export { TerminalInstance } from './terminal';
+/** @deprecated Use TerminalInstance instead */
+export { TerminalInstance as Terminal } from './terminal';
 export { FileWatcher, type FileChangeEvent } from './file-watcher';
 export { SignalService, type PortSignalEvent, type ErrorSignalEvent, type SignalEvent } from './signal-service';
 export { encodeBinaryMessage, decodeBinaryMessage, isBinaryData, blobToArrayBuffer, MessageType } from './protocol';
 
 // Re-export resource types
 export { Command } from './resources/command';
-export { TerminalCommands } from './resources/commands';
-export type { SessionTokenInfo } from './resources/session-tokens';
-export type { MagicLinkInfo } from './resources/magic-links';
-export type { SignalStatusInfo } from './resources/signals';
+export { TerminalCommand } from './resources/terminal-command';
+export type { SessionTokenInfo } from './resources/session-token';
+export type { MagicLinkInfo } from './resources/magic-link';
+export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
-export type { CommandResult } from './resources/sandbox-commands';
+export type { CommandResult } from './resources/sandbox-command';
 
 // ============================================================================
 // Type Definitions
@@ -623,18 +625,18 @@ export class Sandbox {
     remove: (path: string) => Promise<void>;
   };
 
-  // Resource namespaces
-  readonly terminals: Terminals;
-  readonly commands: SandboxCommands;
-  readonly servers: Servers;
-  readonly watchers: Watchers;
-  readonly sessionTokens: SessionTokens;
-  readonly magicLinks: MagicLinks;
-  readonly signals: Signals;
-  readonly files: Files;
+  // Resource namespaces (singular naming convention)
+  readonly terminal: Terminal;
+  readonly command: SandboxCommand;
+  readonly server: Server;
+  readonly watcher: Watcher;
+  readonly sessionToken: SessionToken;
+  readonly magicLink: MagicLink;
+  readonly signal: Signal;
+  readonly file: File;
   readonly env: Env;
   readonly auth: Auth;
-  readonly children: Children;
+  readonly child: Child;
 
   private config: Required<Omit<SandboxConfig, 'WebSocket' | 'metadata'>> & { metadata?: Record<string, unknown> };
   private _token: string | null = null;
@@ -741,8 +743,8 @@ export class Sandbox {
       }
     };
 
-    // Initialize resource namespaces
-    this.terminals = new Terminals({
+    // Initialize resource namespaces (singular naming convention)
+    this.terminal = new Terminal({
       create: async (options) => this.createTerminal(options),
       list: async () => this.listTerminals(),
       retrieve: async (id) => this.getTerminal(id),
@@ -751,7 +753,7 @@ export class Sandbox {
       },
     });
 
-    this.commands = new SandboxCommands({
+    this.command = new SandboxCommand({
       run: async (command, options) => {
         const result = await this.execute({ command, background: options?.background });
         return {
@@ -763,7 +765,7 @@ export class Sandbox {
       },
     });
 
-    this.servers = new Servers({
+    this.server = new Server({
       start: async (options) => this.startServer(options),
       list: async () => this.listServers(),
       retrieve: async (slug) => this.getServer(slug),
@@ -772,7 +774,7 @@ export class Sandbox {
       updateStatus: async (slug, status) => { await this.updateServerStatus(slug, status); },
     });
 
-    this.watchers = new Watchers({
+    this.watcher = new Watcher({
       create: async (path, options) => this.createWatcher(path, options),
       list: async () => this.listWatchers(),
       retrieve: async (id) => this.getWatcher(id),
@@ -781,18 +783,18 @@ export class Sandbox {
       },
     });
 
-    this.sessionTokens = new SessionTokens({
+    this.sessionToken = new SessionToken({
       create: async (options) => this.createSessionToken(options),
       list: async () => this.listSessionTokens(),
       retrieve: async (id) => this.getSessionToken(id),
       revoke: async (id) => this.revokeSessionToken(id),
     });
 
-    this.magicLinks = new MagicLinks({
+    this.magicLink = new MagicLink({
       create: async (options) => this.createMagicLink(options),
     });
 
-    this.signals = new Signals({
+    this.signal = new Signal({
       start: async () => this.startSignals(),
       status: async () => this.getSignalStatus(),
       stop: async () => {
@@ -803,7 +805,7 @@ export class Sandbox {
       emitServerReady: async (port, url) => this.emitServerReadySignal(port, url),
     });
 
-    this.files = new Files({
+    this.file = new File({
       create: async (path, content) => this.createFile(path, content),
       list: async (path) => this.listFiles(path),
       retrieve: async (path) => this.readFile(path),
@@ -824,7 +826,7 @@ export class Sandbox {
       info: async () => this.getAuthInfo(),
     });
 
-    this.children = new Children({
+    this.child = new Child({
       create: async () => this.createSandbox(),
       list: async () => this.listSandboxes(),
       retrieve: async (subdomain) => this.getSandbox(subdomain),
@@ -1270,7 +1272,7 @@ export class Sandbox {
       pty?: boolean;
     },
     encoding?: 'raw' | 'base64'
-  ): Promise<Terminal> {
+  ): Promise<TerminalInstance> {
     // Backward compatibility: if first arg is string, treat as old signature
     let pty: boolean;
     let shell: string | undefined;
@@ -1328,8 +1330,8 @@ export class Sandbox {
       });
     }
 
-    // Create Terminal instance
-    const terminal = new Terminal(
+    // Create TerminalInstance
+    const terminal = new TerminalInstance(
       response.data.id,
       response.data.pty,
       response.data.status,

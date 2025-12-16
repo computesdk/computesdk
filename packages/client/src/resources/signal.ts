@@ -1,5 +1,5 @@
 /**
- * Signals - Resource namespace for signal service operations
+ * Signal - Resource namespace for signal service operations
  */
 
 import type { SignalService } from '../signal-service';
@@ -15,28 +15,28 @@ export interface SignalStatusInfo {
 }
 
 /**
- * Signals resource namespace
+ * Signal resource namespace
  *
  * @example
  * ```typescript
  * // Start the signal service
- * const signals = await sandbox.signals.start();
+ * const signals = await sandbox.signal.start();
  * signals.on('port', (event) => {
  *   console.log(`Port ${event.port} opened: ${event.url}`);
  * });
  *
  * // Get signal service status
- * const status = await sandbox.signals.status();
+ * const status = await sandbox.signal.status();
  *
  * // Emit signals
- * await sandbox.signals.emitPort(3000, 'open', 'http://localhost:3000');
- * await sandbox.signals.emitError('Something went wrong');
+ * await sandbox.signal.emitPort(3000, 'open', 'http://localhost:3000');
+ * await sandbox.signal.emitError('Something went wrong');
  *
  * // Stop the signal service
- * await sandbox.signals.stop();
+ * await sandbox.signal.stop();
  * ```
  */
-export class Signals {
+export class Signal {
   private startHandler: () => Promise<SignalService>;
   private statusHandler: () => Promise<SignalServiceResponse>;
   private stopHandler: () => Promise<void>;

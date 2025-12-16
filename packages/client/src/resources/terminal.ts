@@ -1,41 +1,41 @@
 /**
- * Terminals - Resource namespace for terminal management
+ * Terminal - Resource namespace for terminal management
  */
 
-import type { Terminal } from '../terminal';
+import type { TerminalInstance } from '../terminal';
 import type { TerminalResponse } from '../index';
 
 /**
- * Terminals resource namespace
+ * Terminal resource namespace
  *
  * @example
  * ```typescript
  * // Create a PTY terminal (interactive shell)
- * const pty = await sandbox.terminals.create({ pty: true, shell: '/bin/bash' });
+ * const pty = await sandbox.terminal.create({ pty: true, shell: '/bin/bash' });
  * pty.on('output', (data) => console.log(data));
  * pty.write('ls -la\n');
  *
  * // Create an exec terminal (command tracking)
- * const exec = await sandbox.terminals.create({ pty: false });
- * const cmd = await exec.commands.run('npm test');
+ * const exec = await sandbox.terminal.create({ pty: false });
+ * const cmd = await exec.command.run('npm test');
  * console.log(cmd.exitCode);
  *
  * // List all terminals
- * const terminals = await sandbox.terminals.list();
+ * const terminals = await sandbox.terminal.list();
  *
  * // Retrieve a specific terminal
- * const terminal = await sandbox.terminals.retrieve(id);
+ * const terminal = await sandbox.terminal.retrieve(id);
  *
  * // Destroy a terminal
- * await sandbox.terminals.destroy(id);
+ * await sandbox.terminal.destroy(id);
  * ```
  */
-export class Terminals {
+export class Terminal {
   private createHandler: (options?: {
     shell?: string;
     encoding?: 'raw' | 'base64';
     pty?: boolean;
-  }) => Promise<Terminal>;
+  }) => Promise<TerminalInstance>;
   private listHandler: () => Promise<TerminalResponse[]>;
   private retrieveHandler: (id: string) => Promise<TerminalResponse>;
   private destroyHandler: (id: string) => Promise<void>;
@@ -45,7 +45,7 @@ export class Terminals {
       shell?: string;
       encoding?: 'raw' | 'base64';
       pty?: boolean;
-    }) => Promise<Terminal>;
+    }) => Promise<TerminalInstance>;
     list: () => Promise<TerminalResponse[]>;
     retrieve: (id: string) => Promise<TerminalResponse>;
     destroy: (id: string) => Promise<void>;
@@ -63,13 +63,13 @@ export class Terminals {
    * @param options.shell - Shell to use (e.g., '/bin/bash') - PTY mode only
    * @param options.encoding - Encoding: 'raw' (default) or 'base64' (binary-safe)
    * @param options.pty - Terminal mode: true = PTY (interactive), false = exec (command tracking)
-   * @returns Terminal instance
+   * @returns TerminalInstance
    */
   async create(options?: {
     shell?: string;
     encoding?: 'raw' | 'base64';
     pty?: boolean;
-  }): Promise<Terminal> {
+  }): Promise<TerminalInstance> {
     return this.createHandler(options);
   }
 

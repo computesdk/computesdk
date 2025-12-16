@@ -1,34 +1,34 @@
 /**
- * Commands - Resource namespace for terminal commands
+ * TerminalCommand - Resource namespace for terminal commands
  */
 
 import { Command } from './command';
 import type { CommandsListResponse, CommandDetailsResponse, CommandExecutionResponse } from '../index';
 
 /**
- * Commands resource namespace for a terminal
+ * Command resource namespace for a terminal
  *
  * @example
  * ```typescript
- * const terminal = await sandbox.terminals.create({ pty: false });
+ * const terminal = await sandbox.terminal.create({ pty: false });
  *
  * // Run a command
- * const cmd = await terminal.commands.run('npm test');
+ * const cmd = await terminal.command.run('npm test');
  * console.log(cmd.stdout);
  *
  * // Run in background and wait
- * const cmd = await terminal.commands.run('npm install', { background: true });
+ * const cmd = await terminal.command.run('npm install', { background: true });
  * await cmd.wait();
  * console.log(cmd.exitCode);
  *
  * // List commands
- * const commands = await terminal.commands.list();
+ * const commands = await terminal.command.list();
  *
  * // Retrieve a specific command
- * const cmd = await terminal.commands.retrieve(cmdId);
+ * const cmd = await terminal.command.retrieve(cmdId);
  * ```
  */
-export class TerminalCommands {
+export class TerminalCommand {
   private terminalId: string;
   private runHandler: (command: string, background?: boolean) => Promise<CommandExecutionResponse>;
   private listHandler: () => Promise<CommandsListResponse>;

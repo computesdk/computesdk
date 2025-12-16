@@ -1,5 +1,5 @@
 /**
- * SandboxCommands - Convenience namespace for one-shot command execution
+ * SandboxCommand - Convenience namespace for one-shot command execution
  */
 
 import { Command } from './command';
@@ -15,22 +15,22 @@ export interface CommandResult {
 }
 
 /**
- * SandboxCommands - Convenience namespace for running commands without managing terminals
+ * SandboxCommand - Convenience namespace for running commands without managing terminals
  *
  * @example
  * ```typescript
  * // Run a one-shot command
- * const result = await sandbox.commands.run('npm test');
+ * const result = await sandbox.command.run('npm test');
  * console.log(result.stdout);
  * console.log(result.exitCode);
  *
  * // Run with options
- * const result = await sandbox.commands.run('npm install', {
+ * const result = await sandbox.command.run('npm install', {
  *   background: true,
  * });
  * ```
  */
-export class SandboxCommands {
+export class SandboxCommand {
   private runHandler: (
     command: string,
     options?: { background?: boolean }

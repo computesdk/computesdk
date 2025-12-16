@@ -1,5 +1,5 @@
 /**
- * MagicLinks - Resource namespace for magic link operations
+ * MagicLink - Resource namespace for magic link operations
  */
 
 import type { MagicLinkResponse } from '../index';
@@ -14,18 +14,18 @@ export interface MagicLinkInfo {
 }
 
 /**
- * MagicLinks resource namespace
+ * MagicLink resource namespace
  *
  * @example
  * ```typescript
  * // Create a magic link (requires access token)
- * const link = await sandbox.magicLinks.create({
+ * const link = await sandbox.magicLink.create({
  *   redirectUrl: '/dashboard',
  * });
  * console.log(link.url);
  * ```
  */
-export class MagicLinks {
+export class MagicLink {
   private createHandler: (options?: {
     redirectUrl?: string;
   }) => Promise<MagicLinkResponse>;

@@ -9,7 +9,7 @@ import type {
   TerminalDestroyedMessage,
 } from './websocket';
 import type { CommandExecutionResponse, CommandsListResponse, CommandDetailsResponse } from './index';
-import { TerminalCommands } from './resources/commands';
+import { TerminalCommand } from './resources/terminal-command';
 
 // ============================================================================
 // Base64 Utility Functions
@@ -39,28 +39,30 @@ export type TerminalEventHandler = {
 };
 
 /**
- * Terminal class for interacting with a terminal session
+ * TerminalInstance - A connected terminal session with WebSocket support
+ *
+ * This is the object returned by sandbox.terminal.create()
  *
  * @example
  * ```typescript
  * // PTY mode - Interactive shell
- * const pty = await sandbox.terminals.create({ pty: true });
+ * const pty = await sandbox.terminal.create({ pty: true });
  * pty.on('output', (data) => console.log(data));
  * pty.write('ls -la\n');
  * await pty.destroy();
  *
  * // Exec mode - Command tracking
- * const exec = await sandbox.terminals.create({ pty: false });
- * const cmd = await exec.commands.run('npm test');
+ * const exec = await sandbox.terminal.create({ pty: false });
+ * const cmd = await exec.command.run('npm test');
  * console.log(cmd.exitCode);
  *
  * // Background execution with wait
- * const cmd = await exec.commands.run('npm install', { background: true });
+ * const cmd = await exec.command.run('npm install', { background: true });
  * await cmd.wait();
  * console.log(cmd.stdout);
  * ```
  */
-export class Terminal {
+export class TerminalInstance {
   private _id: string;
   private _pty: boolean;
   private _status: 'running' | 'stopped' | 'active' | 'ready';
@@ -70,9 +72,9 @@ export class Terminal {
   private _eventHandlers: Map<keyof TerminalEventHandler, Set<Function>> = new Map();
 
   /**
-   * Commands namespace for exec mode terminals
+   * Command namespace for exec mode terminals
    */
-  readonly commands: TerminalCommands;
+  readonly command: TerminalCommand;
 
   // Handlers set by the Sandbox
   private _executeHandler?: (command: string, background?: boolean) => Promise<CommandExecutionResponse>;
@@ -97,8 +99,8 @@ export class Terminal {
     this._ws = ws;
     this._encoding = encoding;
 
-    // Initialize commands namespace with handlers
-    this.commands = new TerminalCommands(id, {
+    // Initialize command namespace with handlers
+    this.command = new TerminalCommand(id, {
       run: async (command: string, background?: boolean) => {
         if (!this._executeHandler) {
           throw new Error('Execute handler not set');
@@ -309,8 +311,8 @@ export class Terminal {
   }
 
   /**
-   * Execute a command in the terminal (deprecated, use commands.run())
-   * @deprecated Use terminal.commands.run() instead
+   * Execute a command in the terminal (deprecated, use command.run())
+   * @deprecated Use terminal.command.run() instead
    */
   async execute(command: string, options?: { background?: boolean }): Promise<CommandExecutionResponse> {
     if (!this._executeHandler) {

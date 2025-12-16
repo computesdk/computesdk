@@ -1,17 +1,17 @@
 /**
- * Watchers - Resource namespace for file watcher operations
+ * Watcher - Resource namespace for file watcher operations
  */
 
 import type { FileWatcher } from '../file-watcher';
 import type { WatchersListResponse, WatcherResponse, WatcherInfo } from '../index';
 
 /**
- * Watchers resource namespace
+ * Watcher resource namespace
  *
  * @example
  * ```typescript
  * // Create a file watcher
- * const watcher = await sandbox.watchers.create('/project', {
+ * const watcher = await sandbox.watcher.create('/project', {
  *   ignored: ['node_modules', '.git'],
  *   includeContent: true,
  * });
@@ -20,16 +20,16 @@ import type { WatchersListResponse, WatcherResponse, WatcherInfo } from '../inde
  * });
  *
  * // List all watchers
- * const watchers = await sandbox.watchers.list();
+ * const watchers = await sandbox.watcher.list();
  *
  * // Retrieve a specific watcher
- * const watcher = await sandbox.watchers.retrieve(id);
+ * const watcher = await sandbox.watcher.retrieve(id);
  *
  * // Destroy a watcher
- * await sandbox.watchers.destroy(id);
+ * await sandbox.watcher.destroy(id);
  * ```
  */
-export class Watchers {
+export class Watcher {
   private createHandler: (
     path: string,
     options?: {

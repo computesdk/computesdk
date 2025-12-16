@@ -1,5 +1,5 @@
 /**
- * Files - Resource namespace for file operations
+ * File - Resource namespace for file operations
  */
 
 import type {
@@ -12,35 +12,35 @@ import type {
 } from '../index';
 
 /**
- * Files resource namespace
+ * File resource namespace
  *
  * @example
  * ```typescript
  * // Create a file
- * const file = await sandbox.files.create('/project/hello.txt', 'Hello, World!');
+ * const file = await sandbox.file.create('/project/hello.txt', 'Hello, World!');
  *
  * // List files in a directory
- * const files = await sandbox.files.list('/project');
+ * const files = await sandbox.file.list('/project');
  *
  * // Retrieve file content
- * const content = await sandbox.files.retrieve('/project/hello.txt');
+ * const content = await sandbox.file.retrieve('/project/hello.txt');
  *
  * // Destroy (delete) a file
- * await sandbox.files.destroy('/project/hello.txt');
+ * await sandbox.file.destroy('/project/hello.txt');
  *
  * // Batch write multiple files
- * const results = await sandbox.files.batchWrite([
+ * const results = await sandbox.file.batchWrite([
  *   { path: '/project/a.txt', operation: 'write', content: 'A' },
  *   { path: '/project/b.txt', operation: 'write', content: 'B' },
  * ]);
  *
  * // Batch delete files
- * const results = await sandbox.files.batchWrite([
+ * const results = await sandbox.file.batchWrite([
  *   { path: '/project/old.txt', operation: 'delete' },
  * ]);
  * ```
  */
-export class Files {
+export class File {
   private createHandler: (path: string, content?: string) => Promise<FileResponse>;
   private listHandler: (path: string) => Promise<FilesListResponse>;
   private retrieveHandler: (path: string) => Promise<string>;

@@ -1,5 +1,5 @@
 /**
- * SessionTokens - Resource namespace for session token management
+ * SessionToken - Resource namespace for session token management
  */
 
 import type { SessionTokenResponse, SessionTokenListResponse } from '../index';
@@ -17,28 +17,28 @@ export interface SessionTokenInfo {
 }
 
 /**
- * SessionTokens resource namespace
+ * SessionToken resource namespace
  *
  * @example
  * ```typescript
  * // Create a session token (requires access token)
- * const token = await sandbox.sessionTokens.create({
+ * const token = await sandbox.sessionToken.create({
  *   description: 'My Application',
  *   expiresIn: 604800, // 7 days
  * });
  * console.log(token.token);
  *
  * // List all session tokens
- * const tokens = await sandbox.sessionTokens.list();
+ * const tokens = await sandbox.sessionToken.list();
  *
  * // Retrieve a specific token
- * const token = await sandbox.sessionTokens.retrieve(id);
+ * const token = await sandbox.sessionToken.retrieve(id);
  *
  * // Revoke a token
- * await sandbox.sessionTokens.revoke(id);
+ * await sandbox.sessionToken.revoke(id);
  * ```
  */
-export class SessionTokens {
+export class SessionToken {
   private createHandler: (options?: {
     description?: string;
     expiresIn?: number;

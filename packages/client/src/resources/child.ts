@@ -1,11 +1,11 @@
 /**
- * Children - Resource namespace for child sandbox operations
+ * Child - Resource namespace for child sandbox operations
  */
 
 import type { SandboxInfo, SandboxesListResponse } from '../index';
 
 /**
- * Children resource namespace for managing child sandboxes
+ * Child resource namespace for managing child sandboxes
  *
  * Child sandboxes are isolated environments within the parent sandbox,
  * each with their own filesystem. Available only in multi-tenant mode.
@@ -13,23 +13,23 @@ import type { SandboxInfo, SandboxesListResponse } from '../index';
  * @example
  * ```typescript
  * // Create a new child sandbox
- * const child = await sandbox.children.create();
+ * const child = await sandbox.child.create();
  * console.log(child.url); // https://sandbox-12345.preview.computesdk.com
  *
  * // List all children
- * const all = await sandbox.children.list();
+ * const all = await sandbox.child.list();
  *
  * // Get a specific child
- * const info = await sandbox.children.retrieve('sandbox-12345');
+ * const info = await sandbox.child.retrieve('sandbox-12345');
  *
  * // Delete a child sandbox
- * await sandbox.children.destroy('sandbox-12345');
+ * await sandbox.child.destroy('sandbox-12345');
  *
  * // Delete child and its files
- * await sandbox.children.destroy('sandbox-12345', { deleteFiles: true });
+ * await sandbox.child.destroy('sandbox-12345', { deleteFiles: true });
  * ```
  */
-export class Children {
+export class Child {
   private createHandler: () => Promise<SandboxInfo>;
   private listHandler: () => Promise<SandboxesListResponse>;
   private retrieveHandler: (subdomain: string) => Promise<SandboxInfo>;
