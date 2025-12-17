@@ -27,7 +27,7 @@ import {
   File,
   Env,
   Auth,
-  SandboxCommand,
+  Run,
   Child,
 } from './resources';
 
@@ -46,7 +46,7 @@ export type { SessionTokenInfo } from './resources/session-token';
 export type { MagicLinkInfo } from './resources/magic-link';
 export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
-export type { CommandResult } from './resources/sandbox-command';
+export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions } from './resources/run';
 
 // ============================================================================
 // Type Definitions
@@ -281,6 +281,34 @@ export interface CommandsListResponse {
   data: {
     commands: CommandListItem[];
     count: number;
+  };
+}
+
+/**
+ * Code execution response (POST /run/code)
+ */
+export interface CodeExecutionResponse {
+  data: {
+    output: string;
+    exit_code: number;
+    language: string;
+  };
+}
+
+/**
+ * Run command response (POST /run/command)
+ */
+export interface RunCommandResponse {
+  message: string;
+  data: {
+    terminal_id?: string;
+    cmd_id?: string;
+    command: string;
+    stdout: string;
+    stderr: string;
+    exit_code?: number;
+    duration_ms?: number;
+    status?: 'running' | 'completed' | 'failed';
   };
 }
 
@@ -627,7 +655,7 @@ export class Sandbox {
 
   // Resource namespaces (singular naming convention)
   readonly terminal: Terminal;
-  readonly command: SandboxCommand;
+  readonly run: Run;
   readonly server: Server;
   readonly watcher: Watcher;
   readonly sessionToken: SessionToken;
@@ -753,9 +781,17 @@ export class Sandbox {
       },
     });
 
-    this.command = new SandboxCommand({
-      run: async (command, options) => {
-        const result = await this.execute({ command, background: options?.background });
+    this.run = new Run({
+      code: async (code, options) => {
+        const result = await this.runCodeRequest(code, options?.language);
+        return {
+          output: result.data.output,
+          exitCode: result.data.exit_code,
+          language: result.data.language,
+        };
+      },
+      command: async (command, options) => {
+        const result = await this.runCommandRequest({ command, shell: options?.shell, background: options?.background });
         return {
           stdout: result.data.stdout,
           stderr: result.data.stderr,
@@ -1089,6 +1125,61 @@ export class Sandbox {
     background?: boolean;
   }): Promise<CommandExecutionResponse> {
     return this.request<CommandExecutionResponse>('/execute', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  /**
+   * Execute code with automatic language detection (POST /run/code)
+   *
+   * @param code - The code to execute
+   * @param language - Programming language (optional - auto-detects if not specified)
+   * @returns Code execution result with output, exit code, and detected language
+   *
+   * @example
+   * ```typescript
+   * // Auto-detect language
+   * const result = await sandbox.runCodeRequest('print("Hello")');
+   * console.log(result.data.output); // "Hello\n"
+   * console.log(result.data.language); // "python"
+   *
+   * // Explicit language
+   * const result = await sandbox.runCodeRequest('console.log("Hi")', 'node');
+   * ```
+   */
+  async runCodeRequest(code: string, language?: string): Promise<CodeExecutionResponse> {
+    const body: { code: string; language?: string } = { code };
+    if (language) {
+      body.language = language;
+    }
+    return this.request<CodeExecutionResponse>('/run/code', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Execute a shell command (POST /run/command)
+   *
+   * @param options - Command options
+   * @param options.command - The command to execute
+   * @param options.shell - Shell to use (optional)
+   * @param options.background - Run in background (optional)
+   * @returns Command execution result
+   *
+   * @example
+   * ```typescript
+   * const result = await sandbox.runCommandRequest({ command: 'ls -la' });
+   * console.log(result.data.stdout);
+   * ```
+   */
+  async runCommandRequest(options: {
+    command: string;
+    shell?: string;
+    background?: boolean;
+  }): Promise<RunCommandResponse> {
+    return this.request<RunCommandResponse>('/run/command', {
       method: 'POST',
       body: JSON.stringify(options),
     });
@@ -1809,34 +1900,31 @@ export class Sandbox {
   // ============================================================================
 
   /**
-   * Execute code in the sandbox (Sandbox interface method)
+   * Execute code in the sandbox (convenience method)
+   *
+   * Delegates to sandbox.run.code() - prefer using that directly for new code.
+   *
+   * @param code - The code to execute
+   * @param language - Programming language (auto-detected if not specified)
+   * @returns Code execution result
    */
-  async runCode(code: string, runtime?: 'node' | 'python'): Promise<{
-    stdout: string;
-    stderr: string;
+  async runCode(code: string, language?: 'node' | 'python'): Promise<{
+    output: string;
     exitCode: number;
-    executionTime: number;
-    sandboxId: string;
-    provider: string;
+    language: string;
   }> {
-    const command = runtime === 'python' ? 'python3' : 'node';
-    const result = await this.execute({
-      command: `${command} -c ${JSON.stringify(code)}`
-    });
-
-    return {
-      stdout: result.data.stdout,
-      stderr: result.data.stderr,
-      exitCode: result.data.exit_code ?? 0,
-      executionTime: result.data.duration_ms ?? 0,
-      sandboxId: this.sandboxId || '',
-      provider: this.provider || ''
-    };
+    return this.run.code(code, language ? { language } : undefined);
   }
 
   /**
-   * Execute shell commands (Sandbox interface method)
-   * Accepts either (command, args?, options?) or ([command, ...args], options?)
+   * Execute shell command in the sandbox (convenience method)
+   *
+   * Delegates to sandbox.run.command() - prefer using that directly for new code.
+   *
+   * @param command - The command to execute (string or array form)
+   * @param argsOrOptions - Arguments array or options object
+   * @param maybeOptions - Options when using (command, args, options) form
+   * @returns Command execution result
    */
   async runCommand(
     commandOrArray: string | [string, ...string[]],
@@ -1846,10 +1934,7 @@ export class Sandbox {
     stdout: string;
     stderr: string;
     exitCode: number;
-    executionTime: number;
-    sandboxId: string;
-    provider: string;
-    isBackground?: boolean;
+    durationMs: number;
   }> {
     // Parse overloaded arguments
     let commandParts: string[];
@@ -1870,33 +1955,10 @@ export class Sandbox {
     const finalCommand = cmd(commandParts as Command, options);
 
     // cmd() returns ['sh', '-c', 'escaped command'] if options provided,
-    // or the raw array if no options. Either way, escapeArgs handles it safely:
-    // - For ['sh', '-c', 'cmd'] -> "sh -c 'cmd'" (inner cmd already escaped by buildShellCommand)
-    // - For ['npm', 'install'] -> "npm install" (each arg escaped as needed)
+    // or the raw array if no options. Either way, escapeArgs handles it safely
     const fullCommand = escapeArgs(finalCommand);
 
-    const result = await this.execute({ command: fullCommand });
-
-    if (options?.background) {
-      return {
-        stdout: result.data.stdout,
-        stderr: result.data.stderr,
-        exitCode: result.data.exit_code ?? 0,
-        executionTime: result.data.duration_ms ?? 0,
-        sandboxId: this.sandboxId || '',
-        provider: this.provider || '',
-        isBackground: true
-      };
-    }
-
-    return {
-      stdout: result.data.stdout,
-      stderr: result.data.stderr,
-      exitCode: result.data.exit_code ?? 0,
-      executionTime: result.data.duration_ms ?? 0,
-      sandboxId: this.sandboxId || '',
-      provider: this.provider || ''
-    };
+    return this.run.command(fullCommand, { background: options?.background });
   }
 
   /**

@@ -12,6 +12,19 @@
 // This is THE Sandbox that users interact with
 export { Sandbox, type SandboxConfig } from '@computesdk/client';
 
+// Re-export execution result types from @computesdk/client
+// These are the canonical types for code and command execution
+export {
+  type CodeResult,
+  type CommandResult,
+  type CodeLanguage,
+  type CodeRunOptions,
+  type CommandRunOptions,
+} from '@computesdk/client';
+
+// Import for use within this file
+import type { CodeResult, CommandResult } from '@computesdk/client';
+
 // Forward declaration to avoid circular dependency
 interface Provider {
   readonly name: string;
@@ -62,7 +75,8 @@ export interface RunCommandOptions {
 }
 
 /**
- * Result of code execution
+ * Result of code execution (legacy - use CodeResult for new code)
+ * @deprecated Use CodeResult for sandbox.run.code() results
  */
 export interface ExecutionResult {
   /** Standard output from the execution */
@@ -82,6 +96,9 @@ export interface ExecutionResult {
   /** Whether this command is running in background */
   isBackground?: boolean;
 }
+
+// CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions
+// are now re-exported from @computesdk/client above
 
 /**
  * Information about a sandbox
@@ -220,13 +237,13 @@ export interface ProviderSandbox<TSandbox = any> {
   readonly provider: string;
 
   /** Execute code in the sandbox */
-  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  /** Execute shell commands - accepts either (command, args?, options?) or ([command, ...args], options?) */
+  runCode(code: string, runtime?: Runtime): Promise<CodeResult>;
+  /** Execute shell commands */
   runCommand(
     commandOrArray: string | [string, ...string[]],
     argsOrOptions?: string[] | RunCommandOptions,
     maybeOptions?: RunCommandOptions
-  ): Promise<ExecutionResult>;
+  ): Promise<CommandResult>;
   /** Get information about the sandbox */
   getInfo(): Promise<SandboxInfo>;
   /** Get URL for accessing the sandbox on a specific port */

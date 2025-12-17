@@ -13,7 +13,8 @@ import type {
   ProviderSandbox,
   SandboxFileSystem,
   SandboxInfo,
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   Runtime,
   CreateSandboxOptions,
   FileEntry,
@@ -54,24 +55,24 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   getById: (config: TConfig, sandboxId: string) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
   list: (config: TConfig) => Promise<Array<{ sandbox: TSandbox; sandboxId: string }>>;
   destroy: (config: TConfig, sandboxId: string) => Promise<void>;
-  
-  // Instance operations (map to individual Sandbox methods)
-  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<ExecutionResult>;
-  runCommand: (sandbox: TSandbox, command: string, args?: string[], options?: RunCommandOptions) => Promise<ExecutionResult>;
+
+  // Instance operations
+  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<CodeResult>;
+  runCommand: (sandbox: TSandbox, command: string, args?: string[], options?: RunCommandOptions) => Promise<CommandResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
-  
+
   // Optional provider-specific typed getInstance method
   getInstance?: (sandbox: TSandbox) => TSandbox;
-  
+
   // Optional filesystem methods
   filesystem?: {
-    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<string>;
-    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
-    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
-    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<FileEntry[]>;
-    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<boolean>;
-    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
+    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<string>;
+    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
+    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
+    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<FileEntry[]>;
+    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<boolean>;
+    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
   };
 }
 
@@ -218,7 +219,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     return this.sandbox;
   }
 
-  async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+  async runCode(code: string, runtime?: Runtime): Promise<CodeResult> {
     return await this.methods.runCode(this.sandbox, code, runtime, this.config);
   }
 
@@ -226,7 +227,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     commandOrArray: string | [string, ...string[]],
     argsOrOptions?: string[] | RunCommandOptions,
     maybeOptions?: RunCommandOptions
-  ): Promise<ExecutionResult> {
+  ): Promise<CommandResult> {
     // Parse overloaded arguments
     let command: string;
     let args: string[];
@@ -253,16 +254,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         background: options.background,
       });
       const [wrappedCmd, ...wrappedArgs] = wrappedCommand;
-      const result = await this.methods.runCommand(this.sandbox, wrappedCmd, wrappedArgs, undefined);
-
-      if (options.background) {
-        return {
-          ...result,
-          isBackground: true,
-          pid: -1
-        };
-      }
-      return result;
+      return await this.methods.runCommand(this.sandbox, wrappedCmd, wrappedArgs, undefined);
     }
 
     return await this.methods.runCommand(this.sandbox, command, args, options);

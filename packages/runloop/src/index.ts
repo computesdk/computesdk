@@ -8,7 +8,8 @@
 import { Runloop } from "@runloop/api-client";
 import { createProvider } from "computesdk";
 import type {
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
   FileEntry,
@@ -212,28 +213,29 @@ export const runloop = createProvider<
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
         const devbox = sandbox;
         const client = sandbox.client;
 
+        // Auto-detect runtime if not specified
+        const effectiveRuntime = runtime || (
+          // Strong Python indicators
+          code.includes('print(') ||
+            code.includes('import ') ||
+            code.includes('def ') ||
+            code.includes('sys.') ||
+            code.includes('json.') ||
+            code.includes('__') ||
+            code.includes('f"') ||
+            code.includes("f'") ||
+            code.includes('raise ')
+            ? 'python'
+            // Default to Node.js for all other cases (including ambiguous)
+            : 'node'
+        );
+
         try {
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || (
-            // Strong Python indicators
-            code.includes('print(') ||
-              code.includes('import ') ||
-              code.includes('def ') ||
-              code.includes('sys.') ||
-              code.includes('json.') ||
-              code.includes('__') ||
-              code.includes('f"') ||
-              code.includes("f'") ||
-              code.includes('raise ')
-              ? 'python'
-              // Default to Node.js for all other cases (including ambiguous)
-              : 'node'
-          );
 
           // Use base64 encoding for both runtimes for reliability and consistency
           const encoded = Buffer.from(code).toString('base64');
@@ -267,12 +269,9 @@ export const runloop = createProvider<
           }
 
           return {
-            stdout: executionResult.stdout || "",
-            stderr: executionResult.stderr || "",
+            output: (executionResult.stdout || "") + (executionResult.stderr || ""),
             exitCode: executionResult.exit_status || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: devbox.id || "runloop-unknown",
-            provider: "runloop",
+            language: effectiveRuntime,
           };
         } catch (error) {
           // Handle Runloop execution errors
@@ -287,12 +286,9 @@ export const runloop = createProvider<
             } else {
               // For runtime errors, return a result instead of throwing
               return {
-                stdout: '',
-                stderr: actualStderr || 'Error: Runtime error occurred during execution',
+                output: actualStderr || 'Error: Runtime error occurred during execution',
                 exitCode: 1,
-                executionTime: Date.now() - startTime,
-                sandboxId: devbox.id || 'runloop-unknown',
-                provider: 'runloop'
+                language: effectiveRuntime,
               };
             }
           }
@@ -311,7 +307,7 @@ export const runloop = createProvider<
         sandbox: any,
         command: string,
         args: string[] = []
-      ): Promise<ExecutionResult> => {
+      ): Promise<CommandResult> => {
         const startTime = Date.now();
         const devbox = sandbox;
         const client = sandbox.client;
@@ -334,9 +330,7 @@ export const runloop = createProvider<
             stdout: executionResult.stdout || "",
             stderr: executionResult.stderr || "",
             exitCode: executionResult.exit_status || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: devbox.id || "runloop-unknown",
-            provider: "runloop",
+            durationMs: Date.now() - startTime,
           };
         } catch (error) {
           // Re-throw syntax errors

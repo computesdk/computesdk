@@ -111,10 +111,10 @@ describe('Compute API - Provider-Centric', () => {
     it('should execute code', async () => {
       const provider = new MockProvider()
       const sandbox = await compute.sandbox.create({ provider })
-      
+
       const result = await sandbox.runCode('console.log("Hello")')
-      
-      expect(result.stdout).toBe('Executed: console.log("Hello")')
+
+      expect(result.output).toBe('Executed: console.log("Hello")')
       expect(result.exitCode).toBe(0)
     })
 
@@ -433,7 +433,7 @@ describe('Compute API - Provider-Centric', () => {
 
       expect(result.success).toBe(true)
       expect(result.provider).toBe('mock')
-      expect(result.result?.stdout).toBe('Executed: print("Hello World")')
+      expect(result.result?.output).toBe('Executed: print("Hello World")')
       expect(result.result?.exitCode).toBe(0)
     })
 

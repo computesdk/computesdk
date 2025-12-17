@@ -6,7 +6,7 @@
  */
 
 import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 /**
  * AVM sandbox interface matching the API response structure

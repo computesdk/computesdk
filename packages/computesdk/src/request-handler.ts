@@ -131,14 +131,13 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
         sandboxId,
         provider: provider.name,
         result: {
-          stdout: result.stdout,
-          stderr: result.stderr,
+          output: result.output,
           exitCode: result.exitCode,
-          executionTime: result.executionTime
+          language: result.language
         }
       };
     }
-    
+
     if (action === 'compute.sandbox.runCommand') {
       if (!body.command) throw new Error('command is required');
       const result = await sandbox.runCommand(body.command, body.args, body.commandOptions);
@@ -150,9 +149,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
           stdout: result.stdout,
           stderr: result.stderr,
           exitCode: result.exitCode,
-          executionTime: result.executionTime,
-          ...(result.isBackground && { isBackground: result.isBackground }),
-          ...(result.pid && { pid: result.pid })
+          durationMs: result.durationMs
         }
       };
     }

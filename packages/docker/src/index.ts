@@ -3,7 +3,8 @@ import { PassThrough } from 'stream';
 import { createProvider } from 'computesdk';
 import type {
   Runtime,
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   RunCommandOptions,
   CreateSandboxOptions,
   SandboxInfo,
@@ -297,7 +298,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         }
       },
 
-      runCode: async (handle: DockerSandboxHandle, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (handle: DockerSandboxHandle, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const start = Date.now();
 
         // Resolve runtime: param → label → error
@@ -333,12 +334,9 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         }
 
         return {
-          stdout,
-          stderr,
+          output: stdout + stderr,
           exitCode,
-          executionTime: Date.now() - start,
-          sandboxId: handle.containerId,
-          provider: PROVIDER,
+          language: rt,
         };
       },
 
@@ -346,7 +344,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         handle: DockerSandboxHandle,
         command: string,
         args: string[] = []
-      ): Promise<ExecutionResult> => {
+      ): Promise<CommandResult> => {
         const start = Date.now();
         const shell = args.length ? `${command} ${args.join(' ')}` : command;
 
@@ -356,9 +354,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
           stdout,
           stderr,
           exitCode,
-          executionTime: Date.now() - start,
-          sandboxId: handle.containerId,
-          provider: PROVIDER,
+          durationMs: Date.now() - start,
         };
       },
 

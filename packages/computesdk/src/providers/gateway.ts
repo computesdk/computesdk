@@ -12,7 +12,7 @@
 import { Sandbox as ClientSandbox } from '@computesdk/client';
 import { createProvider } from '../factory';
 import { waitForComputeReady } from '../compute-daemon/lifecycle';
-import type { Runtime, SandboxInfo } from '../types';
+import type { Runtime, SandboxInfo, CodeResult, CommandResult } from '../types';
 
 /**
  * Gateway provider configuration

@@ -3,7 +3,7 @@
  */
 
 import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 /**
  * Railway sandbox interface

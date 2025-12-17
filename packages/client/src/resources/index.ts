@@ -13,5 +13,5 @@ export { Signal, type SignalStatusInfo } from './signal';
 export { File } from './file';
 export { Env } from './env';
 export { Auth, type AuthStatusInfo, type AuthInfo, type AuthEndpointsInfo } from './auth';
-export { SandboxCommand, type CommandResult } from './sandbox-command';
+export { Run, type CodeResult, type CommandResult, type CodeLanguage, type CodeRunOptions, type CommandRunOptions } from './run';
 export { Child } from './child';

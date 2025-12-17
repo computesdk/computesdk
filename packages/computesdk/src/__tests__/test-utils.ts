@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'vitest'
-import type { Provider, ProviderSandbox, ExecutionResult, SandboxInfo, FileEntry, Runtime } from '../types/index.js'
+import type { Provider, ProviderSandbox, SandboxInfo, FileEntry, Runtime, CodeResult, CommandResult } from '../types/index.js'
 
 /** Standard mock runtime support for testing */
 export const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
@@ -22,26 +22,21 @@ export class MockSandbox implements ProviderSandbox {
     return this._mockInstance
   }
 
-  async runCode(code: string): Promise<ExecutionResult> {
+  async runCode(code: string): Promise<CodeResult> {
     return {
-      stdout: `Executed: ${code}`,
-      stderr: '',
+      output: `Executed: ${code}`,
       exitCode: 0,
-      executionTime: 100,
-      sandboxId: this.sandboxId,
-      provider: this.provider
+      language: 'node',
     }
   }
 
-  async runCommand(command: string, args: string[] = []): Promise<ExecutionResult> {
+  async runCommand(command: string, args: string[] = []): Promise<CommandResult> {
     const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command
     return {
       stdout: `Command executed: ${fullCommand}`,
       stderr: '',
       exitCode: 0,
-      executionTime: 50,
-      sandboxId: this.sandboxId,
-      provider: this.provider
+      durationMs: 50,
     }
   }
 
