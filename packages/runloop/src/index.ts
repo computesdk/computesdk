@@ -219,7 +219,7 @@ export const runloop = createProvider<
         const client = sandbox.client;
 
         // Auto-detect runtime if not specified
-        const effectiveRuntime = runtime || (
+        const effectiveRuntime: Runtime = runtime || (
           // Strong Python indicators
           code.includes('print(') ||
             code.includes('import ') ||
@@ -233,7 +233,7 @@ export const runloop = createProvider<
             ? 'python'
             // Default to Node.js for all other cases (including ambiguous)
             : 'node'
-        );
+        ) as Runtime;
 
         try {
 

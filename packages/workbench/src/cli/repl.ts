@@ -14,6 +14,18 @@ import { runCommand, createProviderCommand, restartSandbox, destroySandbox, togg
 import { showHelp, showInfo } from './output.js';
 import { showProviders, showEnv, PROVIDER_NAMES } from './providers.js';
 import { isCommand } from './types.js';
+
+/**
+ * Extended REPL server interface with custom eval function
+ */
+interface ExtendedREPLServer extends repl.REPLServer {
+  eval: (
+    cmd: string,
+    context: object,
+    filename: string,
+    callback: (err: Error | null, result: any) => void
+  ) => void;
+}
 import * as path from 'path';
 import * as os from 'os';
 
@@ -205,7 +217,7 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   // Track workbench command names for auto-calling
   const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose']);
   
-  (replServer as any).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
+  (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
     
     // Special handling for "provider <name>" syntax (without parentheses)

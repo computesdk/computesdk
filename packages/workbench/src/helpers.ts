@@ -16,7 +16,7 @@
  */
 
 import * as cmd from '@computesdk/cmd';
-import { createCompute } from 'computesdk';
+import { createCompute, type Provider } from 'computesdk';
 
 export interface WorkbenchSession {
   sandbox: Awaited<ReturnType<ReturnType<typeof createCompute>['sandbox']['create']>>;
@@ -40,8 +40,8 @@ export interface WorkbenchSession {
  * Create a workbench session for use in TypeScript files
  * This gives you full TypeScript autocomplete!
  */
-export async function createWorkbenchSession(provider?: string): Promise<WorkbenchSession> {
-  const compute = createCompute({ provider: provider as any });
+export async function createWorkbenchSession(provider?: Provider): Promise<WorkbenchSession> {
+  const compute = provider ? createCompute({ defaultProvider: provider }) : createCompute();
   const sandbox = await compute.sandbox.create();
   
   return {

@@ -16,9 +16,15 @@ export function shellEscape(s: string): string {
 }
 
 /**
- * Escape a string for use inside double quotes (legacy function, prefer shellEscape)
+ * Escape a string for use inside double quotes.
+ *
+ * This is a legacy helper kept for backward compatibility; for new code,
+ * prefer {@link shellEscape} which uses single-quoted, safer shell escaping.
+ *
  * @example esc('path with "quotes"') // 'path with \\"quotes\\"'
- * @deprecated Use shellEscape() for safer escaping
+ * @deprecated Use {@link shellEscape} for safer escaping. This function only escapes
+ *   double quotes and may not be safe for all shell contexts. Migration: replace
+ *   `esc(str)` with `shellEscape(str)`.
  */
 export function esc(s: string): string {
   return s.replace(/"/g, '\\"');

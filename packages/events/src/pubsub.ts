@@ -49,7 +49,7 @@ export class EventsPubSubClient extends EventEmitter {
     let resolvedPort: number;
     if (typeof configPort === 'number' && configPort > 0 && configPort <= 65535) {
       resolvedPort = configPort;
-    } else if (typeof envPort === 'number' && !isNaN(envPort) && envPort > 0 && envPort <= 65535) {
+    } else if (typeof envPort === 'number' && envPort > 0 && envPort <= 65535) {
       resolvedPort = envPort;
     } else {
       resolvedPort = DEFAULT_PUBSUB_PORT;
