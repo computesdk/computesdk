@@ -27,26 +27,6 @@ import type {
 import { cmd, type Command } from '@computesdk/cmd';
 
 /**
- * Helper function to handle background command execution
- * Providers can use this to implement background job support
- */
-export function createBackgroundCommand(command: string, args: string[] = [], options?: RunCommandOptions): { command: string; args: string[]; isBackground: boolean } {
-  if (!options?.background) {
-    return { command, args, isBackground: false };
-  }
-
-  // For background execution, use nohup to detach from terminal and & to background
-  // nohup ensures the process survives after the shell exits
-  const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-
-  return {
-    command: 'sh',
-    args: ['-c', `nohup ${fullCommand} > /dev/null 2>&1 &`],
-    isBackground: true
-  };
-}
-
-/**
  * Flat sandbox method implementations - all operations in one place
  */
 export interface SandboxMethods<TSandbox = any, TConfig = any> {
@@ -197,8 +177,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     private methods: SandboxMethods<TSandbox>,
     private config: any,
     private destroyMethod: (config: any, sandboxId: string) => Promise<void>,
-    private providerInstance: Provider,
-    private onDestroy?: (sandboxId: string) => void
+    private providerInstance: Provider
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
@@ -281,11 +260,6 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   async destroy(): Promise<void> {
     // Destroy via the provider's destroy method using our sandboxId
     await this.destroyMethod(this.config, this.sandboxId);
-    
-    // Clean up from manager's active sandboxes map if callback provided
-    if (this.onDestroy) {
-      this.onDestroy(this.sandboxId);
-    }
   }
 }
 
@@ -293,8 +267,6 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
  * Auto-generated Sandbox Manager implementation
  */
 class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManager<TSandbox> {
-  private activeSandboxes: Map<string, GeneratedSandbox<TSandbox>> = new Map();
-
   constructor(
     private config: TConfig,
     private providerName: string,
@@ -306,77 +278,51 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     // Default to 'node' runtime if not specified for consistency across providers
     const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
     const result = await this.methods.create(this.config, optionsWithDefaults);
-    const sandbox = new GeneratedSandbox<TSandbox>(
+    
+    return new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance,
-      (sandboxId) => this.activeSandboxes.delete(sandboxId)
+      this.providerInstance
     );
-    
-    this.activeSandboxes.set(result.sandboxId, sandbox);
-    return sandbox;
   }
 
   async getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null> {
-    // Check active sandboxes first
-    const existing = this.activeSandboxes.get(sandboxId);
-    if (existing) {
-      return existing;
-    }
-
-    // Try to reconnect
     const result = await this.methods.getById(this.config, sandboxId);
     if (!result) {
       return null;
     }
 
-    const sandbox = new GeneratedSandbox<TSandbox>(
+    return new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance,
-      (sandboxId) => this.activeSandboxes.delete(sandboxId)
+      this.providerInstance
     );
-    
-    this.activeSandboxes.set(result.sandboxId, sandbox);
-    return sandbox;
   }
 
   async list(): Promise<ProviderSandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
-    const sandboxes: ProviderSandbox[] = [];
-
-    for (const result of results) {
-      let sandbox = this.activeSandboxes.get(result.sandboxId);
-      if (!sandbox) {
-        sandbox = new GeneratedSandbox<TSandbox>(
-          result.sandbox,
-          result.sandboxId,
-          this.providerName,
-          this.methods,
-          this.config,
-          this.methods.destroy,
-          this.providerInstance,
-          (sandboxId) => this.activeSandboxes.delete(sandboxId)
-        );
-        this.activeSandboxes.set(result.sandboxId, sandbox);
-      }
-      sandboxes.push(sandbox);
-    }
-
-    return sandboxes;
+    
+    return results.map(result => new GeneratedSandbox<TSandbox>(
+      result.sandbox,
+      result.sandboxId,
+      this.providerName,
+      this.methods,
+      this.config,
+      this.methods.destroy,
+      this.providerInstance
+    ));
   }
 
   async destroy(sandboxId: string): Promise<void> {
     await this.methods.destroy(this.config, sandboxId);
-    this.activeSandboxes.delete(sandboxId);
   }
 }
 

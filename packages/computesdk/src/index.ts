@@ -42,7 +42,7 @@ export type {
 } from './request-handler';
 
 // Export provider factory for creating custom providers
-export { createProvider, createBackgroundCommand } from './factory';
+export { createProvider } from './factory';
 export type { ProviderConfig, SandboxMethods, TemplateMethods, SnapshotMethods } from './factory';
 
 // Export error handling utilities (explicitly for clarity)
