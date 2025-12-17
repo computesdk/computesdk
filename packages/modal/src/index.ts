@@ -212,7 +212,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
           const process = await executionSandbox.exec(command, {
             stdout: 'pipe',
-            stderr: 'pipe'
+            stderr: 'pipe',
+            timeout: 30000  // 30 second timeout for code execution
           });
 
           // Use working stream reading pattern from debug
@@ -267,7 +268,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
           // Execute command using Modal's exec method with working pattern
           const process = await modalSandbox.sandbox.exec([command, ...args], {
             stdout: 'pipe',
-            stderr: 'pipe'
+            stderr: 'pipe',
+            timeout: 30000  // 30 second timeout for commands
           });
 
           // Use working stream reading pattern from debug
@@ -357,83 +359,54 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
       filesystem: {
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
           try {
-            // Use Modal's file open API to read files
-            const file = await modalSandbox.sandbox.open(path);
-            
-            // Read the entire file content
-            let content = '';
-            if (file && typeof file.read === 'function') {
-              const data = await file.read();
-              content = typeof data === 'string' ? data : new TextDecoder().decode(data);
+            const process = await modalSandbox.sandbox.exec(['cat', path], {
+              stdout: 'pipe',
+              stderr: 'pipe',
+              timeout: 5000  // 5 second timeout
+            });
+
+            const [content, stderr] = await Promise.all([
+              process.stdout.readText(),
+              process.stderr.readText()
+            ]);
+
+            const exitCode = await process.wait();
+
+            if (exitCode !== 0) {
+              throw new Error(`Failed to read file ${path}: ${stderr}`);
             }
-            
-            // Close the file if it has a close method
-            if (file && typeof file.close === 'function') {
-              await file.close();
-            }
-            
+
             return content;
           } catch (error) {
-            // Fallback to using cat command with working stream pattern
-            try {
-              const process = await modalSandbox.sandbox.exec(['cat', path], {
-                stdout: 'pipe',
-                stderr: 'pipe'
-              });
-
-              const [content, stderr] = await Promise.all([
-                process.stdout.readText(),
-                process.stderr.readText()
-              ]);
-
-              const exitCode = await process.wait();
-
-              if (exitCode !== 0) {
-                throw new Error(`cat failed: ${stderr}`);
-              }
-
-              return content.trim(); // Remove extra newlines
-            } catch (fallbackError) {
-              throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
 
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
           try {
-            // Use Modal's file open API to write files
-            const file = await modalSandbox.sandbox.open(path);
-            
-            // Write content to the file
-            if (file && typeof file.write === 'function') {
-              await file.write(content);
-            }
-            
-            // Close the file if it has a close method
-            if (file && typeof file.close === 'function') {
-              await file.close();
+            // Use printf to write files - avoids shell escaping issues
+            const escapedContent = content.replace(/'/g, "'\\''");
+            const process = await modalSandbox.sandbox.exec(
+              ['sh', '-c', `printf '%s' '${escapedContent}' > "${path}"`],
+              {
+                stdout: 'pipe',
+                stderr: 'pipe',
+                timeout: 5000  // 5 second timeout
+              }
+            );
+
+            const [, stderr] = await Promise.all([
+              process.stdout.readText(),
+              process.stderr.readText()
+            ]);
+
+            const exitCode = await process.wait();
+
+            if (exitCode !== 0) {
+              throw new Error(`Failed to write file ${path}: ${stderr}`);
             }
           } catch (error) {
-            // Fallback to using shell command with proper escaping
-            try {
-              const process = await modalSandbox.sandbox.exec(['sh', '-c', `printf '%s' "${content.replace(/"/g, '\\"')}" > "${path}"`], {
-                stdout: 'pipe',
-                stderr: 'pipe'
-              });
-
-              const [, stderr] = await Promise.all([
-                process.stdout.readText(),
-                process.stderr.readText()
-              ]);
-
-              const exitCode = await process.wait();
-
-              if (exitCode !== 0) {
-                throw new Error(`write failed: ${stderr}`);
-              }
-            } catch (fallbackError) {
-              throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
 
@@ -441,7 +414,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
           try {
             const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], {
               stdout: 'pipe',
-              stderr: 'pipe'
+              stderr: 'pipe',
+              timeout: 5000  // 5 second timeout
             });
 
             const [, stderr] = await Promise.all([
@@ -464,7 +438,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             // Use simple -l flag for BusyBox compatibility (Alpine/node:20-alpine uses BusyBox ls)
             const process = await modalSandbox.sandbox.exec(['ls', '-la', path], {
               stdout: 'pipe',
-              stderr: 'pipe'
+              stderr: 'pipe',
+              timeout: 5000  // 5 second timeout
             });
 
             const [output, stderr] = await Promise.all([
@@ -505,7 +480,9 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
         exists: async (modalSandbox: ModalSandbox, path: string): Promise<boolean> => {
           try {
-            const process = await modalSandbox.sandbox.exec(['test', '-e', path]);
+            const process = await modalSandbox.sandbox.exec(['test', '-e', path], {
+              timeout: 5000  // 5 second timeout
+            });
             const exitCode = await process.wait();
             return exitCode === 0;
           } catch (error) {
@@ -517,7 +494,8 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
           try {
             const process = await modalSandbox.sandbox.exec(['rm', '-rf', path], {
               stdout: 'pipe',
-              stderr: 'pipe'
+              stderr: 'pipe',
+              timeout: 5000  // 5 second timeout
             });
 
             const [, stderr] = await Promise.all([
