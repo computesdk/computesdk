@@ -35,6 +35,8 @@ export interface ModalConfig {
   timeout?: number;
   /** Modal environment (sandbox or main) */
   environment?: string;
+  /** Ports to expose */
+  ports?: number[];
 }
 
 /**
