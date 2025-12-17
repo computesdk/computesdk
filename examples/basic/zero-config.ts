@@ -47,7 +47,7 @@ async function main() {
 print("Hello from Python!")
 print(f"2 + 2 = {2 + 2}")
   `.trim(), 'python');
-  console.log('Output:', pythonResult.stdout);
+  console.log('Output:', pythonResult.output);
 
   // Run Node.js code
   console.log('\nRunning Node.js code...');
@@ -55,36 +55,14 @@ print(f"2 + 2 = {2 + 2}")
 console.log("Hello from Node.js!");
 console.log(\`Process version: \${process.version}\`);
   `.trim(), 'node');
-  console.log('Output:', nodeResult.stdout);
+  console.log('Output:', nodeResult.output);
 
   // Run shell commands
   console.log('\nRunning shell commands...');
   const lsResult = await sandbox.runCommand('ls', ['-la', '/home']);
   console.log('Files:', lsResult.stdout.split('\n').slice(0, 5).join('\n'), '...\n');
 
-  // Enhanced features (terminals, watchers)
-  console.log('Creating interactive terminal...');
-  const terminal = await sandbox.createTerminal();
-  console.log('✅ Terminal created');
-  
-  terminal.on('data', (data) => {
-    console.log('[Terminal]', data.trim());
-  });
-
-  await terminal.write('echo "Interactive terminal works!"\n');
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  console.log('\nCreating file watcher...');
-  const watcher = await sandbox.createWatcher('/home', {
-    includeContent: true
-  });
-  console.log('✅ File watcher created');
-
-  watcher.on('change', (event) => {
-    console.log('[Watcher]', event.path, event.type);
-  });
-
-  // Test filesystem
+  // Test filesystem operations
   console.log('\nTesting filesystem operations...');
   await sandbox.filesystem.writeFile('/home/test.txt', 'Hello from ComputeSDK!');
   const content = await sandbox.filesystem.readFile('/home/test.txt');

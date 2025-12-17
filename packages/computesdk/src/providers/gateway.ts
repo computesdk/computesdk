@@ -42,6 +42,9 @@ const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY = 1000;
 const DEFAULT_RETRYABLE_STATUSES = [408, 429, 502, 503, 504];
 
+// Track if we've already warned about missing tokens to avoid spam
+let hasWarnedAboutMissingToken = false;
+
 /**
  * Custom error class for gateway-specific errors with enhanced context
  */
@@ -60,6 +63,11 @@ export class GatewayError extends Error {
 
 /**
  * Helper to call gateway API with timeout, retry logic, and better error handling
+ * 
+ * Error handling strategy:
+ * - 404 (Not Found): Returns { success: false } without throwing - allows callers to handle missing resources gracefully
+ * - Other HTTP errors: Throws GatewayError with detailed context - indicates actual API problems
+ * - Network errors: Throws GatewayError after retries exhausted
  */
 async function gatewayFetch<T>(
   url: string,
@@ -247,7 +255,9 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
         }
 
         // Warn if token is missing (indicates gateway may be running old version)
-        if (!token) {
+        // Only warn once to avoid log spam
+        if (!token && !hasWarnedAboutMissingToken) {
+          hasWarnedAboutMissingToken = true;
           console.warn(
             `[Gateway] No token received from gateway for sandbox ${sandboxId}. ` +
             `Falling back to API key for authentication. ` +
@@ -287,7 +297,9 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
         const { url, token, provider, metadata } = result.data;
 
         // Warn if token is missing on reconnection
-        if (!token) {
+        // Only warn once to avoid log spam
+        if (!token && !hasWarnedAboutMissingToken) {
+          hasWarnedAboutMissingToken = true;
           console.warn(
             `[Gateway] No token received when reconnecting to sandbox ${sandboxId}. ` +
             `Falling back to API key for authentication. ` +

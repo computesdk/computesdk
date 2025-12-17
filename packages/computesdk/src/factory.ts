@@ -197,7 +197,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     private methods: SandboxMethods<TSandbox>,
     private config: any,
     private destroyMethod: (config: any, sandboxId: string) => Promise<void>,
-    private providerInstance: Provider
+    private providerInstance: Provider,
+    private onDestroy?: (sandboxId: string) => void
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
@@ -280,6 +281,11 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   async destroy(): Promise<void> {
     // Destroy via the provider's destroy method using our sandboxId
     await this.destroyMethod(this.config, this.sandboxId);
+    
+    // Clean up from manager's active sandboxes map if callback provided
+    if (this.onDestroy) {
+      this.onDestroy(this.sandboxId);
+    }
   }
 }
 
@@ -307,7 +313,8 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance
+      this.providerInstance,
+      (sandboxId) => this.activeSandboxes.delete(sandboxId)
     );
     
     this.activeSandboxes.set(result.sandboxId, sandbox);
@@ -334,7 +341,8 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance
+      this.providerInstance,
+      (sandboxId) => this.activeSandboxes.delete(sandboxId)
     );
     
     this.activeSandboxes.set(result.sandboxId, sandbox);
@@ -355,7 +363,8 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
           this.methods,
           this.config,
           this.methods.destroy,
-          this.providerInstance
+          this.providerInstance,
+          (sandboxId) => this.activeSandboxes.delete(sandboxId)
         );
         this.activeSandboxes.set(result.sandboxId, sandbox);
       }

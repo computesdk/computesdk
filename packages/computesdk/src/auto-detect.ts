@@ -24,6 +24,8 @@ function hasProviderEnv(provider: ProviderName): boolean {
   if (typeof process === 'undefined') return false;
   
   const requiredVars = PROVIDER_ENV_VARS[provider];
+  if (!requiredVars) return false; // Safety check for invalid provider names
+  
   return requiredVars.every(varName => !!process.env?.[varName]);
 }
 
@@ -36,11 +38,12 @@ function getProviderEnvStatus(provider: ProviderName): {
   missing: string[];
   isComplete: boolean;
 } {
-  if (typeof process === 'undefined') {
-    return { provider, present: [], missing: [...PROVIDER_ENV_VARS[provider]], isComplete: false };
+  const requiredVars = PROVIDER_ENV_VARS[provider];
+  
+  if (typeof process === 'undefined' || !requiredVars) {
+    return { provider, present: [], missing: requiredVars ? [...requiredVars] : [], isComplete: false };
   }
   
-  const requiredVars = PROVIDER_ENV_VARS[provider];
   const present = requiredVars.filter(varName => !!process.env?.[varName]);
   const missing = requiredVars.filter(varName => !process.env?.[varName]);
   
@@ -234,6 +237,17 @@ export function autoConfigureCompute(): Provider | null {
   const gatewayUrl = process.env.COMPUTESDK_GATEWAY_URL || GATEWAY_URL;
   const computesdkApiKey = process.env.COMPUTESDK_API_KEY!;
   const providerHeaders = getProviderHeaders(provider);
+
+  // Validate gateway URL
+  try {
+    new URL(gatewayUrl);
+  } catch (error) {
+    throw new Error(
+      `Invalid gateway URL: "${gatewayUrl}"\n\n` +
+      `The URL must be a valid HTTP/HTTPS URL.\n` +
+      `Check your COMPUTESDK_GATEWAY_URL environment variable.`
+    );
+  }
 
   // Debug logging if enabled
   if (process.env.COMPUTESDK_DEBUG) {

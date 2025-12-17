@@ -60,10 +60,13 @@ class ComputeManager implements ComputeAPI {
     // Skip if already tried auto-detection
     if (this.autoConfigured) return;
 
-    this.autoConfigured = true;
-
     // Try auto-detection from environment
     const provider = autoConfigureCompute();
+    
+    // Mark as configured after detection completes (success or failure)
+    // This prevents retry loops but allows exceptions to propagate
+    this.autoConfigured = true;
+
     if (provider) {
       this.config = {
         provider,

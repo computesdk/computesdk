@@ -109,6 +109,35 @@ export interface ProviderSandbox<TSandbox = any> {
 
   /** File system operations */
   readonly filesystem: SandboxFileSystem;
+
+  // ============================================================================
+  // Enhanced Features (Optional - available on gateway provider's Sandbox)
+  // ============================================================================
+
+  /**
+   * Create an interactive terminal (PTY or exec mode)
+   * @optional Available when using gateway provider
+   */
+  createTerminal?(options?: {
+    shell?: string;
+    pty?: boolean;
+    encoding?: 'utf8' | 'binary';
+  }): Promise<any>;
+
+  /**
+   * Create a file system watcher
+   * @optional Available when using gateway provider
+   */
+  createWatcher?(path: string, options?: {
+    recursive?: boolean;
+    includeContent?: boolean;
+  }): Promise<any>;
+
+  /**
+   * Send a signal to a process
+   * @optional Available when using gateway provider
+   */
+  sendSignal?(pid: number, signal: string): Promise<void>;
 }
 
 // ============================================================================
