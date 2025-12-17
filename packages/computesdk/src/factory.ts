@@ -79,8 +79,8 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
 /**
  * Template method implementations
  */
-export interface TemplateMethods<TTemplate = any, TConfig = any> {
-  create: (config: TConfig, options: CreateTemplateOptions | any) => Promise<TTemplate>;
+export interface TemplateMethods<TTemplate = any, TConfig = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
+  create: (config: TConfig, options: TCreateOptions) => Promise<TTemplate>;
   list: (config: TConfig, options?: ListTemplatesOptions) => Promise<TTemplate[]>;
   delete: (config: TConfig, templateId: string) => Promise<void>;
 }
@@ -374,13 +374,13 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
 /**
  * Auto-generated Template Manager implementation
  */
-class GeneratedTemplateManager<TTemplate, TConfig> implements ProviderTemplateManager<TTemplate> {
+class GeneratedTemplateManager<TTemplate, TConfig, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> implements ProviderTemplateManager<TTemplate, TCreateOptions> {
   constructor(
     private config: TConfig,
-    private methods: TemplateMethods<TTemplate, TConfig>
+    private methods: TemplateMethods<TTemplate, TConfig, TCreateOptions>
   ) {}
 
-  async create(options: CreateTemplateOptions | any): Promise<TTemplate> {
+  async create(options: TCreateOptions): Promise<TTemplate> {
     return await this.methods.create(this.config, options);
   }
 
@@ -423,7 +423,6 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
   readonly sandbox: ProviderSandboxManager<TSandbox>;
   readonly template?: ProviderTemplateManager<TTemplate>;
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
-  readonly __sandboxType!: TSandbox; // Phantom type for TypeScript inference
 
   constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>) {
     this.name = providerConfig.name;

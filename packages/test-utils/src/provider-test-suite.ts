@@ -588,7 +588,6 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
       // Return a mock provider for testing
       return {
         name: providerName,
-        __sandboxType: null as any, // Phantom type for testing
         getSupportedRuntimes: () => ['node', 'python'],
         sandbox: {
           create: async () => { throw new Error('Not implemented in mock'); },

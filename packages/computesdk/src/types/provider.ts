@@ -66,9 +66,9 @@ export interface ProviderSandboxManager<TSandbox = any> {
 /**
  * Provider template manager interface - handles template/blueprint lifecycle
  */
-export interface ProviderTemplateManager<TTemplate = any> {
+export interface ProviderTemplateManager<TTemplate = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
   /** Create a new template */
-  create(options: CreateTemplateOptions | any): Promise<TTemplate>;
+  create(options: TCreateOptions): Promise<TTemplate>;
   /** List all available templates */
   list(options?: ListTemplatesOptions): Promise<TTemplate[]>;
   /** Delete a template */
@@ -93,22 +93,19 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
 export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
   /** Provider name/type */
   readonly name: string;
-  
+
   /** Sandbox management operations */
   readonly sandbox: ProviderSandboxManager<TSandbox>;
-  
+
   /** Optional template management operations */
   readonly template?: ProviderTemplateManager<TTemplate>;
-  
+
   /** Optional snapshot management operations */
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
-  
+
   /** Get the list of supported runtime environments */
   getSupportedRuntimes(): Runtime[];
-  
-  /** Phantom type property for TypeScript inference - not used at runtime */
-  readonly __sandboxType: TSandbox;
-  
+
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;
   // readonly git: ProviderGitManager;

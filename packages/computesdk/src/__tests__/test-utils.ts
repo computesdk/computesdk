@@ -106,7 +106,6 @@ export class MockSandbox implements ProviderSandbox {
  */
 export class MockProvider implements Provider {
   readonly name = 'mock'
-  readonly __sandboxType!: any // Phantom type for testing
 
   getSupportedRuntimes(): Runtime[] {
     return MOCK_SUPPORTED_RUNTIMES
@@ -139,11 +138,10 @@ export class MockProvider implements Provider {
  */
 export function createMockProvider(overrides?: Partial<Provider>): Provider {
   const mockProvider = new MockProvider()
-  return { 
-    ...mockProvider, 
-    __sandboxType: null as any, 
+  return {
+    ...mockProvider,
     getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
-    ...overrides 
+    ...overrides
   }
 }
 

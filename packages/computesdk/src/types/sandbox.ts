@@ -47,7 +47,7 @@ export type SandboxInfo = ProviderSandboxInfo;
 import type { CodeResult, CommandResult, Runtime, SandboxFileSystem, RunCommandOptions } from '@computesdk/client';
 
 // Forward declaration to avoid circular dependency with provider.ts
-interface Provider {
+interface Provider<TSandbox = any> {
   readonly name: string;
   readonly sandbox: any;
 }
@@ -116,9 +116,9 @@ export interface ProviderSandbox<TSandbox = any> {
 // ============================================================================
 
 /**
- * Extract the sandbox type from a provider
+ * Extract the sandbox type from a provider using generic inference
  */
-type ExtractProviderSandboxType<TProvider extends Provider> = TProvider extends { readonly __sandboxType: infer TSandbox } ? TSandbox : any;
+type ExtractProviderSandboxType<TProvider> = TProvider extends Provider<infer TSandbox> ? TSandbox : any;
 
 /**
  * Typed provider sandbox interface that preserves the provider's native instance type
