@@ -31,6 +31,9 @@ export {
 // Export constants
 export { GATEWAY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
 
+// Export utilities
+export { calculateBackoff } from './utils';
+
 // Export request handler for web framework integration
 export { handleComputeRequest } from './request-handler';
 

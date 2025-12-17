@@ -12,7 +12,8 @@
 import { Sandbox as ClientSandbox } from '@computesdk/client';
 import { createProvider } from '../factory';
 import { waitForComputeReady } from '../compute-daemon/lifecycle';
-import type { Runtime, SandboxInfo, CodeResult, CommandResult } from '../types';
+import type { Runtime, SandboxInfo } from '../types';
+import { calculateBackoff } from '../utils';
 
 /**
  * Gateway provider configuration
@@ -120,7 +121,7 @@ async function gatewayFetch<T>(
         const shouldRetry = isRetryable && attempt < maxRetries;
 
         if (shouldRetry) {
-          const delay = retryDelay * Math.pow(2, attempt) + Math.random() * 100;
+          const delay = calculateBackoff(attempt, retryDelay);
 
           if (process.env.COMPUTESDK_DEBUG) {
             console.log(`[Gateway] Retry ${attempt + 1}/${maxRetries} after ${delay.toFixed(0)}ms (status: ${response.status})...`);
@@ -154,7 +155,6 @@ async function gatewayFetch<T>(
       return response.json();
     } catch (error) {
       clearTimeout(timeoutId);
-      const duration = Date.now() - startTime;
 
       // If it's already a GatewayError, just rethrow
       if (error instanceof GatewayError) {
@@ -172,7 +172,7 @@ async function gatewayFetch<T>(
 
         // Retry on timeout if attempts remain
         if (attempt < maxRetries) {
-          const delay = retryDelay * Math.pow(2, attempt) + Math.random() * 100;
+          const delay = calculateBackoff(attempt, retryDelay);
 
           if (process.env.COMPUTESDK_DEBUG) {
             console.log(`[Gateway] Retry ${attempt + 1}/${maxRetries} after ${delay.toFixed(0)}ms (timeout)...`);
@@ -195,7 +195,7 @@ async function gatewayFetch<T>(
 
       // Retry on network error if attempts remain
       if (attempt < maxRetries) {
-        const delay = retryDelay * Math.pow(2, attempt) + Math.random() * 100;
+        const delay = calculateBackoff(attempt, retryDelay);
 
         if (process.env.COMPUTESDK_DEBUG) {
           console.log(`[Gateway] Retry ${attempt + 1}/${maxRetries} after ${delay.toFixed(0)}ms (network error)...`);
