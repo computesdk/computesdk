@@ -1,5 +1,11 @@
 # @computesdk/modal
 
+## 1.5.0
+
+### Minor Changes
+
+- 70ca324: add ports to modal provider config
+
 ## 1.4.8
 
 ### Patch Changes
