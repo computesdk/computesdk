@@ -14,7 +14,7 @@ import type { SandboxInfo, SandboxesListResponse } from '../index';
  * ```typescript
  * // Create a new child sandbox
  * const child = await sandbox.child.create();
- * console.log(child.url); // https://sandbox-12345.preview.computesdk.com
+ * console.log(child.url); // https://sandbox-12345.sandbox.computesdk.com
  *
  * // List all children
  * const all = await sandbox.child.list();

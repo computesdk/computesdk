@@ -8,7 +8,7 @@
  * - File operations
  *
  * Usage: node example-node.js <sandbox-url> <session-token>
- * Example: node example-node.js https://sandbox-123.preview.computesdk.com your-token
+ * Example: node example-node.js https://sandbox-123.sandbox.computesdk.com your-token
  *
  * Note: Requires Node.js 21+ for native WebSocket support.
  *       For Node.js < 21, see the README for WebSocket configuration.
@@ -21,7 +21,7 @@ const token = process.argv[3];
 
 if (!sandboxUrl || !token) {
   console.error('Usage: node example-node.js <sandbox-url> <session-token>');
-  console.error('Example: node example-node.js https://sandbox-123.preview.computesdk.com your-token');
+  console.error('Example: node example-node.js https://sandbox-123.sandbox.computesdk.com your-token');
   process.exit(1);
 }
 

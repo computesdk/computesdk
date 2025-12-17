@@ -2,7 +2,7 @@
  * ComputeSDK Client - Universal Sandbox Implementation
  *
  * This package provides a Sandbox for interacting with ComputeSDK sandboxes
- * through API endpoints at ${sandboxId}.preview.computesdk.com
+ * through API endpoints at ${sandboxId}.sandbox.computesdk.com
  *
  * Works in browser, Node.js, and edge runtimes.
  * Browser: Uses native WebSocket and fetch
@@ -74,7 +74,7 @@ export type WebSocketConstructor = new (url: string) => WebSocket;
  * Configuration options for creating a Sandbox
  */
 export interface SandboxConfig {
-  /** API endpoint URL (e.g., https://sandbox-123.preview.computesdk.com). Optional in browser - can be auto-detected from URL query param or localStorage */
+  /** API endpoint URL (e.g., https://sandbox-123.sandbox.computesdk.com). Optional in browser - can be auto-detected from URL query param or localStorage */
   sandboxUrl?: string;
   /** Sandbox ID */
   sandboxId: string;
@@ -586,7 +586,7 @@ export interface BatchWriteResponse {
  *
  * // Pattern 1: Admin operations (requires access token)
  * const sandbox = new Sandbox({
- *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
  *   token: accessToken, // From edge service
  * });
  *
@@ -598,7 +598,7 @@ export interface BatchWriteResponse {
  *
  * // Pattern 2: Delegated operations (binary protocol by default)
  * const sandbox2 = new Sandbox({
- *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
  *   token: sessionToken.data.token,
  *   // protocol: 'binary' is the default (50-90% size reduction)
  * });
@@ -2014,7 +2014,7 @@ export class Sandbox {
     const url = new URL(this.config.sandboxUrl);
     const parts = url.hostname.split('.');
     const subdomain = parts[0]; // Extract "sandbox-123" or "abc"
-    const baseDomain = parts.slice(1).join('.'); // Extract "sandbox.computesdk.com" or "preview.computesdk.com"
+    const baseDomain = parts.slice(1).join('.'); // Extract "sandbox.computesdk.com"
 
     // ComputeSDK has two domains:
     // - sandbox.computesdk.com: Management/control plane
@@ -2024,8 +2024,7 @@ export class Sandbox {
 
     // ComputeSDK URL pattern: ${subdomain}-${port}.${previewDomain}
     // Examples:
-    //   - https://abc.sandbox.computesdk.com → https://abc-3000.preview.computesdk.com
-    //   - https://sandbox-123.preview.computesdk.com → https://sandbox-123-3000.preview.computesdk.com
+    //   - https://sandbox-123.sandbox.computesdk.com → https://sandbox-123-3000.preview.computesdk.com
     return `${protocol}://${subdomain}-${options.port}.${previewDomain}`;
   }
 
@@ -2087,7 +2086,7 @@ export class Sandbox {
  *
  * // Create sandbox with access token or session token
  * const sandbox = createSandbox({
- *   sandboxUrl: 'https://sandbox-123.preview.computesdk.com',
+ *   sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com',
  *   token: accessToken,
  * });
  *
