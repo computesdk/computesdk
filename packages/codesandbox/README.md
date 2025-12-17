@@ -31,7 +31,7 @@ const compute = createCompute({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute JavaScript/Node.js code
 const result = await sandbox.runCode(`

@@ -22,7 +22,7 @@ const compute = createCompute({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Daytona!")');

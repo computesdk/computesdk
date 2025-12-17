@@ -10,7 +10,7 @@
  * - Signal monitoring
  *
  * Usage: node example-full.js <sandbox-url> <session-token>
- * Example: node example-full.js https://sandbox-123.preview.computesdk.com your-session-token-here
+ * Example: node example-full.js https://sandbox-123.sandbox.computesdk.com your-session-token-here
  *
  * Note: Requires Node.js 21+ for native WebSocket support.
  *       For Node.js < 21, see the README for WebSocket configuration.
@@ -23,7 +23,7 @@ const token = process.argv[3];
 
 if (!sandboxUrl || !token) {
   console.error('Usage: node example-full.js <sandbox-url> <session-token>');
-  console.error('Example: node example-full.js https://sandbox-123.preview.computesdk.com your-token');
+  console.error('Example: node example-full.js https://sandbox-123.sandbox.computesdk.com your-token');
   process.exit(1);
 }
 

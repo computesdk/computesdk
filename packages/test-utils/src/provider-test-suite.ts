@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, Sandbox, ExecutionResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
+import type { Provider, ProviderSandbox, CodeResult, CommandResult, SandboxInfo, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -43,7 +43,7 @@ export function createProviderTests(config: ProviderTestConfig) {
       }
     };
 
-    const cleanupSandbox = async (sandbox: Sandbox) => {
+    const cleanupSandbox = async (sandbox: ProviderSandbox) => {
       if (sandbox && !skipIntegration) {
         try {
           await Promise.race([
@@ -63,7 +63,7 @@ export function createProviderTests(config: ProviderTestConfig) {
       const runtimeName = runtime.charAt(0).toUpperCase() + runtime.slice(1);
       
       describe(`${runtimeName} Runtime`, () => {
-        let sandbox: Sandbox;
+        let sandbox: ProviderSandbox;
 
         beforeEach(async () => {
           sandbox = await createRuntimeSandbox(runtime);
@@ -83,20 +83,19 @@ export function createProviderTests(config: ProviderTestConfig) {
         if (runtime === 'node') {
           it('should execute simple Node.js code', async () => {
             const result = await sandbox.runCode('console.log("Hello, World!")');
-            
+
             expect(result).toBeDefined();
-            expect(result.stdout).toContain('Hello, World!');
-            expect(result.provider).toBe(name.toLowerCase());
-            expect(typeof result.executionTime).toBe('number');
-            expect(result.executionTime).toBeGreaterThan(0);
+            expect(result.output).toContain('Hello, World!');
+            expect(result.exitCode).toBe(0);
+            expect(result.language).toBeDefined();
           }, timeout);
 
           it('should handle Node.js code execution errors gracefully', async () => {
             const result = await sandbox.runCode('throw new Error("Test error")');
-            
+
             expect(result).toBeDefined();
             expect(result.exitCode).not.toBe(0);
-            expect(result.stderr).toContain('Error');
+            expect(result.output).toContain('Error');
           }, timeout);
 
           it('should handle invalid Node.js code gracefully', async () => {
@@ -115,10 +114,10 @@ print("Hello from Python!")
             `.trim();
 
             const result = await sandbox.runCode(pythonCode);
-            
+
             expect(result).toBeDefined();
-            expect(result.stdout).toContain('Python version:');
-            expect(result.stdout).toContain('Hello from Python!');
+            expect(result.output).toContain('Python version:');
+            expect(result.output).toContain('Hello from Python!');
             expect(result.exitCode).toBe(0);
           }, timeout);
 
@@ -132,19 +131,19 @@ print(json.dumps(data, indent=2))
             `.trim();
 
             const result = await sandbox.runCode(pythonCode);
-            
+
             expect(result).toBeDefined();
-            expect(result.stdout).toContain('"message": "Hello"');
-            expect(result.stdout).toContain('"timestamp"');
+            expect(result.output).toContain('"message": "Hello"');
+            expect(result.output).toContain('"timestamp"');
             expect(result.exitCode).toBe(0);
           }, timeout);
 
           it('should handle Python execution errors gracefully', async () => {
             const result = await sandbox.runCode('raise Exception("Python test error")');
-            
+
             expect(result).toBeDefined();
             expect(result.exitCode).not.toBe(0);
-            expect(result.stderr).toContain('Exception');
+            expect(result.output).toContain('Exception');
           }, timeout);
 
           it('should handle invalid Python code gracefully', async () => {
@@ -157,7 +156,7 @@ print(json.dumps(data, indent=2))
         // Common tests for all runtimes
         it('should execute shell commands', async () => {
           const result = await sandbox.runCommand('echo', ['Hello from command']);
-          
+
           expect(result).toBeDefined();
           expect(result.stdout).toContain('Hello from command');
           expect(result.exitCode).toBe(0);
@@ -165,9 +164,9 @@ print(json.dumps(data, indent=2))
 
         it('should execute background commands', async () => {
           const result = await sandbox.runCommand('sleep', ['1'], { background: true });
-          
+
           expect(result).toBeDefined();
-          expect(result.isBackground).toBe(true);
+          // Background commands should still return quickly with exit code 0
           expect(result.exitCode).toBe(0);
         }, timeout);
 
@@ -360,7 +359,7 @@ export function runProviderTestSuite(config: ProviderTestConfig) {
 /**
  * Creates a mock sandbox for unit testing
  */
-function createMockSandbox(config: ProviderTestConfig): Sandbox {
+function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
   const providerName = config.name.toLowerCase();
   
   // Mock state to simulate realistic behavior
@@ -372,84 +371,66 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
     provider: providerName,
     getInstance: <T = any>(): T => ({} as T), // Mock native instance getter
     
-    runCode: async (code: string, _runtime?: string): Promise<ExecutionResult> => {
+    runCode: async (code: string, _runtime?: string): Promise<CodeResult> => {
       // Simulate realistic code execution
       if (code.includes('console.log("Hello, World!")')) {
         return {
-          stdout: 'Hello, World!\n',
-          stderr: '',
+          output: 'Hello, World!\n',
           exitCode: 0,
-          executionTime: 100,
-          sandboxId: 'mock-sandbox-123',
-          provider: providerName
+          language: 'node'
         };
       }
-      
+
       if (code.includes('throw new Error("Test error")')) {
         return {
-          stdout: '',
-          stderr: 'Error: Test error\n    at <anonymous>:1:7\n',
+          output: 'Error: Test error\n    at <anonymous>:1:7\n',
           exitCode: 1,
-          executionTime: 50,
-          sandboxId: 'mock-sandbox-123',
-          provider: providerName
+          language: 'node'
         };
       }
-      
+
       if (code.includes('invalid syntax here!!!')) {
         throw new Error('SyntaxError: Unexpected token');
       }
-      
+
       // Python-specific responses
       if (code.includes('Python version:') && code.includes('Hello from Python!')) {
         return {
-          stdout: 'Python version: 3.9.2 (default, Feb 28 2021, 17:03:44)\nHello from Python!\n',
-          stderr: '',
+          output: 'Python version: 3.9.2 (default, Feb 28 2021, 17:03:44)\nHello from Python!\n',
           exitCode: 0,
-          executionTime: 120,
-          sandboxId: 'mock-sandbox-123',
-          provider: providerName
+          language: 'python'
         };
       }
-      
+
       if (code.includes('json.dumps') && code.includes('datetime')) {
         return {
-          stdout: '{\n  "message": "Hello",\n  "timestamp": "2023-01-01 12:00:00"\n}\n',
-          stderr: '',
+          output: '{\n  "message": "Hello",\n  "timestamp": "2023-01-01 12:00:00"\n}\n',
           exitCode: 0,
-          executionTime: 150,
-          sandboxId: 'mock-sandbox-123',
-          provider: providerName
+          language: 'python'
         };
       }
-      
+
       if (code.includes('raise Exception("Python test error")')) {
         return {
-          stdout: '',
-          stderr: 'Traceback (most recent call last):\n  File "<stdin>", line 1, in <module>\nException: Python test error\n',
+          output: 'Traceback (most recent call last):\n  File "<stdin>", line 1, in <module>\nException: Python test error\n',
           exitCode: 1,
-          executionTime: 80,
-          sandboxId: 'mock-sandbox-123',
-          provider: providerName
+          language: 'python'
         };
       }
-      
+
       if (code.includes('invalid python syntax here!!!')) {
         throw new Error('SyntaxError: invalid syntax');
       }
-      
+
       // Default successful execution
       return {
-        stdout: `Mock output for: ${code}`,
-        stderr: '',
+        output: `Mock output for: ${code}`,
         exitCode: 0,
-        executionTime: 100,
-        sandboxId: 'mock-sandbox-123',
-        provider: providerName
+        language: 'node'
       };
     },
-    
-    runCommand: async (command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult> => {
+
+    runCommand: async (command: string, args?: string[], options?: RunCommandOptions): Promise<CommandResult> => {
       const fullCommand = `${command} ${args?.join(' ') || ''}`.trim();
 
       if (command === 'echo' && args?.includes('Hello from command')) {
@@ -457,11 +438,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           stdout: 'Hello from command\n',
           stderr: '',
           exitCode: 0,
-          executionTime: 10,
-          sandboxId: 'mock-sandbox-123',
-          provider: providerName,
-          isBackground: options?.background || false,
-          ...(options?.background && { pid: -1 })
+          durationMs: 10
         };
       }
 
@@ -470,11 +447,16 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           stdout: '',
           stderr: `bash: ${command}: command not found\n`,
           exitCode: 127,
-          executionTime: 5,
-          sandboxId: 'mock-sandbox-123',
-          provider: providerName,
-          isBackground: options?.background || false,
-          ...(options?.background && { pid: -1 })
+          durationMs: 5
+        };
+      }
+
+      if (command === 'sleep' && options?.background) {
+        return {
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 1
         };
       }
 
@@ -487,10 +469,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
             stdout: 'hello world\n',
             stderr: '',
             exitCode: 0,
-            executionTime: 10,
-            sandboxId: 'mock-sandbox-123',
-            provider: providerName,
-            isBackground: false
+            durationMs: 10
           };
         }
 
@@ -499,10 +478,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
             stdout: '/home/user\n',
             stderr: '',
             exitCode: 0,
-            executionTime: 10,
-            sandboxId: 'mock-sandbox-123',
-            provider: providerName,
-            isBackground: false
+            durationMs: 10
           };
         }
 
@@ -512,10 +488,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
             stdout: 'test content\n',
             stderr: '',
             exitCode: 0,
-            executionTime: 20,
-            sandboxId: 'mock-sandbox-123',
-            provider: providerName,
-            isBackground: false
+            durationMs: 20
           };
         }
       }
@@ -524,11 +497,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
         stdout: `Mock command output: ${fullCommand}`,
         stderr: '',
         exitCode: 0,
-        executionTime: 50,
-        sandboxId: 'mock-sandbox-123',
-        provider: providerName,
-        isBackground: options?.background || false,
-        ...(options?.background && { pid: -1 })
+        durationMs: 50
       };
     },
     
@@ -615,11 +584,10 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
       }
     },
     
-    getProvider: () => {
+    getProvider: (): Provider => {
       // Return a mock provider for testing
       return {
         name: providerName,
-        __sandboxType: null as any, // Phantom type for testing
         getSupportedRuntimes: () => ['node', 'python'],
         sandbox: {
           create: async () => { throw new Error('Not implemented in mock'); },
@@ -627,7 +595,7 @@ function createMockSandbox(config: ProviderTestConfig): Sandbox {
           list: async () => { throw new Error('Not implemented in mock'); },
           destroy: async () => { throw new Error('Not implemented in mock'); }
         }
-      };
+      } as Provider;
     }
 
   };

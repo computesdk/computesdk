@@ -7,7 +7,7 @@
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
 import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
 
 /**
  * Daytona-specific configuration options
@@ -134,7 +134,7 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       // Instance operations (sandbox.*)
-      runCode: async (sandbox: DaytonaSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: DaytonaSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
 
         try {
@@ -188,12 +188,9 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
           const actualExitCode = hasError ? 1 : (response.exitCode || 0);
 
           return {
-            stdout: hasError ? '' : output,
-            stderr: hasError ? output : '',
+            output: output,
             exitCode: actualExitCode,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'daytona'
+            language: effectiveRuntime
           };
         } catch (error) {
           // Re-throw syntax errors
@@ -206,7 +203,7 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
@@ -226,9 +223,7 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
             stdout: response.result || '',
             stderr: '',
             exitCode: response.exitCode || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'daytona'
+            durationMs: Date.now() - startTime
           };
         } catch (error) {
           throw new Error(

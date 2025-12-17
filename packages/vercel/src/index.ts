@@ -7,7 +7,7 @@
 
 import { Sandbox as VercelSandbox } from '@vercel/sandbox';
 import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
 
 /**
  * Vercel sandbox provider configuration
@@ -194,7 +194,7 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime, config?: VercelConfig): Promise<ExecutionResult> => {
+      runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime, config?: VercelConfig): Promise<CodeResult> => {
         const startTime = Date.now();
 
         // Auto-detect runtime if not specified
@@ -236,16 +236,13 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
         }
 
         return {
-          stdout,
-          stderr,
+          output: stdout + stderr,
           exitCode: result.exitCode,
-          executionTime: Date.now() - startTime,
-          sandboxId: sandbox.sandboxId,
-          provider: 'vercel'
+          language: effectiveRuntime,
         };
       },
 
-      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
@@ -267,18 +264,14 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
             stdout,
             stderr,
             exitCode: result.exitCode,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.sandboxId,
-            provider: 'vercel'
+            durationMs: Date.now() - startTime,
           };
         } catch (error) {
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.sandboxId,
-            provider: 'vercel'
+            durationMs: Date.now() - startTime,
           };
         }
       },

@@ -1,0 +1,60 @@
+{
+  "name": "@computesdk/events",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Events SDK for ComputeSDK - store, retrieve, and subscribe to sandbox events",
+  "author": "Garrison",
+  "license": "MIT",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "events",
+    "pubsub",
+    "sandbox",
+    "compute",
+    "realtime",
+    "streaming"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/events"
+  },
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/events",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

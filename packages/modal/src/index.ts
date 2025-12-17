@@ -10,7 +10,8 @@
 
 import { createProvider } from 'computesdk';
 import type {
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   SandboxInfo,
   Runtime,
   CreateSandboxOptions,
@@ -186,7 +187,7 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (modalSandbox: ModalSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (modalSandbox: ModalSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
 
         try {
@@ -241,12 +242,9 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
           }
 
           return {
-            stdout: stdout || '',
-            stderr: stderr || '',
+            output: (stdout || '') + (stderr || ''),
             exitCode: exitCode || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: modalSandbox.sandboxId,
-            provider: 'modal'
+            language: detectedRuntime,
           };
         } catch (error) {
           // Handle syntax errors and runtime errors
@@ -260,7 +258,7 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
         }
       },
 
-      runCommand: async (modalSandbox: ModalSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (modalSandbox: ModalSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
@@ -282,18 +280,14 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             stdout: stdout || '',
             stderr: stderr || '',
             exitCode: exitCode || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: modalSandbox.sandboxId,
-            provider: 'modal'
+            durationMs: Date.now() - startTime,
           };
         } catch (error) {
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127,
-            executionTime: Date.now() - startTime,
-            sandboxId: modalSandbox.sandboxId,
-            provider: 'modal'
+            durationMs: Date.now() - startTime,
           };
         }
       },

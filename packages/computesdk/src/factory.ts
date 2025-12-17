@@ -10,10 +10,11 @@ import type {
   ProviderSandboxManager,
   ProviderTemplateManager,
   ProviderSnapshotManager,
-  Sandbox,
+  ProviderSandbox,
   SandboxFileSystem,
   SandboxInfo,
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   Runtime,
   CreateSandboxOptions,
   FileEntry,
@@ -23,26 +24,7 @@ import type {
   CreateTemplateOptions,
   ListTemplatesOptions,
 } from './types/index.js';
-
-/**
- * Helper function to handle background command execution
- * Providers can use this to implement background job support
- */
-export function createBackgroundCommand(command: string, args: string[] = [], options?: RunCommandOptions): { command: string; args: string[]; isBackground: boolean } {
-  if (!options?.background) {
-    return { command, args, isBackground: false };
-  }
-
-  // For background execution, use nohup to detach from terminal and & to background
-  // nohup ensures the process survives after the shell exits
-  const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-
-  return {
-    command: 'sh',
-    args: ['-c', `nohup ${fullCommand} > /dev/null 2>&1 &`],
-    isBackground: true
-  };
-}
+import { cmd, type Command } from '@computesdk/cmd';
 
 /**
  * Flat sandbox method implementations - all operations in one place
@@ -53,32 +35,32 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   getById: (config: TConfig, sandboxId: string) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
   list: (config: TConfig) => Promise<Array<{ sandbox: TSandbox; sandboxId: string }>>;
   destroy: (config: TConfig, sandboxId: string) => Promise<void>;
-  
-  // Instance operations (map to individual Sandbox methods)
-  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<ExecutionResult>;
-  runCommand: (sandbox: TSandbox, command: string, args?: string[], options?: RunCommandOptions) => Promise<ExecutionResult>;
+
+  // Instance operations
+  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<CodeResult>;
+  runCommand: (sandbox: TSandbox, command: string, args?: string[], options?: RunCommandOptions) => Promise<CommandResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
-  
+
   // Optional provider-specific typed getInstance method
   getInstance?: (sandbox: TSandbox) => TSandbox;
-  
+
   // Optional filesystem methods
   filesystem?: {
-    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<string>;
-    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
-    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
-    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<FileEntry[]>;
-    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<boolean>;
-    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<ExecutionResult>) => Promise<void>;
+    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<string>;
+    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
+    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
+    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<FileEntry[]>;
+    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<boolean>;
+    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
   };
 }
 
 /**
  * Template method implementations
  */
-export interface TemplateMethods<TTemplate = any, TConfig = any> {
-  create: (config: TConfig, options: CreateTemplateOptions | any) => Promise<TTemplate>;
+export interface TemplateMethods<TTemplate = any, TConfig = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
+  create: (config: TConfig, options: TCreateOptions) => Promise<TTemplate>;
   list: (config: TConfig, options?: ListTemplatesOptions) => Promise<TTemplate[]>;
   delete: (config: TConfig, templateId: string) => Promise<void>;
 }
@@ -181,9 +163,9 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 
 
 /**
- * Generated sandbox class - implements the Sandbox interface
+ * Generated sandbox class - implements the ProviderSandbox interface
  */
-class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
+class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
@@ -217,22 +199,44 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
     return this.sandbox;
   }
 
-  async runCode(code: string, runtime?: Runtime): Promise<ExecutionResult> {
+  async runCode(code: string, runtime?: Runtime): Promise<CodeResult> {
     return await this.methods.runCode(this.sandbox, code, runtime, this.config);
   }
 
-  async runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult> {
-    // Handle background execution at the factory level
-    if (options?.background) {
-      const fullCommand = args?.length ? `${command} ${args.join(' ')}` : command;
-      const bgCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-      const result = await this.methods.runCommand(this.sandbox, 'sh', ['-c', bgCommand], undefined);
-      return {
-        ...result,
-        isBackground: true,
-        pid: -1
-      };
+  async runCommand(
+    commandOrArray: string | [string, ...string[]],
+    argsOrOptions?: string[] | RunCommandOptions,
+    maybeOptions?: RunCommandOptions
+  ): Promise<CommandResult> {
+    // Parse overloaded arguments
+    let command: string;
+    let args: string[];
+    let options: RunCommandOptions | undefined;
+
+    if (Array.isArray(commandOrArray)) {
+      // Array form: runCommand(['npm', 'install'], { cwd: '/app' })
+      [command, ...args] = commandOrArray;
+      options = argsOrOptions as RunCommandOptions | undefined;
+    } else {
+      // Traditional form: runCommand('npm', ['install'], { cwd: '/app' })
+      command = commandOrArray;
+      args = (Array.isArray(argsOrOptions) ? argsOrOptions : []) as string[];
+      options = Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as RunCommandOptions | undefined;
     }
+
+    // Build the command tuple
+    const baseCommand: Command = args.length > 0 ? [command, ...args] : [command];
+
+    // Use cmd() helper to handle cwd and background options
+    if (options?.cwd || options?.background) {
+      const wrappedCommand = cmd(baseCommand, {
+        cwd: options.cwd,
+        background: options.background,
+      });
+      const [wrappedCmd, ...wrappedArgs] = wrappedCommand;
+      return await this.methods.runCommand(this.sandbox, wrappedCmd, wrappedArgs, undefined);
+    }
+
     return await this.methods.runCommand(this.sandbox, command, args, options);
   }
 
@@ -263,8 +267,6 @@ class GeneratedSandbox<TSandbox = any> implements Sandbox<TSandbox> {
  * Auto-generated Sandbox Manager implementation
  */
 class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManager<TSandbox> {
-  private activeSandboxes: Map<string, GeneratedSandbox<TSandbox>> = new Map();
-
   constructor(
     private config: TConfig,
     private providerName: string,
@@ -272,11 +274,12 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     private providerInstance: Provider
   ) {}
 
-  async create(options?: CreateSandboxOptions): Promise<Sandbox<TSandbox>> {
+  async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
     // Default to 'node' runtime if not specified for consistency across providers
     const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
     const result = await this.methods.create(this.config, optionsWithDefaults);
-    const sandbox = new GeneratedSandbox<TSandbox>(
+    
+    return new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -285,25 +288,15 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods.destroy,
       this.providerInstance
     );
-    
-    this.activeSandboxes.set(result.sandboxId, sandbox);
-    return sandbox;
   }
 
-  async getById(sandboxId: string): Promise<Sandbox<TSandbox> | null> {
-    // Check active sandboxes first
-    const existing = this.activeSandboxes.get(sandboxId);
-    if (existing) {
-      return existing;
-    }
-
-    // Try to reconnect
+  async getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null> {
     const result = await this.methods.getById(this.config, sandboxId);
     if (!result) {
       return null;
     }
 
-    const sandbox = new GeneratedSandbox<TSandbox>(
+    return new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -312,51 +305,37 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods.destroy,
       this.providerInstance
     );
-    
-    this.activeSandboxes.set(result.sandboxId, sandbox);
-    return sandbox;
   }
 
-  async list(): Promise<Sandbox<TSandbox>[]> {
+  async list(): Promise<ProviderSandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
-    const sandboxes: Sandbox[] = [];
-
-    for (const result of results) {
-      let sandbox = this.activeSandboxes.get(result.sandboxId);
-      if (!sandbox) {
-        sandbox = new GeneratedSandbox<TSandbox>(
-          result.sandbox,
-          result.sandboxId,
-          this.providerName,
-          this.methods,
-          this.config,
-          this.methods.destroy,
-          this.providerInstance
-        );
-        this.activeSandboxes.set(result.sandboxId, sandbox);
-      }
-      sandboxes.push(sandbox);
-    }
-
-    return sandboxes;
+    
+    return results.map(result => new GeneratedSandbox<TSandbox>(
+      result.sandbox,
+      result.sandboxId,
+      this.providerName,
+      this.methods,
+      this.config,
+      this.methods.destroy,
+      this.providerInstance
+    ));
   }
 
   async destroy(sandboxId: string): Promise<void> {
     await this.methods.destroy(this.config, sandboxId);
-    this.activeSandboxes.delete(sandboxId);
   }
 }
 
 /**
  * Auto-generated Template Manager implementation
  */
-class GeneratedTemplateManager<TTemplate, TConfig> implements ProviderTemplateManager<TTemplate> {
+class GeneratedTemplateManager<TTemplate, TConfig, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> implements ProviderTemplateManager<TTemplate, TCreateOptions> {
   constructor(
     private config: TConfig,
-    private methods: TemplateMethods<TTemplate, TConfig>
+    private methods: TemplateMethods<TTemplate, TConfig, TCreateOptions>
   ) {}
 
-  async create(options: CreateTemplateOptions | any): Promise<TTemplate> {
+  async create(options: TCreateOptions): Promise<TTemplate> {
     return await this.methods.create(this.config, options);
   }
 
@@ -399,7 +378,6 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
   readonly sandbox: ProviderSandboxManager<TSandbox>;
   readonly template?: ProviderTemplateManager<TTemplate>;
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
-  readonly __sandboxType!: TSandbox; // Phantom type for TypeScript inference
 
   constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>) {
     this.name = providerConfig.name;

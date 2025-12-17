@@ -1,37 +1,32 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createProvider } from '../factory.js'
-import type { Runtime, ExecutionResult, SandboxInfo } from '../types/index.js'
+import type { Runtime, CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
 
 describe('Factory', () => {
   describe('createProvider', () => {
     it('should create a provider factory function', () => {
       const methods = {
-        create: vi.fn().mockResolvedValue({ 
-          sandbox: { id: 'test-123', status: 'running' }, 
-          sandboxId: 'test-123' 
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-123', status: 'running' },
+          sandboxId: 'test-123'
         }),
-        getById: vi.fn().mockResolvedValue({ 
-          sandbox: { id: 'test-123', status: 'running' }, 
-          sandboxId: 'test-123' 
+        getById: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-123', status: 'running' },
+          sandboxId: 'test-123'
         }),
         list: vi.fn().mockResolvedValue([]),
         destroy: vi.fn().mockResolvedValue(undefined),
         runCode: vi.fn().mockResolvedValue({
-          stdout: 'Hello World',
-          stderr: '',
+          output: 'Hello World',
           exitCode: 0,
-          executionTime: 100,
-          sandboxId: 'test-123',
-          provider: 'mock'
-        } as ExecutionResult),
+          language: 'python'
+        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'Command output',
           stderr: '',
           exitCode: 0,
-          executionTime: 50,
-          sandboxId: 'test-123',
-          provider: 'mock'
-        } as ExecutionResult),
+          durationMs: 50
+        } as CommandResult),
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: 'mock',
@@ -50,11 +45,11 @@ describe('Factory', () => {
       })
 
       expect(typeof providerFactory).toBe('function')
-      
+
       // Create provider instance
       const config = { apiKey: 'test-key' }
       const provider = providerFactory(config)
-      
+
       expect(provider.name).toBe('mock')
       expect(provider.sandbox).toBeDefined()
       expect(typeof provider.sandbox.create).toBe('function')
@@ -65,32 +60,27 @@ describe('Factory', () => {
 
     it('should create sandbox instances with core methods', async () => {
       const methods = {
-        create: vi.fn().mockResolvedValue({ 
-          sandbox: { id: 'test-123', status: 'running' }, 
-          sandboxId: 'test-123' 
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-123', status: 'running' },
+          sandboxId: 'test-123'
         }),
-        getById: vi.fn().mockResolvedValue({ 
-          sandbox: { id: 'test-123', status: 'running' }, 
-          sandboxId: 'test-123' 
+        getById: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-123', status: 'running' },
+          sandboxId: 'test-123'
         }),
         list: vi.fn().mockResolvedValue([]),
         destroy: vi.fn().mockResolvedValue(undefined),
         runCode: vi.fn().mockResolvedValue({
-          stdout: 'print("Hello")',
-          stderr: '',
+          output: 'print("Hello")',
           exitCode: 0,
-          executionTime: 100,
-          sandboxId: 'test-123',
-          provider: 'mock'
-        } as ExecutionResult),
+          language: 'python'
+        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'ls output',
           stderr: '',
           exitCode: 0,
-          executionTime: 50,
-          sandboxId: 'test-123',
-          provider: 'mock'
-        } as ExecutionResult),
+          durationMs: 50
+        } as CommandResult),
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: 'mock',
@@ -119,7 +109,7 @@ describe('Factory', () => {
 
       // Test sandbox methods
       const codeResult = await sandbox.runCode('print("Hello")')
-      expect(codeResult.stdout).toBe('print("Hello")')
+      expect(codeResult.output).toContain('print("Hello")')
       expect(codeResult.exitCode).toBe(0)
 
       const commandResult = await sandbox.runCommand('ls')
