@@ -15,8 +15,6 @@ import { defaultDockerConfig } from './types/types';
 import type {
   DockerConfig,
   DockerSandboxHandle,
-  DockerSandboxAPI,
-  CreateDockerCompute,
   DockerImage,
   PortBindings,
 } from './types/types';
@@ -461,19 +459,3 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
   },
 });
 
-// ---------------------- convenience creator (optional) ----------------------
-
-export function createDockerCompute(config: DockerConfig): CreateDockerCompute {
-  const provider = docker(config);
-  return {
-    sandbox: {
-      create: async (options) => {
-        const sb = await provider.sandbox.create(options);
-        return {
-          ...sb,
-          getInstance: (): DockerSandboxHandle => sb.getInstance() as DockerSandboxHandle,
-        } as unknown as DockerSandboxAPI;
-      },
-    },
-  };
-}

@@ -431,53 +431,6 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 	}
 });
 
-/**
- * Create a properly typed compute instance for Blaxel
- * This version provides full type safety for getInstance() calls
- * 
- * @example
- * ```typescript
- * import { createBlaxelCompute } from '@computesdk/blaxel'
- * 
- * const compute = createBlaxelCompute({ workspace: 'your-workspace', apiKey: 'your-key' });
- * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed as SandboxInstance!
- * ```
- */
-export function createBlaxelCompute(config: BlaxelConfig): {
-	sandbox: {
-		create(): Promise<{
-			sandboxId: string;
-			provider: string;
-			runCode(code: string, runtime?: import('computesdk').Runtime): Promise<import('computesdk').CodeResult>;
-			runCommand(command: string, args?: string[]): Promise<import('computesdk').CommandResult>;
-			getInfo(): Promise<import('computesdk').SandboxInfo>;
-			getUrl(options: { port: number; protocol?: string }): Promise<string>;
-			getProvider(): ReturnType<typeof blaxel>;
-			getInstance(): SandboxInstance; // ✅ Properly typed!
-			kill(): Promise<void>;
-			destroy(): Promise<void>;
-			filesystem: import('computesdk').SandboxFileSystem;
-		}>;
-	};
-} {
-	const provider = blaxel(config);
-
-	return {
-		sandbox: {
-			create: async () => {
-				const sandbox = await provider.sandbox.create();
-				return {
-					...sandbox,
-					getInstance: (): SandboxInstance => {
-						return sandbox.getInstance() as SandboxInstance;
-					}
-				};
-			}
-		}
-	};
-}
-
 async function handleBlaxelAuth(config: BlaxelConfig) {
 	// Check if auth is already set in the SDK
 	try {
