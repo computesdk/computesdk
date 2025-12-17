@@ -48,6 +48,19 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions } from './resources/run';
 
+// Re-export shared types (canonical definitions)
+export {
+  type Runtime,
+  type SandboxStatus,
+  type RunCommandOptions,
+  type CreateSandboxOptions,
+  type FileEntry,
+  type SandboxFileSystem,
+  type ProviderSandboxInfo,
+  CommandExitError,
+  isCommandExitError,
+} from './types';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================

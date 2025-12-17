@@ -15,7 +15,6 @@ import type {
 import type {
   Runtime,
   FileEntry,
-  ExecutionResult,
   RunCommandOptions,
   CreateSandboxOptions,
   SandboxInfo,

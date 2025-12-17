@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createCompute } from '../compute.js'
-import type { Runtime, ExecutionResult, SandboxInfo } from '../types/index.js'
+import type { Runtime, CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
 import { MOCK_SUPPORTED_RUNTIMES } from './test-utils.js'
 
 // Mock E2B-like provider
@@ -20,21 +20,16 @@ function createMockProvider(name: string) {
         sandboxId: 'test-123',
         provider: name,
         runCode: vi.fn().mockResolvedValue({
-          stdout: 'Hello World',
-          stderr: '',
+          output: 'Hello World',
           exitCode: 0,
-          executionTime: 100,
-          sandboxId: 'test-123',
-          provider: name
-        } as ExecutionResult),
+          language: 'python'
+        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'Command output',
           stderr: '',
           exitCode: 0,
-          executionTime: 50,
-          sandboxId: 'test-123',
-          provider: name
-        } as ExecutionResult),
+          durationMs: 50
+        } as CommandResult),
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: name,
