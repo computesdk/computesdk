@@ -220,11 +220,24 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
     
-    // Special handling for "provider <name>" syntax (without parentheses)
-    const providerMatch = trimmedCmd.match(/^provider\s+(\w+)$/);
+    // Special handling for "provider <mode> <name>" syntax (without parentheses)
+    // Supports: "provider e2b", "provider direct e2b", "provider gateway e2b"
+    const providerMatch = trimmedCmd.match(/^provider(?:\s+(direct|gateway))?\s+(\w+)$/);
     if (providerMatch) {
-      const providerName = providerMatch[1];
-      const providerCmd = `await provider('${providerName}')`;
+      const mode = providerMatch[1] || null; // 'direct', 'gateway', or null
+      const providerName = providerMatch[2];
+      const providerCmd = mode 
+        ? `await provider('${mode}', '${providerName}')`
+        : `await provider('${providerName}')`;
+      originalEval.call(this, providerCmd, context, filename, callback);
+      return;
+    }
+    
+    // Also handle just "provider direct" or "provider gateway" alone  
+    const providerOnlyMatch = trimmedCmd.match(/^provider\s+(direct|gateway)$/);
+    if (providerOnlyMatch) {
+      const mode = providerOnlyMatch[1];
+      const providerCmd = `await provider('${mode}')`;
       originalEval.call(this, providerCmd, context, filename, callback);
       return;
     }
