@@ -40,17 +40,26 @@ export const c = {
 /**
  * Display welcome banner
  */
-export function showWelcome(availableProviders: string[], currentProvider: string | null) {
+export function showWelcome(availableProviders: string[], currentProvider: string | null, useDirectMode: boolean) {
   console.log(c.bold(c.cyan('\n╔═══════════════════════════════════════════════════════╗')));
   console.log(c.bold(c.cyan('║   ComputeSDK Workbench                               ║')));
   console.log(c.bold(c.cyan('╚═══════════════════════════════════════════════════════╝\n')));
   
   if (availableProviders.length > 0) {
-    console.log(`Providers available: ${availableProviders.join(', ')}`);
+    // Filter out 'gateway' from the list since it's not a real backend provider
+    const backendProviders = availableProviders.filter(p => p !== 'gateway');
+    console.log(`Providers available: ${backendProviders.join(', ')}`);
     
     if (currentProvider) {
-      const mode = currentProvider === 'gateway' ? '🌐 gateway mode' : '🔗 direct mode';
-      console.log(`Current provider: ${c.green(currentProvider)} (${mode})\n`);
+      if (useDirectMode) {
+        console.log(`Current provider: ${c.green(currentProvider)} (🔗 direct mode)\n`);
+      } else {
+        // Gateway mode - show which backend will be used
+        const backendProvider = currentProvider === 'gateway' 
+          ? (backendProviders[0] || 'auto')
+          : currentProvider;
+        console.log(`Current provider: ${c.green(backendProvider)} (🌐 via gateway)\n`);
+      }
     } else {
       console.log(`\n${c.dim('Tip: Use "provider <name>" to select a provider')}\n`);
     }
