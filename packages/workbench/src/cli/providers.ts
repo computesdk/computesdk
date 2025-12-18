@@ -248,16 +248,49 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
 
 /**
  * Create provider config from environment variables
+ * Maps environment variable names to provider-specific config keys
  */
 export function getProviderConfig(providerName: ProviderName): Record<string, string> {
   const config: Record<string, string> = {};
-  const requiredVars = PROVIDER_ENV_VARS[providerName];
   
-  for (const varName of requiredVars) {
-    const value = process.env[varName];
-    if (value) {
-      config[varName] = value;
-    }
+  switch (providerName) {
+    case 'e2b':
+      if (process.env.E2B_API_KEY) config.apiKey = process.env.E2B_API_KEY;
+      break;
+    case 'railway':
+      if (process.env.RAILWAY_API_KEY) config.apiKey = process.env.RAILWAY_API_KEY;
+      if (process.env.RAILWAY_PROJECT_ID) config.projectId = process.env.RAILWAY_PROJECT_ID;
+      if (process.env.RAILWAY_ENVIRONMENT_ID) config.environmentId = process.env.RAILWAY_ENVIRONMENT_ID;
+      break;
+    case 'daytona':
+      if (process.env.DAYTONA_API_KEY) config.apiKey = process.env.DAYTONA_API_KEY;
+      break;
+    case 'modal':
+      if (process.env.MODAL_TOKEN_ID) config.tokenId = process.env.MODAL_TOKEN_ID;
+      if (process.env.MODAL_TOKEN_SECRET) config.tokenSecret = process.env.MODAL_TOKEN_SECRET;
+      break;
+    case 'runloop':
+      if (process.env.RUNLOOP_API_KEY) config.apiKey = process.env.RUNLOOP_API_KEY;
+      break;
+    case 'vercel':
+      if (process.env.VERCEL_TOKEN) config.token = process.env.VERCEL_TOKEN;
+      if (process.env.VERCEL_TEAM_ID) config.teamId = process.env.VERCEL_TEAM_ID;
+      if (process.env.VERCEL_PROJECT_ID) config.projectId = process.env.VERCEL_PROJECT_ID;
+      break;
+    case 'cloudflare':
+      if (process.env.CLOUDFLARE_API_TOKEN) config.apiToken = process.env.CLOUDFLARE_API_TOKEN;
+      if (process.env.CLOUDFLARE_ACCOUNT_ID) config.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+      break;
+    case 'codesandbox':
+      if (process.env.CSB_API_KEY) config.apiKey = process.env.CSB_API_KEY;
+      break;
+    case 'blaxel':
+      if (process.env.BL_API_KEY) config.apiKey = process.env.BL_API_KEY;
+      if (process.env.BL_WORKSPACE) config.workspace = process.env.BL_WORKSPACE;
+      break;
+    case 'gateway':
+      if (process.env.COMPUTESDK_API_KEY) config.apiKey = process.env.COMPUTESDK_API_KEY;
+      break;
   }
   
   return config;

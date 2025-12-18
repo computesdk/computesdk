@@ -121,6 +121,14 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
       console.log(`\nInstall it with: ${c.cyan(`npm install @computesdk/${providerName}`)}\n`);
     }
     
+    // Show the actual error for debugging
+    if (error instanceof Error) {
+      logError(`Error: ${error.message}`);
+      if (error.stack) {
+        console.log(c.dim(error.stack));
+      }
+    }
+    
     throw error;
   }
 }
