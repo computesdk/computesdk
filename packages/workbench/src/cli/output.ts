@@ -75,61 +75,7 @@ export function showWelcome(availableProviders: string[], currentProvider: strin
   console.log(c.dim('Type "help" for available commands\n'));
 }
 
-/**
- * Display help text
- */
-export function showHelp() {
-  console.log(`
-${c.bold('Workbench Commands:')}
-  ${c.cyan('provider <name>')}      Switch provider (gateway, e2b, railway, etc.)
-  ${c.cyan('providers')}            List all providers with status
-  ${c.cyan('mode')}                 Show current mode (gateway vs direct)
-  ${c.cyan('mode gateway')}         Force gateway mode
-  ${c.cyan('mode direct')}          Force direct mode (auto-detect provider)
-  ${c.cyan('restart')}              Restart current sandbox
-  ${c.cyan('destroy')}              Destroy current sandbox  
-  ${c.cyan('info')}                 Show sandbox info
-  ${c.cyan('env')}                  Show environment/credentials status
-  ${c.cyan('verbose')}              Toggle verbose output (show full results)
-  ${c.cyan('help')}                 Show this help
-  ${c.cyan('exit')} or ${c.cyan('.exit')}       Exit workbench
 
-${c.bold('Provider Modes:')}
-  ${c.cyan('gateway')}              🌐 Routes through ComputeSDK API (COMPUTESDK_API_KEY)
-  ${c.cyan('e2b, railway, etc.')}   🔗 Direct connection to provider (requires provider package)
-
-${c.bold('Running Commands:')}
-  Just type any ${c.cyan('@computesdk/cmd')} function:
-    ${c.dim('npm.install("express")')}
-    ${c.dim('git.clone("https://github.com/user/repo")')}
-    ${c.dim('python("script.py")')}
-    ${c.dim('mkdir("/app/src")')}
-    ${c.dim('ls("/home")')}
-  
-  ${c.green('✨ Tab autocomplete works for all functions!')}
-
-${c.bold('Background Execution:')}
-  Run commands in the background (returns immediately):
-    ${c.dim('sh("sleep 10", { background: true })')}
-    ${c.dim('sh("npm start", { background: true })')}
-
-${c.bold('Examples:')}
-  ${c.dim('# Install a package')}
-  ${c.cyan('npm.install("express")')}
-  
-  ${c.dim('# Clone a repo')}
-  ${c.cyan('git.clone("https://github.com/user/repo")')}
-  
-  ${c.dim('# Run Python code')}
-  ${c.cyan('python("-c", "print(\'hello\')")')}
-  
-  ${c.dim('# Start a server in background')}
-  ${c.cyan('sh("python -m http.server 8000", { background: true })')}
-  
-  ${c.dim('# Switch providers')}
-  ${c.cyan('provider railway')}
-`);
-}
 
 /**
  * Display sandbox info
@@ -214,6 +160,68 @@ export function logCommand(command: string[]) {
 export function logSuccess(message: string, duration?: number) {
   const durationStr = duration ? ` (${formatDuration(duration)})` : '';
   console.log(c.green(`✅ ${message}${durationStr}`));
+}
+
+/**
+ * Display help text
+ */
+export function showHelp() {
+  console.log(`
+${c.bold('ComputeSDK Workbench Commands')}
+
+${c.bold('Provider Management:')}
+  ${c.cyan('provider <name>')}              Switch to provider via gateway (default)
+                                ${c.dim('Example: provider e2b')}
+  ${c.cyan('provider direct <name>')}       Connect directly to provider
+                                ${c.dim('Example: provider direct e2b')}
+  ${c.cyan('providers')}                    List all providers with status
+  ${c.cyan('mode <gateway|direct>')}        Toggle default mode for next sandbox
+
+${c.bold('Provider Modes:')}
+  ${c.bold('Gateway (default)')}: Routes through ComputeSDK API, zero-config
+    • Requires: COMPUTESDK_API_KEY + provider credentials
+    • Usage: ${c.cyan('provider e2b')}
+  
+  ${c.bold('Direct')}: Connects directly to provider, requires packages
+    • Requires: Provider package installed + credentials
+    • Usage: ${c.cyan('provider direct e2b')}
+
+${c.bold('Sandbox Management:')}
+  ${c.cyan('restart')}                      Restart current sandbox
+  ${c.cyan('destroy')}                      Destroy current sandbox
+  ${c.cyan('info')}                         Show sandbox info (provider, uptime)
+
+${c.bold('Environment:')}
+  ${c.cyan('env')}                          Show environment/credentials status
+  ${c.cyan('verbose')}                      Toggle verbose output mode
+
+${c.bold('Help:')}
+  ${c.cyan('help')}                         Show this help message
+  ${c.cyan('exit')} or ${c.cyan('.exit')}             Exit workbench
+
+${c.bold('Running Commands:')}
+  Type any @computesdk/cmd function and it will run automatically:
+  
+  ${c.dim('Package Managers:')}
+    ${c.cyan('npm.install("express")')}
+    ${c.cyan('pip.install("requests")')}
+  
+  ${c.dim('Git:')}
+    ${c.cyan('git.clone("https://github.com/user/repo")')}
+    ${c.cyan('git.status()')}
+  
+  ${c.dim('Filesystem:')}
+    ${c.cyan('ls("/home")')}
+    ${c.cyan('cat("/etc/hosts")')}
+    ${c.cyan('rm.rf("/tmp")')}          ${c.dim('// Force remove')}
+    ${c.cyan('rm.auto("/path")')}       ${c.dim('// Smart remove')}
+
+${c.bold('Background Execution:')}
+  ${c.cyan('sh("npm start", { background: true })')}
+  ${c.cyan('sh("python -m http.server 8000", { background: true })')}
+
+${c.dim('Press Tab for autocomplete on all commands!')}
+`);
 }
 
 /**
