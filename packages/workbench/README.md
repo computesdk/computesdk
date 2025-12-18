@@ -102,6 +102,9 @@ mkdir('/app/src')
 ls('/home')
 cat('/home/file.txt')
 cp('/src', '/dest', { recursive: true })
+rm('/file.txt')              // Remove file
+rm.rf('/directory')          // Force remove anything
+rm.auto('/path')             // Smart remove (auto-detects file vs directory)
 ```
 
 **Network:**
