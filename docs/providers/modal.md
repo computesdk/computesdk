@@ -62,8 +62,45 @@ interface ModalConfig {
   timeout?: number;
   /** Modal environment (sandbox or main) */
   environment?: string;
+  /** Ports to expose (unencrypted by default) */
+  ports?: number[];
 }
 ```
+
+### Port Configuration
+
+To expose ports from your Modal sandbox and access them via public URLs:
+
+```typescript
+import { createCompute } from 'computesdk';
+import { modal } from '@computesdk/modal';
+
+const compute = createCompute({ 
+  provider: modal({ 
+    tokenId: process.env.MODAL_TOKEN_ID,
+    tokenSecret: process.env.MODAL_TOKEN_SECRET,
+    ports: [3000, 8080] // Specify ports to expose
+  })
+});
+
+const sandbox = await compute.sandbox.create();
+
+// Start a web server on port 3000
+await sandbox.runCode(`
+const http = require('http');
+const server = http.createServer((req, res) => {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('Hello from Modal!');
+});
+server.listen(3000, () => console.log('Server running on port 3000'));
+`, 'node');
+
+// Get the public URL
+const url = await sandbox.getUrl({ port: 3000 });
+console.log(\`Server accessible at: \${url}\`);
+```
+
+Ports are exposed with unencrypted tunnels by default for maximum compatibility.
 ## SDK Reference Links:
 
 - **[Code Execution](/docs/reference/code-execution)** - Execute code snippets in various runtimes

@@ -104,8 +104,72 @@ interface ModalConfig {
   timeout?: number;
   /** Modal environment (sandbox or main) */
   environment?: string;
+  /** Ports to expose (unencrypted by default) */
+  ports?: number[];
 }
 ```
+
+### Port Configuration
+
+To expose ports from your Modal sandbox and access them via public URLs, specify the ports in the config:
+
+```typescript
+import { createCompute } from 'computesdk';
+import { modal } from '@computesdk/modal';
+
+const compute = createCompute({ 
+  provider: modal({ 
+    tokenId: process.env.MODAL_TOKEN_ID,
+    tokenSecret: process.env.MODAL_TOKEN_SECRET,
+    ports: [3000, 8080] // Ports to expose
+  }) 
+});
+
+const sandbox = await compute.sandbox.create({});
+
+// Start a web server in the sandbox
+await sandbox.runCode(`
+const http = require('http');
+
+const PORT = 3000;
+
+const server = http.createServer((req, res) => {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/plain');
+  res.end('Hello from Modal sandbox\\n');
+});
+
+server.listen(PORT, () => {
+  console.log(\`Server running on port \${PORT}\`);
+});
+`, 'node');
+
+// Get the public URL for the exposed port
+const url = await sandbox.getUrl({ port: 3000 });
+console.log(`Server accessible at: ${url}`);
+```
+
+#### Direct SDK Usage with Ports
+
+```typescript
+import { modal } from '@computesdk/modal';
+
+// Create provider with ports
+const provider = modal({ 
+  tokenId: 'your_token_id',
+  tokenSecret: 'your_token_secret',
+  ports: [3000, 5000, 8080], // Multiple ports can be exposed
+  timeout: 600000 // 10 minutes
+});
+
+const sandbox = await compute.sandbox.create({ provider });
+
+// Access different services on different ports
+const webUrl = await sandbox.getUrl({ port: 3000 });
+const apiUrl = await sandbox.getUrl({ port: 8080 });
+```
+
+**Note**: Ports are exposed with unencrypted tunnels by default for maximum compatibility. The tunnels are publicly accessible URLs managed by Modal.
 
 ## Features
 
