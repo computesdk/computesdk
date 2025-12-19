@@ -49,7 +49,7 @@ const compute = createCompute({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute Node.js code
 const result = await sandbox.runCode('console.log("Hello from Vercel!");');

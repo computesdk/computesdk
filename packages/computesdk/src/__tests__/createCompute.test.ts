@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createCompute } from '../compute.js'
-import type { Runtime, ExecutionResult, SandboxInfo } from '../types/index.js'
+import type { Runtime, CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
 import { MOCK_SUPPORTED_RUNTIMES } from './test-utils.js'
 
 // Mock E2B-like provider
@@ -13,28 +13,22 @@ function createMockProvider(name: string) {
 
   return {
     name,
-    __sandboxType: null as any, // Phantom type for testing
     getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
     sandbox: {
       create: vi.fn().mockResolvedValue({
         sandboxId: 'test-123',
         provider: name,
         runCode: vi.fn().mockResolvedValue({
-          stdout: 'Hello World',
-          stderr: '',
+          output: 'Hello World',
           exitCode: 0,
-          executionTime: 100,
-          sandboxId: 'test-123',
-          provider: name
-        } as ExecutionResult),
+          language: 'python'
+        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'Command output',
           stderr: '',
           exitCode: 0,
-          executionTime: 50,
-          sandboxId: 'test-123',
-          provider: name
-        } as ExecutionResult),
+          durationMs: 50
+        } as CommandResult),
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: name,
@@ -89,18 +83,20 @@ describe('createCompute function', () => {
     })
 
     const sandbox = await compute.sandbox.create()
-    
+
     // Should be properly typed and return the provider-specific instance
-    const instance = sandbox.getInstance()
-    
+    // Note: In real usage with createProvider<E2BSandbox>, getInstance() returns E2BSandbox
+    // Here we cast to any since the mock doesn't preserve generic types
+    const instance = sandbox.getInstance() as any
+
     expect(instance).toBeTruthy()
     expect(typeof instance.setTimeout).toBe('function')
     expect(typeof instance.specialMethod).toBe('function')
-    
+
     // Should be able to call provider-specific methods
     instance.setTimeout(5000)
     expect(instance.setTimeout).toHaveBeenCalledWith(5000)
-    
+
     const result = instance.specialMethod()
     expect(result).toBe('mock-e2b-specific')
   })

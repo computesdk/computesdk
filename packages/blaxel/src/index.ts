@@ -7,7 +7,8 @@
 import { SandboxInstance, settings } from '@blaxel/core';
 import { createProvider } from 'computesdk';
 import type {
-	ExecutionResult,
+	CodeResult,
+	CommandResult,
 	SandboxInfo,
 	Runtime,
 	CreateSandboxOptions,
@@ -150,7 +151,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			// Instance operations (map to individual Sandbox methods)
-			runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+			runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
 				const startTime = Date.now();
 
 				try {
@@ -219,13 +220,13 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						}
 					}
 
+					// Combine stdout and stderr into output
+					const output = stderr ? `${stdout}\n${stderr}`.trim() : stdout;
+
 					return {
-						stdout,
-						stderr,
+						output,
 						exitCode,
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel'
+						language: effectiveRuntime
 					};
 				} catch (error) {
 					// Re-throw syntax errors
@@ -235,17 +236,14 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 
 					// For runtime errors, return a result instead of throwing
 					return {
-						stdout: '',
-						stderr: error instanceof Error ? error.message : String(error),
+						output: error instanceof Error ? error.message : String(error),
 						exitCode: 1,
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel'
+						language: runtime || 'node'
 					};
 				}
 			},
 
-			runCommand: async (sandbox: SandboxInstance, command: string, args: string[] = []): Promise<ExecutionResult> => {
+			runCommand: async (sandbox: SandboxInstance, command: string, args: string[] = []): Promise<CommandResult> => {
 				const startTime = Date.now();
 
 				try {
@@ -264,18 +262,14 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						stdout,
 						stderr,
 						exitCode,
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel'
+						durationMs: Date.now() - startTime
 					};
 				} catch (error) {
 					return {
 						stdout: '',
 						stderr: error instanceof Error ? error.message : String(error),
 						exitCode: 127,
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel'
+						durationMs: Date.now() - startTime
 					};
 				}
 			},
@@ -436,53 +430,6 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 		}
 	}
 });
-
-/**
- * Create a properly typed compute instance for Blaxel
- * This version provides full type safety for getInstance() calls
- * 
- * @example
- * ```typescript
- * import { createBlaxelCompute } from '@computesdk/blaxel'
- * 
- * const compute = createBlaxelCompute({ workspace: 'your-workspace', apiKey: 'your-key' });
- * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed as SandboxInstance!
- * ```
- */
-export function createBlaxelCompute(config: BlaxelConfig): {
-	sandbox: {
-		create(): Promise<{
-			sandboxId: string;
-			provider: string;
-			runCode(code: string, runtime?: import('computesdk').Runtime): Promise<import('computesdk').ExecutionResult>;
-			runCommand(command: string, args?: string[]): Promise<import('computesdk').ExecutionResult>;
-			getInfo(): Promise<import('computesdk').SandboxInfo>;
-			getUrl(options: { port: number; protocol?: string }): Promise<string>;
-			getProvider(): ReturnType<typeof blaxel>;
-			getInstance(): SandboxInstance; // ✅ Properly typed!
-			kill(): Promise<void>;
-			destroy(): Promise<void>;
-			filesystem: import('computesdk').SandboxFileSystem;
-		}>;
-	};
-} {
-	const provider = blaxel(config);
-
-	return {
-		sandbox: {
-			create: async () => {
-				const sandbox = await provider.sandbox.create();
-				return {
-					...sandbox,
-					getInstance: (): SandboxInstance => {
-						return sandbox.getInstance() as SandboxInstance;
-					}
-				};
-			}
-		}
-	};
-}
 
 async function handleBlaxelAuth(config: BlaxelConfig) {
 	// Check if auth is already set in the SDK

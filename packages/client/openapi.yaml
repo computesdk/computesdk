@@ -1870,7 +1870,7 @@ components:
           format: date-time
         url:
           type: string
-          example: "https://sandbox-12345.preview.computesdk.com"
+          example: "https://sandbox-12345.sandbox.computesdk.com"
 
     SandboxResponse:
       allOf:

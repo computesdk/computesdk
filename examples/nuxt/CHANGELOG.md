@@ -1,5 +1,36 @@
 # @computesdk/example-nuxt
 
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [f38470d]
+- Updated dependencies [f38470d]
+  - computesdk@1.9.3
+  - @computesdk/daytona@1.6.2
+  - @computesdk/e2b@1.7.2
+  - @computesdk/vercel@1.6.2
+
+## 0.2.11
+
+### Patch Changes
+
+- Updated dependencies [1ac5ad2]
+  - computesdk@1.9.1
+  - @computesdk/daytona@1.6.1
+  - @computesdk/e2b@1.7.1
+  - @computesdk/vercel@1.6.1
+
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [8002931]
+  - computesdk@1.9.0
+  - @computesdk/daytona@1.6.0
+  - @computesdk/e2b@1.7.0
+  - @computesdk/vercel@1.6.0
+
 ## 0.2.9
 
 ### Patch Changes

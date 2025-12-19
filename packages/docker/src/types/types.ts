@@ -15,7 +15,6 @@ import type {
 import type {
   Runtime,
   FileEntry,
-  ExecutionResult,
   RunCommandOptions,
   CreateSandboxOptions,
   SandboxInfo,
@@ -119,28 +118,6 @@ export interface DockerSandboxFileSystem {
   readdir(path: string): Promise<FileEntry[]>;
   exists(path: string): Promise<boolean>;
   remove(path: string): Promise<void>;
-}
-
-/** Strongly-typed sandbox API shape */
-export interface DockerSandboxAPI {
-  sandboxId: string;
-  provider: 'docker';
-  runCode(code: string, runtime?: Runtime): Promise<ExecutionResult>;
-  runCommand(command: string, args?: string[], options?: RunCommandOptions): Promise<ExecutionResult>;
-  getInfo(): Promise<SandboxInfo>;
-  getUrl(options: DockerUrlOptions): Promise<string>;
-  getProvider(): any;
-  getInstance(): DockerSandboxHandle;
-  kill(): Promise<void>;
-  destroy(): Promise<void>;
-  filesystem: DockerSandboxFileSystem;
-}
-
-/** Factory return shape mirroring your createE2BCompute helper */
-export interface CreateDockerCompute {
-  sandbox: {
-    create(options?: CreateSandboxOptions): Promise<DockerSandboxAPI>;
-  };
 }
 
 /** Sensible, safe defaults */

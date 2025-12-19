@@ -1,0 +1,55 @@
+{
+  "name": "@computesdk/cmd",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Type-safe shell command builders for ComputeSDK sandboxes",
+  "author": "Garrison",
+  "license": "MIT",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "commands",
+    "shell",
+    "sandbox",
+    "compute",
+    "bash",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/cmd"
+  },
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cmd",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

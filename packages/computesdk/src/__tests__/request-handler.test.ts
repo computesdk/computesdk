@@ -98,7 +98,7 @@ describe('Request Handler', () => {
 
         expect(result.success).toBe(true)
         expect(result.result).toBeDefined()
-        expect(result.result?.stdout).toBe('Executed: print("Hello World")')
+        expect(result.result?.output).toBe('Executed: print("Hello World")')
         expect(result.result?.exitCode).toBe(0)
       })
 

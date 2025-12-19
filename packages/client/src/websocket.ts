@@ -252,7 +252,7 @@ export type ConnectionHandler = () => void;
  * ```typescript
  * import { ComputeClient } from '@computesdk/client'
  *
- * const client = new ComputeClient({ sandboxUrl: 'https://sandbox-123.preview.computesdk.com' });
+ * const client = new ComputeClient({ sandboxUrl: 'https://sandbox-123.sandbox.computesdk.com' });
  * await client.generateToken();
  *
  * // Create WebSocket manager

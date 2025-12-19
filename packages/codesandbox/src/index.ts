@@ -7,7 +7,7 @@
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
 import { createProvider } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
 
 /**
  * Codesandbox-specific configuration options
@@ -138,7 +138,7 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
       },
 
       // Instance operations (sandbox.*)
-      runCode: async (sandbox: CodesandboxSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: CodesandboxSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
 
         try {
@@ -179,7 +179,7 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
           const output = await client.commands.run(command);
 
           // Check for syntax errors in the output and throw them (similar to other providers)
-          if (output.includes('SyntaxError') || 
+          if (output.includes('SyntaxError') ||
               output.includes('invalid syntax') ||
               output.includes('Unexpected token') ||
               output.includes('Unexpected identifier')) {
@@ -187,12 +187,9 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
           }
 
           return {
-            stdout: output,
-            stderr: '',
+            output: output,
             exitCode: 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'codesandbox'
+            language: effectiveRuntime
           };
         } catch (error) {
           // Re-throw syntax errors
@@ -205,7 +202,7 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
         }
       },
 
-      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
@@ -228,18 +225,14 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
             stdout: output,
             stderr: '',
             exitCode: 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'codesandbox'
+            durationMs: Date.now() - startTime
           };
         } catch (error) {
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'codesandbox'
+            durationMs: Date.now() - startTime
           };
         }
       },

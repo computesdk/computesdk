@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createProvider } from '../factory.js'
-import type { Runtime, ExecutionResult, SandboxInfo } from '../types/index.js'
+import type { Runtime, CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
 
 // Mock E2B-like sandbox type
 interface MockE2BSandbox {
@@ -29,21 +29,16 @@ describe('getInstance method', () => {
       list: vi.fn().mockResolvedValue([]),
       destroy: vi.fn().mockResolvedValue(undefined),
       runCode: vi.fn().mockResolvedValue({
-        stdout: 'Hello World',
-        stderr: '',
+        output: 'Hello World',
         exitCode: 0,
-        executionTime: 100,
-        sandboxId: 'test-123',
-        provider: 'mock'
-      } as ExecutionResult),
+        language: 'python'
+      } as CodeResult),
       runCommand: vi.fn().mockResolvedValue({
         stdout: 'Command output',
         stderr: '',
         exitCode: 0,
-        executionTime: 50,
-        sandboxId: 'test-123',
-        provider: 'mock'
-      } as ExecutionResult),
+        durationMs: 50
+      } as CommandResult),
       getInfo: vi.fn().mockResolvedValue({
         id: 'test-123',
         provider: 'mock',
@@ -54,7 +49,7 @@ describe('getInstance method', () => {
         metadata: {}
       } as SandboxInfo),
       getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev'),
-      
+
       // Provider-specific getInstance method that returns typed instance
       getInstance: (sandbox: MockE2BSandbox): MockE2BSandbox => {
         return sandbox
@@ -104,21 +99,16 @@ describe('getInstance method', () => {
       list: vi.fn().mockResolvedValue([]),
       destroy: vi.fn().mockResolvedValue(undefined),
       runCode: vi.fn().mockResolvedValue({
-        stdout: 'Hello World',
-        stderr: '',
+        output: 'Hello World',
         exitCode: 0,
-        executionTime: 100,
-        sandboxId: 'test-123',
-        provider: 'mock'
-      } as ExecutionResult),
+        language: 'python'
+      } as CodeResult),
       runCommand: vi.fn().mockResolvedValue({
         stdout: 'Command output',
         stderr: '',
         exitCode: 0,
-        executionTime: 50,
-        sandboxId: 'test-123',
-        provider: 'mock'
-      } as ExecutionResult),
+        durationMs: 50
+      } as CommandResult),
       getInfo: vi.fn().mockResolvedValue({
         id: 'test-123',
         provider: 'mock',
@@ -169,8 +159,8 @@ describe('getInstance method', () => {
       }),
       list: vi.fn().mockResolvedValue([]),
       destroy: vi.fn().mockResolvedValue(undefined),
-      runCode: vi.fn().mockResolvedValue({} as ExecutionResult),
-      runCommand: vi.fn().mockResolvedValue({} as ExecutionResult),
+      runCode: vi.fn().mockResolvedValue({} as CodeResult),
+      runCommand: vi.fn().mockResolvedValue({} as CommandResult),
       getInfo: vi.fn().mockResolvedValue({} as SandboxInfo),
       getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev'),
       

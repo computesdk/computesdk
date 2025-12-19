@@ -37,7 +37,7 @@ const compute = createCompute({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute Python code with GPU acceleration
 const result = await sandbox.runCode(`
@@ -129,17 +129,20 @@ const sandbox = await compute.sandbox.create({});
 
 // Start a web server in the sandbox
 await sandbox.runCode(`
-import http.server
-import socketserver
+const http = require('http');
 
-PORT = 3000
+const PORT = 3000;
 
-Handler = http.server.SimpleHTTPRequestHandler
+const server = http.createServer((req, res) => {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/plain');
+  res.end('Hello from Modal sandbox\\n');
+});
 
-with socketserver.TCPServer(("", PORT), Handler) as httpd:
-    print(f"Server running on port {PORT}")
-    httpd.serve_forever()
-`, 'python');
+server.listen(PORT, () => {
+  console.log(\`Server running on port \${PORT}\`);
+});
+`, 'node');
 
 // Get the public URL for the exposed port
 const url = await sandbox.getUrl({ port: 3000 });
@@ -392,7 +395,7 @@ export async function POST(request: Request) {
 ### Machine Learning Pipeline
 
 ```typescript
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Create ML project structure
 await sandbox.filesystem.mkdir('/ml-project');
@@ -465,7 +468,7 @@ console.log('Model saved:', modelExists);
 ### GPU-Accelerated Inference
 
 ```typescript
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // GPU inference example
 const result = await sandbox.runCode(`
@@ -530,7 +533,7 @@ const tasks = [
 
 const results = await Promise.all(
   tasks.map(async (taskFile) => {
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     
     return await sandbox.runCode(`
 import json
