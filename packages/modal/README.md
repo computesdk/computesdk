@@ -129,17 +129,20 @@ const sandbox = await compute.sandbox.create({});
 
 // Start a web server in the sandbox
 await sandbox.runCode(`
-import http.server
-import socketserver
+const http = require('http');
 
-PORT = 3000
+const PORT = 3000;
 
-Handler = http.server.SimpleHTTPRequestHandler
+const server = http.createServer((req, res) => {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/plain');
+  res.end('Hello from Modal sandbox\\n');
+});
 
-with socketserver.TCPServer(("", PORT), Handler) as httpd:
-    print(f"Server running on port {PORT}")
-    httpd.serve_forever()
-`, 'python');
+server.listen(PORT, () => {
+  console.log(\`Server running on port \${PORT}\`);
+});
+`, 'node');
 
 // Get the public URL for the exposed port
 const url = await sandbox.getUrl({ port: 3000 });
