@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/events",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Events SDK for ComputeSDK - store, retrieve, and subscribe to sandbox events",
   "author": "Garrison",

@@ -1,5 +1,16 @@
 # @computesdk/blaxel
 
+## 1.3.0
+
+### Minor Changes
+
+- 8002931: Adding in support for ClientSandbox to all packages
+
+### Patch Changes
+
+- Updated dependencies [8002931]
+  - computesdk@1.9.0
+
 ## 1.2.8
 
 ### Patch Changes
