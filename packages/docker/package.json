@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/docker",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Docker provider for ComputeSDK",
   "author": "IberAI",
   "license": "MIT",
