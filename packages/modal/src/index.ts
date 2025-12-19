@@ -112,7 +112,21 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
             // Create new Modal sandbox with Node.js (more appropriate for a Node.js SDK)
             const app = await App.lookup('computesdk-modal', { createIfMissing: true });
             const image = await app.imageFromRegistry('node:20-alpine');
-            sandbox = await app.createSandbox(image);
+            
+            // Configure sandbox options
+            const sandboxOptions: any = {}; // Using 'any' since Modal SDK is alpha
+            
+            // Configure ports if provided (using unencrypted ports by default)
+            if (config.ports && config.ports.length > 0) {
+              sandboxOptions.unencryptedPorts = config.ports;
+            }
+            
+            // Add timeout if specified
+            if (config.timeout) {
+              sandboxOptions.timeout = config.timeout;
+            }
+            
+            sandbox = await app.createSandbox(image, sandboxOptions);
             sandboxId = sandbox.sandboxId;
           }
 
