@@ -87,7 +87,18 @@ export function showInfo(state: WorkbenchState) {
   }
   
   console.log('\n' + c.bold('Current Sandbox:'));
+  
+  // Show sandbox ID if available
+  if (state.currentSandbox.sandboxId) {
+    console.log(`  Sandbox ID: ${c.cyan(state.currentSandbox.sandboxId)}`);
+  }
+  
   console.log(`  Provider: ${c.green(state.currentProvider || 'unknown')}`);
+  
+  // Show connection mode (gateway or direct)
+  const modeLabel = state.useDirectMode ? 'direct 🔗' : 'gateway 🌐';
+  console.log(`  Mode: ${c.blue(modeLabel)}`);
+  
   console.log(`  Created: ${state.sandboxCreatedAt?.toLocaleString() || 'unknown'}`);
   console.log(`  Uptime: ${formatUptime(state)}`);
   console.log('');
