@@ -4,7 +4,7 @@
   "private": true,
   "description": "A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
   "scripts": {
-    "build": "pnpm --filter '@computesdk/client' run build && pnpm --filter computesdk run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!@computesdk/client' run build",
+    "build": "pnpm --filter '@computesdk/cmd' run build && pnpm --filter '@computesdk/client' run build && pnpm --filter computesdk run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!@computesdk/client' --filter '!@computesdk/cmd' run build",
     "clean": "pnpm -r run clean",
     "dev": "pnpm -r --parallel run dev",
     "lint": "pnpm -r run lint",
@@ -15,7 +15,9 @@
     "changeset": "changeset",
     "version": "changeset version && pnpm install --no-frozen-lockfile",
     "release": "pnpm run build && changeset publish",
-    "prepare": "husky"
+    "prepare": "husky",
+    "workbench": "node packages/workbench/dist/bin/workbench.js",
+    "workbench:ts": "pnpm --filter @computesdk/workbench run dev:ts"
   },
   "keywords": [
     "sandbox",

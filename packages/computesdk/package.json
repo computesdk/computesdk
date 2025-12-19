@@ -1,6 +1,6 @@
 {
   "name": "computesdk",
-  "version": "1.8.8",
+  "version": "1.9.3",
   "description": "A free and open-source toolkit for running other people's code in your applications.",
   "author": "Garrison",
   "license": "MIT",
@@ -42,12 +42,13 @@
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git"
   },
-  "homepage": "https://github.com/computesdk/computesdk",
+  "homepage": "https://www.computesdk.com/",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@computesdk/client": "workspace:*"
+    "@computesdk/client": "workspace:*",
+    "@computesdk/cmd": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

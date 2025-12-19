@@ -1,5 +1,37 @@
 # @computesdk/modal
 
+## 1.6.2
+
+### Patch Changes
+
+- Updated dependencies [f38470d]
+- Updated dependencies [f38470d]
+  - computesdk@1.9.3
+
+## 1.6.1
+
+### Patch Changes
+
+- Updated dependencies [1ac5ad2]
+  - computesdk@1.9.1
+
+## 1.6.0
+
+### Minor Changes
+
+- 8002931: Adding in support for ClientSandbox to all packages
+
+### Patch Changes
+
+- Updated dependencies [8002931]
+  - computesdk@1.9.0
+
+## 1.5.0
+
+### Minor Changes
+
+- 70ca324: add ports to modal provider config
+
 ## 1.4.8
 
 ### Patch Changes

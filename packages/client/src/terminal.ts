@@ -8,6 +8,8 @@ import type {
   TerminalErrorMessage,
   TerminalDestroyedMessage,
 } from './websocket';
+import type { CommandExecutionResponse, CommandsListResponse, CommandDetailsResponse } from './index';
+import { TerminalCommand } from './resources/terminal-command';
 
 // ============================================================================
 // Base64 Utility Functions
@@ -37,57 +39,114 @@ export type TerminalEventHandler = {
 };
 
 /**
- * Terminal class for interacting with a terminal session
+ * TerminalInstance - A connected terminal session with WebSocket support
+ *
+ * This is the object returned by sandbox.terminal.create()
  *
  * @example
  * ```typescript
- * const client = new ComputeClient({ sandboxUrl: '...' });
- * await client.generateToken();
+ * // PTY mode - Interactive shell
+ * const pty = await sandbox.terminal.create({ pty: true });
+ * pty.on('output', (data) => console.log(data));
+ * pty.write('ls -la\n');
+ * await pty.destroy();
  *
- * const terminal = await client.createTerminal();
- * terminal.on('output', (data) => console.log(data));
- * terminal.write('ls -la\n');
- * await terminal.execute('echo "Hello"');
- * await terminal.destroy();
+ * // Exec mode - Command tracking
+ * const exec = await sandbox.terminal.create({ pty: false });
+ * const cmd = await exec.command.run('npm test');
+ * console.log(cmd.exitCode);
+ *
+ * // Background execution with wait
+ * const cmd = await exec.command.run('npm install', { background: true });
+ * await cmd.wait();
+ * console.log(cmd.stdout);
  * ```
  */
-export class Terminal {
-  private id: string;
-  private status: 'running' | 'stopped' | 'active';
-  private channel: string;
-  private ws: WebSocketManager;
-  private encoding: 'raw' | 'base64';
-  private eventHandlers: Map<keyof TerminalEventHandler, Set<Function>> = new Map();
+export class TerminalInstance {
+  private _id: string;
+  private _pty: boolean;
+  private _status: 'running' | 'stopped' | 'active' | 'ready';
+  private _channel: string | null;
+  private _ws: WebSocketManager | null;
+  private _encoding: 'raw' | 'base64';
+  private _eventHandlers: Map<keyof TerminalEventHandler, Set<Function>> = new Map();
+
+  /**
+   * Command namespace for exec mode terminals
+   */
+  readonly command: TerminalCommand;
+
+  // Handlers set by the Sandbox
+  private _executeHandler?: (command: string, background?: boolean) => Promise<CommandExecutionResponse>;
+  private _listCommandsHandler?: () => Promise<CommandsListResponse>;
+  private _retrieveCommandHandler?: (cmdId: string) => Promise<CommandDetailsResponse>;
+  private _waitCommandHandler?: (cmdId: string, timeout?: number) => Promise<CommandDetailsResponse>;
+  private _destroyHandler?: () => Promise<void>;
 
   constructor(
     id: string,
-    status: 'running' | 'stopped' | 'active',
-    channel: string,
-    ws: WebSocketManager,
+    pty: boolean,
+    status: 'running' | 'stopped' | 'active' | 'ready',
+    channel: string | null,
+    ws: WebSocketManager | null,
     encoding: 'raw' | 'base64' = 'raw'
   ) {
-    this.id = id;
+    this._id = id;
+    this._pty = pty;
     // Normalize 'active' to 'running' for consistency
-    this.status = status === 'active' ? 'running' : status;
-    this.channel = channel;
-    this.ws = ws;
-    this.encoding = encoding;
+    this._status = status === 'active' ? 'running' : status;
+    this._channel = channel;
+    this._ws = ws;
+    this._encoding = encoding;
 
-    // Subscribe to terminal channel
-    this.ws.subscribe(this.channel);
+    // Initialize command namespace with handlers
+    this.command = new TerminalCommand(id, {
+      run: async (command: string, background?: boolean) => {
+        if (!this._executeHandler) {
+          throw new Error('Execute handler not set');
+        }
+        return this._executeHandler(command, background);
+      },
+      list: async () => {
+        if (!this._listCommandsHandler) {
+          throw new Error('List commands handler not set');
+        }
+        return this._listCommandsHandler();
+      },
+      retrieve: async (cmdId: string) => {
+        if (!this._retrieveCommandHandler) {
+          throw new Error('Retrieve command handler not set');
+        }
+        return this._retrieveCommandHandler(cmdId);
+      },
+      wait: async (cmdId: string, timeout?: number) => {
+        if (!this._waitCommandHandler) {
+          throw new Error('Wait command handler not set');
+        }
+        return this._waitCommandHandler(cmdId, timeout);
+      },
+    });
 
-    // Set up WebSocket event handlers
-    this.setupWebSocketHandlers();
+    // Only subscribe to WebSocket channel for PTY mode
+    if (this._pty && this._ws && this._channel) {
+      this._ws.subscribe(this._channel);
+      // Set up WebSocket event handlers
+      this.setupWebSocketHandlers();
+    }
   }
 
   /**
-   * Set up WebSocket event handlers
+   * Set up WebSocket event handlers (PTY mode only)
    */
   private setupWebSocketHandlers(): void {
+    if (!this._ws || !this._channel) {
+      return; // No WebSocket in exec mode
+    }
+
     // Handle terminal output (decode based on encoding field)
-    this.ws.on('terminal:output', (msg: TerminalOutputMessage) => {
-      if (msg.channel === this.channel) {
-        const encoding = msg.data.encoding || this.encoding;
+    this._ws.on('terminal:output', (msg: TerminalOutputMessage) => {
+      if (msg.channel === this._channel) {
+        const encoding = msg.data.encoding || this._encoding;
         const output = encoding === 'base64'
           ? decodeBase64(msg.data.output)
           : msg.data.output;
@@ -96,16 +155,16 @@ export class Terminal {
     });
 
     // Handle terminal errors
-    this.ws.on('terminal:error', (msg: TerminalErrorMessage) => {
-      if (msg.channel === this.channel) {
+    this._ws.on('terminal:error', (msg: TerminalErrorMessage) => {
+      if (msg.channel === this._channel) {
         this.emit('error', msg.data.error);
       }
     });
 
     // Handle terminal destroyed
-    this.ws.on('terminal:destroyed', (msg: TerminalDestroyedMessage) => {
-      if (msg.channel === this.channel) {
-        this.status = 'stopped';
+    this._ws.on('terminal:destroyed', (msg: TerminalDestroyedMessage) => {
+      if (msg.channel === this._channel) {
+        this._status = 'stopped';
         this.emit('destroyed');
         this.cleanup();
       }
@@ -113,100 +172,163 @@ export class Terminal {
   }
 
   /**
-   * Get terminal ID
+   * Terminal ID
+   */
+  get id(): string {
+    return this._id;
+  }
+
+  /**
+   * Get terminal ID (deprecated, use .id property)
+   * @deprecated Use .id property instead
    */
   getId(): string {
-    return this.id;
+    return this._id;
   }
 
   /**
-   * Get terminal status
+   * Terminal status
    */
-  getStatus(): 'running' | 'stopped' | 'active' {
-    return this.status;
+  get status(): 'running' | 'stopped' | 'active' | 'ready' {
+    return this._status;
   }
 
   /**
-   * Get terminal channel
+   * Get terminal status (deprecated, use .status property)
+   * @deprecated Use .status property instead
    */
-  getChannel(): string {
-    return this.channel;
+  getStatus(): 'running' | 'stopped' | 'active' | 'ready' {
+    return this._status;
+  }
+
+  /**
+   * Terminal channel (null for exec mode)
+   */
+  get channel(): string | null {
+    return this._channel;
+  }
+
+  /**
+   * Get terminal channel (deprecated, use .channel property)
+   * @deprecated Use .channel property instead
+   */
+  getChannel(): string | null {
+    return this._channel;
+  }
+
+  /**
+   * Whether this is a PTY terminal
+   */
+  get pty(): boolean {
+    return this._pty;
+  }
+
+  /**
+   * Get terminal PTY mode (deprecated, use .pty property)
+   * @deprecated Use .pty property instead
+   */
+  isPTY(): boolean {
+    return this._pty;
   }
 
   /**
    * Check if terminal is running
    */
   isRunning(): boolean {
-    return this.status === 'running';
+    return this._status === 'running';
   }
 
   /**
-   * Write input to the terminal
+   * Write input to the terminal (PTY mode only)
    */
   write(input: string): void {
-    if (!this.isRunning()) {
-      console.warn('[Terminal] Warning: Terminal status is not "running", but attempting to write anyway. Status:', this.status);
+    if (!this._pty) {
+      throw new Error('write() is only available for PTY terminals. Use commands.run() for exec mode terminals.');
     }
-    this.ws.sendTerminalInput(this.id, input);
+    if (!this._ws) {
+      throw new Error('WebSocket not available');
+    }
+    if (!this.isRunning()) {
+      console.warn('[Terminal] Warning: Terminal status is not "running", but attempting to write anyway. Status:', this._status);
+    }
+    this._ws.sendTerminalInput(this._id, input);
   }
 
   /**
-   * Resize terminal window
+   * Resize terminal window (PTY mode only)
    */
   resize(cols: number, rows: number): void {
+    if (!this._pty) {
+      throw new Error('resize() is only available for PTY terminals');
+    }
+    if (!this._ws) {
+      throw new Error('WebSocket not available');
+    }
     if (!this.isRunning()) {
       throw new Error('Terminal is not running');
     }
-    this.ws.resizeTerminal(this.id, cols, rows);
+    this._ws.resizeTerminal(this._id, cols, rows);
   }
 
   /**
-   * Execute a command in the terminal (uses REST API, not WebSocket)
-   * This is provided by the client via a callback
+   * Set execute command handler (called by Sandbox)
+   * @internal
    */
-  private executeCommand?: (command: string, async?: boolean) => Promise<any>;
-
-  /**
-   * Set execute command handler (called by client)
-   */
-  setExecuteHandler(handler: (command: string, async?: boolean) => Promise<any>): void {
-    this.executeCommand = handler;
+  setExecuteHandler(handler: (command: string, background?: boolean) => Promise<CommandExecutionResponse>): void {
+    this._executeHandler = handler;
   }
 
   /**
-   * Execute a command in the terminal
-   * @param command - The command to execute
-   * @param options - Execution options
-   * @param options.async - If true, returns immediately without waiting for completion (default: false)
-   * @returns Promise that resolves when command completes (async: false) or immediately (async: true)
+   * Set list commands handler (called by Sandbox)
+   * @internal
    */
-  async execute(command: string, options?: { async?: boolean }): Promise<any> {
-    if (!this.executeCommand) {
-      throw new Error('Execute handler not set');
-    }
-    return this.executeCommand(command, options?.async);
+  setListCommandsHandler(handler: () => Promise<CommandsListResponse>): void {
+    this._listCommandsHandler = handler;
   }
 
   /**
-   * Destroy the terminal (uses REST API, not WebSocket)
+   * Set retrieve command handler (called by Sandbox)
+   * @internal
    */
-  private destroyTerminal?: () => Promise<void>;
+  setRetrieveCommandHandler(handler: (cmdId: string) => Promise<CommandDetailsResponse>): void {
+    this._retrieveCommandHandler = handler;
+  }
 
   /**
-   * Set destroy handler (called by client)
+   * Set wait command handler (called by Sandbox)
+   * @internal
+   */
+  setWaitCommandHandler(handler: (cmdId: string, timeout?: number) => Promise<CommandDetailsResponse>): void {
+    this._waitCommandHandler = handler;
+  }
+
+  /**
+   * Set destroy handler (called by Sandbox)
+   * @internal
    */
   setDestroyHandler(handler: () => Promise<void>): void {
-    this.destroyTerminal = handler;
+    this._destroyHandler = handler;
+  }
+
+  /**
+   * Execute a command in the terminal (deprecated, use command.run())
+   * @deprecated Use terminal.command.run() instead
+   */
+  async execute(command: string, options?: { background?: boolean }): Promise<CommandExecutionResponse> {
+    if (!this._executeHandler) {
+      throw new Error('Execute handler not set');
+    }
+    return this._executeHandler(command, options?.background);
   }
 
   /**
    * Destroy the terminal
    */
   async destroy(): Promise<void> {
-    if (!this.destroyTerminal) {
+    if (!this._destroyHandler) {
       throw new Error('Destroy handler not set');
     }
-    await this.destroyTerminal();
+    await this._destroyHandler();
     this.cleanup();
   }
 
@@ -214,11 +336,13 @@ export class Terminal {
    * Clean up resources
    */
   private cleanup(): void {
-    // Unsubscribe from channel
-    this.ws.unsubscribe(this.channel);
+    // Unsubscribe from channel (PTY mode only)
+    if (this._ws && this._channel) {
+      this._ws.unsubscribe(this._channel);
+    }
 
     // Clear event handlers
-    this.eventHandlers.clear();
+    this._eventHandlers.clear();
   }
 
   /**
@@ -228,10 +352,10 @@ export class Terminal {
     event: K,
     handler: TerminalEventHandler[K]
   ): void {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, new Set());
+    if (!this._eventHandlers.has(event)) {
+      this._eventHandlers.set(event, new Set());
     }
-    this.eventHandlers.get(event)!.add(handler);
+    this._eventHandlers.get(event)!.add(handler);
   }
 
   /**
@@ -241,11 +365,11 @@ export class Terminal {
     event: K,
     handler: TerminalEventHandler[K]
   ): void {
-    const handlers = this.eventHandlers.get(event);
+    const handlers = this._eventHandlers.get(event);
     if (handlers) {
       handlers.delete(handler);
       if (handlers.size === 0) {
-        this.eventHandlers.delete(event);
+        this._eventHandlers.delete(event);
       }
     }
   }
@@ -257,7 +381,7 @@ export class Terminal {
     event: K,
     ...args: Parameters<TerminalEventHandler[K]>
   ): void {
-    const handlers = this.eventHandlers.get(event);
+    const handlers = this._eventHandlers.get(event);
     if (handlers) {
       handlers.forEach((handler) => {
         try {

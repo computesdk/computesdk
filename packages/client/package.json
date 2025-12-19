@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/client",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "type": "module",
   "description": "Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes",
   "author": "Garrison",
@@ -46,6 +46,9 @@
   "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/client",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "dependencies": {
+    "@computesdk/cmd": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

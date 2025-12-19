@@ -7,9 +7,10 @@
 
 import { getSandbox } from '@cloudflare/sandbox';
 import { createProvider } from 'computesdk';
-import type { 
-  ExecutionResult, 
-  SandboxInfo, 
+import type {
+  CodeResult,
+  CommandResult,
+  SandboxInfo,
   Runtime,
   CreateSandboxOptions,
   FileEntry
@@ -186,7 +187,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (cloudflareSandbox: CloudflareSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (cloudflareSandbox: CloudflareSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
 
         try {
@@ -215,34 +216,28 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
             }
             
             result = {
-              stdout,
-              stderr,
+              output: stdout,
               exitCode: 0, // Cloudflare code interpreter doesn't expose exit codes directly
-              executionTime: Date.now() - startTime,
-              sandboxId,
-              provider: 'cloudflare'
+              language: 'python'
             };
           } else {
             // For Node.js/JavaScript, use exec with node command
             const execResult = await sandbox.exec(`node -e "${code.replace(/"/g, '\\"')}"`);
             
             result = {
-              stdout: execResult.stdout || '',
-              stderr: execResult.stderr || '',
+              output: (execResult.stdout || '') + (execResult.stderr || ''),
               exitCode: execResult.exitCode || 0,
-              executionTime: Date.now() - startTime,
-              sandboxId,
-              provider: 'cloudflare'
+              language: 'node'
             };
           }
 
           // Check for syntax errors
-          if (result.stderr && (
-            result.stderr.includes('SyntaxError') ||
-            result.stderr.includes('invalid syntax') ||
-            result.stderr.includes('Unexpected token')
+          if (result.output && (
+            result.output.includes('SyntaxError') ||
+            result.output.includes('invalid syntax') ||
+            result.output.includes('Unexpected token')
           )) {
-            throw new Error(`Syntax error: ${result.stderr.trim()}`);
+            throw new Error(`Syntax error: ${result.output.trim()}`);
           }
 
           return result;
@@ -258,7 +253,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
         }
       },
 
-      runCommand: async (cloudflareSandbox: CloudflareSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (cloudflareSandbox: CloudflareSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
@@ -282,9 +277,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
             stdout: execResult.stdout || '',
             stderr: execResult.stderr || '',
             exitCode: execResult.exitCode || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId,
-            provider: 'cloudflare'
+            durationMs: Date.now() - startTime
           };
         } catch (error) {
           // For command failures, return error info instead of throwing
@@ -292,9 +285,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127, // Command not found exit code
-            executionTime: Date.now() - startTime,
-            sandboxId: cloudflareSandbox.sandboxId,
-            provider: 'cloudflare'
+            durationMs: Date.now() - startTime
           };
         }
       },

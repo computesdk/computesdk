@@ -10,7 +10,8 @@ import { createProvider } from 'computesdk';
 
 
 import type {
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   SandboxInfo,
   Runtime,
   CreateSandboxOptions,
@@ -36,6 +37,7 @@ export interface E2BConfig {
  */
 export const e2b = createProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
+  defaultMode: 'direct',
   methods: {
     sandbox: {
       // Collection operations (map to compute.sandbox.*)
@@ -165,11 +167,8 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: E2BSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
-        const startTime = Date.now();
-
+      runCode: async (sandbox: E2BSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         try {
-
           // Auto-detect runtime if not specified
           const effectiveRuntime = runtime || (
             // Strong Python indicators
@@ -187,21 +186,14 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
               : 'node'
           );
 
-          // Use runCommand for consistent execution across all providers
-          let result;
-
           // Use base64 encoding for both runtimes for reliability and consistency
           const encoded = Buffer.from(code).toString('base64');
+          const result = effectiveRuntime === 'python'
+            ? await sandbox.commands.run(`echo "${encoded}" | base64 -d | python3`)
+            : await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
 
-          if (effectiveRuntime === 'python') {
-            result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | python3`);
-          } else {
-            result = await sandbox.commands.run(`echo "${encoded}" | base64 -d | node`);
-          }
-
-          // Check for syntax errors and throw them (similar to Vercel behavior)
+          // Check for syntax errors and throw them
           if (result.exitCode !== 0 && result.stderr) {
-            // Check for common syntax error patterns
             if (result.stderr.includes('SyntaxError') ||
               result.stderr.includes('invalid syntax') ||
               result.stderr.includes('Unexpected token') ||
@@ -210,38 +202,32 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             }
           }
 
+          // Combine stdout and stderr for output
+          const output = result.stderr
+            ? `${result.stdout}${result.stdout && result.stderr ? '\n' : ''}${result.stderr}`
+            : result.stdout;
+
           return {
-            stdout: result.stdout,
-            stderr: result.stderr,
+            output,
             exitCode: result.exitCode,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.sandboxId || 'e2b-unknown',
-            provider: 'e2b'
+            language: effectiveRuntime
           };
         } catch (error) {
-          // Handle E2B's CommandExitError - check if it contains actual error details
+          // Handle E2B's CommandExitError
           if (error instanceof Error && error.message === 'exit status 1') {
             const actualStderr = (error as any)?.result?.stderr || '';
-            const isSyntaxError = actualStderr.includes('SyntaxError');
-
-            if (isSyntaxError) {
-              // For syntax errors, throw
+            if (actualStderr.includes('SyntaxError')) {
               const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
               throw new Error(`Syntax error: ${syntaxErrorLine}`);
-            } else {
-              // For runtime errors, return a result instead of throwing
-              return {
-                stdout: '',
-                stderr: actualStderr || 'Error: Runtime error occurred during execution',
-                exitCode: 1,
-                executionTime: Date.now() - startTime,
-                sandboxId: sandbox.sandboxId || 'e2b-unknown',
-                provider: 'e2b'
-              };
             }
+            // For runtime errors, return a result instead of throwing
+            return {
+              output: actualStderr || 'Error: Runtime error occurred during execution',
+              exitCode: 1,
+              language: runtime || 'node'
+            };
           }
 
-          // Re-throw syntax errors
           if (error instanceof Error && error.message.includes('Syntax error')) {
             throw error;
           }
@@ -251,7 +237,7 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
@@ -270,18 +256,27 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             stdout: execution.stdout,
             stderr: execution.stderr,
             exitCode: execution.exitCode,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.sandboxId || 'e2b-unknown',
-            provider: 'e2b'
+            durationMs: Date.now() - startTime
           };
         } catch (error) {
+          // E2B throws errors for non-zero exit codes
+          // Extract the actual result from the error if available
+          const result = (error as any)?.result;
+          if (result) {
+            return {
+              stdout: result.stdout || '',
+              stderr: result.stderr || '',
+              exitCode: result.exitCode || 1,
+              durationMs: Date.now() - startTime
+            };
+          }
+          
+          // Fallback for other errors (command not found, etc.)
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.sandboxId || 'e2b-unknown',
-            provider: 'e2b'
+            durationMs: Date.now() - startTime
           };
         }
       },
@@ -359,52 +354,3 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
 
 // Export E2B sandbox type for explicit typing
 export type { Sandbox as E2BSandbox } from 'e2b';
-
-// Note: getInstance() typing is now handled by generic type parameters in the core SDK
-
-/**
- * Create a properly typed compute instance for E2B
- * This version provides full type safety for getInstance() calls
- * 
- * @example
- * ```typescript
- * import { createE2BCompute } from '@computesdk/e2b'
- * 
- * const compute = createE2BCompute({ apiKey: 'your-key' });
- * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed as E2B Sandbox!
- * ```
- */
-export function createE2BCompute(config: E2BConfig): {
-  sandbox: {
-    create(): Promise<{
-      sandboxId: string;
-      provider: string;
-      runCode(code: string, runtime?: import('computesdk').Runtime): Promise<import('computesdk').ExecutionResult>;
-      runCommand(command: string, args?: string[]): Promise<import('computesdk').ExecutionResult>;
-      getInfo(): Promise<import('computesdk').SandboxInfo>;
-      getUrl(options: { port: number; protocol?: string }): Promise<string>;
-      getProvider(): ReturnType<typeof e2b>;
-      getInstance(): E2BSandbox; // ✅ Properly typed!
-      kill(): Promise<void>;
-      destroy(): Promise<void>;
-      filesystem: import('computesdk').SandboxFileSystem;
-    }>;
-  };
-} {
-  const provider = e2b(config);
-  
-  return {
-    sandbox: {
-      create: async () => {
-        const sandbox = await provider.sandbox.create();
-        return {
-          ...sandbox,
-          getInstance: (): E2BSandbox => {
-            return sandbox.getInstance() as E2BSandbox;
-          }
-        };
-      }
-    }
-  };
-}

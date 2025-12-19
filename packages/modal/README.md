@@ -37,7 +37,7 @@ const compute = createCompute({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Execute Python code with GPU acceleration
 const result = await sandbox.runCode(`
@@ -395,7 +395,7 @@ export async function POST(request: Request) {
 ### Machine Learning Pipeline
 
 ```typescript
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // Create ML project structure
 await sandbox.filesystem.mkdir('/ml-project');
@@ -468,7 +468,7 @@ console.log('Model saved:', modelExists);
 ### GPU-Accelerated Inference
 
 ```typescript
-const sandbox = await compute.sandbox.create({});
+const sandbox = await compute.sandbox.create();
 
 // GPU inference example
 const result = await sandbox.runCode(`
@@ -533,7 +533,7 @@ const tasks = [
 
 const results = await Promise.all(
   tasks.map(async (taskFile) => {
-    const sandbox = await compute.sandbox.create({});
+    const sandbox = await compute.sandbox.create();
     
     return await sandbox.runCode(`
 import json

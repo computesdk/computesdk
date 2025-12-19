@@ -3,7 +3,8 @@ import { PassThrough } from 'stream';
 import { createProvider } from 'computesdk';
 import type {
   Runtime,
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   RunCommandOptions,
   CreateSandboxOptions,
   SandboxInfo,
@@ -14,8 +15,6 @@ import { defaultDockerConfig } from './types/types';
 import type {
   DockerConfig,
   DockerSandboxHandle,
-  DockerSandboxAPI,
-  CreateDockerCompute,
   DockerImage,
   PortBindings,
 } from './types/types';
@@ -297,7 +296,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         }
       },
 
-      runCode: async (handle: DockerSandboxHandle, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (handle: DockerSandboxHandle, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const start = Date.now();
 
         // Resolve runtime: param → label → error
@@ -333,12 +332,9 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         }
 
         return {
-          stdout,
-          stderr,
+          output: stdout + stderr,
           exitCode,
-          executionTime: Date.now() - start,
-          sandboxId: handle.containerId,
-          provider: PROVIDER,
+          language: rt,
         };
       },
 
@@ -346,7 +342,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         handle: DockerSandboxHandle,
         command: string,
         args: string[] = []
-      ): Promise<ExecutionResult> => {
+      ): Promise<CommandResult> => {
         const start = Date.now();
         const shell = args.length ? `${command} ${args.join(' ')}` : command;
 
@@ -356,9 +352,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
           stdout,
           stderr,
           exitCode,
-          executionTime: Date.now() - start,
-          sandboxId: handle.containerId,
-          provider: PROVIDER,
+          durationMs: Date.now() - start,
         };
       },
 
@@ -465,19 +459,3 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
   },
 });
 
-// ---------------------- convenience creator (optional) ----------------------
-
-export function createDockerCompute(config: DockerConfig): CreateDockerCompute {
-  const provider = docker(config);
-  return {
-    sandbox: {
-      create: async (options) => {
-        const sb = await provider.sandbox.create(options);
-        return {
-          ...sb,
-          getInstance: (): DockerSandboxHandle => sb.getInstance() as DockerSandboxHandle,
-        } as unknown as DockerSandboxAPI;
-      },
-    },
-  };
-}
