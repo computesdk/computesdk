@@ -10,7 +10,7 @@
  */
 
 import { Sandbox as ClientSandbox } from '@computesdk/client';
-import { createProvider } from '../factory';
+import { createProvider, type BaseProviderConfig } from '../factory';
 import { waitForComputeReady } from '../compute-daemon/lifecycle';
 import type { Runtime, SandboxInfo } from '../types';
 import { calculateBackoff } from '../utils';
@@ -18,7 +18,7 @@ import { calculateBackoff } from '../utils';
 /**
  * Gateway provider configuration
  */
-export interface GatewayConfig {
+export interface GatewayConfig extends BaseProviderConfig {
   /** Gateway URL (default: https://gateway.computesdk.com) */
   gatewayUrl?: string;
   /** ComputeSDK API key for authentication */

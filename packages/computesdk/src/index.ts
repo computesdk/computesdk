@@ -46,7 +46,7 @@ export type {
 
 // Export provider factory for creating custom providers
 export { createProvider } from './factory';
-export type { ProviderConfig, SandboxMethods, TemplateMethods, SnapshotMethods } from './factory';
+export type { ProviderConfig, SandboxMethods, TemplateMethods, SnapshotMethods, BaseProviderConfig, ProviderMode } from './factory';
 
 // Export error handling utilities (explicitly for clarity)
 export { CommandExitError, isCommandExitError } from './types/sandbox';
