@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/lambda",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lambda provider for ComputeSDK",
   "author": "ComputeSDK Team",
   "license": "MIT",

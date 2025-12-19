@@ -1,4 +1,4 @@
-# @computesdk/namespace
+# @computesdk/lambda
 
 ## 1.1.0
 
@@ -10,9 +10,3 @@
 
 - Updated dependencies [8002931]
   - computesdk@1.9.0
-
-## 1.0.0
-
-### Major Changes
-
-- Initial release of Namespace provider for ComputeSDK
