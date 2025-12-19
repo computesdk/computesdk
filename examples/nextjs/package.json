@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-nextjs",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "private": true,
   "description": "Next.js example using ComputeSDK for server-side code execution",
   "scripts": {
