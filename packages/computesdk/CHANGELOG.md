@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.9.1
+
+### Patch Changes
+
+- 1ac5ad2: adding in mode to types
+
 ## 1.9.0
 
 ### Minor Changes
