@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/avm",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AVM provider for ComputeSDK",
   "author": "ComputeSDK Team",
   "license": "MIT",

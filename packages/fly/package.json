@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/fly",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Fly.io provider for ComputeSDK",
   "author": "ComputeSDK Team",
   "license": "MIT",

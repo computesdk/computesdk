@@ -1,5 +1,13 @@
 # @computesdk/e2b
 
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [f38470d]
+- Updated dependencies [f38470d]
+  - computesdk@1.9.3
+
 ## 1.7.1
 
 ### Patch Changes

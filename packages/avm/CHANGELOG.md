@@ -1,5 +1,13 @@
 # @computesdk/avm
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [f38470d]
+- Updated dependencies [f38470d]
+  - computesdk@1.9.3
+
 ## 0.1.1
 
 ### Patch Changes
