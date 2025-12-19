@@ -31,6 +31,7 @@ import * as network from './commands/network.js';
 import * as text from './commands/text.js';
 import * as archive from './commands/archive.js';
 import * as system from './commands/system.js';
+import * as computeCommands from './commands/compute.js';
 
 import type { Command } from './types.js';
 import { buildShellCommand } from './utils.js';
@@ -70,6 +71,8 @@ export const cmd = Object.assign(
     ...archive,
     // System
     ...system,
+    // Compute
+    ...computeCommands,
   }
 );
 
@@ -103,6 +106,9 @@ export const {
   df, du, sleep, date, find, tee, diff, parallel, raw,
   base64, md5sum, sha256sum, sha1sum,
 } = system;
+
+// Compute
+export const { compute } = computeCommands;
 
 // Default export for convenience
 export default cmd;
