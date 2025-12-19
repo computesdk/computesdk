@@ -26,6 +26,7 @@ export interface DaytonaConfig {
  */
 export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
+  defaultMode: 'direct',
   methods: {
     sandbox: {
       // Collection operations (compute.sandbox.*)

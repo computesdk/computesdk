@@ -16,15 +16,37 @@ export const mkdir = (path: string, options?: { recursive?: boolean }): Command 
 
 /**
  * Remove file or directory
- * @example rm('/app/tmp') // ['rm', '/app/tmp']
- * @example rm('/app/tmp', { recursive: true }) // ['rm', '-rf', '/app/tmp']
+ * @example rm('/app/file.txt') // ['rm', '/app/file.txt']
+ * @example rm('/app/tmp', { recursive: true }) // ['rm', '-r', '/app/tmp']
+ * @example rm('/app/tmp', { recursive: true, force: true }) // ['rm', '-rf', '/app/tmp']
+ * @example rm.rf('/app/tmp') // ['rm', '-rf', '/app/tmp']
+ * @example rm.auto('/app/anything') // Automatically detects file vs directory
  */
-export const rm = (path: string, options?: { recursive?: boolean; force?: boolean }): Command => {
-  const flags: string[] = [];
-  if (options?.recursive) flags.push('r');
-  if (options?.force) flags.push('f');
-  return flags.length > 0 ? ['rm', `-${flags.join('')}`, path] : ['rm', path];
-};
+export const rm = Object.assign(
+  (path: string, options?: { recursive?: boolean; force?: boolean }): Command => {
+    const flags: string[] = [];
+    if (options?.recursive) flags.push('r');
+    if (options?.force) flags.push('f');
+    return flags.length > 0 ? ['rm', `-${flags.join('')}`, path] : ['rm', path];
+  },
+  {
+    /**
+     * Force remove file or directory (always uses -rf)
+     * @example rm.rf('/app/tmp')
+     */
+    rf: (path: string): Command => ['rm', '-rf', path],
+    
+    /**
+     * Smart remove - automatically detects if path is a directory and uses appropriate flags
+     * Uses a shell one-liner to check if directory and apply -r flag accordingly
+     * @example rm.auto('/app/tmp')
+     */
+    auto: (path: string): Command => {
+      // Shell one-liner: if it's a directory, use -rf, otherwise just rm -f
+      return ['sh', '-c', `if [ -d "${path}" ]; then rm -rf "${path}"; else rm -f "${path}"; fi`];
+    }
+  }
+);
 
 /**
  * Copy file or directory

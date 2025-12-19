@@ -67,7 +67,8 @@ drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
 
 ### Workbench Commands
 
-- `provider <name>` - Switch provider (e2b, railway, etc.)
+- `provider <name>` - Switch provider via gateway (e.g., `provider e2b`)
+- `provider direct <name>` - Switch to direct provider connection (e.g., `provider direct e2b`)
 - `providers` - List all providers with status
 - `restart` - Restart current sandbox
 - `destroy` - Destroy current sandbox
@@ -75,6 +76,14 @@ drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
 - `env` - Show environment/credentials status
 - `help` - Show this help
 - `exit` - Exit workbench
+
+**Provider Modes:**
+- **Gateway mode (default)**: Routes through ComputeSDK API, zero-config setup
+  - Example: `provider e2b` uses E2B via gateway
+  - Requires: `COMPUTESDK_API_KEY` + provider credentials
+- **Direct mode**: Connects directly to provider, requires provider packages
+  - Example: `provider direct e2b` connects directly to E2B
+  - Requires: Provider package installed (`@computesdk/e2b`) + provider credentials
 
 ### Running Commands
 
@@ -102,6 +111,9 @@ mkdir('/app/src')
 ls('/home')
 cat('/home/file.txt')
 cp('/src', '/dest', { recursive: true })
+rm('/file.txt')              // Remove file
+rm.rf('/directory')          // Force remove anything
+rm.auto('/path')             // Smart remove (auto-detects file vs directory)
 ```
 
 **Network:**
@@ -114,19 +126,39 @@ wget('https://file.com/download.zip')
 
 ## Provider Switching
 
-Switch between providers on the fly:
+### Gateway Mode (Default - Zero Config)
+
+Switch between providers via the gateway:
 
 ```
+workbench> provider e2b
+✅ Switched to e2b (via gateway)
+
+workbench> npm.install('express')
+⏳ Creating sandbox with e2b (via gateway)...
+✅ Sandbox ready (1.2s)
+Running: npm install express
+✅ Completed (3.2s)
+
 workbench> provider railway
 Destroy current sandbox? (y/N): y
-✅ Destroyed e2b sandbox
-⏳ Creating sandbox with railway...
-✅ Sandbox ready (2.1s)
-Switched to railway
+✅ Switched to railway (via gateway)
+```
 
-workbench> npm.install('lodash')
-Running: npm install lodash
-✅ Completed (2.8s)
+### Direct Mode (Advanced)
+
+Connect directly to providers (requires provider packages):
+
+```
+workbench> provider direct e2b
+✅ Switched to e2b (direct)
+
+workbench> pwd()
+⏳ Creating sandbox with e2b (direct)...
+✅ Sandbox ready (2.5s)
+Running: pwd
+/home
+✅ Completed (0.1s)
 ```
 
 ## Tab Autocomplete

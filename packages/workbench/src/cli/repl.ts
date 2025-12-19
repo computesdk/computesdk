@@ -220,11 +220,24 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
     
-    // Special handling for "provider <name>" syntax (without parentheses)
-    const providerMatch = trimmedCmd.match(/^provider\s+(\w+)$/);
+    // Special handling for "provider <mode> <name>" syntax (without parentheses)
+    // Supports: "provider e2b", "provider direct e2b", "provider gateway e2b"
+    const providerMatch = trimmedCmd.match(/^provider(?:\s+(direct|gateway))?\s+(\w+)$/);
     if (providerMatch) {
-      const providerName = providerMatch[1];
-      const providerCmd = `await provider('${providerName}')`;
+      const mode = providerMatch[1] || null; // 'direct', 'gateway', or null
+      const providerName = providerMatch[2];
+      const providerCmd = mode 
+        ? `await provider('${mode}', '${providerName}')`
+        : `await provider('${providerName}')`;
+      originalEval.call(this, providerCmd, context, filename, callback);
+      return;
+    }
+    
+    // Also handle just "provider direct" or "provider gateway" alone  
+    const providerOnlyMatch = trimmedCmd.match(/^provider\s+(direct|gateway)$/);
+    if (providerOnlyMatch) {
+      const mode = providerOnlyMatch[1];
+      const providerCmd = `await provider('${mode}')`;
       originalEval.call(this, providerCmd, context, filename, callback);
       return;
     }
@@ -295,17 +308,24 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
   };
   
   (replServer as any).completer = function (line: string, callback: (err: Error | null, result: [string[], string]) => void) {
+    // Don't trim - we need to detect trailing spaces
     const trimmed = line.trim();
     
-    // Complete workbench command names
-    if (!trimmed.includes(' ') && !trimmed.includes('.')) {
+    // Complete workbench command names (no space or dot in line)
+    if (!line.includes(' ') && !line.includes('.')) {
       const commands = Object.keys(workbenchCommands);
       const hits = commands.filter(cmd => cmd.startsWith(trimmed));
       
       // Also get context completions from original completer
       if (originalCompleter) {
-        originalCompleter.call(replServer, line, (err: Error | null, [contextHits, partial]: [string[], string]) => {
-          if (err) {
+        originalCompleter.call(replServer, line, (err: Error | null, result?: [string[], string]) => {
+          if (err || !result) {
+            callback(null, [hits, trimmed]);
+            return;
+          }
+          
+          const [contextHits, partial] = result;
+          if (!Array.isArray(contextHits)) {
             callback(null, [hits, trimmed]);
             return;
           }
@@ -322,9 +342,11 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
     }
     
     // Complete command arguments (e.g., "provider e" -> "provider e2b")
-    const parts = trimmed.split(/\s+/);
-    if (parts.length === 2 && !trimmed.includes('.')) {
-      const [command, partial] = parts;
+    // Use original line to detect spaces properly
+    if (line.includes(' ') && !line.includes('.')) {
+      const parts = line.split(' ');
+      const command = parts[0].trim();
+      const partial = parts.slice(1).join(' ').trim(); // Everything after command
       const suggestions = workbenchCommands[command as keyof typeof workbenchCommands];
       
       if (suggestions && suggestions.length > 0) {
@@ -332,14 +354,20 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
           .filter(s => s.startsWith(partial))
           .map(s => `${command} ${s}`);
         
-        callback(null, [hits.length ? hits : suggestions.map(s => `${command} ${s}`), trimmed]);
+        callback(null, [hits.length ? hits : suggestions.map(s => `${command} ${s}`), line]);
         return;
       }
     }
     
     // Fall back to original completer (this handles npm., git., etc.)
     if (originalCompleter) {
-      originalCompleter.call(replServer, line, callback);
+      originalCompleter.call(replServer, line, (err: Error | null, result?: [string[], string]) => {
+        if (err || !result) {
+          callback(null, [[], line]);
+          return;
+        }
+        callback(null, result);
+      });
     } else {
       callback(null, [[], line]);
     }

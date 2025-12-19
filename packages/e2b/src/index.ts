@@ -37,6 +37,7 @@ export interface E2BConfig {
  */
 export const e2b = createProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
+  defaultMode: 'direct',
   methods: {
     sandbox: {
       // Collection operations (map to compute.sandbox.*)
@@ -258,6 +259,19 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
             durationMs: Date.now() - startTime
           };
         } catch (error) {
+          // E2B throws errors for non-zero exit codes
+          // Extract the actual result from the error if available
+          const result = (error as any)?.result;
+          if (result) {
+            return {
+              stdout: result.stdout || '',
+              stderr: result.stderr || '',
+              exitCode: result.exitCode || 1,
+              durationMs: Date.now() - startTime
+            };
+          }
+          
+          // Fallback for other errors (command not found, etc.)
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),

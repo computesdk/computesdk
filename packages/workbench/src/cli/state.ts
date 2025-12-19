@@ -25,8 +25,8 @@ export interface WorkbenchState {
   /** List of providers detected from environment */
   availableProviders: string[];
   
-  /** Force gateway mode even if direct providers are available */
-  forceGatewayMode: boolean;
+  /** Whether to use direct mode (true) or gateway mode (false, default) */
+  useDirectMode: boolean;
   
   /** Show verbose command output (full result object) */
   verbose: boolean;
@@ -41,7 +41,7 @@ export function createState(): WorkbenchState {
     currentSandbox: null,
     sandboxCreatedAt: null,
     availableProviders: [],
-    forceGatewayMode: false,
+    useDirectMode: false,  // Default to gateway mode
     verbose: false,
   };
 }

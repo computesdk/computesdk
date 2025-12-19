@@ -61,34 +61,51 @@ export async function ensureSandbox(state: WorkbenchState): Promise<void> {
 }
 
 /**
- * Create a new sandbox using factory provider
+ * Create a new sandbox using gateway or direct provider
  */
 export async function createSandbox(state: WorkbenchState): Promise<void> {
-  const providerName = state.currentProvider || autoDetectProvider(state.forceGatewayMode);
+  const providerName = state.currentProvider || autoDetectProvider(false);
+  const useDirect = state.useDirectMode;
   
   if (!providerName) {
     logError('No provider configured. Run "env" to see setup instructions.');
     throw new Error('No provider available');
   }
   
-  if (!isProviderReady(providerName)) {
-    logError(`Provider ${providerName} is not fully configured.`);
-    console.log(getProviderSetupHelp(providerName));
-    throw new Error('Provider not ready');
+  // Determine which mode to use
+  let modeLabel: string;
+  let actualProviderName: string;
+  
+  if (useDirect) {
+    // Direct mode: use the provider directly
+    modeLabel = `${providerName} (direct)`;
+    actualProviderName = providerName;
+    
+    if (!isProviderReady(providerName)) {
+      logError(`Provider ${providerName} is not fully configured for direct mode.`);
+      console.log(getProviderSetupHelp(providerName));
+      throw new Error('Provider not ready');
+    }
+  } else {
+    // Gateway mode: use gateway with specified backend
+    modeLabel = `${providerName} (via gateway)`;
+    actualProviderName = 'gateway';
+    
+    if (!isProviderReady('gateway')) {
+      logError('Gateway mode requires COMPUTESDK_API_KEY');
+      console.log(getProviderSetupHelp('gateway'));
+      throw new Error('Gateway not ready');
+    }
   }
   
-  const spinner = new Spinner(`Creating sandbox with ${providerName}...`).start();
+  const spinner = new Spinner(`Creating sandbox with ${modeLabel}...`).start();
   const startTime = Date.now();
   
   try {
     let compute;
     
-    // Gateway uses zero-config mode, other providers use factory pattern
-    if (providerName === 'gateway') {
-      // Gateway mode: just use createCompute() with env auto-detection
-      compute = createCompute();
-    } else {
-      // Load the provider package
+    if (useDirect) {
+      // Direct mode: load the provider package directly
       const providerModule = await loadProvider(providerName as ProviderName);
       const providerFactory = providerModule[providerName];
       
@@ -102,6 +119,51 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
       // Create compute instance with this provider
       compute = createCompute({
         defaultProvider: providerFactory(config),
+      });
+    } else {
+      // Gateway mode: use gateway with provider hint and credentials
+      const gatewayModule = await import('computesdk');
+      const gatewayFactory = gatewayModule.gateway;
+      
+      // Get provider-specific credentials to pass to gateway
+      const providerConfig = getProviderConfig(providerName as ProviderName);
+      
+      // Map provider config to provider headers for gateway
+      const providerHeaders: Record<string, string> = {};
+      
+      // Add provider-specific auth headers based on the provider
+      switch (providerName) {
+        case 'e2b':
+          if (providerConfig.apiKey) providerHeaders['X-E2B-API-Key'] = providerConfig.apiKey;
+          break;
+        case 'railway':
+          if (providerConfig.apiKey) providerHeaders['X-Railway-API-Key'] = providerConfig.apiKey;
+          if (providerConfig.projectId) providerHeaders['X-Railway-Project-ID'] = providerConfig.projectId;
+          if (providerConfig.environmentId) providerHeaders['X-Railway-Environment-ID'] = providerConfig.environmentId;
+          break;
+        case 'daytona':
+          if (providerConfig.apiKey) providerHeaders['X-Daytona-API-Key'] = providerConfig.apiKey;
+          break;
+        case 'modal':
+          if (providerConfig.tokenId) providerHeaders['X-Modal-Token-ID'] = providerConfig.tokenId;
+          if (providerConfig.tokenSecret) providerHeaders['X-Modal-Token-Secret'] = providerConfig.tokenSecret;
+          break;
+        case 'vercel':
+          if (providerConfig.token) providerHeaders['X-Vercel-Token'] = providerConfig.token;
+          if (providerConfig.teamId) providerHeaders['X-Vercel-Team-ID'] = providerConfig.teamId;
+          if (providerConfig.projectId) providerHeaders['X-Vercel-Project-ID'] = providerConfig.projectId;
+          break;
+        // Add other providers as needed
+      }
+      
+      const config = {
+        apiKey: process.env.COMPUTESDK_API_KEY!,
+        provider: providerName, // Tell gateway which backend to use
+        providerHeaders, // Pass provider credentials via headers
+      };
+      
+      compute = createCompute({
+        defaultProvider: gatewayFactory(config),
       });
     }
     
@@ -119,6 +181,14 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
     if (error instanceof Error && error.message.includes('Cannot find module')) {
       logError(`Provider package @computesdk/${providerName} is not installed.`);
       console.log(`\nInstall it with: ${c.cyan(`npm install @computesdk/${providerName}`)}\n`);
+    }
+    
+    // Show the actual error for debugging
+    if (error instanceof Error) {
+      logError(`Error: ${error.message}`);
+      if (error.stack) {
+        console.log(c.dim(error.stack));
+      }
     }
     
     throw error;
@@ -208,19 +278,58 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
 
 /**
  * Switch to a different provider
+ * Supports both gateway mode (default) and direct mode
+ * 
+ * Examples:
+ *   provider e2b          → gateway with e2b backend
+ *   provider direct e2b   → direct connection to e2b
  */
-export async function switchProvider(state: WorkbenchState, newProvider: string): Promise<void> {
+export async function switchProvider(state: WorkbenchState, mode: string, providerName?: string): Promise<void> {
+  // Parse the command: could be "provider e2b" or "provider direct e2b"
+  let useDirect = false;
+  let actualProvider = mode;
+  
+  if (mode === 'direct') {
+    if (!providerName) {
+      logError('Usage: provider direct <name>');
+      console.log('Example: provider direct e2b');
+      return;
+    }
+    useDirect = true;
+    actualProvider = providerName;
+  } else if (mode === 'gateway') {
+    if (!providerName) {
+      logError('Usage: provider gateway <name>');
+      console.log('Example: provider gateway e2b');
+      return;
+    }
+    useDirect = false;
+    actualProvider = providerName;
+  }
+  
+  // Remove 'gateway' prefix if someone types "provider gateway"
+  if (actualProvider === 'gateway') {
+    actualProvider = autoDetectProvider(false) || 'e2b';
+  }
+  
   // Validate provider
-  if (!isValidProvider(newProvider)) {
-    logError(`Unknown provider: ${newProvider}`);
+  if (!isValidProvider(actualProvider)) {
+    logError(`Unknown provider: ${actualProvider}`);
     console.log(`Available providers: e2b, railway, daytona, modal, runloop, vercel, cloudflare, codesandbox, blaxel`);
     return;
   }
   
-  // Check if configured
-  if (!isProviderReady(newProvider)) {
-    logError(`Provider ${newProvider} is not fully configured.`);
-    console.log(getProviderSetupHelp(newProvider));
+  // Check if gateway is configured (always needed)
+  if (!useDirect && !isProviderReady('gateway')) {
+    logError('Gateway mode requires COMPUTESDK_API_KEY');
+    console.log(getProviderSetupHelp('gateway'));
+    return;
+  }
+  
+  // Check if direct provider is configured (only for direct mode)
+  if (useDirect && !isProviderReady(actualProvider)) {
+    logError(`Provider ${actualProvider} is not fully configured for direct mode.`);
+    console.log(getProviderSetupHelp(actualProvider));
     return;
   }
   
@@ -229,61 +338,67 @@ export async function switchProvider(state: WorkbenchState, newProvider: string)
     const shouldDestroy = await confirm('Destroy current sandbox?');
     if (shouldDestroy) {
       await destroySandbox(state);
-      state.currentProvider = newProvider;
-      logSuccess(`Switched to ${newProvider}`);
+      state.currentProvider = actualProvider;
+      state.useDirectMode = useDirect;
+      const modeStr = useDirect ? `${actualProvider} (direct)` : `${actualProvider} (via gateway)`;
+      logSuccess(`Switched to ${modeStr}`);
     } else {
       logWarning('Keeping current sandbox. Provider remains unchanged.');
     }
   } else {
-    state.currentProvider = newProvider;
-    logSuccess(`Switched to ${newProvider}`);
+    state.currentProvider = actualProvider;
+    state.useDirectMode = useDirect;
+    const modeStr = useDirect ? `${actualProvider} (direct)` : `${actualProvider} (via gateway)`;
+    logSuccess(`Switched to ${modeStr}`);
   }
 }
 
 /**
  * Create a provider command handler
+ * Supports: provider e2b, provider direct e2b, provider gateway e2b
  */
 export function createProviderCommand(state: WorkbenchState) {
-  return async function provider(name?: string) {
-    if (!name) {
+  return async function provider(mode?: string, providerName?: string) {
+    if (!mode) {
       // Show current provider
       if (state.currentProvider) {
-        console.log(`\nCurrent provider: ${c.green(state.currentProvider)}\n`);
+        const modeStr = state.useDirectMode ? 'direct' : 'via gateway';
+        console.log(`\nCurrent provider: ${c.green(state.currentProvider)} (${modeStr})\n`);
       } else {
         console.log(c.yellow('\nNo provider selected\n'));
       }
       return;
     }
     
-    await switchProvider(state, name);
+    await switchProvider(state, mode, providerName);
   };
 }
 
 /**
- * Toggle gateway mode on/off
+ * Toggle between gateway and direct mode
  */
 export async function toggleMode(state: WorkbenchState, mode?: 'gateway' | 'direct'): Promise<void> {
-  const newMode = mode || (state.forceGatewayMode ? 'direct' : 'gateway');
+  const newMode = mode || (state.useDirectMode ? 'gateway' : 'direct');
   
-  if (newMode === 'gateway') {
-    state.forceGatewayMode = true;
-    logSuccess('Switched to gateway mode 🌐');
-    console.log(c.dim('Next sandbox will use gateway (requires COMPUTESDK_API_KEY)\n'));
-    
-    // If we have a sandbox and it's not gateway, suggest restart
-    if (hasSandbox(state) && state.currentProvider !== 'gateway') {
-      console.log(c.yellow('Current sandbox is in direct mode.'));
-      console.log(c.dim('Run "restart" to switch to gateway mode\n'));
-    }
-  } else {
-    state.forceGatewayMode = false;
+  if (newMode === 'direct') {
+    state.useDirectMode = true;
     logSuccess('Switched to direct mode 🔗');
     console.log(c.dim('Next sandbox will use direct provider packages\n'));
     
-    // If we have a sandbox and it's gateway, suggest restart
-    if (hasSandbox(state) && state.currentProvider === 'gateway') {
+    // If we have a sandbox and it's in gateway mode, suggest restart
+    if (hasSandbox(state) && !state.useDirectMode) {
       console.log(c.yellow('Current sandbox is in gateway mode.'));
       console.log(c.dim('Run "restart" to switch to direct mode\n'));
+    }
+  } else {
+    state.useDirectMode = false;
+    logSuccess('Switched to gateway mode 🌐');
+    console.log(c.dim('Next sandbox will use gateway (requires COMPUTESDK_API_KEY)\n'));
+    
+    // If we have a sandbox and it's in direct mode, suggest restart
+    if (hasSandbox(state) && state.useDirectMode) {
+      console.log(c.yellow('Current sandbox is in direct mode.'));
+      console.log(c.dim('Run "restart" to switch to gateway mode\n'));
     }
   }
 }
@@ -292,7 +407,7 @@ export async function toggleMode(state: WorkbenchState, mode?: 'gateway' | 'dire
  * Show current mode
  */
 export function showMode(state: WorkbenchState): void {
-  const mode = state.forceGatewayMode || state.currentProvider === 'gateway' ? 'gateway' : 'direct';
+  const mode = state.useDirectMode ? 'direct' : 'gateway';
   const icon = mode === 'gateway' ? '🌐' : '🔗';
   
   console.log(`\nCurrent mode: ${c.green(mode)} ${icon}`);
@@ -303,7 +418,7 @@ export function showMode(state: WorkbenchState): void {
     console.log(c.dim('Direct connection to providers (requires provider packages)'));
   }
   
-  console.log(`\nToggle with: ${c.cyan('mode gateway')} or ${c.cyan('mode direct')}\n`);
+  console.log(`\nSwitch with: ${c.cyan('provider e2b')} (gateway) or ${c.cyan('provider direct e2b')} (direct)\n`);
 }
 
 /**
