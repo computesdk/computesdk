@@ -21,15 +21,22 @@ export async function startWorkbench(): Promise<void> {
   state.availableProviders = getAvailableProviders();
   const detectedProvider = autoDetectProvider();
   
-  // Default to gateway mode with first available provider
-  if (detectedProvider === 'gateway') {
-    // Gateway is available, pick first backend provider
-    const backendProviders = state.availableProviders.filter(p => p !== 'gateway');
+  // Determine mode based on what's available
+  const hasGateway = state.availableProviders.includes('gateway');
+  const backendProviders = state.availableProviders.filter(p => p !== 'gateway');
+  
+  if (hasGateway && backendProviders.length > 0) {
+    // Gateway is available - use it with first backend provider
     state.currentProvider = backendProviders[0] || 'e2b';
-    state.useDirectMode = false; // Default to gateway mode
+    state.useDirectMode = false; // Use gateway mode
+  } else if (backendProviders.length > 0) {
+    // No gateway, but we have direct providers - use direct mode
+    state.currentProvider = backendProviders[0];
+    state.useDirectMode = true; // Use direct mode
   } else {
+    // No providers at all
     state.currentProvider = detectedProvider;
-    state.useDirectMode = false; // Default to gateway mode
+    state.useDirectMode = false;
   }
   
   // Show welcome banner

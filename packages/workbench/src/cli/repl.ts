@@ -151,6 +151,9 @@ function injectCmdContext(replServer: repl.REPLServer) {
   replServer.context.sha256sum = cmd.sha256sum;
   replServer.context.sha1sum = cmd.sha1sum;
   
+  // Compute
+  replServer.context.compute = cmd.compute;
+  
   // Expose cmd namespace for cmd() wrapper
   replServer.context.cmd = cmd.cmd;
   
@@ -248,6 +251,27 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
       const modeName = modeMatch[1];
       const modeCmd = `await mode('${modeName}')`;
       originalEval.call(this, modeCmd, context, filename, callback);
+      return;
+    }
+    
+    // Special handling for $command syntax (direct shell command execution)
+    const dollarMatch = trimmedCmd.match(/^\$(.+)$/);
+    if (dollarMatch) {
+      const shellCmd = dollarMatch[1].trim();
+      
+      // Handle empty command
+      if (!shellCmd) {
+        callback(new Error('Empty command after $'), undefined);
+        return;
+      }
+      
+      // Create command array: ['sh', '-c', 'the command']
+      const command = ['sh', '-c', shellCmd];
+      
+      // Execute the command directly
+      runCommand(state, command)
+        .then(output => callback(null, output))
+        .catch(error => callback(error as Error, undefined));
       return;
     }
     
