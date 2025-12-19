@@ -216,7 +216,7 @@ export function createCompute<TProvider extends Provider>(
     defaultProvider: actualProvider,
   };
 
-  return {
+  const api: TypedComputeAPI<TProvider> = {
     setConfig: <T extends Provider>(cfg: ComputeConfig<T>) => createCompute(cfg),
     getConfig: () => manager.getConfig(),
     clearConfig: () => manager.clearConfig(),
@@ -242,5 +242,6 @@ export function createCompute<TProvider extends Provider>(
         return await manager.sandbox.destroy(sandboxId);
       }
     }
-  } as TypedComputeAPI<TProvider>;
+  };
+  return api;
 }
