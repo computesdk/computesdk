@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/test-utils",
   "version": "1.5.0",
-  "description": "Test utilities for ComputeSDK providers",
+  "description": "Testing utilities and helpers for ComputeSDK provider development and integration tests",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -33,5 +33,24 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "keywords": [
+    "computesdk",
+    "testing",
+    "test-utils",
+    "vitest",
+    "sandbox-testing",
+    "providers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/test-utils"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "author": "Garrison",
+  "license": "MIT"
 }

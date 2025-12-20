@@ -29,6 +29,7 @@
     "lint": "eslint"
   },
   "keywords": [
+    "computesdk",
     "client",
     "browser",
     "node",
@@ -36,14 +37,17 @@
     "code-execution",
     "cloud",
     "compute",
-    "remote-sandbox"
+    "remote-sandbox",
+    "edge-runtime",
+    "serverless",
+    "api-client"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/client"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/client",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

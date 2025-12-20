@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/lambda",
   "version": "1.1.3",
-  "description": "Lambda provider for ComputeSDK",
+  "description": "Lambda Labs provider for ComputeSDK - GPU-accelerated code execution for ML and AI workloads",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "type": "module",
@@ -32,20 +32,23 @@
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "lambda",
+    "lambda-labs",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
     "containers",
-    "gpu"
+    "gpu",
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/lambda"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/lambda",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

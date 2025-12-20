@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/docker",
   "version": "1.2.3",
-  "description": "Docker provider for ComputeSDK",
+  "description": "Docker provider for ComputeSDK - local containerized sandboxes for development and testing",
   "author": "IberAI",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -32,19 +32,24 @@
     "dockerode": "^4.0.8"
   },
   "keywords": [
+    "computesdk",
     "docker",
     "sandbox",
     "code-execution",
     "python",
+    "javascript",
     "cloud",
-    "compute"
+    "compute",
+    "provider",
+    "containers",
+    "local"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/docker"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/docker",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

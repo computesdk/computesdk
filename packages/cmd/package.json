@@ -28,19 +28,23 @@
     "lint": "eslint"
   },
   "keywords": [
+    "computesdk",
     "commands",
     "shell",
     "sandbox",
     "compute",
     "bash",
-    "cli"
+    "cli",
+    "command-builder",
+    "type-safe",
+    "shell-commands"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/cmd"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cmd",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

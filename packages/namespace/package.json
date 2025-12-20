@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/namespace",
   "version": "1.1.3",
-  "description": "Namespace provider for ComputeSDK",
+  "description": "Namespace provider for ComputeSDK - cloud-native sandboxes with optional GPU support",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -31,19 +31,22 @@
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "namespace",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "containers"
+    "containers",
+    "provider",
+    "gpu"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/namespace"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/namespace",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
