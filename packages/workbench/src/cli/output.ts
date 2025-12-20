@@ -217,7 +217,9 @@ ${c.bold('Running Commands:')}
     ${c.cyan('rm.auto("/path")')}       ${c.dim('// Smart remove')}
   
   ${c.dim('Compute CLI:')}
-    ${c.cyan('compute.install()')}      ${c.dim('// Install compute daemon')}
+    ${c.cyan('compute.isSetup()')}      ${c.dim('// Check if daemon is running')}
+    ${c.cyan('compute.setup()')}        ${c.dim('// Install + start daemon')}
+    ${c.cyan('compute.install()')}      ${c.dim('// Install compute CLI')}
     ${c.cyan('compute.start()')}        ${c.dim('// Start daemon')}
     ${c.cyan('compute.health()')}       ${c.dim('// Check daemon health')}
 
