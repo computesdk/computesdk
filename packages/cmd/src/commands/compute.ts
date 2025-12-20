@@ -165,10 +165,60 @@ export const stop = (): Command => {
  * const healthy = result.exitCode === 0;
  * ```
  * 
+ * @param options Health check options
+ * @param options.host Host to check (default: 'localhost')
+ * @param options.port Port to check (default: 18080)
  * @returns Command tuple to check daemon health
  */
-export const health = (): Command => {
-  return ['sh', '-c', 'curl -f http://localhost:3030/health > /dev/null 2>&1'];
+export const health = (options?: {
+  host?: string;
+  port?: number;
+}): Command => {
+  const host = options?.host || 'localhost';
+  const port = options?.port || 18080;
+  return ['sh', '-c', `curl -f http://${host}:${port}/health > /dev/null 2>&1`];
+};
+
+/**
+ * Check if compute daemon is set up and running
+ * 
+ * Returns exit code 0 if daemon is installed and running (ready to use)
+ * Returns exit code 1 if setup is needed (not installed or not running)
+ * 
+ * @example
+ * ```typescript
+ * import { compute } from '@computesdk/cmd';
+ * 
+ * const result = await sandbox.runCommand(compute.isSetup());
+ * if (result.exitCode === 0) {
+ *   console.log('Daemon is ready!');
+ * } else {
+ *   console.log('Setup needed');
+ *   await sandbox.runCommand(compute.setup({ apiKey: 'key' }));
+ * }
+ * ```
+ * 
+ * @param options Setup check options
+ * @param options.host Host to check (default: 'localhost')
+ * @param options.port Port to check (default: 18080)
+ * @returns Command that exits 0 if setup, 1 if setup needed
+ */
+export const isSetup = (options?: {
+  host?: string;
+  port?: number;
+}): Command => {
+  const host = options?.host || 'localhost';
+  const port = options?.port || 18080;
+  
+  return ['sh', '-c', `
+    if ! which compute > /dev/null 2>&1; then
+      exit 1
+    fi
+    if ! curl -f http://${host}:${port}/health > /dev/null 2>&1; then
+      exit 1
+    fi
+    exit 0
+  `.trim()];
 };
 
 /**
@@ -270,4 +320,5 @@ export const compute = {
   stop,
   health,
   setup,
+  isSetup,
 };
