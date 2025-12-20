@@ -1,5 +1,12 @@
 # @computesdk/client
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [729c9b1]
+  - @computesdk/cmd@0.3.0
+
 ## 0.4.0
 
 ### Minor Changes
