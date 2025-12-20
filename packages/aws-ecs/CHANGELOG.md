@@ -1,5 +1,11 @@
 # @computesdk/aws-ecs
 
+## 1.1.3
+
+### Patch Changes
+
+- computesdk@1.9.4
+
 ## 1.1.2
 
 ### Patch Changes
