@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/codesandbox",
-  "version": "1.5.0",
-  "description": "CodeSandbox provider for ComputeSDK",
+  "version": "1.5.4",
+  "description": "CodeSandbox provider for ComputeSDK - fast browser-compatible sandboxes with npm and Python support",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -32,20 +32,23 @@
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "codesandbox",
     "sandbox",
     "code-execution",
     "javascript",
     "python",
     "cloud",
-    "compute"
+    "compute",
+    "provider",
+    "microvm"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/codesandbox"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/codesandbox",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

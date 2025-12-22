@@ -1,5 +1,59 @@
 # computesdk
 
+## 1.9.5
+
+### Patch Changes
+
+- b027cd9: Updating gateway versioning + install and setup
+- Updated dependencies [b027cd9]
+  - @computesdk/cmd@0.3.1
+  - @computesdk/client@0.4.2
+
+## 1.9.4
+
+### Patch Changes
+
+- Updated dependencies [729c9b1]
+  - @computesdk/cmd@0.3.0
+  - @computesdk/client@0.4.1
+
+## 1.9.3
+
+### Patch Changes
+
+- f38470d: Fix getInstance() typing when using createCompute() with direct providers
+
+  Fixed a type inference issue where `sandbox.getInstance()` returned `unknown` instead of the provider's native sandbox type when using `createCompute()` with a direct provider (e.g., E2B, Modal).
+
+  The issue was caused by a forward declaration of the `Provider` interface in `sandbox.ts` that shadowed the real `Provider` interface from `provider.ts`, preventing proper type extraction.
+
+  **Before:**
+
+  ```typescript
+  const provider = e2b({ apiKey: "key" });
+  const compute = createCompute({ defaultProvider: provider });
+  const sandbox = await compute.sandbox.create();
+  const instance = sandbox.getInstance(); // Type: unknown ❌
+  ```
+
+  **After:**
+
+  ```typescript
+  const provider = e2b({ apiKey: "key" });
+  const compute = createCompute({ defaultProvider: provider });
+  const sandbox = await compute.sandbox.create();
+  const instance = sandbox.getInstance(); // Type: E2BSandbox ✅
+  const id = instance.sandboxId; // Works! ✅
+  ```
+
+- f38470d: Update homepage URL to www.computesdk.com
+
+## 1.9.1
+
+### Patch Changes
+
+- 1ac5ad2: adding in mode to types
+
 ## 1.9.0
 
 ### Minor Changes

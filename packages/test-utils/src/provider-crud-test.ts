@@ -41,7 +41,6 @@ const CRUD_ENABLED_PROVIDERS = [
   'avm'
   // Add more providers here as they become stable for CRUD testing
   // 'e2b',      // Add when CRUD implementation is stable
-  // 'modal',    // Add when CRUD implementation is stable  
   // 'vercel',   // Skip - ephemeral sandboxes don't support listing operations
 ];
 

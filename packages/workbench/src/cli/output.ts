@@ -226,6 +226,20 @@ ${c.bold('Running Commands:')}
     ${c.cyan('cat("/etc/hosts")')}
     ${c.cyan('rm.rf("/tmp")')}          ${c.dim('// Force remove')}
     ${c.cyan('rm.auto("/path")')}       ${c.dim('// Smart remove')}
+  
+  ${c.dim('Compute CLI:')}
+    ${c.cyan('compute.isSetup()')}      ${c.dim('// Check if daemon is running')}
+    ${c.cyan('compute.setup()')}        ${c.dim('// Install + start daemon')}
+    ${c.cyan('compute.install()')}      ${c.dim('// Install compute CLI')}
+    ${c.cyan('compute.start()')}        ${c.dim('// Start daemon')}
+    ${c.cyan('compute.health()')}       ${c.dim('// Check daemon health')}
+
+${c.bold('Shell Commands:')}
+  Use ${c.cyan('$')} prefix to run any shell command directly:
+    ${c.cyan('$ls -la /app')}
+    ${c.cyan('$npm install express')}
+    ${c.cyan('$git status')}
+    ${c.cyan('$compute --help')}
 
 ${c.bold('Background Execution:')}
   ${c.cyan('sh("npm start", { background: true })')}

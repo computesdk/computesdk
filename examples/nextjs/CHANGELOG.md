@@ -1,5 +1,45 @@
 # @computesdk/example-nextjs
 
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [b027cd9]
+  - computesdk@1.9.5
+  - @computesdk/daytona@1.6.4
+  - @computesdk/e2b@1.7.4
+  - @computesdk/vercel@1.6.4
+
+## 0.2.13
+
+### Patch Changes
+
+- computesdk@1.9.4
+- @computesdk/daytona@1.6.3
+- @computesdk/e2b@1.7.3
+- @computesdk/vercel@1.6.3
+
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [f38470d]
+- Updated dependencies [f38470d]
+  - computesdk@1.9.3
+  - @computesdk/daytona@1.6.2
+  - @computesdk/e2b@1.7.2
+  - @computesdk/vercel@1.6.2
+
+## 0.2.11
+
+### Patch Changes
+
+- Updated dependencies [1ac5ad2]
+  - computesdk@1.9.1
+  - @computesdk/daytona@1.6.1
+  - @computesdk/e2b@1.7.1
+  - @computesdk/vercel@1.6.1
+
 ## 0.2.10
 
 ### Patch Changes

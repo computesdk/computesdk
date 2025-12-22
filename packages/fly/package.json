@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/fly",
-  "version": "1.1.0",
-  "description": "Fly.io provider for ComputeSDK",
+  "version": "1.1.4",
+  "description": "Fly.io provider for ComputeSDK - globally distributed sandboxes using Fly Machines",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -31,19 +31,23 @@
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "fly",
+    "flyio",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "containers"
+    "containers",
+    "provider",
+    "machines"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/fly"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/fly",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

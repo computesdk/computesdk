@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.5.4
+
+### Patch Changes
+
+- Updated dependencies [b027cd9]
+  - computesdk@1.9.5
+
+## 1.5.3
+
+### Patch Changes
+
+- computesdk@1.9.4
+
+## 1.5.2
+
+### Patch Changes
+
+- Updated dependencies [f38470d]
+- Updated dependencies [f38470d]
+  - computesdk@1.9.3
+
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [1ac5ad2]
+  - computesdk@1.9.1
+
 ## 1.5.0
 
 ### Minor Changes

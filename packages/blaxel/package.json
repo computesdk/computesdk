@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/blaxel",
-  "version": "1.3.0",
-  "description": "Blaxel provider for ComputeSDK",
+  "version": "1.3.4",
+  "description": "Blaxel provider for ComputeSDK - lightweight cloud sandboxes for code execution",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -32,18 +32,21 @@
     "@blaxel/core": "^0.2.42"
   },
   "keywords": [
+    "computesdk",
     "blaxel",
     "sandbox",
     "code-execution",
     "cloud",
-    "compute"
+    "compute",
+    "provider",
+    "containers"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/blaxel"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/blaxel",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

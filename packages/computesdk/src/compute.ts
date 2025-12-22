@@ -1,11 +1,16 @@
 /**
  * Compute Singleton - Main API Orchestrator
  *
- * Provides the unified compute.* API and delegates to specialized managers
+ * Provides the unified compute.* API and delegates to specialized managers.
+ * The `compute` export works as both a singleton and a callable function:
+ *
+ * - Singleton: `compute.sandbox.create()` (auto-detects from env vars)
+ * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config, uses gateway)
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI, ExplicitComputeConfig, CallableCompute } from './types';
 import { autoConfigureCompute } from './auto-detect';
+import { createProviderFromConfig } from './explicit-config';
 
 /**
  * Compute singleton implementation - orchestrates all compute operations
@@ -166,9 +171,55 @@ class ComputeManager implements ComputeAPI {
 }
 
 /**
- * Singleton instance - the main API (untyped)
+ * Singleton instance for property access (internal)
  */
-export const compute: ComputeAPI = new ComputeManager();
+const singletonInstance = new ComputeManager();
+
+/**
+ * Factory function for explicit configuration
+ * Creates a new compute instance using the gateway provider
+ */
+function computeFactory(config: ExplicitComputeConfig): ComputeAPI {
+  const provider = createProviderFromConfig(config);
+  return createCompute({ provider });
+}
+
+/**
+ * Callable compute - works as both singleton and factory function
+ *
+ * @example
+ * ```typescript
+ * import { compute } from 'computesdk';
+ *
+ * // Singleton mode (auto-detects from env vars)
+ * const sandbox1 = await compute.sandbox.create();
+ *
+ * // Callable mode (explicit config, uses gateway)
+ * const sandbox2 = await compute({
+ *   provider: 'e2b',
+ *   apiKey: 'computesdk_xxx',
+ *   e2b: { apiKey: 'e2b_xxx' }
+ * }).sandbox.create();
+ * ```
+ */
+export const compute: CallableCompute = new Proxy(
+  computeFactory as CallableCompute,
+  {
+    get(_target, prop, _receiver) {
+      // Delegate property access to singleton instance
+      const singleton = singletonInstance as unknown as Record<string | symbol, unknown>;
+      const value = singleton[prop];
+      if (typeof value === 'function') {
+        return (value as (...args: unknown[]) => unknown).bind(singletonInstance);
+      }
+      return value;
+    },
+    apply(_target, _thisArg, args) {
+      // Handle function call: compute({...})
+      return computeFactory(args[0] as ExplicitComputeConfig);
+    }
+  }
+);
 
 
 /**
@@ -216,7 +267,7 @@ export function createCompute<TProvider extends Provider>(
     defaultProvider: actualProvider,
   };
 
-  return {
+  const api: TypedComputeAPI<TProvider> = {
     setConfig: <T extends Provider>(cfg: ComputeConfig<T>) => createCompute(cfg),
     getConfig: () => manager.getConfig(),
     clearConfig: () => manager.clearConfig(),
@@ -242,5 +293,6 @@ export function createCompute<TProvider extends Provider>(
         return await manager.sandbox.destroy(sandboxId);
       }
     }
-  } as TypedComputeAPI<TProvider>;
+  };
+  return api;
 }

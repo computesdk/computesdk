@@ -471,8 +471,8 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
  */
 export function createProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
   providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>
-): (config: TConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
-  return (config: TConfig) => {
+): (config: TConfig & BaseProviderConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
+  return (config: TConfig & BaseProviderConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };
 }
