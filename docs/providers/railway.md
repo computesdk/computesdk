@@ -57,14 +57,15 @@ interface RailwayConfig {
 If you prefer to set the provider explicitly, you can do so as follows:
 ```typescript
 // Set as explict provider
-const compute = createCompute({ 
-  provider: railway({ 
-    railwayApiKey: process.env.RAILWAY_API_KEY,
-    railwayProjectId: process.env.RAILWAY_PROJECT_ID,
-    railwayEnvironmentId: process.env.RAILWAY_ENVIRONMENT_ID
-  }),
-  apiKey: process.env.COMPUTESDK_API_KEY 
-});
+const sandbox = compute({
+  provider: 'railway',
+  railway: {
+    railwayApiKey: 'your_railway_api_key',
+    railwayProjectId: 'your_railway_project_id',
+    railwayEnvironmentId: 'your_railway_environment_id'
+  },
+  computesdkApiKey: 'your_computesdk_api_key'
+}).sandbox.create()
 ```
 
 

@@ -2,31 +2,28 @@
 
 Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
 
-## Installation
+## Installation & Setup
 
 ```bash
-npm install @computesdk/daytona
+npm install computesdk
+
+# add to .env file
+COMPUTESDK_API_KEY=your_computesdk_api_key
+
+DAYTONA_API_KEY=your_daytona_api_key
 ```
+
 
 ## Usage
 
 ### With ComputeSDK
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { daytona } from '@computesdk/daytona';
-
-// Set as default provider
-const compute = createCompute({ 
-  provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }),
-  apiKey: process.env.COMPUTESDK_API_KEY 
-});
+import { compute } from 'computesdk';
+// auto-detects provider from environment variables
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
-
-// Get instance
-const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Daytona!")');
@@ -34,14 +31,6 @@ console.log(result.stdout); // "Hello from Daytona!"
 
 // Clean up
 await compute.sandbox.destroy(sandbox.sandboxId);
-```
-
-## Configuration
-
-### Environment Variables
-
-```bash
-export DAYTONA_API_KEY=your_api_key_here
 ```
 
 ### Configuration Options
@@ -55,6 +44,22 @@ interface DaytonaConfig {
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
+```
+
+
+## Explicit Provider Configuration
+If you prefer to set the provider explicitly, you can do so as follows:
+```typescript
+// Set as explict provider
+const sandbox = compute({ 
+  provider: 'daytona', 
+  daytona: {
+    daytonaApiKey: process.env.DAYTONA_API_KEY,
+    daytonaRuntime: 'node',
+    daytonaTimeout: 60000
+  },
+  apiKey: process.env.COMPUTESDK_API_KEY 
+}).sandbox.create();
 ```
 
 ## Runtime Detection
