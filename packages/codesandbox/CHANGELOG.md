@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.4
+
+### Patch Changes
+
+- Updated dependencies [b027cd9]
+  - computesdk@1.9.5
+
 ## 1.5.3
 
 ### Patch Changes

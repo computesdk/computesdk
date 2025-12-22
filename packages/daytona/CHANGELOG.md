@@ -1,5 +1,12 @@
 # @computesdk/daytona
 
+## 1.6.4
+
+### Patch Changes
+
+- Updated dependencies [b027cd9]
+  - computesdk@1.9.5
+
 ## 1.6.3
 
 ### Patch Changes

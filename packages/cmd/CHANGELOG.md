@@ -1,5 +1,11 @@
 # @computesdk/cmd
 
+## 0.3.1
+
+### Patch Changes
+
+- b027cd9: Updating gateway versioning + install and setup
+
 ## 0.3.0
 
 ### Minor Changes
