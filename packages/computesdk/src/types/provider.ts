@@ -204,3 +204,63 @@ export interface TypedComputeAPI<TProvider extends Provider> extends Omit<Comput
   };
 }
 
+/**
+ * E2B provider configuration for explicit compute mode
+ */
+export interface E2BProviderConfig {
+  /** E2B API key */
+  apiKey?: string;
+  /** E2B project ID */
+  projectId?: string;
+  /** E2B environment/template ID */
+  templateId?: string;
+}
+
+/**
+ * Modal provider configuration for explicit compute mode
+ */
+export interface ModalProviderConfig {
+  /** Modal token ID */
+  tokenId?: string;
+  /** Modal token secret */
+  tokenSecret?: string;
+}
+
+/**
+ * Railway provider configuration for explicit compute mode
+ */
+export interface RailwayProviderConfig {
+  /** Railway API token */
+  apiToken?: string;
+}
+
+/**
+ * Supported provider names for explicit compute mode
+ */
+export type ExplicitProviderName = 'e2b' | 'modal' | 'railway';
+
+/**
+ * Explicit compute configuration for callable compute()
+ *
+ * Used when calling compute as a function: compute({ provider: 'e2b', ... })
+ * Always uses gateway mode.
+ */
+export interface ExplicitComputeConfig {
+  /** Provider name to use */
+  provider: ExplicitProviderName;
+  /** ComputeSDK API key (required for gateway mode) */
+  apiKey: string;
+
+  /** E2B provider configuration */
+  e2b?: E2BProviderConfig;
+  /** Modal provider configuration */
+  modal?: ModalProviderConfig;
+  /** Railway provider configuration */
+  railway?: RailwayProviderConfig;
+}
+
+/**
+ * Callable compute type - works as both singleton and factory function
+ */
+export type CallableCompute = ComputeAPI & ((config: ExplicitComputeConfig) => ComputeAPI);
+
