@@ -17,8 +17,6 @@ E2B_API_KEY=your_e2b_api_key
 
 ## Usage
 
-### With ComputeSDK
-
 ```typescript
 import { compute } from 'computesdk';
 // auto-detects provider from environment variables

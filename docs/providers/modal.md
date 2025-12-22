@@ -2,28 +2,27 @@
 
 Modal provider for ComputeSDK - Execute code with GPU support for machine learning workloads.
 
-## Installation
+
+## Installation & Setup
 
 ```bash
-npm install @computesdk/modal
+npm install computesdk
+
+# add to .env file
+COMPUTESDK_API_KEY=your_computesdk_api_key
+
+MODAL_TOKEN_ID=your_modal_token_id_here
+MODAL_TOKEN_SECRET=your_modal_token_secret_here
 ```
+
 
 ## Usage
 
 ### With ComputeSDK
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { modal } from '@computesdk/modal';
-
-// Set as default provider
-const compute = createCompute({ 
-  provider: modal({ 
-    tokenId: process.env.MODAL_TOKEN_ID,
-    tokenSecret: process.env.MODAL_TOKEN_SECRET
-  }),
-  apiKey: process.env.COMPUTESDK_API_KEY 
-});
+import { compute } from 'computesdk';
+// auto-detects provider from environment variables
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
@@ -37,15 +36,6 @@ console.log(result.stdout); // "Hello from Modal!"
 
 // Clean up
 await compute.sandbox.destroy(sandbox.sandboxId);
-```
-
-## Configuration
-
-### Environment Variables
-
-```bash
-export MODAL_TOKEN_ID=your_modal_token_id_here
-export MODAL_TOKEN_SECRET=your_modal_token_secret_here
 ```
 
 ### Configuration Options
@@ -67,39 +57,21 @@ interface ModalConfig {
 }
 ```
 
-### Port Configuration
-
-To expose ports from your Modal sandbox and access them via public URLs:
-
+## Explicit Provider Configuration
+If you prefer to set the provider explicitly, you can do so as follows:
 ```typescript
-import { createCompute } from 'computesdk';
-import { modal } from '@computesdk/modal';
-
-const compute = createCompute({ 
-  provider: modal({ 
-    tokenId: process.env.MODAL_TOKEN_ID,
-    tokenSecret: process.env.MODAL_TOKEN_SECRET,
-    ports: [3000, 8080] // Specify ports to expose
-  })
-});
-
-const sandbox = await compute.sandbox.create();
-
-// Start a web server on port 3000
-await sandbox.runCode(`
-const http = require('http');
-const server = http.createServer((req, res) => {
-  res.writeHead(200, {'Content-Type': 'text/plain'});
-  res.end('Hello from Modal!');
-});
-server.listen(3000, () => console.log('Server running on port 3000'));
-`, 'node');
-
-// Get the public URL
-const url = await sandbox.getUrl({ port: 3000 });
-console.log(\`Server accessible at: \${url}\`);
+// Set as explict provider
+const sandbox = compute({ 
+  provider: 'modal', 
+  modal: {
+    modalTokenId: process.env.MODAL_TOKEN_ID,
+    modalTokenSecret: process.env.MODAL_TOKEN_SECRET,
+    modalRuntime: 'node',
+    modalTimeout: 60000
+  },
+  apiKey: process.env.COMPUTESDK_API_KEY 
+}).sandbox.create();
 ```
-
 Ports are exposed with unencrypted tunnels by default for maximum compatibility.
 ## SDK Reference Links:
 
