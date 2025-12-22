@@ -207,9 +207,10 @@ export const compute: CallableCompute = new Proxy(
   {
     get(_target, prop, _receiver) {
       // Delegate property access to singleton instance
-      const value = (singletonInstance as any)[prop];
+      const singleton = singletonInstance as unknown as Record<string | symbol, unknown>;
+      const value = singleton[prop];
       if (typeof value === 'function') {
-        return value.bind(singletonInstance);
+        return (value as (...args: unknown[]) => unknown).bind(singletonInstance);
       }
       return value;
     },
