@@ -5,6 +5,15 @@ import type { Command } from '../types.js';
  */
 
 /**
+ * Detect if we're running in an interactive TTY environment.
+ * Checks both stdin and stdout since either being a TTY indicates interactive use.
+ */
+const isTTYEnvironment = (): boolean => {
+  if (typeof process === 'undefined') return false;
+  return Boolean(process.stdin?.isTTY || process.stdout?.isTTY);
+};
+
+/**
  * Install the ComputeSDK CLI in a sandbox
  *
  * This command downloads and runs the official ComputeSDK installer.
@@ -45,8 +54,7 @@ export const install = (options?: {
   const curlFlags = options?.silent ? '-fsSL' : '-fSL';
 
   // Auto-detect interactive mode: default to interactive only when in a TTY
-  const isTTY = typeof process !== 'undefined' && process.stdin?.isTTY;
-  const isInteractive = options?.interactive ?? Boolean(isTTY);
+  const isInteractive = options?.interactive ?? isTTYEnvironment();
 
   // Build the install command with optional flags
   let installCmd = isInteractive
@@ -307,8 +315,7 @@ export const setup = (options?: {
   const curlFlags = options?.silent ? '-fsSL' : '-fSL';
 
   // Auto-detect interactive mode: default to interactive only when in a TTY
-  const isTTY = typeof process !== 'undefined' && process.stdin?.isTTY;
-  const isInteractive = options?.interactive ?? Boolean(isTTY);
+  const isInteractive = options?.interactive ?? isTTYEnvironment();
 
   // Build install command with optional flags
   let installCmd = isInteractive
