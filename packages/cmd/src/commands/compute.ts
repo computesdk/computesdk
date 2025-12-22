@@ -49,8 +49,9 @@ export const install = (options?: {
   const isInteractive = options?.interactive ?? Boolean(isTTY);
 
   // Build the install command with optional flags
-  const nonInteractiveFlag = isInteractive ? '' : ' --non-interactive';
-  let installCmd = `curl ${curlFlags} ${installUrl} | bash -s --${nonInteractiveFlag}`;
+  let installCmd = isInteractive
+    ? `curl ${curlFlags} ${installUrl} | bash -s`
+    : `curl ${curlFlags} ${installUrl} | bash -s -- --non-interactive`;
 
   // If API key is provided, set it as environment variable for the install script
   if (options?.apiKey) {
@@ -310,8 +311,9 @@ export const setup = (options?: {
   const isInteractive = options?.interactive ?? Boolean(isTTY);
 
   // Build install command with optional flags
-  const nonInteractiveFlag = isInteractive ? '' : ' --non-interactive';
-  let installCmd = `curl ${curlFlags} ${installUrl} | bash -s --${nonInteractiveFlag}`;
+  let installCmd = isInteractive
+    ? `curl ${curlFlags} ${installUrl} | bash -s`
+    : `curl ${curlFlags} ${installUrl} | bash -s -- --non-interactive`;
 
   // Add API key to install if provided
   if (apiKey) {
