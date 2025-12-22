@@ -2,15 +2,6 @@
 
 ComputeSDK provides a unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers.
 
-<br />
-
-<div class="bg-emerald-100/20 border-l-4 border-emerald-800/20 dark:bg-emerald-800/30 dark:border-emerald-100/20 p-6 my-2 rounded flex flex-col gap-4">
-  <strong>For a quick interactive demo of the SDK in action:</strong>
-  
-  ```bash
-  curl -fsSL https://computesdk.com/install.sh | sh
-  ```
-</div>
 
 <br />
 
@@ -30,28 +21,6 @@ Install the core ComputeSDK package:
 
 ```bash
 npm install computesdk
-```
-
-## Provider Packages
-
-ComputeSDK is modular - install only the providers you need:
-
-```bash
-# E2B
-npm install @computesdk/e2b
-
-# Vercel
-npm install @computesdk/vercel
-
-# Daytona
-npm install @computesdk/daytona
-
-# Modal
-npm install @computesdk/modal
-
-# CodeSandbox
-npm install @computesdk/codesandbox
-
 ```
 
 ## Provider Setup
