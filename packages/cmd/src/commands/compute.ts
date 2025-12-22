@@ -5,40 +5,62 @@ import type { Command } from '../types.js';
  */
 
 /**
+ * Detect if we're running in an interactive TTY environment.
+ * Checks both stdin and stdout since either being a TTY indicates interactive use.
+ */
+const isTTYEnvironment = (): boolean => {
+  if (typeof process === 'undefined') return false;
+  return Boolean(process.stdin?.isTTY || process.stdout?.isTTY);
+};
+
+/**
  * Install the ComputeSDK CLI in a sandbox
- * 
+ *
  * This command downloads and runs the official ComputeSDK installer.
  * The CLI provides the full ComputeSDK API (terminals, watchers, signals, etc.)
  * in any sandbox environment.
- * 
+ *
+ * By default, interactive mode is only enabled when running in a TTY environment.
+ * In non-TTY environments (CI pipelines, scripts), the installer runs non-interactively.
+ *
  * @example
  * ```typescript
  * import { compute } from '@computesdk/cmd';
- * 
+ *
  * // Install compute in a raw E2B/Daytona/etc sandbox
  * await sandbox.runCommand(compute.install({ apiKey: process.env.COMPUTESDK_API_KEY }));
+ *
+ * // Force interactive mode (allow prompts)
+ * await sandbox.runCommand(compute.install({ interactive: true }));
  * ```
- * 
+ *
  * @param options Installation options
  * @param options.apiKey ComputeSDK API key (or set COMPUTESDK_API_KEY env var)
  * @param options.version Specific version to install (default: latest)
  * @param options.silent Suppress installation output (default: false)
+ * @param options.interactive Enable interactive mode with prompts (default: auto-detected based on TTY)
  * @returns Command tuple for installing the compute CLI
  */
 export const install = (options?: {
   apiKey?: string;
   version?: string;
   silent?: boolean;
+  interactive?: boolean;
 }): Command => {
   const installUrl = options?.version
     ? `https://computesdk.com/install.sh?version=${options.version}`
     : 'https://computesdk.com/install.sh';
-  
+
   const curlFlags = options?.silent ? '-fsSL' : '-fSL';
-  
-  // Build the install command with optional API key
-  let installCmd = `curl ${curlFlags} ${installUrl} | bash`;
-  
+
+  // Auto-detect interactive mode: default to interactive only when in a TTY
+  const isInteractive = options?.interactive ?? isTTYEnvironment();
+
+  // Build the install command with optional flags
+  let installCmd = isInteractive
+    ? `curl ${curlFlags} ${installUrl} | bash -s`
+    : `curl ${curlFlags} ${installUrl} | bash -s -- --non-interactive`;
+
   // If API key is provided, set it as environment variable for the install script
   if (options?.apiKey) {
     installCmd = `COMPUTESDK_API_KEY="${options.apiKey}" ${installCmd}`;
@@ -46,7 +68,7 @@ export const install = (options?: {
     // Fallback to process.env if available
     installCmd = `COMPUTESDK_API_KEY="${process.env.COMPUTESDK_API_KEY}" ${installCmd}`;
   }
-  
+
   // Use sh -c to pipe curl output to bash
   return ['sh', '-c', installCmd];
 };
@@ -87,26 +109,34 @@ export const version = (): Command => {
 
 /**
  * Start the ComputeSDK daemon
- * 
+ *
  * Note: The daemon usually auto-starts after installation.
  * This is mainly useful for restarting or manual control.
- * 
+ *
  * @example
  * ```typescript
  * import { compute } from '@computesdk/cmd';
- * 
+ *
  * // With API key
  * await sandbox.runCommand(compute.start({ apiKey: process.env.COMPUTESDK_API_KEY }), { background: true });
- * 
+ *
  * // With access token
  * await sandbox.runCommand(compute.start({ accessToken: process.env.ACCESS_TOKEN }), { background: true });
+ *
+ * // Wait for daemon to be healthy before returning (useful for CI/CD)
+ * await sandbox.runCommand(compute.start({ apiKey: 'key', wait: true }));
+ *
+ * // Wait with custom timeout
+ * await sandbox.runCommand(compute.start({ apiKey: 'key', wait: true, waitTimeout: 60 }));
  * ```
- * 
+ *
  * @param options Start options
  * @param options.apiKey ComputeSDK API key (or set COMPUTESDK_API_KEY env var)
  * @param options.accessToken Access token for authentication (alternative to apiKey)
  * @param options.port Port to listen on (default: 18080)
  * @param options.logLevel Log level (default: 'info')
+ * @param options.wait Wait for daemon to be healthy before returning (default: false)
+ * @param options.waitTimeout Timeout in seconds when waiting for health (default: 30)
  * @returns Command tuple to start the daemon
  */
 export const start = (options?: {
@@ -114,27 +144,37 @@ export const start = (options?: {
   accessToken?: string;
   port?: number;
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  wait?: boolean;
+  waitTimeout?: number;
 }): Command => {
   const args = ['compute', 'start'];
-  
-  const apiKey = options?.apiKey || (typeof process !== 'undefined' && process.env?.COMPUTESDK_API_KEY);
+
+  const apiKey =
+    options?.apiKey || (typeof process !== 'undefined' && process.env?.COMPUTESDK_API_KEY);
   const accessToken = options?.accessToken;
-  
+
   // Prefer access token over API key if both are provided
   if (accessToken) {
     args.push('--access-token', accessToken);
   } else if (apiKey) {
     args.push('--api-key', apiKey);
   }
-  
+
   if (options?.port) {
     args.push('--port', String(options.port));
   }
-  
+
   if (options?.logLevel === 'debug') {
     args.push('--verbose');
   }
-  
+
+  if (options?.wait) {
+    args.push('--wait');
+    if (options.waitTimeout) {
+      args.push('--wait-timeout', String(options.waitTimeout));
+    }
+  }
+
   return args as Command;
 };
 
@@ -223,24 +263,36 @@ export const isSetup = (options?: {
 
 /**
  * Install and start the ComputeSDK daemon in one command
- * 
+ *
  * This is a convenience method that installs the compute CLI and starts the daemon.
  * Useful for quickly setting up a sandbox with ComputeSDK capabilities.
- * 
+ *
+ * By default, interactive mode is only enabled when running in a TTY environment.
+ * In non-TTY environments (CI pipelines, scripts), the installer runs non-interactively.
+ *
  * @example
  * ```typescript
  * import { compute } from '@computesdk/cmd';
- * 
+ *
  * // Quick setup with API key
  * await sandbox.runCommand(compute.setup({ apiKey: process.env.COMPUTESDK_API_KEY }));
+ *
+ * // Force interactive mode (allow prompts)
+ * await sandbox.runCommand(compute.setup({ apiKey: 'key', interactive: true }));
+ *
+ * // Wait for daemon to be healthy before returning (useful for CI/CD)
+ * await sandbox.runCommand(compute.setup({ apiKey: 'key', wait: true }));
  * ```
- * 
+ *
  * @param options Setup options
  * @param options.apiKey ComputeSDK API key (or set COMPUTESDK_API_KEY env var)
  * @param options.accessToken Access token for authentication (alternative to apiKey)
  * @param options.port Port to listen on (default: 18080)
  * @param options.version Specific version to install (default: latest)
  * @param options.silent Suppress installation output (default: false)
+ * @param options.interactive Enable interactive mode with prompts (default: auto-detected based on TTY)
+ * @param options.wait Wait for daemon to be healthy before returning (default: false)
+ * @param options.waitTimeout Timeout in seconds when waiting for health (default: 30)
  * @returns Command tuple for installing and starting the daemon
  */
 export const setup = (options?: {
@@ -249,41 +301,60 @@ export const setup = (options?: {
   port?: number;
   version?: string;
   silent?: boolean;
+  interactive?: boolean;
+  wait?: boolean;
+  waitTimeout?: number;
 }): Command => {
   const apiKey = options?.apiKey || (typeof process !== 'undefined' && process.env?.COMPUTESDK_API_KEY);
   const accessToken = options?.accessToken;
-  
+
   const installUrl = options?.version
     ? `https://computesdk.com/install.sh?version=${options.version}`
     : 'https://computesdk.com/install.sh';
-  
+
   const curlFlags = options?.silent ? '-fsSL' : '-fSL';
-  
-  // Build install command
-  let installCmd = `curl ${curlFlags} ${installUrl} | bash`;
-  
+
+  // Auto-detect interactive mode: default to interactive only when in a TTY
+  const isInteractive = options?.interactive ?? isTTYEnvironment();
+
+  // Build install command with optional flags
+  let installCmd = isInteractive
+    ? `curl ${curlFlags} ${installUrl} | bash -s`
+    : `curl ${curlFlags} ${installUrl} | bash -s -- --non-interactive`;
+
   // Add API key to install if provided
   if (apiKey) {
     installCmd = `COMPUTESDK_API_KEY="${apiKey}" ${installCmd}`;
   }
-  
+
   // Build start command
   let startCmd = 'compute start';
-  
+
   // Add authentication flags
   if (accessToken) {
     startCmd += ` --access-token "${accessToken}"`;
   } else if (apiKey) {
     startCmd += ` --api-key "${apiKey}"`;
   }
-  
+
   if (options?.port) {
     startCmd += ` --port ${options.port}`;
   }
-  
-  // Combine: install, then start in background
-  const fullCmd = `${installCmd} && ${startCmd} > /dev/null 2>&1 &`;
-  
+
+  if (options?.wait) {
+    startCmd += ' --wait';
+    if (options.waitTimeout) {
+      startCmd += ` --wait-timeout ${options.waitTimeout}`;
+    }
+  }
+
+  // Combine: install, then start
+  // If waiting, run in foreground so we block until healthy
+  // Otherwise run in background for backwards compatibility
+  const fullCmd = options?.wait
+    ? `${installCmd} && ${startCmd}`
+    : `${installCmd} && ${startCmd} > /dev/null 2>&1 &`;
+
   return ['sh', '-c', fullCmd];
 };
 
