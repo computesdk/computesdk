@@ -1,5 +1,14 @@
 # computesdk
 
+## 1.9.5
+
+### Patch Changes
+
+- b027cd9: Updating gateway versioning + install and setup
+- Updated dependencies [b027cd9]
+  - @computesdk/cmd@0.3.1
+  - @computesdk/client@0.4.2
+
 ## 1.9.4
 
 ### Patch Changes
