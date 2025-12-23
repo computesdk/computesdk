@@ -11,6 +11,7 @@ import {
   PROVIDER_AUTH,
   PROVIDER_HEADERS,
   PROVIDER_DASHBOARD_URLS,
+  PROVIDER_ENV_MAP,
   type ProviderName,
 } from './provider-config';
 
@@ -71,22 +72,10 @@ function validateProviderConfig(config: ExplicitComputeConfig): void {
 
 /**
  * Map environment variable name to config field name
+ * Uses shared PROVIDER_ENV_MAP as single source of truth
  */
 function envVarToConfigField(provider: ProviderName, envVar: string): string {
-  // Common patterns
-  const mappings: Record<string, Record<string, string>> = {
-    e2b: { E2B_API_KEY: 'apiKey' },
-    modal: { MODAL_TOKEN_ID: 'tokenId', MODAL_TOKEN_SECRET: 'tokenSecret' },
-    railway: { RAILWAY_API_KEY: 'apiToken', RAILWAY_PROJECT_ID: 'projectId', RAILWAY_ENVIRONMENT_ID: 'environmentId' },
-    daytona: { DAYTONA_API_KEY: 'apiKey' },
-    vercel: { VERCEL_OIDC_TOKEN: 'oidcToken', VERCEL_TOKEN: 'token', VERCEL_TEAM_ID: 'teamId', VERCEL_PROJECT_ID: 'projectId' },
-    runloop: { RUNLOOP_API_KEY: 'apiKey' },
-    cloudflare: { CLOUDFLARE_API_TOKEN: 'apiToken', CLOUDFLARE_ACCOUNT_ID: 'accountId' },
-    codesandbox: { CSB_API_KEY: 'apiKey' },
-    blaxel: { BL_API_KEY: 'apiKey', BL_WORKSPACE: 'workspace' },
-  };
-
-  return mappings[provider]?.[envVar] ?? envVar.toLowerCase();
+  return PROVIDER_ENV_MAP[provider]?.[envVar] ?? envVar.toLowerCase();
 }
 
 /**
