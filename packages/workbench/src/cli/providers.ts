@@ -26,43 +26,74 @@ export const PROVIDER_NAMES = [
 export type ProviderName = typeof PROVIDER_NAMES[number];
 
 /**
- * Required environment variables for each provider
+ * Auth requirements for each provider
+ * Each entry is an array of "auth options" - provider is ready if ANY option is fully satisfied
+ * Each auth option is an array of required env vars that must ALL be present
  */
-export const PROVIDER_ENV_VARS: Record<ProviderName, string[]> = {
-  gateway: ['COMPUTESDK_API_KEY'],
-  e2b: ['E2B_API_KEY'],
-  railway: ['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID'],
-  daytona: ['DAYTONA_API_KEY'],
-  modal: ['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET'],
-  runloop: ['RUNLOOP_API_KEY'],
-  vercel: ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
-  cloudflare: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
-  codesandbox: ['CSB_API_KEY'],
-  blaxel: ['BL_API_KEY', 'BL_WORKSPACE'],
+export const PROVIDER_AUTH: Record<ProviderName, string[][]> = {
+  gateway: [['COMPUTESDK_API_KEY']],
+  e2b: [['E2B_API_KEY']],
+  railway: [['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID']],
+  daytona: [['DAYTONA_API_KEY']],
+  modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
+  runloop: [['RUNLOOP_API_KEY']],
+  // Vercel: OIDC (single token) OR traditional (token + teamId + projectId)
+  vercel: [
+    ['VERCEL_OIDC_TOKEN'],
+    ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
+  ],
+  cloudflare: [['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']],
+  codesandbox: [['CSB_API_KEY']],
+  blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
 };
 
 /**
  * Get detailed status for a specific provider
  */
 export function getProviderStatus(provider: ProviderName): ProviderStatus {
+  const authOptions = PROVIDER_AUTH[provider];
+
   if (typeof process === 'undefined') {
+    // Use first auth option as the "default" for missing list
     return {
       name: provider,
       isComplete: false,
       present: [],
-      missing: [...PROVIDER_ENV_VARS[provider]],
+      missing: [...authOptions[0]],
     };
   }
-  
-  const requiredVars = PROVIDER_ENV_VARS[provider];
-  const present = requiredVars.filter(varName => !!process.env?.[varName]);
-  const missing = requiredVars.filter(varName => !process.env?.[varName]);
-  
+
+  // Collect all unique env vars across all auth options
+  const allVars = [...new Set(authOptions.flat())];
+  const present = allVars.filter(v => !!process.env?.[v]);
+
+  // Check if ANY auth option is fully satisfied
+  const satisfiedOption = authOptions.find(option =>
+    option.every(v => !!process.env?.[v])
+  );
+
+  if (satisfiedOption) {
+    return {
+      name: provider,
+      isComplete: true,
+      present,
+      missing: [],
+    };
+  }
+
+  // Find the auth option closest to being complete (most vars present)
+  const optionScores = authOptions.map(option => ({
+    option,
+    present: option.filter(v => !!process.env?.[v]).length,
+    missing: option.filter(v => !process.env?.[v]),
+  }));
+  const bestOption = optionScores.sort((a, b) => b.present - a.present)[0];
+
   return {
     name: provider,
-    isComplete: missing.length === 0,
-    present: [...present],
-    missing: [...missing],
+    isComplete: false,
+    present,
+    missing: bestOption.missing,
   };
 }
 
@@ -273,6 +304,9 @@ export function getProviderConfig(providerName: ProviderName): Record<string, st
       if (process.env.RUNLOOP_API_KEY) config.apiKey = process.env.RUNLOOP_API_KEY;
       break;
     case 'vercel':
+      // OIDC token (preferred method)
+      if (process.env.VERCEL_OIDC_TOKEN) config.oidcToken = process.env.VERCEL_OIDC_TOKEN;
+      // Traditional method
       if (process.env.VERCEL_TOKEN) config.token = process.env.VERCEL_TOKEN;
       if (process.env.VERCEL_TEAM_ID) config.teamId = process.env.VERCEL_TEAM_ID;
       if (process.env.VERCEL_PROJECT_ID) config.projectId = process.env.VERCEL_PROJECT_ID;
