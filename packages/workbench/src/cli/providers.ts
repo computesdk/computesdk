@@ -26,9 +26,14 @@ export const PROVIDER_NAMES = [
 export type ProviderName = typeof PROVIDER_NAMES[number];
 
 /**
- * Auth requirements for each provider
- * Each entry is an array of "auth options" - provider is ready if ANY option is fully satisfied
- * Each auth option is an array of required env vars that must ALL be present
+ * Auth requirements for each provider (string[][] format)
+ *
+ * Structure: { provider: [[option1_vars], [option2_vars], ...] }
+ * - Outer array: OR conditions (any option can satisfy auth)
+ * - Inner arrays: AND conditions (all vars in option must be present)
+ *
+ * Example: vercel: [['OIDC_TOKEN'], ['TOKEN', 'TEAM_ID', 'PROJECT_ID']]
+ *   -> Ready if OIDC_TOKEN is set, OR if all three traditional vars are set
  */
 export const PROVIDER_AUTH: Record<ProviderName, string[][]> = {
   gateway: [['COMPUTESDK_API_KEY']],
@@ -54,7 +59,6 @@ export function getProviderStatus(provider: ProviderName): ProviderStatus {
   const authOptions = PROVIDER_AUTH[provider];
 
   if (typeof process === 'undefined') {
-    // Use first auth option as the "default" for missing list
     return {
       name: provider,
       isComplete: false,
@@ -63,37 +67,49 @@ export function getProviderStatus(provider: ProviderName): ProviderStatus {
     };
   }
 
-  // Collect all unique env vars across all auth options
-  const allVars = [...new Set(authOptions.flat())];
-  const present = allVars.filter(v => !!process.env?.[v]);
-
-  // Check if ANY auth option is fully satisfied
-  const satisfiedOption = authOptions.find(option =>
-    option.every(v => !!process.env?.[v])
-  );
-
-  if (satisfiedOption) {
-    return {
-      name: provider,
-      isComplete: true,
-      present,
-      missing: [],
-    };
+  // Build a set of all present env vars (checked once per unique var)
+  const allVars = new Set(authOptions.flat());
+  const presentSet = new Set<string>();
+  for (const v of allVars) {
+    if (process.env?.[v]) presentSet.add(v);
   }
 
-  // Find the auth option closest to being complete (most vars present)
-  const optionScores = authOptions.map(option => ({
-    option,
-    present: option.filter(v => !!process.env?.[v]).length,
-    missing: option.filter(v => !process.env?.[v]),
-  }));
-  const bestOption = optionScores.sort((a, b) => b.present - a.present)[0];
+  // Evaluate each auth option in a single pass
+  let bestOption: { presentCount: number; missing: string[] } | null = null;
+
+  for (const option of authOptions) {
+    const missing: string[] = [];
+    let presentCount = 0;
+
+    for (const v of option) {
+      if (presentSet.has(v)) {
+        presentCount++;
+      } else {
+        missing.push(v);
+      }
+    }
+
+    // If all vars present, this option is satisfied
+    if (missing.length === 0) {
+      return {
+        name: provider,
+        isComplete: true,
+        present: [...presentSet],
+        missing: [],
+      };
+    }
+
+    // Track the option closest to completion
+    if (!bestOption || presentCount > bestOption.presentCount) {
+      bestOption = { presentCount, missing };
+    }
+  }
 
   return {
     name: provider,
     isComplete: false,
-    present,
-    missing: bestOption.missing,
+    present: [...presentSet],
+    missing: bestOption?.missing ?? [],
   };
 }
 
