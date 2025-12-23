@@ -301,6 +301,50 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     }
   };
   
+  // Expose child namespace for child sandbox operations
+  replServer.context.child = {
+    get create() {
+      return async () => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.create();
+      };
+    },
+    get list() {
+      return async () => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.list();
+      };
+    },
+    get retrieve() {
+      return async (subdomain: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.retrieve(subdomain);
+      };
+    },
+    get destroy() {
+      return async (subdomain: string, options?: { deleteFiles?: boolean }) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.destroy(subdomain, options);
+      };
+    }
+  };
+  
   // Expose getInstance for advanced users
   replServer.context.getInstance = () => {
     const sandbox = state.currentSandbox;

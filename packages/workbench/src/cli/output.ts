@@ -236,6 +236,12 @@ ${c.bold('Running Commands:')}
     ${c.cyan('filesystem.exists("/path")')}
     ${c.cyan('filesystem.remove("/file")')}
   
+  ${c.dim('Child Sandboxes:')}
+    ${c.cyan('child.create()')}            ${c.dim('// Create child sandbox')}
+    ${c.cyan('child.list()')}              ${c.dim('// List all children')}
+    ${c.cyan('child.retrieve("sandbox-id")')} ${c.dim('// Get child info')}
+    ${c.cyan('child.destroy("sandbox-id")')} ${c.dim('// Delete child')}
+  
   ${c.dim('Sandbox Methods:')}
     ${c.cyan('getUrl({ port: 3000 })')}   ${c.dim('// Get public URL')}
     ${c.cyan('runCode("console.log(\'hi\')", "node")')}
