@@ -332,67 +332,99 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
   };
   
   (replServer as any).completer = function (line: string, callback: (err: Error | null, result: [string[], string]) => void) {
-    // Don't trim - we need to detect trailing spaces
-    const trimmed = line.trim();
-    
-    // Complete workbench command names (no space or dot in line)
-    if (!line.includes(' ') && !line.includes('.')) {
-      const commands = Object.keys(workbenchCommands);
-      const hits = commands.filter(cmd => cmd.startsWith(trimmed));
+    try {
+      // Don't trim - we need to detect trailing spaces
+      const trimmed = line.trim();
       
-      // Also get context completions from original completer
+      // Complete workbench command names (no space or dot in line)
+      if (!line.includes(' ') && !line.includes('.')) {
+        const commands = Object.keys(workbenchCommands);
+        const hits = commands.filter(cmd => cmd.startsWith(trimmed));
+        
+        // Also get context completions from original completer
+        if (originalCompleter) {
+          originalCompleter.call(replServer, line, (err: Error | null, result?: [string[], string]) => {
+            if (err || !result) {
+              callback(null, [hits, trimmed]);
+              return;
+            }
+            
+            // Validate result format
+            if (!Array.isArray(result) || result.length !== 2) {
+              callback(null, [hits, trimmed]);
+              return;
+            }
+            
+            const [contextHits, partial] = result;
+            if (!Array.isArray(contextHits)) {
+              callback(null, [hits, trimmed]);
+              return;
+            }
+
+            // Merge workbench commands with context completions
+            const allHits = [...new Set([...hits, ...contextHits])].sort();
+            const completionPrefix = typeof partial === 'string' ? partial : trimmed;
+            callback(null, [allHits, completionPrefix]);
+          });
+          return;
+        }
+        
+        callback(null, [hits.length ? hits : commands, trimmed]);
+        return;
+      }
+      
+      // Complete command arguments (e.g., "provider e" -> "provider e2b")
+      // Use original line to detect spaces properly
+      if (line.includes(' ') && !line.includes('.')) {
+        const parts = line.split(' ');
+        const command = parts[0].trim();
+        const partial = parts.slice(1).join(' ').trim(); // Everything after command
+        const suggestions = workbenchCommands[command as keyof typeof workbenchCommands];
+        
+        // Check if this is a known workbench command
+        if (suggestions !== undefined) {
+          if (suggestions.length > 0) {
+            const hits = suggestions
+              .filter(s => s.startsWith(partial))
+              .map(s => `${command} ${s}`);
+            
+            callback(null, [hits.length ? hits : suggestions.map(s => `${command} ${s}`), line]);
+          } else {
+            // For commands with no arguments (like 'info', 'help', etc.), return empty
+            callback(null, [[], line]);
+          }
+          return;
+        }
+      }
+      
+      // Fall back to original completer (this handles npm., git., etc.)
       if (originalCompleter) {
         originalCompleter.call(replServer, line, (err: Error | null, result?: [string[], string]) => {
           if (err || !result) {
-            callback(null, [hits, trimmed]);
+            callback(null, [[], line]);
             return;
           }
           
-          const [contextHits, partial] = result;
-          if (!Array.isArray(contextHits)) {
-            callback(null, [hits, trimmed]);
+          // Validate result format before passing it along
+          if (!Array.isArray(result) || result.length !== 2) {
+            callback(null, [[], line]);
             return;
           }
-
-          // Merge workbench commands with context completions
-          const allHits = [...new Set([...hits, ...contextHits])].sort();
-          callback(null, [allHits, partial]);
+          
+          const [completions, partial] = result;
+          if (!Array.isArray(completions) || typeof partial !== 'string') {
+            callback(null, [[], line]);
+            return;
+          }
+          
+          callback(null, [completions, partial]);
         });
-        return;
+      } else {
+        callback(null, [[], line]);
       }
-      
-      callback(null, [hits.length ? hits : commands, trimmed]);
-      return;
-    }
-    
-    // Complete command arguments (e.g., "provider e" -> "provider e2b")
-    // Use original line to detect spaces properly
-    if (line.includes(' ') && !line.includes('.')) {
-      const parts = line.split(' ');
-      const command = parts[0].trim();
-      const partial = parts.slice(1).join(' ').trim(); // Everything after command
-      const suggestions = workbenchCommands[command as keyof typeof workbenchCommands];
-      
-      if (suggestions && suggestions.length > 0) {
-        const hits = suggestions
-          .filter(s => s.startsWith(partial))
-          .map(s => `${command} ${s}`);
-        
-        callback(null, [hits.length ? hits : suggestions.map(s => `${command} ${s}`), line]);
-        return;
-      }
-    }
-    
-    // Fall back to original completer (this handles npm., git., etc.)
-    if (originalCompleter) {
-      originalCompleter.call(replServer, line, (err: Error | null, result?: [string[], string]) => {
-        if (err || !result) {
-          callback(null, [[], line]);
-          return;
-        }
-        callback(null, result);
-      });
-    } else {
+    } catch (error) {
+      // Catch any unexpected errors to prevent crashing the REPL
+      console.error('Autocomplete error:', error);
       callback(null, [[], line]);
     }
   };
