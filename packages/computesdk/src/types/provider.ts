@@ -233,6 +233,10 @@ export interface ModalProviderConfig {
 export interface RailwayProviderConfig {
   /** Railway API token */
   apiToken?: string;
+  /** Railway project ID */
+  projectId?: string;
+  /** Railway environment ID */
+  environmentId?: string;
 }
 
 /**
