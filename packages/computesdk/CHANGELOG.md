@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.9.6
+
+### Patch Changes
+
+- 251f324: Adding in support for many gateway providers
+
 ## 1.9.5
 
 ### Patch Changes

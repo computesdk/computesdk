@@ -1,5 +1,12 @@
 # @computesdk/modal
 
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [251f324]
+  - computesdk@1.9.6
+
 ## 1.7.1
 
 ### Patch Changes
