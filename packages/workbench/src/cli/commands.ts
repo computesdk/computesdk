@@ -61,6 +61,92 @@ export async function ensureSandbox(state: WorkbenchState): Promise<void> {
 }
 
 /**
+ * Create or get compute instance for current provider configuration
+ */
+export async function getComputeInstance(state: WorkbenchState): Promise<any> {
+  // Return cached instance if available
+  if (state.compute) {
+    return state.compute;
+  }
+  
+  const providerName = state.currentProvider || autoDetectProvider(false);
+  const useDirect = state.useDirectMode;
+  
+  if (!providerName) {
+    throw new Error('No provider configured.');
+  }
+  
+  let compute;
+  
+  if (useDirect) {
+    // Direct mode: load the provider package directly
+    const providerModule = await loadProvider(providerName as ProviderName);
+    const providerFactory = providerModule[providerName];
+    
+    if (!providerFactory) {
+      throw new Error(`Provider ${providerName} does not export a factory function`);
+    }
+    
+    // Get config from environment
+    const config = getProviderConfig(providerName as ProviderName);
+    
+    // Create compute instance with this provider
+    compute = createCompute({
+      defaultProvider: providerFactory(config),
+    });
+  } else {
+    // Gateway mode: use gateway with provider hint and credentials
+    const gatewayModule = await import('computesdk');
+    const gatewayFactory = gatewayModule.gateway;
+    
+    // Get provider-specific credentials to pass to gateway
+    const providerConfig = getProviderConfig(providerName as ProviderName);
+    
+    // Map provider config to provider headers for gateway
+    const providerHeaders: Record<string, string> = {};
+    
+    // Add provider-specific auth headers based on the provider
+    switch (providerName) {
+      case 'e2b':
+        if (providerConfig.apiKey) providerHeaders['X-E2B-API-Key'] = providerConfig.apiKey;
+        break;
+      case 'railway':
+        if (providerConfig.apiKey) providerHeaders['X-Railway-API-Key'] = providerConfig.apiKey;
+        if (providerConfig.projectId) providerHeaders['X-Railway-Project-ID'] = providerConfig.projectId;
+        if (providerConfig.environmentId) providerHeaders['X-Railway-Environment-ID'] = providerConfig.environmentId;
+        break;
+      case 'daytona':
+        if (providerConfig.apiKey) providerHeaders['X-Daytona-API-Key'] = providerConfig.apiKey;
+        break;
+      case 'modal':
+        if (providerConfig.tokenId) providerHeaders['X-Modal-Token-ID'] = providerConfig.tokenId;
+        if (providerConfig.tokenSecret) providerHeaders['X-Modal-Token-Secret'] = providerConfig.tokenSecret;
+        break;
+      case 'vercel':
+        if (providerConfig.token) providerHeaders['X-Vercel-Token'] = providerConfig.token;
+        if (providerConfig.teamId) providerHeaders['X-Vercel-Team-ID'] = providerConfig.teamId;
+        if (providerConfig.projectId) providerHeaders['X-Vercel-Project-ID'] = providerConfig.projectId;
+        break;
+      // Add other providers as needed
+    }
+    
+    const config = {
+      apiKey: process.env.COMPUTESDK_API_KEY!,
+      provider: providerName, // Tell gateway which backend to use
+      providerHeaders, // Pass provider credentials via headers
+    };
+    
+    compute = createCompute({
+      defaultProvider: gatewayFactory(config),
+    });
+  }
+  
+  // Cache the instance
+  state.compute = compute;
+  return compute;
+}
+
+/**
  * Create a new sandbox using gateway or direct provider
  */
 export async function createSandbox(state: WorkbenchState): Promise<void> {
@@ -102,77 +188,12 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
   const startTime = Date.now();
   
   try {
-    let compute;
-    
-    if (useDirect) {
-      // Direct mode: load the provider package directly
-      const providerModule = await loadProvider(providerName as ProviderName);
-      const providerFactory = providerModule[providerName];
-      
-      if (!providerFactory) {
-        throw new Error(`Provider ${providerName} does not export a factory function`);
-      }
-      
-      // Get config from environment
-      const config = getProviderConfig(providerName as ProviderName);
-      
-      // Create compute instance with this provider
-      compute = createCompute({
-        defaultProvider: providerFactory(config),
-      });
-    } else {
-      // Gateway mode: use gateway with provider hint and credentials
-      const gatewayModule = await import('computesdk');
-      const gatewayFactory = gatewayModule.gateway;
-      
-      // Get provider-specific credentials to pass to gateway
-      const providerConfig = getProviderConfig(providerName as ProviderName);
-      
-      // Map provider config to provider headers for gateway
-      const providerHeaders: Record<string, string> = {};
-      
-      // Add provider-specific auth headers based on the provider
-      switch (providerName) {
-        case 'e2b':
-          if (providerConfig.apiKey) providerHeaders['X-E2B-API-Key'] = providerConfig.apiKey;
-          break;
-        case 'railway':
-          if (providerConfig.apiKey) providerHeaders['X-Railway-API-Key'] = providerConfig.apiKey;
-          if (providerConfig.projectId) providerHeaders['X-Railway-Project-ID'] = providerConfig.projectId;
-          if (providerConfig.environmentId) providerHeaders['X-Railway-Environment-ID'] = providerConfig.environmentId;
-          break;
-        case 'daytona':
-          if (providerConfig.apiKey) providerHeaders['X-Daytona-API-Key'] = providerConfig.apiKey;
-          break;
-        case 'modal':
-          if (providerConfig.tokenId) providerHeaders['X-Modal-Token-ID'] = providerConfig.tokenId;
-          if (providerConfig.tokenSecret) providerHeaders['X-Modal-Token-Secret'] = providerConfig.tokenSecret;
-          break;
-        case 'vercel':
-          if (providerConfig.token) providerHeaders['X-Vercel-Token'] = providerConfig.token;
-          if (providerConfig.teamId) providerHeaders['X-Vercel-Team-ID'] = providerConfig.teamId;
-          if (providerConfig.projectId) providerHeaders['X-Vercel-Project-ID'] = providerConfig.projectId;
-          break;
-        // Add other providers as needed
-      }
-      
-      const config = {
-        apiKey: process.env.COMPUTESDK_API_KEY!,
-        provider: providerName, // Tell gateway which backend to use
-        providerHeaders, // Pass provider credentials via headers
-      };
-      
-      compute = createCompute({
-        defaultProvider: gatewayFactory(config),
-      });
-    }
+    // Get or create compute instance
+    const compute = await getComputeInstance(state);
     
     // Create sandbox
     const result = await compute.sandbox.create();
     const duration = Date.now() - startTime;
-    
-    // Store compute instance in state for named sandbox operations
-    state.compute = compute;
     
     setSandbox(state, result, providerName);
     spinner.succeed(`Sandbox ready ${c.dim(`(${formatDuration(duration)})`)}`);
@@ -377,6 +398,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
       await destroySandbox(state);
       state.currentProvider = actualProvider;
       state.useDirectMode = useDirect;
+      state.compute = null; // Clear compute instance so it gets recreated
       const modeStr = useDirect ? `${actualProvider} (direct)` : `${actualProvider} (via gateway)`;
       logSuccess(`Switched to ${modeStr}`);
     } else {
@@ -385,6 +407,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
   } else {
     state.currentProvider = actualProvider;
     state.useDirectMode = useDirect;
+    state.compute = null; // Clear compute instance so it gets recreated
     const modeStr = useDirect ? `${actualProvider} (direct)` : `${actualProvider} (via gateway)`;
     logSuccess(`Switched to ${modeStr}`);
   }
