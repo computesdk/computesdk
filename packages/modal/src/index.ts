@@ -112,7 +112,7 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
           } else {
             // Create new Modal sandbox with Node.js (more appropriate for a Node.js SDK)
             const app = await App.lookup('computesdk-modal', { createIfMissing: true });
-            const image = await app.imageFromRegistry('node:20-alpine');
+            const image = await app.imageFromRegistry('node:20');
             
             // Configure sandbox options
             const sandboxOptions: any = {}; // Using 'any' since Modal SDK is alpha
