@@ -1,8 +1,9 @@
 ---
 "computesdk": minor
+"@computesdk/workbench": minor
 ---
 
-Add named sandbox support and extend timeout functionality
+Add named sandbox support, extend timeout functionality, and child sandbox REPL access
 
 ## Named Sandboxes
 
@@ -67,3 +68,31 @@ await compute.sandbox.extendTimeout(sandbox.sandboxId, {
 - Default extension duration is 15 minutes (900000ms)
 - Only available with gateway provider
 - Gateway endpoint: `POST /v1/sandbox/:id/extend`
+
+## Child Sandboxes in Workbench
+
+The workbench REPL now exposes child sandbox operations:
+
+**New REPL Methods:**
+- `child.create()` - Create a child sandbox
+- `child.list()` - List all child sandboxes
+- `child.retrieve(subdomain)` - Get info about a specific child
+- `child.destroy(subdomain, options?)` - Delete a child sandbox
+
+**Example (in workbench REPL):**
+```javascript
+// Create a child sandbox
+const child = await child.create();
+console.log(child.url); // https://sandbox-12345.sandbox.computesdk.com
+
+// List all children
+const children = await child.list();
+
+// Delete a child
+await child.destroy('sandbox-12345', { deleteFiles: true });
+```
+
+**Features:**
+- Works similar to `filesystem` namespace in REPL
+- Auto-completion support
+- Documented in help command
