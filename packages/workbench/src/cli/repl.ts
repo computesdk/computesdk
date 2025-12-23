@@ -244,6 +244,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
   };
   
   // Expose sandbox creation methods (gateway mode only)
+  // These return clean { sandboxId, metadata } objects instead of full GeneratedSandbox
   replServer.context.create = async (options?: any) => {
     if (state.useDirectMode) {
       throw new Error('Named sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
@@ -251,7 +252,14 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     // Lazy-load compute instance
     const { getComputeInstance } = await import('./commands.js');
     const compute = await getComputeInstance(state);
-    return await compute.sandbox.create(options);
+    const sandbox = await compute.sandbox.create(options);
+    
+    // Return clean object with just the useful info
+    return {
+      sandboxId: sandbox.sandboxId,
+      provider: sandbox.provider,
+      metadata: sandbox.getInstance().config.metadata || {}
+    };
   };
   
   replServer.context.findOrCreate = async (options: { name: string; namespace?: string; [key: string]: any }) => {
@@ -261,7 +269,16 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     // Lazy-load compute instance
     const { getComputeInstance } = await import('./commands.js');
     const compute = await getComputeInstance(state);
-    return await compute.sandbox.findOrCreate(options);
+    const sandbox = await compute.sandbox.findOrCreate(options);
+    
+    // Return clean object with just the useful info
+    return {
+      sandboxId: sandbox.sandboxId,
+      provider: sandbox.provider,
+      name: options.name,
+      namespace: options.namespace || 'default',
+      metadata: sandbox.getInstance().config.metadata || {}
+    };
   };
   
   replServer.context.find = async (options: { name: string; namespace?: string }) => {
@@ -271,7 +288,20 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     // Lazy-load compute instance
     const { getComputeInstance } = await import('./commands.js');
     const compute = await getComputeInstance(state);
-    return await compute.sandbox.find(options);
+    const sandbox = await compute.sandbox.find(options);
+    
+    if (!sandbox) {
+      return null;
+    }
+    
+    // Return clean object with just the useful info
+    return {
+      sandboxId: sandbox.sandboxId,
+      provider: sandbox.provider,
+      name: options.name,
+      namespace: options.namespace || 'default',
+      metadata: sandbox.getInstance().config.metadata || {}
+    };
   };
   
   // Expose filesystem namespace
