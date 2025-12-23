@@ -5,6 +5,7 @@
  */
 
 import type { Sandbox, ProviderSandbox } from 'computesdk';
+import type { REPLServer } from 'repl';
 
 /** Sandbox can be either client Sandbox (gateway mode) or ProviderSandbox (direct mode) */
 type WorkbenchSandbox = Sandbox | ProviderSandbox;
@@ -32,7 +33,7 @@ export interface WorkbenchState {
   verbose: boolean;
   
   /** Internal: REPL server reference for updating prompt */
-  _replServer?: any;
+  _replServer?: REPLServer;
 }
 
 /**
@@ -99,8 +100,8 @@ function getPrompt(state: WorkbenchState): string {
   }
   
   const provider = state.currentProvider || 'unknown';
-  const sandboxId = (state.currentSandbox as any).sandboxId || '';
-  
+  const sandboxId = state.currentSandbox.sandboxId || '';
+
   // Use full sandbox ID for now
   // User can see exactly which sandbox they're connected to
   return `${provider}:${sandboxId}> `;

@@ -30,29 +30,11 @@ import * as path from 'path';
 import * as os from 'os';
 
 /**
- * Get current prompt based on sandbox state
- */
-function getPrompt(state: WorkbenchState): string {
-  if (!state.currentSandbox) {
-    return '> ';
-  }
-  
-  const provider = state.currentProvider || 'unknown';
-  const sandboxId = (state.currentSandbox as any).sandboxId || '';
-  
-  // Shorten sandbox ID to first part (before dash) for readability
-  // "normal-gayal-gg1qjq" -> "normal-gayal"
-  const shortId = sandboxId.split('-').slice(0, 2).join('-') || sandboxId;
-  
-  return `${provider}:${shortId}> `;
-}
-
-/**
  * Create and configure REPL server
  */
 export function createREPL(state: WorkbenchState): repl.REPLServer {
   const replServer = repl.start({
-    prompt: getPrompt(state),
+    prompt: '> ',  // Initial prompt, will be updated by state management
     useColors: true,
     terminal: true,
     useGlobal: false,
@@ -75,7 +57,7 @@ export function createREPL(state: WorkbenchState): repl.REPLServer {
   setupHistory(replServer);
   
   // Store replServer reference for prompt updates
-  (state as any)._replServer = replServer;
+  state._replServer = replServer;
 
   return replServer;
 }
