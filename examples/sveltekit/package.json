@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-sveltekit",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "private": true,
   "description": "SvelteKit example using ComputeSDK for server-side code execution",
   "scripts": {
