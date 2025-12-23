@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/aws-ecs",
-  "version": "1.1.2",
-  "description": "AWS ECS provider for ComputeSDK",
+  "version": "1.1.5",
+  "description": "AWS ECS provider for ComputeSDK - scalable containerized sandboxes using Fargate",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -32,20 +32,23 @@
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "aws",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
     "containers",
-    "ecs"
+    "ecs",
+    "provider",
+    "fargate"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/aws-ecs"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/aws-ecs",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

@@ -1,8 +1,23 @@
 /**
  * ComputeSDK Constants
- * 
+ *
  * Default configuration values and provider definitions
  */
+
+// Re-export provider config as the single source of truth
+export {
+  PROVIDER_AUTH,
+  PROVIDER_NAMES,
+  PROVIDER_HEADERS,
+  PROVIDER_ENV_MAP,
+  PROVIDER_DASHBOARD_URLS,
+  type ProviderName,
+  isValidProvider,
+  buildProviderHeaders,
+  getProviderConfigFromEnv,
+  isProviderAuthComplete,
+  getMissingEnvVars,
+} from './provider-config';
 
 /**
  * Default gateway URL for sandbox lifecycle operations
@@ -22,12 +37,12 @@ export const PROVIDER_PRIORITY = [
   'vercel',
   'cloudflare',
   'codesandbox',
-  'blaxel'
+  'blaxel',
 ] as const;
 
 /**
  * Required environment variables for each provider
- * Used to detect which provider to use from environment
+ * @deprecated Use PROVIDER_AUTH from provider-config instead
  */
 export const PROVIDER_ENV_VARS = {
   e2b: ['E2B_API_KEY'],
@@ -38,10 +53,5 @@ export const PROVIDER_ENV_VARS = {
   vercel: ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
   cloudflare: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
   codesandbox: ['CSB_API_KEY'],
-  blaxel: ['BL_API_KEY', 'BL_WORKSPACE']
+  blaxel: ['BL_API_KEY', 'BL_WORKSPACE'],
 } as const;
-
-/**
- * Type for provider names
- */
-export type ProviderName = keyof typeof PROVIDER_ENV_VARS;

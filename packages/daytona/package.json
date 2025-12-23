@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/daytona",
-  "version": "1.6.2",
-  "description": "Daytona provider for ComputeSDK",
+  "version": "1.6.5",
+  "description": "Daytona provider for ComputeSDK - standardized development environments with devcontainer support",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -32,19 +32,23 @@
     "@daytonaio/sdk": "^0.25.0"
   },
   "keywords": [
+    "computesdk",
     "daytona",
     "sandbox",
     "code-execution",
     "python",
+    "javascript",
     "cloud",
-    "compute"
+    "compute",
+    "provider",
+    "devcontainers"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/daytona"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/daytona",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

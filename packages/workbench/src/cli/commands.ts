@@ -272,8 +272,42 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
   } catch (error) {
     const duration = Date.now() - startTime;
     logError(`Failed ${c.dim(`(${formatDuration(duration)})`)} - ${error instanceof Error ? error.message : String(error)}`);
+
+    // Clear stale sandbox on connection/auth errors so next command creates fresh
+    if (isStaleConnectionError(error)) {
+      clearSandbox(state);
+      logWarning('Sandbox connection lost. Next command will create a new sandbox.');
+    }
+
     throw error;
   }
+}
+
+/**
+ * Check if an error indicates a stale/dead sandbox connection
+ */
+function isStaleConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  const stalePhrases = [
+    'websocket',
+    'connection refused',
+    'connection reset',
+    'connection closed',
+    'socket hang up',
+    'econnrefused',
+    'econnreset',
+    'etimedout',
+    'not found',
+    'sandbox not found',
+    'unauthorized',
+    '401',
+    '403',
+    '404',
+  ];
+
+  return stalePhrases.some(phrase => message.includes(phrase));
 }
 
 /**
