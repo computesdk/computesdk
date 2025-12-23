@@ -81,18 +81,19 @@ The workbench REPL now exposes child sandbox operations:
 
 **Example (in workbench REPL):**
 ```javascript
-// Create a child sandbox
-const child = await child.create();
+// Create a child sandbox (no await needed - promises are auto-awaited)
+const child = child.create();
 console.log(child.url); // https://sandbox-12345.sandbox.computesdk.com
 
 // List all children
-const children = await child.list();
+const children = child.list();
 
 // Delete a child
-await child.destroy('sandbox-12345', { deleteFiles: true });
+child.destroy('sandbox-12345', { deleteFiles: true });
 ```
 
 **Features:**
 - Works similar to `filesystem` namespace in REPL
+- Promises are auto-awaited (no need for `await` keyword)
 - Auto-completion support
 - Documented in help command
