@@ -232,6 +232,8 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           token: string;
           provider: string;
           metadata?: Record<string, unknown>;
+          name?: string;
+          namespace?: string;
         }>(`${gatewayUrl}/v1/sandbox`, config, {
           method: 'POST',
           body: JSON.stringify(options || {}),
@@ -241,7 +243,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           throw new Error(`Gateway returned invalid response: ${JSON.stringify(result)}`);
         }
 
-        const { sandboxId, url, token, provider, metadata } = result.data;
+        const { sandboxId, url, token, provider, metadata, name, namespace } = result.data;
 
         // Debug logging
         if (process.env.COMPUTESDK_DEBUG) {
@@ -271,7 +273,11 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           sandboxId,
           provider,
           token: token || config.apiKey, // Use token from gateway, fallback to API key
-          metadata,
+          metadata: {
+            ...metadata,
+            ...(name && { name }),
+            ...(namespace && { namespace }),
+          },
           WebSocket: globalThis.WebSocket,
         });
 
