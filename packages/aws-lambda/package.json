@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/aws-lambda",
-  "version": "1.1.2",
-  "description": "AWS Lambda provider for ComputeSDK",
+  "version": "1.1.5",
+  "description": "AWS Lambda provider for ComputeSDK - serverless code execution on AWS Lambda functions",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -33,20 +33,23 @@
     "jszip": "^3.10.1"
   },
   "keywords": [
+    "computesdk",
     "aws",
     "lambda",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "serverless"
+    "serverless",
+    "provider",
+    "functions"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/aws-lambda"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/aws-lambda",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

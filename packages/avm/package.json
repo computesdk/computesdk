@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/avm",
-  "version": "0.1.2",
-  "description": "AVM provider for ComputeSDK",
+  "version": "0.1.5",
+  "description": "AVM provider for ComputeSDK - isolated code execution environments",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -31,19 +31,21 @@
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "avm",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "containers"
+    "containers",
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/avm"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/avm",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

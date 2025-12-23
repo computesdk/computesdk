@@ -29,19 +29,23 @@
     "lint": "eslint"
   },
   "keywords": [
+    "computesdk",
     "events",
     "pubsub",
     "sandbox",
     "compute",
     "realtime",
-    "streaming"
+    "streaming",
+    "event-driven",
+    "websocket",
+    "monitoring"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/events"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/events",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

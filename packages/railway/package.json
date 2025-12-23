@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/railway",
-  "version": "1.1.2",
-  "description": "Railway provider for ComputeSDK",
+  "version": "1.1.5",
+  "description": "Railway provider for ComputeSDK - simple cloud deployment for containerized sandboxes",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -31,19 +31,22 @@
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "railway",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "containers"
+    "containers",
+    "provider",
+    "deployment"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/railway"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/railway",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

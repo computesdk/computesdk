@@ -232,7 +232,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           token: string;
           provider: string;
           metadata?: Record<string, unknown>;
-        }>(`${gatewayUrl}/sandbox`, config, {
+        }>(`${gatewayUrl}/v1/sandbox`, config, {
           method: 'POST',
           body: JSON.stringify(options || {}),
         });
@@ -288,7 +288,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           token: string;
           provider: string;
           metadata?: Record<string, unknown>;
-        }>(`${gatewayUrl}/sandbox/${sandboxId}`, config);
+        }>(`${gatewayUrl}/v1/sandbox/${sandboxId}`, config);
 
         if (!result.success || !result.data) {
           return null;
@@ -330,7 +330,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
       destroy: async (config, sandboxId) => {
         const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
 
-        await gatewayFetch(`${gatewayUrl}/sandbox/${sandboxId}`, config, {
+        await gatewayFetch(`${gatewayUrl}/v1/sandbox/${sandboxId}`, config, {
           method: 'DELETE',
         });
       },

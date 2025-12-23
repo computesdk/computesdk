@@ -1,5 +1,29 @@
 # @computesdk/modal
 
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [251f324]
+  - computesdk@1.9.6
+
+## 1.7.1
+
+### Patch Changes
+
+- Updated dependencies [b027cd9]
+  - computesdk@1.9.5
+
+## 1.7.0
+
+### Minor Changes
+
+- 64569f1: implement ports update for modal
+
+### Patch Changes
+
+- computesdk@1.9.4
+
 ## 1.6.2
 
 ### Patch Changes

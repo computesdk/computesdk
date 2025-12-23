@@ -1,5 +1,28 @@
 # computesdk
 
+## 1.9.6
+
+### Patch Changes
+
+- 251f324: Adding in support for many gateway providers
+
+## 1.9.5
+
+### Patch Changes
+
+- b027cd9: Updating gateway versioning + install and setup
+- Updated dependencies [b027cd9]
+  - @computesdk/cmd@0.3.1
+  - @computesdk/client@0.4.2
+
+## 1.9.4
+
+### Patch Changes
+
+- Updated dependencies [729c9b1]
+  - @computesdk/cmd@0.3.0
+  - @computesdk/client@0.4.1
+
 ## 1.9.3
 
 ### Patch Changes

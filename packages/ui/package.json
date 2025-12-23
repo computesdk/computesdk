@@ -37,7 +37,13 @@
     "ui",
     "components",
     "code-execution",
-    "sandbox"
+    "sandbox",
+    "react",
+    "vue",
+    "svelte",
+    "framework-agnostic",
+    "frontend",
+    "integration"
   ],
   "author": "Garrison",
   "license": "MIT",
@@ -54,5 +60,14 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/ui"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
   }
 }

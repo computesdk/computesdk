@@ -1,68 +1,98 @@
 /**
  * Provider detection and management for workbench
- * 
- * Uses factory pattern to dynamically import provider packages
+ *
+ * Uses shared provider config from computesdk as single source of truth
  */
 
 import type { ProviderStatus } from './types.js';
 import { c } from './output.js';
+import {
+  PROVIDER_AUTH as SHARED_PROVIDER_AUTH,
+  PROVIDER_NAMES as SHARED_PROVIDER_NAMES,
+  PROVIDER_ENV_MAP,
+  type ProviderName as SharedProviderName,
+  isProviderAuthComplete,
+  getMissingEnvVars,
+  getProviderConfigFromEnv,
+} from 'computesdk';
 
 /**
- * Provider names supported by workbench
+ * Workbench-specific provider names (includes gateway)
  */
 export const PROVIDER_NAMES = [
   'gateway',
-  'e2b',
-  'railway',
-  'daytona',
-  'modal',
-  'runloop',
-  'vercel',
-  'cloudflare',
-  'codesandbox',
-  'blaxel',
+  ...SHARED_PROVIDER_NAMES,
 ] as const;
 
 export type ProviderName = typeof PROVIDER_NAMES[number];
 
 /**
- * Required environment variables for each provider
+ * Auth requirements for each provider
+ * Extends shared config with gateway-specific auth
  */
-export const PROVIDER_ENV_VARS: Record<ProviderName, string[]> = {
-  gateway: ['COMPUTESDK_API_KEY'],
-  e2b: ['E2B_API_KEY'],
-  railway: ['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID'],
-  daytona: ['DAYTONA_API_KEY'],
-  modal: ['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET'],
-  runloop: ['RUNLOOP_API_KEY'],
-  vercel: ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
-  cloudflare: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
-  codesandbox: ['CSB_API_KEY'],
-  blaxel: ['BL_API_KEY', 'BL_WORKSPACE'],
+export const PROVIDER_AUTH: Record<ProviderName, readonly (readonly string[])[]> = {
+  gateway: [['COMPUTESDK_API_KEY']],
+  ...SHARED_PROVIDER_AUTH,
 };
 
 /**
  * Get detailed status for a specific provider
  */
 export function getProviderStatus(provider: ProviderName): ProviderStatus {
+  const authOptions = PROVIDER_AUTH[provider];
+
   if (typeof process === 'undefined') {
     return {
       name: provider,
       isComplete: false,
       present: [],
-      missing: [...PROVIDER_ENV_VARS[provider]],
+      missing: [...authOptions[0]],
     };
   }
-  
-  const requiredVars = PROVIDER_ENV_VARS[provider];
-  const present = requiredVars.filter(varName => !!process.env?.[varName]);
-  const missing = requiredVars.filter(varName => !process.env?.[varName]);
-  
+
+  // Build a set of all present env vars (checked once per unique var)
+  const allVars = new Set(authOptions.flat());
+  const presentSet = new Set<string>();
+  for (const v of allVars) {
+    if (process.env?.[v]) presentSet.add(v);
+  }
+
+  // Evaluate each auth option in a single pass
+  let bestOption: { presentCount: number; missing: string[] } | null = null;
+
+  for (const option of authOptions) {
+    const missing: string[] = [];
+    let presentCount = 0;
+
+    for (const v of option) {
+      if (presentSet.has(v)) {
+        presentCount++;
+      } else {
+        missing.push(v);
+      }
+    }
+
+    // If all vars present, this option is satisfied
+    if (missing.length === 0) {
+      return {
+        name: provider,
+        isComplete: true,
+        present: [...presentSet],
+        missing: [],
+      };
+    }
+
+    // Track the option closest to completion
+    if (!bestOption || presentCount > bestOption.presentCount) {
+      bestOption = { presentCount, missing };
+    }
+  }
+
   return {
     name: provider,
-    isComplete: missing.length === 0,
-    present: [...present],
-    missing: [...missing],
+    isComplete: false,
+    present: [...presentSet],
+    missing: bestOption?.missing ?? [],
   };
 }
 
@@ -81,10 +111,10 @@ export function getAvailableProviders(): string[] {
  */
 export function showProviders() {
   console.log('\n' + c.bold('Provider Status:'));
-  
+
   for (const provider of PROVIDER_NAMES) {
     const status = getProviderStatus(provider);
-    
+
     if (status.isComplete) {
       console.log(`  ${c.green('✅')} ${provider} - Ready`);
     } else if (status.present.length > 0) {
@@ -95,7 +125,7 @@ export function showProviders() {
       console.log(`  ${c.dim('❌')} ${c.dim(provider)} - Not configured`);
     }
   }
-  
+
   console.log('');
 }
 
@@ -105,12 +135,12 @@ export function showProviders() {
 export function showEnv() {
   console.log('\n' + c.bold('Environment Configuration:'));
   console.log('');
-  
+
   for (const provider of PROVIDER_NAMES) {
     const status = getProviderStatus(provider);
-    
+
     console.log(c.bold(`${provider}:`));
-    
+
     if (status.isComplete) {
       console.log(`  ${c.green('✅')} All credentials present`);
       status.present.forEach(varName => {
@@ -123,7 +153,7 @@ export function showEnv() {
           console.log(`    ${c.green('✓')} ${varName}`);
         });
       }
-      
+
       if (status.missing.length > 0) {
         console.log(c.dim('  Missing:'));
         status.missing.forEach(varName => {
@@ -131,10 +161,10 @@ export function showEnv() {
         });
       }
     }
-    
+
     console.log('');
   }
-  
+
   console.log(c.dim('Tip: Set credentials in your .env file'));
   console.log('');
 }
@@ -148,19 +178,19 @@ export function autoDetectProvider(forceGatewayMode = false): string | null {
   if (explicit && isValidProvider(explicit) && isProviderReady(explicit)) {
     return explicit;
   }
-  
+
   // If forcing gateway mode, only return gateway if available
   if (forceGatewayMode) {
     return isProviderReady('gateway') ? 'gateway' : null;
   }
-  
+
   // Auto-detect based on priority order
   for (const provider of PROVIDER_NAMES) {
     if (isProviderReady(provider)) {
       return provider;
     }
   }
-  
+
   return null;
 }
 
@@ -187,13 +217,13 @@ export function getProviderSetupHelp(provider: string): string {
   if (!isValidProvider(provider)) {
     return `Unknown provider: ${provider}\nAvailable: ${PROVIDER_NAMES.join(', ')}`;
   }
-  
+
   const status = getProviderStatus(provider);
-  
+
   if (status.isComplete) {
     return `Provider ${provider} is already configured`;
   }
-  
+
   const lines = [
     `Provider ${provider} requires these environment variables:`,
     '',
@@ -201,7 +231,7 @@ export function getProviderSetupHelp(provider: string): string {
     '',
     'Add them to your .env file or export them in your shell.',
   ];
-  
+
   return lines.join('\n');
 }
 
@@ -248,50 +278,16 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
 
 /**
  * Create provider config from environment variables
- * Maps environment variable names to provider-specific config keys
+ * Uses shared PROVIDER_ENV_MAP from computesdk
  */
 export function getProviderConfig(providerName: ProviderName): Record<string, string> {
-  const config: Record<string, string> = {};
-  
-  switch (providerName) {
-    case 'e2b':
-      if (process.env.E2B_API_KEY) config.apiKey = process.env.E2B_API_KEY;
-      break;
-    case 'railway':
-      if (process.env.RAILWAY_API_KEY) config.apiKey = process.env.RAILWAY_API_KEY;
-      if (process.env.RAILWAY_PROJECT_ID) config.projectId = process.env.RAILWAY_PROJECT_ID;
-      if (process.env.RAILWAY_ENVIRONMENT_ID) config.environmentId = process.env.RAILWAY_ENVIRONMENT_ID;
-      break;
-    case 'daytona':
-      if (process.env.DAYTONA_API_KEY) config.apiKey = process.env.DAYTONA_API_KEY;
-      break;
-    case 'modal':
-      if (process.env.MODAL_TOKEN_ID) config.tokenId = process.env.MODAL_TOKEN_ID;
-      if (process.env.MODAL_TOKEN_SECRET) config.tokenSecret = process.env.MODAL_TOKEN_SECRET;
-      break;
-    case 'runloop':
-      if (process.env.RUNLOOP_API_KEY) config.apiKey = process.env.RUNLOOP_API_KEY;
-      break;
-    case 'vercel':
-      if (process.env.VERCEL_TOKEN) config.token = process.env.VERCEL_TOKEN;
-      if (process.env.VERCEL_TEAM_ID) config.teamId = process.env.VERCEL_TEAM_ID;
-      if (process.env.VERCEL_PROJECT_ID) config.projectId = process.env.VERCEL_PROJECT_ID;
-      break;
-    case 'cloudflare':
-      if (process.env.CLOUDFLARE_API_TOKEN) config.apiToken = process.env.CLOUDFLARE_API_TOKEN;
-      if (process.env.CLOUDFLARE_ACCOUNT_ID) config.accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-      break;
-    case 'codesandbox':
-      if (process.env.CSB_API_KEY) config.apiKey = process.env.CSB_API_KEY;
-      break;
-    case 'blaxel':
-      if (process.env.BL_API_KEY) config.apiKey = process.env.BL_API_KEY;
-      if (process.env.BL_WORKSPACE) config.workspace = process.env.BL_WORKSPACE;
-      break;
-    case 'gateway':
-      if (process.env.COMPUTESDK_API_KEY) config.apiKey = process.env.COMPUTESDK_API_KEY;
-      break;
+  // Handle gateway separately (not in shared config)
+  if (providerName === 'gateway') {
+    const config: Record<string, string> = {};
+    if (process.env.COMPUTESDK_API_KEY) config.apiKey = process.env.COMPUTESDK_API_KEY;
+    return config;
   }
-  
-  return config;
+
+  // Use shared utility for other providers
+  return getProviderConfigFromEnv(providerName as SharedProviderName);
 }
