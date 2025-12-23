@@ -32,6 +32,9 @@ export interface WorkbenchState {
   /** Show verbose command output (full result object) */
   verbose: boolean;
   
+  /** Compute instance (for creating named sandboxes, etc.) */
+  compute: any | null;
+  
   /** Internal: REPL server reference for updating prompt */
   _replServer?: REPLServer;
 }
@@ -47,6 +50,7 @@ export function createState(): WorkbenchState {
     availableProviders: [],
     useDirectMode: false,  // Default to gateway mode
     verbose: false,
+    compute: null,
   };
 }
 

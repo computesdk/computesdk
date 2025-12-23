@@ -171,6 +171,9 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
     const result = await compute.sandbox.create();
     const duration = Date.now() - startTime;
     
+    // Store compute instance in state for named sandbox operations
+    state.compute = compute;
+    
     setSandbox(state, result, providerName);
     spinner.succeed(`Sandbox ready ${c.dim(`(${formatDuration(duration)})`)}`);
   } catch (error) {

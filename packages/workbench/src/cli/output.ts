@@ -236,7 +236,12 @@ ${c.bold('Running Commands:')}
     ${c.cyan('filesystem.exists("/path")')}
     ${c.cyan('filesystem.remove("/file")')}
   
-  ${c.dim('Child Sandboxes:')}
+  ${c.dim('Named Sandboxes (gateway mode only):')}
+    ${c.cyan('create({ name: "my-app", namespace: "user-123" })')} ${c.dim('// Create with name')}
+    ${c.cyan('findOrCreate({ name: "my-app" })')} ${c.dim('// Find or create')}
+    ${c.cyan('find({ name: "my-app" })')}  ${c.dim('// Find existing')}
+  
+  ${c.dim('Child Sandboxes (gateway mode only):')}
     ${c.cyan('child.create()')}            ${c.dim('// Create child sandbox')}
     ${c.cyan('child.list()')}              ${c.dim('// List all children')}
     ${c.cyan('child.retrieve("sandbox-id")')} ${c.dim('// Get child info')}

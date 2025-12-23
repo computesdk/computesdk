@@ -69,6 +69,33 @@ await compute.sandbox.extendTimeout(sandbox.sandboxId, {
 - Only available with gateway provider
 - Gateway endpoint: `POST /v1/sandbox/:id/extend`
 
+## Named Sandboxes in Workbench
+
+The workbench REPL now supports creating and managing named sandboxes:
+
+**New REPL Methods:**
+- `create({ name?, namespace?, ...options })` - Create sandbox with optional name/namespace
+- `findOrCreate({ name, namespace?, ...options })` - Find or create named sandbox
+- `find({ name, namespace? })` - Find existing named sandbox
+
+**Example (in workbench REPL):**
+```javascript
+// Create sandbox with name and namespace (no await needed)
+const sandbox = create({ name: 'my-app', namespace: 'user-123' });
+
+// Find or create named sandbox
+const sandbox = findOrCreate({ name: 'my-app', namespace: 'user-123' });
+
+// Find existing sandbox
+const existing = find({ name: 'my-app', namespace: 'user-123' });
+```
+
+**Features:**
+- Gateway mode only (use `mode gateway` to enable)
+- Promises are auto-awaited (no need for `await` keyword)
+- Auto-completion support
+- Documented in help command
+
 ## Child Sandboxes in Workbench
 
 The workbench REPL now exposes child sandbox operations:
@@ -93,6 +120,7 @@ child.destroy('sandbox-12345', { deleteFiles: true });
 ```
 
 **Features:**
+- Gateway mode only (use `mode gateway` to enable)
 - Works similar to `filesystem` namespace in REPL
 - Promises are auto-awaited (no need for `await` keyword)
 - Auto-completion support

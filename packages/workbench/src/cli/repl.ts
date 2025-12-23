@@ -243,6 +243,37 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     return sandbox.runCode(code, runtime);
   };
   
+  // Expose sandbox creation methods (gateway mode only)
+  replServer.context.create = async (options?: any) => {
+    if (!state.compute) {
+      throw new Error('No compute instance configured.');
+    }
+    if (state.useDirectMode) {
+      throw new Error('Named sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+    }
+    return await state.compute.sandbox.create(options);
+  };
+  
+  replServer.context.findOrCreate = async (options: { name: string; namespace?: string; [key: string]: any }) => {
+    if (!state.compute) {
+      throw new Error('No compute instance configured.');
+    }
+    if (state.useDirectMode) {
+      throw new Error('Named sandboxes (findOrCreate) are only available in gateway mode. Use "mode gateway" to switch.');
+    }
+    return await state.compute.sandbox.findOrCreate(options);
+  };
+  
+  replServer.context.find = async (options: { name: string; namespace?: string }) => {
+    if (!state.compute) {
+      throw new Error('No compute instance configured.');
+    }
+    if (state.useDirectMode) {
+      throw new Error('Named sandboxes (find) are only available in gateway mode. Use "mode gateway" to switch.');
+    }
+    return await state.compute.sandbox.find(options);
+  };
+  
   // Expose filesystem namespace
   replServer.context.filesystem = {
     get readFile() {
@@ -301,10 +332,13 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     }
   };
   
-  // Expose child namespace for child sandbox operations
+  // Expose child namespace for child sandbox operations (gateway mode only)
   replServer.context.child = {
     get create() {
       return async () => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
         const sandbox = state.currentSandbox;
         if (!sandbox) {
           throw new Error('No active sandbox. Run a command to auto-create one.');
@@ -315,6 +349,9 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     },
     get list() {
       return async () => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
         const sandbox = state.currentSandbox;
         if (!sandbox) {
           throw new Error('No active sandbox. Run a command to auto-create one.');
@@ -325,6 +362,9 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     },
     get retrieve() {
       return async (subdomain: string) => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
         const sandbox = state.currentSandbox;
         if (!sandbox) {
           throw new Error('No active sandbox. Run a command to auto-create one.');
@@ -335,6 +375,9 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     },
     get destroy() {
       return async (subdomain: string, options?: { deleteFiles?: boolean }) => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
         const sandbox = state.currentSandbox;
         if (!sandbox) {
           throw new Error('No active sandbox. Run a command to auto-create one.');
