@@ -411,12 +411,12 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
           }
           
           const [completions, partial] = result;
-          if (!Array.isArray(completions)) {
+          if (!Array.isArray(completions) || typeof partial !== 'string') {
             callback(null, [[], line]);
             return;
           }
           
-          callback(null, [completions, partial ?? line]);
+          callback(null, [completions, partial]);
         });
       } else {
         callback(null, [[], line]);
