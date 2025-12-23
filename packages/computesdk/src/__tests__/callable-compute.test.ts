@@ -135,7 +135,7 @@ describe('Callable Compute', () => {
       };
 
       expect(() => createProviderFromConfig(config)).toThrow(
-        /Missing E2B configuration/
+        /Missing e2b configuration/i
       );
     });
 
@@ -147,7 +147,7 @@ describe('Callable Compute', () => {
       };
 
       expect(() => createProviderFromConfig(config)).toThrow(
-        /Missing Modal configuration/
+        /Missing modal configuration/i
       );
     });
 
@@ -159,7 +159,7 @@ describe('Callable Compute', () => {
       };
 
       expect(() => createProviderFromConfig(config)).toThrow(
-        /Missing Railway configuration/
+        /Missing railway configuration/i
       );
     });
 
@@ -193,7 +193,11 @@ describe('Callable Compute', () => {
       const config: ExplicitComputeConfig = {
         provider: 'railway',
         apiKey: 'test-computesdk-key',
-        railway: { apiToken: 'test-railway-token' },
+        railway: {
+          apiToken: 'test-railway-token',
+          projectId: 'test-project-id',
+          environmentId: 'test-env-id',
+        },
       };
 
       const provider = createProviderFromConfig(config);

@@ -5,6 +5,7 @@
  */
 
 import type { Sandbox, ProviderSandbox, CreateSandboxOptions, Runtime } from './sandbox';
+import type { ProviderName } from '../provider-config';
 
 /**
  * Common options for creating snapshots
@@ -232,12 +233,75 @@ export interface ModalProviderConfig {
 export interface RailwayProviderConfig {
   /** Railway API token */
   apiToken?: string;
+  /** Railway project ID */
+  projectId?: string;
+  /** Railway environment ID */
+  environmentId?: string;
+}
+
+/**
+ * Daytona provider configuration for explicit compute mode
+ */
+export interface DaytonaProviderConfig {
+  /** Daytona API key */
+  apiKey?: string;
+}
+
+/**
+ * Vercel provider configuration for explicit compute mode
+ */
+export interface VercelProviderConfig {
+  /** Vercel OIDC token (preferred, simpler auth) */
+  oidcToken?: string;
+  /** Vercel API token (traditional auth) */
+  token?: string;
+  /** Vercel team ID (required with token) */
+  teamId?: string;
+  /** Vercel project ID (required with token) */
+  projectId?: string;
+}
+
+/**
+ * Runloop provider configuration for explicit compute mode
+ */
+export interface RunloopProviderConfig {
+  /** Runloop API key */
+  apiKey?: string;
+}
+
+/**
+ * Cloudflare provider configuration for explicit compute mode
+ */
+export interface CloudflareProviderConfig {
+  /** Cloudflare API token */
+  apiToken?: string;
+  /** Cloudflare account ID */
+  accountId?: string;
+}
+
+/**
+ * CodeSandbox provider configuration for explicit compute mode
+ */
+export interface CodesandboxProviderConfig {
+  /** CodeSandbox API key */
+  apiKey?: string;
+}
+
+/**
+ * Blaxel provider configuration for explicit compute mode
+ */
+export interface BlaxelProviderConfig {
+  /** Blaxel API key */
+  apiKey?: string;
+  /** Blaxel workspace */
+  workspace?: string;
 }
 
 /**
  * Supported provider names for explicit compute mode
+ * Re-exported from provider-config for convenience
  */
-export type ExplicitProviderName = 'e2b' | 'modal' | 'railway';
+export type { ProviderName as ExplicitProviderName } from '../provider-config';
 
 /**
  * Explicit compute configuration for callable compute()
@@ -247,7 +311,7 @@ export type ExplicitProviderName = 'e2b' | 'modal' | 'railway';
  */
 export interface ExplicitComputeConfig {
   /** Provider name to use */
-  provider: ExplicitProviderName;
+  provider: ProviderName;
   /** ComputeSDK API key (required for gateway mode) */
   apiKey: string;
 
@@ -257,6 +321,18 @@ export interface ExplicitComputeConfig {
   modal?: ModalProviderConfig;
   /** Railway provider configuration */
   railway?: RailwayProviderConfig;
+  /** Daytona provider configuration */
+  daytona?: DaytonaProviderConfig;
+  /** Vercel provider configuration */
+  vercel?: VercelProviderConfig;
+  /** Runloop provider configuration */
+  runloop?: RunloopProviderConfig;
+  /** Cloudflare provider configuration */
+  cloudflare?: CloudflareProviderConfig;
+  /** CodeSandbox provider configuration */
+  codesandbox?: CodesandboxProviderConfig;
+  /** Blaxel provider configuration */
+  blaxel?: BlaxelProviderConfig;
 }
 
 /**

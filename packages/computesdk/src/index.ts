@@ -36,8 +36,23 @@ export {
   autoConfigureCompute
 } from './auto-detect';
 
-// Export constants
-export { GATEWAY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
+// Export constants and provider config utilities
+export {
+  GATEWAY_URL,
+  PROVIDER_PRIORITY,
+  PROVIDER_ENV_VARS,
+  PROVIDER_AUTH,
+  PROVIDER_NAMES,
+  PROVIDER_HEADERS,
+  PROVIDER_ENV_MAP,
+  PROVIDER_DASHBOARD_URLS,
+  type ProviderName,
+  isValidProvider,
+  buildProviderHeaders,
+  getProviderConfigFromEnv,
+  isProviderAuthComplete,
+  getMissingEnvVars,
+} from './constants';
 
 // Export utilities
 export { calculateBackoff } from './utils';

@@ -6,39 +6,30 @@
  */
 
 import { gateway } from './providers/gateway';
-import type { Provider, ExplicitComputeConfig, ExplicitProviderName } from './types';
+import type { Provider, ExplicitComputeConfig } from './types';
+import {
+  PROVIDER_AUTH,
+  PROVIDER_HEADERS,
+  PROVIDER_DASHBOARD_URLS,
+  PROVIDER_ENV_MAP,
+  type ProviderName,
+} from './provider-config';
 
 /**
  * Build provider-specific headers for gateway authentication
  */
 function buildProviderHeaders(config: ExplicitComputeConfig): Record<string, string> {
   const headers: Record<string, string> = {};
+  const provider = config.provider as ProviderName;
+  const headerMap = PROVIDER_HEADERS[provider];
+  const providerConfig = config[provider] as Record<string, string | undefined> | undefined;
 
-  switch (config.provider) {
-    case 'e2b':
-      if (config.e2b?.apiKey) {
-        headers['X-E2B-API-Key'] = config.e2b.apiKey;
-      }
-      break;
+  if (!providerConfig || !headerMap) return headers;
 
-    case 'modal':
-      if (config.modal?.tokenId) {
-        headers['X-Modal-Token-Id'] = config.modal.tokenId;
-      }
-      if (config.modal?.tokenSecret) {
-        headers['X-Modal-Token-Secret'] = config.modal.tokenSecret;
-      }
-      break;
-
-    case 'railway':
-      if (config.railway?.apiToken) {
-        headers['X-Railway-API-Token'] = config.railway.apiToken;
-      }
-      break;
-
-    default: {
-      const exhaustiveCheck: never = config.provider;
-      throw new Error(`Unknown provider: ${exhaustiveCheck}`);
+  for (const [configKey, headerName] of Object.entries(headerMap)) {
+    const value = providerConfig[configKey];
+    if (value) {
+      headers[headerName] = value;
     }
   }
 
@@ -49,44 +40,67 @@ function buildProviderHeaders(config: ExplicitComputeConfig): Record<string, str
  * Validate that the config has the required provider-specific credentials
  */
 function validateProviderConfig(config: ExplicitComputeConfig): void {
-  const providerName = config.provider;
+  const provider = config.provider as ProviderName;
+  const authOptions = PROVIDER_AUTH[provider];
+  const providerConfig = config[provider] as Record<string, string | undefined> | undefined;
+  const dashboardUrl = PROVIDER_DASHBOARD_URLS[provider];
 
-  switch (providerName) {
-    case 'e2b':
-      if (!config.e2b?.apiKey) {
-        throw new Error(
-          `Missing E2B configuration. When using provider: 'e2b', you must provide:\n` +
-          `  e2b: { apiKey: 'your-e2b-api-key' }\n\n` +
-          `Get your API key at: https://e2b.dev/dashboard`
-        );
-      }
-      break;
-
-    case 'modal':
-      if (!config.modal?.tokenId || !config.modal?.tokenSecret) {
-        throw new Error(
-          `Missing Modal configuration. When using provider: 'modal', you must provide:\n` +
-          `  modal: { tokenId: '...', tokenSecret: '...' }\n\n` +
-          `Get your tokens at: https://modal.com/settings`
-        );
-      }
-      break;
-
-    case 'railway':
-      if (!config.railway?.apiToken) {
-        throw new Error(
-          `Missing Railway configuration. When using provider: 'railway', you must provide:\n` +
-          `  railway: { apiToken: 'your-railway-token' }\n\n` +
-          `Get your token at: https://railway.app/account/tokens`
-        );
-      }
-      break;
-
-    default: {
-      const exhaustiveCheck: never = providerName;
-      throw new Error(`Unknown provider: ${exhaustiveCheck}`);
-    }
+  if (!authOptions) {
+    throw new Error(`Unknown provider: ${provider}`);
   }
+
+  // Check if any auth option is satisfied
+  // For explicit mode, we check config fields instead of env vars
+  for (const option of authOptions) {
+    // Map env vars to config field names and check if all are present
+    const allPresent = option.every(envVar => {
+      const configField = envVarToConfigField(provider, envVar);
+      return providerConfig?.[configField];
+    });
+
+    if (allPresent) return; // Valid config found
+  }
+
+  // No valid config found, build helpful error message
+  const configExample = buildConfigExample(provider, authOptions);
+  throw new Error(
+    `Missing ${provider} configuration. When using provider: '${provider}', you must provide:\n` +
+    `${configExample}\n\n` +
+    `Get your credentials at: ${dashboardUrl}`
+  );
+}
+
+/**
+ * Map environment variable name to config field name
+ * Uses shared PROVIDER_ENV_MAP as single source of truth
+ */
+function envVarToConfigField(provider: ProviderName, envVar: string): string {
+  return PROVIDER_ENV_MAP[provider]?.[envVar] ?? envVar.toLowerCase();
+}
+
+/**
+ * Build example config for error message
+ */
+function buildConfigExample(provider: ProviderName, authOptions: readonly (readonly string[])[]): string {
+  if (authOptions.length === 1) {
+    // Single option
+    const fields = authOptions[0].map(envVar => {
+      const field = envVarToConfigField(provider, envVar);
+      return `${field}: '...'`;
+    });
+    return `  ${provider}: { ${fields.join(', ')} }`;
+  }
+
+  // Multiple options (like Vercel with OIDC or traditional)
+  const options = authOptions.map((option, i) => {
+    const fields = option.map(envVar => {
+      const field = envVarToConfigField(provider, envVar);
+      return `${field}: '...'`;
+    });
+    return `  Option ${i + 1}:\n    ${provider}: { ${fields.join(', ')} }`;
+  });
+
+  return options.join('\n\n');
 }
 
 /**
