@@ -363,7 +363,8 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
 
             // Merge workbench commands with context completions
             const allHits = [...new Set([...hits, ...contextHits])].sort();
-            callback(null, [allHits, partial ?? trimmed]);
+            const completionPrefix = typeof partial === 'string' ? partial : trimmed;
+            callback(null, [allHits, completionPrefix]);
           });
           return;
         }
