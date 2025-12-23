@@ -210,11 +210,27 @@ ${c.bold('Running Commands:')}
     ${c.cyan('git.clone("https://github.com/user/repo")')}
     ${c.cyan('git.status()')}
   
-  ${c.dim('Filesystem:')}
+  ${c.dim('Filesystem (via commands):')}
     ${c.cyan('ls("/home")')}
     ${c.cyan('cat("/etc/hosts")')}
     ${c.cyan('rm.rf("/tmp")')}          ${c.dim('// Force remove')}
     ${c.cyan('rm.auto("/path")')}       ${c.dim('// Smart remove')}
+  
+  ${c.dim('Filesystem (direct API):')}
+    ${c.cyan('filesystem.readFile("/etc/hosts")')}
+    ${c.cyan('filesystem.writeFile("/app/server.js", code)')}
+    ${c.cyan('filesystem.mkdir("/app")')}
+    ${c.cyan('filesystem.readdir("/home")')}
+    ${c.cyan('filesystem.exists("/path")')}
+    ${c.cyan('filesystem.remove("/file")')}
+  
+  ${c.dim('Sandbox Methods:')}
+    ${c.cyan('getUrl({ port: 3000 })')}   ${c.dim('// Get public URL')}
+    ${c.cyan('runCode("console.log(\'hi\')", "node")')}
+    ${c.cyan('sandboxInfo()')}            ${c.dim('// Get sandbox details')}
+    ${c.cyan('getInstance()')}            ${c.dim('// Get native instance')}
+  
+  ${c.dim('Note: No need to use "await" - promises are auto-awaited!')}
   
   ${c.dim('Compute CLI:')}
     ${c.cyan('compute.isSetup()')}      ${c.dim('// Check if daemon is running')}

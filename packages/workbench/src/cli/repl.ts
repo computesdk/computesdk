@@ -209,6 +209,103 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
   // Environment/help
   replServer.context.env = () => showEnv();
   replServer.context.help = showHelp;
+  
+  // Expose sandbox methods directly in context
+  // These are lazy-evaluated to get the current sandbox
+  
+  // Expose getUrl directly
+  replServer.context.getUrl = async (options: { port: number; protocol?: string }) => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.getUrl(options);
+  };
+  
+  // Expose getInfo as sandboxInfo (since 'info' is already taken for workbench info)
+  replServer.context.sandboxInfo = async () => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.getInfo();
+  };
+  
+  // Expose runCode directly
+  replServer.context.runCode = async (code: string, runtime?: 'node' | 'python') => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.runCode(code, runtime);
+  };
+  
+  // Expose filesystem namespace
+  replServer.context.filesystem = {
+    get readFile() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.readFile(path);
+      };
+    },
+    get writeFile() {
+      return async (path: string, content: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.writeFile(path, content);
+      };
+    },
+    get mkdir() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.mkdir(path);
+      };
+    },
+    get readdir() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.readdir(path);
+      };
+    },
+    get exists() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.exists(path);
+      };
+    },
+    get remove() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.remove(path);
+      };
+    }
+  };
+  
+  // Expose getInstance for advanced users
+  replServer.context.getInstance = () => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.getInstance();
+  };
 }
 
 /**
@@ -218,7 +315,7 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   const originalEval = replServer.eval;
   
   // Track workbench command names for auto-calling
-  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose']);
+  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose', 'sandboxInfo']);
   
   (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
@@ -304,7 +401,18 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
         return;
       }
       
-      // Not a command, return as-is
+      // Auto-await promises (so users don't need to type "await")
+      if (result && typeof result.then === 'function') {
+        try {
+          const output = await result;
+          callback(null, output);
+        } catch (error) {
+          callback(error as Error, undefined);
+        }
+        return;
+      }
+      
+      // Not a command or promise, return as-is
       callback(null, result);
     });
   };
@@ -329,6 +437,12 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
     'verbose': [],
     'exit': [],
     '.exit': [],
+    // Sandbox methods
+    'getUrl': [],
+    'runCode': [],
+    'sandboxInfo': [],
+    'getInstance': [],
+    // Filesystem is an object, so it gets dot notation autocomplete automatically
   };
   
   (replServer as any).completer = function (line: string, callback: (err: Error | null, result: [string[], string]) => void) {
