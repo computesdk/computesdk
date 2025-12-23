@@ -8,7 +8,7 @@
  * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config, uses gateway)
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI, ExplicitComputeConfig, CallableCompute, FindOrCreateSandboxOptions, FindSandboxOptions } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI, ExplicitComputeConfig, CallableCompute, FindOrCreateSandboxOptions, FindSandboxOptions, ExtendTimeoutOptions } from './types';
 import { autoConfigureCompute } from './auto-detect';
 import { createProviderFromConfig } from './explicit-config';
 
@@ -221,6 +221,33 @@ class ComputeManager implements ComputeAPI {
       }
       
       return await provider.sandbox.find(options);
+    },
+
+    /**
+     * Extend sandbox timeout/expiration
+     *
+     * @example
+     * ```typescript
+     * // Extend timeout by 15 minutes (default)
+     * await compute.sandbox.extendTimeout('sandbox-123');
+     * 
+     * // Extend timeout by custom duration
+     * await compute.sandbox.extendTimeout('sandbox-123', {
+     *   duration: 1800000 // 30 minutes
+     * });
+     * ```
+     */
+    extendTimeout: async (sandboxId: string, options?: ExtendTimeoutOptions): Promise<void> => {
+      const provider = this.getDefaultProvider();
+      
+      if (!provider.sandbox.extendTimeout) {
+        throw new Error(
+          `Provider '${provider.name}' does not support extendTimeout.\n` +
+          `This feature requires gateway provider with timeout extension support.`
+        );
+      }
+      
+      return await provider.sandbox.extendTimeout(sandboxId, options);
     }
   };
 }
@@ -357,6 +384,10 @@ export function createCompute<TProvider extends Provider>(
         const sandbox = await manager.sandbox.find(options);
         if (!sandbox) return null;
         return sandbox as TypedProviderSandbox<TProvider>;
+      },
+
+      extendTimeout: async (sandboxId: string, options?: ExtendTimeoutOptions) => {
+        return await manager.sandbox.extendTimeout(sandboxId, options);
       }
     }
   };

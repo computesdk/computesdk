@@ -25,6 +25,7 @@ import type {
   ListTemplatesOptions,
   FindOrCreateSandboxOptions,
   FindSandboxOptions,
+  ExtendTimeoutOptions,
 } from './types/index.js';
 import { cmd, type Command } from '@computesdk/cmd';
 
@@ -41,6 +42,9 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   // Optional named sandbox operations
   findOrCreate?: (config: TConfig, options: FindOrCreateSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string }>;
   find?: (config: TConfig, options: FindSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
+  
+  // Optional timeout management
+  extendTimeout?: (config: TConfig, sandboxId: string, options?: ExtendTimeoutOptions) => Promise<void>;
 
   // Instance operations
   runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<CodeResult>;
@@ -431,6 +435,17 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods.destroy,
       this.providerInstance
     );
+  }
+
+  async extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void> {
+    if (!this.methods.extendTimeout) {
+      throw new Error(
+        `Provider '${this.providerName}' does not support extendTimeout.\n` +
+        `This feature requires gateway provider with timeout extension support.`
+      );
+    }
+
+    await this.methods.extendTimeout(this.config, sandboxId, options);
   }
 }
 

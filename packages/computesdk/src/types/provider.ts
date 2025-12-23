@@ -68,6 +68,14 @@ export interface FindSandboxOptions {
 }
 
 /**
+ * Options for extending sandbox timeout
+ */
+export interface ExtendTimeoutOptions {
+  /** Additional time to extend in milliseconds. Defaults to 900000 (15 minutes) */
+  duration?: number;
+}
+
+/**
  * Provider sandbox manager interface - handles sandbox lifecycle
  *
  * For most providers (e2b, railway, etc.), this returns ProviderSandbox.
@@ -86,6 +94,8 @@ export interface ProviderSandboxManager<TSandbox = any> {
   findOrCreate?(options: FindOrCreateSandboxOptions): Promise<ProviderSandbox<TSandbox>>;
   /** Find existing sandbox by (namespace, name) without creating */
   find?(options: FindSandboxOptions): Promise<ProviderSandbox<TSandbox> | null>;
+  /** Extend sandbox timeout/expiration */
+  extendTimeout?(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
 }
 
 /**
@@ -199,6 +209,8 @@ export interface ComputeAPI {
     findOrCreate(options: FindOrCreateSandboxOptions): Promise<ProviderSandbox>;
     /** Find existing sandbox by (namespace, name) without creating */
     find(options: FindSandboxOptions): Promise<ProviderSandbox | null>;
+    /** Extend sandbox timeout/expiration */
+    extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
   };
 
   // Future resource APIs will be added here:
@@ -234,6 +246,8 @@ export interface TypedComputeAPI<TProvider extends Provider> extends Omit<Comput
     findOrCreate(options: FindOrCreateSandboxOptions): Promise<import('./sandbox').TypedProviderSandbox<TProvider>>;
     /** Find existing sandbox by (namespace, name) without creating */
     find(options: FindSandboxOptions): Promise<import('./sandbox').TypedProviderSandbox<TProvider> | null>;
+    /** Extend sandbox timeout/expiration */
+    extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
   };
 }
 

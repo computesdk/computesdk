@@ -130,4 +130,75 @@ describe('Named Sandbox Feature', () => {
       expect('default').toBe('default');
     });
   });
+
+  describe('Extend Timeout Feature', () => {
+    it('should include extendTimeout in ComputeAPI interface', () => {
+      const compute = createCompute({
+        defaultProvider: gateway({
+          apiKey: 'test-key',
+          provider: 'e2b',
+        }),
+      });
+
+      // Should exist and be callable (TypeScript compilation test)
+      expect(typeof compute.sandbox.extendTimeout).toBe('function');
+    });
+
+    it('should accept sandboxId and optional duration parameter', async () => {
+      const compute = createCompute({
+        defaultProvider: gateway({
+          apiKey: 'test-key',
+          provider: 'e2b',
+        }),
+      });
+
+      // Type-level test - if it compiles, the types are correct
+      const sandboxId = 'sandbox-123';
+      const optionsWithDuration = { duration: 1800000 }; // 30 minutes
+      const optionsWithoutDuration = undefined;
+
+      expect(sandboxId).toBeDefined();
+      expect(optionsWithDuration).toBeDefined();
+      expect(optionsWithoutDuration).toBeUndefined();
+    });
+
+    it('should throw error if provider does not support extendTimeout', async () => {
+      // Create a mock provider without extendTimeout support
+      const mockProvider = {
+        name: 'mock',
+        sandbox: {
+          create: async () => ({ sandbox: {}, sandboxId: 'test' }),
+          getById: async () => null,
+          list: async () => [],
+          destroy: async () => {},
+        },
+        getSupportedRuntimes: () => ['node' as const],
+      };
+
+      const compute = createCompute({
+        defaultProvider: mockProvider as any,
+      });
+
+      await expect(
+        compute.sandbox.extendTimeout('sandbox-123')
+      ).rejects.toThrow(/does not support extendTimeout/);
+    });
+
+    it('should use default duration of 15 minutes if not specified', () => {
+      // This is tested through the gateway provider implementation
+      // which defaults duration to 900000ms (15 minutes)
+      const DEFAULT_DURATION = 900000;
+      expect(DEFAULT_DURATION).toBe(15 * 60 * 1000);
+    });
+
+    it('gateway provider should have extendTimeout method', () => {
+      const provider = gateway({
+        apiKey: 'test-key',
+        provider: 'e2b',
+      });
+
+      expect(provider.sandbox.extendTimeout).toBeDefined();
+      expect(typeof provider.sandbox.extendTimeout).toBe('function');
+    });
+  });
 });

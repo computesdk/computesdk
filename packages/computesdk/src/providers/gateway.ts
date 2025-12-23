@@ -453,6 +453,21 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
         return { sandbox, sandboxId };
       },
 
+      extendTimeout: async (config, sandboxId, options) => {
+        const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
+        const duration = options?.duration ?? 900000; // Default to 15 minutes
+
+        // Debug logging
+        if (process.env.COMPUTESDK_DEBUG) {
+          console.log(`[Gateway] Extending timeout for sandbox ${sandboxId} by ${duration}ms`);
+        }
+
+        await gatewayFetch(`${gatewayUrl}/v1/sandbox/${sandboxId}/extend`, config, {
+          method: 'POST',
+          body: JSON.stringify({ duration }),
+        });
+      },
+
       // All operations delegate directly to ClientSandbox
       runCode: async (sandbox, code, runtime) => sandbox.runCode(code, runtime),
       runCommand: async (sandbox, command, args) => sandbox.runCommand(command, args),
