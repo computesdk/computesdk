@@ -335,6 +335,118 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
         });
       },
 
+      findOrCreate: async (config, options) => {
+        const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
+
+        // Extract name and namespace from options, pass rest through
+        const { name: requestedName, namespace: requestedNamespace, ...restOptions } = options;
+
+        const result = await gatewayFetch<{
+          sandboxId: string;
+          name: string;
+          namespace: string;
+          url: string;
+          token: string;
+          provider: string;
+          metadata?: Record<string, unknown>;
+        }>(`${gatewayUrl}/v1/sandbox/find-or-create`, config, {
+          method: 'POST',
+          body: JSON.stringify({
+            namespace: requestedNamespace || 'default',
+            name: requestedName,
+            ...restOptions,
+          }),
+        });
+
+        if (!result.success || !result.data) {
+          throw new Error(`Gateway returned invalid response: ${JSON.stringify(result)}`);
+        }
+
+        const { sandboxId, url, token, provider, metadata, name, namespace } = result.data;
+
+        // Debug logging
+        if (process.env.COMPUTESDK_DEBUG) {
+          console.log(`[Gateway] Named sandbox found/created:`, {
+            sandboxId,
+            name,
+            namespace,
+            url,
+            hasToken: !!token,
+            provider,
+          });
+        }
+
+        const sandbox = new ClientSandbox({
+          sandboxUrl: url,
+          sandboxId,
+          provider,
+          token: token || config.apiKey,
+          metadata: {
+            ...metadata,
+            name,
+            namespace,
+          },
+          WebSocket: globalThis.WebSocket,
+        });
+
+        await waitForComputeReady(sandbox);
+
+        return { sandbox, sandboxId };
+      },
+
+      find: async (config, options) => {
+        const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
+
+        const result = await gatewayFetch<{
+          sandboxId: string;
+          name: string;
+          namespace: string;
+          url: string;
+          token: string;
+          provider: string;
+          metadata?: Record<string, unknown>;
+        } | null>(`${gatewayUrl}/v1/sandbox/find`, config, {
+          method: 'POST',
+          body: JSON.stringify({
+            namespace: options.namespace || 'default',
+            name: options.name,
+          }),
+        });
+
+        if (!result.success || !result.data) {
+          return null;
+        }
+
+        const { sandboxId, url, token, provider, metadata, name, namespace } = result.data;
+
+        // Debug logging
+        if (process.env.COMPUTESDK_DEBUG) {
+          console.log(`[Gateway] Named sandbox found:`, {
+            sandboxId,
+            name,
+            namespace,
+            url,
+          });
+        }
+
+        const sandbox = new ClientSandbox({
+          sandboxUrl: url,
+          sandboxId,
+          provider,
+          token: token || config.apiKey,
+          metadata: {
+            ...metadata,
+            name,
+            namespace,
+          },
+          WebSocket: globalThis.WebSocket,
+        });
+
+        await waitForComputeReady(sandbox);
+
+        return { sandbox, sandboxId };
+      },
+
       // All operations delegate directly to ClientSandbox
       runCode: async (sandbox, code, runtime) => sandbox.runCode(code, runtime),
       runCommand: async (sandbox, command, args) => sandbox.runCommand(command, args),

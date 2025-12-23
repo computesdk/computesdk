@@ -8,7 +8,7 @@
  * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config, uses gateway)
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI, ExplicitComputeConfig, CallableCompute } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI, ExplicitComputeConfig, CallableCompute, FindOrCreateSandboxOptions, FindSandboxOptions } from './types';
 import { autoConfigureCompute } from './auto-detect';
 import { createProviderFromConfig } from './explicit-config';
 
@@ -166,6 +166,61 @@ class ComputeManager implements ComputeAPI {
         }
         return await providerOrSandboxId.sandbox.destroy(sandboxId);
       }
+    },
+
+    /**
+     * Find existing or create new sandbox by (namespace, name)
+     *
+     * @example
+     * ```typescript
+     * // Find or create sandbox for a user's project
+     * const sandbox = await compute.sandbox.findOrCreate({
+     *   name: 'my-app',
+     *   namespace: 'user-123',
+     *   timeout: 1800000
+     * });
+     * ```
+     */
+    findOrCreate: async (options: FindOrCreateSandboxOptions): Promise<ProviderSandbox> => {
+      const provider = this.getDefaultProvider();
+      
+      if (!provider.sandbox.findOrCreate) {
+        throw new Error(
+          `Provider '${provider.name}' does not support findOrCreate.\n` +
+          `This feature requires gateway provider with named sandbox support.`
+        );
+      }
+      
+      return await provider.sandbox.findOrCreate(options);
+    },
+
+    /**
+     * Find existing sandbox by (namespace, name) without creating
+     *
+     * @example
+     * ```typescript
+     * // Find existing sandbox
+     * const sandbox = await compute.sandbox.find({
+     *   name: 'my-app',
+     *   namespace: 'user-123'
+     * });
+     * 
+     * if (sandbox) {
+     *   console.log('Found sandbox:', sandbox.sandboxId);
+     * }
+     * ```
+     */
+    find: async (options: FindSandboxOptions): Promise<ProviderSandbox | null> => {
+      const provider = this.getDefaultProvider();
+      
+      if (!provider.sandbox.find) {
+        throw new Error(
+          `Provider '${provider.name}' does not support find.\n` +
+          `This feature requires gateway provider with named sandbox support.`
+        );
+      }
+      
+      return await provider.sandbox.find(options);
     }
   };
 }
@@ -291,6 +346,17 @@ export function createCompute<TProvider extends Provider>(
 
       destroy: async (sandboxId: string) => {
         return await manager.sandbox.destroy(sandboxId);
+      },
+
+      findOrCreate: async (options: FindOrCreateSandboxOptions) => {
+        const sandbox = await manager.sandbox.findOrCreate(options);
+        return sandbox as TypedProviderSandbox<TProvider>;
+      },
+
+      find: async (options: FindSandboxOptions) => {
+        const sandbox = await manager.sandbox.find(options);
+        if (!sandbox) return null;
+        return sandbox as TypedProviderSandbox<TProvider>;
       }
     }
   };
