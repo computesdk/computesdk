@@ -44,6 +44,7 @@ export function showWelcome(availableProviders: string[], currentProvider: strin
   console.log(c.bold(c.cyan('\n╔═══════════════════════════════════════════════════════╗')));
   console.log(c.bold(c.cyan('║   ComputeSDK Workbench                               ║')));
   console.log(c.bold(c.cyan('╚═══════════════════════════════════════════════════════╝\n')));
+  console.log(c.dim('Prompt shows connection status: > (disconnected) or provider:sandbox> (connected)\n'));
   
   if (availableProviders.length > 0) {
     // Filter out 'gateway' from the list since it's not a real backend provider
