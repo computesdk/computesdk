@@ -30,7 +30,7 @@ import * as readline from 'readline';
 /**
  * Prompt user for yes/no confirmation
  */
-async function confirm(question: string): Promise<boolean> {
+async function confirm(question: string, defaultYes = false): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -40,13 +40,33 @@ async function confirm(question: string): Promise<boolean> {
     // Clear any pending input
     process.stdin.resume();
     
-    rl.question(`${question} (y/N): `, (answer) => {
+    const promptSuffix = defaultYes ? '(Y/n)' : '(y/N)';
+    
+    rl.question(`${question} ${promptSuffix}: `, (answer) => {
       rl.close();
       // Trim the answer to handle any extra characters
       const trimmed = answer.trim().toLowerCase();
-      resolve(trimmed === 'y' || trimmed === 'yes');
+      
+      // If empty answer, use default
+      if (trimmed === '') {
+        resolve(defaultYes);
+      } else {
+        resolve(trimmed === 'y' || trimmed === 'yes');
+      }
     });
   });
+}
+
+/**
+ * Prompt user to switch sandbox if one is already active
+ * Returns true if should proceed with switch
+ */
+export async function confirmSandboxSwitch(state: WorkbenchState): Promise<boolean> {
+  if (!hasSandbox(state)) {
+    return true; // No current sandbox, no need to confirm
+  }
+  
+  return await confirm('Switch to new sandbox?', true); // Default YES
 }
 
 /**
@@ -512,6 +532,85 @@ export function showVerbose(state: WorkbenchState): void {
 }
 
 /**
+ * Connect to an existing sandbox via URL
+ * Useful for connecting to a locally running sandbox or a sandbox created elsewhere
+ */
+export async function connectToSandbox(state: WorkbenchState, sandboxUrl: string, token?: string): Promise<void> {
+  // Validate URL format
+  if (!sandboxUrl) {
+    logError('Usage: connect <sandbox_url> [token]');
+    console.log('Example: connect https://sandbox-123.localhost:8080');
+    console.log('Example: connect https://sandbox-123.localhost:8080 your_access_token');
+    return;
+  }
+  
+  // Clean up URL (remove trailing slash)
+  const cleanUrl = sandboxUrl.replace(/\/$/, '');
+  
+  // Disconnect from current sandbox if exists
+  if (hasSandbox(state)) {
+    const shouldDestroy = await confirm('Disconnect from current sandbox?');
+    if (!shouldDestroy) {
+      logWarning('Keeping current sandbox. Connection cancelled.');
+      return;
+    }
+    // Just clear the reference, don't destroy since we don't own this sandbox
+    clearSandbox(state);
+  }
+  
+  const spinner = new Spinner(`Connecting to ${cleanUrl}...`).start();
+  const startTime = Date.now();
+  
+  try {
+    // Import Sandbox class from client package
+    const { Sandbox } = await import('@computesdk/client');
+    
+    // Dynamically import WebSocket for Node.js environment
+    let WebSocket: any;
+    try {
+      // @ts-ignore - ws is a peer dependency
+      const wsModule = await import('ws');
+      WebSocket = wsModule.default;
+    } catch {
+      logError('Failed to import "ws" module. Please install it: npm install ws');
+      throw new Error('Missing "ws" dependency');
+    }
+    
+    // Create a Sandbox instance directly with optional token
+    const sandbox = new Sandbox({
+      sandboxUrl: cleanUrl,
+      sandboxId: '', // Will be populated when we get info
+      provider: 'connected', // Mark as directly connected
+      token: token, // Optional access token
+      WebSocket: WebSocket as any,
+    });
+    
+    // Test the connection by getting sandbox info
+    const info = await sandbox.getInfo();
+    const duration = Date.now() - startTime;
+    
+    // Update state with the connected sandbox
+    setSandbox(state, sandbox as any, 'connected');
+    
+    spinner.succeed(`Connected to sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
+    console.log(c.dim(`Provider: ${info.provider || 'unknown'}`));
+    console.log(c.dim(`Sandbox ID: ${info.id || 'unknown'}`));
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    spinner.fail(`Failed to connect ${c.dim(`(${formatDuration(duration)})`)}`);
+    
+    if (error instanceof Error) {
+      logError(`Error: ${error.message}`);
+      if (error.stack) {
+        console.log(c.dim(error.stack));
+      }
+    }
+    
+    throw error;
+  }
+}
+
+/**
  * Cleanup on exit
  */
 export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Promise<void> {
@@ -525,6 +624,13 @@ export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Pr
   }
   
   console.log(''); // New line
+  
+  // Don't offer to destroy if we're just connected to an external sandbox
+  if (state.currentProvider === 'connected') {
+    logWarning('Disconnecting from external sandbox (not destroying).');
+    return;
+  }
+  
   const shouldDestroy = await confirm('Destroy active sandbox?');
   
   if (shouldDestroy) {

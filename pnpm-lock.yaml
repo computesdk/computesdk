@@ -1097,6 +1097,9 @@ importers:
       '@computesdk/blaxel':
         specifier: workspace:*
         version: link:../blaxel
+      '@computesdk/client':
+        specifier: workspace:*
+        version: link:../client
       '@computesdk/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
@@ -1130,6 +1133,9 @@ importers:
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
     devDependencies:
       '@types/node':
         specifier: ^20.0.0

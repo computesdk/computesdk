@@ -10,7 +10,7 @@
 import * as repl from 'repl';
 import * as cmd from '@computesdk/cmd';
 import type { WorkbenchState } from './state.js';
-import { runCommand, createProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose } from './commands.js';
+import { runCommand, createProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose, connectToSandbox } from './commands.js';
 import { showHelp, showInfo } from './output.js';
 import { showProviders, showEnv, PROVIDER_NAMES } from './providers.js';
 import { isCommand } from './types.js';
@@ -193,6 +193,10 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     await destroySandbox(state);
   };
   
+  replServer.context.connect = async (url: string, token?: string) => {
+    await connectToSandbox(state, url, token);
+  };
+  
   replServer.context.info = () => showInfo(state);
   
   // Output control
@@ -249,12 +253,35 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     if (state.useDirectMode) {
       throw new Error('Named sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
     }
-    // Lazy-load compute instance
-    const { getComputeInstance } = await import('./commands.js');
+    
+    // Lazy-load dependencies
+    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
+    const { setSandbox } = await import('./state.js');
+    const { logSuccess } = await import('./output.js');
+    
+    // Prompt if switching from existing sandbox
+    const shouldSwitch = await confirmSandboxSwitch(state);
+    
+    if (!shouldSwitch) {
+      // User chose not to switch - create but don't activate
+      const compute = await getComputeInstance(state);
+      const sandbox = await compute.sandbox.create(options);
+      
+      return {
+        sandboxId: sandbox.sandboxId,
+        provider: sandbox.provider,
+        metadata: sandbox.getInstance().config.metadata || {}
+      };
+    }
+    
+    // Create sandbox (may throw error)
     const compute = await getComputeInstance(state);
     const sandbox = await compute.sandbox.create(options);
     
-    // Return clean object with just the useful info
+    // Only set as current after successful creation
+    setSandbox(state, sandbox, sandbox.provider);
+    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
+    
     return {
       sandboxId: sandbox.sandboxId,
       provider: sandbox.provider,
@@ -266,12 +293,36 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     if (state.useDirectMode) {
       throw new Error('Named sandboxes (findOrCreate) are only available in gateway mode. Use "mode gateway" to switch.');
     }
-    // Lazy-load compute instance
-    const { getComputeInstance } = await import('./commands.js');
+    
+    // Lazy-load dependencies
+    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
+    const { setSandbox } = await import('./state.js');
+    const { logSuccess } = await import('./output.js');
+    
+    // Prompt if switching
+    const shouldSwitch = await confirmSandboxSwitch(state);
+    
+    if (!shouldSwitch) {
+      const compute = await getComputeInstance(state);
+      const sandbox = await compute.sandbox.findOrCreate(options);
+      
+      return {
+        sandboxId: sandbox.sandboxId,
+        provider: sandbox.provider,
+        name: options.name,
+        namespace: options.namespace || 'default',
+        metadata: sandbox.getInstance().config.metadata || {}
+      };
+    }
+    
+    // Find or create sandbox
     const compute = await getComputeInstance(state);
     const sandbox = await compute.sandbox.findOrCreate(options);
     
-    // Return clean object with just the useful info
+    // Set as current after successful operation
+    setSandbox(state, sandbox, sandbox.provider);
+    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
+    
     return {
       sandboxId: sandbox.sandboxId,
       provider: sandbox.provider,
@@ -285,16 +336,37 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     if (state.useDirectMode) {
       throw new Error('Named sandboxes (find) are only available in gateway mode. Use "mode gateway" to switch.');
     }
-    // Lazy-load compute instance
-    const { getComputeInstance } = await import('./commands.js');
+    
+    // Lazy-load dependencies
+    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
+    const { setSandbox } = await import('./state.js');
+    const { logSuccess } = await import('./output.js');
+    
+    // Find sandbox first (may return null)
     const compute = await getComputeInstance(state);
     const sandbox = await compute.sandbox.find(options);
     
     if (!sandbox) {
-      return null;
+      return null; // Not found, nothing to switch to
     }
     
-    // Return clean object with just the useful info
+    // Prompt if switching
+    const shouldSwitch = await confirmSandboxSwitch(state);
+    
+    if (!shouldSwitch) {
+      return {
+        sandboxId: sandbox.sandboxId,
+        provider: sandbox.provider,
+        name: options.name,
+        namespace: options.namespace || 'default',
+        metadata: sandbox.getInstance().config.metadata || {}
+      };
+    }
+    
+    // Set as current
+    setSandbox(state, sandbox, sandbox.provider);
+    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
+    
     return {
       sandboxId: sandbox.sandboxId,
       provider: sandbox.provider,
@@ -435,7 +507,7 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   const originalEval = replServer.eval;
   
   // Track workbench command names for auto-calling
-  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose', 'sandboxInfo']);
+  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose', 'sandboxInfo', 'connect']);
   
   (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
@@ -551,6 +623,7 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
     'providers': [],
     'restart': [],
     'destroy': [],
+    'connect': [], // Connect takes a URL argument
     'info': [],
     'env': [],
     'help': [],

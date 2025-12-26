@@ -50,9 +50,11 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
+    "@computesdk/client": "workspace:*",
     "@computesdk/cmd": "workspace:*",
     "computesdk": "workspace:*",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
   },
   "peerDependencies": {
     "@computesdk/blaxel": "workspace:*",
