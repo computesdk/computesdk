@@ -1,5 +1,12 @@
 # @computesdk/fly
 
+## 1.1.6
+
+### Patch Changes
+
+- Updated dependencies [f2d4273]
+  - computesdk@1.10.0
+
 ## 1.1.5
 
 ### Patch Changes

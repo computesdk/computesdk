@@ -1,5 +1,12 @@
 # @computesdk/modal
 
+## 1.8.1
+
+### Patch Changes
+
+- Updated dependencies [f2d4273]
+  - computesdk@1.10.0
+
 ## 1.8.0
 
 ### Minor Changes
