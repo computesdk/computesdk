@@ -43,6 +43,10 @@ export interface CreateSandboxOptions {
   domain?: string;
   /** Environment variables for the sandbox */
   envs?: Record<string, string>;
+  /** User-provided stable identifier (for named sandboxes) */
+  name?: string;
+  /** Isolation scope (for named sandboxes) */
+  namespace?: string;
 }
 
 /**

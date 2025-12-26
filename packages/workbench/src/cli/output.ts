@@ -201,6 +201,9 @@ ${c.bold('Provider Modes:')}
 ${c.bold('Sandbox Management:')}
   ${c.cyan('restart')}                      Restart current sandbox
   ${c.cyan('destroy')}                      Destroy current sandbox
+  ${c.cyan('connect <url> [token]')}        Connect to existing sandbox via URL
+                                ${c.dim('Example: connect https://sandbox-123.localhost:8080')}
+                                ${c.dim('Example: connect https://sandbox-123.localhost:8080 your_token')}
   ${c.cyan('info')}                         Show sandbox info (provider, uptime)
 
 ${c.bold('Environment:')}
@@ -235,6 +238,20 @@ ${c.bold('Running Commands:')}
     ${c.cyan('filesystem.readdir("/home")')}
     ${c.cyan('filesystem.exists("/path")')}
     ${c.cyan('filesystem.remove("/file")')}
+  
+  ${c.dim('Named Sandboxes (gateway mode only):')}
+    ${c.cyan('create()')}                          ${c.dim('// Create & switch to new sandbox')}
+    ${c.cyan('create({ namespace: "h" })')}        ${c.dim('// Create with namespace & switch')}
+    ${c.cyan('findOrCreate({ name: "my-app" })')} ${c.dim('// Find or create & switch')}
+    ${c.cyan('find({ name: "my-app" })')}          ${c.dim('// Find existing & switch')}
+    
+    ${c.dim('Note: Prompts before switching if you already have an active sandbox')}
+  
+  ${c.dim('Child Sandboxes (gateway mode only):')}
+    ${c.cyan('child.create()')}            ${c.dim('// Create child sandbox')}
+    ${c.cyan('child.list()')}              ${c.dim('// List all children')}
+    ${c.cyan('child.retrieve("sandbox-id")')} ${c.dim('// Get child info')}
+    ${c.cyan('child.destroy("sandbox-id")')} ${c.dim('// Delete child')}
   
   ${c.dim('Sandbox Methods:')}
     ${c.cyan('getUrl({ port: 3000 })')}   ${c.dim('// Get public URL')}
