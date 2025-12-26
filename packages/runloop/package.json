@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/runloop",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Runloop provider for ComputeSDK - AI-optimized code execution with built-in devtools and debugging",
   "author": "Runloop",
   "license": "MIT",
