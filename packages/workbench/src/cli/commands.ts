@@ -568,29 +568,31 @@ export async function connectToSandbox(state: WorkbenchState, sandboxUrl: string
     // Dynamically import WebSocket for Node.js environment
     let WebSocket: any;
     try {
-      // @ts-ignore - ws is a peer dependency
+      // @ts-expect-error - ws is an optional peer dependency that may not have type declarations
       const wsModule = await import('ws');
       WebSocket = wsModule.default;
     } catch {
-      logError('Failed to import "ws" module. Please install it: npm install ws');
+      logError('Failed to import "ws" module. Please install it: pnpm add ws');
       throw new Error('Missing "ws" dependency');
     }
     
     // Create a Sandbox instance directly with optional token
+    // WebSocket type comes from 'ws' module which may differ from browser WebSocket
     const sandbox = new Sandbox({
       sandboxUrl: cleanUrl,
       sandboxId: '', // Will be populated when we get info
       provider: 'connected', // Mark as directly connected
       token: token, // Optional access token
-      WebSocket: WebSocket as any,
+      WebSocket: WebSocket as typeof globalThis.WebSocket,
     });
-    
+
     // Test the connection by getting sandbox info
     const info = await sandbox.getInfo();
     const duration = Date.now() - startTime;
-    
+
     // Update state with the connected sandbox
-    setSandbox(state, sandbox as any, 'connected');
+    // Sandbox from @computesdk/client is the same class re-exported by computesdk
+    setSandbox(state, sandbox, 'connected');
     
     spinner.succeed(`Connected to sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
     console.log(c.dim(`Provider: ${info.provider || 'unknown'}`));

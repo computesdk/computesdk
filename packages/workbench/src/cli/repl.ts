@@ -249,7 +249,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
   
   // Expose sandbox creation methods (gateway mode only)
   // These return clean { sandboxId, metadata } objects instead of full GeneratedSandbox
-  replServer.context.create = async (options?: any) => {
+  replServer.context.create = async (options?: Record<string, unknown>) => {
     if (state.useDirectMode) {
       throw new Error('Named sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
     }
@@ -289,7 +289,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     };
   };
   
-  replServer.context.findOrCreate = async (options: { name: string; namespace?: string; [key: string]: any }) => {
+  replServer.context.findOrCreate = async (options: { name: string; namespace?: string; timeout?: number; runtime?: string }) => {
     if (state.useDirectMode) {
       throw new Error('Named sandboxes (findOrCreate) are only available in gateway mode. Use "mode gateway" to switch.');
     }
