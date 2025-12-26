@@ -1,27 +1,11 @@
-# Installation
+# Supported Providers
 
-ComputeSDK provides a unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers.
-
-
-<br />
-
-## Start Here
-
-1) Visit https://console.computesdk.com/register to create an account and get your ComputeSDK API key.
-2) Next create a .env file in the root of your project and add your API key (this is where you will store your API keys for each of your providers as well):
-
-```bash
-COMPUTESDK_API_KEY=your_api_key_here
-```
-
-
-## Core SDK
-
-Install the core ComputeSDK package:
-
-```bash
-npm install computesdk
-```
+Link to:
+Railway
+E2B
+Modal
+Daytona
+Vercel
 
 ## Provider Setup
 
