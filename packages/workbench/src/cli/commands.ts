@@ -30,7 +30,7 @@ import * as readline from 'readline';
 /**
  * Prompt user for yes/no confirmation
  */
-async function confirm(question: string): Promise<boolean> {
+async function confirm(question: string, defaultYes = false): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -40,13 +40,33 @@ async function confirm(question: string): Promise<boolean> {
     // Clear any pending input
     process.stdin.resume();
     
-    rl.question(`${question} (y/N): `, (answer) => {
+    const promptSuffix = defaultYes ? '(Y/n)' : '(y/N)';
+    
+    rl.question(`${question} ${promptSuffix}: `, (answer) => {
       rl.close();
       // Trim the answer to handle any extra characters
       const trimmed = answer.trim().toLowerCase();
-      resolve(trimmed === 'y' || trimmed === 'yes');
+      
+      // If empty answer, use default
+      if (trimmed === '') {
+        resolve(defaultYes);
+      } else {
+        resolve(trimmed === 'y' || trimmed === 'yes');
+      }
     });
   });
+}
+
+/**
+ * Prompt user to switch sandbox if one is already active
+ * Returns true if should proceed with switch
+ */
+export async function confirmSandboxSwitch(state: WorkbenchState): Promise<boolean> {
+  if (!hasSandbox(state)) {
+    return true; // No current sandbox, no need to confirm
+  }
+  
+  return await confirm('Switch to new sandbox?', true); // Default YES
 }
 
 /**
@@ -58,6 +78,92 @@ export async function ensureSandbox(state: WorkbenchState): Promise<void> {
   }
   
   await createSandbox(state);
+}
+
+/**
+ * Create or get compute instance for current provider configuration
+ */
+export async function getComputeInstance(state: WorkbenchState): Promise<any> {
+  // Return cached instance if available
+  if (state.compute) {
+    return state.compute;
+  }
+  
+  const providerName = state.currentProvider || autoDetectProvider(false);
+  const useDirect = state.useDirectMode;
+  
+  if (!providerName) {
+    throw new Error('No provider configured.');
+  }
+  
+  let compute;
+  
+  if (useDirect) {
+    // Direct mode: load the provider package directly
+    const providerModule = await loadProvider(providerName as ProviderName);
+    const providerFactory = providerModule[providerName];
+    
+    if (!providerFactory) {
+      throw new Error(`Provider ${providerName} does not export a factory function`);
+    }
+    
+    // Get config from environment
+    const config = getProviderConfig(providerName as ProviderName);
+    
+    // Create compute instance with this provider
+    compute = createCompute({
+      defaultProvider: providerFactory(config),
+    });
+  } else {
+    // Gateway mode: use gateway with provider hint and credentials
+    const gatewayModule = await import('computesdk');
+    const gatewayFactory = gatewayModule.gateway;
+    
+    // Get provider-specific credentials to pass to gateway
+    const providerConfig = getProviderConfig(providerName as ProviderName);
+    
+    // Map provider config to provider headers for gateway
+    const providerHeaders: Record<string, string> = {};
+    
+    // Add provider-specific auth headers based on the provider
+    switch (providerName) {
+      case 'e2b':
+        if (providerConfig.apiKey) providerHeaders['X-E2B-API-Key'] = providerConfig.apiKey;
+        break;
+      case 'railway':
+        if (providerConfig.apiKey) providerHeaders['X-Railway-API-Key'] = providerConfig.apiKey;
+        if (providerConfig.projectId) providerHeaders['X-Railway-Project-ID'] = providerConfig.projectId;
+        if (providerConfig.environmentId) providerHeaders['X-Railway-Environment-ID'] = providerConfig.environmentId;
+        break;
+      case 'daytona':
+        if (providerConfig.apiKey) providerHeaders['X-Daytona-API-Key'] = providerConfig.apiKey;
+        break;
+      case 'modal':
+        if (providerConfig.tokenId) providerHeaders['X-Modal-Token-ID'] = providerConfig.tokenId;
+        if (providerConfig.tokenSecret) providerHeaders['X-Modal-Token-Secret'] = providerConfig.tokenSecret;
+        break;
+      case 'vercel':
+        if (providerConfig.token) providerHeaders['X-Vercel-Token'] = providerConfig.token;
+        if (providerConfig.teamId) providerHeaders['X-Vercel-Team-ID'] = providerConfig.teamId;
+        if (providerConfig.projectId) providerHeaders['X-Vercel-Project-ID'] = providerConfig.projectId;
+        break;
+      // Add other providers as needed
+    }
+    
+    const config = {
+      apiKey: process.env.COMPUTESDK_API_KEY!,
+      provider: providerName, // Tell gateway which backend to use
+      providerHeaders, // Pass provider credentials via headers
+    };
+    
+    compute = createCompute({
+      defaultProvider: gatewayFactory(config),
+    });
+  }
+  
+  // Cache the instance
+  state.compute = compute;
+  return compute;
 }
 
 /**
@@ -102,70 +208,8 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
   const startTime = Date.now();
   
   try {
-    let compute;
-    
-    if (useDirect) {
-      // Direct mode: load the provider package directly
-      const providerModule = await loadProvider(providerName as ProviderName);
-      const providerFactory = providerModule[providerName];
-      
-      if (!providerFactory) {
-        throw new Error(`Provider ${providerName} does not export a factory function`);
-      }
-      
-      // Get config from environment
-      const config = getProviderConfig(providerName as ProviderName);
-      
-      // Create compute instance with this provider
-      compute = createCompute({
-        defaultProvider: providerFactory(config),
-      });
-    } else {
-      // Gateway mode: use gateway with provider hint and credentials
-      const gatewayModule = await import('computesdk');
-      const gatewayFactory = gatewayModule.gateway;
-      
-      // Get provider-specific credentials to pass to gateway
-      const providerConfig = getProviderConfig(providerName as ProviderName);
-      
-      // Map provider config to provider headers for gateway
-      const providerHeaders: Record<string, string> = {};
-      
-      // Add provider-specific auth headers based on the provider
-      switch (providerName) {
-        case 'e2b':
-          if (providerConfig.apiKey) providerHeaders['X-E2B-API-Key'] = providerConfig.apiKey;
-          break;
-        case 'railway':
-          if (providerConfig.apiKey) providerHeaders['X-Railway-API-Key'] = providerConfig.apiKey;
-          if (providerConfig.projectId) providerHeaders['X-Railway-Project-ID'] = providerConfig.projectId;
-          if (providerConfig.environmentId) providerHeaders['X-Railway-Environment-ID'] = providerConfig.environmentId;
-          break;
-        case 'daytona':
-          if (providerConfig.apiKey) providerHeaders['X-Daytona-API-Key'] = providerConfig.apiKey;
-          break;
-        case 'modal':
-          if (providerConfig.tokenId) providerHeaders['X-Modal-Token-ID'] = providerConfig.tokenId;
-          if (providerConfig.tokenSecret) providerHeaders['X-Modal-Token-Secret'] = providerConfig.tokenSecret;
-          break;
-        case 'vercel':
-          if (providerConfig.token) providerHeaders['X-Vercel-Token'] = providerConfig.token;
-          if (providerConfig.teamId) providerHeaders['X-Vercel-Team-ID'] = providerConfig.teamId;
-          if (providerConfig.projectId) providerHeaders['X-Vercel-Project-ID'] = providerConfig.projectId;
-          break;
-        // Add other providers as needed
-      }
-      
-      const config = {
-        apiKey: process.env.COMPUTESDK_API_KEY!,
-        provider: providerName, // Tell gateway which backend to use
-        providerHeaders, // Pass provider credentials via headers
-      };
-      
-      compute = createCompute({
-        defaultProvider: gatewayFactory(config),
-      });
-    }
+    // Get or create compute instance
+    const compute = await getComputeInstance(state);
     
     // Create sandbox
     const result = await compute.sandbox.create();
@@ -272,8 +316,42 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
   } catch (error) {
     const duration = Date.now() - startTime;
     logError(`Failed ${c.dim(`(${formatDuration(duration)})`)} - ${error instanceof Error ? error.message : String(error)}`);
+
+    // Clear stale sandbox on connection/auth errors so next command creates fresh
+    if (isStaleConnectionError(error)) {
+      clearSandbox(state);
+      logWarning('Sandbox connection lost. Next command will create a new sandbox.');
+    }
+
     throw error;
   }
+}
+
+/**
+ * Check if an error indicates a stale/dead sandbox connection
+ */
+function isStaleConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  const stalePhrases = [
+    'websocket',
+    'connection refused',
+    'connection reset',
+    'connection closed',
+    'socket hang up',
+    'econnrefused',
+    'econnreset',
+    'etimedout',
+    'not found',
+    'sandbox not found',
+    'unauthorized',
+    '401',
+    '403',
+    '404',
+  ];
+
+  return stalePhrases.some(phrase => message.includes(phrase));
 }
 
 /**
@@ -340,6 +418,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
       await destroySandbox(state);
       state.currentProvider = actualProvider;
       state.useDirectMode = useDirect;
+      state.compute = null; // Clear compute instance so it gets recreated
       const modeStr = useDirect ? `${actualProvider} (direct)` : `${actualProvider} (via gateway)`;
       logSuccess(`Switched to ${modeStr}`);
     } else {
@@ -348,6 +427,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
   } else {
     state.currentProvider = actualProvider;
     state.useDirectMode = useDirect;
+    state.compute = null; // Clear compute instance so it gets recreated
     const modeStr = useDirect ? `${actualProvider} (direct)` : `${actualProvider} (via gateway)`;
     logSuccess(`Switched to ${modeStr}`);
   }
@@ -452,6 +532,87 @@ export function showVerbose(state: WorkbenchState): void {
 }
 
 /**
+ * Connect to an existing sandbox via URL
+ * Useful for connecting to a locally running sandbox or a sandbox created elsewhere
+ */
+export async function connectToSandbox(state: WorkbenchState, sandboxUrl: string, token?: string): Promise<void> {
+  // Validate URL format
+  if (!sandboxUrl) {
+    logError('Usage: connect <sandbox_url> [token]');
+    console.log('Example: connect https://sandbox-123.localhost:8080');
+    console.log('Example: connect https://sandbox-123.localhost:8080 your_access_token');
+    return;
+  }
+  
+  // Clean up URL (remove trailing slash)
+  const cleanUrl = sandboxUrl.replace(/\/$/, '');
+  
+  // Disconnect from current sandbox if exists
+  if (hasSandbox(state)) {
+    const shouldDestroy = await confirm('Disconnect from current sandbox?');
+    if (!shouldDestroy) {
+      logWarning('Keeping current sandbox. Connection cancelled.');
+      return;
+    }
+    // Just clear the reference, don't destroy since we don't own this sandbox
+    clearSandbox(state);
+  }
+  
+  const spinner = new Spinner(`Connecting to ${cleanUrl}...`).start();
+  const startTime = Date.now();
+  
+  try {
+    // Import Sandbox class from client package
+    const { Sandbox } = await import('@computesdk/client');
+    
+    // Dynamically import WebSocket for Node.js environment
+    let WebSocket: any;
+    try {
+      // @ts-expect-error - ws is an optional peer dependency that may not have type declarations
+      const wsModule = await import('ws');
+      WebSocket = wsModule.default;
+    } catch {
+      logError('Failed to import "ws" module. Please install it: pnpm add ws');
+      throw new Error('Missing "ws" dependency');
+    }
+    
+    // Create a Sandbox instance directly with optional token
+    // WebSocket type comes from 'ws' module which may differ from browser WebSocket
+    const sandbox = new Sandbox({
+      sandboxUrl: cleanUrl,
+      sandboxId: '', // Will be populated when we get info
+      provider: 'connected', // Mark as directly connected
+      token: token, // Optional access token
+      WebSocket: WebSocket as typeof globalThis.WebSocket,
+    });
+
+    // Test the connection by getting sandbox info
+    const info = await sandbox.getInfo();
+    const duration = Date.now() - startTime;
+
+    // Update state with the connected sandbox
+    // Sandbox from @computesdk/client is the same class re-exported by computesdk
+    setSandbox(state, sandbox, 'connected');
+    
+    spinner.succeed(`Connected to sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
+    console.log(c.dim(`Provider: ${info.provider || 'unknown'}`));
+    console.log(c.dim(`Sandbox ID: ${info.id || 'unknown'}`));
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    spinner.fail(`Failed to connect ${c.dim(`(${formatDuration(duration)})`)}`);
+    
+    if (error instanceof Error) {
+      logError(`Error: ${error.message}`);
+      if (error.stack) {
+        console.log(c.dim(error.stack));
+      }
+    }
+    
+    throw error;
+  }
+}
+
+/**
  * Cleanup on exit
  */
 export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Promise<void> {
@@ -465,6 +626,13 @@ export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Pr
   }
   
   console.log(''); // New line
+  
+  // Don't offer to destroy if we're just connected to an external sandbox
+  if (state.currentProvider === 'connected') {
+    logWarning('Disconnecting from external sandbox (not destroying).');
+    return;
+  }
+  
   const shouldDestroy = await confirm('Destroy active sandbox?');
   
   if (shouldDestroy) {

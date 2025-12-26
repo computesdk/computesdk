@@ -1,11 +1,16 @@
 /**
  * Compute Singleton - Main API Orchestrator
  *
- * Provides the unified compute.* API and delegates to specialized managers
+ * Provides the unified compute.* API and delegates to specialized managers.
+ * The `compute` export works as both a singleton and a callable function:
+ *
+ * - Singleton: `compute.sandbox.create()` (auto-detects from env vars)
+ * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config, uses gateway)
  */
 
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI } from './types';
+import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, ProviderSandbox, Provider, TypedProviderSandbox, TypedComputeAPI, ExplicitComputeConfig, CallableCompute, FindOrCreateSandboxOptions, FindSandboxOptions, ExtendTimeoutOptions } from './types';
 import { autoConfigureCompute } from './auto-detect';
+import { createProviderFromConfig } from './explicit-config';
 
 /**
  * Compute singleton implementation - orchestrates all compute operations
@@ -161,14 +166,142 @@ class ComputeManager implements ComputeAPI {
         }
         return await providerOrSandboxId.sandbox.destroy(sandboxId);
       }
+    },
+
+    /**
+     * Find existing or create new sandbox by (namespace, name)
+     *
+     * @example
+     * ```typescript
+     * // Find or create sandbox for a user's project
+     * const sandbox = await compute.sandbox.findOrCreate({
+     *   name: 'my-app',
+     *   namespace: 'user-123',
+     *   timeout: 1800000
+     * });
+     * ```
+     */
+    findOrCreate: async (options: FindOrCreateSandboxOptions): Promise<ProviderSandbox> => {
+      const provider = this.getDefaultProvider();
+      
+      if (!provider.sandbox.findOrCreate) {
+        throw new Error(
+          `Provider '${provider.name}' does not support findOrCreate.\n` +
+          `This feature requires gateway provider with named sandbox support.`
+        );
+      }
+      
+      return await provider.sandbox.findOrCreate(options);
+    },
+
+    /**
+     * Find existing sandbox by (namespace, name) without creating
+     *
+     * @example
+     * ```typescript
+     * // Find existing sandbox
+     * const sandbox = await compute.sandbox.find({
+     *   name: 'my-app',
+     *   namespace: 'user-123'
+     * });
+     * 
+     * if (sandbox) {
+     *   console.log('Found sandbox:', sandbox.sandboxId);
+     * }
+     * ```
+     */
+    find: async (options: FindSandboxOptions): Promise<ProviderSandbox | null> => {
+      const provider = this.getDefaultProvider();
+      
+      if (!provider.sandbox.find) {
+        throw new Error(
+          `Provider '${provider.name}' does not support find.\n` +
+          `This feature requires gateway provider with named sandbox support.`
+        );
+      }
+      
+      return await provider.sandbox.find(options);
+    },
+
+    /**
+     * Extend sandbox timeout/expiration
+     *
+     * @example
+     * ```typescript
+     * // Extend timeout by 15 minutes (default)
+     * await compute.sandbox.extendTimeout('sandbox-123');
+     * 
+     * // Extend timeout by custom duration
+     * await compute.sandbox.extendTimeout('sandbox-123', {
+     *   duration: 1800000 // 30 minutes
+     * });
+     * ```
+     */
+    extendTimeout: async (sandboxId: string, options?: ExtendTimeoutOptions): Promise<void> => {
+      const provider = this.getDefaultProvider();
+      
+      if (!provider.sandbox.extendTimeout) {
+        throw new Error(
+          `Provider '${provider.name}' does not support extendTimeout.\n` +
+          `This feature requires gateway provider with timeout extension support.`
+        );
+      }
+      
+      return await provider.sandbox.extendTimeout(sandboxId, options);
     }
   };
 }
 
 /**
- * Singleton instance - the main API (untyped)
+ * Singleton instance for property access (internal)
  */
-export const compute: ComputeAPI = new ComputeManager();
+const singletonInstance = new ComputeManager();
+
+/**
+ * Factory function for explicit configuration
+ * Creates a new compute instance using the gateway provider
+ */
+function computeFactory(config: ExplicitComputeConfig): ComputeAPI {
+  const provider = createProviderFromConfig(config);
+  return createCompute({ provider });
+}
+
+/**
+ * Callable compute - works as both singleton and factory function
+ *
+ * @example
+ * ```typescript
+ * import { compute } from 'computesdk';
+ *
+ * // Singleton mode (auto-detects from env vars)
+ * const sandbox1 = await compute.sandbox.create();
+ *
+ * // Callable mode (explicit config, uses gateway)
+ * const sandbox2 = await compute({
+ *   provider: 'e2b',
+ *   apiKey: 'computesdk_xxx',
+ *   e2b: { apiKey: 'e2b_xxx' }
+ * }).sandbox.create();
+ * ```
+ */
+export const compute: CallableCompute = new Proxy(
+  computeFactory as CallableCompute,
+  {
+    get(_target, prop, _receiver) {
+      // Delegate property access to singleton instance
+      const singleton = singletonInstance as unknown as Record<string | symbol, unknown>;
+      const value = singleton[prop];
+      if (typeof value === 'function') {
+        return (value as (...args: unknown[]) => unknown).bind(singletonInstance);
+      }
+      return value;
+    },
+    apply(_target, _thisArg, args) {
+      // Handle function call: compute({...})
+      return computeFactory(args[0] as ExplicitComputeConfig);
+    }
+  }
+);
 
 
 /**
@@ -240,6 +373,21 @@ export function createCompute<TProvider extends Provider>(
 
       destroy: async (sandboxId: string) => {
         return await manager.sandbox.destroy(sandboxId);
+      },
+
+      findOrCreate: async (options: FindOrCreateSandboxOptions) => {
+        const sandbox = await manager.sandbox.findOrCreate(options);
+        return sandbox as TypedProviderSandbox<TProvider>;
+      },
+
+      find: async (options: FindSandboxOptions) => {
+        const sandbox = await manager.sandbox.find(options);
+        if (!sandbox) return null;
+        return sandbox as TypedProviderSandbox<TProvider>;
+      },
+
+      extendTimeout: async (sandboxId: string, options?: ExtendTimeoutOptions) => {
+        return await manager.sandbox.extendTimeout(sandboxId, options);
       }
     }
   };

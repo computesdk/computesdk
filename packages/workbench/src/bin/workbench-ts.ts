@@ -13,7 +13,6 @@ import * as fs from 'fs';
 const possibleEnvPaths = [
   path.join(process.cwd(), '.env'),           // Current directory
   path.join(process.cwd(), '../../.env'),     // Monorepo root (if running from packages/workbench)
-  path.join(__dirname, '../../../.env'),      // Relative to src/bin directory
 ];
 
 // Try to load from first existing .env file

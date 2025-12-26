@@ -72,6 +72,7 @@ drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
 - `providers` - List all providers with status
 - `restart` - Restart current sandbox
 - `destroy` - Destroy current sandbox
+- `connect <url> [token]` - Connect to existing sandbox via URL (e.g., `connect https://sandbox-123.localhost:8080` or `connect https://sandbox-123.localhost:8080 your_token`)
 - `info` - Show sandbox info (provider, uptime)
 - `env` - Show environment/credentials status
 - `help` - Show this help
@@ -160,6 +161,69 @@ Running: pwd
 /home
 ✅ Completed (0.1s)
 ```
+
+## Connect to Existing Sandboxes
+
+You can connect to an existing sandbox instance via its URL. This is particularly useful for:
+- Connecting to locally running sandboxes
+- Attaching to sandboxes created by other tools
+- Debugging existing sandbox instances
+
+### Without Authentication
+
+```
+workbench> connect https://sandbox-123.localhost:8080
+⏳ Connecting to https://sandbox-123.localhost:8080...
+✅ Connected to sandbox (0.5s)
+Provider: e2b
+Sandbox ID: sandbox-123
+
+connected:sandbox-123> ls('/home')
+Running: ls /home
+total 8
+drwxr-xr-x 3 user user 4096 Dec 12 19:00 app
+✅ Completed (0.1s)
+```
+
+### With Access Token
+
+If the sandbox requires authentication, you can provide an access token:
+
+```
+workbench> connect https://sandbox-123.localhost:8080 your_access_token_here
+⏳ Connecting to https://sandbox-123.localhost:8080...
+✅ Connected to sandbox (0.5s)
+Provider: e2b
+Sandbox ID: sandbox-123
+```
+
+Note: When you exit the workbench after connecting to an external sandbox, it will disconnect without destroying the sandbox (since you don't own it).
+
+## Creating and Switching Sandboxes
+
+When you create a sandbox using `create()`, `findOrCreate()`, or `find()`, it automatically becomes your current active sandbox. All subsequent commands will run on this sandbox.
+
+```javascript
+> create({ namespace: "h" })
+✅ Switched to sandbox sandbox-123
+{ sandboxId: 'sandbox-123', provider: 'gateway', metadata: {} }
+gateway:sandbox-123>  // Prompt shows you're now on this sandbox
+
+> ls('/home')  // Runs on sandbox-123
+```
+
+### Switching Between Sandboxes
+
+If you already have an active sandbox and create/find another one, the workbench will prompt you:
+
+```javascript
+e2b:sandbox-456> create({ namespace: "prod" })
+Switch to new sandbox? (Y/n): y
+✅ Switched to sandbox sandbox-789
+gateway:sandbox-789>
+```
+
+Press Enter or type "y" to switch. Type "n" to create the sandbox without switching to it.
 
 ## Tab Autocomplete
 

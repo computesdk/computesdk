@@ -5,6 +5,7 @@
  */
 
 import type { Sandbox, ProviderSandbox, CreateSandboxOptions, Runtime } from './sandbox';
+import type { ProviderName } from '../provider-config';
 
 /**
  * Common options for creating snapshots
@@ -47,6 +48,34 @@ export interface ListTemplatesOptions {
 }
 
 /**
+ * Options for finding or creating a named sandbox
+ */
+export interface FindOrCreateSandboxOptions extends CreateSandboxOptions {
+  /** User-provided stable identifier (e.g., "my-app", "frontend") */
+  name: string;
+  /** Isolation scope (e.g., "user-123", "org-456"). Defaults to "default" */
+  namespace?: string;
+}
+
+/**
+ * Options for finding a named sandbox (without creating)
+ */
+export interface FindSandboxOptions {
+  /** User-provided stable identifier */
+  name: string;
+  /** Isolation scope. Defaults to "default" */
+  namespace?: string;
+}
+
+/**
+ * Options for extending sandbox timeout
+ */
+export interface ExtendTimeoutOptions {
+  /** Additional time to extend in milliseconds. Defaults to 900000 (15 minutes) */
+  duration?: number;
+}
+
+/**
  * Provider sandbox manager interface - handles sandbox lifecycle
  *
  * For most providers (e2b, railway, etc.), this returns ProviderSandbox.
@@ -61,6 +90,12 @@ export interface ProviderSandboxManager<TSandbox = any> {
   list(): Promise<ProviderSandbox<TSandbox>[]>;
   /** Destroy a sandbox */
   destroy(sandboxId: string): Promise<void>;
+  /** Find existing or create new sandbox by (namespace, name) */
+  findOrCreate?(options: FindOrCreateSandboxOptions): Promise<ProviderSandbox<TSandbox>>;
+  /** Find existing sandbox by (namespace, name) without creating */
+  find?(options: FindSandboxOptions): Promise<ProviderSandbox<TSandbox> | null>;
+  /** Extend sandbox timeout/expiration */
+  extendTimeout?(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
 }
 
 /**
@@ -170,6 +205,12 @@ export interface ComputeAPI {
     list(provider?: Provider): Promise<ProviderSandbox[]>;
     /** Destroy a sandbox via a provider (or default provider if configured) */
     destroy(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<void>;
+    /** Find existing or create new sandbox by (namespace, name) */
+    findOrCreate(options: FindOrCreateSandboxOptions): Promise<ProviderSandbox>;
+    /** Find existing sandbox by (namespace, name) without creating */
+    find(options: FindSandboxOptions): Promise<ProviderSandbox | null>;
+    /** Extend sandbox timeout/expiration */
+    extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
   };
 
   // Future resource APIs will be added here:
@@ -201,6 +242,147 @@ export interface TypedComputeAPI<TProvider extends Provider> extends Omit<Comput
     list(): Promise<import('./sandbox').TypedProviderSandbox<TProvider>[]>;
     /** Destroy a sandbox via the configured provider */
     destroy(sandboxId: string): Promise<void>;
+    /** Find existing or create new sandbox by (namespace, name) */
+    findOrCreate(options: FindOrCreateSandboxOptions): Promise<import('./sandbox').TypedProviderSandbox<TProvider>>;
+    /** Find existing sandbox by (namespace, name) without creating */
+    find(options: FindSandboxOptions): Promise<import('./sandbox').TypedProviderSandbox<TProvider> | null>;
+    /** Extend sandbox timeout/expiration */
+    extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
   };
 }
+
+/**
+ * E2B provider configuration for explicit compute mode
+ */
+export interface E2BProviderConfig {
+  /** E2B API key */
+  apiKey?: string;
+  /** E2B project ID */
+  projectId?: string;
+  /** E2B environment/template ID */
+  templateId?: string;
+}
+
+/**
+ * Modal provider configuration for explicit compute mode
+ */
+export interface ModalProviderConfig {
+  /** Modal token ID */
+  tokenId?: string;
+  /** Modal token secret */
+  tokenSecret?: string;
+}
+
+/**
+ * Railway provider configuration for explicit compute mode
+ */
+export interface RailwayProviderConfig {
+  /** Railway API token */
+  apiToken?: string;
+  /** Railway project ID */
+  projectId?: string;
+  /** Railway environment ID */
+  environmentId?: string;
+}
+
+/**
+ * Daytona provider configuration for explicit compute mode
+ */
+export interface DaytonaProviderConfig {
+  /** Daytona API key */
+  apiKey?: string;
+}
+
+/**
+ * Vercel provider configuration for explicit compute mode
+ */
+export interface VercelProviderConfig {
+  /** Vercel OIDC token (preferred, simpler auth) */
+  oidcToken?: string;
+  /** Vercel API token (traditional auth) */
+  token?: string;
+  /** Vercel team ID (required with token) */
+  teamId?: string;
+  /** Vercel project ID (required with token) */
+  projectId?: string;
+}
+
+/**
+ * Runloop provider configuration for explicit compute mode
+ */
+export interface RunloopProviderConfig {
+  /** Runloop API key */
+  apiKey?: string;
+}
+
+/**
+ * Cloudflare provider configuration for explicit compute mode
+ */
+export interface CloudflareProviderConfig {
+  /** Cloudflare API token */
+  apiToken?: string;
+  /** Cloudflare account ID */
+  accountId?: string;
+}
+
+/**
+ * CodeSandbox provider configuration for explicit compute mode
+ */
+export interface CodesandboxProviderConfig {
+  /** CodeSandbox API key */
+  apiKey?: string;
+}
+
+/**
+ * Blaxel provider configuration for explicit compute mode
+ */
+export interface BlaxelProviderConfig {
+  /** Blaxel API key */
+  apiKey?: string;
+  /** Blaxel workspace */
+  workspace?: string;
+}
+
+/**
+ * Supported provider names for explicit compute mode
+ * Re-exported from provider-config for convenience
+ */
+export type { ProviderName as ExplicitProviderName } from '../provider-config';
+
+/**
+ * Explicit compute configuration for callable compute()
+ *
+ * Used when calling compute as a function: compute({ provider: 'e2b', ... })
+ * Always uses gateway mode.
+ */
+export interface ExplicitComputeConfig {
+  /** Provider name to use */
+  provider: ProviderName;
+  /** ComputeSDK API key (required for gateway mode) */
+  apiKey: string;
+
+  /** E2B provider configuration */
+  e2b?: E2BProviderConfig;
+  /** Modal provider configuration */
+  modal?: ModalProviderConfig;
+  /** Railway provider configuration */
+  railway?: RailwayProviderConfig;
+  /** Daytona provider configuration */
+  daytona?: DaytonaProviderConfig;
+  /** Vercel provider configuration */
+  vercel?: VercelProviderConfig;
+  /** Runloop provider configuration */
+  runloop?: RunloopProviderConfig;
+  /** Cloudflare provider configuration */
+  cloudflare?: CloudflareProviderConfig;
+  /** CodeSandbox provider configuration */
+  codesandbox?: CodesandboxProviderConfig;
+  /** Blaxel provider configuration */
+  blaxel?: BlaxelProviderConfig;
+}
+
+/**
+ * Callable compute type - works as both singleton and factory function
+ */
+export type CallableCompute = ComputeAPI & ((config: ExplicitComputeConfig) => ComputeAPI);
 

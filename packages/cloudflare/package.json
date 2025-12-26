@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cloudflare",
-  "version": "1.3.3",
+  "version": "1.3.5",
   "description": "Cloudflare provider for ComputeSDK - edge code execution using Cloudflare Workers and Durable Objects",
   "author": "Garrison",
   "license": "MIT",

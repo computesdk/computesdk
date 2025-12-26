@@ -5,6 +5,7 @@
  */
 
 import type { Sandbox, ProviderSandbox } from 'computesdk';
+import type { REPLServer } from 'repl';
 
 /** Sandbox can be either client Sandbox (gateway mode) or ProviderSandbox (direct mode) */
 type WorkbenchSandbox = Sandbox | ProviderSandbox;
@@ -30,6 +31,12 @@ export interface WorkbenchState {
   
   /** Show verbose command output (full result object) */
   verbose: boolean;
+  
+  /** Compute instance (for creating named sandboxes, etc.) */
+  compute: any | null;
+  
+  /** Internal: REPL server reference for updating prompt */
+  _replServer?: REPLServer;
 }
 
 /**
@@ -43,6 +50,7 @@ export function createState(): WorkbenchState {
     availableProviders: [],
     useDirectMode: false,  // Default to gateway mode
     verbose: false,
+    compute: null,
   };
 }
 
@@ -63,6 +71,7 @@ export function setSandbox(state: WorkbenchState, sandbox: WorkbenchSandbox, pro
   state.currentSandbox = sandbox;
   state.currentProvider = provider;
   state.sandboxCreatedAt = new Date();
+  updatePromptIfNeeded(state);
 }
 
 /**
@@ -71,6 +80,35 @@ export function setSandbox(state: WorkbenchState, sandbox: WorkbenchSandbox, pro
 export function clearSandbox(state: WorkbenchState) {
   state.currentSandbox = null;
   state.sandboxCreatedAt = null;
+  updatePromptIfNeeded(state);
+}
+
+/**
+ * Update REPL prompt if replServer is available
+ * @internal
+ */
+function updatePromptIfNeeded(state: WorkbenchState) {
+  if (state._replServer) {
+    const prompt = getPrompt(state);
+    state._replServer.setPrompt(prompt);
+  }
+}
+
+/**
+ * Get prompt string based on current state
+ * @internal
+ */
+function getPrompt(state: WorkbenchState): string {
+  if (!state.currentSandbox) {
+    return '> ';
+  }
+  
+  const provider = state.currentProvider || 'unknown';
+  const sandboxId = state.currentSandbox.sandboxId || '';
+
+  // Use full sandbox ID for now
+  // User can see exactly which sandbox they're connected to
+  return `${provider}:${sandboxId}> `;
 }
 
 /**

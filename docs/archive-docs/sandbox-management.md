@@ -103,6 +103,32 @@ try {
 }
 ```
 
+## Extending Sandbox Timeout (Not implemented yet)
+
+You can extend the timeout/expiration of a sandbox to keep it alive longer:
+
+```typescript
+// Extend timeout by default 15 minutes
+await compute.sandbox.extendTimeout(sandbox.sandboxId)
+
+// Extend timeout by custom duration (30 minutes)
+await compute.sandbox.extendTimeout(sandbox.sandboxId, {
+  duration: 30 * 60 * 1000
+})
+
+// Useful for long-running tasks
+const sandbox = await compute.sandbox.create({
+  timeout: 30 * 60 * 1000 // Start with 30 minutes
+})
+
+// Later, before timeout expires, extend it
+await compute.sandbox.extendTimeout(sandbox.sandboxId, {
+  duration: 60 * 60 * 1000 // Add 1 more hour
+})
+```
+
+**Note:** `extendTimeout` is only available with the gateway provider. Other providers will throw an error.
+
 ## Cleanup
 
 Always clean up sandboxes when you're done with them to free up resources:

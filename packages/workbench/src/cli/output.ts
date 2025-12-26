@@ -44,6 +44,7 @@ export function showWelcome(availableProviders: string[], currentProvider: strin
   console.log(c.bold(c.cyan('\n╔═══════════════════════════════════════════════════════╗')));
   console.log(c.bold(c.cyan('║   ComputeSDK Workbench                               ║')));
   console.log(c.bold(c.cyan('╚═══════════════════════════════════════════════════════╝\n')));
+  console.log(c.dim('Prompt shows connection status: > (disconnected) or provider:sandbox> (connected)\n'));
   
   if (availableProviders.length > 0) {
     // Filter out 'gateway' from the list since it's not a real backend provider
@@ -87,7 +88,18 @@ export function showInfo(state: WorkbenchState) {
   }
   
   console.log('\n' + c.bold('Current Sandbox:'));
+  
+  // Show sandbox ID if available
+  if (state.currentSandbox.sandboxId) {
+    console.log(`  Sandbox ID: ${c.cyan(state.currentSandbox.sandboxId)}`);
+  }
+  
   console.log(`  Provider: ${c.green(state.currentProvider || 'unknown')}`);
+  
+  // Show connection mode (gateway or direct)
+  const modeLabel = state.useDirectMode ? 'direct 🔗' : 'gateway 🌐';
+  console.log(`  Mode: ${c.blue(modeLabel)}`);
+  
   console.log(`  Created: ${state.sandboxCreatedAt?.toLocaleString() || 'unknown'}`);
   console.log(`  Uptime: ${formatUptime(state)}`);
   console.log('');
@@ -189,6 +201,9 @@ ${c.bold('Provider Modes:')}
 ${c.bold('Sandbox Management:')}
   ${c.cyan('restart')}                      Restart current sandbox
   ${c.cyan('destroy')}                      Destroy current sandbox
+  ${c.cyan('connect <url> [token]')}        Connect to existing sandbox via URL
+                                ${c.dim('Example: connect https://sandbox-123.localhost:8080')}
+                                ${c.dim('Example: connect https://sandbox-123.localhost:8080 your_token')}
   ${c.cyan('info')}                         Show sandbox info (provider, uptime)
 
 ${c.bold('Environment:')}
@@ -210,11 +225,41 @@ ${c.bold('Running Commands:')}
     ${c.cyan('git.clone("https://github.com/user/repo")')}
     ${c.cyan('git.status()')}
   
-  ${c.dim('Filesystem:')}
+  ${c.dim('Filesystem (via commands):')}
     ${c.cyan('ls("/home")')}
     ${c.cyan('cat("/etc/hosts")')}
     ${c.cyan('rm.rf("/tmp")')}          ${c.dim('// Force remove')}
     ${c.cyan('rm.auto("/path")')}       ${c.dim('// Smart remove')}
+  
+  ${c.dim('Filesystem (direct API):')}
+    ${c.cyan('filesystem.readFile("/etc/hosts")')}
+    ${c.cyan('filesystem.writeFile("/app/server.js", code)')}
+    ${c.cyan('filesystem.mkdir("/app")')}
+    ${c.cyan('filesystem.readdir("/home")')}
+    ${c.cyan('filesystem.exists("/path")')}
+    ${c.cyan('filesystem.remove("/file")')}
+  
+  ${c.dim('Named Sandboxes (gateway mode only):')}
+    ${c.cyan('create()')}                          ${c.dim('// Create & switch to new sandbox')}
+    ${c.cyan('create({ namespace: "h" })')}        ${c.dim('// Create with namespace & switch')}
+    ${c.cyan('findOrCreate({ name: "my-app" })')} ${c.dim('// Find or create & switch')}
+    ${c.cyan('find({ name: "my-app" })')}          ${c.dim('// Find existing & switch')}
+    
+    ${c.dim('Note: Prompts before switching if you already have an active sandbox')}
+  
+  ${c.dim('Child Sandboxes (gateway mode only):')}
+    ${c.cyan('child.create()')}            ${c.dim('// Create child sandbox')}
+    ${c.cyan('child.list()')}              ${c.dim('// List all children')}
+    ${c.cyan('child.retrieve("sandbox-id")')} ${c.dim('// Get child info')}
+    ${c.cyan('child.destroy("sandbox-id")')} ${c.dim('// Delete child')}
+  
+  ${c.dim('Sandbox Methods:')}
+    ${c.cyan('getUrl({ port: 3000 })')}   ${c.dim('// Get public URL')}
+    ${c.cyan('runCode("console.log(\'hi\')", "node")')}
+    ${c.cyan('sandboxInfo()')}            ${c.dim('// Get sandbox details')}
+    ${c.cyan('getInstance()')}            ${c.dim('// Get native instance')}
+  
+  ${c.dim('Note: No need to use "await" - promises are auto-awaited!')}
   
   ${c.dim('Compute CLI:')}
     ${c.cyan('compute.isSetup()')}      ${c.dim('// Check if daemon is running')}

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/workbench",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Interactive REPL for testing ComputeSDK sandbox operations",
   "author": "Garrison",
   "license": "MIT",
@@ -50,9 +50,11 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
+    "@computesdk/client": "workspace:*",
     "@computesdk/cmd": "workspace:*",
     "computesdk": "workspace:*",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
   },
   "peerDependencies": {
     "@computesdk/blaxel": "workspace:*",

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-remix",
-  "version": "0.2.13",
+  "version": "0.2.15",
   "private": true,
   "description": "Remix example using ComputeSDK for server-side code execution",
   "sideEffects": false,

@@ -1,5 +1,25 @@
 # @computesdk/modal
 
+## 1.8.0
+
+### Minor Changes
+
+- 13bb329: update docker image for gateway deployment
+
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [251f324]
+  - computesdk@1.9.6
+
+## 1.7.1
+
+### Patch Changes
+
+- Updated dependencies [b027cd9]
+  - computesdk@1.9.5
+
 ## 1.7.0
 
 ### Minor Changes
