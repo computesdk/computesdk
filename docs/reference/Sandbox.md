@@ -58,9 +58,9 @@ const result = await sandbox.runCode('print("Hello")', 'python')
 ---
 
 ## getUrl()
-To generate a url for the sandbox, provide your port of choice and use ```sandbox.getUrl(port: number)```
+To generate a url for the sandbox, provide your port of choice and use ```sandbox.getUrl({port: number})```
 ```typescript
-const result = await sandbox.getUrl(port: number)
+const result = await sandbox.getUrl({port: number})
 ```
 
 <br/>
@@ -269,7 +269,7 @@ await terminal.destroy();
 
 
 
-### sandbox.commands.run()
+## sandbox.commands.run()
 
 One-shot command execution without managing terminals:
 
@@ -292,11 +292,11 @@ const bgResult = await sandbox.commands.run('npm install', {
 
 ---
 
-### sandbox.servers
+## sandbox.servers
 
 Manage long-running server processes:
 
-#### servers.start()
+### servers.start()
 
 ```typescript
 // Start a server
@@ -308,14 +308,14 @@ const server = await sandbox.servers.start({
 });
 ```
 
-#### servers.list()
+### servers.list()
 
 ```typescript
 // List all servers
 const servers = await sandbox.servers.list();
 ```
 
-#### servers.retrieve()
+### servers.retrieve()
 
 ```typescript
 // Get server info
@@ -324,13 +324,13 @@ console.log(info.status); // 'starting' | 'running' | 'ready' | 'failed' | 'stop
 console.log(info.url);    // Server URL when ready
 ```
 
-#### servers.stop()
+### servers.stop()
 ```typescript
 // Stop a server
 await sandbox.servers.stop('api');
 ```
 
-#### servers.restart()
+### servers.restart()
 ```typescript
 // Restart a server
 await sandbox.servers.restart('api');
@@ -342,19 +342,19 @@ await sandbox.servers.restart('api');
 
 ---
 
-### sandbox.env
+## sandbox.env
 
 Manage `.env` files in the sandbox:
 
 
-#### env.retrieve()
+### env.retrieve()
 ```typescript
 // Get environment variables
 const vars = await sandbox.env.retrieve('.env');
 console.log(vars); // { API_KEY: 'secret', DEBUG: 'true' }
 ```
 
-#### env.update()
+### env.update()
 ```typescript
 // Update environment variables (merges with existing)
 await sandbox.env.update('.env', {
@@ -363,13 +363,13 @@ await sandbox.env.update('.env', {
 });
 ```
 
-#### env.remove()
+### env.remove()
 ```typescript
 // Remove environment variables
 await sandbox.env.remove('.env', ['OLD_KEY', 'DEPRECATED']);
 ```
 
-#### env.exists()
+### env.exists()
 ```typescript
 // Check if env file exists
 const exists = await sandbox.env.exists('.env');
@@ -380,29 +380,29 @@ const exists = await sandbox.env.exists('.env');
 ---
 
 
-### sandbox.files
+## sandbox.files
 
 File operations via the resource namespace:
 
-#### files.read()
+### files.read()
 ```typescript
 // Read file
 const content = await sandbox.files.read('/app/config.json');
 ```
 
-#### files.write()
+### files.write()
 ```typescript
 // Write file
 await sandbox.files.write('/app/config.json', '{"key": "value"}');
 ```
 
-#### files.list()
+### files.list()
 ```typescript
 // List directory
 const files = await sandbox.files.list('/app');
 ```
 
-#### files.delete()
+### files.delete()
 ```typescript
 // Delete file
 await sandbox.files.delete('/app/old-file.txt');
@@ -414,11 +414,11 @@ await sandbox.files.delete('/app/old-file.txt');
 ---
 
 
-### sandbox.watchers
+## sandbox.watchers
 
 Real-time file system monitoring:
 
-#### watchers.create()
+### watchers.create()
 ```typescript
 // Create a file watcher
 const watcher = await sandbox.watchers.create('/home/project', {
@@ -427,7 +427,7 @@ const watcher = await sandbox.watchers.create('/home/project', {
 });
 ```
 
-#### watchers.on()
+### watchers.on()
 ```typescript
 watcher.on('change', (event) => {
   console.log(`${event.event}: ${event.path}`);
@@ -437,7 +437,7 @@ watcher.on('change', (event) => {
 });
 ```
 
-#### watchers.destroy()
+### watchers.destroy()
 ```typescript
 // Destroy watcher
 await sandbox.watchers.destroy(watcher.id);
@@ -448,17 +448,17 @@ await sandbox.watchers.destroy(watcher.id);
 
 ---
 
-### sandbox.signals
+## sandbox.signals
 
 Monitor system events:
 
-#### signals.start()
+### signals.start()
 ```typescript
 // Start signal monitoring
 const signals = await sandbox.signals.start();
 ```
 
-#### signals.on()
+### signals.on()
 ```typescript
 signals.on('port', (event) => {
   console.log(`Port ${event.port} ${event.type}: ${event.url}`);
@@ -469,7 +469,7 @@ signals.on('error', (event) => {
 });
 ```
 
-#### signals.stop()
+### signals.stop()
 ```typescript
 // Stop signal monitoring
 await sandbox.signals.stop();
@@ -480,11 +480,11 @@ await sandbox.signals.stop();
 
 ---
 
-### sandbox.sessionTokens
+## sandbox.sessionTokens
 
 Manage delegated access (requires access token):
 
-#### sessionTokens.create()
+### sessionTokens.create()
 ```typescript
 // Create a session token
 const token = await sandbox.sessionTokens.create({
@@ -493,13 +493,13 @@ const token = await sandbox.sessionTokens.create({
 });
 ```
 
-#### sessionTokens.list()
+### sessionTokens.list()
 ```typescript
 // List session tokens
 const tokens = await sandbox.sessionTokens.list();
 ```
 
-#### sessionTokens.revoke()
+### sessionTokens.revoke()
 ```typescript
 // Revoke a token
 await sandbox.sessionTokens.revoke(tokenId);
@@ -512,7 +512,7 @@ await sandbox.sessionTokens.revoke(tokenId);
 ---
 
 
-### sandbox.magicLinks.create()
+## sandbox.magicLinks.create()
 
 Browser authentication (requires access token):
 
