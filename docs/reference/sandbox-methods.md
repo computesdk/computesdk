@@ -127,5 +127,5 @@ const result = await sandbox.runCode('print("Hello")', 'python')
 ## getUrl()
 To generate a url for the sandbox, provide your port of choice and use ```sandbox.getUrl(port: number)```
 ```typescript
-const result = await sandbox.getUrl(port: number)
+const result = await sandbox.getUrl({port: number})
 ```
