@@ -65,19 +65,9 @@ const sandbox = compute({
   provider: 'modal', 
   modal: {
     modalTokenId: process.env.MODAL_TOKEN_ID,
-    modalTokenSecret: process.env.MODAL_TOKEN_SECRET,
-    modalRuntime: 'node',
-    modalTimeout: 60000
+    modalTokenSecret: process.env.MODAL_TOKEN_SECRET
   },
   apiKey: process.env.COMPUTESDK_API_KEY 
 }).sandbox.create();
 ```
 Ports are exposed with unencrypted tunnels by default for maximum compatibility.
-## SDK Reference Links:
-
-- **[Code Execution](/docs/reference/code-execution)** - Execute code snippets in various runtimes
-- **[Command Execution](/docs/reference/code-execution#basic-code-execution)** - Run shell commands and scripts
-- **[Filesystem Operations](/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
-- **[Sandbox Management](/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
-- **[Error Handling](/docs/reference/api-integration#error-handling)** - Handle command failures and runtime errors
-- **[Web Framework Integration](/docs/reference/api-integration#web-framework-integration)** - Integrate with Express, Next.js, and other frameworks

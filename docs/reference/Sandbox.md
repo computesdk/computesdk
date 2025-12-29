@@ -1,0 +1,525 @@
+# Sandbox (interface)
+
+## Overview
+
+Methods available for interacting with a compute sandbox.
+
+<br/>
+<br/>
+
+---
+
+## runCommand()
+
+Execute shell commands directly:
+
+```typescript
+// Simple command execution
+const result = await sandbox.runCommand('ls', ['-la'])
+console.log(result.stdout)
+
+// Command with arguments
+const result = await sandbox.runCommand('python', ['-c', 'print("Hello")'])
+
+// With options
+const result = await sandbox.runCommand('npm', ['install'], {
+  cwd: '/app',
+  env: { NODE_ENV: 'development' }
+})
+```
+
+<br/>
+<br/>
+
+---
+
+## runCode()
+
+Execute code directly in the sandbox with automatic runtime detection:
+
+```typescript
+// Execute JavaScript/Node.js code
+const result = await sandbox.runCode('console.log("Hello from Node.js!")')
+console.log(result.stdout) // "Hello from Node.js!"
+
+// Execute Python code  
+const result = await sandbox.runCode('print("Hello from Python!")')
+console.log(result.stdout) // "Hello from Python!"
+
+// Specify runtime explicitly
+const result = await sandbox.runCode('console.log("Hello")', 'node')
+const result = await sandbox.runCode('print("Hello")', 'python')
+```
+
+
+<br/>
+<br/>
+
+---
+
+## getUrl()
+To generate a url for the sandbox, provide your port of choice and use ```sandbox.getUrl(port: number)```
+```typescript
+const result = await sandbox.getUrl(port: number)
+```
+
+<br/>
+<br/>
+
+---
+
+## sandbox.filesystem
+
+ComputeSDK provides filesystem operations for managing files and directories within sandboxes. All filesystem operations are accessed through the `sandbox.filesystem` object.
+
+### filesystem.readFile()
+
+```typescript
+// Read a file as text
+const content = await sandbox.filesystem.readFile('/path/to/file.txt')
+
+// With error handling
+try {
+  const content = await sandbox.filesystem.readFile('/nonexistent.txt')
+} catch (error) {
+  console.error('Failed to read file:', error.message)
+}
+```
+<br/>
+<br/>
+
+---
+
+### filesystem.writeFile()
+
+```typescript
+// Write a text file
+await sandbox.filesystem.writeFile('/path/to/file.txt', 'Hello, World!')
+
+// Write JSON data
+const data = { key: 'value' }
+await sandbox.filesystem.writeFile('/path/to/data.json', JSON.stringify(data))
+```
+<br/>
+<br/>
+
+---
+### filesystem.mkdir()
+
+```typescript
+// Create a directory
+await sandbox.filesystem.mkdir('/app/new-directory')
+``` 
+<br/>
+<br/>
+
+---
+
+### filesystem.readdir() 
+```typescript
+// List directory contents
+const entries = await sandbox.filesystem.readdir('/app')
+entries.forEach(entry => {
+  console.log(`${entry.isDirectory ? '📁' : '📄'} ${entry.name} (${entry.size} bytes)`)
+})
+```
+<br/>
+<br/>
+
+---
+
+### filesystem.exists()
+```typescript
+// Check if a file or directory exists
+const exists = await sandbox.filesystem.exists('/path/to/file')
+```
+<br/>
+<br/>
+
+---
+
+### filesystem.remove()
+
+```typescript
+// Remove a file
+await sandbox.filesystem.remove('/path/to/file.txt')
+
+// Remove a directory (recursive)
+await sandbox.filesystem.remove('/path/to/directory')
+```
+
+<br/>
+<br/>
+
+---
+
+## sandbox.terminals
+
+### terminals.create()
+
+```typescript
+// Create a PTY terminal (interactive shell with WebSocket)
+const ptyTerminal = await sandbox.terminals.create({
+  pty: true,
+  shell: '/bin/bash'
+});
+ptyTerminal.on('output', (data) => console.log(data));
+ptyTerminal.write('ls -la\n');
+
+// Create an exec terminal (command tracking without WebSocket)
+const execTerminal = await sandbox.terminals.create({ pty: false });
+const result = await execTerminal.execute('npm test');
+console.log(result.data.stdout);
+```
+<br/>
+<br/>
+
+---
+### terminals.list()
+```typescript
+// List all terminals
+const terminals = await sandbox.terminals.list();
+```
+<br/>
+<br/>
+
+---
+### terminals.retrieve()
+```typescript
+// Retrieve a specific terminal
+const terminal = await sandbox.terminals.retrieve('terminal-id');
+```
+<br/>
+<br/>
+
+---
+### terminals.destroy()
+```typescript
+// Destroy a terminal
+await sandbox.terminals.destroy('terminal-id');
+```
+
+
+### Terminal Modes
+
+The client supports two terminal modes:
+
+#### PTY Mode (Interactive)
+
+PTY terminals provide a full interactive shell with WebSocket streaming:
+
+```typescript
+const terminal = await sandbox.terminals.create({
+  pty: true,
+  shell: '/bin/bash',
+  encoding: 'raw' // or 'base64' for binary-safe
+});
+
+// Real-time output via WebSocket
+terminal.on('output', (data) => process.stdout.write(data));
+terminal.on('destroyed', () => console.log('Terminal closed'));
+
+// Write to terminal
+terminal.write('ls -la\n');
+terminal.write('cd /app && npm start\n');
+
+// Clean up
+await terminal.destroy();
+```
+
+#### Exec Mode (Command Tracking)
+
+Exec terminals track individual commands with status and output:
+
+```typescript
+const terminal = await sandbox.terminals.create({ pty: false });
+
+// Run a command and get structured result
+const result = await terminal.execute('npm test');
+console.log(result.data.cmd_id);
+console.log(result.data.status);  // 'running' | 'completed' | 'failed'
+console.log(result.data.stdout);
+console.log(result.data.stderr);
+console.log(result.data.exit_code);
+
+// Run in background
+const bgResult = await terminal.execute('npm install', { background: true });
+console.log(bgResult.data.cmd_id); // Track this command
+
+// Check command status later
+const cmdStatus = await sandbox.getCommand(terminal.getId(), bgResult.data.cmd_id);
+
+// Wait for command to complete
+const finalResult = await sandbox.waitForCommand(
+  terminal.getId(),
+  bgResult.data.cmd_id,
+  { timeout: 60000 }
+);
+
+// List all commands in a terminal
+const commands = await sandbox.listCommands(terminal.getId());
+
+await terminal.destroy();
+```
+
+<br/>
+<br/>
+
+---
+
+
+
+### sandbox.commands.run()
+
+One-shot command execution without managing terminals:
+
+```typescript
+// Run a command and wait for completion
+const result = await sandbox.commands.run('npm test');
+console.log(result.stdout);
+console.log(result.exitCode);
+console.log(result.durationMs);
+
+// Run in background (returns immediately)
+const bgResult = await sandbox.commands.run('npm install', {
+  background: true
+});
+```
+
+
+<br/>
+<br/>
+
+---
+
+### sandbox.servers
+
+Manage long-running server processes:
+
+#### servers.start()
+
+```typescript
+// Start a server
+const server = await sandbox.servers.start({
+  name: 'api',
+  command: 'npm start',
+  path: '/app',
+  env_file: '.env'
+});
+```
+
+#### servers.list()
+
+```typescript
+// List all servers
+const servers = await sandbox.servers.list();
+```
+
+#### servers.retrieve()
+
+```typescript
+// Get server info
+const info = await sandbox.servers.retrieve('api');
+console.log(info.status); // 'starting' | 'running' | 'ready' | 'failed' | 'stopped'
+console.log(info.url);    // Server URL when ready
+```
+
+#### servers.stop()
+```typescript
+// Stop a server
+await sandbox.servers.stop('api');
+```
+
+#### servers.restart()
+```typescript
+// Restart a server
+await sandbox.servers.restart('api');
+```
+
+
+<br/>
+<br/>
+
+---
+
+### sandbox.env
+
+Manage `.env` files in the sandbox:
+
+
+#### env.retrieve()
+```typescript
+// Get environment variables
+const vars = await sandbox.env.retrieve('.env');
+console.log(vars); // { API_KEY: 'secret', DEBUG: 'true' }
+```
+
+#### env.update()
+```typescript
+// Update environment variables (merges with existing)
+await sandbox.env.update('.env', {
+  API_KEY: 'new-secret',
+  NEW_VAR: 'value'
+});
+```
+
+#### env.remove()
+```typescript
+// Remove environment variables
+await sandbox.env.remove('.env', ['OLD_KEY', 'DEPRECATED']);
+```
+
+#### env.exists()
+```typescript
+// Check if env file exists
+const exists = await sandbox.env.exists('.env');
+```
+<br/>
+<br/>
+
+---
+
+
+### sandbox.files
+
+File operations via the resource namespace:
+
+#### files.read()
+```typescript
+// Read file
+const content = await sandbox.files.read('/app/config.json');
+```
+
+#### files.write()
+```typescript
+// Write file
+await sandbox.files.write('/app/config.json', '{"key": "value"}');
+```
+
+#### files.list()
+```typescript
+// List directory
+const files = await sandbox.files.list('/app');
+```
+
+#### files.delete()
+```typescript
+// Delete file
+await sandbox.files.delete('/app/old-file.txt');
+```
+
+<br/>
+<br/>
+
+---
+
+
+### sandbox.watchers
+
+Real-time file system monitoring:
+
+#### watchers.create()
+```typescript
+// Create a file watcher
+const watcher = await sandbox.watchers.create('/home/project', {
+  ignored: ['node_modules', '.git'],
+  includeContent: true
+});
+```
+
+#### watchers.on()
+```typescript
+watcher.on('change', (event) => {
+  console.log(`${event.event}: ${event.path}`);
+  if (event.content) {
+    console.log('New content:', event.content);
+  }
+});
+```
+
+#### watchers.destroy()
+```typescript
+// Destroy watcher
+await sandbox.watchers.destroy(watcher.id);
+```
+
+<br/>
+<br/>
+
+---
+
+### sandbox.signals
+
+Monitor system events:
+
+#### signals.start()
+```typescript
+// Start signal monitoring
+const signals = await sandbox.signals.start();
+```
+
+#### signals.on()
+```typescript
+signals.on('port', (event) => {
+  console.log(`Port ${event.port} ${event.type}: ${event.url}`);
+});
+
+signals.on('error', (event) => {
+  console.error('Error:', event.message);
+});
+```
+
+#### signals.stop()
+```typescript
+// Stop signal monitoring
+await sandbox.signals.stop();
+```
+
+<br/>
+<br/>
+
+---
+
+### sandbox.sessionTokens
+
+Manage delegated access (requires access token):
+
+#### sessionTokens.create()
+```typescript
+// Create a session token
+const token = await sandbox.sessionTokens.create({
+  description: 'My Application',
+  expiresIn: 604800 // 7 days
+});
+```
+
+#### sessionTokens.list()
+```typescript
+// List session tokens
+const tokens = await sandbox.sessionTokens.list();
+```
+
+#### sessionTokens.revoke()
+```typescript
+// Revoke a token
+await sandbox.sessionTokens.revoke(tokenId);
+```
+
+
+<br/>
+<br/>
+
+---
+
+
+### sandbox.magicLinks.create()
+
+Browser authentication (requires access token):
+
+```typescript
+// Create a magic link
+const link = await sandbox.magicLinks.create({
+  redirectUrl: '/dashboard'
+});
+console.log(link.magic_url);
+```
