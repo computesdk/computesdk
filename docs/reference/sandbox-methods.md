@@ -13,7 +13,7 @@ Below are details related to sandbox methods. These are universal methods that c
 COMPUTESDK_API_KEY=your_api_key_here
 ```
 
-### Add provider specifc env variables
+### Add provider specific env variables
 - wondering which env variables you need from your provider? Supported providers & details found here <link>/providers</link>
 ```bash
 PROVIDER_API_KEY=your_provider_api_key_here
