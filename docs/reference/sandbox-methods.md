@@ -42,10 +42,9 @@ If you prefer to set the provider explicitly, you can do so as follows:
 // Set as explict provider
 const sandbox = compute({ 
   provider: 'your-provider', 
-  e2b: {
-    e2bApiKey: process.env.E2B_API_KEY,
-    e2bRuntime: 'node',
-    e2bTimeout: 60000
+  yourProvider: {
+    yourProviderApiKey: process.env.YOUR_PROVIDER_API_KEY,
+    // Add other provider-specific env variables here
   },
   apiKey: process.env.COMPUTESDK_API_KEY 
 }).sandbox.create();
