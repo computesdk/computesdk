@@ -1,60 +1,64 @@
-# Daytona
+# E2B
 
-Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
+E2B provider for ComputeSDK
 
-## Installation
+
+## Installation & Setup
 
 ```bash
-npm install @computesdk/daytona
+npm install computesdk
+
+# add to .env file
+COMPUTESDK_API_KEY=your_computesdk_api_key
+
+E2B_API_KEY=your_e2b_api_key
 ```
+
 
 ## Usage
 
-### With ComputeSDK
-
 ```typescript
-import { createCompute } from 'computesdk';
-import { daytona } from '@computesdk/daytona';
-
-// Set as default provider
-const compute = createCompute({ 
-  provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }),
-  apiKey: process.env.COMPUTESDK_API_KEY 
-});
+import { compute } from 'computesdk';
+// auto-detects provider from environment variables
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Get instance
-const instance = sandbox.getInstance();
-
 // Execute code
-const result = await sandbox.runCode('print("Hello from Daytona!")');
-console.log(result.stdout); // "Hello from Daytona!"
+const result = await sandbox.runCode('print("Hello from E2B!")');
+console.log(result.stdout); // "Hello from E2B!"
 
 // Clean up
 await compute.sandbox.destroy(sandbox.sandboxId);
 ```
 
-## Configuration
-
-### Environment Variables
-
-```bash
-export DAYTONA_API_KEY=your_api_key_here
-```
 
 ### Configuration Options
 
 ```typescript
-interface DaytonaConfig {
-  /** Daytona API key - if not provided, will use DAYTONA_API_KEY env var */
+interface E2BConfig {
+  /** E2B API key - if not provided, will use E2B_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
+  /** Environment template to use */
   runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
+```
+
+## Explicit Provider Configuration
+If you prefer to set the provider explicitly, you can do so as follows:
+```typescript
+// Set as explicit provider
+const sandbox = compute({ 
+  provider: 'e2b', 
+  e2b: {
+    e2bApiKey: process.env.E2B_API_KEY,
+    e2bRuntime: 'node',
+    e2bTimeout: 60000
+  },
+  apiKey: process.env.COMPUTESDK_API_KEY 
+}).sandbox.create();
 ```
 
 ## Runtime Detection

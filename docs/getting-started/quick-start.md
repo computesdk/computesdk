@@ -2,15 +2,6 @@
 
 Welcome to ComputeSDK! This guide will get you up and running with secure, isolated code execution across multiple cloud providers using a unified TypeScript interface.
 
-<br />
-
-<div class="bg-emerald-100/20 border-l-4 border-emerald-800/20 dark:bg-emerald-800/30 dark:border-emerald-100/20 p-6 my-2 rounded flex flex-col gap-4">
-  <strong>For a quick interactive demo of the SDK in action:</strong>
-  
-  ```bash
-  curl -fsSL https://computesdk.com/install.sh | sh
-  ```
-</div>
 
 <br />
 
@@ -21,41 +12,24 @@ Welcome to ComputeSDK! This guide will get you up and running with secure, isola
 
 ```bash
 COMPUTESDK_API_KEY=your_api_key_here
+
+PROVIDER_API_KEY=your_provider_api_key_here
 ```
 
 ## Installation
 
 ```bash
-# Core SDK
 npm install computesdk
-
-# Provider packages (install only what you need)
-npm install @computesdk/blaxel     # Blaxel provider
-npm install @computesdk/codesandbox # CodeSandbox provider
-npm install @computesdk/daytona    # Daytona provider
-npm install @computesdk/e2b        # E2B provider
-npm install @computesdk/modal      # Modal provider
-npm install @computesdk/vercel     # Vercel provider  
-
 ```
 
 ## Basic Usage
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+import { compute } from 'computesdk';
 
-// Set default provider
-const compute = createCompute({ 
-  defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }),
-  apiKey: process.env.COMPUTESDK_API_KEY 
-});
 
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
-
-// Get instance
-const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello World!")');
