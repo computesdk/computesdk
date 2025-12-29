@@ -14,7 +14,7 @@ COMPUTESDK_API_KEY=your_api_key_here
 ```
 
 ### Add provider specific env variables
-- wondering which env variables you need from your provider? Supported providers & details found here <link>/providers</link>
+- wondering which env variables you need from your provider? Supported providers & details found [here](/providers)
 ```bash
 PROVIDER_API_KEY=your_provider_api_key_here
 ```
