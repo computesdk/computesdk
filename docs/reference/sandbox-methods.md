@@ -39,7 +39,7 @@ const sandbox = await compute.sandbox.create();
 ### Explicit Provider Configuration
 If you prefer to set the provider explicitly, you can do so as follows:
 ```typescript
-// Set as explict provider
+// Set as explicit provider
 const sandbox = compute({ 
   provider: 'your-provider', 
   yourProvider: {
