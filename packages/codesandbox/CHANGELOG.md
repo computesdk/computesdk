@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.6
+
+### Patch Changes
+
+- Updated dependencies [38caad9]
+- Updated dependencies [f2d4273]
+  - computesdk@1.10.0
+
 ## 1.5.5
 
 ### Patch Changes
