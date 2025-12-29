@@ -234,7 +234,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           metadata?: Record<string, unknown>;
           name?: string;
           namespace?: string;
-        }>(`${gatewayUrl}/v1/sandbox`, config, {
+        }>(`${gatewayUrl}/v1/sandboxes`, config, {
           method: 'POST',
           body: JSON.stringify(options || {}),
         });
@@ -294,7 +294,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           token: string;
           provider: string;
           metadata?: Record<string, unknown>;
-        }>(`${gatewayUrl}/v1/sandbox/${sandboxId}`, config);
+        }>(`${gatewayUrl}/v1/sandboxes/${sandboxId}`, config);
 
         if (!result.success || !result.data) {
           return null;
@@ -336,7 +336,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
       destroy: async (config, sandboxId) => {
         const gatewayUrl = config.gatewayUrl || DEFAULT_GATEWAY_URL;
 
-        await gatewayFetch(`${gatewayUrl}/v1/sandbox/${sandboxId}`, config, {
+        await gatewayFetch(`${gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
           method: 'DELETE',
         });
       },
@@ -355,7 +355,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           token: string;
           provider: string;
           metadata?: Record<string, unknown>;
-        }>(`${gatewayUrl}/v1/sandbox/find-or-create`, config, {
+        }>(`${gatewayUrl}/v1/sandboxes/find-or-create`, config, {
           method: 'POST',
           body: JSON.stringify({
             namespace: requestedNamespace || 'default',
@@ -411,7 +411,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           token: string;
           provider: string;
           metadata?: Record<string, unknown>;
-        } | null>(`${gatewayUrl}/v1/sandbox/find`, config, {
+        } | null>(`${gatewayUrl}/v1/sandboxes/find`, config, {
           method: 'POST',
           body: JSON.stringify({
             namespace: options.namespace || 'default',
@@ -462,7 +462,7 @@ export const gateway = createProvider<ClientSandbox, GatewayConfig>({
           console.log(`[Gateway] Extending timeout for sandbox ${sandboxId} by ${duration}ms`);
         }
 
-        await gatewayFetch(`${gatewayUrl}/v1/sandbox/${sandboxId}/extend`, config, {
+        await gatewayFetch(`${gatewayUrl}/v1/sandboxes/${sandboxId}/extend`, config, {
           method: 'POST',
           body: JSON.stringify({ duration }),
         });
