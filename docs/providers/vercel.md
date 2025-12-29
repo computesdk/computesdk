@@ -71,6 +71,21 @@ interface VercelConfig {
 }
 ```
 
+## Explicit Provider Configuration
+If you prefer to set the provider explicitly, you can do so as follows:
+```typescript
+// Set as explicit provider
+const sandbox = compute({
+  provider: 'vercel',
+  vercel: {
+    vercelToken: 'your_vercel_token',
+    vercelTeamId: 'your_vercel_team_id',
+    vercelProjectId: 'your_vercel_project_id'
+  },
+  apiKey: 'your_computesdk_api_key'
+}).sandbox.create()
+```
+
 
 ## Runtime Detection
 
@@ -83,13 +98,3 @@ The provider automatically detects the runtime based on code patterns:
 - Python-specific syntax (`f"`, `__`, etc.)
 
 **Default:** Node.js for all other cases
-
-
-## SDK Reference Links:
-
-- **[Code Execution](/docs/reference/code-execution)** - Execute code snippets in various runtimes
-- **[Command Execution](/docs/reference/code-execution#basic-code-execution)** - Run shell commands and scripts
-- **[Filesystem Operations](/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
-- **[Sandbox Management](/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
-- **[Error Handling](/docs/reference/api-integration#error-handling)** - Handle command failures and runtime errors
-- **[Web Framework Integration](/docs/reference/api-integration#web-framework-integration)** - Integrate with Express, Next.js, and other frameworks

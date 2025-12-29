@@ -54,9 +54,7 @@ If you prefer to set the provider explicitly, you can do so as follows:
 const sandbox = compute({ 
   provider: 'daytona', 
   daytona: {
-    daytonaApiKey: process.env.DAYTONA_API_KEY,
-    daytonaRuntime: 'node',
-    daytonaTimeout: 60000
+    daytonaApiKey: process.env.DAYTONA_API_KEY
   },
   apiKey: process.env.COMPUTESDK_API_KEY 
 }).sandbox.create();
@@ -73,12 +71,3 @@ The provider automatically detects the runtime based on code patterns:
 - Python-specific syntax (`f"`, `__`, etc.)
 
 **Default:** Node.js for all other cases
-
-## SDK Reference Links:
-
-- **[Code Execution](/docs/reference/code-execution)** - Execute code snippets in various runtimes
-- **[Command Execution](/docs/reference/code-execution#basic-code-execution)** - Run shell commands and scripts
-- **[Filesystem Operations](/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
-- **[Sandbox Management](/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
-- **[Error Handling](/docs/reference/api-integration#error-handling)** - Handle command failures and runtime errors
-- **[Web Framework Integration](/docs/reference/api-integration#web-framework-integration)** - Integrate with Express, Next.js, and other frameworks
