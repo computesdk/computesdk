@@ -36,7 +36,20 @@ import { compute } from 'computesdk';
 const sandbox = await compute.sandbox.create();
 ```
 
-
+### Explicit Provider Configuration
+If you prefer to set the provider explicitly, you can do so as follows:
+```typescript
+// Set as explict provider
+const sandbox = compute({ 
+  provider: 'your-provider', 
+  e2b: {
+    e2bApiKey: process.env.E2B_API_KEY,
+    e2bRuntime: 'node',
+    e2bTimeout: 60000
+  },
+  apiKey: process.env.COMPUTESDK_API_KEY 
+}).sandbox.create();
+```
 
 ## destroy()
 to destroy a sandbox use ```compute.sandbox.destroy(sandbox.sandboxId)```
@@ -113,3 +126,7 @@ const result = await sandbox.runCode('print("Hello")', 'python')
 
 
 ## getUrl()
+To generate a url for the sandbox, provide your port of choice and use ```sandbox.getUrl(port: number)```
+```typescript
+const result = await sandbox.getUrl(port: number)
+```
