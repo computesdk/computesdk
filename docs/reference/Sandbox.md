@@ -33,23 +33,53 @@ const result = await sandbox.runCommand('npm', ['install'], {
 
 ---
 
-## runCode()
+## runCode(code, language?)
 
-Execute code directly in the sandbox with automatic runtime detection:
+Execute code in the sandbox with automatic language detection or explicit runtime.
+
+**Parameters:**
+
+- `code` (string, required): The code to execute
+- `language` ('node' | 'python', optional): Runtime environment for execution. Auto-detects if not specified.
+
+**Returns:** `Promise<CodeResult>` - Execution result with output, exit code, and detected language
+
+**CodeResult interface:**
+- `output` (string): Combined output from code execution
+- `exitCode` (number): Exit code (0 for success, non-zero for errors)
+- `language` (string): Detected or specified programming language
+
+**Examples:**
 
 ```typescript
-// Execute JavaScript/Node.js code
-const result = await sandbox.runCode('console.log("Hello from Node.js!")')
-console.log(result.stdout) // "Hello from Node.js!"
+// Auto-detect language (Python)
+const result = await sandbox.runCode('print("Hello from Python")');
+console.log(result.output);    // "Hello from Python\n"
+console.log(result.exitCode);  // 0
+console.log(result.language);  // "python"
 
-// Execute Python code  
-const result = await sandbox.runCode('print("Hello from Python!")')
-console.log(result.stdout) // "Hello from Python!"
+// Auto-detect language (Node.js)
+const result = await sandbox.runCode('console.log("Hello from Node.js")');
+console.log(result.output);    // "Hello from Node.js\n"
+console.log(result.language);  // "node"
 
-// Specify runtime explicitly
-const result = await sandbox.runCode('console.log("Hello")', 'node')
-const result = await sandbox.runCode('print("Hello")', 'python')
+// Explicit runtime
+const result = await sandbox.runCode('console.log("Hello")', 'node');
+
+// Multi-line Python code
+const pythonResult = await sandbox.runCode(`
+def greet(name):
+    return f"Hello, {name}!"
+    
+print(greet("World"))
+`, 'python');
+console.log(pythonResult.output); // "Hello, World!\n"
 ```
+
+**Notes:**
+- Supports automatic language detection for Python and Node.js code
+- Available on all sandbox instances regardless of provider
+- Returns structured output with exit codes for error handling
 
 
 <br/>
@@ -267,30 +297,6 @@ await terminal.destroy();
 
 ---
 
-
-
-## sandbox.commands.run()
-
-One-shot command execution without managing terminals:
-
-```typescript
-// Run a command and wait for completion
-const result = await sandbox.commands.run('npm test');
-console.log(result.stdout);
-console.log(result.exitCode);
-console.log(result.durationMs);
-
-// Run in background (returns immediately)
-const bgResult = await sandbox.commands.run('npm install', {
-  background: true
-});
-```
-
-
-<br/>
-<br/>
-
----
 
 ## sandbox.servers
 
