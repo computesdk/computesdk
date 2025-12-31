@@ -173,11 +173,11 @@ class ComputeManager {
 
     if (!this.config) {
       throw new Error(
-        'No gateway configuration found.\n\n' +
+        'No ComputeSDK configuration found.\n\n' +
         'Options:\n' +
-        '1. Zero-config mode: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)\n' +
-        '2. Explicit mode: Call compute.setConfig({ provider: "e2b", apiKey: "...", e2b: { apiKey: "..." } })\n' +
-        '3. Direct mode: Import provider packages directly to bypass the gateway\n\n' +
+        '1. Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)\n' +
+        '2. Explicit: Call compute.setConfig({ provider: "e2b", apiKey: "...", e2b: { apiKey: "..." } })\n' +
+        '3. Use provider directly: import { e2b } from \'@computesdk/e2b\'\n\n' +
         'Docs: https://computesdk.com/docs/quickstart'
       );
     }
