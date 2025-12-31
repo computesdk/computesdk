@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createProvider } from '../factory.js'
+import { defineProvider } from '../factory.js'
 import type { Runtime, CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
 
 describe('Factory', () => {
-  describe('createProvider', () => {
+  describe('defineProvider', () => {
     it('should create a provider factory function', () => {
       const methods = {
         create: vi.fn().mockResolvedValue({
@@ -39,7 +39,7 @@ describe('Factory', () => {
         getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev')
       }
 
-      const providerFactory = createProvider({
+      const providerFactory = defineProvider({
         name: 'mock',
         methods: { sandbox: methods }
       })
@@ -92,7 +92,7 @@ describe('Factory', () => {
         getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev')
       }
 
-      const providerFactory = createProvider({
+      const providerFactory = defineProvider({
         name: 'mock',
         methods: { sandbox: methods }
       })

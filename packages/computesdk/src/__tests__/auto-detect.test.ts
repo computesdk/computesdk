@@ -150,14 +150,17 @@ describe('Auto-Detection', () => {
       );
     });
 
-    it('returns gateway provider when properly configured', () => {
+    it('returns gateway config when properly configured', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
       
-      const provider = autoConfigureCompute();
+      const config = autoConfigureCompute();
       
-      expect(provider).toBeDefined();
-      expect(provider?.name).toBe('gateway');
+      expect(config).toBeDefined();
+      expect(config?.provider).toBe('e2b');
+      expect(config?.apiKey).toBe('test_key');
+      expect(config?.gatewayUrl).toBeDefined();
+      expect(config?.providerHeaders).toBeDefined();
     });
 
     it('validates gateway URL when COMPUTESDK_GATEWAY_URL is set', () => {
@@ -173,8 +176,9 @@ describe('Auto-Detection', () => {
       process.env.E2B_API_KEY = 'e2b_key';
       process.env.COMPUTESDK_GATEWAY_URL = 'https://custom-gateway.example.com';
       
-      const provider = autoConfigureCompute();
-      expect(provider).toBeDefined();
+      const config = autoConfigureCompute();
+      expect(config).toBeDefined();
+      expect(config?.gatewayUrl).toBe('https://custom-gateway.example.com');
     });
 
     it('accepts valid HTTP gateway URL', () => {
@@ -182,8 +186,9 @@ describe('Auto-Detection', () => {
       process.env.E2B_API_KEY = 'e2b_key';
       process.env.COMPUTESDK_GATEWAY_URL = 'http://localhost:3000';
       
-      const provider = autoConfigureCompute();
-      expect(provider).toBeDefined();
+      const config = autoConfigureCompute();
+      expect(config).toBeDefined();
+      expect(config?.gatewayUrl).toBe('http://localhost:3000');
     });
 
     it('shows debug logs when COMPUTESDK_DEBUG is enabled', () => {

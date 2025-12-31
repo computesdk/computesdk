@@ -6,8 +6,9 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -24,7 +25,7 @@ export interface DaytonaConfig {
 /**
  * Create a Daytona provider instance using the factory pattern
  */
-export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
+export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
   defaultMode: 'direct',
   methods: {
@@ -333,10 +334,9 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
 
                 entries.push({
                   name,
-                  path: `${path}/${name}`.replace(/\/+/g, '/'), // Clean up double slashes
-                  isDirectory,
+                  type: isDirectory ? 'directory' as const : 'file' as const,
                   size,
-                  lastModified: new Date() // ls -la date parsing is complex, use current time
+                  modified: new Date() // ls -la date parsing is complex, use current time
                 });
               }
             }

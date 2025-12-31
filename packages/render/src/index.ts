@@ -2,8 +2,9 @@
  * Render Provider - Factory-based Implementation
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Render sandbox interface
@@ -74,7 +75,7 @@ export const fetchRender = async (
 /**
  * Create a Render provider instance using the factory pattern
  */
-export const render = createProvider<RenderSandbox, RenderConfig>({
+export const render = defineProvider<RenderSandbox, RenderConfig>({
   name: 'render',
   methods: {
     sandbox: {

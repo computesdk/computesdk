@@ -2,8 +2,8 @@
  * AWS ECS Fargate Provider - Factory-based Implementation
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CreateSandboxOptions, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+import type { Runtime, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 import {
   ECSClient,
   RunTaskCommand,
@@ -121,7 +121,7 @@ const normalizeTaskArn = (taskId: string, cluster: string, region: string, accou
 /**
  * Create an AWS ECS Fargate provider instance using the factory pattern
  */
-export const fargate = createProvider<FargateSandbox, FargateConfig>({
+export const fargate = defineProvider<FargateSandbox, FargateConfig>({
   name: 'fargate',
   methods: {
     sandbox: {

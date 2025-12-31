@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createCompute } from '../compute.js'
-import type { Runtime, CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
-import { MOCK_SUPPORTED_RUNTIMES } from './test-utils.js'
+import type { CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
+import type { Runtime } from 'computesdk'
+
+const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
 
 // Mock E2B-like provider
 function createMockProvider(name: string) {
@@ -41,7 +43,6 @@ function createMockProvider(name: string) {
         getUrl: vi.fn().mockResolvedValue('https://test-123-3000.mock.dev'),
         getProvider: vi.fn().mockReturnValue({ name }),
         getInstance: vi.fn().mockReturnValue(mockSandbox),
-        kill: vi.fn().mockResolvedValue(undefined),
         destroy: vi.fn().mockResolvedValue(undefined),
         filesystem: {
           readFile: vi.fn(),
@@ -85,7 +86,7 @@ describe('createCompute function', () => {
     const sandbox = await compute.sandbox.create()
 
     // Should be properly typed and return the provider-specific instance
-    // Note: In real usage with createProvider<E2BSandbox>, getInstance() returns E2BSandbox
+    // Note: In real usage with defineProvider<E2BSandbox>, getInstance() returns E2BSandbox
     // Here we cast to any since the mock doesn't preserve generic types
     const instance = sandbox.getInstance() as any
 
@@ -118,7 +119,6 @@ describe('createCompute function', () => {
     expect(typeof sandbox.runCommand).toBe('function')
     expect(typeof sandbox.getInfo).toBe('function')
     expect(typeof sandbox.getUrl).toBe('function')
-    expect(typeof sandbox.kill).toBe('function')
     expect(typeof sandbox.destroy).toBe('function')
   })
 

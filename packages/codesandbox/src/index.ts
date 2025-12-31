@@ -6,8 +6,9 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Codesandbox-specific configuration options
@@ -26,7 +27,7 @@ export interface CodesandboxConfig {
 /**
  * Create a Codesandbox provider instance using the factory pattern
  */
-export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>({
+export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig>({
   name: 'codesandbox',
   methods: {
     sandbox: {
@@ -287,10 +288,9 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
 
           return entries.map((entry: any) => ({
             name: entry.name,
-            path: `${path}/${entry.name}`.replace(/\/+/g, '/'),
-            isDirectory: entry.isDirectory || false,
+            type: entry.isDirectory ? 'directory' as const : 'file' as const,
             size: entry.size || 0,
-            lastModified: entry.lastModified ? new Date(entry.lastModified) : new Date()
+            modified: entry.lastModified ? new Date(entry.lastModified) : new Date()
           }));
         },
 

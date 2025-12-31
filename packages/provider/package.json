@@ -1,22 +1,22 @@
 {
-  "name": "@computesdk/client",
-  "version": "0.4.2",
-  "type": "module",
-  "description": "Universal client for ComputeSDK - works in browser, Node.js, and edge runtimes",
+  "name": "@computesdk/provider",
+  "version": "1.0.0",
+  "description": "Provider framework for ComputeSDK - define custom sandbox providers",
   "author": "Garrison",
   "license": "MIT",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -30,39 +30,31 @@
   },
   "keywords": [
     "computesdk",
-    "client",
-    "browser",
-    "node",
+    "provider",
+    "framework",
     "sandbox",
-    "code-execution",
     "cloud",
-    "compute",
-    "remote-sandbox",
-    "edge-runtime",
-    "serverless",
-    "api-client"
+    "compute"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/client"
+    "url": "https://github.com/computesdk/computesdk.git"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://www.computesdk.com/",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@computesdk/cmd": "workspace:*"
+    "@computesdk/cmd": "workspace:*",
+    "computesdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/ws": "^8.5.10",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0",
-    "ws": "^8.18.0"
+    "vitest": "^1.0.0"
   }
 }

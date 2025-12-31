@@ -1,16 +1,8 @@
 /**
  * ComputeSDK Types
  * 
- * Organized by concern: provider configuration vs resource operations
+ * Re-exports sandbox types
  */
 
-// Provider types - configuration, authentication, resource management
-export * from './provider';
-
-// Sandbox types - execution, filesystem, terminal operations  
+// Re-export everything from client for backward compatibility
 export * from './sandbox';
-
-// Future resource types will be added here:
-// export * from './blob';
-// export * from './git';
-// export * from './domains';

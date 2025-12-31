@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@runloop/api-client": "^0.44.0",
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [

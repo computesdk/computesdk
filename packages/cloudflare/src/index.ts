@@ -6,15 +6,9 @@
  */
 
 import { getSandbox } from '@cloudflare/sandbox';
-import { createProvider } from 'computesdk';
-import type {
-  CodeResult,
-  CommandResult,
-  SandboxInfo,
-  Runtime,
-  CreateSandboxOptions,
-  FileEntry
-} from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
 
 /**
  * Cloudflare-specific configuration options
@@ -75,7 +69,7 @@ function detectRuntime(code: string): Runtime {
 /**
  * Create a Cloudflare provider instance using the factory pattern
  */
-export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
+export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
   name: 'cloudflare',
   methods: {
     sandbox: {
@@ -408,10 +402,9 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
 
               return {
                 name,
-                path: `${path}/${name}`.replace('//', '/'),
-                isDirectory: permissions.startsWith('d'),
+                type: permissions.startsWith('d') ? 'directory' as const : 'file' as const,
                 size,
-                lastModified: isNaN(date.getTime()) ? new Date() : date
+                modified: isNaN(date.getTime()) ? new Date() : date
               };
             });
           } catch (error) {

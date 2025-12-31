@@ -10,7 +10,7 @@
 import * as repl from 'repl';
 import * as cmd from '@computesdk/cmd';
 import type { WorkbenchState } from './state.js';
-import { runCommand, createProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose, connectToSandbox } from './commands.js';
+import { runCommand, defineProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose, connectToSandbox } from './commands.js';
 import { showHelp, showInfo } from './output.js';
 import { showProviders, showEnv, PROVIDER_NAMES } from './providers.js';
 import { isCommand } from './types.js';
@@ -172,7 +172,7 @@ function injectCmdContext(replServer: repl.REPLServer) {
  */
 function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchState) {
   // Provider management
-  replServer.context.provider = createProviderCommand(state);
+  replServer.context.provider = defineProviderCommand(state);
   replServer.context.providers = () => showProviders();
   
   // Mode management

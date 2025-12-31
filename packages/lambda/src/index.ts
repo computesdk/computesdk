@@ -34,8 +34,8 @@
   }'
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Lambda sandbox interface
@@ -147,7 +147,7 @@ export const fetchLambda = async (
 /**
  * Create a Lambda provider instance using the factory pattern
  */
-export const lambda = createProvider<LambdaSandbox, LambdaConfig>({
+export const lambda = defineProvider<LambdaSandbox, LambdaConfig>({
   name: 'lambda',
   methods: {
     sandbox: {

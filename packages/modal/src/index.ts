@@ -8,15 +8,9 @@
  * foundation but may need updates as the Modal API evolves.
  */
 
-import { createProvider } from 'computesdk';
-import type {
-  CodeResult,
-  CommandResult,
-  SandboxInfo,
-  Runtime,
-  CreateSandboxOptions,
-  FileEntry
-} from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
 
 // Import Modal SDK
 import { App, Sandbox, initializeClient } from 'modal';
@@ -82,7 +76,7 @@ function detectRuntime(code: string): Runtime {
 /**
  * Create a Modal provider instance using the factory pattern
  */
-export const modal = createProvider<ModalSandbox, ModalConfig>({
+export const modal = defineProvider<ModalSandbox, ModalConfig>({
   name: 'modal',
   methods: {
     sandbox: {
@@ -500,10 +494,9 @@ export const modal = createProvider<ModalSandbox, ModalConfig>({
 
                 return {
                   name,
-                  path: `${path}/${name}`.replace('//', '/'),
-                  isDirectory: permissions.startsWith('d'),
+                  type: permissions.startsWith('d') ? 'directory' as const : 'file' as const,
                   size,
-                  lastModified: isNaN(date.getTime()) ? new Date() : date
+                  modified: isNaN(date.getTime()) ? new Date() : date
                 };
               });
           } catch (error) {

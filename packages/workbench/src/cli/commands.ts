@@ -4,7 +4,7 @@
  * Core operations using factory providers directly
  */
 
-import { createCompute } from 'computesdk';
+import { createCompute } from '@computesdk/provider';
 import type { WorkbenchState } from './state.js';
 import { getCurrentSandbox, setSandbox, clearSandbox, hasSandbox } from './state.js';
 import { 
@@ -115,50 +115,11 @@ export async function getComputeInstance(state: WorkbenchState): Promise<any> {
       defaultProvider: providerFactory(config),
     });
   } else {
-    // Gateway mode: use gateway with provider hint and credentials
-    const gatewayModule = await import('computesdk');
-    const gatewayFactory = gatewayModule.gateway;
-    
-    // Get provider-specific credentials to pass to gateway
-    const providerConfig = getProviderConfig(providerName as ProviderName);
-    
-    // Map provider config to provider headers for gateway
-    const providerHeaders: Record<string, string> = {};
-    
-    // Add provider-specific auth headers based on the provider
-    switch (providerName) {
-      case 'e2b':
-        if (providerConfig.apiKey) providerHeaders['X-E2B-API-Key'] = providerConfig.apiKey;
-        break;
-      case 'railway':
-        if (providerConfig.apiKey) providerHeaders['X-Railway-API-Key'] = providerConfig.apiKey;
-        if (providerConfig.projectId) providerHeaders['X-Railway-Project-ID'] = providerConfig.projectId;
-        if (providerConfig.environmentId) providerHeaders['X-Railway-Environment-ID'] = providerConfig.environmentId;
-        break;
-      case 'daytona':
-        if (providerConfig.apiKey) providerHeaders['X-Daytona-API-Key'] = providerConfig.apiKey;
-        break;
-      case 'modal':
-        if (providerConfig.tokenId) providerHeaders['X-Modal-Token-ID'] = providerConfig.tokenId;
-        if (providerConfig.tokenSecret) providerHeaders['X-Modal-Token-Secret'] = providerConfig.tokenSecret;
-        break;
-      case 'vercel':
-        if (providerConfig.token) providerHeaders['X-Vercel-Token'] = providerConfig.token;
-        if (providerConfig.teamId) providerHeaders['X-Vercel-Team-ID'] = providerConfig.teamId;
-        if (providerConfig.projectId) providerHeaders['X-Vercel-Project-ID'] = providerConfig.projectId;
-        break;
-      // Add other providers as needed
-    }
-    
-    const config = {
-      apiKey: process.env.COMPUTESDK_API_KEY!,
-      provider: providerName, // Tell gateway which backend to use
-      providerHeaders, // Pass provider credentials via headers
-    };
-    
-    compute = createCompute({
-      defaultProvider: gatewayFactory(config),
-    });
+    // Gateway mode: use the shared gateway compute instance from computesdk.
+    // The gateway must be configured via environment variables (for example, COMPUTESDK_API_KEY)
+    // or explicit configuration; if neither is provided, the gateway will throw an error.
+    const { compute: gatewayCompute } = await import('computesdk');
+    compute = gatewayCompute;
   }
   
   // Cache the instance
@@ -243,11 +204,6 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
  * Destroy current sandbox
  */
 export async function destroySandbox(state: WorkbenchState): Promise<void> {
-  if (!hasSandbox(state)) {
-    logWarning('No active sandbox');
-    return;
-  }
-  
   const spinner = new Spinner('Destroying sandbox...').start();
   
   try {
@@ -437,7 +393,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
  * Create a provider command handler
  * Supports: provider e2b, provider direct e2b, provider gateway e2b
  */
-export function createProviderCommand(state: WorkbenchState) {
+export function defineProviderCommand(state: WorkbenchState) {
   return async function provider(mode?: string, providerName?: string) {
     if (!mode) {
       // Show current provider
@@ -562,8 +518,8 @@ export async function connectToSandbox(state: WorkbenchState, sandboxUrl: string
   const startTime = Date.now();
   
   try {
-    // Import Sandbox class from client package
-    const { Sandbox } = await import('@computesdk/client');
+    // Import Sandbox class from computesdk package (client is now merged into computesdk)
+    const { Sandbox } = await import('computesdk');
     
     // Dynamically import WebSocket for Node.js environment
     let WebSocket: any;

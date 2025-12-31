@@ -4,8 +4,31 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { Sandbox, ProviderSandbox, CreateSandboxOptions, Runtime } from './sandbox';
-import type { ProviderName } from '../provider-config';
+import type { Runtime, CreateSandboxOptions, SandboxFileSystem, SandboxInterface, CodeResult, CommandResult, SandboxInfo, RunCommandOptions } from 'computesdk';
+
+/**
+ * Provider Sandbox - what provider implementations return
+ * 
+ * Extends the universal Sandbox interface with provider-specific methods
+ */
+export interface ProviderSandbox<TSandbox = any> extends SandboxInterface {
+  /** Get the provider that created this sandbox */
+  getProvider(): Provider<TSandbox>;
+  /** Get the native provider sandbox instance */
+  getInstance(): TSandbox;
+  /** Destroy sandbox and clean up resources */
+  destroy(): Promise<void>;
+}
+
+/**
+ * Extract the sandbox type from a provider using generic inference
+ */
+export type ExtractProviderSandboxType<TProvider> = TProvider extends Provider<infer TSandbox, any, any> ? TSandbox : any;
+
+/**
+ * Typed provider sandbox interface that preserves the provider's native instance type
+ */
+export type TypedProviderSandbox<TProvider extends Provider> = ProviderSandbox<ExtractProviderSandboxType<TProvider>>;
 
 /**
  * Common options for creating snapshots
@@ -232,20 +255,20 @@ export interface TypedComputeAPI<TProvider extends Provider> extends Omit<Comput
   sandbox: {
     /** Create a sandbox from the configured provider with proper typing */
     create(params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>): Promise<
-      import('./sandbox').TypedProviderSandbox<TProvider>
+      TypedProviderSandbox<TProvider>
     >;
     /** Get an existing sandbox by ID from the configured provider with proper typing */
     getById(sandboxId: string): Promise<
-      import('./sandbox').TypedProviderSandbox<TProvider> | null
+      TypedProviderSandbox<TProvider> | null
     >;
     /** List all active sandboxes from the configured provider with proper typing */
-    list(): Promise<import('./sandbox').TypedProviderSandbox<TProvider>[]>;
+    list(): Promise<TypedProviderSandbox<TProvider>[]>;
     /** Destroy a sandbox via the configured provider */
     destroy(sandboxId: string): Promise<void>;
     /** Find existing or create new sandbox by (namespace, name) */
-    findOrCreate(options: FindOrCreateSandboxOptions): Promise<import('./sandbox').TypedProviderSandbox<TProvider>>;
+    findOrCreate(options: FindOrCreateSandboxOptions): Promise<TypedProviderSandbox<TProvider>>;
     /** Find existing sandbox by (namespace, name) without creating */
-    find(options: FindSandboxOptions): Promise<import('./sandbox').TypedProviderSandbox<TProvider> | null>;
+    find(options: FindSandboxOptions): Promise<TypedProviderSandbox<TProvider> | null>;
     /** Extend sandbox timeout/expiration */
     extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
   };
@@ -343,46 +366,5 @@ export interface BlaxelProviderConfig {
   workspace?: string;
 }
 
-/**
- * Supported provider names for explicit compute mode
- * Re-exported from provider-config for convenience
- */
-export type { ProviderName as ExplicitProviderName } from '../provider-config';
-
-/**
- * Explicit compute configuration for callable compute()
- *
- * Used when calling compute as a function: compute({ provider: 'e2b', ... })
- * Always uses gateway mode.
- */
-export interface ExplicitComputeConfig {
-  /** Provider name to use */
-  provider: ProviderName;
-  /** ComputeSDK API key (required for gateway mode) */
-  apiKey: string;
-
-  /** E2B provider configuration */
-  e2b?: E2BProviderConfig;
-  /** Modal provider configuration */
-  modal?: ModalProviderConfig;
-  /** Railway provider configuration */
-  railway?: RailwayProviderConfig;
-  /** Daytona provider configuration */
-  daytona?: DaytonaProviderConfig;
-  /** Vercel provider configuration */
-  vercel?: VercelProviderConfig;
-  /** Runloop provider configuration */
-  runloop?: RunloopProviderConfig;
-  /** Cloudflare provider configuration */
-  cloudflare?: CloudflareProviderConfig;
-  /** CodeSandbox provider configuration */
-  codesandbox?: CodesandboxProviderConfig;
-  /** Blaxel provider configuration */
-  blaxel?: BlaxelProviderConfig;
-}
-
-/**
- * Callable compute type - works as both singleton and factory function
- */
-export type CallableCompute = ComputeAPI & ((config: ExplicitComputeConfig) => ComputeAPI);
+// Note: Gateway-specific types (ExplicitComputeConfig, etc.) are in computesdk package
 
