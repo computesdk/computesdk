@@ -6,6 +6,8 @@
  * routing through the gateway.
  */
 
+import { compute } from 'computesdk';
+
 /**
  * Compute factory configuration
  */
@@ -22,25 +24,6 @@ export interface ComputeConfig {
   apiKey?: string;
   /** Gateway URL override */
   gatewayUrl?: string;
-}
-
-/**
- * Import compute singleton from computesdk
- * This is a regular import, not dynamic, since compute packages
- * explicitly depend on computesdk
- */
-function getComputeSingleton(): any {
-  try {
-    // Use require to avoid issues with ESM/CJS interop
-    // The compute package will bundle this properly
-    const computeModule = require('computesdk');
-    return computeModule.compute;
-  } catch (error) {
-    throw new Error(
-      'Failed to import compute singleton from "computesdk" package. ' +
-      'Make sure "computesdk" is installed: npm install computesdk'
-    );
-  }
 }
 
 /**
@@ -75,15 +58,13 @@ export function defineCompute<TConfig extends ComputeConfig = ComputeConfig>(
   factoryConfig: ComputeFactoryConfig
 ): (config: TConfig) => any {
   return (config: TConfig) => {
-    const compute = getComputeSingleton();
-    
     // Configure compute with provider-specific settings
     compute.setConfig({
-      provider: factoryConfig.provider,
-      apiKey: config.apiKey,
+      provider: factoryConfig.provider as any,
+      apiKey: config.apiKey || '',
       gatewayUrl: config.gatewayUrl,
       [factoryConfig.provider]: config,
-    });
+    } as any);
     
     // Return the configured compute instance
     return compute;
