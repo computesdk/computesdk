@@ -108,18 +108,6 @@ export {
 } from './provider-config';
 
 // ============================================================================
-// Web Framework Integration
-// ============================================================================
-
-// Export request handler for web framework integration
-export { handleComputeRequest } from './request-handler';
-export type {
-  ComputeRequest,
-  ComputeResponse,
-  HandleComputeRequestParams
-} from './request-handler';
-
-// ============================================================================
 // Note: Provider Framework
 // ============================================================================
 

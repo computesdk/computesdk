@@ -49,10 +49,12 @@ export interface ExplicitComputeConfig {
 }
 
 /**
- * Options for creating a sandbox
+ * Options for creating a sandbox via the gateway
+ * 
+ * Note: Runtime is determined by the provider, not specified at creation time.
+ * Use sandbox.runCode(code, runtime) to specify which runtime to use for execution.
  */
 export interface CreateSandboxOptions {
-  runtime?: 'node' | 'python';
   timeout?: number;
   templateId?: string;
   metadata?: Record<string, any>;

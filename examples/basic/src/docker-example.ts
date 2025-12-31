@@ -35,7 +35,8 @@ async function main() {
   let node: any | null = null
 
   try {
-    // Python sandbox 
+    // Python sandbox
+    // Note: Docker provider (direct mode) supports runtime parameter to select the container image
     py = await compute.sandbox.create({
       runtime: 'python',
       image: { name: 'python:3.11-slim' },
@@ -65,7 +66,8 @@ async function main() {
     const contents = await py.filesystem.readFile('/workspace/demo/out.txt')
     console.log('readFile ->', contents)
 
-    // Node.js sandbox 
+    // Node.js sandbox
+    // Note: Docker provider (direct mode) supports runtime parameter to select the container image
     node = await compute.sandbox.create({
       runtime: 'node',
       image: { name: 'node:20-alpine' },

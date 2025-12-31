@@ -35,12 +35,12 @@ async function main() {
     console.log('🚀 Creating Blaxel sandbox for Python...');
     
     try {
-      const sandbox = await compute.sandbox.create({ runtime: 'python' });
+      const sandbox = await compute.sandbox.create();
       console.log('✅ Created Blaxel sandbox:', sandbox.sandboxId);
 
       // Execute Python code
       console.log('\n--- Python Execution ---');
-      const pythonResult = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
+      const pythonResult = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI, 'python');
 
       console.log('Python Output:', pythonResult.output);
       console.log('Exit code:', pythonResult.exitCode);
@@ -62,11 +62,11 @@ async function main() {
       // Node.js execution
       console.log('\n--- Node.js Execution ---');
       
-      // Create a Node.js sandbox
-      const nodeSandbox = await compute.sandbox.create({ runtime: 'node' });
+      // Create a second sandbox for Node.js
+      const nodeSandbox = await compute.sandbox.create();
       console.log('Created Node.js sandbox:', nodeSandbox.sandboxId);
       
-      const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
+      const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING, 'node');
       console.log('Node.js Output:', nodeResult.output);
 
       // Clean up

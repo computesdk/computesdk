@@ -3,7 +3,12 @@
 "@computesdk/example-basic": patch
 ---
 
-Add setConfig() method and update examples to use gateway mode
+Add setConfig() method, remove runtime parameter, and update examples to use gateway mode
+
+**Breaking Changes:**
+- Removed `runtime` parameter from gateway's `CreateSandboxOptions` - runtime is determined by the provider, not specified at creation time
+- Removed `handleComputeRequest` and related web framework integration exports (no longer needed)
+- Use `sandbox.runCode(code, runtime)` to specify which runtime to use for execution
 
 **New Features:**
 - Added `compute.setConfig()` method for explicit gateway configuration
@@ -13,6 +18,11 @@ Add setConfig() method and update examples to use gateway mode
 Two modes are now clearly separated:
 1. **Gateway Mode** (recommended): `import { compute } from 'computesdk'` with auto-detection or `compute.setConfig()`
 2. **Direct Mode** (advanced): `const compute = e2b({ apiKey: 'xxx' })` - providers are compute instances
+
+**Runtime Selection:**
+Runtime is no longer specified at sandbox creation. Instead, specify it when executing code:
+- `sandbox.runCode(pythonCode, 'python')` - Execute Python code
+- `sandbox.runCode(nodeCode, 'node')` - Execute Node.js code
 
 **Updated Examples:**
 All provider examples now demonstrate **gateway mode** using the `computesdk` package:

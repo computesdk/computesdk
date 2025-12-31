@@ -58,11 +58,11 @@ async function main() {
     // Node.js execution
     console.log('\n--- Node.js Execution ---');
     
-    // Create a Node.js sandbox
-    const nodeSandbox = await compute.sandbox.create({ runtime: 'node' });
+    // Create a second sandbox for Node.js
+    const nodeSandbox = await compute.sandbox.create();
     console.log('Created Node.js sandbox:', nodeSandbox.sandboxId);
     
-    const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
+    const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING, 'node');
     console.log('Node.js Output:', nodeResult.output);
 
     // Clean up
