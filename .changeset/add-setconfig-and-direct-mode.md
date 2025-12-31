@@ -1,5 +1,5 @@
 ---
-"computesdk": minor
+"computesdk": patch
 "@computesdk/example-basic": patch
 ---
 
