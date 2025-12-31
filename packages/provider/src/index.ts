@@ -22,11 +22,11 @@ export type {
   DaemonConfig
 } from './infra-factory';
 
-export { defineGatewayProvider } from './gateway-factory';
+export { defineCompute } from './compute-factory';
 export type {
-  GatewayProviderConfig,
-  GatewayConfig
-} from './gateway-factory';
+  ComputeFactoryConfig,
+  ComputeConfig
+} from './compute-factory';
 
 // Export direct mode compute API
 export { createCompute } from './compute';
