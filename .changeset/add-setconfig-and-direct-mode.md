@@ -1,7 +1,5 @@
 ---
-"computesdk": minor
-"@computesdk/example-basic": patch
-"@computesdk/ui": major
+"computesdk": patch
 ---
 
 Add setConfig() method, remove runtime parameter, UI package, and web framework examples
