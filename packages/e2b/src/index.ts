@@ -6,17 +6,9 @@
  */
 
 import { Sandbox as E2BSandbox } from 'e2b';
-import { createProvider } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
 
-
-import type {
-  CodeResult,
-  CommandResult,
-  SandboxInfo,
-  Runtime,
-  CreateSandboxOptions,
-  FileEntry
-} from 'computesdk';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
 
 /**
  * E2B-specific configuration options
@@ -35,7 +27,7 @@ export interface E2BConfig {
 /**
  * Create an E2B provider instance using the factory pattern
  */
-export const e2b = createProvider<E2BSandbox, E2BConfig>({
+export const e2b = defineProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
   defaultMode: 'direct',
   methods: {
@@ -327,10 +319,9 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
 
           return entries.map((entry: any) => ({
             name: entry.name,
-            path: entry.path,
-            isDirectory: Boolean(entry.isDir || entry.isDirectory),
+            type: (entry.isDir || entry.isDirectory) ? 'directory' as const : 'file' as const,
             size: entry.size || 0,
-            lastModified: new Date(entry.lastModified || Date.now())
+            modified: new Date(entry.lastModified || Date.now())
           }));
         },
 

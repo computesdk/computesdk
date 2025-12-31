@@ -13,7 +13,7 @@
 import '@computesdk/test-utils';
 
 import { describe, it, expect } from 'vitest';
-import { createCompute } from 'computesdk';
+import { createCompute } from '@computesdk/provider';
 import { modal } from '../index';
 
 describe('Modal Port Forwarding Integration Tests', () => {

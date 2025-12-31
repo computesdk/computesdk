@@ -6,15 +6,17 @@
  */
 
 import { Runloop } from "@runloop/api-client";
-import { createProvider } from "computesdk";
+import { defineProvider } from "@computesdk/provider";
 import type {
   CodeResult,
   CommandResult,
   SandboxInfo,
-  CreateSandboxOptions,
-  FileEntry,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
+} from "@computesdk/provider";
+import type {
+  CreateSandboxOptions,
+  FileEntry,
   Runtime,
   SandboxStatus,
   Sandbox,
@@ -83,7 +85,7 @@ export interface CreateBlueprintTemplateOptions {
 /**
  * Create a Runloop provider instance using the factory pattern
  */
-export const runloop = createProvider<
+export const runloop = defineProvider<
   Runloop.DevboxView,         // TSandbox
   RunloopConfig,              // TConfig
   RunloopTemplate,            // TTemplate 
@@ -466,10 +468,9 @@ export const runloop = createProvider<
 
             return {
               name,
-              path: `${path}/${name}`,
-              isDirectory,
+              type: isDirectory ? 'directory' as const : 'file' as const,
               size: parseInt(parts[4]) || 0,
-              lastModified: new Date(),
+              modified: new Date(),
             };
           });
         },

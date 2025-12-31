@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "modal": "^0.3.16",
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [

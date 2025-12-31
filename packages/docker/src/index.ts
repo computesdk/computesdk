@@ -1,6 +1,6 @@
 import Docker from 'dockerode';
 import { PassThrough } from 'stream';
-import { createProvider } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
 import type {
   Runtime,
   CodeResult,
@@ -9,7 +9,7 @@ import type {
   CreateSandboxOptions,
   SandboxInfo,
   FileEntry,
-} from 'computesdk';
+} from '@computesdk/provider';
 
 import { defaultDockerConfig } from './types/types';
 import type {
@@ -141,7 +141,7 @@ function pickImageForRuntime(runtime: Runtime, configured?: DockerImage): Docker
   };
 }
 
-export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
+export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
   name: PROVIDER,
   methods: {
     sandbox: {
@@ -434,10 +434,9 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
             const size = Number(parts[4]) || 0;
             entries.push({
               name,
-              path: `${path.replace(/\/$/, '')}/${name}`,
-              isDirectory: isDir,
+              type: isDir ? 'directory' as const : 'file' as const,
               size,
-              lastModified: new Date(),
+              modified: new Date(),
             });
           }
           return entries;

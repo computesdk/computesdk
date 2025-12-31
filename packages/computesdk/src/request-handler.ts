@@ -2,11 +2,12 @@
  * Simplified Request Handler for Web Framework Integration
  * 
  * Handles JSON requests for sandbox and code execution operations.
- * Terminal support removed - will be re-added with WebSocket VM connections.
  */
 
-import type { Provider, Runtime } from './types';
 import { compute } from './compute';
+
+// Gateway-specific runtime (subset of universal Runtime)
+type GatewayRuntime = 'node' | 'python';
 
 /**
  * Request structure supporting sandbox and code execution capabilities
@@ -20,7 +21,7 @@ export interface ComputeRequest {
   code?: string;
   command?: string;
   args?: string[];
-  runtime?: Runtime;
+  runtime?: GatewayRuntime;
   path?: string;
   content?: string;
   
@@ -31,9 +32,10 @@ export interface ComputeRequest {
   
   /** Sandbox creation options */
   options?: {
-    runtime?: Runtime;
+    runtime?: GatewayRuntime;
     timeout?: number;
-    sandboxId?: string;
+    name?: string;
+    namespace?: string;
   };
 }
 
@@ -51,45 +53,33 @@ export interface ComputeResponse {
 /**
  * Execute compute action using targeted handling
  */
-async function executeAction(body: ComputeRequest, provider: Provider): Promise<ComputeResponse> {
+async function executeAction(body: ComputeRequest): Promise<ComputeResponse> {
   try {
     const { action, sandboxId } = body;
     
     // Sandbox management operations
     if (action === 'compute.sandbox.create') {
-      const sandbox = await compute.sandbox.create({
-        provider,
-        options: body.options || { runtime: 'python' }
-      });
+      const sandbox = await compute.sandbox.create(body.options || { runtime: 'python' });
       return {
         success: true,
         sandboxId: sandbox.sandboxId,
-        provider: provider.name
+        provider: sandbox.provider
       };
     }
     
     if (action === 'compute.sandbox.list') {
-      const sandboxes = await compute.sandbox.list(provider);
-      return {
-        success: true,
-        sandboxId: '',
-        provider: provider.name,
-        sandboxes: sandboxes.map(sb => ({
-          sandboxId: sb.sandboxId,
-          provider: sb.provider
-        }))
-      };
+      throw new Error('List operation not supported in gateway mode');
     }
     
     if (action === 'compute.sandbox.destroy') {
       if (!sandboxId) {
         throw new Error('sandboxId is required for destroy action');
       }
-      await compute.sandbox.destroy(provider, sandboxId);
+      await compute.sandbox.destroy(sandboxId);
       return {
         success: true,
         sandboxId,
-        provider: provider.name
+        provider: 'gateway'
       };
     }
     
@@ -98,7 +88,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       throw new Error('sandboxId is required for this action');
     }
     
-    const sandbox = await compute.sandbox.getById(provider, sandboxId);
+    const sandbox = await compute.sandbox.getById(sandboxId);
     if (!sandbox) {
       throw new Error(`Sandbox ${sandboxId} not found`);
     }
@@ -109,7 +99,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       return {
         success: true,
         sandboxId,
-        provider: provider.name,
+        provider: sandbox.provider,
         info: {
           id: result.id,
           provider: result.provider,
@@ -129,7 +119,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       return {
         success: true,
         sandboxId,
-        provider: provider.name,
+        provider: sandbox.provider,
         result: {
           output: result.output,
           exitCode: result.exitCode,
@@ -144,7 +134,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       return {
         success: true,
         sandboxId,
-        provider: provider.name,
+        provider: sandbox.provider,
         result: {
           stdout: result.stdout,
           stderr: result.stderr,
@@ -161,7 +151,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       return {
         success: true,
         sandboxId,
-        provider: provider.name,
+        provider: sandbox.provider,
         fileContent: result
       };
     }
@@ -170,13 +160,13 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       if (!body.path) throw new Error('path is required');
       if (body.content === undefined) throw new Error('content is required');
       await sandbox.filesystem.writeFile(body.path, body.content);
-      return { success: true, sandboxId, provider: provider.name };
+      return { success: true, sandboxId, provider: sandbox.provider };
     }
     
     if (action === 'compute.sandbox.filesystem.mkdir') {
       if (!body.path) throw new Error('path is required');
       await sandbox.filesystem.mkdir(body.path);
-      return { success: true, sandboxId, provider: provider.name };
+      return { success: true, sandboxId, provider: sandbox.provider };
     }
     
     if (action === 'compute.sandbox.filesystem.readdir') {
@@ -185,7 +175,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       return {
         success: true,
         sandboxId,
-        provider: provider.name,
+        provider: sandbox.provider,
         files: result.map((entry: any) => ({
           name: entry.name,
           path: entry.path,
@@ -202,7 +192,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       return {
         success: true,
         sandboxId,
-        provider: provider.name,
+        provider: sandbox.provider,
         exists: result
       };
     }
@@ -210,7 +200,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
     if (action === 'compute.sandbox.filesystem.remove') {
       if (!body.path) throw new Error('path is required');
       await sandbox.filesystem.remove(body.path);
-      return { success: true, sandboxId, provider: provider.name };
+      return { success: true, sandboxId, provider: sandbox.provider };
     }
     
     throw new Error(`Unknown action: ${action}`);
@@ -220,7 +210,7 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       sandboxId: body.sandboxId || '',
-      provider: provider.name
+      provider: 'gateway'
     };
   }
 }
@@ -229,28 +219,8 @@ async function executeAction(body: ComputeRequest, provider: Provider): Promise<
  * Main request handler - handles HTTP requests and pre-parsed bodies
  */
 export async function handleComputeRequest(
-  params: HandleComputeRequestParams
-): Promise<ComputeResponse>;
-export async function handleComputeRequest(
-  requestOrBody: Request | ComputeRequest,
-  provider: Provider
-): Promise<Response>;
-export async function handleComputeRequest(
-  paramsOrRequestOrBody: HandleComputeRequestParams | Request | ComputeRequest,
-  provider?: Provider
-): Promise<ComputeResponse | Response> {
-  // Handle object-style API
-  if (typeof paramsOrRequestOrBody === 'object' && 'request' in paramsOrRequestOrBody && 'provider' in paramsOrRequestOrBody) {
-    const params = paramsOrRequestOrBody as HandleComputeRequestParams;
-    return await executeAction(params.request, params.provider);
-  }
-  
-  // Handle original API
-  if (!provider) {
-    throw new Error('Provider is required when not using object-style API');
-  }
-  
-  const requestOrBody = paramsOrRequestOrBody as Request | ComputeRequest;
+  requestOrBody: Request | ComputeRequest
+): Promise<Response | ComputeResponse> {
   try {
     let body: ComputeRequest;
     
@@ -261,7 +231,7 @@ export async function handleComputeRequest(
           success: false,
           error: 'Only POST requests are supported',
           sandboxId: '',
-          provider: provider.name
+          provider: 'gateway'
         }, { status: 405 });
       }
       
@@ -273,36 +243,40 @@ export async function handleComputeRequest(
           success: false,
           error: 'Invalid JSON in request body',
           sandboxId: '',
-          provider: provider.name
+          provider: 'gateway'
         }, { status: 400 });
       }
+      
+      // Execute the action and return Response
+      const result = await executeAction(body);
+      return Response.json(result, {
+        status: result.success ? 200 : 500
+      });
     } else {
+      // Direct body passed - return result directly
       body = requestOrBody;
+      return await executeAction(body);
     }
     
-    // Execute the action
-    const result = await executeAction(body, provider);
-    
-    return Response.json(result, {
-      status: result.success ? 200 : 500
-    });
-    
   } catch (error) {
-    return Response.json({
+    const errorResponse = {
       success: false,
       error: error instanceof Error ? error.message : 'Request handling failed',
       sandboxId: '',
-      provider: provider.name
-    }, { status: 500 });
+      provider: 'gateway'
+    };
+    
+    if (requestOrBody instanceof Request) {
+      return Response.json(errorResponse, { status: 500 });
+    } else {
+      return errorResponse;
+    }
   }
 }
 
 /**
- * Legacy export for backward compatibility
+ * Parameters for handleComputeRequest
  */
 export interface HandleComputeRequestParams {
   request: ComputeRequest;
-  provider: Provider;
 }
-
-export { handleComputeRequest as handleHttpComputeRequest };

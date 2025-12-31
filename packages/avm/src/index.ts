@@ -5,8 +5,8 @@
  * API Documentation: https://api.avm.codes/
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * AVM sandbox interface matching the API response structure
@@ -104,7 +104,7 @@ export const fetchAVM = async (
 /**
  * Create an AVM provider instance using the factory pattern
  */
-export const avm = createProvider<AVMSandbox, AVMConfig>({
+export const avm = defineProvider<AVMSandbox, AVMConfig>({
   name: 'avm',
   methods: {
     sandbox: {

@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@codesandbox/sdk": "^2.0.7",
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [

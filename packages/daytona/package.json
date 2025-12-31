@@ -28,6 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
     "@daytonaio/sdk": "^0.25.0"
   },

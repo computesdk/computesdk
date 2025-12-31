@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider } from 'computesdk';
+import type { Provider } from '@computesdk/provider';
 
 export interface ProviderCrudTestConfig {
   /** The provider instance to test */
@@ -96,7 +96,7 @@ export function runProviderCrudTest(config: ProviderCrudTestConfig) {
       expect(Array.isArray(sandboxes)).toBe(true);
       
       // Find our sandbox in the list
-      const ourSandbox = sandboxes.find(s => s.sandboxId === createdSandboxId);
+      const ourSandbox = sandboxes.find((s: any) => s.sandboxId === createdSandboxId);
       expect(ourSandbox).toBeDefined();
       expect(ourSandbox?.sandboxId).toBe(createdSandboxId);
       

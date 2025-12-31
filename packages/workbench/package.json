@@ -50,8 +50,8 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@computesdk/client": "workspace:*",
     "@computesdk/cmd": "workspace:*",
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
     "dotenv": "^16.4.5",
     "ws": "^8.18.0"

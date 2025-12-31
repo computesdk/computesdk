@@ -419,6 +419,9 @@ importers:
       '@blaxel/core':
         specifier: ^0.2.42
         version: 0.2.42(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -448,45 +451,14 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
-  packages/client:
-    dependencies:
-      '@computesdk/cmd':
-        specifier: workspace:*
-        version: link:../cmd
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.5
-      '@types/ws':
-        specifier: ^8.5.10
-        version: 8.18.1
-      '@vitest/coverage-v8':
-        specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
-      eslint:
-        specifier: ^8.37.0
-        version: 8.57.1
-      rimraf:
-        specifier: ^5.0.0
-        version: 5.0.10
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.0(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.8.3
-      vitest:
-        specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
-      ws:
-        specifier: ^8.18.0
-        version: 8.18.3
-
   packages/cloudflare:
     dependencies:
       '@cloudflare/sandbox':
         specifier: ^0.3.0
         version: 0.3.0
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -551,6 +523,9 @@ importers:
       '@codesandbox/sdk':
         specifier: ^2.0.7
         version: 2.0.7(ink@6.2.1(react@18.3.1))(ws@8.18.3)
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -582,9 +557,6 @@ importers:
 
   packages/computesdk:
     dependencies:
-      '@computesdk/client':
-        specifier: workspace:*
-        version: link:../client
       '@computesdk/cmd':
         specifier: workspace:*
         version: link:../cmd
@@ -650,6 +622,9 @@ importers:
 
   packages/daytona:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       '@daytonaio/sdk':
         specifier: ^0.25.0
         version: 0.25.4(ws@8.18.3)
@@ -721,6 +696,9 @@ importers:
 
   packages/e2b:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -779,6 +757,9 @@ importers:
 
   packages/fly:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -841,6 +822,9 @@ importers:
 
   packages/modal:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -875,6 +859,9 @@ importers:
 
   packages/namespace:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -907,8 +894,42 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
+  packages/provider:
+    dependencies:
+      '@computesdk/cmd':
+        specifier: workspace:*
+        version: link:../cmd
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.5
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.0(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
+
   packages/railway:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -940,6 +961,9 @@ importers:
 
   packages/render:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -971,6 +995,9 @@ importers:
 
   packages/runloop:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       '@runloop/api-client':
         specifier: ^0.44.0
         version: 0.44.0
@@ -1054,6 +1081,9 @@ importers:
 
   packages/vercel:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       '@vercel/sandbox':
         specifier: ^0.0.13
         version: 0.0.13
@@ -1097,9 +1127,6 @@ importers:
       '@computesdk/blaxel':
         specifier: workspace:*
         version: link:../blaxel
-      '@computesdk/client':
-        specifier: workspace:*
-        version: link:../client
       '@computesdk/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
@@ -1118,6 +1145,9 @@ importers:
       '@computesdk/modal':
         specifier: workspace:*
         version: link:../modal
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       '@computesdk/railway':
         specifier: workspace:*
         version: link:../railway
@@ -4663,9 +4693,6 @@ packages:
 
   '@types/ws@7.4.7':
     resolution: {integrity: sha512-JQbbmxZTZehdc2iszGKs5oC3NFnjeay7mtAWrdt7qNtAVK0g19muApzAy4bm9byz79xa2ZnO/BOBC2R8RC5Lww==}
-
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -11311,6 +11338,7 @@ packages:
   whatwg-encoding@3.1.1:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
+    deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
   whatwg-mimetype@4.0.0:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
@@ -16497,10 +16525,6 @@ snapshots:
   '@types/uuid@9.0.8': {}
 
   '@types/ws@7.4.7':
-    dependencies:
-      '@types/node': 20.19.5
-
-  '@types/ws@8.18.1':
     dependencies:
       '@types/node': 20.19.5
 

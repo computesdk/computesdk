@@ -2,8 +2,9 @@
  * Namespace Provider - Factory-based Implementation
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Namespace sandbox interface
@@ -85,7 +86,7 @@ export const fetchNamespace = async (
 /**
  * Create a Namespace provider instance using the factory pattern
  */
-export const namespace = createProvider<NamespaceSandbox, NamespaceConfig>({
+export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
   name: 'namespace',
   methods: {
     sandbox: {

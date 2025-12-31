@@ -5,20 +5,21 @@
  * from simple method definitions with automatic feature detection.
  */
 
+// Import all types from local types
 import type {
+  Runtime,
+  CreateSandboxOptions,
+  FileEntry,
+  RunCommandOptions,
+  SandboxFileSystem,
   Provider,
   ProviderSandboxManager,
   ProviderTemplateManager,
   ProviderSnapshotManager,
   ProviderSandbox,
-  SandboxFileSystem,
   SandboxInfo,
   CodeResult,
   CommandResult,
-  Runtime,
-  CreateSandboxOptions,
-  FileEntry,
-  RunCommandOptions,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
   CreateTemplateOptions,
@@ -94,7 +95,7 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
 export type ProviderMode = 'raw' | 'direct' | 'gateway';
 
 /**
- * Provider configuration for createProvider()
+ * Provider configuration for defineProvider()
  */
 export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, TSnapshot = any> {
   name: string;
@@ -295,11 +296,6 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
   getProvider(): Provider<TSandbox> {
     return this.providerInstance;
-  }
-
-  async kill(): Promise<void> {
-    // For backward compatibility, kill() delegates to destroy()
-    await this.destroy();
   }
 
   async destroy(): Promise<void> {
@@ -535,7 +531,7 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
  * Auto-generates all boilerplate classes and provides feature detection
  * based on which methods are implemented.
  */
-export function createProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
+export function defineProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
   providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>
 ): (config: TConfig & BaseProviderConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
   return (config: TConfig & BaseProviderConfig) => {

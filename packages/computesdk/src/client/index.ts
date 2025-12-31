@@ -48,18 +48,48 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions } from './resources/run';
 
-// Re-export shared types (canonical definitions)
-export {
-  type Runtime,
-  type SandboxStatus,
-  type RunCommandOptions,
-  type CreateSandboxOptions,
-  type FileEntry,
-  type SandboxFileSystem,
-  type ProviderSandboxInfo,
+// Import universal types
+import type { 
+  SandboxFileSystem,
+  CodeResult,
+  CommandResult,
+  Runtime,
+  SandboxInfo as UniversalSandboxInfo,
+} from '../types/universal-sandbox';
+
+// Import client-specific types
+import type {
+  SandboxStatus,
+  ProviderSandboxInfo,
+  FileEntry as ClientFileEntry,
+} from './types';
+
+import {
   CommandExitError,
   isCommandExitError,
 } from './types';
+
+// Re-export shared types (canonical definitions)
+export type {
+  Runtime,
+  SandboxStatus,
+  ProviderSandboxInfo,
+  SandboxFileSystem,
+};
+
+export type {
+  ClientFileEntry as FileEntry,
+};
+
+// Note: CodeResult and CommandResult are exported from ./resources/run
+
+export {
+  CommandExitError,
+  isCommandExitError,
+};
+
+// Import universal Sandbox interface
+import type { Sandbox as ISandbox } from '../types/universal-sandbox';
 
 // ============================================================================
 // Type Definitions
@@ -575,14 +605,22 @@ export interface BatchWriteResponse {
 // ============================================================================
 
 /**
- * Sandbox - Full-featured sandbox with WebSocket terminals, file watchers, and signals
+ * Sandbox - Full-featured gateway sandbox implementation
  *
- * This is THE Sandbox class - the primary interface for interacting with ComputeSDK sandboxes.
- * It provides all the features needed for code execution, file operations, and real-time communication.
+ * Provides complete feature set including:
+ * - Interactive terminals (PTY and exec modes)
+ * - Managed servers
+ * - File watchers with real-time events
+ * - Authentication (session tokens, magic links)
+ * - Environment management
+ * - Signal service for port/error events
+ * - Child sandbox creation
+ *
+ * This is the most feature-rich implementation available.
  *
  * @example
  * ```typescript
- * import { Sandbox } from '@computesdk/client'
+ * import { Sandbox } from 'computesdk'
  *
  * // Pattern 1: Admin operations (requires access token)
  * const sandbox = new Sandbox({
@@ -651,20 +689,7 @@ export interface BatchWriteResponse {
 export class Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
-  readonly filesystem: {
-    readFile: (path: string) => Promise<string>;
-    writeFile: (path: string, content: string) => Promise<void>;
-    mkdir: (path: string) => Promise<void>;
-    readdir: (path: string) => Promise<Array<{
-      name: string;
-      path: string;
-      isDirectory: boolean;
-      size: number;
-      lastModified: Date;
-    }>>;
-    exists: (path: string) => Promise<boolean>;
-    remove: (path: string) => Promise<void>;
-  };
+  readonly filesystem: SandboxFileSystem;
 
   // Resource namespaces (singular naming convention)
   readonly terminal: Terminal;
@@ -767,12 +792,12 @@ export class Sandbox {
       },
       readdir: async (path: string) => {
         const response = await this.listFiles(path);
+        // Convert to universal FileEntry format
         return response.data.files.map(f => ({
           name: f.name,
-          path: f.path,
-          isDirectory: f.is_dir,
+          type: (f.is_dir ? 'directory' : 'file') as 'directory' | 'file',
           size: f.size,
-          lastModified: new Date(f.modified_at)
+          modified: new Date(f.modified_at)
         }));
       },
       exists: async (path: string) => {
@@ -1983,7 +2008,7 @@ export class Sandbox {
   }
 
   /**
-   * Get sandbox information (Sandbox interface method)
+   * Get sandbox information
    */
   async getInfo(): Promise<{
     id: string;
@@ -2045,13 +2070,6 @@ export class Sandbox {
    */
   getInstance(): this {
     return this;
-  }
-
-  /**
-   * Kill the sandbox (Sandbox interface method)
-   */
-  async kill(): Promise<void> {
-    await this.destroy();
   }
 
   /**

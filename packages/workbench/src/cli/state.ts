@@ -4,7 +4,8 @@
  * Tracks current sandbox and provider state in-memory (no persistence)
  */
 
-import type { Sandbox, ProviderSandbox } from 'computesdk';
+import type { Sandbox } from 'computesdk';
+import type { ProviderSandbox } from '@computesdk/provider';
 import type { REPLServer } from 'repl';
 
 /** Sandbox can be either client Sandbox (gateway mode) or ProviderSandbox (direct mode) */

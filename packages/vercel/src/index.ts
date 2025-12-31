@@ -1,13 +1,14 @@
 /**
  * Vercel Provider - Factory-based Implementation
  * 
- * Demonstrates the new createProvider() factory pattern with ~50 lines
+ * Demonstrates the new defineProvider() factory pattern with ~50 lines
  * instead of the original ~350 lines of boilerplate.
  */
 
 import { Sandbox as VercelSandbox } from '@vercel/sandbox';
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
 
 /**
  * Vercel sandbox provider configuration
@@ -33,7 +34,7 @@ export interface VercelConfig {
 /**
  * Create a Vercel provider instance using the factory pattern
  */
-export const vercel = createProvider<VercelSandbox, VercelConfig>({
+export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
   methods: {
     sandbox: {

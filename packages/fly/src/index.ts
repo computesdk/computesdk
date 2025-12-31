@@ -7,8 +7,9 @@
  * FLY_REGION=
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CreateSandboxOptions, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Fly.io sandbox interface
@@ -148,7 +149,7 @@ const waitForMachineState = async (
 /**
  * Create a Fly.io provider instance using the factory pattern
  */
-export const fly = createProvider<FlyMachine, FlyConfig>({
+export const fly = defineProvider<FlyMachine, FlyConfig>({
   name: 'fly',
   methods: {
     sandbox: {

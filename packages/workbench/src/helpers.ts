@@ -16,10 +16,18 @@
  */
 
 import * as cmd from '@computesdk/cmd';
-import { createCompute, type Provider } from 'computesdk';
+import { createCompute } from '@computesdk/provider';
+import { compute as gatewayCompute, type SandboxInterface } from 'computesdk';
+import type { Provider, ProviderSandbox } from '@computesdk/provider';
+
+/**
+ * Represents any valid sandbox instance in the workbench context
+ * Can be either a gateway sandbox or a direct provider sandbox
+ */
+export type WorkbenchSandboxInstance = SandboxInterface | ProviderSandbox;
 
 export interface WorkbenchSession {
-  sandbox: Awaited<ReturnType<ReturnType<typeof createCompute>['sandbox']['create']>>;
+  sandbox: WorkbenchSandboxInstance;
   // Re-export all cmd functions with the sandbox bound
   npm: typeof cmd.npm;
   pnpm: typeof cmd.pnpm;
@@ -41,7 +49,7 @@ export interface WorkbenchSession {
  * This gives you full TypeScript autocomplete!
  */
 export async function createWorkbenchSession(provider?: Provider): Promise<WorkbenchSession> {
-  const compute = provider ? createCompute({ defaultProvider: provider }) : createCompute();
+  const compute = provider ? createCompute({ defaultProvider: provider }) : gatewayCompute;
   const sandbox = await compute.sandbox.create();
   
   return {

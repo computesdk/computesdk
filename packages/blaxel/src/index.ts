@@ -5,16 +5,9 @@
  */
 
 import { SandboxInstance, settings } from '@blaxel/core';
-import { createProvider } from 'computesdk';
-import type {
-	CodeResult,
-	CommandResult,
-	SandboxInfo,
-	Runtime,
-	CreateSandboxOptions,
-	FileEntry,
-	SandboxStatus
-} from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -37,7 +30,7 @@ export interface BlaxelConfig {
 /**
  * Create a Blaxel provider instance using the factory pattern
  */
-export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
+export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 	name: 'blaxel',
 	methods: {
 		sandbox: {
@@ -386,19 +379,17 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 					for (const file of files) {
 						entries.push({
 							name: file.name,
-							path: `${path}/${file.name}`,
-							isDirectory: false,
+							type: 'file' as const,
 							size: file.size || 0,
-							lastModified: new Date(file.lastModified || Date.now())
+							modified: new Date(file.lastModified || Date.now())
 						});
 					}
 					for (const directory of directories) {
 						entries.push({
 							name: directory.name,
-							path: `${path}/${directory.name}`,
-							isDirectory: true,
+							type: 'directory' as const,
 							size: 0,
-							lastModified: new Date()
+							modified: new Date()
 						});
 					}
 					return entries;
@@ -479,7 +470,7 @@ function parseTTLToMilliseconds(ttl: string | number | undefined): number {
 	}
 }
 
-function convertSandboxStatus(status: string | undefined): SandboxStatus {
+function convertSandboxStatus(status: string | undefined): 'running' | 'stopped' | 'error' {
 	switch (status?.toLowerCase()) {
 		case 'deployed': return 'running';
 		case 'deleting': return 'stopped';

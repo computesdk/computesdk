@@ -11,7 +11,8 @@ export default defineConfig({
         'node_modules/',
         'dist/',
         '**/*.d.ts',
-        '**/*.config.*'
+        '**/*.config.*',
+        '**/index.ts' // Exclude barrel exports
       ]
     }
   },
