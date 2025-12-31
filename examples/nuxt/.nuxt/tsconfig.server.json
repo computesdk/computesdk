@@ -66,10 +66,10 @@
         "../../../node_modules/@nuxt/schema"
       ],
       "nuxt": [
-        "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@20.19.5_@vue+compiler-sfc@_glkl6ojpuo66qbr7ka2fdho4z4/node_modules/nuxt"
+        "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@24.10.1_@vue+compile_e5d2526043d082cc3afbe58d89b6ad26/node_modules/nuxt"
       ],
       "vite/client": [
-        "../../../node_modules/vite/client"
+        "../../../node_modules/.pnpm/rolldown-vite@7.2.5_@types+node@24.10.1_esbuild@0.25.6_jiti@2.6.1_terser@5.43.1_tsx@4.20.3_yaml@2.8.0/node_modules/rolldown-vite/client"
       ],
       "#shared": [
         "../shared"
@@ -90,10 +90,10 @@
         "./*"
       ],
       "#internal/nuxt/paths": [
-        "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@20.19.5_@vue+compiler-sfc@_glkl6ojpuo66qbr7ka2fdho4z4/node_modules/nuxt/dist/core/runtime/nitro/utils/paths"
+        "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@24.10.1_@vue+compile_e5d2526043d082cc3afbe58d89b6ad26/node_modules/nuxt/dist/core/runtime/nitro/utils/paths"
       ],
       "#unhead/composables": [
-        "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@20.19.5_@vue+compiler-sfc@_glkl6ojpuo66qbr7ka2fdho4z4/node_modules/nuxt/dist/head/runtime/composables/v3"
+        "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@24.10.1_@vue+compile_e5d2526043d082cc3afbe58d89b6ad26/node_modules/nuxt/dist/head/runtime/composables/v3"
       ]
     },
     "lib": [
@@ -104,7 +104,7 @@
   },
   "include": [
     "./types/nitro-nuxt.d.ts",
-    "../../../node_modules/.pnpm/@nuxt+devtools@2.6.5_vite@6.3.5_@types+node@20.19.5_jiti@2.5.1_lightningcss@1.30.2_terser@5.4_fktnypyeekn4gshd6osvnzh74i/node_modules/@nuxt/devtools/runtime/server",
+    "../../../node_modules/.pnpm/@nuxt+devtools@3.1.1_vite@6.3.5_@types+node@24.10.1_jiti@2.5.1_lightningcss@1.30.2_ters_8f7a7617e0f2ed95c79047ae0eae629a/node_modules/@nuxt/devtools/runtime/server",
     "../../../node_modules/@nuxt/telemetry/runtime/server",
     "./types/nitro.d.ts",
     "../**/*",
@@ -113,8 +113,8 @@
   "exclude": [
     "../node_modules",
     "../../../node_modules",
-    "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@20.19.5_@vue+compiler-sfc@_glkl6ojpuo66qbr7ka2fdho4z4/node_modules/nuxt/node_modules",
-    "../../../node_modules/.pnpm/@nuxt+devtools@2.6.5_vite@6.3.5_@types+node@20.19.5_jiti@2.5.1_lightningcss@1.30.2_terser@5.4_fktnypyeekn4gshd6osvnzh74i/node_modules/@nuxt/devtools/node_modules",
+    "../../../node_modules/.pnpm/nuxt@3.17.7_@netlify+blobs@9.1.2_@parcel+watcher@2.5.1_@types+node@24.10.1_@vue+compile_e5d2526043d082cc3afbe58d89b6ad26/node_modules/nuxt/node_modules",
+    "../../../node_modules/.pnpm/@nuxt+devtools@3.1.1_vite@6.3.5_@types+node@24.10.1_jiti@2.5.1_lightningcss@1.30.2_ters_8f7a7617e0f2ed95c79047ae0eae629a/node_modules/@nuxt/devtools/node_modules",
     "../../../node_modules/@nuxt/telemetry/node_modules",
     "../dist"
   ]

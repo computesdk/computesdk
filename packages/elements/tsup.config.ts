@@ -1,6 +1,16 @@
 import { defineConfig } from 'tsup'
+import path from "path"
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  plugins: [
+    tailwindcss(),
+  ],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   entry: {
     index: 'src/index.ts',
   },
@@ -11,3 +21,4 @@ export default defineConfig({
   clean: true,
   external: ['ws'],
 })
+
