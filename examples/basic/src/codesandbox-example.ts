@@ -1,11 +1,11 @@
 /**
  * CodeSandbox Provider Example
  * 
- * This example shows how to use the CodeSandbox provider for Python code execution
+ * This example shows how to use ComputeSDK with the CodeSandbox provider for Python code execution
  * with filesystem support (but without terminal methods as CodeSandbox doesn't expose terminals in the same way).
  */
 
-import { codesandbox } from '@computesdk/codesandbox';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -17,8 +17,12 @@ async function main() {
   }
 
   try {
-    // Direct mode: use CodeSandbox provider directly
-    const compute = codesandbox({ apiKey: process.env.CSB_API_KEY });
+    // Gateway mode: configure compute to use CodeSandbox provider
+    compute.setConfig({
+      provider: 'codesandbox',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      codesandbox: { apiKey: process.env.CSB_API_KEY }
+    });
 
     // Create sandbox
     const sandbox = await compute.sandbox.create();

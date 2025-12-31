@@ -1,7 +1,7 @@
 /**
  * Vercel Sandbox Provider Example
  * 
- * This example shows how to use the Vercel provider for Node.js and Python code execution.
+ * This example shows how to use ComputeSDK with the Vercel provider for Node.js and Python code execution.
  * 
  * Note: Filesystem operations are not yet implemented for Vercel provider.
  * Use E2B or Daytona providers for reliable filesystem support.
@@ -12,7 +12,7 @@
  * - VERCEL_PROJECT_ID environment variable
  */
 
-import { vercel } from '@computesdk/vercel';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { NODEJS_SNIPPETS, PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -36,12 +36,15 @@ async function main() {
   }
   
   try {
-    // Direct mode: use Vercel provider directly
-    const compute = vercel({ 
-      token: process.env.VERCEL_TOKEN,
-      teamId: process.env.VERCEL_TEAM_ID,
-      projectId: process.env.VERCEL_PROJECT_ID,
-      ports: [3000] // Example port exposure
+    // Gateway mode: configure compute to use Vercel provider
+    compute.setConfig({
+      provider: 'vercel',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      vercel: { 
+        token: process.env.VERCEL_TOKEN,
+        teamId: process.env.VERCEL_TEAM_ID,
+        projectId: process.env.VERCEL_PROJECT_ID
+      }
     });
     
     // Create sandbox

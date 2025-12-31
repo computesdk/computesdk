@@ -1,11 +1,11 @@
 /**
  * Modal Provider Example
  * 
- * This example shows how to use the Modal provider for Python and Node.js code execution
+ * This example shows how to use ComputeSDK with the Modal provider for Python and Node.js code execution
  * with filesystem support.
  */
 
-import { modal } from '@computesdk/modal';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS, NODEJS_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -18,10 +18,14 @@ async function main() {
   }
 
   try {
-    // Direct mode: use Modal provider directly
-    const compute = modal({ 
-      tokenId: process.env.MODAL_TOKEN_ID,
-      tokenSecret: process.env.MODAL_TOKEN_SECRET 
+    // Gateway mode: configure compute to use Modal provider
+    compute.setConfig({
+      provider: 'modal',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      modal: { 
+        tokenId: process.env.MODAL_TOKEN_ID,
+        tokenSecret: process.env.MODAL_TOKEN_SECRET 
+      }
     });
 
     // Create sandbox - auto-detects Python runtime
@@ -55,7 +59,7 @@ async function main() {
     console.log('\n--- Node.js Execution ---');
     
     // Create a Node.js sandbox
-    const nodeSandbox = await compute.sandbox.create({ options: { runtime: 'node' } });
+    const nodeSandbox = await compute.sandbox.create({ runtime: 'node' });
     console.log('Created Node.js sandbox:', nodeSandbox.sandboxId);
     
     const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);

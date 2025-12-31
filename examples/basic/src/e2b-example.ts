@@ -1,11 +1,11 @@
 /**
  * E2B Provider Example
  * 
- * This example shows how to use the E2B provider for Python code execution
+ * This example shows how to use ComputeSDK with the E2B provider for Python code execution
  * with filesystem and terminal support.
  */
 
-import { e2b } from '@computesdk/e2b';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -17,8 +17,14 @@ async function main() {
   }
 
   try {
-    // Direct mode: use E2B provider directly
-    const compute = e2b({ apiKey: process.env.E2B_API_KEY });
+    // Gateway mode: configure compute to use E2B provider
+    // Note: If COMPUTESDK_API_KEY is set, this will auto-detect E2B from E2B_API_KEY
+    // Otherwise, use setConfig for explicit configuration
+    compute.setConfig({
+      provider: 'e2b',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      e2b: { apiKey: process.env.E2B_API_KEY }
+    });
 
     // Create sandbox
     const sandbox = await compute.sandbox.create();

@@ -1,14 +1,9 @@
 ---
-"computesdk": patch
+"computesdk": minor
 "@computesdk/example-basic": patch
 ---
 
-Add setConfig() method and update examples to use direct mode
-
-**Breaking Changes:**
-- Examples no longer use `createCompute()` wrapper - providers are used directly
-- `CodeResult` interface uses `output` instead of `stdout`, removed `executionTime`
-- Sandbox cleanup uses `destroy()` instead of `kill()`
+Add setConfig() method and update examples to use gateway mode
 
 **New Features:**
 - Added `compute.setConfig()` method for explicit gateway configuration
@@ -20,19 +15,19 @@ Two modes are now clearly separated:
 2. **Direct Mode** (advanced): `const compute = e2b({ apiKey: 'xxx' })` - providers are compute instances
 
 **Updated Examples:**
-All provider examples now demonstrate direct mode usage:
-- e2b-example.ts
-- modal-example.ts
-- daytona-example.ts
-- docker-example.ts
-- runloop-example.ts
-- codesandbox-example.ts
-- blaxel-example.ts
-- vercel-example.ts
+All provider examples now demonstrate **gateway mode** using the `computesdk` package:
+- e2b-example.ts - Gateway mode with E2B provider
+- modal-example.ts - Gateway mode with Modal provider
+- daytona-example.ts - Gateway mode with Daytona provider
+- docker-example.ts - Direct mode (local Docker, no gateway needed)
+- runloop-example.ts - Gateway mode with Runloop provider
+- codesandbox-example.ts - Gateway mode with CodeSandbox provider
+- blaxel-example.ts - Gateway mode with Blaxel provider
+- vercel-example.ts - Gateway mode with Vercel provider
 
 **Example Usage:**
 ```typescript
-// Gateway mode with setConfig
+// Gateway mode with setConfig (recommended)
 import { compute } from 'computesdk';
 compute.setConfig({
   provider: 'e2b',
@@ -41,8 +36,13 @@ compute.setConfig({
 });
 const sandbox = await compute.sandbox.create();
 
-// Direct mode (new pattern)
-import { e2b } from '@computesdk/e2b';
-const compute = e2b({ apiKey: 'e2b_xxx' });
+// Gateway mode with auto-detection (zero-config)
+// Just set COMPUTESDK_API_KEY and E2B_API_KEY environment variables
+import { compute } from 'computesdk';
+const sandbox = await compute.sandbox.create();
+
+// Direct mode (advanced - for local providers like Docker)
+import { docker } from '@computesdk/docker';
+const compute = docker({ image: { name: 'python:3.11' } });
 const sandbox = await compute.sandbox.create();
 ```

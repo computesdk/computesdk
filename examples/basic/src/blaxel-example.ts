@@ -1,11 +1,11 @@
 /**
  * Blaxel Provider Example
  * 
- * This example shows how to use the Blaxel provider for Python and Node.js code execution
+ * This example shows how to use ComputeSDK with the Blaxel provider for Python and Node.js code execution
  * with AI-powered optimization and fast boot times.
  */
 
-import { blaxel } from '@computesdk/blaxel';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS, NODEJS_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -21,17 +21,21 @@ async function main() {
   }
 
   try {
-    // Direct mode: use Blaxel provider directly
-    const compute = blaxel({
-      apiKey: process.env.BL_API_KEY,
-      workspace: process.env.BL_WORKSPACE
+    // Gateway mode: configure compute to use Blaxel provider
+    compute.setConfig({
+      provider: 'blaxel',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      blaxel: {
+        apiKey: process.env.BL_API_KEY,
+        workspace: process.env.BL_WORKSPACE
+      }
     });
 
     // Create Python sandbox
     console.log('🚀 Creating Blaxel sandbox for Python...');
     
     try {
-      const sandbox = await compute.sandbox.create({ options: { runtime: 'python' } });
+      const sandbox = await compute.sandbox.create({ runtime: 'python' });
       console.log('✅ Created Blaxel sandbox:', sandbox.sandboxId);
 
       // Execute Python code
@@ -59,7 +63,7 @@ async function main() {
       console.log('\n--- Node.js Execution ---');
       
       // Create a Node.js sandbox
-      const nodeSandbox = await compute.sandbox.create({ options: { runtime: 'node' } });
+      const nodeSandbox = await compute.sandbox.create({ runtime: 'node' });
       console.log('Created Node.js sandbox:', nodeSandbox.sandboxId);
       
       const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);

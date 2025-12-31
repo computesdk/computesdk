@@ -6,8 +6,10 @@ config() // Load env (e.g., DOCKER_HOST / TLS vars)
 /**
  * Docker Sandbox Provider Example
  *
- * This example shows how to use the Docker provider for **Node.js** and **Python**
+ * This example shows how to use the Docker provider in **direct mode** for **Node.js** and **Python**
  * code execution — plus a small sample of filesystem operations (supported).
+ *
+ * Note: Docker provider uses direct mode since it runs locally and doesn't go through the gateway.
  *
  * Prerequisites:
  * - Docker daemon running and accessible (Docker Desktop or dockerd)
@@ -19,7 +21,7 @@ config() // Load env (e.g., DOCKER_HOST / TLS vars)
  * - DOCKER_CERT_PATH
  */
 async function main() {
-  // Direct mode: use Docker provider directly
+  // Direct mode: use Docker provider directly (no gateway needed for local Docker)
   const compute = docker({
     // Default image hints; we still set explicit images per sandbox below.
     image: { name: 'python:3.11-slim', pullPolicy: 'ifNotPresent' },
