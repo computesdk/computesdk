@@ -37,17 +37,14 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 
 ## Features
 
-- 🚀 **Multi-provider support** - Blaxel, E2B, Vercel, Daytona, Modal, CodeSandbox
+- 🚀 **Multi-provider support** - E2B, Modal, Vercel, Daytona, Railway, and more
 - ⚡ **Zero-config mode** - Auto-detect provider from environment variables
 - 📁 **Filesystem operations** - Read, write, create directories across providers
-- 🖥️ **Terminal support** - Interactive PTY terminals with exec mode
+- 🖥️ **Terminal support** - Interactive PTY terminals (provider-dependent)
 - ⚡ **Command execution** - Run shell commands with PTY or exec mode
-- 🔧 **Type-safe commands** - Build shell commands with `@computesdk/cmd`
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
 - 📦 **Modular** - Install only the providers you need
-- 🔧 **Extensible** - Easy to add custom providers
-- 🌐 **Web Framework Integration** - Built-in request handlers for Next.js, Nuxt, SvelteKit, etc.
-- 🎨 **Frontend Integration** - Client-side hooks and utilities via @computesdk/ui
+- 🔧 **Extensible** - Easy to add custom providers via [@computesdk/provider](../provider)
 
 ## Get Started in 30 Seconds
 
@@ -55,28 +52,38 @@ ComputeSDK is a free and open-source toolkit for running other people's code in 
 # Install the core SDK
 npm install computesdk
 
-# Add your preferred provider
-npm install @computesdk/blaxel     # For AI-powered code execution
+# Add your preferred provider (optional - auto-detects from env vars)
 npm install @computesdk/e2b        # For data science and Python
-npm install @computesdk/vercel     # For web-scale Node.js/Python
-npm install @computesdk/daytona    # For development workspaces
 npm install @computesdk/modal      # For GPU-accelerated Python workloads
-npm install @computesdk/codesandbox # For collaborative sandboxes
-
-# Frontend integration (optional)
-npm install @computesdk/ui         # React hooks and utilities
+npm install @computesdk/vercel     # For web-scale Node.js/Python  
+npm install @computesdk/daytona    # For development workspaces
+npm install @computesdk/railway    # For Railway deployments
 ```
 
 Set your environment variables and you're ready to go:
 
 ```bash
-export BLAXEL_API_KEY=your_api_key
-export BLAXEL_WORKSPACE=your_workspace
-# or E2B_API_KEY=your_api_key
+export E2B_API_KEY=your_api_key
+# or MODAL_TOKEN_ID=your_token_id and MODAL_TOKEN_SECRET=your_token_secret
 # or VERCEL_TOKEN=your_token
 # or DAYTONA_API_KEY=your_key
-# or MODAL_TOKEN_ID=your_token_id and MODAL_TOKEN_SECRET=your_token_secret
-# or CODESANDBOX_TOKEN=your_token
+# or RAILWAY_TOKEN=your_token
+```
+
+## Quick Start
+
+```typescript
+import { compute } from 'computesdk';
+
+// No configuration needed - auto-detects provider from environment!
+const sandbox = await compute.sandbox.create();
+
+// Execute code
+const result = await sandbox.runCode('print("Hello World!")');
+console.log(result.stdout); // "Hello World!"
+
+// Clean up
+await sandbox.destroy();
 ```
 
 ## Quick Start
@@ -171,142 +178,55 @@ print(json.dumps(data, indent=2))
 console.log(result.stdout);
 ```
 
-### E2B - Full Development Environment
+## Supported Providers
 
-E2B provides full filesystem and terminal support:
+ComputeSDK automatically detects and uses providers based on your environment variables:
 
-```bash
-export E2B_API_KEY=e2b_your_api_key_here
-```
+| Provider | Environment Variables | Use Cases |
+|----------|----------------------|-----------|
+| **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
+| **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference, Python workloads |
+| **Railway** | `RAILWAY_TOKEN` | Full-stack deployments, persistent storage |
+| **Daytona** | `DAYTONA_API_KEY` | Development workspaces, custom environments |
+| **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
+| **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions, web apps |
+| **Cloudflare** | `CLOUDFLARE_API_TOKEN` | Edge computing |
+| **CodeSandbox** | `CODESANDBOX_TOKEN` | Collaborative development |
 
-```typescript
-import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+### Provider Detection Order
 
-compute.setConfig({ 
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
-});
+**E2B → Railway → Daytona → Modal → Runloop → Vercel → Cloudflare → CodeSandbox**
 
-const sandbox = await compute.sandbox.create();
-
-// Execute Python with data science libraries
-const result = await sandbox.runCode(`
-import pandas as pd
-import numpy as np
-
-data = {'A': [1, 2, 3], 'B': [4, 5, 6]}
-df = pd.DataFrame(data)
-print(df)
-print(f"Sum: {df.sum().sum()}")
-`);
-
-// Interactive terminal support
-const terminal = await sandbox.terminal.create({
-  command: 'bash',
-  cols: 80,
-  rows: 24
-});
-```
-
-### Vercel - Scalable Serverless Execution
-
-Vercel provides reliable execution with filesystem support:
+You can override detection by setting `COMPUTESDK_PROVIDER`:
 
 ```bash
-# Method 1: OIDC Token (Recommended)
-vercel env pull  # Downloads VERCEL_OIDC_TOKEN
-
-# Method 2: Traditional
-export VERCEL_TOKEN=your_vercel_token_here
-export VERCEL_TEAM_ID=your_team_id_here
-export VERCEL_PROJECT_ID=your_project_id_here
-```
-
-```typescript
-import { compute } from 'computesdk';
-import { vercel } from '@computesdk/vercel';
-
-compute.setConfig({ 
-  provider: vercel({ runtime: 'node' }) 
-});
-
-const sandbox = await compute.sandbox.create();
-
-// Execute Node.js or Python
-const result = await sandbox.runCode(`
-console.log('Node.js version:', process.version);
-console.log('Hello from Vercel!');
-`);
-
-// Up to 45 minutes execution time
-// Global infrastructure deployment
-```
-
-### Daytona - Development Workspaces
-
-Daytona provides development workspace environments:
-
-```bash
-export DAYTONA_API_KEY=your_daytona_api_key_here
-```
-
-```typescript
-import { compute } from 'computesdk';
-import { daytona } from '@computesdk/daytona';
-
-compute.setConfig({ 
-  provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
-});
-
-const sandbox = await compute.sandbox.create();
-
-// Execute in development workspace
-const result = await sandbox.runCode(`
-print('Hello from Daytona!')
-import sys
-print(f'Python version: {sys.version}')
-`);
+export COMPUTESDK_PROVIDER=modal  # Force using Modal
 ```
 
 ## Core API
 
-### Configuration
+### Sandbox Management
 
 ```typescript
 import { compute } from 'computesdk';
 
-// Set default provider
-compute.setConfig({ provider: myProvider });
+// Create sandbox (auto-detects provider from environment)
+const sandbox = await compute.sandbox.create();
 
-// Get current config
-const config = compute.getConfig();
-
-// Clear config
-compute.clearConfig();
-```
-
-### Sandbox Management
-
-```typescript
-// Create sandbox with explicit provider
+// Create sandbox with specific options
 const sandbox = await compute.sandbox.create({
-  provider: e2b({ apiKey: 'your-key' }),
-  options: { runtime: 'python', timeout: 300000 }
+  runtime: 'python',
+  timeout: 300000
 });
 
-// Create sandbox with default provider
-const sandbox = await compute.sandbox.create({
-  options: { runtime: 'python' }
-});
-
-// Get existing sandbox
+// Get existing sandbox by ID
 const sandbox = await compute.sandbox.getById('sandbox-id');
 
 // List all sandboxes
 const sandboxes = await compute.sandbox.list();
 
 // Destroy sandbox
-await compute.sandbox.destroy('sandbox-id');
+await sandbox.destroy();
 ```
 
 ### Code Execution
@@ -377,86 +297,7 @@ const terminals = await sandbox.terminal.list();
 const terminal = await sandbox.terminal.getById('terminal-id');
 ```
 
-## Web Framework Integration
 
-ComputeSDK provides built-in request handlers for web frameworks:
-
-```typescript
-import { handleComputeRequest } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-
-// Next.js API route
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: e2b({ apiKey: process.env.E2B_API_KEY })
-  });
-}
-
-// Client usage
-const response = await fetch('/api/compute', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'compute.sandbox.runCode',
-    code: 'print("Hello from web!")',
-    runtime: 'python'
-  })
-});
-
-const result = await response.json();
-console.log(result.result.stdout);
-```
-
-### Supported Actions
-
-- `compute.sandbox.create` - Create new sandbox
-- `compute.sandbox.destroy` - Destroy sandbox
-- `compute.sandbox.getInfo` - Get sandbox information
-- `compute.sandbox.list` - List all sandboxes
-- `compute.sandbox.runCode` - Execute code
-- `compute.sandbox.runCommand` - Run shell command
-- `compute.sandbox.filesystem.readFile` - Read file
-- `compute.sandbox.filesystem.writeFile` - Write file
-- `compute.sandbox.filesystem.mkdir` - Create directory
-- `compute.sandbox.filesystem.readdir` - List directory
-- `compute.sandbox.filesystem.exists` - Check if path exists
-- `compute.sandbox.filesystem.remove` - Remove file/directory
-- `compute.sandbox.terminal.create` - Create terminal
-- `compute.sandbox.terminal.list` - List terminals
-- `compute.sandbox.terminal.getById` - Get terminal by ID
-- `compute.sandbox.terminal.destroy` - Destroy terminal
-- `compute.sandbox.terminal.write` - Write to terminal
-- `compute.sandbox.terminal.resize` - Resize terminal
-- `compute.sandbox.terminal.kill` - Kill terminal
-
-## Frontend Integration
-
-Use `@computesdk/ui` for framework-agnostic factory functions:
-
-```typescript
-import { createCompute, createSandboxConsole } from '@computesdk/ui';
-
-function CodeExecutor() {
-  const compute = createCompute({
-    apiEndpoint: '/api/compute',
-    defaultRuntime: 'python'
-  });
-  
-  const executeCode = async () => {
-    const sandbox = await compute.sandbox.create();
-    const result = await sandbox.runCode('print("Hello World!")');
-    console.log(result.result?.stdout);
-    await sandbox.destroy();
-  };
-  
-  return (
-    <button onClick={executeCode}>
-      Execute Code
-    </button>
-  );
-}
-```
 
 ## Error Handling
 
@@ -471,14 +312,12 @@ try {
 
 ## Examples
 
-### Data Science with E2B
+### Data Science Example
 
 ```typescript
 import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
 
-compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
-
+// Assumes E2B_API_KEY is set in environment
 const sandbox = await compute.sandbox.create();
 
 // Create project structure
@@ -537,177 +376,29 @@ console.log(result.stdout);
 const results = await sandbox.filesystem.readFile('/analysis/output/results.json');
 console.log('Analysis results:', JSON.parse(results));
 
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
-### Cross-Provider Data Processing
+## Building Custom Providers
+
+Want to add support for a new compute provider? Check out **[@computesdk/provider](../provider)** - the provider framework that makes it easy to build custom providers.
 
 ```typescript
-import { compute } from 'computesdk';
-import { vercel } from '@computesdk/vercel';
-import { daytona } from '@computesdk/daytona';
+import { defineProvider } from '@computesdk/provider';
 
-async function processData(provider: any) {
-  compute.setConfig({ provider });
-  
-  const sandbox = await compute.sandbox.create();
-  
-  // Create workspace
-  await sandbox.filesystem.mkdir('/workspace');
-  
-  // Write input data
-  await sandbox.filesystem.writeFile('/workspace/input.json', 
-    JSON.stringify({ numbers: [1, 2, 3, 4, 5] })
-  );
-  
-  // Process with code execution
-  const result = await sandbox.runCode(`
-import json
-
-# Read input
-with open('/workspace/input.json', 'r') as f:
-    data = json.load(f)
-
-# Process
-numbers = data['numbers']
-result = {
-    'sum': sum(numbers),
-    'average': sum(numbers) / len(numbers),
-    'count': len(numbers)
-}
-
-# Write output
-with open('/workspace/output.json', 'w') as f:
-    json.dump(result, f, indent=2)
-
-print("Processing complete!")
-  `);
-  
-  // Read results
-  const output = await sandbox.filesystem.readFile('/workspace/output.json');
-  await compute.sandbox.destroy(sandbox.sandboxId);
-  
-  return JSON.parse(output);
-}
-
-// Use with different providers
-const vercelResult = await processData(vercel({ runtime: 'python' }));
-console.log('Vercel result:', vercelResult);
-
-const daytonaResult = await processData(daytona({ runtime: 'python' }));
-console.log('Daytona result:', daytonaResult);
-```
-
-## Provider Packages
-
-ComputeSDK uses separate provider packages:
-
-```bash
-npm install @computesdk/blaxel     # Blaxel provider
-npm install @computesdk/e2b        # E2B provider
-npm install @computesdk/vercel     # Vercel provider
-npm install @computesdk/daytona    # Daytona provider
-npm install @computesdk/modal      # Modal provider
-npm install @computesdk/codesandbox # CodeSandbox provider
-```
-
-Each provider implements the same interface but may support different capabilities (filesystem, terminal, etc.).
-
-## Utility Packages
-
-Additional packages for enhanced functionality:
-
-```bash
-npm install @computesdk/cmd        # Type-safe shell command builders
-npm install @computesdk/client     # Universal sandbox client (browser/Node.js)
-npm install @computesdk/events     # Event storage and real-time streaming
-npm install @computesdk/workbench  # Interactive REPL for sandbox testing
-```
-
-### @computesdk/cmd - Type-Safe Commands
-
-Build shell commands with full TypeScript support:
-
-```typescript
-import { npm, git, mkdir, cmd } from '@computesdk/cmd';
-
-// Type-safe command builders
-await sandbox.runCommand(npm.install('express'));
-await sandbox.runCommand(git.clone('https://github.com/user/repo'));
-await sandbox.runCommand(mkdir('/app/src'));
-
-// With options
-await sandbox.runCommand(cmd(npm.run('dev'), { cwd: '/app', background: true }));
-```
-
-### @computesdk/workbench - Interactive REPL
-
-Test sandbox operations interactively:
-
-```bash
-npx workbench
-
-# Commands autocomplete!
-workbench> npm.install('express')
-workbench> git.clone('https://github.com/user/repo')
-workbench> ls('/home')
-```
-
-## Custom Providers
-
-Create custom providers using the factory:
-
-```typescript
-import { createProvider } from 'computesdk';
-
-const myProvider = createProvider({
+export const myProvider = defineProvider({
   name: 'my-provider',
-  methods: {
-    sandbox: {
-      create: async (config, options) => {
-        // Implementation
-      },
-      getById: async (config, id) => {
-        // Implementation  
-      },
-      list: async (config) => {
-        // Implementation
-      },
-      destroy: async (config, id) => {
-        // Implementation
-      }
+  defaultMode: 'direct',
+  sandbox: {
+    create: async (config, options) => {
+      // Your implementation here
     }
+    // ... other methods
   }
 });
 ```
 
-## TypeScript Support
-
-ComputeSDK is fully typed with comprehensive TypeScript definitions:
-
-```typescript
-import type { 
-  Sandbox, 
-  Provider, 
-  ExecutionResult,
-  ComputeConfig,
-  Runtime 
-} from 'computesdk';
-```
-
-## Provider Comparison
-
-| Provider | Code Execution | Filesystem | Terminal | Use Cases |
-|----------|----------------|------------|----------|-----------|
-| **E2B** | Python, Node.js | ✅ Full | ✅ PTY | Data science, AI/ML, interactive development |
-| **Vercel** | Node.js, Python | ✅ Full | ❌ | Web apps, APIs, serverless functions |
-| **Daytona** | Python, Node.js | ✅ Full | ❌ | Development workspaces, custom environments |
-
-### Key Differences
-
-- **E2B**: Full development environment with data science libraries and interactive terminals
-- **Vercel**: Ephemeral sandboxes optimized for serverless execution (up to 45 minutes)
-- **Daytona**: Development workspaces with persistent environments
+See the [@computesdk/provider README](../provider) for complete documentation on building custom providers.
 
 ## Examples
 

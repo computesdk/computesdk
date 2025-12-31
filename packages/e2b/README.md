@@ -19,18 +19,12 @@ export E2B_API_KEY=e2b_your_api_key_here
 
 ## Usage
 
-### With ComputeSDK
+### With ComputeSDK (Gateway Mode)
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+import { compute } from 'computesdk';
 
-// Set as default provider
-const compute = createCompute({ 
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
-});
-
-// Create sandbox
+// Assumes E2B_API_KEY is set in environment - auto-detects provider
 const sandbox = await compute.sandbox.create();
 
 // Execute Python code
@@ -56,19 +50,22 @@ console.log(result.stdout);
 await compute.sandbox.destroy(sandbox.sandboxId);
 ```
 
-### Direct Usage
+### Direct Mode (Advanced)
+
+For direct provider usage without the gateway:
 
 ```typescript
+import { createCompute } from '@computesdk/provider';
 import { e2b } from '@computesdk/e2b';
 
-// Create provider
-const provider = e2b({ 
-  apiKey: 'e2b_your_api_key',
-  timeout: 600000 // 10 minutes
+const compute = createCompute({ 
+  defaultProvider: e2b({ 
+    apiKey: process.env.E2B_API_KEY,
+    timeout: 600000 // 10 minutes
+  })
 });
 
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
+const sandbox = await compute.sandbox.create();
 ```
 
 ## Configuration
@@ -196,10 +193,10 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // Get existing sandbox (reconnect)
-const existing = await compute.sandbox.getById(provider, 'sandbox-id');
+const existing = await compute.sandbox.getById('sandbox-id');
 
 // Destroy sandbox
-await compute.sandbox.destroy(provider, 'sandbox-id');
+await sandbox.destroy();
 
 // Note: E2B doesn't support listing all sandboxes
 // Each sandbox is managed individually
@@ -237,21 +234,7 @@ try {
 }
 ```
 
-## Web Framework Integration
 
-Use with web frameworks via the request handler:
-
-```typescript
-import { handleComputeRequest } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: e2b({ apiKey: process.env.E2B_API_KEY })
-  });
-}
-```
 
 ## Examples
 
