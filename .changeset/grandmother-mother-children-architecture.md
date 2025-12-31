@@ -37,10 +37,36 @@ Major architectural refactoring that splits computesdk into a clean three-tier s
 ## New @computesdk/provider Package
 
 Contains the provider framework extracted from computesdk:
-- `defineProvider()` function for defining custom providers
+- `defineProvider()` function for defining custom providers (renamed from `createProvider()`)
 - `createCompute()` for direct mode
 - Provider types and interfaces (Provider, ProviderSandbox, etc.)
 - Universal Sandbox interface types
+
+### Why `defineProvider()`?
+
+We renamed `createProvider()` to `defineProvider()` to match modern framework conventions and improve developer experience:
+
+**Pattern Recognition:**
+- Vite: `defineConfig()`
+- Nuxt: `defineNuxtConfig()`
+- Vue: `defineComponent()`
+
+**Better Semantics:**
+- `createProvider` implies creating an instance (it actually returns a factory definition)
+- `defineProvider` means "define what this provider is" (accurate to what it does)
+- More intuitive for developers familiar with modern frameworks
+
+**Example:**
+```typescript
+import { defineProvider } from '@computesdk/provider';
+
+export const modal = defineProvider({
+  name: 'modal',
+  defaultMode: 'direct',
+  sandbox: { /* ... */ },
+  methods: { /* ... */ }
+});
+```
 
 ## Provider Package Updates
 
