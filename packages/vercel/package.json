@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/vercel",
-  "version": "1.6.7",
+  "version": "1.6.8",
   "description": "Vercel Sandbox provider for ComputeSDK - serverless code execution for Python and Node.js on Vercel's edge network",
   "author": "Garrison",
   "license": "MIT",
