@@ -33,11 +33,33 @@ Example IAM role ARN: `arn:aws:iam::123456789012:role/lambda-execution-role`
 
 ## Usage
 
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
+
+```typescript
+import { compute } from 'computesdk';
+
+// Auto-detects AWS Lambda from AWS credentials and AWS_LAMBDA_ROLE_ARN
+const sandbox = await compute.sandbox.create();
+console.log('Created function:', sandbox.id);
+
+// List all functions
+const allFunctions = await compute.sandbox.list();
+console.log('All functions:', allFunctions.length);
+
+// Destroy the function
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
+
 ```typescript
 import { awsLambda } from '@computesdk/aws-lambda';
 
-// Initialize the provider
-const provider = awsLambda({
+const compute = awsLambda({
   roleArn: 'arn:aws:iam::123456789012:role/lambda-execution-role',
   region: 'us-east-2', // optional, defaults to us-east-2
   accessKeyId: 'YOUR_ACCESS_KEY', // optional, uses AWS SDK credential chain
@@ -46,20 +68,15 @@ const provider = awsLambda({
 });
 
 // Create a Lambda function
-const created = await provider.sandbox.create({ runtime: 'node' });
-console.log('Created function:', created.sandboxId);
-
-// Get function by ID
-const retrieved = await provider.sandbox.getById(created.sandboxId);
-console.log('Retrieved function:', retrieved);
+const sandbox = await compute.sandbox.create({ runtime: 'node' });
+console.log('Created function:', sandbox.id);
 
 // List all functions
-const allFunctions = await provider.sandbox.list();
+const allFunctions = await compute.sandbox.list();
 console.log('All functions:', allFunctions.length);
 
-// Destroy a function
-await provider.sandbox.destroy(created.sandboxId);
-console.log('Destroyed function');
+// Destroy the function
+await sandbox.destroy();
 ```
 
 ## Configuration

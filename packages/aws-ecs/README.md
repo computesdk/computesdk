@@ -27,10 +27,32 @@ AWS_SECURITY_GROUPS=sg-xxx
 
 ## Usage
 
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
+
+```typescript
+import { compute } from 'computesdk';
+
+// Auto-detects AWS ECS from AWS credentials and environment variables
+const sandbox = await compute.sandbox.create();
+console.log(`Created sandbox: ${sandbox.id}`);
+
+// List all running sandboxes
+const sandboxes = await compute.sandbox.list();
+
+// Destroy the sandbox
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
+
 ```typescript
 import { fargate } from '@computesdk/aws';
 
-const provider = fargate({
+const compute = fargate({
   cluster: 'my-ecs-cluster',
   taskDefinition: 'my-task-definition',
   subnets: ['subnet-12345', 'subnet-67890'],
@@ -39,17 +61,14 @@ const provider = fargate({
 });
 
 // Create a sandbox (ECS task)
-const sandbox = await provider.sandbox.create({ runtime: 'node' });
-console.log(`Created sandbox: ${sandbox.sandboxId}`);
-
-// Get sandbox by ID
-const retrieved = await provider.sandbox.getById(sandbox.sandboxId);
+const sandbox = await compute.sandbox.create({ runtime: 'node' });
+console.log(`Created sandbox: ${sandbox.id}`);
 
 // List all running sandboxes
-const sandboxes = await provider.sandbox.list();
+const sandboxes = await compute.sandbox.list();
 
 // Destroy the sandbox
-await provider.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ## Currently Implemented

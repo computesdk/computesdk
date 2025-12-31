@@ -3,17 +3,17 @@
  *
  * Provides the universal Sandbox class and compute API for executing code in remote sandboxes.
  *
- * Zero-Config Mode (Gateway):
- *   Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)
- *   No explicit configuration needed - auto-detects from environment
+ * Using ComputeSDK (Recommended):
+ *   import { compute } from 'computesdk';
+ *   
+ *   Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)
+ *   Or explicit: compute.setConfig({ provider: 'e2b', apiKey: '...', e2b: { apiKey: '...' } })
  *
- * Explicit Mode (Gateway with inline config):
- *   compute({ provider: 'e2b', apiKey: '...', e2b: { apiKey: '...' } })
- *   Always uses gateway mode, returns new instance
- *
- * Direct Mode (Provider SDKs):
- *   Use @computesdk/provider's createCompute() with provider packages
- *   Bypasses gateway, talks directly to provider APIs
+ * Using Providers Directly (Advanced):
+ *   import { e2b } from '@computesdk/e2b';
+ *   const compute = e2b({ apiKey: '...' });
+ *   
+ *   Useful for local providers (Docker) or provider-specific features
  */
 
 // ============================================================================
@@ -106,18 +106,6 @@ export {
   isProviderAuthComplete,
   getMissingEnvVars,
 } from './provider-config';
-
-// ============================================================================
-// Web Framework Integration
-// ============================================================================
-
-// Export request handler for web framework integration
-export { handleComputeRequest } from './request-handler';
-export type {
-  ComputeRequest,
-  ComputeResponse,
-  HandleComputeRequestParams
-} from './request-handler';
 
 // ============================================================================
 // Note: Provider Framework

@@ -19,26 +19,45 @@ RENDER_OWNER_ID=your_render_owner_id
 
 ## Usage
 
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
+
+```typescript
+import { compute } from 'computesdk';
+
+// Auto-detects Render from RENDER_API_KEY environment variable
+const sandbox = await compute.sandbox.create();
+console.log(`Created sandbox: ${sandbox.id}`);
+
+// List all sandboxes
+const sandboxes = await compute.sandbox.list();
+
+// Destroy the sandbox
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
+
 ```typescript
 import { render } from '@computesdk/render';
 
-const provider = render({
+const compute = render({
   apiKey: 'your_api_key',
   ownerId: 'your_owner_id'
 });
 
 // Create a sandbox
-const sandbox = await provider.sandbox.create({ runtime: 'node' });
-console.log(`Created sandbox: ${sandbox.sandboxId}`);
-
-// Get sandbox by ID
-const retrieved = await provider.sandbox.getById(sandbox.sandboxId);
+const sandbox = await compute.sandbox.create({ runtime: 'node' });
+console.log(`Created sandbox: ${sandbox.id}`);
 
 // List all sandboxes
-const sandboxes = await provider.sandbox.list();
+const sandboxes = await compute.sandbox.list();
 
 // Destroy the sandbox
-await provider.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ## Currently Implemented

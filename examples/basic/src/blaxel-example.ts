@@ -1,12 +1,11 @@
 /**
  * Blaxel Provider Example
  * 
- * This example shows how to use the Blaxel provider for Python and Node.js code execution
+ * This example shows how to use ComputeSDK with the Blaxel provider for Python and Node.js code execution
  * with AI-powered optimization and fast boot times.
  */
 
-import { blaxel } from '@computesdk/blaxel';
-import { createCompute } from 'computesdk';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS, NODEJS_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -22,27 +21,29 @@ async function main() {
   }
 
   try {
-    // Configure compute with Blaxel provider
-    const compute = createCompute({ 
-      provider: blaxel({
+    // Gateway mode: configure compute to use Blaxel provider
+    compute.setConfig({
+      provider: 'blaxel',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      blaxel: {
         apiKey: process.env.BL_API_KEY,
         workspace: process.env.BL_WORKSPACE
-      })
+      }
     });
 
     // Create Python sandbox
     console.log('🚀 Creating Blaxel sandbox for Python...');
     
     try {
-      const sandbox = await compute.sandbox.create({ options: { runtime: 'python' } });
+      const sandbox = await compute.sandbox.create();
       console.log('✅ Created Blaxel sandbox:', sandbox.sandboxId);
 
       // Execute Python code
       console.log('\n--- Python Execution ---');
-      const pythonResult = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
+      const pythonResult = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI, 'python');
 
-      console.log('Python Output:', pythonResult.stdout);
-      console.log('Execution time:', pythonResult.executionTime, 'ms');
+      console.log('Python Output:', pythonResult.output);
+      console.log('Exit code:', pythonResult.exitCode);
 
       // Filesystem operations
       console.log('\n--- Filesystem Operations ---');
@@ -61,16 +62,16 @@ async function main() {
       // Node.js execution
       console.log('\n--- Node.js Execution ---');
       
-      // Create a Node.js sandbox
-      const nodeSandbox = await compute.sandbox.create({ options: { runtime: 'node' } });
+      // Create a second sandbox for Node.js
+      const nodeSandbox = await compute.sandbox.create();
       console.log('Created Node.js sandbox:', nodeSandbox.sandboxId);
       
-      const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
-      console.log('Node.js Output:', nodeResult.stdout);
+      const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING, 'node');
+      console.log('Node.js Output:', nodeResult.output);
 
       // Clean up
-      await sandbox.kill();
-      await nodeSandbox.kill();
+      await sandbox.destroy();
+      await nodeSandbox.destroy();
       console.log('\n✅ Sandboxes cleaned up successfully');
 
     } catch (sandboxError) {

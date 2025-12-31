@@ -76,15 +76,38 @@ export default {
 };
 ```
 
-## Basic Usage
+## Quick Start
+
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
+
+```typescript
+import { compute } from 'computesdk';
+
+// Auto-detects from environment (when running in Cloudflare Workers)
+const sandbox = await compute.sandbox.create();
+
+// Execute Python code
+const result = await sandbox.runCode(`
+import sys
+print(f"Python version: {sys.version}")
+print("Hello from Cloudflare!")
+`);
+
+console.log(result.stdout);
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
 
 ```typescript
 import { cloudflare } from '@computesdk/cloudflare';
-import { createCompute } from 'computesdk';
 
-
-// Initialize the provider with your Durable Object binding
-const provider = cloudflare({
+// Initialize with your Durable Object binding
+const compute = cloudflare({
   sandboxBinding: env.Sandbox, // Your Durable Object binding
   runtime: 'python',
   timeout: 300000,
@@ -93,10 +116,6 @@ const provider = cloudflare({
   }
 });
 
-// Create a compute instance
-const compute = createCompute({ provider });
-
-// Create a sandbox
 const sandbox = await compute.sandbox.create();
 
 // Execute Python code
@@ -132,7 +151,6 @@ with socketserver.TCPServer(("", PORT), Handler) as httpd:
 const url = await sandbox.getUrl({ port: 3000 });
 console.log(`Service available at: ${url}`);
 
-// Clean up
 await sandbox.destroy();
 ```
 
@@ -156,7 +174,9 @@ await sandbox.runCode('print("Hello")', 'python');
 ### Environment Variables
 
 ```typescript
-const provider = cloudflare({
+import { cloudflare } from '@computesdk/cloudflare';
+
+const compute = cloudflare({
   sandboxBinding: env.Sandbox,
   envVars: {
     API_KEY: 'your-api-key',
@@ -257,7 +277,12 @@ interface CloudflareConfig {
 ## Error Handling
 
 ```typescript
+import { cloudflare } from '@computesdk/cloudflare';
+
 try {
+  const compute = cloudflare({ sandboxBinding: env.Sandbox });
+  const sandbox = await compute.sandbox.create();
+  
   const result = await sandbox.runCode('invalid python syntax');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
