@@ -29,7 +29,6 @@ export interface E2BConfig {
  */
 export const e2b = defineProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
-  defaultMode: 'direct',
   methods: {
     sandbox: {
       // Collection operations (map to compute.sandbox.*)
