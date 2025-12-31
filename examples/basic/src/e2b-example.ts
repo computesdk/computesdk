@@ -6,7 +6,6 @@
  */
 
 import { e2b } from '@computesdk/e2b';
-import { createCompute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -18,10 +17,10 @@ async function main() {
   }
 
   try {
-    // Configure compute with E2B provider
-    const compute = createCompute({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
+    // Direct mode: use E2B provider directly
+    const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
-    // Create sandbox using compute singleton
+    // Create sandbox
     const sandbox = await compute.sandbox.create();
 
     console.log('Created E2B sandbox:', sandbox.sandboxId);
@@ -29,8 +28,9 @@ async function main() {
     // Execute Python code
     const result = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
 
-    console.log('Output:', result.stdout);
-    console.log('Execution time:', result.executionTime, 'ms');
+    console.log('Output:', result.output);
+    console.log('Exit code:', result.exitCode);
+    console.log('Language:', result.language);
 
     // Filesystem operations
     console.log('\n--- Filesystem Operations ---');
@@ -47,7 +47,7 @@ async function main() {
     console.log('Files in /tmp:', files.map(f => f.name));
 
     // Clean up
-    await sandbox.kill();
+    await sandbox.destroy();
     console.log('\nSandbox cleaned up successfully');
 
   } catch (error) {

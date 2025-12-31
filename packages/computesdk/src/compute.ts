@@ -174,13 +174,35 @@ class ComputeManager {
         'No gateway configuration found.\n\n' +
         'Options:\n' +
         '1. Zero-config mode: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)\n' +
-        '2. Explicit mode: Call compute({ provider: "e2b", apiKey: "...", e2b: { apiKey: "..." } })\n' +
-        '3. Direct mode: Import createCompute from @computesdk/provider to bypass the gateway\n\n' +
+        '2. Explicit mode: Call compute.setConfig({ provider: "e2b", apiKey: "...", e2b: { apiKey: "..." } })\n' +
+        '3. Direct mode: Import provider packages directly to bypass the gateway\n\n' +
         'Docs: https://computesdk.com/docs/quickstart'
       );
     }
 
     return this.config;
+  }
+
+  /**
+   * Explicitly configure the compute singleton
+   * 
+   * @example
+   * ```typescript
+   * import { compute } from 'computesdk';
+   * 
+   * compute.setConfig({
+   *   provider: 'e2b',
+   *   apiKey: 'computesdk_xxx',
+   *   e2b: { apiKey: 'e2b_xxx' }
+   * });
+   * 
+   * const sandbox = await compute.sandbox.create();
+   * ```
+   */
+  setConfig(config: ExplicitComputeConfig): void {
+    const gatewayConfig = createConfigFromExplicit(config);
+    this.config = gatewayConfig;
+    this.autoConfigured = false;
   }
 
   sandbox = {
@@ -415,6 +437,8 @@ function computeFactory(config: ExplicitComputeConfig): ComputeManager {
 interface CallableCompute extends ComputeManager {
   /** Create a new compute instance with explicit configuration */
   (config: ExplicitComputeConfig): ComputeManager;
+  /** Explicitly configure the singleton */
+  setConfig(config: ExplicitComputeConfig): void;
 }
 
 /**

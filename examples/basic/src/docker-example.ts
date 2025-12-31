@@ -1,5 +1,4 @@
 import { docker } from '@computesdk/docker'
-import { createCompute } from 'computesdk'
 import { config } from 'dotenv'
 import { NODEJS_SNIPPETS, PYTHON_SNIPPETS } from './constants/code-snippets'
 config() // Load env (e.g., DOCKER_HOST / TLS vars)
@@ -20,8 +19,8 @@ config() // Load env (e.g., DOCKER_HOST / TLS vars)
  * - DOCKER_CERT_PATH
  */
 async function main() {
-  // Configure ComputeSDK with Docker as the default provider.
-  const provider = docker({
+  // Direct mode: use Docker provider directly
+  const compute = docker({
     // Default image hints; we still set explicit images per sandbox below.
     image: { name: 'python:3.11-slim', pullPolicy: 'ifNotPresent' },
     container: {
@@ -29,8 +28,6 @@ async function main() {
       resources: { memory: 512 * 1024 * 1024 },
     },
   })
-
-  const compute = createCompute({ defaultProvider: provider })
 
   let py: any | null = null
   let node: any | null = null
@@ -51,10 +48,9 @@ async function main() {
 
     const pyResult = await py.runCode(pythonCode, 'python')
     console.log('\n--- Python Execution ---')
-    console.log('stdout:\n' + (pyResult.stdout || '∅'))
-    if (pyResult.stderr) console.error('stderr:\n' + pyResult.stderr)
-    console.log('Execution time:', pyResult.executionTime, 'ms')
+    console.log('Output:\n' + (pyResult.output || '∅'))
     console.log('Exit code:', pyResult.exitCode)
+    console.log('Language:', pyResult.language)
 
     // Filesystem (supported on Docker)
     console.log('\nFilesystem Operations (Python sandbox)')
@@ -81,10 +77,9 @@ async function main() {
 
     const nodeResult = await node.runCode(nodeCode, 'node')
     console.log('\nNode.js Execution')
-    console.log('stdout:\n' + (nodeResult.stdout || '∅'))
-    if (nodeResult.stderr) console.error('stderr:\n' + nodeResult.stderr)
-    console.log('Execution time:', nodeResult.executionTime, 'ms')
+    console.log('Output:\n' + (nodeResult.output || '∅'))
     console.log('Exit code:', nodeResult.exitCode)
+    console.log('Language:', nodeResult.language)
 
     // Optional shell command
     const cmd = await node.runCommand('sh', ['-lc', 'echo runtime=$(node -v) && uname -a'])

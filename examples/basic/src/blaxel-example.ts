@@ -6,7 +6,6 @@
  */
 
 import { blaxel } from '@computesdk/blaxel';
-import { createCompute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS, NODEJS_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -22,12 +21,10 @@ async function main() {
   }
 
   try {
-    // Configure compute with Blaxel provider
-    const compute = createCompute({ 
-      provider: blaxel({
-        apiKey: process.env.BL_API_KEY,
-        workspace: process.env.BL_WORKSPACE
-      })
+    // Direct mode: use Blaxel provider directly
+    const compute = blaxel({
+      apiKey: process.env.BL_API_KEY,
+      workspace: process.env.BL_WORKSPACE
     });
 
     // Create Python sandbox
@@ -41,8 +38,8 @@ async function main() {
       console.log('\n--- Python Execution ---');
       const pythonResult = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
 
-      console.log('Python Output:', pythonResult.stdout);
-      console.log('Execution time:', pythonResult.executionTime, 'ms');
+      console.log('Python Output:', pythonResult.output);
+      console.log('Exit code:', pythonResult.exitCode);
 
       // Filesystem operations
       console.log('\n--- Filesystem Operations ---');
@@ -66,11 +63,11 @@ async function main() {
       console.log('Created Node.js sandbox:', nodeSandbox.sandboxId);
       
       const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
-      console.log('Node.js Output:', nodeResult.stdout);
+      console.log('Node.js Output:', nodeResult.output);
 
       // Clean up
-      await sandbox.kill();
-      await nodeSandbox.kill();
+      await sandbox.destroy();
+      await nodeSandbox.destroy();
       console.log('\n✅ Sandboxes cleaned up successfully');
 
     } catch (sandboxError) {
