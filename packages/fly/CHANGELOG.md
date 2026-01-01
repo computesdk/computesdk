@@ -1,5 +1,12 @@
 # @computesdk/fly
 
+## 1.1.10
+
+### Patch Changes
+
+- computesdk@1.10.3
+- @computesdk/provider@1.0.4
+
 ## 1.1.9
 
 ### Patch Changes

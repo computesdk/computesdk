@@ -1,5 +1,11 @@
 # @computesdk/aws-lambda
 
+## 1.1.10
+
+### Patch Changes
+
+- computesdk@1.10.3
+
 ## 1.1.9
 
 ### Patch Changes

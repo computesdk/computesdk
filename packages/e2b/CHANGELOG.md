@@ -1,5 +1,12 @@
 # @computesdk/e2b
 
+## 1.7.10
+
+### Patch Changes
+
+- computesdk@1.10.3
+- @computesdk/provider@1.0.4
+
 ## 1.7.9
 
 ### Patch Changes

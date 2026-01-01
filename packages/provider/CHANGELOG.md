@@ -1,5 +1,13 @@
 # @computesdk/provider
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [6b0c820]
+  - @computesdk/cmd@0.4.0
+  - computesdk@1.10.3
+
 ## 1.0.3
 
 ### Patch Changes
