@@ -85,50 +85,15 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
 }
 
 /**
- * Provider execution modes
- *
- * - 'raw': Use raw provider methods directly (for gateway internal use)
- * - 'direct': Use provider's native SDK directly (for providers with sandbox capabilities)
- * - 'gateway': Route through ComputeSDK gateway (for providers without native sandbox)
- */
-export type ProviderMode = 'raw' | 'direct' | 'gateway';
-
-/**
  * Provider configuration for defineProvider()
  */
 export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, TSnapshot = any> {
   name: string;
-  /**
-   * Default execution mode for this provider (defaults to 'gateway' if not specified)
-   *
-   * - 'direct': Provider has native sandbox capabilities (e.g., E2B) - uses provider SDK directly
-   * - 'gateway': Provider only has infrastructure (e.g., Railway) - routes through gateway
-   *
-   * Can be overridden at runtime with `mode` in config.
-   */
-  defaultMode?: 'direct' | 'gateway';
   methods: {
     sandbox: SandboxMethods<TSandbox, TConfig>;
     template?: TemplateMethods<TTemplate, TConfig>;
     snapshot?: SnapshotMethods<TSnapshot, TConfig>;
   };
-}
-
-/**
- * Base config that all provider configs should extend
- * Includes the `mode` option for controlling execution mode
- */
-export interface BaseProviderConfig {
-  /**
-   * Execution mode override
-   *
-   * - 'raw': Use raw provider methods directly (for gateway internal use)
-   * - 'direct': Use provider's native SDK directly
-   * - 'gateway': Route through ComputeSDK gateway
-   *
-   * If not specified, uses the provider's `defaultMode`.
-   */
-  mode?: ProviderMode;
 }
 
 /**
@@ -276,37 +241,15 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 }
 
 /**
- * Determines the effective execution mode
- *
- * @param config - Runtime config (may contain `mode` override)
- * @param defaultMode - Provider's default mode
- * @returns The effective execution mode
- */
-function getEffectiveMode(config: BaseProviderConfig, defaultMode: 'direct' | 'gateway'): ProviderMode {
-  // If mode is explicitly set in config, use it
-  if (config.mode) {
-    return config.mode;
-  }
-
-  // Otherwise use provider's default mode
-  return defaultMode;
-}
-
-/**
  * Auto-generated Sandbox Manager implementation
  */
 class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManager<TSandbox> {
-  private readonly effectiveMode: ProviderMode;
-
   constructor(
     private config: TConfig,
     private providerName: string,
     private methods: SandboxMethods<TSandbox, TConfig>,
-    private providerInstance: Provider,
-    defaultMode: 'direct' | 'gateway'
-  ) {
-    this.effectiveMode = getEffectiveMode(config as BaseProviderConfig, defaultMode);
-  }
+    private providerInstance: Provider
+  ) {}
 
   async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
     // Default to 'node' runtime if not specified for consistency across providers
@@ -475,8 +418,7 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
       config,
       providerConfig.name,
       providerConfig.methods.sandbox,
-      this,
-      providerConfig.defaultMode ?? 'gateway'
+      this
     );
 
     // Initialize optional managers if methods are provided
@@ -504,8 +446,8 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
  */
 export function defineProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
   providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>
-): (config: TConfig & BaseProviderConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
-  return (config: TConfig & BaseProviderConfig) => {
+): (config: TConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
+  return (config: TConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };
 }
