@@ -6,7 +6,7 @@
  * routing through the gateway.
  */
 
-import { compute } from 'computesdk';
+import { compute, type CallableCompute } from 'computesdk';
 
 /**
  * Compute factory configuration
@@ -56,7 +56,7 @@ export interface ComputeConfig {
  */
 export function defineCompute<TConfig = any>(
   factoryConfig: ComputeFactoryConfig
-): (config: TConfig) => typeof compute {
+): (config: TConfig) => CallableCompute {
   return (config: TConfig) => {
     // Configure compute with provider-specific settings
     // Type assertion needed here since we accept generic TConfig but setConfig expects ExplicitComputeConfig
