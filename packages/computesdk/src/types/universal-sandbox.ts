@@ -149,12 +149,13 @@ export interface Sandbox {
   /** Execute code in the sandbox */
   runCode(code: string, runtime?: Runtime): Promise<CodeResult>;
   
-  /** Execute shell commands */
-  runCommand(
-    commandOrArray: string | [string, ...string[]],
-    argsOrOptions?: string[] | RunCommandOptions,
-    maybeOptions?: RunCommandOptions
-  ): Promise<CommandResult>;
+  /** 
+   * Execute shell command
+   * 
+   * Send raw command string to the sandbox - no preprocessing.
+   * The provider/server handles shell invocation and execution details.
+   */
+  runCommand(command: string, options?: RunCommandOptions): Promise<CommandResult>;
   
   /** Get information about the sandbox */
   getInfo(): Promise<SandboxInfo>;

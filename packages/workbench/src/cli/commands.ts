@@ -248,7 +248,9 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
   logCommand(command);
   
   try {
-    const result = await sandbox.runCommand(command[0], command.slice(1));
+    // Join command array into a single string for new runCommand signature
+    const commandString = command.join(' ');
+    const result = await sandbox.runCommand(commandString);
     const duration = Date.now() - startTime;
     
     // Print output directly
