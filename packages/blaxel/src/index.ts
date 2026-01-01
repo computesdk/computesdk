@@ -7,7 +7,7 @@
 import { SandboxInstance, settings } from '@blaxel/core';
 import { defineProvider } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -236,36 +236,48 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 				}
 			},
 
-			runCommand: async (sandbox: SandboxInstance, command: string, args: string[] = []): Promise<CommandResult> => {
-				const startTime = Date.now();
+		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+			const startTime = Date.now();
 
-				try {
-					// Construct full command with arguments, properly quoting each arg
-					const quotedArgs = args.map((arg: string) => {
-						if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-							return `"${arg.replace(/"/g, '\\"')}"`;
-						}
-						return arg;
-					});
-					const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
-
-					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand);
-
-					return {
-						stdout,
-						stderr,
-						exitCode,
-						durationMs: Date.now() - startTime
-					};
-				} catch (error) {
-					return {
-						stdout: '',
-						stderr: error instanceof Error ? error.message : String(error),
-						exitCode: 127,
-						durationMs: Date.now() - startTime
-					};
+			try {
+				// Build command with options
+				let fullCommand = command;
+				
+				// Handle environment variables
+				if (options?.env && Object.keys(options.env).length > 0) {
+					const envPrefix = Object.entries(options.env)
+						.map(([k, v]) => `${k}="${v}"`)
+						.join(' ');
+					fullCommand = `${envPrefix} ${fullCommand}`;
 				}
-			},
+				
+				// Handle working directory
+				if (options?.cwd) {
+					fullCommand = `cd "${options.cwd}" && ${fullCommand}`;
+				}
+				
+				// Handle background execution
+				if (options?.background) {
+					fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+				}
+
+				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand);
+
+				return {
+					stdout,
+					stderr,
+					exitCode,
+					durationMs: Date.now() - startTime
+				};
+			} catch (error) {
+				return {
+					stdout: '',
+					stderr: error instanceof Error ? error.message : String(error),
+					exitCode: 127,
+					durationMs: Date.now() - startTime
+				};
+			}
+		},
 
 			getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
 				return {
