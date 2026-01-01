@@ -37,44 +37,47 @@ import type { Command } from './types.js';
 import { buildShellCommand } from './utils.js';
 
 /**
- * Command builders for common shell operations - callable with shell wrapper + command methods
+ * Command builders for common shell operations
+ * 
+ * Namespace containing command builder functions for filesystem operations,
+ * package managers, git, network utilities, and more.
+ * 
+ * For shell wrapping with cwd/background options, use `shell()` instead.
  *
  * @example
- * // As shell wrapper (default: sh)
- * cmd(npm.install(), { cwd: '/app' })
- * // => ['sh', '-c', 'cd '/app' && npm install']
- *
- * @example
- * // As command builders
+ * // Command builders
  * cmd.npm.install('express')
  * // => ['npm', 'install', 'express']
+ * 
+ * cmd.mkdir('/app/src')
+ * // => ['mkdir', '-p', '/app/src']
+ * 
+ * @example
+ * // For shell wrapping, use shell() instead
+ * import { shell, npm } from '@computesdk/cmd';
+ * shell(npm.install(), { cwd: '/app' })
+ * // => ['sh', '-c', 'cd '/app' && npm install']
  */
-export const cmd = Object.assign(
-  // Callable: shell wrapper with sh default
-  (command: Command, options?: { cwd?: string; background?: boolean }): Command => {
-    return buildShellCommand('sh', command, options);
-  },
-  {
-    // Filesystem
-    ...filesystem,
-    // Process
-    ...process,
-    // Package managers
-    ...packages,
-    // Git
-    ...gitCommands,
-    // Network
-    ...network,
-    // Text processing
-    ...text,
-    // Archives
-    ...archive,
-    // System
-    ...system,
-    // Compute
-    ...computeCommands,
-  }
-);
+export const cmd = {
+  // Filesystem
+  ...filesystem,
+  // Process
+  ...process,
+  // Package managers
+  ...packages,
+  // Git
+  ...gitCommands,
+  // Network
+  ...network,
+  // Text processing
+  ...text,
+  // Archives
+  ...archive,
+  // System
+  ...system,
+  // Compute
+  ...computeCommands,
+};
 
 // Export individual command builders for destructured imports
 // Filesystem

@@ -157,10 +157,7 @@ function injectCmdContext(replServer: repl.REPLServer) {
   // Compute
   replServer.context.compute = cmd.compute;
   
-  // Expose cmd namespace for cmd() wrapper
-  replServer.context.cmd = cmd.cmd;
-  
-  // Shell wrappers
+  // Shell wrappers (for wrapping commands with cwd/background options)
   replServer.context.shell = cmd.shell;
   replServer.context.sh = cmd.sh;
   replServer.context.bash = cmd.bash;
