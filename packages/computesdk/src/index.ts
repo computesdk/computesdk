@@ -77,6 +77,7 @@ export {
 // Export compute singleton/callable - the main API
 // Works as both: compute.sandbox.create() and compute({...}).sandbox.create()
 export { compute } from './compute';
+export type { CallableCompute } from './compute';
 
 // ============================================================================
 // Provider Configuration & Detection
