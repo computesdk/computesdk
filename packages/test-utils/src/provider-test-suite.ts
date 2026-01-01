@@ -9,6 +9,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
 import type { Provider, ProviderSandbox, CodeResult, CommandResult, FileEntry, RunCommandOptions, Runtime, SandboxInfo } from '@computesdk/provider';
+// @ts-ignore - workspace reference
+import { escapeArgs } from '@computesdk/cmd';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -155,7 +157,7 @@ print(json.dumps(data, indent=2))
 
         // Common tests for all runtimes
         it('should execute shell commands', async () => {
-          const result = await sandbox.runCommand('echo', ['Hello from command']);
+          const result = await sandbox.runCommand('echo "Hello from command"');
 
           expect(result).toBeDefined();
           expect(result.stdout).toContain('Hello from command');
@@ -163,7 +165,7 @@ print(json.dumps(data, indent=2))
         }, timeout);
 
         it('should execute background commands', async () => {
-          const result = await sandbox.runCommand('sleep', ['1'], { background: true });
+          const result = await sandbox.runCommand('sleep 1', { background: true });
 
           expect(result).toBeDefined();
           // Background commands should still return quickly with exit code 0
@@ -248,14 +250,14 @@ print(json.dumps(data, indent=2))
         if (runtime === supportedRuntimes[0]) {
           describe('Shell Command Argument Quoting', () => {
             it('should properly quote arguments with spaces', async () => {
-              const result = await sandbox.runCommand('sh', ['-c', 'echo "hello world"']);
+              const result = await sandbox.runCommand('sh -c \'echo "hello world"\'');
 
               expect(result.exitCode).toBe(0);
               expect(result.stdout.trim()).toBe('hello world');
             }, timeout);
 
             it('should properly quote arguments with special characters', async () => {
-              const result = await sandbox.runCommand('sh', ['-c', 'echo "$HOME"']);
+              const result = await sandbox.runCommand('sh -c \'echo "$HOME"\'');
 
               expect(result.exitCode).toBe(0);
               // Should output something (either literal "$HOME" or actual home path)
@@ -263,7 +265,7 @@ print(json.dumps(data, indent=2))
             }, timeout);
 
             it('should handle complex shell commands with pipes', async () => {
-              const result = await sandbox.runCommand('sh', ['-c', 'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt']);
+              const result = await sandbox.runCommand('sh -c \'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt\'');
 
               expect(result.exitCode).toBe(0);
               expect(result.stdout.trim()).toBe('test content');
@@ -430,10 +432,8 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
       };
     },
 
-    runCommand: async (command: string, args?: string[], options?: RunCommandOptions): Promise<CommandResult> => {
-      const fullCommand = `${command} ${args?.join(' ') || ''}`.trim();
-
-      if (command === 'echo' && args?.includes('Hello from command')) {
+    runCommand: async (command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+      if (command.includes('echo "Hello from command"')) {
         return {
           stdout: 'Hello from command\n',
           stderr: '',
@@ -451,7 +451,7 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
         };
       }
 
-      if (command === 'sleep' && options?.background) {
+      if (command.includes('sleep 1') && options?.background) {
         return {
           stdout: '',
           stderr: '',
@@ -461,40 +461,36 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
       }
 
       // Shell command quoting tests
-      if (command === 'sh' && args?.[0] === '-c') {
-        const shellCommand = args[1];
+      if (command === 'sh -c \'echo "hello world"\'') {
+        return {
+          stdout: 'hello world\n',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 10
+        };
+      }
 
-        if (shellCommand === 'echo "hello world"') {
-          return {
-            stdout: 'hello world\n',
-            stderr: '',
-            exitCode: 0,
-            durationMs: 10
-          };
-        }
+      if (command === 'sh -c \'echo "$HOME"\'') {
+        return {
+          stdout: '/home/user\n',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 10
+        };
+      }
 
-        if (shellCommand === 'echo "$HOME"') {
-          return {
-            stdout: '/home/user\n',
-            stderr: '',
-            exitCode: 0,
-            durationMs: 10
-          };
-        }
-
-        if (shellCommand === 'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt') {
-          mockFiles.set('/tmp/test-quoting.txt', 'test content');
-          return {
-            stdout: 'test content\n',
-            stderr: '',
-            exitCode: 0,
-            durationMs: 20
-          };
-        }
+      if (command === 'sh -c \'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt\'') {
+        mockFiles.set('/tmp/test-quoting.txt', 'test content');
+        return {
+          stdout: 'test content\n',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 20
+        };
       }
 
       return {
-        stdout: `Mock command output: ${fullCommand}`,
+        stdout: `Mock command output: ${command}`,
         stderr: '',
         exitCode: 0,
         durationMs: 50
