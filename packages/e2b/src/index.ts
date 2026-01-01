@@ -6,9 +6,9 @@
  */
 
 import { Sandbox as E2BSandbox } from 'e2b';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * E2B-specific configuration options
@@ -229,18 +229,30 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options (E2B doesn't support these natively, so we wrap with shell)
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           const execution = await sandbox.commands.run(fullCommand);
 

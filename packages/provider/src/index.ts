@@ -21,7 +21,7 @@ export { createCompute } from './compute';
 export type { CreateComputeConfig, ComputeAPI } from './compute';
 
 // Export utilities
-export { calculateBackoff } from './utils';
+export { calculateBackoff, escapeShellArg } from './utils';
 
 // Export all types
 export type * from './types';

@@ -6,9 +6,9 @@
  */
 
 import { getSandbox } from '@cloudflare/sandbox';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Cloudflare-specific configuration options
@@ -247,22 +247,32 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         }
       },
 
-      runCommand: async (cloudflareSandbox: CloudflareSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (cloudflareSandbox: CloudflareSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
           const { sandbox, sandboxId } = cloudflareSandbox;
 
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map(arg => {
-            // Quote arguments that contain spaces or special characters
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              // Escape any double quotes in the argument and wrap in double quotes
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using Cloudflare's exec method
           const execResult = await sandbox.exec(fullCommand);

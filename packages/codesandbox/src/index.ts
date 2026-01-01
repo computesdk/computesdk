@@ -6,7 +6,7 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -203,21 +203,33 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig>
         }
       },
 
-      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: CodesandboxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
           // Connect to the sandbox client using sandbox.connect()
           const client = await sandbox.connect();
 
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using CodeSandbox client.commands.run()
           const output = await client.commands.run(fullCommand);

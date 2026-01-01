@@ -6,7 +6,7 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -205,18 +205,30 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: DaytonaSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using Daytona's process.executeCommand method
           const response = await sandbox.process.executeCommand(fullCommand);
