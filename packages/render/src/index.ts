@@ -222,7 +222,7 @@ export const render = defineProvider<RenderSandbox, RenderConfig>({
         throw new Error('Render runCode method not implemented yet');
       },
 
-      runCommand: async (_sandbox: RenderSandbox, _command: string, _args?: string[], _options?: RunCommandOptions) => {
+      runCommand: async (_sandbox: RenderSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Render runCommand method not implemented yet');
       },
 

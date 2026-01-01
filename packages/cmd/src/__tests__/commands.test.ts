@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   cmd,
+  shell,
   mkdir,
   rm,
   cp,
@@ -24,20 +25,28 @@ import {
 } from '../index';
 
 describe('cmd (main export)', () => {
-  it('acts as shell wrapper when called as function', () => {
-    const result = cmd(['npm', 'install'], { cwd: '/app' });
-    expect(result).toEqual(['sh', '-c', "cd '/app' && npm install"]);
-  });
-
-  it('returns command unchanged when no options', () => {
-    const result = cmd(['npm', 'install']);
-    expect(result).toEqual(['npm', 'install']);
-  });
-
   it('has command builders as properties', () => {
     expect(cmd.mkdir).toBeDefined();
     expect(cmd.npm).toBeDefined();
     expect(cmd.git).toBeDefined();
+  });
+
+  it('is a namespace, not a callable function', () => {
+    expect(typeof cmd).toBe('object');
+    expect(typeof cmd.npm).toBe('object');
+    expect(typeof cmd.mkdir).toBe('function');
+  });
+});
+
+describe('shell (shell wrapper)', () => {
+  it('wraps commands with shell when options provided', () => {
+    const result = shell(['npm', 'install'], { cwd: '/app' });
+    expect(result).toEqual(['sh', '-c', "cd '/app' && npm install"]);
+  });
+
+  it('returns command unchanged when no options', () => {
+    const result = shell(['npm', 'install']);
+    expect(result).toEqual(['npm', 'install']);
   });
 });
 

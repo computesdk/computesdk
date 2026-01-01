@@ -32,3 +32,31 @@ export function calculateBackoff(
 ): number {
   return baseDelay * Math.pow(2, attempt) + Math.random() * jitterMax;
 }
+
+/**
+ * Escapes a string for safe use in shell commands
+ * 
+ * Escapes special shell characters to prevent command injection.
+ * Use this when interpolating user-controlled values into shell commands.
+ * 
+ * @param arg - The string to escape
+ * @returns Escaped string safe for shell interpolation
+ * 
+ * @example
+ * ```typescript
+ * const path = '/path/with spaces';
+ * const command = `cd "${escapeShellArg(path)}" && ls`;
+ * // Result: cd "/path/with\ spaces" && ls
+ * 
+ * const env = { KEY: 'value with $pecial chars' };
+ * const command = `KEY="${escapeShellArg(env.KEY)}" npm run build`;
+ * // Result: KEY="value with \$pecial chars" npm run build
+ * ```
+ */
+export function escapeShellArg(arg: string): string {
+  return arg
+    .replace(/\\/g, '\\\\')  // Escape backslashes
+    .replace(/"/g, '\\"')    // Escape double quotes
+    .replace(/\$/g, '\\$')   // Escape dollar signs (variable expansion)
+    .replace(/`/g, '\\`');   // Escape backticks (command substitution)
+}

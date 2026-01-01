@@ -42,6 +42,10 @@ export interface CommandRunOptions {
   shell?: string;
   /** Run in background (optional) */
   background?: boolean;
+  /** Working directory for the command (optional) */
+  cwd?: string;
+  /** Environment variables (optional) */
+  env?: Record<string, string>;
 }
 
 /**
@@ -96,6 +100,8 @@ export class Run {
    * @param options - Execution options
    * @param options.shell - Shell to use (optional)
    * @param options.background - Run in background (optional)
+   * @param options.cwd - Working directory for the command (optional)
+   * @param options.env - Environment variables (optional)
    * @returns Command execution result with stdout, stderr, exit code, and duration
    */
   async command(command: string, options?: CommandRunOptions): Promise<CommandResult> {

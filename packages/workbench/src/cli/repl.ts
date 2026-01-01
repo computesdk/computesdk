@@ -157,10 +157,7 @@ function injectCmdContext(replServer: repl.REPLServer) {
   // Compute
   replServer.context.compute = cmd.compute;
   
-  // Expose cmd namespace for cmd() wrapper
-  replServer.context.cmd = cmd.cmd;
-  
-  // Shell wrappers
+  // Shell wrappers (for wrapping commands with cwd/background options)
   replServer.context.shell = cmd.shell;
   replServer.context.sh = cmd.sh;
   replServer.context.bash = cmd.bash;
@@ -245,6 +242,18 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
       throw new Error('No active sandbox. Run a command to auto-create one.');
     }
     return sandbox.runCode(code, runtime);
+  };
+  
+  // Expose runCommand directly with full options support (background, cwd, env)
+  replServer.context.runCommand = async (
+    command: string,
+    options?: { background?: boolean; cwd?: string; env?: Record<string, string> }
+  ) => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.runCommand(command, options);
   };
   
   // Expose sandbox creation methods (gateway mode only)
