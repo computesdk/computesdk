@@ -257,7 +257,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         throw new Error('Namespace runCode method not implemented yet');
       },
 
-      runCommand: async (_sandbox: NamespaceSandbox, _command: string, _args?: string[], _options?: RunCommandOptions) => {
+      runCommand: async (_sandbox: NamespaceSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Namespace runCommand method not implemented yet');
       },
 

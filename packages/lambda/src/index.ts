@@ -299,7 +299,7 @@ docker run -d --name compute-app ${dockerImage} tail -f /dev/null`;
         throw new Error('Lambda runCode method not implemented yet');
       },
 
-      runCommand: async (_sandbox: LambdaSandbox, _command: string, _args?: string[], _options?: RunCommandOptions) => {
+      runCommand: async (_sandbox: LambdaSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Lambda runCommand method not implemented yet');
       },
 

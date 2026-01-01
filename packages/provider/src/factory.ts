@@ -28,7 +28,6 @@ import type {
   FindSandboxOptions,
   ExtendTimeoutOptions,
 } from './types/index.js';
-import { cmd, type Command } from '@computesdk/cmd';
 
 /**
  * Flat sandbox method implementations - all operations in one place
@@ -49,7 +48,7 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
 
   // Instance operations
   runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<CodeResult>;
-  runCommand: (sandbox: TSandbox, command: string, args?: string[], options?: RunCommandOptions) => Promise<CommandResult>;
+  runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
 
@@ -58,12 +57,12 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
 
   // Optional filesystem methods
   filesystem?: {
-    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<string>;
-    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
-    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
-    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<FileEntry[]>;
-    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<boolean>;
-    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, args?: string[]) => Promise<CommandResult>) => Promise<void>;
+    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<string>;
+    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
+    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
+    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<FileEntry[]>;
+    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<boolean>;
+    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
   };
 }
 
@@ -250,40 +249,12 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   }
 
   async runCommand(
-    commandOrArray: string | [string, ...string[]],
-    argsOrOptions?: string[] | RunCommandOptions,
-    maybeOptions?: RunCommandOptions
+    command: string,
+    options?: RunCommandOptions
   ): Promise<CommandResult> {
-    // Parse overloaded arguments
-    let command: string;
-    let args: string[];
-    let options: RunCommandOptions | undefined;
-
-    if (Array.isArray(commandOrArray)) {
-      // Array form: runCommand(['npm', 'install'], { cwd: '/app' })
-      [command, ...args] = commandOrArray;
-      options = argsOrOptions as RunCommandOptions | undefined;
-    } else {
-      // Traditional form: runCommand('npm', ['install'], { cwd: '/app' })
-      command = commandOrArray;
-      args = (Array.isArray(argsOrOptions) ? argsOrOptions : []) as string[];
-      options = Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as RunCommandOptions | undefined;
-    }
-
-    // Build the command tuple
-    const baseCommand: Command = args.length > 0 ? [command, ...args] : [command];
-
-    // Use cmd() helper to handle cwd and background options
-    if (options?.cwd || options?.background) {
-      const wrappedCommand = cmd(baseCommand, {
-        cwd: options.cwd,
-        background: options.background,
-      });
-      const [wrappedCmd, ...wrappedArgs] = wrappedCommand;
-      return await this.methods.runCommand(this.sandbox, wrappedCmd, wrappedArgs, undefined);
-    }
-
-    return await this.methods.runCommand(this.sandbox, command, args, options);
+    // Pass command and options directly to provider - no preprocessing
+    // Provider is responsible for handling cwd, env, background, etc.
+    return await this.methods.runCommand(this.sandbox, command, options);
   }
 
   async getInfo(): Promise<SandboxInfo> {

@@ -255,7 +255,7 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
         throw new Error('Railway runCode method not implemented yet');
       },
 
-      runCommand: async (_sandbox: RailwaySandbox, _command: string, _args?: string[], _options?: RunCommandOptions) => {
+      runCommand: async (_sandbox: RailwaySandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Railway runCommand method not implemented yet');
       },
 

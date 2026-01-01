@@ -10,7 +10,7 @@
 
 import { defineProvider } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 // Import Modal SDK
 import { App, Sandbox, initializeClient } from 'modal';
@@ -266,12 +266,33 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
         }
       },
 
-      runCommand: async (modalSandbox: ModalSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (modalSandbox: ModalSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Execute command using Modal's exec method with working pattern
-          const process = await modalSandbox.sandbox.exec([command, ...args], {
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${v}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${options.cwd}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
+          
+          // Execute using shell to handle complex commands
+          const process = await modalSandbox.sandbox.exec(['sh', '-c', fullCommand], {
             stdout: 'pipe',
             stderr: 'pipe'
           });
