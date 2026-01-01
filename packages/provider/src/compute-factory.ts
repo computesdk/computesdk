@@ -54,15 +54,16 @@ export interface ComputeConfig {
  * await sandbox.runCode('console.log("hello")');
  * ```
  */
-export function defineCompute<TConfig extends ComputeConfig = ComputeConfig>(
+export function defineCompute<TConfig = any>(
   factoryConfig: ComputeFactoryConfig
-): (config: TConfig) => any {
+): (config: TConfig) => typeof compute {
   return (config: TConfig) => {
     // Configure compute with provider-specific settings
+    // Type assertion needed here since we accept generic TConfig but setConfig expects ExplicitComputeConfig
     compute.setConfig({
-      provider: factoryConfig.provider as any,
-      apiKey: config.apiKey || '',
-      gatewayUrl: config.gatewayUrl,
+      provider: factoryConfig.provider,
+      apiKey: (config as any).apiKey || '',
+      gatewayUrl: (config as any).gatewayUrl,
       [factoryConfig.provider]: config,
     } as any);
     
