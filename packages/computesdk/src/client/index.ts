@@ -13,8 +13,7 @@ import { WebSocketManager } from './websocket';
 import { TerminalInstance } from './terminal';
 import { FileWatcher } from './file-watcher';
 import { SignalService } from './signal-service';
-import { cmd, escapeArgs, mkdir, test } from '@computesdk/cmd';
-import type { Command } from '@computesdk/cmd';
+import { escapeArgs, mkdir, test } from '@computesdk/cmd';
 
 // Import resource namespaces
 import {
@@ -788,7 +787,7 @@ export class Sandbox {
         await this.writeFile(path, content);
       },
       mkdir: async (path: string) => {
-        await this.runCommand(mkdir(path));
+        await this.runCommand(escapeArgs(mkdir(path)));
       },
       readdir: async (path: string) => {
         const response = await this.listFiles(path);
@@ -801,7 +800,7 @@ export class Sandbox {
         }));
       },
       exists: async (path: string) => {
-        const result = await this.runCommand(test.exists(path));
+        const result = await this.runCommand(escapeArgs(test.exists(path)));
         return result.exitCode === 0;
       },
       remove: async (path: string) => {
@@ -829,7 +828,13 @@ export class Sandbox {
         };
       },
       command: async (command, options) => {
-        const result = await this.runCommandRequest({ command, shell: options?.shell, background: options?.background });
+        const result = await this.runCommandRequest({ 
+          command, 
+          shell: options?.shell, 
+          background: options?.background,
+          cwd: options?.cwd,
+          env: options?.env
+        });
         return {
           stdout: result.data.stdout,
           stderr: result.data.stderr,
@@ -1198,12 +1203,14 @@ export class Sandbox {
   }
 
   /**
-   * Execute a shell command (POST /run/command)
+   * Execute a command and get the result
+   * Lower-level method that returns the raw API response
    *
-   * @param options - Command options
-   * @param options.command - The command to execute
+   * @param options.command - Command to execute
    * @param options.shell - Shell to use (optional)
    * @param options.background - Run in background (optional)
+   * @param options.cwd - Working directory for the command (optional)
+   * @param options.env - Environment variables (optional)
    * @returns Command execution result
    *
    * @example
@@ -1216,6 +1223,8 @@ export class Sandbox {
     command: string;
     shell?: string;
     background?: boolean;
+    cwd?: string;
+    env?: Record<string, string>;
   }): Promise<RunCommandResponse> {
     return this.request<RunCommandResponse>('/run/command', {
       method: 'POST',
@@ -1955,48 +1964,45 @@ export class Sandbox {
   }
 
   /**
-   * Execute shell command in the sandbox (convenience method)
+   * Execute shell command in the sandbox
    *
-   * Delegates to sandbox.run.command() - prefer using that directly for new code.
+   * Sends clean command string to server - no preprocessing or shell wrapping.
+   * The server handles shell invocation, working directory, and backgrounding.
    *
-   * @param command - The command to execute (string or array form)
-   * @param argsOrOptions - Arguments array or options object
-   * @param maybeOptions - Options when using (command, args, options) form
+   * @param command - The command to execute (raw string, e.g., "npm install")
+   * @param options - Execution options
+   * @param options.background - Run in background (server uses goroutines)
+   * @param options.cwd - Working directory (server uses cmd.Dir)
+   * @param options.env - Environment variables (server uses cmd.Env)
    * @returns Command execution result
+   * 
+   * @example
+   * ```typescript
+   * // Simple command
+   * await sandbox.runCommand('ls -la')
+   * 
+   * // With working directory
+   * await sandbox.runCommand('npm install', { cwd: '/app' })
+   * 
+   * // Background with env vars
+   * await sandbox.runCommand('node server.js', { 
+   *   background: true, 
+   *   env: { PORT: '3000' } 
+   * })
+   * ```
    */
   async runCommand(
-    commandOrArray: string | [string, ...string[]],
-    argsOrOptions?: string[] | { background?: boolean; cwd?: string },
-    maybeOptions?: { background?: boolean; cwd?: string }
+    command: string,
+    options?: { background?: boolean; cwd?: string; env?: Record<string, string> }
   ): Promise<{
     stdout: string;
     stderr: string;
     exitCode: number;
     durationMs: number;
   }> {
-    // Parse overloaded arguments
-    let commandParts: string[];
-    let options: { background?: boolean; cwd?: string } | undefined;
-
-    if (Array.isArray(commandOrArray)) {
-      // Array form: runCommand(['npm', 'install'], { cwd: '/app' })
-      commandParts = commandOrArray;
-      options = argsOrOptions as { background?: boolean; cwd?: string } | undefined;
-    } else {
-      // Traditional form: runCommand('npm', ['install'], { cwd: '/app' })
-      const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
-      commandParts = [commandOrArray, ...args];
-      options = Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions as { background?: boolean; cwd?: string } | undefined;
-    }
-
-    // Use cmd() to build the command with proper escaping and shell wrapping
-    const finalCommand = cmd(commandParts as Command, options);
-
-    // cmd() returns ['sh', '-c', 'escaped command'] if options provided,
-    // or the raw array if no options. Either way, escapeArgs handles it safely
-    const fullCommand = escapeArgs(finalCommand);
-
-    return this.run.command(fullCommand, { background: options?.background });
+    // Send raw command to server - no preprocessing!
+    // Server will handle: sh -c "command", cmd.Dir, cmd.Env, goroutines
+    return this.run.command(command, options);
   }
 
   /**

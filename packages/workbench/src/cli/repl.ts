@@ -247,6 +247,18 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     return sandbox.runCode(code, runtime);
   };
   
+  // Expose runCommand directly with full options support (background, cwd, env)
+  replServer.context.runCommand = async (
+    command: string,
+    options?: { background?: boolean; cwd?: string; env?: Record<string, string> }
+  ) => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.runCommand(command, options);
+  };
+  
   // Expose sandbox creation methods (gateway mode only)
   // These return clean { sandboxId, metadata } objects instead of full GeneratedSandbox
   replServer.context.create = async (options?: Record<string, unknown>) => {
