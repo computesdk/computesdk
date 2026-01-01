@@ -5,7 +5,7 @@
  */
 
 import { SandboxInstance, settings } from '@blaxel/core';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -246,14 +246,14 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 				// Handle environment variables
 				if (options?.env && Object.keys(options.env).length > 0) {
 					const envPrefix = Object.entries(options.env)
-						.map(([k, v]) => `${k}="${v}"`)
+						.map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
 						.join(' ');
 					fullCommand = `${envPrefix} ${fullCommand}`;
 				}
 				
 				// Handle working directory
 				if (options?.cwd) {
-					fullCommand = `cd "${options.cwd}" && ${fullCommand}`;
+					fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
 				}
 				
 				// Handle background execution

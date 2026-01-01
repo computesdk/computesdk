@@ -6,7 +6,7 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -215,14 +215,14 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${v}"`)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
           
           // Handle working directory
           if (options?.cwd) {
-            fullCommand = `cd "${options.cwd}" && ${fullCommand}`;
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
           
           // Handle background execution
