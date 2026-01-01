@@ -5,6 +5,7 @@
  */
 
 import { createCompute } from '@computesdk/provider';
+import { escapeArgs } from '@computesdk/cmd';
 import type { WorkbenchState } from './state.js';
 import { getCurrentSandbox, setSandbox, clearSandbox, hasSandbox } from './state.js';
 import { 
@@ -248,8 +249,8 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
   logCommand(command);
   
   try {
-    // Join command array into a single string for new runCommand signature
-    const commandString = command.join(' ');
+    // Use escapeArgs to properly join and escape command array with spaces/special chars
+    const commandString = escapeArgs(command);
     const result = await sandbox.runCommand(commandString);
     const duration = Date.now() - startTime;
     
