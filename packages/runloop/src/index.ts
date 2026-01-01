@@ -468,7 +468,7 @@ export const runloop = defineProvider<
           path: string,
           runCommand: any
         ): Promise<FileEntry[]> => {
-          const result = await runCommand(sandbox, "ls", ["-la", path]);
+          const result = await runCommand(sandbox, `ls -la "${path}"`);
 
           if (result.exitCode !== 0) {
             throw new Error(
@@ -499,7 +499,7 @@ export const runloop = defineProvider<
           path: string,
           runCommand: any
         ): Promise<boolean> => {
-          const result = await runCommand(sandbox, "test", ["-e", path]);
+          const result = await runCommand(sandbox, `test -e "${path}"`);
           return result.exitCode === 0;
         },
 
@@ -508,7 +508,7 @@ export const runloop = defineProvider<
           path: string,
           runCommand: any
         ): Promise<void> => {
-          const result = await runCommand(sandbox, "rm", ["-rf", path]);
+          const result = await runCommand(sandbox, `rm -rf "${path}"`);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
           }
