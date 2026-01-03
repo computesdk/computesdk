@@ -76,7 +76,8 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
       expect(typeof sandbox.sandboxId).toBe('string');
     });
 
-    it('sandbox.setTimeout(ms) -> extendTimeout', async () => {
+    // TODO: Gateway feature not implemented yet
+    it.skip('sandbox.setTimeout(ms) -> extendTimeout', async () => {
       // E2B: await e2bInstance.setTimeout(minDurationMs)
       // ComputeSDK: await compute.sandbox.extendTimeout(sandboxId, { duration: ms })
       await compute.sandbox.extendTimeout(sandboxId, { duration: 300000 });
