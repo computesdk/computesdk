@@ -111,10 +111,19 @@ function buildConfigExample(provider: ProviderName, authOptions: readonly (reado
  * @returns Gateway configuration object
  */
 export function createConfigFromExplicit(config: ExplicitComputeConfig): GatewayConfig {
+  // Support both computesdkApiKey (preferred) and apiKey (deprecated)
+  const computesdkApiKey = config.computesdkApiKey || config.apiKey;
+
   // Validate required fields
-  if (!config.apiKey) {
+  if (!computesdkApiKey) {
     throw new Error(
-      `Missing ComputeSDK API key. The 'apiKey' field is required.\n\n` +
+      `Missing ComputeSDK API key. Set 'computesdkApiKey' in your config.\n\n` +
+      `Example:\n` +
+      `  compute.setConfig({\n` +
+      `    provider: 'e2b',\n` +
+      `    computesdkApiKey: process.env.COMPUTESDK_API_KEY,\n` +
+      `    e2b: { apiKey: process.env.E2B_API_KEY }\n` +
+      `  })\n\n` +
       `Get your API key at: https://computesdk.com/dashboard`
     );
   }
@@ -127,7 +136,7 @@ export function createConfigFromExplicit(config: ExplicitComputeConfig): Gateway
 
   // Create and return gateway config
   return {
-    apiKey: config.apiKey,
+    apiKey: computesdkApiKey,
     gatewayUrl: config.gatewayUrl || GATEWAY_URL,
     provider: config.provider,
     providerHeaders,

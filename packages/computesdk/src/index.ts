@@ -7,7 +7,11 @@
  *   import { compute } from 'computesdk';
  *   
  *   Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)
- *   Or explicit: compute.setConfig({ provider: 'e2b', apiKey: '...', e2b: { apiKey: '...' } })
+ *   Or explicit: compute.setConfig({ 
+ *     provider: 'e2b', 
+ *     computesdkApiKey: '...', 
+ *     e2b: { apiKey: '...' } 
+ *   })
  *
  * Using Providers Directly (Advanced):
  *   import { e2b } from '@computesdk/e2b';
