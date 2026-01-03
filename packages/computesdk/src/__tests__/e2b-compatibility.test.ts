@@ -25,11 +25,12 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
   const templateId = process.env.E2B_TEMPLATE_ID || 'base';
 
   beforeAll(async () => {
-    const apiKey = process.env.E2B_API_KEY!;
+    const e2bApiKey = process.env.E2B_API_KEY!;
+    const computesdkApiKey = process.env.COMPUTESDK_API_KEY!;
     compute.setConfig({
       provider: 'e2b',
-      apiKey: apiKey,
-      e2b: { apiKey, templateId },
+      apiKey: computesdkApiKey,
+      e2b: { apiKey: e2bApiKey, templateId },
     });
   });
 
