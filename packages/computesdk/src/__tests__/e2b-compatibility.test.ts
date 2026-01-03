@@ -15,18 +15,15 @@ import { compute } from '../index';
 import type { Sandbox } from '../client';
 import type { TerminalInstance } from '../client/terminal';
 
-describe('E2B Compatibility', () => {
+const hasE2BKey = !!process.env.E2B_API_KEY;
+
+describe.skipIf(!hasE2BKey)('E2B Compatibility', () => {
   let sandbox: Sandbox;
   let sandboxId: string;
   const templateId = process.env.E2B_TEMPLATE_ID || 'base';
 
   beforeAll(async () => {
-    const apiKey = process.env.E2B_API_KEY;
-    if (!apiKey) {
-      console.log('Skipping E2B tests - E2B_API_KEY not set');
-      return;
-    }
-
+    const apiKey = process.env.E2B_API_KEY!;
     compute.setConfig({
       provider: 'e2b',
       apiKey: apiKey,
