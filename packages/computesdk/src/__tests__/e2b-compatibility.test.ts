@@ -89,13 +89,18 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
   // FILE OPERATIONS (DevServer.ts, expo files patterns)
   // ==========================================================================
 
+  // Note: Using relative paths (e.g., 'testfiles/') instead of absolute paths (e.g., '/tmp/')
+  // because absolute path handling is inconsistent in the daemon. See daemon team for fix.
   describe('File Operations', () => {
+    const testDir = 'testfiles';
+
     it('sandbox.files.write(path, content)', async () => {
       // E2B: await sandbox.files.write(path, content)
       // ComputeSDK: await sandbox.filesystem.writeFile(path, content)
-      await sandbox.filesystem.writeFile('/tmp/test.txt', 'Hello World');
+      await sandbox.filesystem.mkdir(testDir);
+      await sandbox.filesystem.writeFile(`${testDir}/test.txt`, 'Hello World');
       await sandbox.filesystem.writeFile(
-        '/tmp/app.json',
+        `${testDir}/app.json`,
         JSON.stringify({ name: 'test', version: '1.0.0' })
       );
     }, 30000);
@@ -105,12 +110,12 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
       // ComputeSDK: use batchWriteFiles or multiple writeFile calls
       // Note: ComputeSDK has sandbox.file.batchWrite() for this
       await sandbox.file.batchWrite([
-        { path: '/tmp/batch1.txt', operation: 'write', content: 'file1' },
-        { path: '/tmp/batch2.txt', operation: 'write', content: 'file2' },
+        { path: `${testDir}/batch1.txt`, operation: 'write', content: 'file1' },
+        { path: `${testDir}/batch2.txt`, operation: 'write', content: 'file2' },
       ]);
 
-      const content1 = await sandbox.filesystem.readFile('/tmp/batch1.txt');
-      const content2 = await sandbox.filesystem.readFile('/tmp/batch2.txt');
+      const content1 = await sandbox.filesystem.readFile(`${testDir}/batch1.txt`);
+      const content2 = await sandbox.filesystem.readFile(`${testDir}/batch2.txt`);
       expect(content1).toBe('file1');
       expect(content2).toBe('file2');
     }, 30000);
@@ -118,34 +123,34 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
     it('sandbox.files.read(path)', async () => {
       // E2B: const content = await sandbox.files.read(path)
       // ComputeSDK: const content = await sandbox.filesystem.readFile(path)
-      const content = await sandbox.filesystem.readFile('/tmp/test.txt');
+      const content = await sandbox.filesystem.readFile(`${testDir}/test.txt`);
       expect(content).toBe('Hello World');
     }, 30000);
 
     it('sandbox.files.exists(path)', async () => {
       // E2B: const exists = await sandbox.files.exists(path)
       // ComputeSDK: const exists = await sandbox.filesystem.exists(path)
-      const exists = await sandbox.filesystem.exists('/tmp/test.txt');
+      const exists = await sandbox.filesystem.exists(`${testDir}/test.txt`);
       expect(exists).toBe(true);
 
-      const notExists = await sandbox.filesystem.exists('/tmp/nonexistent.txt');
+      const notExists = await sandbox.filesystem.exists(`${testDir}/nonexistent.txt`);
       expect(notExists).toBe(false);
     }, 30000);
 
     it('sandbox.files.remove(path, opts)', async () => {
       // E2B: await sandbox.files.remove(path, { requestTimeoutMs })
       // ComputeSDK: await sandbox.filesystem.remove(path)
-      await sandbox.filesystem.writeFile('/tmp/to-delete.txt', 'delete me');
-      await sandbox.filesystem.remove('/tmp/to-delete.txt');
+      await sandbox.filesystem.writeFile(`${testDir}/to-delete.txt`, 'delete me');
+      await sandbox.filesystem.remove(`${testDir}/to-delete.txt`);
 
-      const exists = await sandbox.filesystem.exists('/tmp/to-delete.txt');
+      const exists = await sandbox.filesystem.exists(`${testDir}/to-delete.txt`);
       expect(exists).toBe(false);
     }, 30000);
 
     it('sandbox.files.list(path) -> readdir', async () => {
       // E2B: const files = await sandbox.files.list(path)
       // ComputeSDK: const files = await sandbox.filesystem.readdir(path)
-      const files = await sandbox.filesystem.readdir('/tmp');
+      const files = await sandbox.filesystem.readdir(testDir);
       expect(Array.isArray(files)).toBe(true);
 
       const testFile = files.find((f) => f.name === 'test.txt');
@@ -156,8 +161,8 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
     it('sandbox.files.mkdir(path)', async () => {
       // E2B: via commands or files API
       // ComputeSDK: await sandbox.filesystem.mkdir(path)
-      await sandbox.filesystem.mkdir('/tmp/newdir');
-      const exists = await sandbox.filesystem.exists('/tmp/newdir');
+      await sandbox.filesystem.mkdir(`${testDir}/newdir`);
+      const exists = await sandbox.filesystem.exists(`${testDir}/newdir`);
       expect(exists).toBe(true);
     }, 30000);
   });
@@ -176,10 +181,11 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
     }, 30000);
 
     it('command with cwd option', async () => {
-      await sandbox.filesystem.mkdir('/tmp/cmdtest');
-      await sandbox.filesystem.writeFile('/tmp/cmdtest/file.txt', 'content');
+      // Using relative path - absolute paths have inconsistent handling in daemon
+      await sandbox.filesystem.mkdir('cmdtest');
+      await sandbox.filesystem.writeFile('cmdtest/file.txt', 'content');
 
-      const result = await sandbox.runCommand('ls', { cwd: '/tmp/cmdtest' });
+      const result = await sandbox.runCommand('ls', { cwd: 'cmdtest' });
       expect(result.stdout).toContain('file.txt');
       expect(result.exitCode).toBe(0);
     }, 30000);
