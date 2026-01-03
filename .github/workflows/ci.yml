@@ -173,9 +173,9 @@ jobs:
         E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
       run: |
-        if [ -n "$E2B_API_KEY" ]; then
+        if [ -n "$E2B_API_KEY" ] && [ -n "$COMPUTESDK_API_KEY" ]; then
           echo "Running ComputeSDK integration tests..."
           pnpm --filter computesdk test e2b-compatibility
         else
-          echo "Skipping ComputeSDK integration tests - no E2B_API_KEY provided"
+          echo "Skipping ComputeSDK integration tests - missing E2B_API_KEY or COMPUTESDK_API_KEY"
         fi

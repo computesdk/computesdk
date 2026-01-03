@@ -8,6 +8,7 @@
  *
  * Requirements:
  * - E2B_API_KEY environment variable
+ * - COMPUTESDK_API_KEY environment variable
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -15,9 +16,10 @@ import { compute } from '../index';
 import type { Sandbox } from '../client';
 import type { TerminalInstance } from '../client/terminal';
 
-const hasE2BKey = !!process.env.E2B_API_KEY;
+const hasRequiredKeys =
+  !!process.env.E2B_API_KEY && !!process.env.COMPUTESDK_API_KEY;
 
-describe.skipIf(!hasE2BKey)('E2B Compatibility', () => {
+describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
   let sandbox: Sandbox;
   let sandboxId: string;
   const templateId = process.env.E2B_TEMPLATE_ID || 'base';
