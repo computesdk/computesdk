@@ -31,8 +31,13 @@ interface GatewayConfig {
 export interface ExplicitComputeConfig {
   /** Provider name to use */
   provider: ProviderName;
+  /** 
+   * ComputeSDK API key (required for gateway mode)
+   * @deprecated Use `computesdkApiKey` for clarity
+   */
+  apiKey?: string;
   /** ComputeSDK API key (required for gateway mode) */
-  apiKey: string;
+  computesdkApiKey?: string;
   /** Optional gateway URL override */
   gatewayUrl?: string;
 
@@ -176,7 +181,7 @@ class ComputeManager {
         'No ComputeSDK configuration found.\n\n' +
         'Options:\n' +
         '1. Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)\n' +
-        '2. Explicit: Call compute.setConfig({ provider: "e2b", apiKey: "...", e2b: { apiKey: "..." } })\n' +
+        '2. Explicit: Call compute.setConfig({ provider: "e2b", computesdkApiKey: "...", e2b: { apiKey: "..." } })\n' +
         '3. Use provider directly: import { e2b } from \'@computesdk/e2b\'\n\n' +
         'Docs: https://computesdk.com/docs/quickstart'
       );
