@@ -261,7 +261,7 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
       terminal.write('echo "test-output"\n');
 
       // Wait for output
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       const allOutput = outputs.join('');
       expect(allOutput).toContain('test-output');
@@ -277,7 +277,8 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
 
       terminal.write('for i in 1 2 3; do echo "line $i"; done\n');
 
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Wait for output
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       const allOutput = chunks.join('');
       expect(allOutput).toContain('line 1');

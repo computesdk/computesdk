@@ -30,31 +30,72 @@ import * as readline from 'readline';
 
 /**
  * Prompt user for yes/no confirmation
+ * Uses raw mode to read a single keypress without conflicting with REPL
  */
-async function confirm(question: string, defaultYes = false): Promise<boolean> {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    
-    // Clear any pending input
+async function confirm(question: string, defaultYes = false, _state?: WorkbenchState): Promise<boolean> {
+  const promptSuffix = defaultYes ? '(Y/n)' : '(y/N)';
+  
+  // Write prompt directly to stdout
+  process.stdout.write(`${question} ${promptSuffix}: `);
+  
+  // Ensure stdin is in a readable state
+  if (process.stdin.isPaused()) {
     process.stdin.resume();
+  }
+  
+  return new Promise((resolve) => {
+    // Set raw mode to get individual keypresses
+    const wasRaw = process.stdin.isRaw;
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
     
-    const promptSuffix = defaultYes ? '(Y/n)' : '(y/N)';
-    
-    rl.question(`${question} ${promptSuffix}: `, (answer) => {
-      rl.close();
-      // Trim the answer to handle any extra characters
-      const trimmed = answer.trim().toLowerCase();
-      
-      // If empty answer, use default
-      if (trimmed === '') {
-        resolve(defaultYes);
-      } else {
-        resolve(trimmed === 'y' || trimmed === 'yes');
+    const cleanup = (restoreRaw: boolean) => {
+      process.stdin.removeListener('data', onData);
+      if (process.stdin.isTTY && restoreRaw) {
+        process.stdin.setRawMode(wasRaw || false);
       }
-    });
+    };
+    
+    const onData = (key: Buffer) => {
+      const char = key.toString();
+      
+      // Handle Ctrl+C
+      if (char === '\x03') {
+        process.stdout.write('^C\n');
+        cleanup(true);
+        resolve(false);
+        return;
+      }
+      
+      // Handle Enter (use default)
+      if (char === '\r' || char === '\n') {
+        process.stdout.write(defaultYes ? 'Y\n' : 'N\n');
+        cleanup(true);
+        resolve(defaultYes);
+        return;
+      }
+      
+      // Handle y/Y
+      if (char === 'y' || char === 'Y') {
+        process.stdout.write('y\n');
+        cleanup(true);
+        resolve(true);
+        return;
+      }
+      
+      // Handle n/N
+      if (char === 'n' || char === 'N') {
+        process.stdout.write('n\n');
+        cleanup(true);
+        resolve(false);
+        return;
+      }
+      
+      // Ignore other keys - wait for valid input
+    };
+    
+    process.stdin.on('data', onData);
   });
 }
 
@@ -67,7 +108,7 @@ export async function confirmSandboxSwitch(state: WorkbenchState): Promise<boole
     return true; // No current sandbox, no need to confirm
   }
   
-  return await confirm('Switch to new sandbox?', true); // Default YES
+  return await confirm('Switch to new sandbox?', true, state); // Default YES
 }
 
 /**
@@ -320,8 +361,21 @@ function isStaleConnectionError(error: unknown): boolean {
  * Examples:
  *   provider e2b          → gateway with e2b backend
  *   provider direct e2b   → direct connection to e2b
+ *   provider local        → connect to local daemon
+ *   provider local list   → list local sandboxes
  */
 export async function switchProvider(state: WorkbenchState, mode: string, providerName?: string): Promise<void> {
+  // Handle "provider local" specially
+  if (mode === 'local') {
+    if (providerName === 'list') {
+      await listLocalSandboxes();
+      return;
+    }
+    // Connect to local daemon (providerName is optional subdomain)
+    await connectToLocal(state, providerName);
+    return;
+  }
+  
   // Parse the command: could be "provider e2b" or "provider direct e2b"
   let useDirect = false;
   let actualProvider = mode;
@@ -352,7 +406,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
   // Validate provider
   if (!isValidProvider(actualProvider)) {
     logError(`Unknown provider: ${actualProvider}`);
-    console.log(`Available providers: e2b, railway, daytona, modal, runloop, vercel, cloudflare, codesandbox, blaxel`);
+    console.log(`Available providers: e2b, railway, daytona, modal, runloop, vercel, cloudflare, codesandbox, blaxel, local`);
     return;
   }
   
@@ -372,7 +426,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
   
   // Prompt to destroy current sandbox if exists
   if (hasSandbox(state)) {
-    const shouldDestroy = await confirm('Destroy current sandbox?');
+    const shouldDestroy = await confirm('Destroy current sandbox?', false, state);
     if (shouldDestroy) {
       await destroySandbox(state);
       state.currentProvider = actualProvider;
@@ -394,14 +448,14 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
 
 /**
  * Create a provider command handler
- * Supports: provider e2b, provider direct e2b, provider gateway e2b
+ * Supports: provider e2b, provider direct e2b, provider gateway e2b, provider local
  */
 export function defineProviderCommand(state: WorkbenchState) {
   return async function provider(mode?: string, providerName?: string) {
     if (!mode) {
       // Show current provider
       if (state.currentProvider) {
-        const modeStr = state.useDirectMode ? 'direct' : 'via gateway';
+        const modeStr = state.useDirectMode ? 'direct' : (state.currentProvider === 'local' ? 'local daemon' : 'via gateway');
         console.log(`\nCurrent provider: ${c.green(state.currentProvider)} (${modeStr})\n`);
       } else {
         console.log(c.yellow('\nNo provider selected\n'));
@@ -508,8 +562,8 @@ export async function connectToSandbox(state: WorkbenchState, sandboxUrl: string
   
   // Disconnect from current sandbox if exists
   if (hasSandbox(state)) {
-    const shouldDestroy = await confirm('Disconnect from current sandbox?');
-    if (!shouldDestroy) {
+    const shouldDisconnect = await confirm('Disconnect from current sandbox?', false, state);
+    if (!shouldDisconnect) {
       logWarning('Keeping current sandbox. Connection cancelled.');
       return;
     }
@@ -572,6 +626,190 @@ export async function connectToSandbox(state: WorkbenchState, sandboxUrl: string
 }
 
 /**
+ * Local daemon config structure (from ~/.compute/config.json)
+ */
+interface LocalConfig {
+  access_token: string;
+  main_subdomain: string;
+  auth_enabled: boolean;
+  sandboxes: Array<{
+    subdomain: string;
+    directory: string;
+    is_main: boolean;
+    created_at: string;
+  }>;
+}
+
+/**
+ * Read local daemon config from ~/.compute/config.json
+ */
+async function readLocalConfig(): Promise<LocalConfig | null> {
+  const os = await import('os');
+  const fs = await import('fs/promises');
+  const path = await import('path');
+  
+  const configPath = path.join(os.homedir(), '.compute', 'config.json');
+  
+  try {
+    const content = await fs.readFile(configPath, 'utf-8');
+    return JSON.parse(content) as LocalConfig;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if local daemon is running
+ */
+export async function isLocalDaemonRunning(): Promise<boolean> {
+  const os = await import('os');
+  const fs = await import('fs/promises');
+  const path = await import('path');
+  
+  const pidPath = path.join(os.homedir(), '.compute', 'compute.pid');
+  
+  try {
+    const pidContent = await fs.readFile(pidPath, 'utf-8');
+    const pid = parseInt(pidContent.trim(), 10);
+    
+    // Check if process is running
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * List local sandboxes
+ */
+export async function listLocalSandboxes(): Promise<void> {
+  const config = await readLocalConfig();
+  
+  if (!config) {
+    logError('No local daemon config found at ~/.compute/config.json');
+    console.log(c.dim('Run "compute start" to start the local daemon'));
+    return;
+  }
+  
+  const isRunning = await isLocalDaemonRunning();
+  
+  console.log('');
+  console.log(c.bold('Local Daemon Status:'), isRunning ? c.green('Running') : c.red('Stopped'));
+  console.log('');
+  
+  if (!config.sandboxes || config.sandboxes.length === 0) {
+    console.log(c.dim('No sandboxes found'));
+    return;
+  }
+  
+  console.log(c.bold('Sandboxes:'));
+  for (const sandbox of config.sandboxes) {
+    const isMain = sandbox.subdomain === config.main_subdomain;
+    const mainLabel = isMain ? c.green(' (main)') : '';
+    console.log(`  ${c.cyan(sandbox.subdomain)}${mainLabel}`);
+    console.log(c.dim(`    https://${sandbox.subdomain}.sandbox.computesdk.com`));
+  }
+  console.log('');
+  console.log(c.dim(`Connect with: local ${config.main_subdomain}`));
+  console.log('');
+}
+
+/**
+ * Connect to a local daemon sandbox
+ */
+export async function connectToLocal(state: WorkbenchState, subdomain?: string): Promise<void> {
+  const config = await readLocalConfig();
+  
+  if (!config) {
+    logError('No local daemon config found at ~/.compute/config.json');
+    console.log(c.dim('Run "compute start" to start the local daemon'));
+    return;
+  }
+  
+  const isRunning = await isLocalDaemonRunning();
+  if (!isRunning) {
+    logError('Local daemon is not running');
+    console.log(c.dim('Run "compute start" to start the local daemon'));
+    return;
+  }
+  
+  // Use provided subdomain or default to main
+  const targetSubdomain = subdomain || config.main_subdomain;
+  
+  // Verify sandbox exists
+  const sandbox = config.sandboxes.find(s => s.subdomain === targetSubdomain);
+  if (!sandbox) {
+    logError(`Sandbox "${targetSubdomain}" not found`);
+    console.log(c.dim('Run "local list" to see available sandboxes'));
+    return;
+  }
+  
+  const sandboxUrl = `https://${targetSubdomain}.sandbox.computesdk.com`;
+  const token = config.access_token;
+  
+  // Disconnect from current sandbox if exists
+  if (hasSandbox(state)) {
+    const shouldDisconnect = await confirm('Disconnect from current sandbox?', false, state);
+    if (!shouldDisconnect) {
+      logWarning('Keeping current sandbox. Connection cancelled.');
+      return;
+    }
+    clearSandbox(state);
+  }
+  
+  const spinner = new Spinner(`Connecting to local sandbox ${targetSubdomain}...`).start();
+  const startTime = Date.now();
+  
+  try {
+    const { Sandbox } = await import('computesdk');
+    
+    // Dynamically import WebSocket for Node.js environment
+    let WebSocket: any;
+    try {
+      // @ts-expect-error - ws is an optional peer dependency
+      const wsModule = await import('ws');
+      WebSocket = wsModule.default;
+    } catch {
+      spinner.fail('Failed to import "ws" module');
+      logError('Please install ws: pnpm add ws');
+      throw new Error('Missing "ws" dependency');
+    }
+    
+    const sandboxInstance = new Sandbox({
+      sandboxUrl,
+      sandboxId: targetSubdomain,
+      provider: 'local',
+      token,
+      WebSocket: WebSocket as typeof globalThis.WebSocket,
+    });
+    
+    // Test the connection
+    const info = await sandboxInstance.getInfo();
+    const duration = Date.now() - startTime;
+    
+    setSandbox(state, sandboxInstance, 'local');
+    
+    // Enable verbose mode for local provider (useful for debugging)
+    state.verbose = true;
+    
+    spinner.succeed(`Connected to local sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
+    console.log(c.dim(`Sandbox: ${targetSubdomain}`));
+    console.log(c.dim(`URL: ${sandboxUrl}`));
+    console.log(c.dim(`Verbose mode: enabled (for debugging)`));
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    spinner.fail(`Failed to connect ${c.dim(`(${formatDuration(duration)})`)}`);
+    
+    if (error instanceof Error) {
+      logError(`Error: ${error.message}`);
+    }
+    
+    throw error;
+  }
+}
+
+/**
  * Cleanup on exit
  */
 export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Promise<void> {
@@ -592,7 +830,7 @@ export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Pr
     return;
   }
   
-  const shouldDestroy = await confirm('Destroy active sandbox?');
+  const shouldDestroy = await confirm('Destroy active sandbox?', false, state);
   
   if (shouldDestroy) {
     await destroySandbox(state);
