@@ -9,24 +9,85 @@ Methods available for interacting with a compute sandbox.
 
 ---
 
-## runCommand()
+## runCommand(command, options?)
 
-Execute shell commands directly:
+Execute shell commands in the sandbox with full control over execution environment.
+
+**Parameters:**
+
+- `command` (string, required): The shell command to execute as a single string
+- `options` (RunCommandOptions, optional): Execution options
+  - `cwd` (string, optional): Working directory for command execution
+  - `env` (Record<string, string>, optional): Environment variables to set
+  - `timeout` (number, optional): Command timeout in milliseconds
+  - `background` (boolean, optional): Run command in background without waiting for completion
+
+**Returns:** `Promise<CommandResult>` - Command execution result with output streams, exit code, and duration
+
+**CommandResult interface:**
+- `stdout` (string): Standard output from the command
+- `stderr` (string): Standard error output from the command
+- `exitCode` (number): Exit code (0 for success, non-zero for errors)
+- `durationMs` (number): Command execution duration in milliseconds
+
+**Examples:**
 
 ```typescript
 // Simple command execution
-const result = await sandbox.runCommand('ls', ['-la'])
-console.log(result.stdout)
+const result = await sandbox.runCommand('ls -la');
+console.log(result.stdout);      // Directory listing
+console.log(result.exitCode);    // 0
+console.log(result.durationMs);  // 45
 
-// Command with arguments
-const result = await sandbox.runCommand('python', ['-c', 'print("Hello")'])
+// Command with working directory
+const result = await sandbox.runCommand('npm install', {
+  cwd: '/app'
+});
+console.log(result.stdout);
 
-// With options
-const result = await sandbox.runCommand('npm', ['install'], {
-  cwd: '/app',
-  env: { NODE_ENV: 'development' }
-})
+// Command with environment variables
+const result = await sandbox.runCommand('node server.js', {
+  env: { 
+    NODE_ENV: 'production',
+    PORT: '3000'
+  }
+});
+
+// Background command execution
+const result = await sandbox.runCommand('npm run dev', {
+  background: true
+});
+// Command runs in background, result returns immediately
+
+// Combined options
+const result = await sandbox.runCommand('python script.py', {
+  cwd: '/app/scripts',
+  env: { DEBUG: 'true' },
+  timeout: 30000
+});
+
+// Error handling with exit codes
+const result = await sandbox.runCommand('grep pattern file.txt');
+if (result.exitCode !== 0) {
+  console.error('Command failed:', result.stderr);
+} else {
+  console.log('Match found:', result.stdout);
+}
+
+// Multi-command execution (use shell operators)
+const result = await sandbox.runCommand('cd /app && npm install && npm test');
+
+// Command with shell pipes and redirects
+const result = await sandbox.runCommand('cat data.txt | grep "error" | wc -l');
 ```
+
+**Notes:**
+- Commands are executed as a single string, not as separate command + arguments arrays
+- Use shell operators (`&&`, `||`, `|`, etc.) within the command string for complex operations
+- Non-zero exit codes indicate command failure but do not throw errors - check `exitCode` in the result
+- Background commands return immediately with `exitCode: 0` without waiting for completion
+- The command runs in a shell context, so all shell features (pipes, redirects, etc.) are available
+- Available on all sandbox instances regardless of provider
 
 <br/>
 <br/>
@@ -40,7 +101,7 @@ Execute code in the sandbox with automatic language detection or explicit runtim
 **Parameters:**
 
 - `code` (string, required): The code to execute
-- `language` ('node' | 'python', optional): Runtime environment for execution. Auto-detects if not specified.
+- `language` ('node' | 'python' | 'deno' | 'bun', optional): Runtime environment for execution. Auto-detects if not specified.
 
 **Returns:** `Promise<CodeResult>` - Execution result with output, exit code, and detected language
 

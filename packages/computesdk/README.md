@@ -40,8 +40,11 @@ For more control, use `setConfig()` to explicitly configure the provider:
 import { compute } from 'computesdk';
 
 compute.setConfig({
-  provider: 'e2b',
-  e2b: { apiKey: 'your_api_key' }
+  provider: 'your-provider',
+  apiKey: process.env.COMPUTESDK_API_KEY,
+  'your-provider': {
+    apiKey: process.env.YOUR_PROVIDER_API_KEY
+  }
 });
 
 const sandbox = await compute.sandbox.create();
@@ -84,8 +87,11 @@ Configure the gateway with explicit provider settings.
 
 ```typescript
 compute.setConfig({
-  provider: 'e2b',
-  e2b: { apiKey: 'your_api_key' }
+  provider: 'your-provider',
+  apiKey: process.env.COMPUTESDK_API_KEY,
+  'your-provider': {
+    apiKey: process.env.YOUR_PROVIDER_API_KEY
+  }
 });
 ```
 
@@ -95,6 +101,7 @@ compute.setConfig({
 // E2B
 compute.setConfig({
   provider: 'e2b',
+  apiKey: process.env.COMPUTESDK_API_KEY,
   e2b: { 
     apiKey: 'e2b_xxx',
     templateId: 'optional_template' 
@@ -104,6 +111,7 @@ compute.setConfig({
 // Modal
 compute.setConfig({
   provider: 'modal',
+  apiKey: process.env.COMPUTESDK_API_KEY,
   modal: { 
     tokenId: 'ak-xxx',
     tokenSecret: 'as-xxx'
@@ -113,6 +121,7 @@ compute.setConfig({
 // Railway
 compute.setConfig({
   provider: 'railway',
+  apiKey: process.env.COMPUTESDK_API_KEY,
   railway: { 
     apiToken: 'your_token',
     projectId: 'project_id',
@@ -123,12 +132,14 @@ compute.setConfig({
 // Daytona
 compute.setConfig({
   provider: 'daytona',
+  apiKey: process.env.COMPUTESDK_API_KEY,
   daytona: { apiKey: 'your_api_key' }
 });
 
 // Vercel
 compute.setConfig({
   provider: 'vercel',
+  apiKey: process.env.COMPUTESDK_API_KEY,
   vercel: { 
     token: 'your_token',
     teamId: 'team_xxx',
