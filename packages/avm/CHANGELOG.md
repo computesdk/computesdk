@@ -1,5 +1,11 @@
 # @computesdk/avm
 
+## 0.1.10
+
+### Patch Changes
+
+- computesdk@1.10.3
+
 ## 0.1.9
 
 ### Patch Changes

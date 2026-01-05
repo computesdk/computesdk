@@ -1,5 +1,12 @@
 # computesdk
 
+## 1.10.3
+
+### Patch Changes
+
+- Updated dependencies [6b0c820]
+  - @computesdk/cmd@0.4.0
+
 ## 1.10.2
 
 ### Patch Changes
