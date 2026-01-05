@@ -148,6 +148,11 @@ jobs:
     needs: test
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
 
+    strategy:
+      matrix:
+        provider: [e2b, vercel, daytona, modal]
+      fail-fast: false
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -168,14 +173,17 @@ jobs:
     - name: Build packages
       run: pnpm build
         
-    - name: Run ComputeSDK Integration Tests
+    - name: Run Provider Compatibility Tests (${{ matrix.provider }})
       env:
-        E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+        TEST_PROVIDER: ${{ matrix.provider }}
         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+        E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+        E2B_TEMPLATE_ID: ${{ secrets.E2B_TEMPLATE_ID }}
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       run: |
-        if [ -n "$E2B_API_KEY" ] && [ -n "$COMPUTESDK_API_KEY" ]; then
-          echo "Running ComputeSDK integration tests..."
-          pnpm --filter computesdk test e2b-compatibility
-        else
-          echo "Skipping ComputeSDK integration tests - missing E2B_API_KEY or COMPUTESDK_API_KEY"
-        fi
+        echo "Running provider compatibility tests for $TEST_PROVIDER..."
+        pnpm --filter computesdk test provider-compatibility

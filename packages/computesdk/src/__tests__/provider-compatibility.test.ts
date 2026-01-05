@@ -1,14 +1,15 @@
 /**
- * E2B Compatibility Test
+ * Provider Compatibility Test
  *
- * Tests ALL E2B usage patterns to validate
- * ComputeSDK can fully replace E2B SDK.
+ * Tests all sandbox patterns to validate ComputeSDK works
+ * consistently across different providers.
  *
- * Run: pnpm test e2b-compatibility
+ * Run: TEST_PROVIDER=e2b pnpm test provider-compatibility
  *
  * Requirements:
- * - E2B_API_KEY environment variable
+ * - TEST_PROVIDER environment variable (e2b, vercel, daytona, modal)
  * - COMPUTESDK_API_KEY environment variable
+ * - Provider-specific keys (E2B_API_KEY, VERCEL_TOKEN, etc.)
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -16,20 +17,94 @@ import { compute } from '../index';
 import type { Sandbox } from '../client';
 import type { TerminalInstance } from '../client/terminal';
 
-const hasRequiredKeys =
-  !!process.env.E2B_API_KEY && !!process.env.COMPUTESDK_API_KEY;
+// Determine which provider to test
+const testProvider = process.env.TEST_PROVIDER || 'e2b';
 
-describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
+// Check if we have the required keys for the selected provider
+function hasRequiredKeys(): boolean {
+  if (!process.env.COMPUTESDK_API_KEY) return false;
+  
+  switch (testProvider) {
+    case 'e2b':
+      return !!process.env.E2B_API_KEY;
+    case 'vercel':
+      return !!process.env.VERCEL_TOKEN && !!process.env.VERCEL_TEAM_ID;
+    case 'daytona':
+      return !!process.env.DAYTONA_API_KEY;
+    case 'modal':
+      return !!process.env.MODAL_TOKEN_ID && !!process.env.MODAL_TOKEN_SECRET;
+    default:
+      return false;
+  }
+}
+
+// Get provider config based on TEST_PROVIDER
+function getProviderConfig(): Record<string, unknown> {
+  const baseConfig = {
+    provider: testProvider,
+    computesdkApiKey: process.env.COMPUTESDK_API_KEY!,
+  };
+  
+  switch (testProvider) {
+    case 'e2b':
+      return {
+        ...baseConfig,
+        e2b: { 
+          apiKey: process.env.E2B_API_KEY!, 
+          templateId: process.env.E2B_TEMPLATE_ID || 'base',
+        },
+      };
+    case 'vercel':
+      return {
+        ...baseConfig,
+        vercel: { 
+          token: process.env.VERCEL_TOKEN!,
+          teamId: process.env.VERCEL_TEAM_ID!,
+        },
+      };
+    case 'daytona':
+      return {
+        ...baseConfig,
+        daytona: { 
+          apiKey: process.env.DAYTONA_API_KEY!,
+        },
+      };
+    case 'modal':
+      return {
+        ...baseConfig,
+        modal: { 
+          tokenId: process.env.MODAL_TOKEN_ID!,
+          tokenSecret: process.env.MODAL_TOKEN_SECRET!,
+        },
+      };
+    default:
+      throw new Error(`Unknown provider: ${testProvider}`);
+  }
+}
+
+// Get create options (some providers need templateId, others don't)
+function getCreateOptions(): Record<string, unknown> {
+  const baseOptions = {
+    envs: { TEST_VAR: 'test-value' },
+    metadata: { devServerId: 'test-123' },
+  };
+  
+  if (testProvider === 'e2b') {
+    return {
+      ...baseOptions,
+      templateId: process.env.E2B_TEMPLATE_ID || 'base',
+    };
+  }
+  
+  return baseOptions;
+}
+
+describe.skipIf(!hasRequiredKeys())(`Provider Compatibility (${testProvider})`, () => {
   let sandbox: Sandbox;
   let sandboxId: string;
-  const templateId = process.env.E2B_TEMPLATE_ID || 'base';
 
   beforeAll(async () => {
-    compute.setConfig({
-      provider: 'e2b',
-      computesdkApiKey: process.env.COMPUTESDK_API_KEY!,
-      e2b: { apiKey: process.env.E2B_API_KEY!, templateId },
-    });
+    compute.setConfig(getProviderConfig() as any);
   });
 
   afterAll(async () => {
@@ -43,18 +118,13 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
   });
 
   // ==========================================================================
-  // SANDBOX LIFECYCLE (E2BSandbox.ts patterns)
+  // SANDBOX LIFECYCLE
   // ==========================================================================
 
   describe('Sandbox Lifecycle', () => {
-    it('Sandbox.create(templateId, { domain, envs, metadata })', async () => {
-      // E2B: E2BInstance.create(e2bTemplateId, { metadata, domain: 'e2b.dev', envs })
-      // ComputeSDK: compute.sandbox.create({ templateId, envs, metadata })
-      sandbox = await compute.sandbox.create({
-        templateId,
-        envs: { TEST_VAR: 'test-value' },
-        metadata: { devServerId: 'test-123' },
-      });
+    it('Sandbox.create({ envs, metadata })', async () => {
+      // ComputeSDK: compute.sandbox.create({ envs, metadata })
+      sandbox = await compute.sandbox.create(getCreateOptions() as any);
 
       expect(sandbox).toBeDefined();
       expect(sandbox.sandboxId).toBeDefined();
@@ -367,11 +437,10 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
 
   describe('Cleanup', () => {
     it('Sandbox.kill(sandboxId)', async () => {
-      // E2B: await E2BInstance.kill(sandboxId)
       // ComputeSDK: await compute.sandbox.destroy(sandboxId)
 
       // Create a temporary sandbox to destroy
-      const tempSandbox = await compute.sandbox.create({ templateId });
+      const tempSandbox = await compute.sandbox.create(getCreateOptions() as any);
       const tempId = tempSandbox.sandboxId;
 
       await compute.sandbox.destroy(tempId);
@@ -384,43 +453,38 @@ describe.skipIf(!hasRequiredKeys)('E2B Compatibility', () => {
 });
 
 /**
- * API MAPPING SUMMARY
+ * ComputeSDK API Summary
  *
  * SANDBOX LIFECYCLE:
- *   E2B                                    ComputeSDK
- *   ----                                   ----------
- *   Sandbox.create(template, opts)      -> compute.sandbox.create({ templateId, envs, metadata })
- *   Sandbox.connect(id, { domain })     -> compute.sandbox.getById(id)
- *   Sandbox.kill(id)                    -> compute.sandbox.destroy(id)
- *   sandbox.sandboxId                   -> sandbox.sandboxId
- *   sandbox.setTimeout(ms)              -> compute.sandbox.extendTimeout(id, { duration })
+ *   compute.sandbox.create({ envs, metadata })
+ *   compute.sandbox.getById(id)
+ *   compute.sandbox.destroy(id)
+ *   sandbox.sandboxId
  *
  * FILE OPERATIONS:
- *   E2B                                    ComputeSDK
- *   ----                                   ----------
- *   sandbox.files.write(path, content)  -> sandbox.filesystem.writeFile(path, content)
- *   sandbox.files.write([{path, data}]) -> sandbox.file.batchWrite([{path, operation, content}])
- *   sandbox.files.read(path)            -> sandbox.filesystem.readFile(path)
- *   sandbox.files.exists(path)          -> sandbox.filesystem.exists(path)
- *   sandbox.files.remove(path)          -> sandbox.filesystem.remove(path)
- *   sandbox.files.list(path)            -> sandbox.filesystem.readdir(path)
+ *   sandbox.filesystem.writeFile(path, content)
+ *   sandbox.filesystem.readFile(path)
+ *   sandbox.filesystem.exists(path)
+ *   sandbox.filesystem.remove(path)
+ *   sandbox.filesystem.readdir(path)
+ *   sandbox.filesystem.mkdir(path)
+ *   sandbox.file.batchWrite([{path, operation, content}])
  *
  * COMMAND EXECUTION:
- *   E2B                                    ComputeSDK
- *   ----                                   ----------
- *   sandbox.commands.run(cmd, opts)     -> sandbox.runCommand(cmd, opts)
- *   result.stdout, stderr, exitCode     -> result.stdout, stderr, exitCode
+ *   sandbox.runCommand(cmd, { cwd, env, background })
+ *   result.stdout, result.stderr, result.exitCode
  *
  * PTY TERMINAL:
- *   E2B                                    ComputeSDK
- *   ----                                   ----------
- *   sandbox.pty.create({ onData })      -> sandbox.terminal.create({ pty: true })
- *                                          terminal.on('output', callback)
- *   sandbox.pty.sendInput(pid, data)    -> terminal.write(input)
- *   sandbox.pty.kill(pid)               -> terminal.destroy()
- *   shell.pid                           -> terminal.id
+ *   sandbox.terminal.create({ pty: true })
+ *   terminal.on('output', callback)
+ *   terminal.write(input)
+ *   terminal.destroy()
+ *   terminal.id, terminal.status
+ *
+ * EXEC TERMINAL:
+ *   sandbox.terminal.create({ pty: false })
+ *   terminal.execute(command)
  *
  * URL GENERATION:
- *   E2B: https://${port}-${sandboxId}.e2b.dev
- *   ComputeSDK: await sandbox.getUrl({ port })
+ *   sandbox.getUrl({ port })
  */
