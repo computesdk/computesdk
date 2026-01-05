@@ -6,8 +6,6 @@
  */
 
 import { GATEWAY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
-import { gateway as gatewayProvider } from './providers/gateway';
-import type { Provider } from './types';
 
 /**
  * Check if gateway mode is enabled
@@ -182,12 +180,22 @@ export function getProviderHeaders(provider: string): Record<string, string> {
 }
 
 /**
+ * Gateway configuration object
+ */
+export interface GatewayConfig {
+  apiKey: string;
+  gatewayUrl: string;
+  provider: string;
+  providerHeaders: Record<string, string>;
+}
+
+/**
  * Main auto-configuration function
- * Returns configured HTTP provider or null if auto-detection not possible
+ * Returns gateway configuration or null if auto-detection not possible
  *
  * @throws Error if COMPUTESDK_API_KEY is set but no provider detected
  */
-export function autoConfigureCompute(): Provider | null {
+export function autoConfigureCompute(): GatewayConfig | null {
   // Only auto-configure in gateway mode
   if (!isGatewayModeEnabled()) {
     return null;
@@ -256,10 +264,12 @@ export function autoConfigureCompute(): Provider | null {
     console.log(`🔑 Provider headers:`, Object.keys(providerHeaders).join(', '));
   }
 
-  return gatewayProvider({
-    gatewayUrl,
+  const config: GatewayConfig = {
     apiKey: computesdkApiKey,
+    gatewayUrl,
     provider,
     providerHeaders
-  });
+  };
+  
+  return config;
 }

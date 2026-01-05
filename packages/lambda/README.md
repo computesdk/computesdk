@@ -10,6 +10,28 @@ npm install @computesdk/lambda
 
 ## Usage
 
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
+
+```typescript
+import { compute } from 'computesdk';
+
+// Auto-detects Lambda from LAMBDA_API_KEY environment variable
+const sandbox = await compute.sandbox.create();
+console.log(`Created sandbox: ${sandbox.id}`);
+
+// List all sandboxes
+const sandboxes = await compute.sandbox.list();
+
+// Destroy the sandbox
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
+
 ```typescript
 import { lambda } from '@computesdk/lambda';
 
@@ -21,18 +43,16 @@ const compute = lambda({
 });
 
 // Create a new sandbox
-const { sandbox, sandboxId } = await compute.sandbox.create({
+const sandbox = await compute.sandbox.create({
   runtime: 'node' // or 'python'
 });
+console.log(`Created sandbox: ${sandbox.id}`);
 
 // List all sandboxes
 const sandboxes = await compute.sandbox.list();
 
-// Get a specific sandbox
-const retrieved = await compute.sandbox.getById(sandboxId);
-
-// Destroy a sandbox
-await compute.sandbox.destroy(sandboxId);
+// Destroy the sandbox
+await sandbox.destroy();
 ```
 
 ## Configuration

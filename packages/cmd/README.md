@@ -25,39 +25,44 @@ await sandbox.runCommand(npm.install('express'));
 await sandbox.runCommand(node('server.js'));
 ```
 
-### Shell Wrapping with `cmd()`
+### Using with runCommand Options
 
-Use `cmd()` to wrap commands with `cwd` or `background` options:
+Modern ComputeSDK sandboxes handle `cwd`, `env`, and `background` options directly:
 
 ```typescript
-import { cmd, npm, node } from '@computesdk/cmd';
+import { npm, node } from '@computesdk/cmd';
 
-// Run in a specific directory
-cmd(npm.install(), { cwd: '/app' })
-// => ['sh', '-c', 'cd "/app" && npm install']
-
-// Run in background
-cmd(node('server.js'), { background: true })
-// => ['sh', '-c', 'nohup node server.js > /dev/null 2>&1 &']
-
-// Both options
-cmd(npm.run('dev'), { cwd: '/app', background: true })
-// => ['sh', '-c', 'nohup cd "/app" && npm run dev > /dev/null 2>&1 &']
+// Let the sandbox handle execution options
+await sandbox.runCommand('npm install', { cwd: '/app' })
+await sandbox.runCommand('node server.js', { background: true })
+await sandbox.runCommand('npm run dev', { 
+  cwd: '/app', 
+  background: true,
+  env: { NODE_ENV: 'production' }
+})
 ```
 
-### Shell-Specific Wrappers
+### Shell Wrapping (Advanced)
 
-Use `sh`, `bash`, or `zsh` for explicit shell selection:
+For cases where you need explicit shell wrapping, use `shell()`, `sh()`, `bash()`, or `zsh()`:
 
 ```typescript
-import { bash, zsh, npm } from '@computesdk/cmd';
+import { shell, bash, zsh, npm } from '@computesdk/cmd';
 
+// Default shell wrapper (sh)
+shell(npm.install(), { cwd: '/app' })
+// => ['sh', '-c', 'cd "/app" && npm install']
+
+// Bash-specific
 bash(npm.install(), { cwd: '/app' })
 // => ['bash', '-c', 'cd "/app" && npm install']
 
+// Zsh with background
 zsh(npm.run('dev'), { background: true })
 // => ['zsh', '-c', 'nohup npm run dev > /dev/null 2>&1 &']
 ```
+
+**Note:** Shell wrapping is rarely needed - prefer using `runCommand()` options instead.
 
 ## Available Commands
 

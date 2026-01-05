@@ -6,8 +6,9 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Codesandbox-specific configuration options
@@ -26,7 +27,7 @@ export interface CodesandboxConfig {
 /**
  * Create a Codesandbox provider instance using the factory pattern
  */
-export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>({
+export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig>({
   name: 'codesandbox',
   methods: {
     sandbox: {
@@ -202,21 +203,33 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
         }
       },
 
-      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: CodesandboxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
           // Connect to the sandbox client using sandbox.connect()
           const client = await sandbox.connect();
 
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using CodeSandbox client.commands.run()
           const output = await client.commands.run(fullCommand);
@@ -287,10 +300,9 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
 
           return entries.map((entry: any) => ({
             name: entry.name,
-            path: `${path}/${entry.name}`.replace(/\/+/g, '/'),
-            isDirectory: entry.isDirectory || false,
+            type: entry.isDirectory ? 'directory' as const : 'file' as const,
             size: entry.size || 0,
-            lastModified: entry.lastModified ? new Date(entry.lastModified) : new Date()
+            modified: entry.lastModified ? new Date(entry.lastModified) : new Date()
           }));
         },
 

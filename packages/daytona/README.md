@@ -8,43 +8,42 @@ Daytona provider for ComputeSDK - Execute code in Daytona development workspaces
 npm install @computesdk/daytona
 ```
 
-## Usage
+## Quick Start
 
-### With ComputeSDK
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { daytona } from '@computesdk/daytona';
+import { compute } from 'computesdk';
 
-// Set as default provider
-const compute = createCompute({ 
-  provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) 
-});
-
-// Create sandbox
+// Auto-detects Daytona from DAYTONA_API_KEY environment variable
 const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Daytona!")');
 console.log(result.stdout); // "Hello from Daytona!"
 
-// Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
-### Direct Usage
+### Direct Mode
+
+For direct SDK usage without the gateway:
 
 ```typescript
 import { daytona } from '@computesdk/daytona';
 
-// Create provider
-const provider = daytona({ 
-  apiKey: 'your-api-key',
-  runtime: 'python' 
+const compute = daytona({ 
+  apiKey: process.env.DAYTONA_API_KEY
 });
 
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
+const sandbox = await compute.sandbox.create();
+
+const result = await sandbox.runCode('print("Hello from Daytona!")');
+console.log(result.stdout);
+
+await sandbox.destroy();
 ```
 
 ## Configuration
@@ -165,7 +164,12 @@ The provider automatically detects the runtime based on code patterns:
 ## Error Handling
 
 ```typescript
+import { daytona } from '@computesdk/daytona';
+
 try {
+  const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
+  const sandbox = await compute.sandbox.create();
+  
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
@@ -178,27 +182,16 @@ try {
 }
 ```
 
-## Web Framework Integration
-
-Use with web frameworks via the request handler:
-
-```typescript
-import { handleComputeRequest } from 'computesdk';
-import { daytona } from '@computesdk/daytona';
-
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: daytona({ apiKey: process.env.DAYTONA_API_KEY })
-  });
-}
-```
-
 ## Examples
 
 ### Data Processing
 
 ```typescript
+import { daytona } from '@computesdk/daytona';
+
+const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
+const sandbox = await compute.sandbox.create();
+
 const result = await sandbox.runCode(`
 import json
 
@@ -215,11 +208,18 @@ print(json.dumps(result))
 
 const output = JSON.parse(result.stdout);
 console.log(output); // { sum: 15, average: 3, max: 5 }
+
+await sandbox.destroy();
 ```
 
 ### File Processing
 
 ```typescript
+import { daytona } from '@computesdk/daytona';
+
+const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
+const sandbox = await compute.sandbox.create();
+
 // Create data file
 await sandbox.filesystem.writeFile('/workspace/data.json', 
   JSON.stringify({ users: ['Alice', 'Bob', 'Charlie'] })
@@ -245,6 +245,8 @@ with open('/workspace/result.json', 'w') as f:
 // Read result
 const resultData = await sandbox.filesystem.readFile('/workspace/result.json');
 console.log(JSON.parse(resultData));
+
+await sandbox.destroy();
 ```
 
 ## License

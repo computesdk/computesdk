@@ -1,5 +1,4 @@
 import { docker } from '@computesdk/docker'
-import { createCompute } from 'computesdk'
 import { config } from 'dotenv'
 import { NODEJS_SNIPPETS, PYTHON_SNIPPETS } from './constants/code-snippets'
 config() // Load env (e.g., DOCKER_HOST / TLS vars)
@@ -7,8 +6,10 @@ config() // Load env (e.g., DOCKER_HOST / TLS vars)
 /**
  * Docker Sandbox Provider Example
  *
- * This example shows how to use the Docker provider for **Node.js** and **Python**
+ * This example shows how to use the Docker provider in **direct mode** for **Node.js** and **Python**
  * code execution — plus a small sample of filesystem operations (supported).
+ *
+ * Note: Docker provider uses direct mode since it runs locally and doesn't go through the gateway.
  *
  * Prerequisites:
  * - Docker daemon running and accessible (Docker Desktop or dockerd)
@@ -20,8 +21,8 @@ config() // Load env (e.g., DOCKER_HOST / TLS vars)
  * - DOCKER_CERT_PATH
  */
 async function main() {
-  // Configure ComputeSDK with Docker as the default provider.
-  const provider = docker({
+  // Direct mode: use Docker provider directly (no gateway needed for local Docker)
+  const compute = docker({
     // Default image hints; we still set explicit images per sandbox below.
     image: { name: 'python:3.11-slim', pullPolicy: 'ifNotPresent' },
     container: {
@@ -30,13 +31,12 @@ async function main() {
     },
   })
 
-  const compute = createCompute({ defaultProvider: provider })
-
   let py: any | null = null
   let node: any | null = null
 
   try {
-    // Python sandbox 
+    // Python sandbox
+    // Note: Docker provider (direct mode) supports runtime parameter to select the container image
     py = await compute.sandbox.create({
       runtime: 'python',
       image: { name: 'python:3.11-slim' },
@@ -51,10 +51,9 @@ async function main() {
 
     const pyResult = await py.runCode(pythonCode, 'python')
     console.log('\n--- Python Execution ---')
-    console.log('stdout:\n' + (pyResult.stdout || '∅'))
-    if (pyResult.stderr) console.error('stderr:\n' + pyResult.stderr)
-    console.log('Execution time:', pyResult.executionTime, 'ms')
+    console.log('Output:\n' + (pyResult.output || '∅'))
     console.log('Exit code:', pyResult.exitCode)
+    console.log('Language:', pyResult.language)
 
     // Filesystem (supported on Docker)
     console.log('\nFilesystem Operations (Python sandbox)')
@@ -67,7 +66,8 @@ async function main() {
     const contents = await py.filesystem.readFile('/workspace/demo/out.txt')
     console.log('readFile ->', contents)
 
-    // Node.js sandbox 
+    // Node.js sandbox
+    // Note: Docker provider (direct mode) supports runtime parameter to select the container image
     node = await compute.sandbox.create({
       runtime: 'node',
       image: { name: 'node:20-alpine' },
@@ -81,10 +81,9 @@ async function main() {
 
     const nodeResult = await node.runCode(nodeCode, 'node')
     console.log('\nNode.js Execution')
-    console.log('stdout:\n' + (nodeResult.stdout || '∅'))
-    if (nodeResult.stderr) console.error('stderr:\n' + nodeResult.stderr)
-    console.log('Execution time:', nodeResult.executionTime, 'ms')
+    console.log('Output:\n' + (nodeResult.output || '∅'))
     console.log('Exit code:', nodeResult.exitCode)
+    console.log('Language:', nodeResult.language)
 
     // Optional shell command
     const cmd = await node.runCommand('sh', ['-lc', 'echo runtime=$(node -v) && uname -a'])

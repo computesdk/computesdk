@@ -1,5 +1,336 @@
 # computesdk
 
+## 1.10.3
+
+### Patch Changes
+
+- Updated dependencies [6b0c820]
+  - @computesdk/cmd@0.4.0
+
+## 1.10.2
+
+### Patch Changes
+
+- 07e0953: Add setConfig() method, remove runtime parameter, UI package, and web framework examples
+
+  **Breaking Changes:**
+
+  - Removed `runtime` parameter from gateway's `CreateSandboxOptions` - runtime is determined by the provider, not specified at creation time
+  - Removed `handleComputeRequest` and related web framework integration exports (no longer needed)
+  - Removed `@computesdk/ui` package (built for pre-gateway architecture, will be redesigned for gateway)
+  - Removed web framework examples (Next.js, Nuxt, SvelteKit, Remix, Astro) - will be rebuilt for gateway architecture
+  - Use `sandbox.runCode(code, runtime)` to specify which runtime to use for execution
+
+  **New Features:**
+
+  - Added `compute.setConfig()` method for explicit configuration
+  - Updated error messages to reference `setConfig()` instead of callable pattern
+
+  **Two Ways to Use ComputeSDK:**
+
+  1. **Using ComputeSDK** (recommended):
+
+     - `import { compute } from 'computesdk'`
+     - Zero-config with environment variables or explicit `compute.setConfig()`
+     - Works with all providers through unified interface
+
+  2. **Using providers directly** (advanced):
+     - `import { e2b } from '@computesdk/e2b'`
+     - Use provider SDKs directly without ComputeSDK wrapper
+     - Useful for local providers (Docker) or provider-specific features
+
+  **Runtime Selection:**
+  Runtime is no longer specified at sandbox creation. Instead, specify it when executing code:
+
+  - `sandbox.runCode(pythonCode, 'python')` - Execute Python code
+  - `sandbox.runCode(nodeCode, 'node')` - Execute Node.js code
+
+  **Updated Examples:**
+  All provider examples now demonstrate **using ComputeSDK**:
+
+  - e2b-example.ts - Using ComputeSDK with E2B provider
+  - modal-example.ts - Using ComputeSDK with Modal provider
+  - daytona-example.ts - Using ComputeSDK with Daytona provider
+  - docker-example.ts - Using Docker provider directly (local, no gateway)
+  - runloop-example.ts - Using ComputeSDK with Runloop provider
+  - codesandbox-example.ts - Using ComputeSDK with CodeSandbox provider
+  - blaxel-example.ts - Using ComputeSDK with Blaxel provider
+  - vercel-example.ts - Using ComputeSDK with Vercel provider
+
+  **Example Usage:**
+
+  ```typescript
+  // Using ComputeSDK with setConfig (recommended)
+  import { compute } from "computesdk";
+  compute.setConfig({
+    provider: "e2b",
+    apiKey: "computesdk_xxx",
+    e2b: { apiKey: "e2b_xxx" },
+  });
+  const sandbox = await compute.sandbox.create();
+
+  // Using ComputeSDK with zero-config (auto-detection)
+  // Just set COMPUTESDK_API_KEY and E2B_API_KEY environment variables
+  import { compute } from "computesdk";
+  const sandbox = await compute.sandbox.create();
+
+  // Using Docker provider directly (for local providers)
+  import { docker } from "@computesdk/docker";
+  const compute = docker({ image: { name: "python:3.11" } });
+  const sandbox = await compute.sandbox.create();
+  ```
+
+## 1.10.1
+
+### Patch Changes
+
+- fa18a99: # Grandmother/Mother/Children Architecture Refactor
+
+  Major architectural refactoring that splits computesdk into a clean three-tier structure.
+
+  ## New Architecture
+
+  - **computesdk** (Grandmother) - User-facing SDK with gateway HTTP + Sandbox client
+  - **@computesdk/provider** (Mother) - Provider framework for building custom providers
+  - **Provider packages** (Children) - Import from @computesdk/provider
+
+  ## Changes to computesdk
+
+  - Removed `setConfig()`, `getConfig()`, `clearConfig()` methods from compute singleton
+  - Removed `createCompute()` (moved to @computesdk/provider)
+  - Gateway now uses direct HTTP implementation (not a provider)
+  - Merged @computesdk/client into computesdk package
+  - Renamed `sandbox.kill()` → `sandbox.destroy()`
+
+  ## New @computesdk/provider Package
+
+  Contains the provider framework extracted from computesdk:
+
+  - `defineProvider()` function for defining custom providers (renamed from `createProvider()`)
+  - `createCompute()` for direct mode
+  - Provider types and interfaces (Provider, ProviderSandbox, etc.)
+  - Universal Sandbox interface types
+
+  ### Why `defineProvider()`?
+
+  We renamed `createProvider()` to `defineProvider()` to match modern framework conventions and improve developer experience:
+
+  **Pattern Recognition:**
+
+  - Vite: `defineConfig()`
+  - Nuxt: `defineNuxtConfig()`
+  - Vue: `defineComponent()`
+
+  **Better Semantics:**
+
+  - `createProvider` implies creating an instance (it actually returns a factory definition)
+  - `defineProvider` means "define what this provider is" (accurate to what it does)
+  - More intuitive for developers familiar with modern frameworks
+
+  **Example:**
+
+  ```typescript
+  import { defineProvider } from "@computesdk/provider";
+
+  export const modal = defineProvider({
+    name: "modal",
+    defaultMode: "direct",
+    sandbox: {
+      /* ... */
+    },
+    methods: {
+      /* ... */
+    },
+  });
+  ```
+
+  ## Provider Package Updates
+
+  All 12 provider packages now:
+
+  - Import `defineProvider` from @computesdk/provider
+  - Import types from @computesdk/provider (which re-exports from computesdk)
+  - Have @computesdk/provider as a dependency
+
+  ## Migration Guide
+
+  ### Gateway Mode (unchanged)
+
+  ```typescript
+  import { compute } from "computesdk";
+  const sandbox = await compute.sandbox.create(); // Auto-detects from env
+  ```
+
+  ### Direct Mode (new location)
+
+  ```typescript
+  import { createCompute } from "@computesdk/provider";
+  import { e2b } from "@computesdk/e2b";
+
+  const compute = createCompute({ defaultProvider: e2b({ apiKey: "xxx" }) });
+  const sandbox = await compute.sandbox.create();
+  ```
+
+  ### Method Rename
+
+  ```typescript
+  // Before
+  await sandbox.kill();
+
+  // After
+  await sandbox.destroy();
+  ```
+
+## 1.10.0
+
+### Minor Changes
+
+- 38caad9: Update gateway provider to use plural `/v1/sandboxes` endpoints for REST consistency
+
+  - `POST /v1/sandboxes` - Create a new sandbox
+  - `GET /v1/sandboxes/:id` - Get sandbox info
+  - `DELETE /v1/sandboxes/:id` - Destroy sandbox
+  - `POST /v1/sandboxes/:id/extend` - Extend sandbox expiration
+  - `POST /v1/sandboxes/find-or-create` - Find or create by namespace/name
+  - `POST /v1/sandboxes/find` - Find by namespace/name
+
+  **Breaking Change:** Requires gateway version with plural endpoints (computesdk/edge#80)
+
+- f2d4273: Add named sandbox support, extend timeout functionality, and child sandbox REPL access
+
+  ## Named Sandboxes
+
+  Sandboxes can now be referenced by stable (namespace, name) identifiers instead of just provider-generated UUIDs.
+
+  **New Methods:**
+
+  - `compute.sandbox.findOrCreate({ name, namespace?, timeout? })` - Find existing or create new sandbox by (namespace, name)
+  - `compute.sandbox.find({ name, namespace? })` - Find existing sandbox without creating
+
+  **Example:**
+
+  ```typescript
+  // First call - creates new sandbox
+  const sandbox1 = await compute.sandbox.findOrCreate({
+    name: "my-app",
+    namespace: "user-123",
+  });
+
+  // Later call - returns same sandbox
+  const sandbox2 = await compute.sandbox.findOrCreate({
+    name: "my-app",
+    namespace: "user-123",
+  });
+  // sandbox1.sandboxId === sandbox2.sandboxId
+  ```
+
+  **Features:**
+
+  - Namespace-based isolation (different namespaces = different sandboxes)
+  - Default namespace of "default" when not specified
+  - Automatic stale mapping cleanup
+  - Works with gateway provider
+
+  ## Extend Timeout
+
+  You can now extend the timeout/expiration of an existing sandbox to keep it alive longer:
+
+  **New Method:**
+
+  - `compute.sandbox.extendTimeout(sandboxId, options?)` - Extend sandbox timeout
+
+  **Example:**
+
+  ```typescript
+  // Extend timeout by default 15 minutes
+  await compute.sandbox.extendTimeout("sandbox-123");
+
+  // Extend timeout by custom duration (30 minutes)
+  await compute.sandbox.extendTimeout("sandbox-123", {
+    duration: 30 * 60 * 1000,
+  });
+
+  // Useful with named sandboxes
+  const sandbox = await compute.sandbox.findOrCreate({
+    name: "long-running-task",
+    namespace: "user-alice",
+  });
+
+  // Extend timeout before it expires
+  await compute.sandbox.extendTimeout(sandbox.sandboxId, {
+    duration: 60 * 60 * 1000, // 1 hour
+  });
+  ```
+
+  **Features:**
+
+  - Default extension duration is 15 minutes (900000ms)
+  - Only available with gateway provider
+  - Gateway endpoint: `POST /v1/sandbox/:id/extend`
+
+  ## Named Sandboxes in Workbench
+
+  The workbench REPL now supports creating and managing named sandboxes:
+
+  **New REPL Methods:**
+
+  - `create({ name?, namespace?, ...options })` - Create sandbox with optional name/namespace
+  - `findOrCreate({ name, namespace?, ...options })` - Find or create named sandbox
+  - `find({ name, namespace? })` - Find existing named sandbox
+
+  **Example (in workbench REPL):**
+
+  ```javascript
+  // Create sandbox with name and namespace (no await needed)
+  const sandbox = create({ name: "my-app", namespace: "user-123" });
+
+  // Find or create named sandbox
+  const sandbox = findOrCreate({ name: "my-app", namespace: "user-123" });
+
+  // Find existing sandbox
+  const existing = find({ name: "my-app", namespace: "user-123" });
+  ```
+
+  **Features:**
+
+  - Gateway mode only (use `mode gateway` to enable)
+  - Promises are auto-awaited (no need for `await` keyword)
+  - Auto-completion support
+  - Documented in help command
+
+  ## Child Sandboxes in Workbench
+
+  The workbench REPL now exposes child sandbox operations:
+
+  **New REPL Methods:**
+
+  - `child.create()` - Create a child sandbox
+  - `child.list()` - List all child sandboxes
+  - `child.retrieve(subdomain)` - Get info about a specific child
+  - `child.destroy(subdomain, options?)` - Delete a child sandbox
+
+  **Example (in workbench REPL):**
+
+  ```javascript
+  // Create a child sandbox (no await needed - promises are auto-awaited)
+  const child = child.create();
+  console.log(child.url); // https://sandbox-12345.sandbox.computesdk.com
+
+  // List all children
+  const children = child.list();
+
+  // Delete a child
+  child.destroy("sandbox-12345", { deleteFiles: true });
+  ```
+
+  **Features:**
+
+  - Gateway mode only (use `mode gateway` to enable)
+  - Works similar to `filesystem` namespace in REPL
+  - Promises are auto-awaited (no need for `await` keyword)
+  - Auto-completion support
+  - Documented in help command
+
 ## 1.9.6
 
 ### Patch Changes

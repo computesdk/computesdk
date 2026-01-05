@@ -2,8 +2,9 @@
  * Railway Provider - Factory-based Implementation
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Railway sandbox interface
@@ -94,7 +95,7 @@ export const fetchRailway = async (
 /**
  * Create a Railway provider instance using the factory pattern
  */
-export const railway = createProvider<RailwaySandbox, RailwayConfig>({
+export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
   name: 'railway',
   methods: {
     sandbox: {
@@ -254,7 +255,7 @@ export const railway = createProvider<RailwaySandbox, RailwayConfig>({
         throw new Error('Railway runCode method not implemented yet');
       },
 
-      runCommand: async (_sandbox: RailwaySandbox, _command: string, _args?: string[], _options?: RunCommandOptions) => {
+      runCommand: async (_sandbox: RailwaySandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Railway runCommand method not implemented yet');
       },
 

@@ -6,17 +6,9 @@
  */
 
 import { Sandbox as E2BSandbox } from 'e2b';
-import { createProvider } from 'computesdk';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-
-import type {
-  CodeResult,
-  CommandResult,
-  SandboxInfo,
-  Runtime,
-  CreateSandboxOptions,
-  FileEntry
-} from 'computesdk';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * E2B-specific configuration options
@@ -35,7 +27,7 @@ export interface E2BConfig {
 /**
  * Create an E2B provider instance using the factory pattern
  */
-export const e2b = createProvider<E2BSandbox, E2BConfig>({
+export const e2b = defineProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
   defaultMode: 'direct',
   methods: {
@@ -237,18 +229,30 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      runCommand: async (sandbox: E2BSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options (E2B doesn't support these natively, so we wrap with shell)
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           const execution = await sandbox.commands.run(fullCommand);
 
@@ -327,10 +331,9 @@ export const e2b = createProvider<E2BSandbox, E2BConfig>({
 
           return entries.map((entry: any) => ({
             name: entry.name,
-            path: entry.path,
-            isDirectory: Boolean(entry.isDir || entry.isDirectory),
+            type: (entry.isDir || entry.isDirectory) ? 'directory' as const : 'file' as const,
             size: entry.size || 0,
-            lastModified: new Date(entry.lastModified || Date.now())
+            modified: new Date(entry.lastModified || Date.now())
           }));
         },
 

@@ -2,8 +2,8 @@
  * AWS Lambda Provider - Factory-based Implementation
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CreateSandboxOptions, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+import type { Runtime, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 import {
   LambdaClient,
   CreateFunctionCommand,
@@ -131,7 +131,7 @@ const createLambdaZip = async (): Promise<Buffer> => {
 /**
  * Create an AWS Lambda provider instance using the factory pattern
  */
-export const awsLambda = createProvider<LambdaSandbox, LambdaConfig>({
+export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
   name: 'aws-lambda',
   methods: {
     sandbox: {
@@ -283,7 +283,7 @@ export const awsLambda = createProvider<LambdaSandbox, LambdaConfig>({
         throw new Error('AWS Lambda runCode method not implemented yet');
       },
 
-      runCommand: async (_sandbox: LambdaSandbox, _command: string, _args?: string[], _options?: RunCommandOptions) => {
+      runCommand: async (_sandbox: LambdaSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('AWS Lambda runCommand method not implemented yet');
       },
 

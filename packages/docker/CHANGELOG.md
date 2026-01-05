@@ -1,5 +1,33 @@
 # @computesdk/docker
 
+## 1.2.9
+
+### Patch Changes
+
+- computesdk@1.10.3
+
+## 1.2.8
+
+### Patch Changes
+
+- Updated dependencies [07e0953]
+  - computesdk@1.10.2
+
+## 1.2.7
+
+### Patch Changes
+
+- Updated dependencies [fa18a99]
+  - computesdk@1.10.1
+
+## 1.2.6
+
+### Patch Changes
+
+- Updated dependencies [38caad9]
+- Updated dependencies [f2d4273]
+  - computesdk@1.10.0
+
 ## 1.2.5
 
 ### Patch Changes

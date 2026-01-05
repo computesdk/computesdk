@@ -1,12 +1,12 @@
 /**
  * Explicit Config
  *
- * Converts explicit compute configuration to a gateway provider.
+ * Converts explicit compute configuration to gateway config.
  * Used when compute() is called as a function with configuration.
  */
 
-import { gateway } from './providers/gateway';
-import type { Provider, ExplicitComputeConfig } from './types';
+import type { ExplicitComputeConfig } from './compute';
+import type { GatewayConfig } from './auto-detect';
 import {
   PROVIDER_AUTH,
   PROVIDER_HEADERS,
@@ -14,6 +14,7 @@ import {
   PROVIDER_ENV_MAP,
   type ProviderName,
 } from './provider-config';
+import { GATEWAY_URL } from './constants';
 
 /**
  * Build provider-specific headers for gateway authentication
@@ -104,12 +105,12 @@ function buildConfigExample(provider: ProviderName, authOptions: readonly (reado
 }
 
 /**
- * Create a gateway provider from explicit configuration
+ * Create gateway configuration from explicit configuration
  *
  * @param config - Explicit compute configuration
- * @returns A configured gateway provider
+ * @returns Gateway configuration object
  */
-export function createProviderFromConfig(config: ExplicitComputeConfig): Provider {
+export function createConfigFromExplicit(config: ExplicitComputeConfig): GatewayConfig {
   // Validate required fields
   if (!config.apiKey) {
     throw new Error(
@@ -124,10 +125,11 @@ export function createProviderFromConfig(config: ExplicitComputeConfig): Provide
   // Build provider headers
   const providerHeaders = buildProviderHeaders(config);
 
-  // Create and return gateway provider
-  return gateway({
+  // Create and return gateway config
+  return {
     apiKey: config.apiKey,
+    gatewayUrl: config.gatewayUrl || GATEWAY_URL,
     provider: config.provider,
     providerHeaders,
-  });
+  };
 }

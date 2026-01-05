@@ -10,7 +10,7 @@
 import * as repl from 'repl';
 import * as cmd from '@computesdk/cmd';
 import type { WorkbenchState } from './state.js';
-import { runCommand, createProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose, connectToSandbox } from './commands.js';
+import { runCommand, defineProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose, connectToSandbox } from './commands.js';
 import { showHelp, showInfo } from './output.js';
 import { showProviders, showEnv, PROVIDER_NAMES } from './providers.js';
 import { isCommand } from './types.js';
@@ -157,10 +157,7 @@ function injectCmdContext(replServer: repl.REPLServer) {
   // Compute
   replServer.context.compute = cmd.compute;
   
-  // Expose cmd namespace for cmd() wrapper
-  replServer.context.cmd = cmd.cmd;
-  
-  // Shell wrappers
+  // Shell wrappers (for wrapping commands with cwd/background options)
   replServer.context.shell = cmd.shell;
   replServer.context.sh = cmd.sh;
   replServer.context.bash = cmd.bash;
@@ -172,7 +169,7 @@ function injectCmdContext(replServer: repl.REPLServer) {
  */
 function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchState) {
   // Provider management
-  replServer.context.provider = createProviderCommand(state);
+  replServer.context.provider = defineProviderCommand(state);
   replServer.context.providers = () => showProviders();
   
   // Mode management
@@ -245,6 +242,18 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
       throw new Error('No active sandbox. Run a command to auto-create one.');
     }
     return sandbox.runCode(code, runtime);
+  };
+  
+  // Expose runCommand directly with full options support (background, cwd, env)
+  replServer.context.runCommand = async (
+    command: string,
+    options?: { background?: boolean; cwd?: string; env?: Record<string, string> }
+  ) => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.runCommand(command, options);
   };
   
   // Expose sandbox creation methods (gateway mode only)

@@ -1,13 +1,14 @@
 /**
  * Vercel Provider - Factory-based Implementation
  * 
- * Demonstrates the new createProvider() factory pattern with ~50 lines
+ * Demonstrates the new defineProvider() factory pattern with ~50 lines
  * instead of the original ~350 lines of boilerplate.
  */
 
 import { Sandbox as VercelSandbox } from '@vercel/sandbox';
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Vercel sandbox provider configuration
@@ -33,7 +34,7 @@ export interface VercelConfig {
 /**
  * Create a Vercel provider instance using the factory pattern
  */
-export const vercel = createProvider<VercelSandbox, VercelConfig>({
+export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
   methods: {
     sandbox: {
@@ -242,18 +243,30 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
         };
       },
 
-      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           const result = await sandbox.runCommand('sh', ['-c', fullCommand]);
           // Call stdout/stderr sequentially to avoid "Multiple consumers for logs" warning

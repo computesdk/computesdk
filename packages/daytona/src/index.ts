@@ -6,8 +6,9 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from 'computesdk';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -24,7 +25,7 @@ export interface DaytonaConfig {
 /**
  * Create a Daytona provider instance using the factory pattern
  */
-export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
+export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
   defaultMode: 'direct',
   methods: {
@@ -204,18 +205,30 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: DaytonaSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using Daytona's process.executeCommand method
           const response = await sandbox.process.executeCommand(fullCommand);
@@ -333,10 +346,9 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
 
                 entries.push({
                   name,
-                  path: `${path}/${name}`.replace(/\/+/g, '/'), // Clean up double slashes
-                  isDirectory,
+                  type: isDirectory ? 'directory' as const : 'file' as const,
                   size,
-                  lastModified: new Date() // ls -la date parsing is complex, use current time
+                  modified: new Date() // ls -la date parsing is complex, use current time
                 });
               }
             }

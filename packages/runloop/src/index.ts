@@ -6,15 +6,18 @@
  */
 
 import { Runloop } from "@runloop/api-client";
-import { createProvider } from "computesdk";
+import { defineProvider, escapeShellArg } from "@computesdk/provider";
 import type {
   CodeResult,
   CommandResult,
   SandboxInfo,
-  CreateSandboxOptions,
-  FileEntry,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
+  RunCommandOptions,
+} from "@computesdk/provider";
+import type {
+  CreateSandboxOptions,
+  FileEntry,
   Runtime,
   SandboxStatus,
   Sandbox,
@@ -83,7 +86,7 @@ export interface CreateBlueprintTemplateOptions {
 /**
  * Create a Runloop provider instance using the factory pattern
  */
-export const runloop = createProvider<
+export const runloop = defineProvider<
   Runloop.DevboxView,         // TSandbox
   RunloopConfig,              // TConfig
   RunloopTemplate,            // TTemplate 
@@ -306,18 +309,36 @@ export const runloop = createProvider<
       runCommand: async (
         sandbox: any,
         command: string,
-        args: string[] = []
+        options?: RunCommandOptions
       ): Promise<CommandResult> => {
         const startTime = Date.now();
         const devbox = sandbox;
         const client = sandbox.client;
 
         try {
-          // Execute code using Runloop's executeAsync
-          // Runloop supports all runtimes
+          // Build the full command with options
+          let fullCommand = command;
+
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           const execution = await client.devboxes.executeAsync(devbox.id, {
-            command: `${command} ${args.join(" ")}`,
+            command: fullCommand,
           });
 
           const executionResult =
@@ -392,7 +413,7 @@ export const runloop = createProvider<
       filesystem: {
         readFile: async (sandbox: any, path: string, runCommand: any): Promise<string> => {
           try {
-            const result = await runCommand(sandbox, 'cat', [path]);
+            const result = await runCommand(sandbox, `cat "${path}"`);
             if (result.exitCode !== 0) {
               throw new Error(`File not found or unreadable: ${result.stderr}`);
             }
@@ -415,7 +436,7 @@ export const runloop = createProvider<
           try {
             // Use command-based approach for file writing since API writeFileContents may have issues
             const encoded = Buffer.from(content).toString('base64');
-            const result = await runCommand(sandbox, 'sh', ['-c', `echo "${encoded}" | base64 -d > "${path}"`]);
+            const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
             
             if (result.exitCode !== 0) {
               throw new Error(`Command failed: ${result.stderr}`);
@@ -434,7 +455,7 @@ export const runloop = createProvider<
           path: string,
           runCommand: any
         ): Promise<void> => {
-          const result = await runCommand(sandbox, "mkdir", ["-p", path]);
+          const result = await runCommand(sandbox, `mkdir -p "${path}"`);
           if (result.exitCode !== 0) {
             throw new Error(
               `Failed to create directory ${path}: ${result.stderr}`
@@ -447,7 +468,7 @@ export const runloop = createProvider<
           path: string,
           runCommand: any
         ): Promise<FileEntry[]> => {
-          const result = await runCommand(sandbox, "ls", ["-la", path]);
+          const result = await runCommand(sandbox, `ls -la "${path}"`);
 
           if (result.exitCode !== 0) {
             throw new Error(
@@ -466,10 +487,9 @@ export const runloop = createProvider<
 
             return {
               name,
-              path: `${path}/${name}`,
-              isDirectory,
+              type: isDirectory ? 'directory' as const : 'file' as const,
               size: parseInt(parts[4]) || 0,
-              lastModified: new Date(),
+              modified: new Date(),
             };
           });
         },
@@ -479,7 +499,7 @@ export const runloop = createProvider<
           path: string,
           runCommand: any
         ): Promise<boolean> => {
-          const result = await runCommand(sandbox, "test", ["-e", path]);
+          const result = await runCommand(sandbox, `test -e "${path}"`);
           return result.exitCode === 0;
         },
 
@@ -488,7 +508,7 @@ export const runloop = createProvider<
           path: string,
           runCommand: any
         ): Promise<void> => {
-          const result = await runCommand(sandbox, "rm", ["-rf", path]);
+          const result = await runCommand(sandbox, `rm -rf "${path}"`);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
           }

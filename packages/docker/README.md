@@ -35,35 +35,48 @@ Common environment variables (used by Docker/dockerode):
 
 ## Usage
 
-You can use the provider directly or via the ComputeSDK singleton.
+### Gateway Mode (Recommended)
 
-### With ComputeSDK
+Use the gateway for zero-config auto-detection:
 
 ```ts
-import { createCompute } from 'computesdk';
+import { compute } from 'computesdk';
+
+// Auto-detects Docker (requires Docker daemon running)
+const sandbox = await compute.sandbox.create();
+
+const result = await sandbox.runCode(`print("Hello from Python")`, 'python');
+console.log(result.stdout.trim()); // Hello from Python
+
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
+
+```ts
 import { docker } from '@computesdk/docker';
 
-const provider = docker({
+const compute = docker({
   runtime: 'python', // or 'node'
   image: { name: 'python:3.11-slim', pullPolicy: 'ifNotPresent' },
 });
 
-const compute = createCompute({ defaultProvider: provider });
-
 // Create a sandbox and run Python
-const py = await compute.sandbox.create();
-const out = await py.runCode(`print("Hello from Python")`, 'python');
-console.log(out.stdout.trim()); // Hello from Python
+const sandbox = await compute.sandbox.create();
+const result = await sandbox.runCode(`print("Hello from Python")`, 'python');
+console.log(result.stdout.trim()); // Hello from Python
 
-await py.destroy();
+await sandbox.destroy();
 ```
 
-### Direct Usage
+### Advanced Configuration
 
 ```ts
 import { docker } from '@computesdk/docker';
 
-const provider = docker({
+const compute = docker({
   runtime: 'node',
   image: { name: 'node:20-alpine' },
   container: {
@@ -72,15 +85,15 @@ const provider = docker({
   },
 });
 
-const sb = await provider.sandbox.create({ runtime: 'node' });
+const sandbox = await compute.sandbox.create({ runtime: 'node' });
 
-const res = await sb.runCode(`console.log("Hello, World!")`, 'node');
-console.log(res.stdout.trim()); // Hello, World!
+const result = await sandbox.runCode(`console.log("Hello, World!")`, 'node');
+console.log(result.stdout.trim()); // Hello, World!
 
-const ls = await sb.runCommand('sh', ['-lc', 'echo Hello from command']);
-console.log(ls.stdout.trim()); // Hello from command
+const cmd = await sandbox.runCommand('sh', ['-lc', 'echo Hello from command']);
+console.log(cmd.stdout.trim()); // Hello from command
 
-await sb.destroy();
+await sandbox.destroy();
 ```
 
 ---
@@ -212,12 +225,12 @@ Interactive terminals aren’t exposed. Use `runCommand('sh', ['-lc', '…'])` f
 ### Sandbox Management
 
 ```ts
-const sb = await provider.sandbox.create({ runtime?: 'python' | 'node' });
-await provider.sandbox.destroy(sb.sandboxId);
+const sandbox = await compute.sandbox.create({ runtime?: 'python' | 'node' });
 
-await sb.getInfo(); // { id, provider, runtime, status, createdAt, timeout, metadata }
-await sb.getUrl({ port, protocol?: 'http' | 'https' });
-sb.getInstance(); // { docker: Docker, container: Container, ... }
+await sandbox.getInfo(); // { id, provider, runtime, status, createdAt, timeout, metadata }
+await sandbox.getUrl({ port, protocol?: 'http' | 'https' });
+sandbox.getInstance(); // { docker: Docker, container: Container, ... }
+await sandbox.destroy();
 ```
 
 ---
@@ -254,14 +267,14 @@ if (res.exitCode !== 0) {
 import { handleComputeRequest } from 'computesdk';
 import { docker } from '@computesdk/docker';
 
-const provider = docker({
+const compute = docker({
   runtime: 'node',
   image: { name: 'node:20-alpine' },
 });
 
 export async function POST(req: Request) {
   const body = await req.json(); // ComputeRequest
-  return handleComputeRequest(body, provider);
+  return handleComputeRequest(body, compute);
 }
 ```
 
@@ -272,40 +285,40 @@ export async function POST(req: Request) {
 ### Data Science Workflow (Python)
 
 ```ts
-const py = await provider.sandbox.create({ runtime: 'python' });
-await py.runCommand('sh', ['-lc', 'python3 -m pip install --no-cache-dir pandas']);
-await py.filesystem.writeFile('/workspace/app.py', `
+const sandbox = await compute.sandbox.create({ runtime: 'python' });
+await sandbox.runCommand('sh', ['-lc', 'python3 -m pip install --no-cache-dir pandas']);
+await sandbox.filesystem.writeFile('/workspace/app.py', `
 import pandas as pd
 print("rows:", len(pd.DataFrame({"x":[1,2,3]})))
 `);
-const run = await py.runCommand('sh', ['-lc', 'python3 /workspace/app.py']);
+const run = await sandbox.runCommand('sh', ['-lc', 'python3 /workspace/app.py']);
 console.log(run.stdout.trim()); // rows: 3
-await py.destroy();
+await sandbox.destroy();
 ```
 
 ### Interactive-like Loop
 
 ```ts
-const sb = await provider.sandbox.create({ runtime: 'node' });
-await sb.runCommand('sh', ['-lc', 'echo boot > /tmp/state']);
-await sb.runCommand('sh', ['-lc', 'cat /tmp/state']); // 'boot'
-await sb.destroy();
+const sandbox = await compute.sandbox.create({ runtime: 'node' });
+await sandbox.runCommand('sh', ['-lc', 'echo boot > /tmp/state']);
+await sandbox.runCommand('sh', ['-lc', 'cat /tmp/state']); // 'boot'
+await sandbox.destroy();
 ```
 
 ### Machine Learning Pipeline (Python + Ports)
 
 ```ts
-const sb = await provider.sandbox.create({ runtime: 'python' });
-const bg = await sb.runCommand('sh', ['-lc', 'python3 -m http.server 8080'], { background: true });
-const url = await sb.getUrl({ port: 8080 });
+const sandbox = await compute.sandbox.create({ runtime: 'python' });
+const bg = await sandbox.runCommand('sh', ['-lc', 'python3 -m http.server 8080'], { background: true });
+const url = await sandbox.getUrl({ port: 8080 });
 console.log('Serving at', url);
-await sb.destroy();
+await sandbox.destroy();
 ```
 
 > To make ports reachable from the host, publish them up front:
 >
 > ```ts
-> const provider = docker({
+> const compute = docker({
 >   runtime: 'python',
 >   image: { name: 'python:3.11-slim' },
 >   container: {
