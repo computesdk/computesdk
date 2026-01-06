@@ -126,6 +126,45 @@ export interface TerminalErrorMessage {
 }
 
 /**
+ * Command stdout streaming message (exec mode with stream: true)
+ */
+export interface CommandStdoutMessage {
+  type: 'command:stdout';
+  channel: string;
+  data: {
+    terminal_id: string;
+    cmd_id: string;
+    output: string;
+  };
+}
+
+/**
+ * Command stderr streaming message (exec mode with stream: true)
+ */
+export interface CommandStderrMessage {
+  type: 'command:stderr';
+  channel: string;
+  data: {
+    terminal_id: string;
+    cmd_id: string;
+    output: string;
+  };
+}
+
+/**
+ * Command exit message (exec mode with stream: true)
+ */
+export interface CommandExitMessage {
+  type: 'command:exit';
+  channel: string;
+  data: {
+    terminal_id: string;
+    cmd_id: string;
+    exit_code: number;
+  };
+}
+
+/**
  * File watcher created notification
  */
 export interface WatcherCreatedMessage {
@@ -203,6 +242,9 @@ export type IncomingMessage =
   | TerminalOutputMessage
   | TerminalDestroyedMessage
   | TerminalErrorMessage
+  | CommandStdoutMessage
+  | CommandStderrMessage
+  | CommandExitMessage
   | WatcherCreatedMessage
   | FileChangedMessage
   | WatcherDestroyedMessage
@@ -520,6 +562,9 @@ export class WebSocketManager {
   on(event: 'terminal:output', handler: MessageHandler<TerminalOutputMessage>): void;
   on(event: 'terminal:destroyed', handler: MessageHandler<TerminalDestroyedMessage>): void;
   on(event: 'terminal:error', handler: MessageHandler<TerminalErrorMessage>): void;
+  on(event: 'command:stdout', handler: MessageHandler<CommandStdoutMessage>): void;
+  on(event: 'command:stderr', handler: MessageHandler<CommandStderrMessage>): void;
+  on(event: 'command:exit', handler: MessageHandler<CommandExitMessage>): void;
   on(event: 'watcher:created', handler: MessageHandler<WatcherCreatedMessage>): void;
   on(event: 'file:changed', handler: MessageHandler<FileChangedMessage>): void;
   on(event: 'watcher:destroyed', handler: MessageHandler<WatcherDestroyedMessage>): void;

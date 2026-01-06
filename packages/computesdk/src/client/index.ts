@@ -266,20 +266,20 @@ export interface TerminalResponse {
 }
 
 /**
- * Command execution response
+ * Command execution response (used by both /run/command and /terminals/{id}/execute)
  */
 export interface CommandExecutionResponse {
   message: string;
   data: {
     terminal_id?: string;
-    cmd_id?: string; // Present for exec mode commands
+    cmd_id?: string;
     command: string;
-    output?: string; // Deprecated: combined stdout+stderr (backward compatibility)
     stdout: string;
     stderr: string;
-    exit_code?: number; // May not be present for background commands
-    duration_ms?: number; // May not be present for background commands
-    status?: 'running' | 'completed' | 'failed'; // Present for exec mode
+    exit_code?: number; // May not be present for background/streaming commands
+    duration_ms?: number; // May not be present for background/streaming commands
+    status?: 'running' | 'completed' | 'failed';
+    channel?: string; // Present for streaming mode
     pty?: boolean; // Indicates terminal mode
   };
 }
@@ -337,22 +337,7 @@ export interface CodeExecutionResponse {
   };
 }
 
-/**
- * Run command response (POST /run/command)
- */
-export interface RunCommandResponse {
-  message: string;
-  data: {
-    terminal_id?: string;
-    cmd_id?: string;
-    command: string;
-    stdout: string;
-    stderr: string;
-    exit_code?: number;
-    duration_ms?: number;
-    status?: 'running' | 'completed' | 'failed';
-  };
-}
+
 
 /**
  * File watcher information
@@ -1223,10 +1208,11 @@ export class Sandbox {
     command: string;
     shell?: string;
     background?: boolean;
+    stream?: boolean;
     cwd?: string;
     env?: Record<string, string>;
-  }): Promise<RunCommandResponse> {
-    return this.request<RunCommandResponse>('/run/command', {
+  }): Promise<CommandExecutionResponse> {
+    return this.request<CommandExecutionResponse>('/run/command', {
       method: 'POST',
       body: JSON.stringify(options),
     });
@@ -1979,6 +1965,8 @@ export class Sandbox {
    * @param options.background - Run in background (server uses goroutines)
    * @param options.cwd - Working directory (server uses cmd.Dir)
    * @param options.env - Environment variables (server uses cmd.Env)
+   * @param options.onStdout - Callback for streaming stdout data
+   * @param options.onStderr - Callback for streaming stderr data
    * @returns Command execution result
    * 
    * @example
@@ -1994,20 +1982,99 @@ export class Sandbox {
    *   background: true, 
    *   env: { PORT: '3000' } 
    * })
+   * 
+   * // With streaming output
+   * await sandbox.runCommand('npm install', {
+   *   onStdout: (data) => console.log(data),
+   *   onStderr: (data) => console.error(data),
+   * })
    * ```
    */
   async runCommand(
     command: string,
-    options?: { background?: boolean; cwd?: string; env?: Record<string, string> }
+    options?: {
+      background?: boolean;
+      cwd?: string;
+      env?: Record<string, string>;
+      onStdout?: (data: string) => void;
+      onStderr?: (data: string) => void;
+    }
   ): Promise<{
     stdout: string;
     stderr: string;
     exitCode: number;
     durationMs: number;
   }> {
-    // Send raw command to server - no preprocessing!
-    // Server will handle: sh -c "command", cmd.Dir, cmd.Env, goroutines
-    return this.run.command(command, options);
+    const hasStreamingCallbacks = options?.onStdout || options?.onStderr;
+    
+    if (!hasStreamingCallbacks) {
+      // Non-streaming mode: use existing behavior
+      return this.run.command(command, options);
+    }
+
+    // Streaming mode: use WebSocket to receive output
+    const result = await this.runCommandRequest({
+      command,
+      stream: true,
+      background: options?.background,
+      cwd: options?.cwd,
+      env: options?.env,
+    });
+
+    const { terminal_id, cmd_id, channel } = result.data;
+    
+    if (!channel || !terminal_id || !cmd_id) {
+      throw new Error('Server did not return streaming channel info');
+    }
+
+    // Get or create WebSocket connection
+    const ws = await this.ensureWebSocket();
+
+    // Subscribe to the terminal channel
+    ws.subscribe(channel);
+
+    // Collect stdout/stderr for final result
+    let stdout = '';
+    let stderr = '';
+
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        ws.off('command:stdout', handleStdout);
+        ws.off('command:stderr', handleStderr);
+        ws.off('command:exit', handleExit);
+        ws.unsubscribe(channel);
+      };
+
+      const handleStdout = (msg: { channel: string; data: { cmd_id: string; output: string } }) => {
+        if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
+          stdout += msg.data.output;
+          options?.onStdout?.(msg.data.output);
+        }
+      };
+
+      const handleStderr = (msg: { channel: string; data: { cmd_id: string; output: string } }) => {
+        if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
+          stderr += msg.data.output;
+          options?.onStderr?.(msg.data.output);
+        }
+      };
+
+      const handleExit = (msg: { channel: string; data: { cmd_id: string; exit_code: number } }) => {
+        if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
+          cleanup();
+          resolve({
+            stdout,
+            stderr,
+            exitCode: msg.data.exit_code,
+            durationMs: 0, // Not available in streaming mode
+          });
+        }
+      };
+
+      ws.on('command:stdout', handleStdout);
+      ws.on('command:stderr', handleStderr);
+      ws.on('command:exit', handleExit);
+    });
   }
 
   /**
