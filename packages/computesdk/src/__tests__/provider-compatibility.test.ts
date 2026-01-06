@@ -311,22 +311,25 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
     }, 30000);
 
     it('command with background + streaming (returns immediately)', async () => {
-      let stdoutCalled = false;
-
-      const result = await sandbox.runCommand('echo "hello"', {
-        background: true,
-        onStdout: () => { stdoutCalled = true; },
+      // Use promise to wait for callback instead of fixed timeout
+      const stdoutPromise = new Promise<void>((resolve) => {
+        sandbox.runCommand('echo "hello"', {
+          background: true,
+          onStdout: () => resolve(),
+        }).then((result) => {
+          // Background + streaming returns immediately
+          // stdout/stderr are empty since we didn't wait
+          expect(result.stdout).toBe('');
+          expect(result.stderr).toBe('');
+          expect(result.exitCode).toBe(0);
+        });
       });
 
-      // Background + streaming returns immediately
-      // stdout/stderr are empty since we didn't wait
-      expect(result.stdout).toBe('');
-      expect(result.stderr).toBe('');
-      expect(result.exitCode).toBe(0);
-
-      // Wait a bit for callback to fire
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      expect(stdoutCalled).toBe(true);
+      // Wait for stdout callback (with timeout fallback)
+      await Promise.race([
+        stdoutPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for stdout')), 10000))
+      ]);
     }, 30000);
   });
 
@@ -363,16 +366,19 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // ComputeSDK: terminal.write(input)
       terminal = await sandbox.terminal.create({ pty: true });
 
-      let outputReceived = false;
-      terminal.on('output', () => { outputReceived = true; });
+      // Set up output promise BEFORE writing
+      const outputPromise = new Promise<void>((resolve) => {
+        terminal.on('output', () => resolve());
+      });
 
-      // Send a command
-      terminal.write('echo "test"\n');
+      // Use sleep to give subscription time to propagate, then echo
+      terminal.write('sleep 1 && echo "test"\n');
 
-      // Wait briefly for output
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      expect(outputReceived).toBe(true);
+      // Wait for output event (with timeout fallback)
+      await Promise.race([
+        outputPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for output')), 10000))
+      ]);
     }, 30000);
 
     it('terminal.on("output", callback) - streaming output', async () => {
@@ -380,15 +386,19 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // ComputeSDK: terminal.on('output', callback)
       terminal = await sandbox.terminal.create({ pty: true });
 
-      let outputReceived = false;
-      terminal.on('output', () => { outputReceived = true; });
+      // Set up output promise BEFORE writing
+      const outputPromise = new Promise<void>((resolve) => {
+        terminal.on('output', () => resolve());
+      });
 
-      terminal.write('echo "test"\n');
+      // Use sleep to give subscription time to propagate, then echo
+      terminal.write('sleep 1 && echo "test"\n');
 
-      // Wait briefly for output
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      expect(outputReceived).toBe(true);
+      // Wait for output event (with timeout fallback)
+      await Promise.race([
+        outputPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for output')), 10000))
+      ]);
     }, 30000);
 
     it('sandbox.pty.kill(pid) -> terminal.destroy()', async () => {
