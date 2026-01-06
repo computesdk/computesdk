@@ -284,34 +284,137 @@ try {
 
 ComputeSDK provides filesystem operations for managing files and directories within sandboxes. All filesystem operations are accessed through the `sandbox.filesystem` object.
 
-### filesystem.readFile()
+### filesystem.readFile(path)
+
+Read the contents of a file from the sandbox filesystem.
+
+**Parameters:**
+
+- `path` (string, required): Absolute path to the file to read within the sandbox
+
+**Returns:** `Promise<string>` - File contents as UTF-8 encoded string
+
+**Examples:**
 
 ```typescript
-// Read a file as text
-const content = await sandbox.filesystem.readFile('/path/to/file.txt')
+// Basic file reading
+const content = await sandbox.filesystem.readFile('/app/config.txt');
+console.log(content);  // "port=3000\nhost=localhost"
 
-// With error handling
+// Read a JSON file
+const jsonContent = await sandbox.filesystem.readFile('/app/package.json');
+const packageData = JSON.parse(jsonContent);
+console.log(packageData.name);     // "my-app"
+console.log(packageData.version);  // "1.0.0"
+
+// Read configuration files
+const envContent = await sandbox.filesystem.readFile('/app/.env');
+console.log(envContent);  // "API_KEY=secret\nDEBUG=true"
+
+// Error handling for non-existent files
 try {
-  const content = await sandbox.filesystem.readFile('/nonexistent.txt')
+  const content = await sandbox.filesystem.readFile('/nonexistent.txt');
 } catch (error) {
-  console.error('Failed to read file:', error.message)
+  console.error('Failed to read file:', error.message);
+  // "Failed to read file: File not found: /nonexistent.txt"
 }
+
+// Check existence before reading
+const filePath = '/app/optional-config.json';
+if (await sandbox.filesystem.exists(filePath)) {
+  const content = await sandbox.filesystem.readFile(filePath);
+  console.log('Config loaded:', content);
+} else {
+  console.log('Config file not found, using defaults');
+}
+
+// Read after writing
+await sandbox.filesystem.writeFile('/app/output.txt', 'Hello, World!');
+const content = await sandbox.filesystem.readFile('/app/output.txt');
+console.log(content);  // "Hello, World!"
+
+// Read code files
+const scriptContent = await sandbox.filesystem.readFile('/app/server.js');
+console.log(scriptContent);  // "const express = require('express');\n..."
+
+// Read markdown files
+const readme = await sandbox.filesystem.readFile('/app/README.md');
+console.log(readme);  // "# My Project\n\nDescription..."
 ```
+
+**Notes:**
+- Always returns UTF-8 encoded strings
+- Throws an error if the file does not exist
+- Requires absolute paths (paths should start with `/`)
+- No encoding options available - always returns UTF-8
+- Available on all sandbox instances with filesystem support
 <br/>
 <br/>
 
 ---
 
-### filesystem.writeFile()
+### filesystem.writeFile(path, content)
+
+Write content to a file in the sandbox filesystem, creating the file if it doesn't exist.
+
+**Parameters:**
+
+- `path` (string, required): Absolute path where the file should be written
+- `content` (string, required): Content to write to the file as UTF-8 text
+
+**Returns:** `Promise<void>` - Resolves when the file is successfully written
+
+**Examples:**
 
 ```typescript
-// Write a text file
-await sandbox.filesystem.writeFile('/path/to/file.txt', 'Hello, World!')
+// Basic file writing
+await sandbox.filesystem.writeFile('/app/config.txt', 'port=3000\nhost=localhost');
+console.log('File written successfully');
 
 // Write JSON data
-const data = { key: 'value' }
-await sandbox.filesystem.writeFile('/path/to/data.json', JSON.stringify(data))
+const data = { name: 'my-app', version: '1.0.0' };
+await sandbox.filesystem.writeFile('/app/package.json', JSON.stringify(data, null, 2));
+
+// Write configuration files
+const envContent = 'API_KEY=secret\nDEBUG=true\nPORT=3000';
+await sandbox.filesystem.writeFile('/app/.env', envContent);
+
+// Overwrite existing files
+await sandbox.filesystem.writeFile('/app/log.txt', 'First entry');
+await sandbox.filesystem.writeFile('/app/log.txt', 'Second entry');
+const content = await sandbox.filesystem.readFile('/app/log.txt');
+console.log(content);  // "Second entry" (first entry was overwritten)
+
+// Error handling
+try {
+  await sandbox.filesystem.writeFile('/app/data.json', JSON.stringify({ key: 'value' }));
+  console.log('File created successfully');
+} catch (error) {
+  console.error('Failed to write file:', error.message);
+}
+
+// Write multiline content with template literals
+const script = `#!/bin/bash
+echo "Starting application..."
+npm install
+npm start
+`;
+await sandbox.filesystem.writeFile('/app/start.sh', script);
+
+// Write then read to verify
+const newContent = 'Hello, World!';
+await sandbox.filesystem.writeFile('/app/greeting.txt', newContent);
+const readBack = await sandbox.filesystem.readFile('/app/greeting.txt');
+console.log(readBack === newContent);  // true
 ```
+
+**Notes:**
+- Always writes UTF-8 encoded text
+- Creates the file if it doesn't exist
+- Overwrites existing files completely (previous content is lost)
+- Requires absolute paths (paths should start with `/`)
+- No encoding options available - always UTF-8
+- Available on all sandbox instances with filesystem support
 <br/>
 <br/>
 
