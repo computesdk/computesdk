@@ -273,18 +273,17 @@ try {
 - Returns a publicly accessible URL that routes to the specified port in your sandbox
 - URL construction is instantaneous (no network calls) - the URL is available immediately
 - The service must be running on the specified port for the URL to be accessible
-- URLs follow the pattern: `${protocol}://${sandbox-id}-${port}.preview.computesdk.com`
 
 <br/>
 <br/>
 
 ---
 
-## sandbox.filesystem
+## `sandbox.filesystem`
 
 ComputeSDK provides filesystem operations for managing files and directories within sandboxes. All filesystem operations are accessed through the `sandbox.filesystem` object.
 
-### filesystem.readFile(path)
+### `filesystem.readFile(path)`
 
 Read the contents of a file from the sandbox filesystem.
 
@@ -347,13 +346,12 @@ console.log(readme);  // "# My Project\n\nDescription..."
 - Throws an error if the file does not exist
 - Requires absolute paths (paths should start with `/`)
 - No encoding options available - always returns UTF-8
-- Available on all sandbox instances with filesystem support
 <br/>
 <br/>
 
 ---
 
-### filesystem.writeFile(path, content)
+### `filesystem.writeFile(path, content)`
 
 Write content to a file in the sandbox filesystem, creating the file if it doesn't exist.
 
@@ -414,30 +412,141 @@ console.log(readBack === newContent);  // true
 - Overwrites existing files completely (previous content is lost)
 - Requires absolute paths (paths should start with `/`)
 - No encoding options available - always UTF-8
-- Available on all sandbox instances with filesystem support
 <br/>
 <br/>
 
 ---
-### filesystem.mkdir()
+### `filesystem.mkdir(path)`
+
+Create a directory in the sandbox filesystem, automatically creating parent directories as needed.
+
+**Parameters:**
+
+- `path` (string, required): Absolute path of the directory to create
+
+**Returns:** `Promise<void>` - Resolves when the directory is successfully created
+
+**Examples:**
 
 ```typescript
-// Create a directory
-await sandbox.filesystem.mkdir('/app/new-directory')
-``` 
-<br/>
-<br/>
+// Basic directory creation
+await sandbox.filesystem.mkdir('/app/data');
+console.log('Directory created');
 
----
+// Multiple directories for project structure
+await sandbox.filesystem.mkdir('/app/src');
+await sandbox.filesystem.mkdir('/app/tests');
+await sandbox.filesystem.mkdir('/app/dist');
 
-### filesystem.readdir() 
-```typescript
-// List directory contents
-const entries = await sandbox.filesystem.readdir('/app')
-entries.forEach(entry => {
-  console.log(`${entry.isDirectory ? '📁' : '📄'} ${entry.name} (${entry.size} bytes)`)
-})
+// Directory already exists - succeeds silently
+await sandbox.filesystem.mkdir('/app/data');
+await sandbox.filesystem.mkdir('/app/data'); // No error thrown
+console.log('Both calls succeeded');
+
+// Error handling
+try {
+  await sandbox.filesystem.mkdir('/app/project/data');
+  console.log('Directory created successfully');
+} catch (error) {
+  console.error('Failed to create directory:', error.message);
+}
 ```
+
+**Notes:**
+- Automatically creates parent directories as needed
+- Does not throw an error if the directory already exists
+- Requires absolute paths (paths should start with `/`)
+- Throws errors only on actual failures (permissions, invalid paths, disk space issues)
+<br/>
+<br/>
+
+---
+
+### `filesystem.readdir(path)`
+
+List the contents of a directory in the sandbox filesystem.
+
+**Parameters:**
+
+- `path` (string, required): Absolute path to the directory to list
+
+**Returns:** `Promise<FileEntry[]>` - Array of entries in the directory
+
+**FileEntry interface:**
+- `name` (string): Name of the file or directory
+- `type` ('file' | 'directory'): Type of the entry
+- `size` (number, optional): Size in bytes (for files)
+- `modified` (Date, optional): Last modification timestamp
+
+**Examples:**
+
+```typescript
+// Basic directory listing
+const entries = await sandbox.filesystem.readdir('/app');
+console.log(entries);
+// [
+//   { name: 'config.json', type: 'file', size: 245 },
+//   { name: 'src', type: 'directory' },
+//   { name: 'package.json', type: 'file', size: 512 }
+// ]
+
+// List and display all entries
+const entries = await sandbox.filesystem.readdir('/app');
+entries.forEach(entry => {
+  console.log(`${entry.type === 'directory' ? '📁' : '📄'} ${entry.name}`);
+});
+// 📄 config.json
+// 📁 src
+// 📄 package.json
+
+
+// Find specific files by extension
+const entries = await sandbox.filesystem.readdir('/app/src');
+const jsFiles = entries.filter(e => 
+  e.type === 'file' && e.name.endsWith('.js')
+);
+console.log('JavaScript files:', jsFiles.map(f => f.name));
+
+// Count files and directories
+const entries = await sandbox.filesystem.readdir('/app');
+const fileCount = entries.filter(e => e.type === 'file').length;
+const dirCount = entries.filter(e => e.type === 'directory').length;
+console.log(`Found ${fileCount} files and ${dirCount} directories`);
+
+// Check if directory is empty
+const entries = await sandbox.filesystem.readdir('/app/temp');
+if (entries.length === 0) {
+  console.log('Directory is empty');
+} else {
+  console.log(`Directory contains ${entries.length} items`);
+}
+
+// Error handling for non-existent directories
+try {
+  const entries = await sandbox.filesystem.readdir('/nonexistent');
+  console.log(entries);
+} catch (error) {
+  console.error('Failed to read directory:', error.message);
+  // "Failed to read directory: Directory not found: /nonexistent"
+}
+
+// Check existence before reading
+const dirPath = '/app/optional-data';
+if (await sandbox.filesystem.exists(dirPath)) {
+  const entries = await sandbox.filesystem.readdir(dirPath);
+  console.log(`Found ${entries.length} entries in ${dirPath}`);
+} else {
+  console.log('Directory does not exist');
+}
+```
+
+**Notes:**
+- Returns an array of FileEntry objects with file/directory metadata
+- Requires absolute paths (paths should start with `/`)
+- Only lists direct children - does not recursively list subdirectories
+- Throws an error if the directory does not exist
+- The `size` and `modified` fields may not be available on all providers
+- Empty directories return an empty array (not an error)
 <br/>
 <br/>
 
