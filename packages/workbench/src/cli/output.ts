@@ -40,11 +40,16 @@ export const c = {
 /**
  * Display welcome banner
  */
-export function showWelcome(availableProviders: string[], currentProvider: string | null, useDirectMode: boolean) {
+export function showWelcome(availableProviders: string[], currentProvider: string | null, useDirectMode: boolean, localDaemonRunning = false) {
   console.log(c.bold(c.cyan('\n╔═══════════════════════════════════════════════════════╗')));
   console.log(c.bold(c.cyan('║   ComputeSDK Workbench                               ║')));
   console.log(c.bold(c.cyan('╚═══════════════════════════════════════════════════════╝\n')));
   console.log(c.dim('Prompt shows connection status: > (disconnected) or provider:sandbox> (connected)\n'));
+  
+  // Show local daemon status prominently if available
+  if (localDaemonRunning) {
+    console.log(c.green('Local daemon detected - auto-connecting...\n'));
+  }
   
   if (availableProviders.length > 0) {
     // Filter out 'gateway' from the list since it's not a real backend provider
@@ -52,20 +57,22 @@ export function showWelcome(availableProviders: string[], currentProvider: strin
     console.log(`Providers available: ${backendProviders.join(', ')}`);
     
     if (currentProvider) {
-      if (useDirectMode) {
-        console.log(`Current provider: ${c.green(currentProvider)} (🔗 direct mode)\n`);
+      if (currentProvider === 'local') {
+        console.log(`Current provider: ${c.green('local')} (local daemon)\n`);
+      } else if (useDirectMode) {
+        console.log(`Current provider: ${c.green(currentProvider)} (direct mode)\n`);
       } else {
         // Gateway mode - show which backend will be used
         const backendProvider = currentProvider === 'gateway' 
           ? (backendProviders[0] || 'auto')
           : currentProvider;
-        console.log(`Current provider: ${c.green(backendProvider)} (🌐 via gateway)\n`);
+        console.log(`Current provider: ${c.green(backendProvider)} (via gateway)\n`);
       }
     } else {
       console.log(`\n${c.dim('Tip: Use "provider <name>" to select a provider')}\n`);
     }
   } else {
-    console.log(c.yellow('⚠️  No providers detected.\n'));
+    console.log(c.yellow('No providers detected.\n'));
     console.log('To get started:');
     console.log('  1. Copy .env.example to .env');
     console.log('  2. Add your provider credentials');
@@ -201,10 +208,14 @@ ${c.bold('Provider Modes:')}
 ${c.bold('Sandbox Management:')}
   ${c.cyan('restart')}                      Restart current sandbox
   ${c.cyan('destroy')}                      Destroy current sandbox
-  ${c.cyan('connect <url> [token]')}        Connect to existing sandbox via URL
-                                ${c.dim('Example: connect https://sandbox-123.localhost:8080')}
-                                ${c.dim('Example: connect https://sandbox-123.localhost:8080 your_token')}
   ${c.cyan('info')}                         Show sandbox info (provider, uptime)
+  ${c.cyan('connect <url> [token]')}        Connect to sandbox via URL
+
+${c.bold('Local Daemon:')}
+  ${c.cyan('provider local')}               Connect to local daemon's main sandbox
+  ${c.cyan('provider local list')}          List local sandboxes
+  ${c.cyan('provider local <subdomain>')}   Connect to specific local sandbox
+                                ${c.dim('Example: provider local separate-snail-qkktux')}
 
 ${c.bold('Environment:')}
   ${c.cyan('env')}                          Show environment/credentials status
@@ -258,6 +269,24 @@ ${c.bold('Running Commands:')}
     ${c.cyan('runCode("console.log(\'hi\')", "node")')}
     ${c.cyan('sandboxInfo()')}            ${c.dim('// Get sandbox details')}
     ${c.cyan('getInstance()')}            ${c.dim('// Get native instance')}
+  
+  ${c.dim('Terminal (PTY & Exec):')}
+    ${c.cyan('terminal.create({ pty: true })')}   ${c.dim('// Create PTY terminal')}
+    ${c.cyan('terminal.create({ pty: false })')}  ${c.dim('// Create exec terminal')}
+    ${c.cyan('terminal.list()')}                  ${c.dim('// List all terminals')}
+    ${c.cyan('terminal.retrieve(id)')}            ${c.dim('// Get terminal by ID')}
+    ${c.cyan('terminal.destroy(id)')}             ${c.dim('// Close terminal by ID')}
+    
+    ${c.dim('PTY Terminal:')}
+      ${c.cyan('term = terminal.create({ pty: true })')}
+      ${c.cyan('term.on("output", (data) => console.log(data))')}
+      ${c.cyan('term.write("echo hello\\n")')}
+      ${c.cyan('term.destroy()')}
+    
+    ${c.dim('Exec Terminal:')}
+      ${c.cyan('exec = terminal.create({ pty: false })')}
+      ${c.cyan('cmd = exec.command.run("ls -la")')}
+      ${c.cyan('cmd.stdout')}  ${c.dim('// view output')}
   
   ${c.dim('Note: No need to use "await" - promises are auto-awaited!')}
   
