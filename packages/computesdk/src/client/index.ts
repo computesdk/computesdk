@@ -2020,25 +2020,30 @@ export class Sandbox {
       return this.run.command(command, options);
     }
 
-    // Streaming mode: use WebSocket to receive output
+    // Two-phase streaming flow:
+    // 1. POST /run/command with stream: true -> returns cmd_id, channel, status: "pending"
+    // 2. Subscribe to channel via WebSocket
+    // 3. Send command:start to trigger execution
+    // This ensures we're subscribed before the command runs (no race condition).
+    
+    // Get or create WebSocket connection first
+    const ws = await this.ensureWebSocket();
+
+    // Phase 1: Create pending command
     const result = await this.runCommandRequest({
       command,
       stream: true,
-      background: options?.background,
       cwd: options?.cwd,
       env: options?.env,
     });
 
-    const { terminal_id, cmd_id, channel } = result.data;
-    
-    if (!channel || !terminal_id || !cmd_id) {
+    const { cmd_id, channel } = result.data;
+
+    if (!cmd_id || !channel) {
       throw new Error('Server did not return streaming channel info');
     }
 
-    // Get or create WebSocket connection
-    const ws = await this.ensureWebSocket();
-
-    // Subscribe to the terminal channel
+    // Phase 2: Subscribe to channel
     ws.subscribe(channel);
 
     // Collect stdout/stderr for final result
@@ -2082,6 +2087,9 @@ export class Sandbox {
     ws.on('command:stdout', handleStdout);
     ws.on('command:stderr', handleStderr);
     ws.on('command:exit', handleExit);
+
+    // Phase 3: Send command:start to trigger execution
+    ws.startCommand(cmd_id);
 
     // Background mode: return immediately, callbacks continue firing in background
     if (options?.background) {

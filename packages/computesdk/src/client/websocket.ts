@@ -68,11 +68,22 @@ export interface TerminalResizeMessage {
   };
 }
 
+/**
+ * Start a pending streaming command
+ */
+export interface CommandStartMessage {
+  type: 'command:start';
+  data: {
+    cmd_id: string;
+  };
+}
+
 export type OutgoingMessage =
   | SubscribeMessage
   | UnsubscribeMessage
   | TerminalInputMessage
-  | TerminalResizeMessage;
+  | TerminalResizeMessage
+  | CommandStartMessage;
 
 // ============================================================================
 // Incoming Message Types (Server → Client)
@@ -544,6 +555,18 @@ export class WebSocketManager {
     this.sendRaw({
       type: 'terminal:resize',
       data: { terminal_id: terminalId, cols, rows },
+    });
+  }
+
+  /**
+   * Start a pending streaming command
+   * Used in two-phase streaming flow: HTTP request creates pending command,
+   * then this signal triggers execution after client has subscribed.
+   */
+  startCommand(cmdId: string): void {
+    this.sendRaw({
+      type: 'command:start',
+      data: { cmd_id: cmdId },
     });
   }
 
