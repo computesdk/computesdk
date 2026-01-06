@@ -29,7 +29,7 @@ npm install computesdk
 
 ## Configuration
 
-### compute.setConfig(config)
+### `compute.setConfig(config)`
 
 Explicitly configure the compute singleton with provider and authentication details. This method provides manual control over provider selection and configuration, as an alternative to the recommended auto-detection approach.
 
