@@ -28,7 +28,7 @@ function hasRequiredKeys(): boolean {
     case 'e2b':
       return !!process.env.E2B_API_KEY;
     case 'vercel':
-      return !!process.env.VERCEL_TOKEN && !!process.env.VERCEL_TEAM_ID;
+      return !!process.env.VERCEL_TOKEN && !!process.env.VERCEL_TEAM_ID && !!process.env.VERCEL_PROJECT_ID;
     case 'daytona':
       return !!process.env.DAYTONA_API_KEY;
     case 'modal':
@@ -37,6 +37,9 @@ function hasRequiredKeys(): boolean {
       return false;
   }
 }
+
+// Cache the result so we don't recompute
+const shouldRunTests = hasRequiredKeys();
 
 // Get provider config based on TEST_PROVIDER
 function getProviderConfig(): Record<string, unknown> {
@@ -60,6 +63,7 @@ function getProviderConfig(): Record<string, unknown> {
         vercel: { 
           token: process.env.VERCEL_TOKEN!,
           teamId: process.env.VERCEL_TEAM_ID!,
+          projectId: process.env.VERCEL_PROJECT_ID!,
         },
       };
     case 'daytona':
@@ -99,12 +103,15 @@ function getCreateOptions(): Record<string, unknown> {
   return baseOptions;
 }
 
-describe.skipIf(!hasRequiredKeys())(`Provider Compatibility (${testProvider})`, () => {
+describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () => {
   let sandbox: Sandbox;
   let sandboxId: string;
 
   beforeAll(async () => {
-    compute.setConfig(getProviderConfig() as any);
+    // Only configure if we have the required keys (extra guard)
+    if (shouldRunTests) {
+      compute.setConfig(getProviderConfig() as any);
+    }
   });
 
   afterAll(async () => {

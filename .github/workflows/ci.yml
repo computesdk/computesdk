@@ -181,6 +181,7 @@ jobs:
         E2B_TEMPLATE_ID: ${{ secrets.E2B_TEMPLATE_ID }}
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
         MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
