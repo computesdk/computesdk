@@ -848,7 +848,7 @@ await exec.destroy();
 
 ---
 
-## `terminals.list()`
+### `terminals.list()`
 
 List all active terminal sessions in the sandbox.
 
@@ -883,7 +883,7 @@ terminals.forEach(term => {
 
 ---
 
-## `terminals.retrieve(id)`
+### `terminals.retrieve(id)`
 
 Retrieve information about a specific terminal by ID.
 
@@ -923,7 +923,7 @@ if (terminal.pty) {
 
 ---
 
-## `terminals.destroy(id)`
+### `terminals.destroy(id)`
 
 Destroy a terminal session and clean up all associated resources.
 
