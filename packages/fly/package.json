@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/fly",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "description": "Fly.io provider for ComputeSDK - globally distributed sandboxes using Fly Machines",
   "author": "ComputeSDK Team",
   "license": "MIT",

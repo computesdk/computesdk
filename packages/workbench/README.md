@@ -316,6 +316,67 @@ BL_WORKSPACE=xxx
 - **Auto-create**: First command automatically creates a sandbox
 - **Stay in context**: Workbench maintains "current sandbox" - no IDs to track
 
+## Debugging SDK Tests
+
+The workbench is a full Node.js REPL with the ComputeSDK pre-loaded. You can reproduce any SDK test by calling the same methods interactively.
+
+### SDK to Workbench Mapping
+
+| SDK Test Code | Workbench Equivalent |
+|---------------|---------------------|
+| `sandbox.runCommand('echo hi')` | `runCommand('echo hi')` or `getInstance().runCommand(...)` |
+| `sandbox.terminal.create()` | `terminal.create()` |
+| `sandbox.filesystem.readFile(path)` | `filesystem.readFile(path)` |
+| `sandbox.getInfo()` | `sandboxInfo()` |
+| `sandbox.getUrl({ port })` | `getUrl({ port: 3000 })` |
+
+### Example: Reproducing a Failing Test
+
+If this test fails:
+
+```typescript
+// From provider-compatibility.test.ts
+it('command with streaming callbacks', async () => {
+  let stdoutCalled = false;
+  const result = await sandbox.runCommand('echo "hello"', {
+    onStdout: () => { stdoutCalled = true; },
+  });
+  expect(stdoutCalled).toBe(true);
+});
+```
+
+Reproduce it in workbench:
+
+```javascript
+> ls('/home')  // Auto-creates sandbox
+> const sandbox = getInstance()
+> let stdoutCalled = false
+> const result = await sandbox.runCommand('echo "hello"', {
+    onStdout: (data) => { console.log('STDOUT:', data); stdoutCalled = true }
+  })
+> stdoutCalled  // Should be true
+> result
+```
+
+### Verbose Mode
+
+Enable verbose mode to see full response objects and WebSocket debug info:
+
+```javascript
+> verbose()  // Toggle on - shows full results and WebSocket frames
+> ls('/home')
+> verbose()  // Toggle off
+```
+
+### Direct Shell Commands
+
+Prefix with `$` to run shell commands directly (bypasses `@computesdk/cmd`):
+
+```javascript
+> $echo "hello" | tr 'a-z' 'A-Z'
+> $for i in 1 2 3; do echo $i; done
+```
+
 ## License
 
 MIT

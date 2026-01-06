@@ -499,6 +499,67 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     }
   };
   
+  // Expose terminal namespace for PTY and exec terminal operations
+  replServer.context.terminal = {
+    get create() {
+      return async (options?: { shell?: string; encoding?: 'raw' | 'base64'; pty?: boolean }) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const term = await sandbox.terminal.create(options);
+        
+        // In verbose mode, enable WebSocket debug logging and auto-log terminal events
+        if (state.verbose) {
+          // Enable WebSocket debug mode
+          if (term._ws) {
+            term._ws.config.debug = true;
+          }
+          
+          // Auto-register event handlers that log output
+          term.on('output', (data: string) => {
+            console.log('[terminal:output]', JSON.stringify(data));
+          });
+          term.on('error', (error: string) => {
+            console.log('[terminal:error]', error);
+          });
+          term.on('destroyed', () => {
+            console.log('[terminal:destroyed]');
+          });
+        }
+        
+        return term;
+      };
+    },
+    get list() {
+      return async () => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.terminal.list();
+      };
+    },
+    get retrieve() {
+      return async (id: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.terminal.retrieve(id);
+      };
+    },
+    get destroy() {
+      return async (id: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.terminal.destroy(id);
+      };
+    }
+  };
+  
   // Expose getInstance for advanced users
   replServer.context.getInstance = () => {
     const sandbox = state.currentSandbox;
@@ -520,6 +581,18 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   
   (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
+    
+    // Special handling for "provider local" variants
+    // Supports: "provider local", "provider local list", "provider local <subdomain>"
+    const providerLocalMatch = trimmedCmd.match(/^provider\s+local(?:\s+(\S+))?$/);
+    if (providerLocalMatch) {
+      const arg = providerLocalMatch[1];
+      const providerCmd = arg 
+        ? `await provider('local', '${arg}')`
+        : `await provider('local')`;
+      originalEval.call(this, providerCmd, context, filename, callback);
+      return;
+    }
     
     // Special handling for "provider <mode> <name>" syntax (without parentheses)
     // Supports: "provider e2b", "provider direct e2b", "provider gateway e2b"
@@ -627,7 +700,7 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
   
   // Workbench commands with their argument suggestions
   const workbenchCommands = {
-    'provider': [...PROVIDER_NAMES], // Use actual provider names from config
+    'provider': [...PROVIDER_NAMES, 'local'], // Include 'local' as a provider option
     'mode': ['gateway', 'direct'],
     'providers': [],
     'restart': [],
