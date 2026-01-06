@@ -703,114 +703,255 @@ if (await sandbox.filesystem.exists(filePath)) {
 
 ---
 
-## sandbox.terminals
+## `sandbox.terminals`
 
-### terminals.create()
+### `terminals.create(options?)`
+
+Create a terminal session in the sandbox with support for two modes: **PTY mode** (interactive shell with real-time I/O over WebSocket) and **Exec mode** (command tracking with structured results).
+
+**Parameters:**
+
+- `options` (object, optional): Terminal creation options
+  - `pty` (boolean, optional): Terminal mode. `true` = PTY (interactive shell), `false` = exec (command tracking). Default: `false`
+  - `shell` (string, optional): Shell to use (e.g., '/bin/bash', '/bin/zsh'). PTY mode only. Default: system default shell
+  - `encoding` ('raw' | 'base64', optional): Output encoding. Default: `'raw'`
+
+**Returns:** `Promise<TerminalInstance>` - Terminal instance with properties and methods based on the selected mode
+
+**TerminalInstance properties:**
+- `id` (string): Unique identifier for the terminal
+- `status` ('running' | 'stopped' | 'active' | 'ready'): Current terminal status
+- `channel` (string | null): WebSocket channel identifier (PTY mode only, null for exec mode)
+- `pty` (boolean): Whether this is a PTY terminal (true) or exec terminal (false)
+- `command` (TerminalCommand): Command execution namespace (exec mode only)
+
+**TerminalInstance methods (PTY mode):**
+- `write(input: string): void` - Send input to the terminal shell
+- `resize(cols: number, rows: number): void` - Resize terminal window dimensions
+- `on(event: string, handler: Function): void` - Register event handler ('output', 'error', 'destroyed')
+- `off(event: string, handler: Function): void` - Unregister event handler
+- `destroy(): Promise<void>` - Destroy the terminal and clean up resources
+
+**TerminalInstance methods (Exec mode):**
+- `command.run(command: string, options?: { background?: boolean }): Promise<Command>` - Execute a command
+- `command.list(): Promise<Command[]>` - List all commands executed in this terminal
+- `command.retrieve(cmdId: string): Promise<Command>` - Retrieve specific command by ID
+- `destroy(): Promise<void>` - Destroy the terminal and clean up resources
+
+**TerminalInstance methods (Both modes):**
+- `isRunning(): boolean` - Check if terminal is currently running
+
+**Command object (returned by command.run()):**
+- `id` (string): Unique command identifier
+- `terminalId` (string): Parent terminal ID
+- `command` (string): The executed command string
+- `status` ('running' | 'completed' | 'failed'): Current command status
+- `stdout` (string): Standard output from the command
+- `stderr` (string): Standard error output from the command
+- `exitCode` (number | undefined): Exit code (undefined if still running)
+- `durationMs` (number | undefined): Execution duration in milliseconds
+- `startedAt` (string): ISO timestamp when command started
+- `finishedAt` (string | undefined): ISO timestamp when command finished (undefined if still running)
+- `wait(timeout?: number): Promise<Command>` - Wait for command to complete (timeout in seconds, 0 = no timeout)
+- `refresh(): Promise<Command>` - Refresh command status from server
+
+**Examples:**
 
 ```typescript
-// Create a PTY terminal (interactive shell with WebSocket)
-const ptyTerminal = await sandbox.terminals.create({
-  pty: true,
-  shell: '/bin/bash'
+// PTY mode - Interactive shell with real-time output
+const pty = await sandbox.terminals.create({ 
+  pty: true, 
+  shell: '/bin/bash' 
 });
-ptyTerminal.on('output', (data) => console.log(data));
-ptyTerminal.write('ls -la\n');
 
-// Create an exec terminal (command tracking without WebSocket)
-const execTerminal = await sandbox.terminals.create({ pty: false });
-const result = await execTerminal.execute('npm test');
-console.log(result.data.stdout);
+// Handle output events
+pty.on('output', (data) => {
+  console.log('Output:', data);
+});
+
+pty.on('error', (error) => {
+  console.error('Error:', error);
+});
+
+pty.on('destroyed', () => {
+  console.log('Terminal destroyed');
+});
+
+// Send commands to shell
+pty.write('ls -la\n');
+pty.write('cd /app\n');
+pty.write('npm install\n');
+
+// Resize terminal
+pty.resize(120, 40);
+
+// Clean up
+await pty.destroy();
 ```
+
+```typescript
+// Exec mode - Command execution with tracking
+const exec = await sandbox.terminals.create({ pty: false });
+
+// Run command in foreground (waits for completion)
+const cmd = await exec.command.run('npm test');
+console.log('Exit code:', cmd.exitCode);       // 0
+console.log('Output:', cmd.stdout);            // Test results
+console.log('Duration:', cmd.durationMs);      // 1543
+console.log('Status:', cmd.status);            // 'completed'
+
+// Check for errors
+if (cmd.exitCode !== 0) {
+  console.error('Command failed:', cmd.stderr);
+} else {
+  console.log('Tests passed!');
+}
+
+await exec.destroy();
+```
+
+```typescript
+// Exec mode - Background execution with wait
+const exec = await sandbox.terminals.create({ pty: false });
+
+// Start long-running command in background
+const cmd = await exec.command.run('npm install', { background: true });
+console.log('Command started:', cmd.id);
+console.log('Status:', cmd.status);  // 'running'
+
+// Wait for command to complete (60 second timeout)
+await cmd.wait(60);
+console.log('Installation complete');
+console.log('Exit code:', cmd.exitCode);
+console.log('Output:', cmd.stdout);
+
+// Or refresh status without waiting
+await cmd.refresh();
+console.log('Current status:', cmd.status);
+
+await exec.destroy();
+```
+
+**Notes:**
+- **PTY mode** provides an interactive shell with WebSocket streaming for real-time I/O - use for interactive sessions
+- **Exec mode** tracks individual commands with structured results - use for automation and scripting
+- PTY terminals require WebSocket connection for real-time communication
+- Exec mode commands can run in foreground (blocking) or background (non-blocking with wait capability)
+- Always call `destroy()` to clean up terminal resources when done
+- Background commands return immediately with status 'running' - use `wait()` to block until completion
+- The `write()` and `resize()` methods are only available for PTY terminals
+- The `command` namespace is only available for exec terminals
+- Terminal status 'active' is normalized to 'running' internally
+
 <br/>
 <br/>
 
 ---
-### terminals.list()
+
+## `terminals.list()`
+
+List all active terminal sessions in the sandbox.
+
+**Parameters:** None
+
+**Returns:** `Promise<TerminalResponse[]>` - Array of terminal information objects
+
+**TerminalResponse interface:**
+- `id` (string): Terminal identifier
+- `pty` (boolean): Whether this is a PTY terminal
+- `status` ('running' | 'stopped' | 'active' | 'ready'): Terminal status
+- `channel` (string | null): WebSocket channel (PTY mode only)
+
+**Examples:**
+
 ```typescript
 // List all terminals
 const terminals = await sandbox.terminals.list();
-```
-<br/>
-<br/>
+console.log(`Active terminals: ${terminals.length}`);
 
----
-### terminals.retrieve()
-```typescript
-// Retrieve a specific terminal
-const terminal = await sandbox.terminals.retrieve('terminal-id');
-```
-<br/>
-<br/>
-
----
-### terminals.destroy()
-```typescript
-// Destroy a terminal
-await sandbox.terminals.destroy('terminal-id');
-```
-
-
-### Terminal Modes
-
-The client supports two terminal modes:
-
-#### PTY Mode (Interactive)
-
-PTY terminals provide a full interactive shell with WebSocket streaming:
-
-```typescript
-const terminal = await sandbox.terminals.create({
-  pty: true,
-  shell: '/bin/bash',
-  encoding: 'raw' // or 'base64' for binary-safe
+terminals.forEach(term => {
+  console.log(`${term.id} - ${term.pty ? 'PTY' : 'Exec'} - ${term.status}`);
 });
-
-// Real-time output via WebSocket
-terminal.on('output', (data) => process.stdout.write(data));
-terminal.on('destroyed', () => console.log('Terminal closed'));
-
-// Write to terminal
-terminal.write('ls -la\n');
-terminal.write('cd /app && npm start\n');
-
-// Clean up
-await terminal.destroy();
 ```
 
-#### Exec Mode (Command Tracking)
+**Notes:**
+- Returns information about all active terminals regardless of mode
+- Does not return TerminalInstance objects - use `retrieve()` to get a specific terminal instance
 
-Exec terminals track individual commands with status and output:
+<br/>
+<br/>
+
+---
+
+## `terminals.retrieve(id)`
+
+Retrieve information about a specific terminal by ID.
+
+**Parameters:**
+
+- `id` (string, required): The terminal identifier
+
+**Returns:** `Promise<TerminalResponse>` - Terminal information object
+
+**TerminalResponse interface:**
+- `id` (string): Terminal identifier
+- `pty` (boolean): Whether this is a PTY terminal
+- `status` ('running' | 'stopped' | 'active' | 'ready'): Terminal status
+- `channel` (string | null): WebSocket channel (PTY mode only)
+
+**Examples:**
 
 ```typescript
-const terminal = await sandbox.terminals.create({ pty: false });
+// Retrieve specific terminal
+const terminal = await sandbox.terminals.retrieve('term-abc123');
+console.log(`Terminal ${terminal.id}: ${terminal.status}`);
 
-// Run a command and get structured result
-const result = await terminal.execute('npm test');
-console.log(result.data.cmd_id);
-console.log(result.data.status);  // 'running' | 'completed' | 'failed'
-console.log(result.data.stdout);
-console.log(result.data.stderr);
-console.log(result.data.exit_code);
-
-// Run in background
-const bgResult = await terminal.execute('npm install', { background: true });
-console.log(bgResult.data.cmd_id); // Track this command
-
-// Check command status later
-const cmdStatus = await sandbox.getCommand(terminal.getId(), bgResult.data.cmd_id);
-
-// Wait for command to complete
-const finalResult = await sandbox.waitForCommand(
-  terminal.getId(),
-  bgResult.data.cmd_id,
-  { timeout: 60000 }
-);
-
-// List all commands in a terminal
-const commands = await sandbox.listCommands(terminal.getId());
-
-await terminal.destroy();
+// Check terminal type
+if (terminal.pty) {
+  console.log('PTY terminal on channel:', terminal.channel);
+} else {
+  console.log('Exec terminal');
+}
 ```
+
+**Notes:**
+- Returns terminal metadata, not a TerminalInstance object
+- Throws an error if the terminal does not exist
+
+<br/>
+<br/>
+
+---
+
+## `terminals.destroy(id)`
+
+Destroy a terminal session and clean up all associated resources.
+
+**Parameters:**
+
+- `id` (string, required): The terminal identifier
+
+**Returns:** `Promise<void>` - Resolves when the terminal is destroyed
+
+**Examples:**
+
+```typescript
+// Destroy a terminal by ID
+await sandbox.terminals.destroy('term-abc123');
+console.log('Terminal destroyed');
+
+// Destroy all terminals
+const terminals = await sandbox.terminals.list();
+await Promise.all(
+  terminals.map(term => sandbox.terminals.destroy(term.id))
+);
+console.log('All terminals destroyed');
+```
+
+**Notes:**
+- Destroys the terminal and cleans up all resources including WebSocket connections
+- Throws an error if the terminal does not exist
+- Background commands may be terminated when the terminal is destroyed
 
 <br/>
 <br/>
