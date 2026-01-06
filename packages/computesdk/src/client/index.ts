@@ -121,6 +121,13 @@ export interface SandboxConfig {
   protocol?: 'json' | 'binary';
   /** Optional metadata associated with the sandbox */
   metadata?: Record<string, unknown>;
+  /** 
+   * Handler called when destroy() is invoked. 
+   * If provided, this is called to destroy the sandbox (e.g., via gateway API).
+   * If not provided, destroy() only disconnects the WebSocket.
+   * @internal
+   */
+  destroyHandler?: () => Promise<void>;
 }
 
 /**
@@ -688,7 +695,7 @@ export class Sandbox {
   readonly auth: Auth;
   readonly child: Child;
 
-  private config: Required<Omit<SandboxConfig, 'WebSocket' | 'metadata'>> & { metadata?: Record<string, unknown> };
+  private config: Required<Omit<SandboxConfig, 'WebSocket' | 'metadata' | 'destroyHandler'>> & { metadata?: Record<string, unknown>; destroyHandler?: () => Promise<void> };
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
@@ -743,6 +750,7 @@ export class Sandbox {
       timeout: config.timeout || 30000,
       protocol: config.protocol || 'binary',
       metadata: config.metadata,
+      destroyHandler: config.destroyHandler,
     };
 
     // Use provided WebSocket or fall back to global
@@ -2152,9 +2160,18 @@ export class Sandbox {
 
   /**
    * Destroy the sandbox (Sandbox interface method)
+   * 
+   * If a destroyHandler was provided (e.g., from gateway), calls it to destroy
+   * the sandbox on the backend. Otherwise, only disconnects the WebSocket.
    */
   async destroy(): Promise<void> {
+    // Disconnect WebSocket first
     await this.disconnect();
+    
+    // Call destroy handler if provided (e.g., gateway DELETE endpoint)
+    if (this.config.destroyHandler) {
+      await this.config.destroyHandler();
+    }
   }
 
   /**

@@ -249,6 +249,11 @@ class ComputeManager {
           ...(namespace && { namespace }),
         },
         WebSocket: globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
       });
 
       await waitForComputeReady(sandbox);
@@ -282,6 +287,11 @@ class ComputeManager {
         token: token || config.apiKey,
         metadata,
         WebSocket: globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
       });
 
       await waitForComputeReady(sandbox);
@@ -351,6 +361,11 @@ class ComputeManager {
           namespace: result.data.namespace,
         },
         WebSocket: globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
       });
 
       await waitForComputeReady(sandbox);
@@ -397,6 +412,11 @@ class ComputeManager {
           namespace,
         },
         WebSocket: globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
       });
 
       await waitForComputeReady(sandbox);
