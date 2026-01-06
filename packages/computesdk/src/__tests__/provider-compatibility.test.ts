@@ -297,15 +297,36 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       expect(result.stderr).toContain('stderr');
     }, 30000);
 
-    it('command with streaming callbacks', async () => {
+    it('command with streaming callbacks (waits for completion)', async () => {
       let stdoutCalled = false;
 
       const result = await sandbox.runCommand('echo "hello"', {
         onStdout: () => { stdoutCalled = true; },
       });
 
+      // Streaming without background waits for completion
       expect(stdoutCalled).toBe(true);
       expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('hello');
+    }, 30000);
+
+    it('command with background + streaming (returns immediately)', async () => {
+      let stdoutCalled = false;
+
+      const result = await sandbox.runCommand('echo "hello"', {
+        background: true,
+        onStdout: () => { stdoutCalled = true; },
+      });
+
+      // Background + streaming returns immediately
+      // stdout/stderr are empty since we didn't wait
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe('');
+      expect(result.exitCode).toBe(0);
+
+      // Wait a bit for callback to fire
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      expect(stdoutCalled).toBe(true);
     }, 30000);
   });
 

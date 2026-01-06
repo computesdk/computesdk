@@ -2044,44 +2044,58 @@ export class Sandbox {
     // Collect stdout/stderr for final result
     let stdout = '';
     let stderr = '';
+    let exitCode = 0;
+    let resolvePromise: ((value: { stdout: string; stderr: string; exitCode: number; durationMs: number }) => void) | null = null;
 
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        ws.off('command:stdout', handleStdout);
-        ws.off('command:stderr', handleStderr);
-        ws.off('command:exit', handleExit);
-        ws.unsubscribe(channel);
-      };
+    const cleanup = () => {
+      ws.off('command:stdout', handleStdout);
+      ws.off('command:stderr', handleStderr);
+      ws.off('command:exit', handleExit);
+      ws.unsubscribe(channel);
+    };
 
-      const handleStdout = (msg: { channel: string; data: { cmd_id: string; output: string } }) => {
-        if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
-          stdout += msg.data.output;
-          options?.onStdout?.(msg.data.output);
+    const handleStdout = (msg: { channel: string; data: { cmd_id: string; output: string } }) => {
+      if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
+        stdout += msg.data.output;
+        options?.onStdout?.(msg.data.output);
+      }
+    };
+
+    const handleStderr = (msg: { channel: string; data: { cmd_id: string; output: string } }) => {
+      if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
+        stderr += msg.data.output;
+        options?.onStderr?.(msg.data.output);
+      }
+    };
+
+    const handleExit = (msg: { channel: string; data: { cmd_id: string; exit_code: number } }) => {
+      if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
+        exitCode = msg.data.exit_code;
+        cleanup();
+        // Resolve promise if we're waiting (non-background mode)
+        if (resolvePromise) {
+          resolvePromise({ stdout, stderr, exitCode, durationMs: 0 });
         }
-      };
+      }
+    };
 
-      const handleStderr = (msg: { channel: string; data: { cmd_id: string; output: string } }) => {
-        if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
-          stderr += msg.data.output;
-          options?.onStderr?.(msg.data.output);
-        }
-      };
+    ws.on('command:stdout', handleStdout);
+    ws.on('command:stderr', handleStderr);
+    ws.on('command:exit', handleExit);
 
-      const handleExit = (msg: { channel: string; data: { cmd_id: string; exit_code: number } }) => {
-        if (msg.channel === channel && msg.data.cmd_id === cmd_id) {
-          cleanup();
-          resolve({
-            stdout,
-            stderr,
-            exitCode: msg.data.exit_code,
-            durationMs: 0, // Not available in streaming mode
-          });
-        }
+    // Background mode: return immediately, callbacks continue firing in background
+    if (options?.background) {
+      return {
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+        durationMs: 0,
       };
+    }
 
-      ws.on('command:stdout', handleStdout);
-      ws.on('command:stderr', handleStderr);
-      ws.on('command:exit', handleExit);
+    // Non-background streaming: wait for command to complete
+    return new Promise((resolve) => {
+      resolvePromise = resolve;
     });
   }
 
