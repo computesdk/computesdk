@@ -6,29 +6,9 @@
 Core methods for creating, destroying, listing, and retrieving sandbox instances.
 
 
-## Prerequisites
-
-### ComputeSDK API Key
-```bash
-COMPUTESDK_API_KEY=your_api_key_here
-```
-
-### Provider API Key / Environment Variables
-```bash
-PROVIDER_API_KEY=your_provider_api_key_here
-```
-
-### Install computesdk
-```bash
-npm install computesdk
-```
-
-<br/>
-<br/>
-
 ---
 
-## create(options?)
+## `create(options?)`
 
 Create a new compute sandbox instance with auto-detected provider configuration.
 
@@ -139,7 +119,7 @@ try {
 
 ---
 
-## destroy(sandboxId)
+## `destroy(sandboxId)`
 
 Destroy a sandbox and clean up all associated resources.
 
@@ -200,7 +180,7 @@ try {
 
 ---
 
-## getById(sandboxId)
+## `getById(sandboxId)`
 
 Retrieve an existing sandbox instance by its unique identifier.
 
@@ -280,7 +260,7 @@ if (sandbox) {
 
 ---
 
-## list()
+## `list()`
 
 **ℹ️ NOTE:** The `list()` method is currently not supported when using the gateway API (`import { compute } from 'computesdk'`). This functionality is actively being developed and will be available in a future release.
 
