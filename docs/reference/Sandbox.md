@@ -552,26 +552,152 @@ if (await sandbox.filesystem.exists(dirPath)) {
 
 ---
 
-### filesystem.exists()
+### `filesystem.exists(path)`
+
+Check if a file or directory exists at the specified path in the sandbox filesystem.
+
+**Parameters:**
+
+- `path` (string, required): Absolute path to the file or directory to check
+
+**Returns:** `Promise<boolean>` - Returns `true` if the path exists (file or directory), `false` otherwise
+
+**Examples:**
+
 ```typescript
-// Check if a file or directory exists
-const exists = await sandbox.filesystem.exists('/path/to/file')
+// Basic file existence check
+const exists = await sandbox.filesystem.exists('/app/config.json');
+console.log(exists);  // true
+
+// Basic directory existence check
+const dirExists = await sandbox.filesystem.exists('/app/src');
+console.log(dirExists);  // true
+
+// Check for non-existent path (returns false, doesn't throw error)
+const missing = await sandbox.filesystem.exists('/app/nonexistent.txt');
+console.log(missing);  // false
+
+// Check before reading to avoid errors
+const configPath = '/app/config.json';
+if (await sandbox.filesystem.exists(configPath)) {
+  const content = await sandbox.filesystem.readFile(configPath);
+  console.log('Config loaded:', content);
+} else {
+  console.log('Config file not found, using defaults');
+}
+
+// Check before writing to avoid overwriting
+const outputPath = '/app/output.txt';
+if (await sandbox.filesystem.exists(outputPath)) {
+  console.log('File already exists, skipping write');
+} else {
+  await sandbox.filesystem.writeFile(outputPath, 'New content');
+  console.log('File created');
+}
+
+// Verify file creation
+await sandbox.filesystem.writeFile('/app/data.json', '{}');
+const created = await sandbox.filesystem.exists('/app/data.json');
+console.log('File created successfully:', created);  // true
+
+// Verify file deletion
+await sandbox.filesystem.writeFile('/app/temp.txt', 'temporary');
+await sandbox.filesystem.remove('/app/temp.txt');
+const stillExists = await sandbox.filesystem.exists('/app/temp.txt');
+console.log('File still exists:', stillExists);  // false
+
+// Verify directory creation
+await sandbox.filesystem.mkdir('/app/logs');
+const dirCreated = await sandbox.filesystem.exists('/app/logs');
+console.log('Directory created:', dirCreated);  // true
+
+
+// Check multiple files at once
+const requiredFiles = ['/app/package.json', '/app/src/index.js', '/app/README.md'];
+const checks = await Promise.all(
+  requiredFiles.map(path => sandbox.filesystem.exists(path))
+);
+const allExist = checks.every(exists => exists);
+console.log('All required files present:', allExist);
 ```
+
+**Notes:**
+- Returns a boolean value - never throws errors (unlike `readFile` or `readdir`)
+- Works for both files and directories - no distinction in the return value
+- Requires absolute paths (paths should start with `/`)
+- Returns `false` for non-existent paths, not an error
+- Cannot distinguish between a file and directory from the return value alone
+- Useful for defensive programming to prevent errors before operations
 <br/>
 <br/>
 
 ---
 
-### filesystem.remove()
+### `filesystem.remove(path)`
+
+Remove a file or directory from the sandbox filesystem. For directories, this recursively removes all contents.
+
+**Parameters:**
+
+- `path` (string, required): Absolute path to the file or directory to remove
+
+**Returns:** `Promise<void>` - Resolves when the file or directory is successfully removed
+
+**Examples:**
 
 ```typescript
-// Remove a file
-await sandbox.filesystem.remove('/path/to/file.txt')
+// Basic file removal
+await sandbox.filesystem.writeFile('/app/temp.txt', 'temporary data');
+await sandbox.filesystem.remove('/app/temp.txt');
+console.log('File removed');
 
-// Remove a directory (recursive)
-await sandbox.filesystem.remove('/path/to/directory')
+// Basic directory removal (recursive)
+await sandbox.filesystem.mkdir('/app/old-data');
+await sandbox.filesystem.writeFile('/app/old-data/file1.txt', 'data');
+await sandbox.filesystem.writeFile('/app/old-data/file2.txt', 'data');
+await sandbox.filesystem.remove('/app/old-data');
+console.log('Directory and all contents removed');
+
+// Remove file and verify deletion
+await sandbox.filesystem.writeFile('/app/output.txt', 'content');
+await sandbox.filesystem.remove('/app/output.txt');
+const exists = await sandbox.filesystem.exists('/app/output.txt');
+console.log('File still exists:', exists);  // false
+
+// Remove directory with nested contents
+await sandbox.filesystem.mkdir('/app/cache/images/thumbnails');
+await sandbox.filesystem.writeFile('/app/cache/data.json', '{}');
+await sandbox.filesystem.writeFile('/app/cache/images/photo.jpg', 'image data');
+await sandbox.filesystem.remove('/app/cache');
+console.log('Entire cache directory tree removed');
+
+// Error handling for non-existent paths
+try {
+  await sandbox.filesystem.remove('/app/nonexistent.txt');
+} catch (error) {
+  console.error('Failed to remove:', error.message);
+  // "Failed to remove: File not found: /app/nonexistent.txt"
+}
+
+// Safe removal with existence check
+const filePath = '/app/optional-cache.json';
+if (await sandbox.filesystem.exists(filePath)) {
+  await sandbox.filesystem.remove(filePath);
+  console.log('Cache file removed');
+} else {
+  console.log('No cache file to remove');
+}
 ```
 
+**Notes:**
+- Works for both files and directories - no distinction needed
+- **Recursive deletion for directories** - removes all contents and subdirectories (like `rm -rf`)
+- Requires absolute paths (paths should start with `/`)
+- Throws an error if the path does not exist
+- **Deletion is permanent** - no recycle bin, trash, or undo capability
+- **Use with caution** - destructive operation that cannot be reversed
+- For directories, all nested files and subdirectories are removed automatically
+- No confirmation prompt - removal happens immediately
 <br/>
 <br/>
 
