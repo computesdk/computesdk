@@ -85,6 +85,14 @@ export const ls = (path?: string, options?: { all?: boolean; long?: boolean }): 
 export const pwd = (): Command => ['pwd'];
 
 /**
+ * Change directory
+ * Note: cd is a shell built-in, so this command only works when executed
+ * within a shell context (e.g., as part of a shell script or with sh -c)
+ * @example cd('/app') // ['cd', '/app']
+ */
+export const cd = (path: string): Command => ['cd', path];
+
+/**
  * Change file permissions
  * @example chmod('755', '/app/script.sh')
  */

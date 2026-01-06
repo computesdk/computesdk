@@ -329,6 +329,7 @@ export class TerminalInstance {
       throw new Error('Destroy handler not set');
     }
     await this._destroyHandler();
+    this._status = 'stopped';
     this.cleanup();
   }
 
