@@ -337,8 +337,8 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // Send a command
       terminal.write('echo "test-output"\n');
 
-      // Wait for output
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Wait for output (5s for CI latency)
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       const allOutput = outputs.join('');
       expect(allOutput).toContain('test-output');
@@ -354,8 +354,8 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
 
       terminal.write('for i in 1 2 3; do echo "line $i"; done\n');
 
-      // Wait for output
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Wait for output (5s for CI latency)
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       const allOutput = chunks.join('');
       expect(allOutput).toContain('line 1');
