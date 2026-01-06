@@ -1258,7 +1258,17 @@ export class Sandbox {
    * Get file metadata (without content)
    */
   async getFile(path: string): Promise<FileResponse> {
-    return this.request<FileResponse>(`/files/${encodeURIComponent(path)}`);
+    return this.request<FileResponse>(`/files/${this.encodeFilePath(path)}`);
+  }
+
+  /**
+   * Encode a file path for use in URLs
+   * Strips leading slash and encodes each segment separately to preserve path structure
+   */
+  private encodeFilePath(path: string): string {
+    const pathWithoutLeadingSlash = path.startsWith('/') ? path.slice(1) : path;
+    const segments = pathWithoutLeadingSlash.split('/');
+    return segments.map(s => encodeURIComponent(s)).join('/');
   }
 
   /**
@@ -1266,13 +1276,8 @@ export class Sandbox {
    */
   async readFile(path: string): Promise<string> {
     const params = new URLSearchParams({ content: 'true' });
-    // Encode each path segment separately to handle special characters in filenames
-    // while preserving forward slashes as path separators
-    const pathWithoutLeadingSlash = path.startsWith('/') ? path.slice(1) : path;
-    const segments = pathWithoutLeadingSlash.split('/');
-    const encodedPath = segments.map(s => encodeURIComponent(s)).join('/');
     const response = await this.request<FileResponse>(
-      `/files/${encodedPath}?${params}`
+      `/files/${this.encodeFilePath(path)}?${params}`
     );
     return response.data.content || '';
   }
@@ -1291,7 +1296,7 @@ export class Sandbox {
    * Delete a file or directory
    */
   async deleteFile(path: string): Promise<void> {
-    return this.request<void>(`/files/${encodeURIComponent(path)}`, {
+    return this.request<void>(`/files/${this.encodeFilePath(path)}`, {
       method: 'DELETE',
     });
   }
@@ -1313,7 +1318,7 @@ export class Sandbox {
       }
 
       const response = await fetch(
-        `${this.config.sandboxUrl}/files/${encodeURIComponent(path)}`,
+        `${this.config.sandboxUrl}/files/${this.encodeFilePath(path)}`,
         {
           method: 'HEAD',
           headers,

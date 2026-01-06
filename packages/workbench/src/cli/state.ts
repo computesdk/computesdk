@@ -50,7 +50,7 @@ export function createState(): WorkbenchState {
     sandboxCreatedAt: null,
     availableProviders: [],
     useDirectMode: false,  // Default to gateway mode
-    verbose: false,
+    verbose: false,  // Enabled automatically for local provider
     compute: null,
   };
 }
