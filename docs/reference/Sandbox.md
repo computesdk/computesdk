@@ -959,49 +959,265 @@ console.log('All terminals destroyed');
 ---
 
 
-## sandbox.servers
+## sandbox.server
 
 Manage long-running server processes:
 
-### servers.start()
+### `server.start(options)`
+
+Start a managed server process in the sandbox with automatic process management and URL exposure.
+
+**Parameters:**
+
+- `options` (object, required): Server configuration
+  - `slug` (string, required): Unique URL-safe identifier for the server
+  - `command` (string, required): Command to start the server process
+  - `path` (string, optional): Working directory for command execution
+  - `env_file` (string, optional): Path to environment file to load
+
+**Returns:** `Promise<ServerInfo>` - Server information including status, URL, and process details
+
+**ServerInfo interface:**
+- `slug` (string): Server identifier
+- `command` (string): The command being executed
+- `path` (string): Working directory path
+- `original_path` (string, optional): Original path before resolution
+- `env_file` (string, optional): Environment file path if specified
+- `port` (number, optional): Detected port number
+- `url` (string, optional): Public URL when server is ready
+- `status` ('starting' | 'running' | 'ready' | 'failed' | 'stopped'): Current server status
+- `pid` (number, optional): Process ID when running
+- `terminal_id` (string, optional): Associated terminal session ID
+- `created_at` (string): ISO timestamp when server was created
+- `updated_at` (string): ISO timestamp of last status update
+
+**Examples:**
 
 ```typescript
-// Start a server
-const server = await sandbox.servers.start({
-  name: 'api',
-  command: 'npm start',
-  path: '/app',
-  env_file: '.env'
+// Basic server start
+const server = await sandbox.server.start({
+  slug: 'api',
+  command: 'npm start'
+});
+console.log(server.slug);     // "api"
+console.log(server.status);   // "starting"
+console.log(server.command);  // "npm start"
+
+// Server with environment file
+const server = await sandbox.server.start({
+  slug: 'api',
+  command: 'node server.js',
+  env_file: '.env.production'
+});
+console.log(server.env_file); // ".env.production"
+
+// Check server status after starting
+const server = await sandbox.server.start({
+  slug: 'api',
+  command: 'npm start'
+});
+console.log('Initial status:', server.status);  // "starting"
+
+// Error handling
+try {
+  const server = await sandbox.server.start({
+    slug: 'test-server',
+    command: 'invalid-command'
+  });
+} catch (error) {
+  console.error('Failed to start server:', error.message);
+}
+```
+
+**Notes:**
+- The `slug` must be unique across all servers in the sandbox
+- Server processes continue running until explicitly stopped with `server.stop(slug)`
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `server.list()`
+
+List all managed server processes running in the sandbox.
+
+**Parameters:** None
+
+**Returns:** `Promise<ServerInfo[]>` - Array of server information objects (see `server.start()` for `ServerInfo` interface details)
+
+**Examples:**
+
+```typescript
+// Basic usage - list all servers
+const servers = await sandbox.server.list();
+console.log(`Found ${servers.length} servers`);
+
+// Empty array when no servers running
+const servers = await sandbox.server.list();
+if (servers.length === 0) {
+  console.log('No servers are currently running');
+}
+
+// Display all server information
+const servers = await sandbox.server.list();
+servers.forEach(server => {
+  console.log(`${server.slug}: ${server.status}`);
+  console.log(`  Command: ${server.command}`);
+  console.log(`  URL: ${server.url || 'not ready'}`);
 });
 ```
 
-### servers.list()
+**Notes:**
+- Returns an empty array if no servers are currently running
+- Use `server.retrieve(slug)` to get information about a specific server by its slug
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `server.retrieve(slug)`
+
+Retrieve information about a specific server by its slug identifier.
+
+**Parameters:**
+
+- `slug` (string, required): The unique server slug identifier
+
+**Returns:** `Promise<ServerInfo>` - Server information object (see `server.start()` for `ServerInfo` interface details)
+
+**Examples:**
 
 ```typescript
-// List all servers
-const servers = await sandbox.servers.list();
+// Basic retrieval - get server by slug
+const server = await sandbox.server.retrieve('api');
+console.log(server.status);  // "ready"
+console.log(server.url);     // "https://..."
+
+// Check if server is ready
+const server = await sandbox.server.retrieve('api');
+if (server.status === 'ready') {
+  console.log('Server is ready at:', server.url);
+} else {
+  console.log('Server is still', server.status);
+}
+
+// Check server process information
+const server = await sandbox.server.retrieve('api');
+console.log('Process ID:', server.pid);
+console.log('Port:', server.port);
+console.log('Terminal:', server.terminal_id);
+
+// Check server status before operations
+const server = await sandbox.server.retrieve('backend');
+if (server.status === 'failed') {
+  console.log('Server failed, restarting...');
+  await sandbox.server.restart('backend');
+} else if (server.status === 'ready') {
+  console.log('Server is healthy');
+}
 ```
 
-### servers.retrieve()
+**Notes:**
+- Returns the current state of the server - status may change immediately after retrieval
+- Use `server.list()` first to check if a server exists before calling `retrieve()`
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `server.stop(slug)`
+
+Stop a running server process.
+
+**Parameters:**
+
+- `slug` (string, required): The unique server slug identifier
+
+**Returns:** `Promise<void>` - Resolves when the server is successfully stopped
+
+**Examples:**
 
 ```typescript
-// Get server info
-const info = await sandbox.servers.retrieve('api');
-console.log(info.status); // 'starting' | 'running' | 'ready' | 'failed' | 'stopped'
-console.log(info.url);    // Server URL when ready
+// Basic stop - stop a server by slug
+await sandbox.server.stop('api');
+console.log('Server stopped');
+
+// Stop before starting with new configuration
+await sandbox.server.stop('api');
+const newServer = await sandbox.server.start({
+  slug: 'api',
+  command: 'npm run prod',
+  path: '/app'
+});
+console.log('Server started with new configuration');
+
+// Check status before stopping
+const server = await sandbox.server.retrieve('api');
+if (server.status === 'running' || server.status === 'ready') {
+  await sandbox.server.stop('api');
+  console.log('Server stopped');
+} else {
+  console.log('Server is not running');
+}
 ```
 
-### servers.stop()
+**Notes:**
+- Stops a running server process
+- Use `server.retrieve(slug)` to check server status before stopping
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `server.restart(slug)`
+
+Restart a server process.
+
+**Parameters:**
+
+- `slug` (string, required): The unique server slug identifier
+
+**Returns:** `Promise<ServerInfo>` - Server information object after restart (see `server.start()` for `ServerInfo` interface details)
+
+**Examples:**
+
 ```typescript
-// Stop a server
-await sandbox.servers.stop('api');
+// Basic restart - restart a server by slug
+const server = await sandbox.server.restart('api');
+console.log(server.status);  // Server status after restart
+console.log(server.url);     // Server URL
+
+// Restart and check updated status
+const server = await sandbox.server.restart('backend');
+console.log('Server restarted');
+console.log('New status:', server.status);
+console.log('New PID:', server.pid);
+
+// Restart multiple servers sequentially
+const api = await sandbox.server.restart('api');
+const frontend = await sandbox.server.restart('frontend');
+const worker = await sandbox.server.restart('worker');
+console.log('All servers restarted');
+
+// Check status before restart
+const server = await sandbox.server.retrieve('api');
+console.log('Current status:', server.status);
+const restarted = await sandbox.server.restart('api');
+console.log('New status:', restarted.status);
 ```
 
-### servers.restart()
-```typescript
-// Restart a server
-await sandbox.servers.restart('api');
-```
+**Notes:**
+- Returns updated server information after restart
+- Use the returned `ServerInfo` object to check the new status, PID, and other details
+- Available on all sandbox instances regardless of provider
 
 
 <br/>

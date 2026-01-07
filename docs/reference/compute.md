@@ -111,7 +111,7 @@ try {
 
 ---
 
-## Creating a sandbox
+## `compute.sandbox` methods
 
 - [compute.sandbox](./computesandbox)
 
