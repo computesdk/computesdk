@@ -1230,33 +1230,162 @@ console.log('New status:', restarted.status);
 Manage `.env` files in the sandbox:
 
 
-### env.retrieve()
+### `env.retrieve(file)`
+
+Retrieve all environment variables from a `.env` file in the sandbox as a key-value object.
+
+**Parameters:**
+
+- `file` (string, required): Path to the .env file relative to sandbox root (e.g., '.env', '.env.production', 'config/.env')
+
+**Returns:** `Promise<Record<string, string>>` - Key-value map of all environment variables in the file
+
+**Examples:**
+
 ```typescript
-// Get environment variables
+// Basic retrieval
 const vars = await sandbox.env.retrieve('.env');
-console.log(vars); // { API_KEY: 'secret', DEBUG: 'true' }
+console.log(vars);  // { API_KEY: 'secret', DEBUG: 'true', PORT: '3000' }
+
+// Access specific variables
+const vars = await sandbox.env.retrieve('.env');
+console.log(vars.API_KEY);  // "secret"
+console.log(vars.DEBUG);    // "true"
+
+// Check if file exists before retrieving
+const exists = await sandbox.env.exists('.env.local');
+if (exists) {
+  const vars = await sandbox.env.retrieve('.env.local');
+  console.log('Local config loaded:', vars);
+} else {
+  console.log('No local config found, using defaults');
+}
 ```
 
-### env.update()
+**Notes:**
+- Returns all environment variables as string key-value pairs
+- File paths are relative to the sandbox root directory
+- All values are returned as strings - no automatic type conversion
+- Use with `env.exists()` to check file presence before retrieval
+
+### `env.update(file, variables)`
+
+Update or add environment variables in a `.env` file, merging with existing variables.
+
+**Parameters:**
+
+- `file` (string, required): Path to the .env file relative to sandbox root (e.g., '.env', '.env.production', 'config/.env')
+- `variables` (Record<string, string>, required): Key-value pairs of environment variables to set or update
+
+**Returns:** `Promise<string[]>` - Array of environment variable keys that were updated or added
+
+**Examples:**
+
 ```typescript
-// Update environment variables (merges with existing)
-await sandbox.env.update('.env', {
+// Basic update
+const keys = await sandbox.env.update('.env', {
   API_KEY: 'new-secret',
-  NEW_VAR: 'value'
+  DEBUG: 'true'
 });
+console.log(keys);  // ['API_KEY', 'DEBUG']
+
+// Conditional update with existence check
+const exists = await sandbox.env.exists('.env.local');
+if (!exists) {
+  await sandbox.env.update('.env.local', { DEBUG: 'true', LOG_LEVEL: 'verbose' });
+  console.log('Created new local environment file');
+} else {
+  await sandbox.env.update('.env.local', { DEBUG: 'false' });
+  console.log('Updated existing local environment');
+}
 ```
 
-### env.remove()
+**Notes:**
+- Merges with existing variables - does not replace the entire file
+- Existing variables not mentioned in the update are preserved
+- Creates the file if it doesn't exist
+- All values must be strings - no automatic type conversion
+- File paths are relative to the sandbox root directory
+- Returns array of keys that were modified or added
+
+### `env.remove(file, keys)`
+
+Remove specific environment variables from a `.env` file while preserving all other variables.
+
+**Parameters:**
+
+- `file` (string, required): Path to the .env file relative to sandbox root (e.g., '.env', '.env.production', 'config/.env')
+- `keys` (string[], required): Array of environment variable keys to remove from the file
+
+**Returns:** `Promise<string[]>` - Array of environment variable keys that were successfully removed
+
+**Examples:**
+
 ```typescript
-// Remove environment variables
-await sandbox.env.remove('.env', ['OLD_KEY', 'DEPRECATED']);
+// Basic removal
+const removed = await sandbox.env.remove('.env', ['OLD_KEY', 'DEPRECATED']);
+console.log(removed);  // ['OLD_KEY', 'DEPRECATED']
+
+// Conditional removal with existence check
+const exists = await sandbox.env.exists('.env.local');
+if (exists) {
+  const vars = await sandbox.env.retrieve('.env.local');
+  if ('DEBUG' in vars) {
+    await sandbox.env.remove('.env.local', ['DEBUG']);
+    console.log('DEBUG variable removed from local environment');
+  }
+}
 ```
 
-### env.exists()
+**Notes:**
+- Only removes specified keys - all other variables in the file are preserved
+- Returns array of keys that were successfully removed
+- File paths are relative to the sandbox root directory
+- Use with `env.retrieve()` to check which variables exist before removal
+
+### `env.exists(file)`
+
+Check if a `.env` file exists in the sandbox.
+
+**Parameters:**
+
+- `file` (string, required): Path to the .env file relative to sandbox root (e.g., '.env', '.env.production', 'config/.env')
+
+**Returns:** `Promise<boolean>` - Returns `true` if the file exists, `false` otherwise
+
+**Examples:**
+
 ```typescript
-// Check if env file exists
+// Basic existence check
 const exists = await sandbox.env.exists('.env');
+console.log(exists);  // true or false
+
+// Conditional operations - check before retrieve
+const exists = await sandbox.env.exists('.env.local');
+if (exists) {
+  const vars = await sandbox.env.retrieve('.env.local');
+  console.log('Local config loaded:', vars);
+} else {
+  console.log('No local config found, using defaults');
+}
+
+// Check before update - determine whether to create or update
+const exists = await sandbox.env.exists('.env.production');
+if (!exists) {
+  await sandbox.env.update('.env.production', {
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgres://prod-server/db'
+  });
+  console.log('Production environment file created');
+} else {
+  console.log('Production environment file already exists');
+}
 ```
+
+**Notes:**
+- Returns a boolean value - never throws errors (safe to call without try/catch)
+- Returns `false` for non-existent files rather than throwing an error
+- File paths are relative to the sandbox root directory
 <br/>
 <br/>
 
