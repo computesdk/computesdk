@@ -2169,36 +2169,429 @@ watcher.on('change', async (event) => {
 
 ---
 
+
+## `sandbox.signals`
+
+Monitor system events and emit custom signals via WebSocket.
+
 <br/>
 <br/>
 
 ---
 
-## sandbox.signals
+### `signals.start()`
 
-Monitor system events:
+Start the signal service to monitor system events via WebSocket.
 
-### signals.start()
+**Parameters:** None
+
+**Returns:** `Promise<SignalService>` - SignalService instance with event handling
+
+**SignalService interface:**
+- Event methods: `on()`, `off()`, `stop()`
+- Getter methods: `getStatus()`, `getChannel()`, `isActive()`
+
+**Examples:**
+
 ```typescript
 // Start signal monitoring
 const signals = await sandbox.signals.start();
-```
 
-### signals.on()
-```typescript
+// Listen for port signals
 signals.on('port', (event) => {
   console.log(`Port ${event.port} ${event.type}: ${event.url}`);
 });
 
+// Listen for error signals
 signals.on('error', (event) => {
   console.error('Error:', event.message);
 });
+
+// Check status
+console.log('Active:', signals.isActive());  // true
+console.log('Status:', signals.getStatus()); // 'active'
+console.log('Channel:', signals.getChannel()); // 'signals-channel-123'
+
+// Stop when done
+await signals.stop();
 ```
 
-### signals.stop()
+**Notes:**
+- Returns a `SignalService` instance for monitoring events
+- Requires WebSocket connection to receive events
+- Multiple event handlers can be registered for the same event type
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.status()`
+
+Get the current status of the signal service.
+
+**Parameters:** None
+
+**Returns:** `Promise<SignalStatusInfo>` - Signal service status information
+
+**SignalStatusInfo interface:**
+- `status` ('active' | 'stopped'): Current service status
+- `channel` (string): WebSocket channel identifier
+- `wsUrl` (string): WebSocket URL
+
+**Examples:**
+
 ```typescript
-// Stop signal monitoring
+// Get signal service status
+const status = await sandbox.signals.status();
+console.log(status.status);   // 'active' or 'stopped'
+console.log(status.channel);  // 'signals-channel-123'
+console.log(status.wsUrl);    // 'wss://...'
+
+// Check if service is active before emitting
+const status = await sandbox.signals.status();
+if (status.status === 'active') {
+  await sandbox.signals.emitPort(3000, 'open', 'http://localhost:3000');
+}
+```
+
+**Notes:**
+- Returns current state without requiring a `SignalService` instance
+- Use this to check status before calling other signal methods
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.stop()`
+
+Stop the signal service (namespace method).
+
+**Parameters:** None
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Stop signal service via namespace
 await sandbox.signals.stop();
+console.log('Signal service stopped');
+
+// Alternative: stop via instance
+const signals = await sandbox.signals.start();
+await signals.stop();
+```
+
+**Notes:**
+- This is a namespace method - can be called directly on `sandbox.signals`
+- The `SignalService` instance also has a `stop()` method
+- Both accomplish the same result
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.emitPort(port, type, url)`
+
+Emit a port signal to notify about port status changes.
+
+**Parameters:**
+- `port` (number, required): Port number
+- `type` ('open' | 'close', required): Signal type indicating port status
+- `url` (string, required): URL associated with the port
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Emit port opened signal
+await sandbox.signals.emitPort(3000, 'open', 'http://localhost:3000');
+
+// Emit port closed signal
+await sandbox.signals.emitPort(3000, 'close', 'http://localhost:3000');
+
+// Notify about server starting
+await sandbox.signals.emitPort(8080, 'open', 'https://myapp.example.com');
+console.log('Port signal emitted');
+```
+
+**Notes:**
+- Use 'open' type when a port becomes available
+- Use 'close' type when a port is no longer available
+- Requires signal service to be started to receive events
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.emitError(message)`
+
+Emit an error signal to notify about errors in the sandbox.
+
+**Parameters:**
+- `message` (string, required): Error message
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Emit error signal
+await sandbox.signals.emitError('Database connection failed');
+
+// Error in application code
+try {
+  await riskyOperation();
+} catch (error) {
+  await sandbox.signals.emitError(`Operation failed: ${error.message}`);
+}
+
+// Custom error notifications
+await sandbox.signals.emitError('Configuration file missing');
+```
+
+**Notes:**
+- Use for application-level errors or notifications
+- Requires signal service to be started to receive events
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.emitServerReady(port, url)`
+
+Emit a server ready signal to notify when a server is ready to accept connections.
+
+**Parameters:**
+- `port` (number, required): Port number where server is listening
+- `url` (string, required): Server URL
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Notify server is ready
+await sandbox.signals.emitServerReady(3000, 'http://localhost:3000');
+
+// After starting Express server
+const app = express();
+app.listen(3000, async () => {
+  await sandbox.signals.emitServerReady(3000, 'http://localhost:3000');
+  console.log('Server ready signal emitted');
+});
+
+// Multiple servers
+await sandbox.signals.emitServerReady(3000, 'http://localhost:3000'); // API
+await sandbox.signals.emitServerReady(8080, 'http://localhost:8080'); // WebSocket
+```
+
+**Notes:**
+- Specialized signal for server readiness (distinct from port open)
+- Useful for coordinating application startup
+- Requires signal service to be started to receive events
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+## SignalService Instance
+
+The `SignalService` instance returned by `signals.start()` provides event handling and management methods.
+
+### `on(event, handler)`
+
+Register an event handler for signal events.
+
+**Parameters:**
+- `event` ('port' | 'error' | 'signal', required): Event type to listen for
+- `handler` (function, required): Event handler function
+  - For 'port': `(event: PortSignalEvent) => void`
+  - For 'error': `(event: ErrorSignalEvent) => void`
+  - For 'signal': `(event: SignalEvent) => void`
+
+**Event Types:**
+- `PortSignalEvent`: `{ signal: 'port' | 'server-ready', port: number, url: string, type?: 'open' | 'close' }`
+- `ErrorSignalEvent`: `{ signal: 'error', message: string }`
+- `SignalEvent`: Union of all event types
+
+**Returns:** void
+
+**Examples:**
+
+```typescript
+const signals = await sandbox.signals.start();
+
+// Listen for port events
+signals.on('port', (event) => {
+  console.log(`Signal: ${event.signal}`);
+  console.log(`Port: ${event.port} - ${event.url}`);
+  if (event.type) {
+    console.log(`Type: ${event.type}`);
+  }
+});
+
+// Listen for error events
+signals.on('error', (event) => {
+  console.error(`Error signal: ${event.message}`);
+});
+
+// Listen for all signal events (generic)
+signals.on('signal', (event) => {
+  console.log('Signal received:', event);
+});
+
+// Multiple handlers for same event
+const handler1 = (event) => console.log('Handler 1:', event.port);
+const handler2 = (event) => console.log('Handler 2:', event.port);
+
+signals.on('port', handler1);
+signals.on('port', handler2);
+// Both handlers will be called
+```
+
+**Notes:**
+- Multiple handlers can be registered for the same event type
+- All handlers are called when an event fires
+- The 'port' event includes both port signals and server-ready signals
+- The 'signal' event is a generic listener that receives all signal types
+- Handler errors are caught and logged to console without stopping other handlers
+
+<br/>
+<br/>
+
+---
+
+### `off(event, handler)`
+
+Unregister an event handler to stop receiving notifications.
+
+**Parameters:**
+- `event` ('port' | 'error' | 'signal', required): Event type
+- `handler` (function, required): The specific handler function to remove
+
+**Returns:** void
+
+**Examples:**
+
+```typescript
+const signals = await sandbox.signals.start();
+
+// Register handler
+const portHandler = (event) => {
+  console.log('Port event:', event.port);
+};
+signals.on('port', portHandler);
+
+// Later, remove handler
+signals.off('port', portHandler);
+
+// Remove specific handler from multiple
+const handler1 = (event) => console.log('Handler 1');
+const handler2 = (event) => console.log('Handler 2');
+
+signals.on('error', handler1);
+signals.on('error', handler2);
+
+signals.off('error', handler1); // Only handler2 continues to receive events
+
+// Cleanup pattern
+const cleanup = () => {
+  signals.off('port', portHandler);
+  signals.off('error', errorHandler);
+};
+```
+
+**Notes:**
+- Must pass the exact same function reference used with `on()`
+- Anonymous functions cannot be removed unless you store a reference
+- No error if handler wasn't registered
+- Use for cleanup when you no longer need specific handlers
+
+<br/>
+<br/>
+
+---
+
+### `stop()`
+
+Stop the signal service instance and clean up resources.
+
+**Parameters:** None
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Stop via instance method
+const signals = await sandbox.signals.start();
+signals.on('port', (event) => console.log(event));
+
+// Later, stop monitoring
+await signals.stop();
+console.log('Signal service stopped');
+
+// Cleanup pattern with finally
+let signals;
+try {
+  signals = await sandbox.signals.start();
+  signals.on('port', (event) => console.log(event));
+  // ... work ...
+} finally {
+  if (signals) {
+    await signals.stop();
+  }
+}
+```
+
+**Notes:**
+- Makes POST request to `/signals/stop`
+- Cleans up WebSocket subscriptions and event handlers
+- Sets status to 'stopped'
+- Alternative to namespace method `sandbox.signals.stop()`
+
+<br/>
+<br/>
+
+---
+
+### Getter Methods
+
+The `SignalService` instance provides getter methods to inspect its state.
+
+**`getStatus()`** - Returns current status ('active' | 'stopped')
+```typescript
+const signals = await sandbox.signals.start();
+console.log(signals.getStatus()); // 'active'
+```
+
+**`getChannel()`** - Returns WebSocket channel identifier
+```typescript
+const signals = await sandbox.signals.start();
+console.log(signals.getChannel()); // 'signals-channel-123'
+```
+
+**`isActive()`** - Returns true if service is active
+```typescript
+const signals = await sandbox.signals.start();
+console.log(signals.isActive()); // true
+
+await signals.stop();
+console.log(signals.isActive()); // false
 ```
 
 <br/>
