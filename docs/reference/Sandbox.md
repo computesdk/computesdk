@@ -2601,29 +2601,246 @@ console.log(signals.isActive()); // false
 
 ## sandbox.sessionTokens
 
-Manage delegated access (requires access token):
+Manage session tokens for delegated access. Session tokens provide temporary, scoped access to a sandbox without requiring the primary access token.
 
-### sessionTokens.create()
+**Important:** All sessionToken methods require an **access token**. Session tokens cannot manage themselves (403 Forbidden).
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.create(options?)`
+
+Create a new session token for delegated access to the sandbox.
+
+**Parameters:**
+- `options` (object, optional): Token configuration
+  - `description` (string, optional): Human-readable description for the token
+  - `expiresIn` (number, optional): Expiration time in seconds (default: 604800 = 7 days)
+
+**Returns:** `Promise<SessionTokenInfo>` - Session token information including the token value
+
+**SessionTokenInfo interface (create only):**
+- `id` (string): Unique token identifier
+- `token` (string): The actual token value - **ONLY returned on creation, cannot be retrieved later!**
+- `description` (string, optional): Token description
+- `createdAt` (string): ISO timestamp when token was created
+- `expiresAt` (string): ISO timestamp when token expires
+
+**Examples:**
+
 ```typescript
-// Create a session token
+// Basic token creation with default expiration (7 days)
+const token = await sandbox.sessionTokens.create();
+console.log(token.token);      // "st_abc123..." - Save this!
+console.log(token.id);         // "token_xyz789"
+console.log(token.expiresAt);  // "2024-01-15T12:00:00Z"
+
+// Token with description
 const token = await sandbox.sessionTokens.create({
-  description: 'My Application',
-  expiresIn: 604800 // 7 days
+  description: 'My Application'
+});
+console.log(token.description); // "My Application"
+
+// Token with custom expiration (1 hour = 3600 seconds)
+const token = await sandbox.sessionTokens.create({
+  description: 'Short-lived token',
+  expiresIn: 3600
+});
+
+// Save token immediately - it won't be available later!
+const token = await sandbox.sessionTokens.create({
+  description: 'Production API'
+});
+const tokenValue = token.token; // Save this now!
+// Later calls to retrieve() or list() will NOT include the token value
+
+// Use token to create a new sandbox connection
+const delegatedSandbox = new Sandbox({
+  sandboxUrl: 'https://sandbox-123.computesdk.com',
+  token: token.token  // Use session token instead of access token
 });
 ```
 
-### sessionTokens.list()
+**Notes:**
+- ⚠️ **Critical:** The `token` field is ONLY returned once at creation time - store it securely immediately!
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Default expiration is 7 days (604800 seconds)
+- Token becomes invalid after expiration or revocation
+- Use session tokens to delegate access without exposing your primary access token
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.list()`
+
+List all session tokens for the current sandbox.
+
+**Parameters:** None
+
+**Returns:** `Promise<SessionTokenInfo[]>` - Array of session token information
+
+**SessionTokenInfo interface (list):**
+- `id` (string): Unique token identifier
+- `description` (string, optional): Token description
+- `createdAt` (string): ISO timestamp when token was created
+- `expiresAt` (string): ISO timestamp when token expires
+- `lastUsedAt` (string, optional): ISO timestamp of last usage (undefined if never used)
+
+**Note:** The actual `token` value is **NOT included** in list results.
+
+**Examples:**
+
 ```typescript
-// List session tokens
+// List all tokens
 const tokens = await sandbox.sessionTokens.list();
+console.log(`Found ${tokens.length} tokens`);
+
+// Display token information
+const tokens = await sandbox.sessionTokens.list();
+tokens.forEach(token => {
+  console.log(`ID: ${token.id}`);
+  console.log(`Description: ${token.description || 'None'}`);
+  console.log(`Created: ${token.createdAt}`);
+  console.log(`Expires: ${token.expiresAt}`);
+  console.log(`Last used: ${token.lastUsedAt || 'Never'}`);
+});
+
+// Find tokens by description
+const tokens = await sandbox.sessionTokens.list();
+const prodToken = tokens.find(t => t.description === 'Production API');
+
+// Check for expired tokens
+const tokens = await sandbox.sessionTokens.list();
+const now = new Date();
+const expiredTokens = tokens.filter(t => new Date(t.expiresAt) < now);
+console.log(`${expiredTokens.length} tokens have expired`);
 ```
 
-### sessionTokens.revoke()
+**Notes:**
+- ⚠️ The actual `token` value is NOT included - use `create()` to get the token value
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Returns empty array if no tokens exist
+- Includes `lastUsedAt` to track when token was last used
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.retrieve(id)`
+
+Retrieve detailed information about a specific session token by ID.
+
+**Parameters:**
+- `id` (string, required): The token ID to retrieve
+
+**Returns:** `Promise<SessionTokenInfo>` - Session token information
+
+**SessionTokenInfo interface (retrieve):**
+- `id` (string): Unique token identifier
+- `description` (string, optional): Token description
+- `createdAt` (string): ISO timestamp when token was created
+- `expiresAt` (string): ISO timestamp when token expires
+
+**Note:** The actual `token` value and `lastUsedAt` field are **NOT included** in retrieve results.
+
+**Examples:**
+
 ```typescript
-// Revoke a token
-await sandbox.sessionTokens.revoke(tokenId);
+// Retrieve specific token
+const token = await sandbox.sessionTokens.retrieve('token_abc123');
+console.log(token.id);          // "token_abc123"
+console.log(token.description); // "My Application"
+console.log(token.expiresAt);   // "2024-01-15T12:00:00Z"
+
+// Check if token exists
+try {
+  const token = await sandbox.sessionTokens.retrieve('token_xyz789');
+  console.log('Token exists:', token.id);
+} catch (error) {
+  console.error('Token not found');
+}
+
+// Check expiration
+const token = await sandbox.sessionTokens.retrieve('token_abc123');
+const expiresAt = new Date(token.expiresAt);
+const now = new Date();
+if (expiresAt < now) {
+  console.log('Token has expired');
+  await sandbox.sessionTokens.revoke(token.id);
+} else {
+  const hoursRemaining = (expiresAt - now) / (1000 * 60 * 60);
+  console.log(`Token expires in ${hoursRemaining.toFixed(1)} hours`);
+}
 ```
 
+**Notes:**
+- ⚠️ The actual `token` value is NOT included - cannot retrieve token value after creation
+- ⚠️ The `lastUsedAt` field is also NOT included (unlike `list()`)
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Throws error if token ID doesn't exist
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.revoke(id)`
+
+Revoke (delete) a session token, immediately invalidating it and preventing further use.
+
+**Parameters:**
+- `id` (string, required): The token ID to revoke
+
+**Returns:** `Promise<void>` - Resolves when token is successfully revoked
+
+**Examples:**
+
+```typescript
+// Basic revocation
+await sandbox.sessionTokens.revoke('token_abc123');
+console.log('Token revoked');
+
+// Revoke expired tokens
+const tokens = await sandbox.sessionTokens.list();
+const now = new Date();
+for (const token of tokens) {
+  if (new Date(token.expiresAt) < now) {
+    await sandbox.sessionTokens.revoke(token.id);
+    console.log(`Revoked expired token: ${token.id}`);
+  }
+}
+
+// Safe revocation with error handling
+try {
+  await sandbox.sessionTokens.revoke('token_xyz789');
+  console.log('Token revoked successfully');
+} catch (error) {
+  console.error('Revocation failed:', error.message);
+}
+
+// Revoke all tokens
+const tokens = await sandbox.sessionTokens.list();
+await Promise.all(
+  tokens.map(token => sandbox.sessionTokens.revoke(token.id))
+);
+console.log('All tokens revoked');
+```
+
+**Notes:**
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Revocation is immediate and permanent - the token cannot be used after this call
+- Does not throw error if token doesn't exist or was already revoked
+- Once revoked, any sandbox connections using this token will fail with authentication errors
+- Use this to clean up expired or compromised tokens
+- Available on all sandbox instances regardless of provider
 
 <br/>
 <br/>
