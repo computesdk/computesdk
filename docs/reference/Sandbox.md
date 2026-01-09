@@ -959,7 +959,7 @@ console.log('All terminals destroyed');
 ---
 
 
-## sandbox.server
+## `sandbox.server`
 
 Manage long-running server processes:
 
@@ -1225,7 +1225,7 @@ console.log('New status:', restarted.status);
 
 ---
 
-## sandbox.env
+## `sandbox.env`
 
 Manage `.env` files in the sandbox:
 
@@ -1769,34 +1769,405 @@ if (await sandbox.file.exists(outputPath)) {
 ---
 
 
-## sandbox.watchers
+## `sandbox.watcher`
 
-Real-time file system monitoring:
+Real-time file system monitoring.
 
-### watchers.create()
+### `watcher.create(path, options?)`
+
+Create a file watcher to monitor filesystem changes in real-time.
+
+**Parameters:**
+- `path` (string, required): Directory or file path to watch
+- `options` (object, optional):
+  - `includeContent` (boolean): Include file content in change events (default: false)
+  - `ignored` (string[]): Glob patterns to ignore (e.g., `['node_modules', '.git']`)
+  - `encoding` ('raw' | 'base64'): Content encoding, 'raw' (default) or 'base64' for binary-safe content
+
+**Returns:** `Promise<FileWatcher>` - FileWatcher instance with event handling
+
+**Examples:**
 ```typescript
-// Create a file watcher
-const watcher = await sandbox.watchers.create('/home/project', {
-  ignored: ['node_modules', '.git'],
+// Basic watcher creation
+const watcher = await sandbox.watcher.create('/project/src');
+watcher.on('change', (event) => {
+  console.log(`${event.event}: ${event.path}`);
+});
+// Logs: add: /project/src/app.ts (when files are added)
+//       change: /project/src/app.ts (when files are modified)
+//       unlink: /project/src/app.ts (when files are deleted)
+
+// Watch with ignored patterns
+const watcher = await sandbox.watcher.create('/project', {
+  ignored: ['node_modules', '.git', '*.log', 'dist']
+}); // Only monitors changes outside of node_modules, .git, log files, and dist
+
+// Watch with content included
+const watcher = await sandbox.watcher.create('/project/config', {
   includeContent: true
 });
+watcher.on('change', (event) => {
+  console.log(`File ${event.event}: ${event.path}`);
+  if (event.content) {
+    console.log('New content:', event.content);
+  }
+}); // Output includes full file content for each change event
+
 ```
 
-### watchers.on()
+**Notes:**
+- Watchers emit five event types: `'add'` (file created), `'change'` (file modified), `'unlink'` (file deleted), `'addDir'` (directory created), `'unlinkDir'` (directory deleted).
+- Set `includeContent: false` (default) for better performance when you only need to know which files changed, not their contents. Enable `includeContent: true` only when you need the actual file content.
+- Use glob patterns to exclude directories like `node_modules` or `.git` to reduce noise and improve performance. Patterns are matched against the full path.
+- Available on all sandbox instances regardless of provider.
+
+<br/>
+<br/>
+
+---
+
+### `watcher.list()`
+
+List all active file watchers in the sandbox.
+
+**Parameters:** None
+
+**Returns:** `Promise<WatcherInfo[]>` - Array of watcher information objects
+
+**Examples:**
 ```typescript
+// Basic list all watchers
+const watchers = await sandbox.watcher.list();
+console.log(`Active watchers: ${watchers.length}`);
+watchers.forEach(w => {
+  console.log(`ID: ${w.id}, Path: ${w.path}, Status: ${w.status}`);
+}); // Output: ID: watcher_123, Path: /project/src, Status: active
+
+// Empty list handling
+const watchers = await sandbox.watcher.list();
+if (watchers.length === 0) {
+  console.log('No active watchers');
+} else {
+  console.log(`Found ${watchers.length} active watcher(s)`);
+}
+
+// Check if specific path is being watched
+const watchers = await sandbox.watcher.list();
+const targetPath = '/project/config';
+const isWatched = watchers.some(w => w.path === targetPath);
+console.log(`Path ${targetPath} is ${isWatched ? 'being watched' : 'not watched'}`);
+```
+
+**Notes:**
+- Each watcher object includes `id`, `path`, `includeContent`, `ignored`, `status`, `channel`, and `encoding`.
+- Watchers can have status `'active'` (currently monitoring) or `'stopped'` (no longer monitoring).
+- Returns the current state of all watchers. Create new watchers with `watcher.create()` and they will appear in subsequent `list()` calls.
+- Available on all sandbox instances regardless of provider.
+
+<br/>
+<br/>
+
+---
+
+### `watcher.retrieve(id)`
+
+Retrieve information about a specific file watcher by its ID.
+
+**Parameters:**
+- `id` (string, required): The watcher ID
+
+**Returns:** `Promise<WatcherInfo>` - Watcher information object
+
+**Examples:**
+```typescript
+// Basic retrieve watcher info
+const watcher = await sandbox.watcher.create('/project/src');
+const watcherId = watcher.getId();
+
+const info = await sandbox.watcher.retrieve(watcherId);
+console.log('Path:', info.path); // /project/src
+console.log('Status:', info.status); // active
+
+// Check watcher status
+const watcherId = 'watcher_abc123';
+const info = await sandbox.watcher.retrieve(watcherId);
+if (info.status === 'active') {
+  console.log('Watcher is actively monitoring');
+} else {
+  console.log('Watcher has been stopped');
+}
+
+// Get watcher configuration
+const info = await sandbox.watcher.retrieve(watcherId);
+console.log('Watching:', info.path);
+console.log('Content included:', info.includeContent);
+console.log('Ignored patterns:', info.ignored);
+console.log('Encoding:', info.encoding || 'raw');
+
+```
+
+**Notes:**
+- If the watcher ID doesn't exist, this method will throw an error. Use `list()` first if you're unsure whether a watcher exists.
+- Returns the current state of the watcher at the moment of the call. The watcher's status can change if it's destroyed.
+- Useful for verifying watcher configuration, checking if a watcher is still active, or debugging watcher setup.
+- Available on all sandbox instances regardless of provider.
+
+<br/>
+<br/>
+
+---
+
+### `watcher.destroy(id)`
+
+Destroy a file watcher by its ID, stopping all monitoring.
+
+**Parameters:**
+- `id` (string, required): The watcher ID to destroy
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+```typescript
+// Basic destroy by ID
+const watcher = await sandbox.watcher.create('/project/src');
+const watcherId = watcher.getId();
+
+await sandbox.watcher.destroy(watcherId);
+console.log('Watcher destroyed');
+
+
+// Destroy multiple watchers
+const watchers = await sandbox.watcher.list();
+for (const w of watchers) {
+  await sandbox.watcher.destroy(w.id);
+}
+console.log('All watchers destroyed');
+
+
+// Destroy and verify
+const watcherId = watcher.getId();
+await sandbox.watcher.destroy(watcherId);
+
+const remaining = await sandbox.watcher.list();
+const stillExists = remaining.some(w => w.id === watcherId);
+console.log('Destroyed:', !stillExists); // true
+
+```
+
+**Notes:**
+- `sandbox.watcher.destroy(id)` takes a watcher ID parameter. The FileWatcher instance also has a [`destroy()`](#destroy-2) method that takes no parameters: `watcher.destroy()`. Both accomplish the same result.
+- Destroying an already-destroyed watcher will throw an error. Use defensive checks with `list()` if you're unsure.
+- Available on all sandbox instances regardless of provider.
+
+<br/>
+<br/>
+
+---
+
+### FileWatcher Instance
+
+The `FileWatcher` instance returned by `watcher.create()` provides event-based monitoring and management methods.
+
+**Getter Methods:**
+- `getId()`: Returns the watcher ID (string)
+- `getPath()`: Returns the watched path (string)
+- `getStatus()`: Returns watcher status ('active' | 'stopped')
+- `getChannel()`: Returns the WebSocket channel (string)
+- `isIncludingContent()`: Returns true if content is included in events (boolean)
+- `getIgnoredPatterns()`: Returns array of ignored patterns (string[])
+- `isActive()`: Returns true if watcher is active (boolean)
+
+**Example:**
+```typescript
+const watcher = await sandbox.watcher.create('/project/src', {
+  includeContent: true,
+  ignored: ['*.test.ts']
+});
+
+console.log('ID:', watcher.getId());              // watcher_abc123
+console.log('Path:', watcher.getPath());          // /project/src
+console.log('Status:', watcher.getStatus());      // active
+console.log('Active:', watcher.isActive());       // true
+console.log('Content:', watcher.isIncludingContent()); // true
+console.log('Ignored:', watcher.getIgnoredPatterns());  // ['*.test.ts']
+```
+
+---
+
+#### `on(event, handler)`
+
+Register an event handler for file changes or watcher destruction.
+
+**Parameters:**
+- `event` ('change' | 'destroyed', required): Event type to listen for
+- `handler` (function, required): Event handler function
+  - For 'change': `(event: FileChangeEvent) => void`
+  - For 'destroyed': `() => void`
+
+**FileChangeEvent properties:**
+- `event`: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir'
+- `path`: File or directory path (string)
+- `content`: File content (string, only if `includeContent: true`)
+
+**Returns:** void
+
+**Examples:**
+```typescript
+// Basic change event listener
+const watcher = await sandbox.watcher.create('/project/src');
+watcher.on('change', (event) => {
+  console.log(`${event.event}: ${event.path}`);
+});
+// Output: change: /project/src/app.ts
+//         add: /project/src/utils.ts
+//         unlink: /project/src/old.ts
+
+// Handle different event types
+const watcher = await sandbox.watcher.create('/project');
+watcher.on('change', (event) => {
+  switch (event.event) {
+    case 'add':
+      console.log('File created:', event.path);
+      break;
+    case 'change':
+      console.log('File modified:', event.path);
+      break;
+    case 'unlink':
+      console.log('File deleted:', event.path);
+      break;
+    case 'addDir':
+      console.log('Directory created:', event.path);
+      break;
+    case 'unlinkDir':
+      console.log('Directory deleted:', event.path);
+      break;
+  }
+});
+
+// Access file content in events
+const watcher = await sandbox.watcher.create('/project/config', {
+  includeContent: true
+});
 watcher.on('change', (event) => {
   console.log(`${event.event}: ${event.path}`);
   if (event.content) {
-    console.log('New content:', event.content);
+    console.log('Content length:', event.content.length);
+    console.log('First 100 chars:', event.content.substring(0, 100));
   }
 });
 ```
 
-### watchers.destroy()
+**Notes:**
+- You can register multiple handlers for the same event. All handlers will be called when the event fires.
+- The `content` property is only present in change events if the watcher was created with `includeContent: true`.
+- Change events are emitted in the order they occur. If multiple files change simultaneously, you'll receive multiple events.
+- The 'destroyed' event fires when the watcher is destroyed (via `destroy()` or `sandbox.watcher.destroy(id)`), allowing cleanup of resources.
+
+<br/>
+<br/>
+
+---
+
+#### `off(event, handler)`
+
+Unregister an event handler to stop receiving notifications.
+
+**Parameters:**
+- `event` ('change' | 'destroyed', required): Event type
+- `handler` (function, required): The specific handler function to remove
+
+**Returns:** void
+
+**Examples:**
 ```typescript
-// Destroy watcher
-await sandbox.watchers.destroy(watcher.id);
+// Basic remove handler
+const watcher = await sandbox.watcher.create('/project/src');
+
+const changeHandler = (event) => {
+  console.log('Change:', event.path);
+};
+
+watcher.on('change', changeHandler);
+  // Later, stop listening
+watcher.off('change', changeHandler);
+
+// Remove specific handler from multiple
+const watcher = await sandbox.watcher.create('/project/src');
+
+const handler1 = (event) => console.log('Handler 1:', event.path);
+const handler2 = (event) => console.log('Handler 2:', event.path);
+
+watcher.on('change', handler1);
+watcher.on('change', handler2);
+
+  // Remove only handler1, handler2 continues to receive events
+watcher.off('change', handler1);
+
+// Temporary listener pattern
+const watcher = await sandbox.watcher.create('/project/build');
+
+const buildCompleteHandler = (event) => {
+  if (event.path.endsWith('build-complete.txt')) {
+    console.log('Build complete!');
+    // Stop listening after detecting completion
+    watcher.off('change', buildCompleteHandler);
+  }
+};
+
+watcher.on('change', buildCompleteHandler);
+
 ```
+
+**Notes:**
+- You must pass the exact same function reference that was used with `on()`. Anonymous functions cannot be removed unless you store a reference.
+- Calling `off()` with a handler that wasn't registered has no effect and doesn't throw an error.
+- Always remove event handlers when you're done with them to prevent memory leaks, especially in long-running applications.
+
+<br/>
+<br/>
+
+---
+
+#### `destroy()`
+
+Destroy the watcher instance, stopping all monitoring and cleanup resources.
+
+**Parameters:** None
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+```typescript
+// Basic destroy instance
+const watcher = await sandbox.watcher.create('/project/src');
+watcher.on('change', (event) => {
+  console.log('Change:', event.path);
+});
+
+  // Later, when done monitoring
+await watcher.destroy();
+console.log('Watcher stopped');
+
+
+// Destroy after one-time operation
+const watcher = await sandbox.watcher.create('/project/output');
+
+watcher.on('change', async (event) => {
+  if (event.path.endsWith('result.json')) {
+    console.log('Result file created, cleaning up');
+    await watcher.destroy();
+  }
+});
+```
+
+**Notes:**
+- When you call `destroy()`, the watcher automatically unsubscribes from WebSocket events and clears all event handlers.
+- Both `watcher.destroy()` (instance method, no parameters) and `sandbox.watcher.destroy(id)` (namespace method, requires ID) accomplish the same result.
+
+<br/>
+<br/>
+
+---
 
 <br/>
 <br/>
