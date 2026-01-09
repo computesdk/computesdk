@@ -268,3 +268,228 @@ WIP: to retrieve a list of your active sandboxes from your provider, using ```co
 
 **Alternative Approach:**
 Until `list()` is available, you can **Track sandbox IDs locally**: Store sandbox IDs in your application (database, config, memory) and retrieve them using `getById()`
+
+<br/>
+<br/>
+
+---
+
+## `findOrCreate(options)`
+
+Find an existing named sandbox or create a new one if it doesn't exist. Named sandboxes provide persistent, reusable sandbox instances identified by `(namespace, name)` pairs.
+
+**Parameters:**
+
+- `options` (FindOrCreateSandboxOptions, required): Configuration for finding or creating the sandbox
+  - `name` (string, required): Unique identifier for the sandbox within its namespace
+  - `namespace` (string, optional): Isolation scope for the sandbox (defaults to "default")
+  - `timeout` (number, optional): Sandbox execution timeout in milliseconds (only used when creating)
+  - `templateId` (string, optional): Provider-specific template identifier (only used when creating)
+  - `metadata` (Record<string, any>, optional): Custom metadata (only used when creating)
+  - `envs` (Record<string, string>, optional): Environment variables (only used when creating)
+
+**Returns:** `Promise<Sandbox>` - Existing sandbox if found by name, or newly created sandbox if not found
+
+**FindOrCreateSandboxOptions interface:**
+```typescript
+{
+  name: string;                   // Required: Unique sandbox identifier
+  namespace?: string;             // Optional: Defaults to "default"
+  timeout?: number;               // Used only when creating
+  templateId?: string;            // Used only when creating
+  metadata?: Record<string, any>; // Used only when creating
+  envs?: Record<string, string>;  // Used only when creating
+}
+```
+
+**Examples:**
+
+```typescript
+import { compute } from 'computesdk';
+
+// Basic usage - find or create by name
+const sandbox = await compute.sandbox.findOrCreate({
+  name: 'my-dev-sandbox'
+});
+console.log(sandbox.sandboxId);  // Consistent ID for "my-dev-sandbox"
+
+// With custom namespace for isolation
+const sandbox = await compute.sandbox.findOrCreate({
+  name: 'build-env',
+  namespace: 'project-123'
+});
+// Creates/finds sandbox uniquely identified by (project-123, build-env)
+
+// With creation options (used only if sandbox doesn't exist)
+const sandbox = await compute.sandbox.findOrCreate({
+  name: 'ci-runner',
+  namespace: 'github-actions',
+  timeout: 60 * 60 * 1000,  // 1 hour (only applied to new sandboxes)
+  envs: {
+    NODE_ENV: 'test',
+    CI: 'true'
+  },
+  metadata: {
+    workflow: 'test-suite',
+    branch: 'main'
+  }
+});
+
+
+// Multi-tenant isolation with namespaces
+const tenant1Sandbox = await compute.sandbox.findOrCreate({
+  name: 'app-instance',
+  namespace: 'tenant-abc'  // Isolated to tenant-abc
+});
+
+const tenant2Sandbox = await compute.sandbox.findOrCreate({
+  name: 'app-instance',
+  namespace: 'tenant-xyz'  // Isolated to tenant-xyz
+});
+// Both use same name but are separate sandboxes due to different namespaces
+```
+
+**Notes:**
+- **Idempotent operation**: Safe to call multiple times - always returns the same sandbox for a given `(namespace, name)` pair
+- The `namespace` defaults to `"default"` if not specified
+- Creation options (`timeout`, `templateId`, `metadata`, `envs`) are only applied when creating a new sandbox
+- If the sandbox already exists, creation options are ignored and the existing sandbox is returned as-is
+- Named sandboxes persist until explicitly destroyed with `destroy(sandboxId)`
+- Useful for implementing persistent workspaces, shared environments, or CI/CD build caches
+- The returned Sandbox instance includes `name` and `namespace` in its metadata
+
+<br/>
+<br/>
+
+---
+
+## `find(options)`
+
+Find an existing named sandbox without creating a new one if it doesn't exist.
+
+**Parameters:**
+
+- `options` (FindSandboxOptions, required): Configuration for finding the sandbox
+  - `name` (string, required): Unique identifier for the sandbox within its namespace
+  - `namespace` (string, optional): Isolation scope for the sandbox (defaults to "default")
+
+**Returns:** `Promise<Sandbox | null>` - Existing sandbox if found by name, or `null` if not found
+
+**FindSandboxOptions interface:**
+```typescript
+{
+  name: string;       // Required: Unique sandbox identifier
+  namespace?: string; // Optional: Defaults to "default"
+}
+```
+
+**Examples:**
+
+```typescript
+import { compute } from 'computesdk';
+
+// Basic usage - find by name
+const sandbox = await compute.sandbox.find({
+  name: 'my-dev-sandbox'
+});
+
+if (sandbox) {
+  console.log('Found existing sandbox:', sandbox.sandboxId);
+  await sandbox.runCommand('ls -la');
+} else {
+  console.log('Sandbox not found');
+}
+
+// Find with custom namespace
+const sandbox = await compute.sandbox.find({
+  name: 'build-env',
+  namespace: 'project-123'
+});
+
+// Cleanup check - find before destroying
+const toCleanup = await compute.sandbox.find({
+  name: 'temp-environment',
+  namespace: 'staging'
+});
+
+if (toCleanup) {
+  await compute.sandbox.destroy(toCleanup.sandboxId);
+  console.log('Cleaned up temporary environment');
+}
+```
+
+**Notes:**
+- Returns `null` if no sandbox exists with the given `(namespace, name)` pair (does not throw errors)
+- The `namespace` defaults to `"default"` if not specified
+- Does not create a new sandbox - read-only lookup operation
+- Use this when you want to check for existence without automatically creating
+- More explicit than `findOrCreate()` when you need different handling for found vs not-found cases
+
+<br/>
+<br/>
+
+---
+
+## `extendTimeout(sandboxId, options?)`
+
+Extend the timeout/TTL (time-to-live) for an existing sandbox to prevent automatic shutdown.
+
+**Parameters:**
+
+- `sandboxId` (string, required): Unique identifier of the sandbox to extend
+- `options` (ExtendTimeoutOptions, optional): Extension configuration
+  - `duration` (number, optional): Extension duration in milliseconds (default: 900000 = 15 minutes)
+
+**Returns:** `Promise<void>` - Resolves when timeout is successfully extended
+
+**ExtendTimeoutOptions interface:**
+```typescript
+{
+  duration?: number;  // Extension duration in milliseconds (default: 15 minutes)
+}
+```
+
+**Examples:**
+
+```typescript
+import { compute } from 'computesdk';
+
+// Basic timeout extension (default: 15 minutes)
+const sandbox = await compute.sandbox.create();
+await compute.sandbox.extendTimeout(sandbox.sandboxId);
+console.log('Sandbox lifetime extended by 15 minutes');
+
+// Custom extension duration (1 hour)
+await compute.sandbox.extendTimeout(sandbox.sandboxId, {
+  duration: 60 * 60 * 1000  // 3600000 ms = 1 hour
+});
+
+
+// Long-running task with periodic extensions
+async function longRunningBuild(sandbox: Sandbox) {
+  const extendEvery = 20 * 60 * 1000;  // 20 minutes
+  const extendBy = 30 * 60 * 1000;      // 30 minutes
+
+  const keepAlive = setInterval(async () => {
+    await compute.sandbox.extendTimeout(sandbox.sandboxId, {
+      duration: extendBy
+    });
+  }, extendEvery);
+
+  try {
+    await sandbox.runCommand('npm run build:production');
+    console.log('Build completed successfully');
+  } finally {
+    clearInterval(keepAlive);
+  }
+}
+
+```
+
+**Notes:**
+- Default extension duration is 15 minutes (900000 milliseconds)
+- Extends the maximum lifetime of the sandbox from the current time
+- Does not restart or reset the sandbox - only prevents automatic shutdown
+- Can be called multiple times to keep extending as needed
+- Useful for long-running operations like large builds, extensive test suites, or data processing
+- The sandbox will still shut down when explicitly destroyed with `destroy()`

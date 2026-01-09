@@ -959,7 +959,7 @@ console.log('All terminals destroyed');
 ---
 
 
-## sandbox.server
+## `sandbox.server`
 
 Manage long-running server processes:
 
@@ -1225,7 +1225,7 @@ console.log('New status:', restarted.status);
 
 ---
 
-## sandbox.env
+## `sandbox.env`
 
 Manage `.env` files in the sandbox:
 
@@ -1769,65 +1769,829 @@ if (await sandbox.file.exists(outputPath)) {
 ---
 
 
-## sandbox.watchers
+## `sandbox.watcher`
 
-Real-time file system monitoring:
+Real-time file system monitoring.
 
-### watchers.create()
+### `watcher.create(path, options?)`
+
+Create a file watcher to monitor filesystem changes in real-time.
+
+**Parameters:**
+- `path` (string, required): Directory or file path to watch
+- `options` (object, optional):
+  - `includeContent` (boolean): Include file content in change events (default: false)
+  - `ignored` (string[]): Glob patterns to ignore (e.g., `['node_modules', '.git']`)
+  - `encoding` ('raw' | 'base64'): Content encoding, 'raw' (default) or 'base64' for binary-safe content
+
+**Returns:** `Promise<FileWatcher>` - FileWatcher instance with event handling
+
+**Examples:**
 ```typescript
-// Create a file watcher
-const watcher = await sandbox.watchers.create('/home/project', {
-  ignored: ['node_modules', '.git'],
-  includeContent: true
-});
-```
-
-### watchers.on()
-```typescript
+// Basic watcher creation
+const watcher = await sandbox.watcher.create('/project/src');
 watcher.on('change', (event) => {
   console.log(`${event.event}: ${event.path}`);
+});
+// Logs: add: /project/src/app.ts (when files are added)
+//       change: /project/src/app.ts (when files are modified)
+//       unlink: /project/src/app.ts (when files are deleted)
+
+// Watch with ignored patterns
+const watcher = await sandbox.watcher.create('/project', {
+  ignored: ['node_modules', '.git', '*.log', 'dist']
+}); // Only monitors changes outside of node_modules, .git, log files, and dist
+
+// Watch with content included
+const watcher = await sandbox.watcher.create('/project/config', {
+  includeContent: true
+});
+watcher.on('change', (event) => {
+  console.log(`File ${event.event}: ${event.path}`);
   if (event.content) {
     console.log('New content:', event.content);
   }
-});
+}); // Output includes full file content for each change event
+
 ```
 
-### watchers.destroy()
-```typescript
-// Destroy watcher
-await sandbox.watchers.destroy(watcher.id);
-```
+**Notes:**
+- Watchers emit five event types: `'add'` (file created), `'change'` (file modified), `'unlink'` (file deleted), `'addDir'` (directory created), `'unlinkDir'` (directory deleted).
+- Set `includeContent: false` (default) for better performance when you only need to know which files changed, not their contents. Enable `includeContent: true` only when you need the actual file content.
+- Use glob patterns to exclude directories like `node_modules` or `.git` to reduce noise and improve performance. Patterns are matched against the full path.
+- Available on all sandbox instances regardless of provider.
 
 <br/>
 <br/>
 
 ---
 
-## sandbox.signals
+### `watcher.list()`
 
-Monitor system events:
+List all active file watchers in the sandbox.
 
-### signals.start()
+**Parameters:** None
+
+**Returns:** `Promise<WatcherInfo[]>` - Array of watcher information objects
+
+**Examples:**
+```typescript
+// Basic list all watchers
+const watchers = await sandbox.watcher.list();
+console.log(`Active watchers: ${watchers.length}`);
+watchers.forEach(w => {
+  console.log(`ID: ${w.id}, Path: ${w.path}, Status: ${w.status}`);
+}); // Output: ID: watcher_123, Path: /project/src, Status: active
+
+// Empty list handling
+const watchers = await sandbox.watcher.list();
+if (watchers.length === 0) {
+  console.log('No active watchers');
+} else {
+  console.log(`Found ${watchers.length} active watcher(s)`);
+}
+
+// Check if specific path is being watched
+const watchers = await sandbox.watcher.list();
+const targetPath = '/project/config';
+const isWatched = watchers.some(w => w.path === targetPath);
+console.log(`Path ${targetPath} is ${isWatched ? 'being watched' : 'not watched'}`);
+```
+
+**Notes:**
+- Each watcher object includes `id`, `path`, `includeContent`, `ignored`, `status`, `channel`, and `encoding`.
+- Watchers can have status `'active'` (currently monitoring) or `'stopped'` (no longer monitoring).
+- Returns the current state of all watchers. Create new watchers with `watcher.create()` and they will appear in subsequent `list()` calls.
+- Available on all sandbox instances regardless of provider.
+
+<br/>
+<br/>
+
+---
+
+### `watcher.retrieve(id)`
+
+Retrieve information about a specific file watcher by its ID.
+
+**Parameters:**
+- `id` (string, required): The watcher ID
+
+**Returns:** `Promise<WatcherInfo>` - Watcher information object
+
+**Examples:**
+```typescript
+// Basic retrieve watcher info
+const watcher = await sandbox.watcher.create('/project/src');
+const watcherId = watcher.getId();
+
+const info = await sandbox.watcher.retrieve(watcherId);
+console.log('Path:', info.path); // /project/src
+console.log('Status:', info.status); // active
+
+// Check watcher status
+const watcherId = 'watcher_abc123';
+const info = await sandbox.watcher.retrieve(watcherId);
+if (info.status === 'active') {
+  console.log('Watcher is actively monitoring');
+} else {
+  console.log('Watcher has been stopped');
+}
+
+// Get watcher configuration
+const info = await sandbox.watcher.retrieve(watcherId);
+console.log('Watching:', info.path);
+console.log('Content included:', info.includeContent);
+console.log('Ignored patterns:', info.ignored);
+console.log('Encoding:', info.encoding || 'raw');
+
+```
+
+**Notes:**
+- If the watcher ID doesn't exist, this method will throw an error. Use `list()` first if you're unsure whether a watcher exists.
+- Returns the current state of the watcher at the moment of the call. The watcher's status can change if it's destroyed.
+- Useful for verifying watcher configuration, checking if a watcher is still active, or debugging watcher setup.
+- Available on all sandbox instances regardless of provider.
+
+<br/>
+<br/>
+
+---
+
+### `watcher.destroy(id)`
+
+Destroy a file watcher by its ID, stopping all monitoring.
+
+**Parameters:**
+- `id` (string, required): The watcher ID to destroy
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+```typescript
+// Basic destroy by ID
+const watcher = await sandbox.watcher.create('/project/src');
+const watcherId = watcher.getId();
+
+await sandbox.watcher.destroy(watcherId);
+console.log('Watcher destroyed');
+
+
+// Destroy multiple watchers
+const watchers = await sandbox.watcher.list();
+for (const w of watchers) {
+  await sandbox.watcher.destroy(w.id);
+}
+console.log('All watchers destroyed');
+
+
+// Destroy and verify
+const watcherId = watcher.getId();
+await sandbox.watcher.destroy(watcherId);
+
+const remaining = await sandbox.watcher.list();
+const stillExists = remaining.some(w => w.id === watcherId);
+console.log('Destroyed:', !stillExists); // true
+
+```
+
+**Notes:**
+- `sandbox.watcher.destroy(id)` takes a watcher ID parameter. The FileWatcher instance also has a [`destroy()`](#destroy-2) method that takes no parameters: `watcher.destroy()`. Both accomplish the same result.
+- Destroying an already-destroyed watcher will throw an error. Use defensive checks with `list()` if you're unsure.
+- Available on all sandbox instances regardless of provider.
+
+<br/>
+<br/>
+
+---
+
+### FileWatcher Instance
+
+The `FileWatcher` instance returned by `watcher.create()` provides event-based monitoring and management methods.
+
+**Getter Methods:**
+- `getId()`: Returns the watcher ID (string)
+- `getPath()`: Returns the watched path (string)
+- `getStatus()`: Returns watcher status ('active' | 'stopped')
+- `getChannel()`: Returns the WebSocket channel (string)
+- `isIncludingContent()`: Returns true if content is included in events (boolean)
+- `getIgnoredPatterns()`: Returns array of ignored patterns (string[])
+- `isActive()`: Returns true if watcher is active (boolean)
+
+**Example:**
+```typescript
+const watcher = await sandbox.watcher.create('/project/src', {
+  includeContent: true,
+  ignored: ['*.test.ts']
+});
+
+console.log('ID:', watcher.getId());              // watcher_abc123
+console.log('Path:', watcher.getPath());          // /project/src
+console.log('Status:', watcher.getStatus());      // active
+console.log('Active:', watcher.isActive());       // true
+console.log('Content:', watcher.isIncludingContent()); // true
+console.log('Ignored:', watcher.getIgnoredPatterns());  // ['*.test.ts']
+```
+
+---
+
+#### `on(event, handler)`
+
+Register an event handler for file changes or watcher destruction.
+
+**Parameters:**
+- `event` ('change' | 'destroyed', required): Event type to listen for
+- `handler` (function, required): Event handler function
+  - For 'change': `(event: FileChangeEvent) => void`
+  - For 'destroyed': `() => void`
+
+**FileChangeEvent properties:**
+- `event`: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir'
+- `path`: File or directory path (string)
+- `content`: File content (string, only if `includeContent: true`)
+
+**Returns:** void
+
+**Examples:**
+```typescript
+// Basic change event listener
+const watcher = await sandbox.watcher.create('/project/src');
+watcher.on('change', (event) => {
+  console.log(`${event.event}: ${event.path}`);
+});
+// Output: change: /project/src/app.ts
+//         add: /project/src/utils.ts
+//         unlink: /project/src/old.ts
+
+// Handle different event types
+const watcher = await sandbox.watcher.create('/project');
+watcher.on('change', (event) => {
+  switch (event.event) {
+    case 'add':
+      console.log('File created:', event.path);
+      break;
+    case 'change':
+      console.log('File modified:', event.path);
+      break;
+    case 'unlink':
+      console.log('File deleted:', event.path);
+      break;
+    case 'addDir':
+      console.log('Directory created:', event.path);
+      break;
+    case 'unlinkDir':
+      console.log('Directory deleted:', event.path);
+      break;
+  }
+});
+
+// Access file content in events
+const watcher = await sandbox.watcher.create('/project/config', {
+  includeContent: true
+});
+watcher.on('change', (event) => {
+  console.log(`${event.event}: ${event.path}`);
+  if (event.content) {
+    console.log('Content length:', event.content.length);
+    console.log('First 100 chars:', event.content.substring(0, 100));
+  }
+});
+```
+
+**Notes:**
+- You can register multiple handlers for the same event. All handlers will be called when the event fires.
+- The `content` property is only present in change events if the watcher was created with `includeContent: true`.
+- Change events are emitted in the order they occur. If multiple files change simultaneously, you'll receive multiple events.
+- The 'destroyed' event fires when the watcher is destroyed (via `destroy()` or `sandbox.watcher.destroy(id)`), allowing cleanup of resources.
+
+<br/>
+<br/>
+
+---
+
+#### `off(event, handler)`
+
+Unregister an event handler to stop receiving notifications.
+
+**Parameters:**
+- `event` ('change' | 'destroyed', required): Event type
+- `handler` (function, required): The specific handler function to remove
+
+**Returns:** void
+
+**Examples:**
+```typescript
+// Basic remove handler
+const watcher = await sandbox.watcher.create('/project/src');
+
+const changeHandler = (event) => {
+  console.log('Change:', event.path);
+};
+
+watcher.on('change', changeHandler);
+  // Later, stop listening
+watcher.off('change', changeHandler);
+
+// Remove specific handler from multiple
+const watcher = await sandbox.watcher.create('/project/src');
+
+const handler1 = (event) => console.log('Handler 1:', event.path);
+const handler2 = (event) => console.log('Handler 2:', event.path);
+
+watcher.on('change', handler1);
+watcher.on('change', handler2);
+
+  // Remove only handler1, handler2 continues to receive events
+watcher.off('change', handler1);
+
+// Temporary listener pattern
+const watcher = await sandbox.watcher.create('/project/build');
+
+const buildCompleteHandler = (event) => {
+  if (event.path.endsWith('build-complete.txt')) {
+    console.log('Build complete!');
+    // Stop listening after detecting completion
+    watcher.off('change', buildCompleteHandler);
+  }
+};
+
+watcher.on('change', buildCompleteHandler);
+
+```
+
+**Notes:**
+- You must pass the exact same function reference that was used with `on()`. Anonymous functions cannot be removed unless you store a reference.
+- Calling `off()` with a handler that wasn't registered has no effect and doesn't throw an error.
+- Always remove event handlers when you're done with them to prevent memory leaks, especially in long-running applications.
+
+<br/>
+<br/>
+
+---
+
+#### `destroy()`
+
+Destroy the watcher instance, stopping all monitoring and cleanup resources.
+
+**Parameters:** None
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+```typescript
+// Basic destroy instance
+const watcher = await sandbox.watcher.create('/project/src');
+watcher.on('change', (event) => {
+  console.log('Change:', event.path);
+});
+
+  // Later, when done monitoring
+await watcher.destroy();
+console.log('Watcher stopped');
+
+
+// Destroy after one-time operation
+const watcher = await sandbox.watcher.create('/project/output');
+
+watcher.on('change', async (event) => {
+  if (event.path.endsWith('result.json')) {
+    console.log('Result file created, cleaning up');
+    await watcher.destroy();
+  }
+});
+```
+
+**Notes:**
+- When you call `destroy()`, the watcher automatically unsubscribes from WebSocket events and clears all event handlers.
+- Both `watcher.destroy()` (instance method, no parameters) and `sandbox.watcher.destroy(id)` (namespace method, requires ID) accomplish the same result.
+
+<br/>
+<br/>
+
+---
+
+
+## `sandbox.signals`
+
+Monitor system events and emit custom signals via WebSocket.
+
+<br/>
+<br/>
+
+---
+
+### `signals.start()`
+
+Start the signal service to monitor system events via WebSocket.
+
+**Parameters:** None
+
+**Returns:** `Promise<SignalService>` - SignalService instance with event handling
+
+**SignalService interface:**
+- Event methods: `on()`, `off()`, `stop()`
+- Getter methods: `getStatus()`, `getChannel()`, `isActive()`
+
+**Examples:**
+
 ```typescript
 // Start signal monitoring
 const signals = await sandbox.signals.start();
-```
 
-### signals.on()
-```typescript
+// Listen for port signals
 signals.on('port', (event) => {
   console.log(`Port ${event.port} ${event.type}: ${event.url}`);
 });
 
+// Listen for error signals
 signals.on('error', (event) => {
   console.error('Error:', event.message);
 });
+
+// Check status
+console.log('Active:', signals.isActive());  // true
+console.log('Status:', signals.getStatus()); // 'active'
+console.log('Channel:', signals.getChannel()); // 'signals-channel-123'
+
+// Stop when done
+await signals.stop();
 ```
 
-### signals.stop()
+**Notes:**
+- Returns a `SignalService` instance for monitoring events
+- Requires WebSocket connection to receive events
+- Multiple event handlers can be registered for the same event type
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.status()`
+
+Get the current status of the signal service.
+
+**Parameters:** None
+
+**Returns:** `Promise<SignalStatusInfo>` - Signal service status information
+
+**SignalStatusInfo interface:**
+- `status` ('active' | 'stopped'): Current service status
+- `channel` (string): WebSocket channel identifier
+- `wsUrl` (string): WebSocket URL
+
+**Examples:**
+
 ```typescript
-// Stop signal monitoring
+// Get signal service status
+const status = await sandbox.signals.status();
+console.log(status.status);   // 'active' or 'stopped'
+console.log(status.channel);  // 'signals-channel-123'
+console.log(status.wsUrl);    // 'wss://...'
+
+// Check if service is active before emitting
+const status = await sandbox.signals.status();
+if (status.status === 'active') {
+  await sandbox.signals.emitPort(3000, 'open', 'http://localhost:3000');
+}
+```
+
+**Notes:**
+- Returns current state without requiring a `SignalService` instance
+- Use this to check status before calling other signal methods
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.stop()`
+
+Stop the signal service (namespace method).
+
+**Parameters:** None
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Stop signal service via namespace
 await sandbox.signals.stop();
+console.log('Signal service stopped');
+
+// Alternative: stop via instance
+const signals = await sandbox.signals.start();
+await signals.stop();
+```
+
+**Notes:**
+- This is a namespace method - can be called directly on `sandbox.signals`
+- The `SignalService` instance also has a `stop()` method
+- Both accomplish the same result
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.emitPort(port, type, url)`
+
+Emit a port signal to notify about port status changes.
+
+**Parameters:**
+- `port` (number, required): Port number
+- `type` ('open' | 'close', required): Signal type indicating port status
+- `url` (string, required): URL associated with the port
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Emit port opened signal
+await sandbox.signals.emitPort(3000, 'open', 'http://localhost:3000');
+
+// Emit port closed signal
+await sandbox.signals.emitPort(3000, 'close', 'http://localhost:3000');
+
+// Notify about server starting
+await sandbox.signals.emitPort(8080, 'open', 'https://myapp.example.com');
+console.log('Port signal emitted');
+```
+
+**Notes:**
+- Use 'open' type when a port becomes available
+- Use 'close' type when a port is no longer available
+- Requires signal service to be started to receive events
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.emitError(message)`
+
+Emit an error signal to notify about errors in the sandbox.
+
+**Parameters:**
+- `message` (string, required): Error message
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Emit error signal
+await sandbox.signals.emitError('Database connection failed');
+
+// Error in application code
+try {
+  await riskyOperation();
+} catch (error) {
+  await sandbox.signals.emitError(`Operation failed: ${error.message}`);
+}
+
+// Custom error notifications
+await sandbox.signals.emitError('Configuration file missing');
+```
+
+**Notes:**
+- Use for application-level errors or notifications
+- Requires signal service to be started to receive events
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `signals.emitServerReady(port, url)`
+
+Emit a server ready signal to notify when a server is ready to accept connections.
+
+**Parameters:**
+- `port` (number, required): Port number where server is listening
+- `url` (string, required): Server URL
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Notify server is ready
+await sandbox.signals.emitServerReady(3000, 'http://localhost:3000');
+
+// After starting Express server
+const app = express();
+app.listen(3000, async () => {
+  await sandbox.signals.emitServerReady(3000, 'http://localhost:3000');
+  console.log('Server ready signal emitted');
+});
+
+// Multiple servers
+await sandbox.signals.emitServerReady(3000, 'http://localhost:3000'); // API
+await sandbox.signals.emitServerReady(8080, 'http://localhost:8080'); // WebSocket
+```
+
+**Notes:**
+- Specialized signal for server readiness (distinct from port open)
+- Useful for coordinating application startup
+- Requires signal service to be started to receive events
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+## SignalService Instance
+
+The `SignalService` instance returned by `signals.start()` provides event handling and management methods.
+
+### `on(event, handler)`
+
+Register an event handler for signal events.
+
+**Parameters:**
+- `event` ('port' | 'error' | 'signal', required): Event type to listen for
+- `handler` (function, required): Event handler function
+  - For 'port': `(event: PortSignalEvent) => void`
+  - For 'error': `(event: ErrorSignalEvent) => void`
+  - For 'signal': `(event: SignalEvent) => void`
+
+**Event Types:**
+- `PortSignalEvent`: `{ signal: 'port' | 'server-ready', port: number, url: string, type?: 'open' | 'close' }`
+- `ErrorSignalEvent`: `{ signal: 'error', message: string }`
+- `SignalEvent`: Union of all event types
+
+**Returns:** void
+
+**Examples:**
+
+```typescript
+const signals = await sandbox.signals.start();
+
+// Listen for port events
+signals.on('port', (event) => {
+  console.log(`Signal: ${event.signal}`);
+  console.log(`Port: ${event.port} - ${event.url}`);
+  if (event.type) {
+    console.log(`Type: ${event.type}`);
+  }
+});
+
+// Listen for error events
+signals.on('error', (event) => {
+  console.error(`Error signal: ${event.message}`);
+});
+
+// Listen for all signal events (generic)
+signals.on('signal', (event) => {
+  console.log('Signal received:', event);
+});
+
+// Multiple handlers for same event
+const handler1 = (event) => console.log('Handler 1:', event.port);
+const handler2 = (event) => console.log('Handler 2:', event.port);
+
+signals.on('port', handler1);
+signals.on('port', handler2);
+// Both handlers will be called
+```
+
+**Notes:**
+- Multiple handlers can be registered for the same event type
+- All handlers are called when an event fires
+- The 'port' event includes both port signals and server-ready signals
+- The 'signal' event is a generic listener that receives all signal types
+- Handler errors are caught and logged to console without stopping other handlers
+
+<br/>
+<br/>
+
+---
+
+### `off(event, handler)`
+
+Unregister an event handler to stop receiving notifications.
+
+**Parameters:**
+- `event` ('port' | 'error' | 'signal', required): Event type
+- `handler` (function, required): The specific handler function to remove
+
+**Returns:** void
+
+**Examples:**
+
+```typescript
+const signals = await sandbox.signals.start();
+
+// Register handler
+const portHandler = (event) => {
+  console.log('Port event:', event.port);
+};
+signals.on('port', portHandler);
+
+// Later, remove handler
+signals.off('port', portHandler);
+
+// Remove specific handler from multiple
+const handler1 = (event) => console.log('Handler 1');
+const handler2 = (event) => console.log('Handler 2');
+
+signals.on('error', handler1);
+signals.on('error', handler2);
+
+signals.off('error', handler1); // Only handler2 continues to receive events
+
+// Cleanup pattern
+const cleanup = () => {
+  signals.off('port', portHandler);
+  signals.off('error', errorHandler);
+};
+```
+
+**Notes:**
+- Must pass the exact same function reference used with `on()`
+- Anonymous functions cannot be removed unless you store a reference
+- No error if handler wasn't registered
+- Use for cleanup when you no longer need specific handlers
+
+<br/>
+<br/>
+
+---
+
+### `stop()`
+
+Stop the signal service instance and clean up resources.
+
+**Parameters:** None
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Stop via instance method
+const signals = await sandbox.signals.start();
+signals.on('port', (event) => console.log(event));
+
+// Later, stop monitoring
+await signals.stop();
+console.log('Signal service stopped');
+
+// Cleanup pattern with finally
+let signals;
+try {
+  signals = await sandbox.signals.start();
+  signals.on('port', (event) => console.log(event));
+  // ... work ...
+} finally {
+  if (signals) {
+    await signals.stop();
+  }
+}
+```
+
+**Notes:**
+- Makes POST request to `/signals/stop`
+- Cleans up WebSocket subscriptions and event handlers
+- Sets status to 'stopped'
+- Alternative to namespace method `sandbox.signals.stop()`
+
+<br/>
+<br/>
+
+---
+
+### Getter Methods
+
+The `SignalService` instance provides getter methods to inspect its state.
+
+**`getStatus()`** - Returns current status ('active' | 'stopped')
+```typescript
+const signals = await sandbox.signals.start();
+console.log(signals.getStatus()); // 'active'
+```
+
+**`getChannel()`** - Returns WebSocket channel identifier
+```typescript
+const signals = await sandbox.signals.start();
+console.log(signals.getChannel()); // 'signals-channel-123'
+```
+
+**`isActive()`** - Returns true if service is active
+```typescript
+const signals = await sandbox.signals.start();
+console.log(signals.isActive()); // true
+
+await signals.stop();
+console.log(signals.isActive()); // false
 ```
 
 <br/>
@@ -1837,29 +2601,246 @@ await sandbox.signals.stop();
 
 ## sandbox.sessionTokens
 
-Manage delegated access (requires access token):
+Manage session tokens for delegated access. Session tokens provide temporary, scoped access to a sandbox without requiring the primary access token.
 
-### sessionTokens.create()
+**Important:** All sessionToken methods require an **access token**. Session tokens cannot manage themselves (403 Forbidden).
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.create(options?)`
+
+Create a new session token for delegated access to the sandbox.
+
+**Parameters:**
+- `options` (object, optional): Token configuration
+  - `description` (string, optional): Human-readable description for the token
+  - `expiresIn` (number, optional): Expiration time in seconds (default: 604800 = 7 days)
+
+**Returns:** `Promise<SessionTokenInfo>` - Session token information including the token value
+
+**SessionTokenInfo interface (create only):**
+- `id` (string): Unique token identifier
+- `token` (string): The actual token value - **ONLY returned on creation, cannot be retrieved later!**
+- `description` (string, optional): Token description
+- `createdAt` (string): ISO timestamp when token was created
+- `expiresAt` (string): ISO timestamp when token expires
+
+**Examples:**
+
 ```typescript
-// Create a session token
+// Basic token creation with default expiration (7 days)
+const token = await sandbox.sessionTokens.create();
+console.log(token.token);      // "st_abc123..." - Save this!
+console.log(token.id);         // "token_xyz789"
+console.log(token.expiresAt);  // "2024-01-15T12:00:00Z"
+
+// Token with description
 const token = await sandbox.sessionTokens.create({
-  description: 'My Application',
-  expiresIn: 604800 // 7 days
+  description: 'My Application'
+});
+console.log(token.description); // "My Application"
+
+// Token with custom expiration (1 hour = 3600 seconds)
+const token = await sandbox.sessionTokens.create({
+  description: 'Short-lived token',
+  expiresIn: 3600
+});
+
+// Save token immediately - it won't be available later!
+const token = await sandbox.sessionTokens.create({
+  description: 'Production API'
+});
+const tokenValue = token.token; // Save this now!
+// Later calls to retrieve() or list() will NOT include the token value
+
+// Use token to create a new sandbox connection
+const delegatedSandbox = new Sandbox({
+  sandboxUrl: 'https://sandbox-123.computesdk.com',
+  token: token.token  // Use session token instead of access token
 });
 ```
 
-### sessionTokens.list()
+**Notes:**
+- ⚠️ **Critical:** The `token` field is ONLY returned once at creation time - store it securely immediately!
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Default expiration is 7 days (604800 seconds)
+- Token becomes invalid after expiration or revocation
+- Use session tokens to delegate access without exposing your primary access token
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.list()`
+
+List all session tokens for the current sandbox.
+
+**Parameters:** None
+
+**Returns:** `Promise<SessionTokenInfo[]>` - Array of session token information
+
+**SessionTokenInfo interface (list):**
+- `id` (string): Unique token identifier
+- `description` (string, optional): Token description
+- `createdAt` (string): ISO timestamp when token was created
+- `expiresAt` (string): ISO timestamp when token expires
+- `lastUsedAt` (string, optional): ISO timestamp of last usage (undefined if never used)
+
+**Note:** The actual `token` value is **NOT included** in list results.
+
+**Examples:**
+
 ```typescript
-// List session tokens
+// List all tokens
 const tokens = await sandbox.sessionTokens.list();
+console.log(`Found ${tokens.length} tokens`);
+
+// Display token information
+const tokens = await sandbox.sessionTokens.list();
+tokens.forEach(token => {
+  console.log(`ID: ${token.id}`);
+  console.log(`Description: ${token.description || 'None'}`);
+  console.log(`Created: ${token.createdAt}`);
+  console.log(`Expires: ${token.expiresAt}`);
+  console.log(`Last used: ${token.lastUsedAt || 'Never'}`);
+});
+
+// Find tokens by description
+const tokens = await sandbox.sessionTokens.list();
+const prodToken = tokens.find(t => t.description === 'Production API');
+
+// Check for expired tokens
+const tokens = await sandbox.sessionTokens.list();
+const now = new Date();
+const expiredTokens = tokens.filter(t => new Date(t.expiresAt) < now);
+console.log(`${expiredTokens.length} tokens have expired`);
 ```
 
-### sessionTokens.revoke()
+**Notes:**
+- ⚠️ The actual `token` value is NOT included - use `create()` to get the token value
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Returns empty array if no tokens exist
+- Includes `lastUsedAt` to track when token was last used
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.retrieve(id)`
+
+Retrieve detailed information about a specific session token by ID.
+
+**Parameters:**
+- `id` (string, required): The token ID to retrieve
+
+**Returns:** `Promise<SessionTokenInfo>` - Session token information
+
+**SessionTokenInfo interface (retrieve):**
+- `id` (string): Unique token identifier
+- `description` (string, optional): Token description
+- `createdAt` (string): ISO timestamp when token was created
+- `expiresAt` (string): ISO timestamp when token expires
+
+**Note:** The actual `token` value and `lastUsedAt` field are **NOT included** in retrieve results.
+
+**Examples:**
+
 ```typescript
-// Revoke a token
-await sandbox.sessionTokens.revoke(tokenId);
+// Retrieve specific token
+const token = await sandbox.sessionTokens.retrieve('token_abc123');
+console.log(token.id);          // "token_abc123"
+console.log(token.description); // "My Application"
+console.log(token.expiresAt);   // "2024-01-15T12:00:00Z"
+
+// Check if token exists
+try {
+  const token = await sandbox.sessionTokens.retrieve('token_xyz789');
+  console.log('Token exists:', token.id);
+} catch (error) {
+  console.error('Token not found');
+}
+
+// Check expiration
+const token = await sandbox.sessionTokens.retrieve('token_abc123');
+const expiresAt = new Date(token.expiresAt);
+const now = new Date();
+if (expiresAt < now) {
+  console.log('Token has expired');
+  await sandbox.sessionTokens.revoke(token.id);
+} else {
+  const hoursRemaining = (expiresAt - now) / (1000 * 60 * 60);
+  console.log(`Token expires in ${hoursRemaining.toFixed(1)} hours`);
+}
 ```
 
+**Notes:**
+- ⚠️ The actual `token` value is NOT included - cannot retrieve token value after creation
+- ⚠️ The `lastUsedAt` field is also NOT included (unlike `list()`)
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Throws error if token ID doesn't exist
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
+
+### `sessionTokens.revoke(id)`
+
+Revoke (delete) a session token, immediately invalidating it and preventing further use.
+
+**Parameters:**
+- `id` (string, required): The token ID to revoke
+
+**Returns:** `Promise<void>` - Resolves when token is successfully revoked
+
+**Examples:**
+
+```typescript
+// Basic revocation
+await sandbox.sessionTokens.revoke('token_abc123');
+console.log('Token revoked');
+
+// Revoke expired tokens
+const tokens = await sandbox.sessionTokens.list();
+const now = new Date();
+for (const token of tokens) {
+  if (new Date(token.expiresAt) < now) {
+    await sandbox.sessionTokens.revoke(token.id);
+    console.log(`Revoked expired token: ${token.id}`);
+  }
+}
+
+// Safe revocation with error handling
+try {
+  await sandbox.sessionTokens.revoke('token_xyz789');
+  console.log('Token revoked successfully');
+} catch (error) {
+  console.error('Revocation failed:', error.message);
+}
+
+// Revoke all tokens
+const tokens = await sandbox.sessionTokens.list();
+await Promise.all(
+  tokens.map(token => sandbox.sessionTokens.revoke(token.id))
+);
+console.log('All tokens revoked');
+```
+
+**Notes:**
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Revocation is immediate and permanent - the token cannot be used after this call
+- Does not throw error if token doesn't exist or was already revoked
+- Once revoked, any sandbox connections using this token will fail with authentication errors
+- Use this to clean up expired or compromised tokens
+- Available on all sandbox instances regardless of provider
 
 <br/>
 <br/>
@@ -1867,14 +2848,61 @@ await sandbox.sessionTokens.revoke(tokenId);
 ---
 
 
-## sandbox.magicLinks.create()
+## `sandbox.magicLinks`
 
-Browser authentication (requires access token):
+Create one-time authentication URLs for browser-based access. Magic links provide passwordless authentication by automatically creating session tokens and setting them as secure cookies.
+
+**Important:** Requires an **access token** to create magic links (403 Forbidden if called with a session token).
+
+<br/>
+<br/>
+
+---
+
+### `magicLinks.create(options?)`
+
+Create a one-time magic link URL for browser-based authentication.
+
+**Parameters:**
+- `options` (object, optional): Magic link configuration
+  - `redirectUrl` (string, optional): URL path to redirect to after authentication (default: `/play/`)
+
+**Returns:** `Promise<MagicLinkInfo>` - Magic link information including the URL
+
+**MagicLinkInfo interface:**
+- `url` (string): The magic link URL to share with users
+- `expiresAt` (string): ISO timestamp when the link expires
+- `redirectUrl` (string): The redirect URL configured for this link
+
+**Examples:**
 
 ```typescript
-// Create a magic link
+// Basic magic link with default redirect
+const link = await sandbox.magicLinks.create();
+console.log(link.url);         // "https://sandbox-123.computesdk.com/auth/magic/abc123..."
+console.log(link.expiresAt);   // "2024-01-09T12:05:00Z" (5 minutes from now)
+console.log(link.redirectUrl); // "/play/"
+
+// Magic link with custom redirect
 const link = await sandbox.magicLinks.create({
   redirectUrl: '/dashboard'
 });
-console.log(link.magic_url);
+console.log(link.redirectUrl); // "/dashboard"
+
 ```
+
+**Notes:**
+- ⚠️ **One-time use:** Link expires after first click or 5 minutes (whichever comes first)
+- ⚠️ **Security:** Session token is set as HttpOnly cookie, preventing XSS attacks
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Magic link expires after **5 minutes** or first use
+- Automatically creates a **session token** with **7-day expiration**
+- Session token is set as an **HttpOnly cookie** (not accessible via JavaScript)
+- Default redirect is `/play/` if `redirectUrl` is not specified
+- Relative URLs only - `redirectUrl` should be a path, not a full URL
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
