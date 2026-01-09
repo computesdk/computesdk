@@ -2,7 +2,7 @@
 
 ## What is ComputeSDK?
 
-ComputeSDK is an open-source toolkit for running other people's code in your applications. Think of it as the "AI SDK for compute" - providing a consistent TypeScript interface whether you're using Railway, E2B, Vercel, Daytona, Modal, and more.
+ComputeSDK gives you one consistent API to control sandboxes across multiple providers. Spin up isolated environments, execute shell commands, work with filesystems, and more without worrying about vendor-specific APIs. Perfect for building AI agents that execute code, running untrusted code safely, or orchestrating cloud workloads all while remaining provider-agnostic.
 
 ## How It Works
 
