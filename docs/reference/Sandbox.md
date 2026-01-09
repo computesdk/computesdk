@@ -1738,7 +1738,7 @@ console.log(dirExists); // true (works for directories too)
 const missing = await sandbox.file.exists('/project/nonexistent.txt');
 console.log(missing); // false (never throws an error)
 
-// 4. Defensive pattern before read
+// Defensive pattern before read
 const configPath = '/project/config.json';
 if (await sandbox.file.exists(configPath)) {
   const config = await sandbox.file.retrieve(configPath);
@@ -1747,7 +1747,7 @@ if (await sandbox.file.exists(configPath)) {
   console.log('Config file not found');
 }
 
-// 5. Defensive pattern before write (avoid overwrite)
+// Defensive pattern before write (avoid overwrite)
 const outputPath = '/project/report.txt';
 if (await sandbox.file.exists(outputPath)) {
   console.log('File already exists, skipping write');
