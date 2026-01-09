@@ -2848,14 +2848,61 @@ console.log('All tokens revoked');
 ---
 
 
-## sandbox.magicLinks.create()
+## `sandbox.magicLinks`
 
-Browser authentication (requires access token):
+Create one-time authentication URLs for browser-based access. Magic links provide passwordless authentication by automatically creating session tokens and setting them as secure cookies.
+
+**Important:** Requires an **access token** to create magic links (403 Forbidden if called with a session token).
+
+<br/>
+<br/>
+
+---
+
+### `magicLinks.create(options?)`
+
+Create a one-time magic link URL for browser-based authentication.
+
+**Parameters:**
+- `options` (object, optional): Magic link configuration
+  - `redirectUrl` (string, optional): URL path to redirect to after authentication (default: `/play/`)
+
+**Returns:** `Promise<MagicLinkInfo>` - Magic link information including the URL
+
+**MagicLinkInfo interface:**
+- `url` (string): The magic link URL to share with users
+- `expiresAt` (string): ISO timestamp when the link expires
+- `redirectUrl` (string): The redirect URL configured for this link
+
+**Examples:**
 
 ```typescript
-// Create a magic link
+// Basic magic link with default redirect
+const link = await sandbox.magicLinks.create();
+console.log(link.url);         // "https://sandbox-123.computesdk.com/auth/magic/abc123..."
+console.log(link.expiresAt);   // "2024-01-09T12:05:00Z" (5 minutes from now)
+console.log(link.redirectUrl); // "/play/"
+
+// Magic link with custom redirect
 const link = await sandbox.magicLinks.create({
   redirectUrl: '/dashboard'
 });
-console.log(link.magic_url);
+console.log(link.redirectUrl); // "/dashboard"
+
 ```
+
+**Notes:**
+- ⚠️ **One-time use:** Link expires after first click or 5 minutes (whichever comes first)
+- ⚠️ **Security:** Session token is set as HttpOnly cookie, preventing XSS attacks
+- Requires an **access token** to call (403 Forbidden if called with a session token)
+- Magic link expires after **5 minutes** or first use
+- Automatically creates a **session token** with **7-day expiration**
+- Session token is set as an **HttpOnly cookie** (not accessible via JavaScript)
+- Default redirect is `/play/` if `redirectUrl` is not specified
+- Relative URLs only - `redirectUrl` should be a path, not a full URL
+- Available on all sandbox instances regardless of provider
+
+<br/>
+<br/>
+
+---
