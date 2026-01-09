@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/aws-ecs",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "description": "AWS ECS provider for ComputeSDK - scalable containerized sandboxes using Fargate",
   "author": "ComputeSDK Team",
   "license": "MIT",
