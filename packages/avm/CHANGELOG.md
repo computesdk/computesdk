@@ -1,5 +1,12 @@
 # @computesdk/avm
 
+## 0.1.13
+
+### Patch Changes
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+
 ## 0.1.12
 
 ### Patch Changes

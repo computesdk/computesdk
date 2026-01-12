@@ -1,5 +1,12 @@
 # @computesdk/aws-ecs
 
+## 1.1.13
+
+### Patch Changes
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+
 ## 1.1.12
 
 ### Patch Changes

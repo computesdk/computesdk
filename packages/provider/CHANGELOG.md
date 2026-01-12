@@ -1,5 +1,12 @@
 # @computesdk/provider
 
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+
 ## 1.0.6
 
 ### Patch Changes
