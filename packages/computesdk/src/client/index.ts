@@ -456,6 +456,13 @@ export interface TerminalResponse {
 
 /**
  * Server status types
+ *
+ * - `starting`: Initial startup of the server process
+ * - `running`: Server process is running
+ * - `ready`: Server is running and ready to accept traffic
+ * - `failed`: Server failed to start or encountered a fatal error
+ * - `stopped`: Server was intentionally stopped
+ * - `restarting`: Server is being automatically restarted by the supervisor
  */
 export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
 
@@ -495,9 +502,9 @@ export interface ServerInfo {
   restart_policy?: RestartPolicy;
   /** Maximum restart attempts (0 = unlimited) */
   max_restarts?: number;
-  /** Delay between restarts in nanoseconds */
+  /** Delay between restarts in nanoseconds (input uses milliseconds via restart_delay_ms) */
   restart_delay?: number;
-  /** Graceful shutdown timeout in nanoseconds */
+  /** Graceful shutdown timeout in nanoseconds (input uses milliseconds via stop_timeout_ms) */
   stop_timeout?: number;
   /** Number of times the server has been automatically restarted */
   restart_count?: number;
