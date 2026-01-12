@@ -477,6 +477,131 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
   });
 
   // ==========================================================================
+  // SERVER MANAGEMENT (supervisor/daemon patterns)
+  // ==========================================================================
+
+  describe('Server Management', () => {
+    const testSlug = 'test-server';
+
+    afterEach(async () => {
+      // Clean up any test servers
+      try {
+        await sandbox.server.stop(testSlug);
+      } catch {
+        // Ignore - server may not exist
+      }
+    });
+
+    it('sandbox.server.start({ slug, command })', async () => {
+      // Start a basic server
+      const server = await sandbox.server.start({
+        slug: testSlug,
+        command: 'python3 -m http.server 8080',
+      });
+
+      expect(server.slug).toBe(testSlug);
+      expect(server.command).toBe('python3 -m http.server 8080');
+      expect(server.status).toBeDefined();
+    }, 30000);
+
+    it('sandbox.server.start with environment variables', async () => {
+      // Start server with inline environment variables
+      const server = await sandbox.server.start({
+        slug: testSlug,
+        command: 'echo $TEST_VAR && sleep 10',
+        environment: { TEST_VAR: 'hello-world' },
+      });
+
+      expect(server.slug).toBe(testSlug);
+      // Note: environment field only returned after server-core PR #89 is deployed
+      if (server.environment !== undefined) {
+        expect(server.environment).toEqual({ TEST_VAR: 'hello-world' });
+      }
+    }, 30000);
+
+    it('sandbox.server.start with restart_policy', async () => {
+      // Start server with supervisor settings
+      const server = await sandbox.server.start({
+        slug: testSlug,
+        command: 'python3 -m http.server 8080',
+        restart_policy: 'on-failure',
+        max_restarts: 3,
+        restart_delay_ms: 1000,
+        stop_timeout_ms: 5000,
+      });
+
+      expect(server.slug).toBe(testSlug);
+      // Note: supervisor fields only returned after server-core PR #89 is deployed
+      if (server.restart_policy !== undefined) {
+        expect(server.restart_policy).toBe('on-failure');
+        expect(server.max_restarts).toBe(3);
+      }
+    }, 30000);
+
+    it('sandbox.server.list()', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // List servers
+      const servers = await sandbox.server.list();
+
+      expect(Array.isArray(servers)).toBe(true);
+      const found = servers.find((s) => s.slug === testSlug);
+      expect(found).toBeDefined();
+    }, 30000);
+
+    it('sandbox.server.retrieve(slug)', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // Retrieve server
+      const server = await sandbox.server.retrieve(testSlug);
+
+      expect(server.slug).toBe(testSlug);
+      expect(server.pid).toBeDefined();
+    }, 30000);
+
+    it('sandbox.server.stop(slug) - graceful shutdown', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // Stop server (SIGTERM → wait → SIGKILL)
+      await sandbox.server.stop(testSlug);
+
+      // Server should be stopped or removed from list
+      const servers = await sandbox.server.list();
+      const found = servers.find((s) => s.slug === testSlug);
+      // Server may be 'stopped' or removed from list entirely depending on backend
+      if (found) {
+        expect(found.status).toBe('stopped');
+      }
+    }, 30000);
+
+    it('sandbox.server.restart(slug)', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // Restart server
+      const restarted = await sandbox.server.restart(testSlug);
+
+      expect(restarted.slug).toBe(testSlug);
+      expect(['starting', 'running', 'restarting']).toContain(restarted.status);
+    }, 30000);
+  });
+
+  // ==========================================================================
   // CLEANUP
   // ==========================================================================
 
@@ -532,4 +657,12 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
  *
  * URL GENERATION:
  *   sandbox.getUrl({ port })
+ *
+ * SERVER MANAGEMENT:
+ *   sandbox.server.start({ slug, command, environment, restart_policy, ... })
+ *   sandbox.server.list()
+ *   sandbox.server.retrieve(slug)
+ *   sandbox.server.stop(slug)
+ *   sandbox.server.restart(slug)
+ *   server.slug, server.status, server.pid, server.restart_count, server.exit_code
  */

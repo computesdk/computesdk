@@ -46,6 +46,7 @@ export type { MagicLinkInfo } from './resources/magic-link';
 export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions } from './resources/run';
+export type { ServerStartOptions } from './resources/server';
 
 // Import universal types
 import type { 
@@ -455,24 +456,63 @@ export interface TerminalResponse {
 
 /**
  * Server status types
+ *
+ * - `starting`: Initial startup of the server process
+ * - `running`: Server process is running
+ * - `ready`: Server is running and ready to accept traffic
+ * - `failed`: Server failed to start or encountered a fatal error
+ * - `stopped`: Server was intentionally stopped
+ * - `restarting`: Server is being automatically restarted by the supervisor
  */
-export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped';
+export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
+
+/**
+ * Server restart policy
+ * - `never`: No automatic restart (default)
+ * - `on-failure`: Restart only on non-zero exit code
+ * - `always`: Always restart on exit (including exit code 0)
+ */
+export type RestartPolicy = 'never' | 'on-failure' | 'always';
 
 /**
  * Server information
  */
 export interface ServerInfo {
+  /** Unique server identifier */
   slug: string;
+  /** Command used to start the server */
   command: string;
+  /** Working directory path */
   path: string;
+  /** Original path before resolution */
   original_path?: string;
+  /** Path to .env file */
   env_file?: string;
+  /** Inline environment variables */
+  environment?: Record<string, string>;
+  /** Auto-detected port number (populated when port monitor detects listening port) */
   port?: number;
+  /** Generated URL from subdomain + port (populated when port is detected) */
   url?: string;
+  /** Server lifecycle status */
   status: ServerStatus;
+  /** Process ID (direct process, not shell wrapper) */
   pid?: number;
-  terminal_id?: string;
+  /** Configured restart policy */
+  restart_policy?: RestartPolicy;
+  /** Maximum restart attempts (0 = unlimited) */
+  max_restarts?: number;
+  /** Delay between restarts in nanoseconds (input uses milliseconds via restart_delay_ms) */
+  restart_delay?: number;
+  /** Graceful shutdown timeout in nanoseconds (input uses milliseconds via stop_timeout_ms) */
+  stop_timeout?: number;
+  /** Number of times the server has been automatically restarted */
+  restart_count?: number;
+  /** Last exit code (null if process is still running) */
+  exit_code?: number | null;
+  /** When the server was created */
   created_at: string;
+  /** When the server was last updated */
   updated_at: string;
 }
 
@@ -1809,14 +1849,51 @@ export class Sandbox {
   }
 
   /**
-   * Start a new managed server
+   * Start a new managed server with optional supervisor settings
+   *
    * @param options - Server configuration
+   * @param options.slug - Unique server identifier
+   * @param options.command - Command to start the server
+   * @param options.path - Working directory (optional)
+   * @param options.env_file - Path to .env file relative to path (optional)
+   * @param options.environment - Inline environment variables (merged with env_file if both provided)
+   * @param options.restart_policy - When to automatically restart: 'never' (default), 'on-failure', 'always'
+   * @param options.max_restarts - Maximum restart attempts, 0 = unlimited (default: 0)
+   * @param options.restart_delay_ms - Delay between restart attempts in milliseconds (default: 1000)
+   * @param options.stop_timeout_ms - Graceful shutdown timeout in milliseconds (default: 10000)
+   *
+   * @example
+   * ```typescript
+   * // Basic server
+   * await sandbox.startServer({
+   *   slug: 'web',
+   *   command: 'npm run dev',
+   *   path: '/app',
+   * });
+   *
+   * // With supervisor settings
+   * await sandbox.startServer({
+   *   slug: 'api',
+   *   command: 'node server.js',
+   *   path: '/app',
+   *   environment: { NODE_ENV: 'production', PORT: '3000' },
+   *   restart_policy: 'on-failure',
+   *   max_restarts: 5,
+   *   restart_delay_ms: 2000,
+   *   stop_timeout_ms: 5000,
+   * });
+   * ```
    */
   async startServer(options: {
     slug: string;
     command: string;
     path?: string;
     env_file?: string;
+    environment?: Record<string, string>;
+    restart_policy?: RestartPolicy;
+    max_restarts?: number;
+    restart_delay_ms?: number;
+    stop_timeout_ms?: number;
   }): Promise<ServerResponse> {
     return this.request<ServerResponse>('/servers', {
       method: 'POST',

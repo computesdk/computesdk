@@ -499,6 +499,55 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     }
   };
   
+  // Expose server namespace for managed server operations
+  replServer.context.server = {
+    get start() {
+      return async (options: { slug: string; command: string; path?: string; env_file?: string; environment?: Record<string, string>; restart_policy?: 'never' | 'on-failure' | 'always'; max_restarts?: number; restart_delay_ms?: number; stop_timeout_ms?: number }) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.start(options);
+      };
+    },
+    get list() {
+      return async () => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.list();
+      };
+    },
+    get retrieve() {
+      return async (slug: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.retrieve(slug);
+      };
+    },
+    get stop() {
+      return async (slug: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.stop(slug);
+      };
+    },
+    get restart() {
+      return async (slug: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.restart(slug);
+      };
+    }
+  };
+
   // Expose terminal namespace for PTY and exec terminal operations
   replServer.context.terminal = {
     get create() {
