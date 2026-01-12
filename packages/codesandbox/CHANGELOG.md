@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.13
+
+### Patch Changes
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+  - @computesdk/provider@1.0.7
+
 ## 1.5.12
 
 ### Patch Changes

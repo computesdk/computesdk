@@ -1,5 +1,30 @@
 # @computesdk/workbench
 
+## 3.1.7
+
+### Patch Changes
+
+- fdda069: Add supervisor/daemon capabilities to server service
+
+  - Add restart policies: `never`, `on-failure`, `always`
+  - Add graceful shutdown with configurable timeout (SIGTERM → wait → SIGKILL)
+  - Add inline environment variables support
+  - Add process monitoring with `restart_count` and `exit_code` tracking
+  - Expose server namespace in workbench REPL for testing
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+  - @computesdk/blaxel@1.3.13
+  - @computesdk/cloudflare@1.3.13
+  - @computesdk/codesandbox@1.5.13
+  - @computesdk/daytona@1.6.13
+  - @computesdk/e2b@1.7.13
+  - @computesdk/modal@1.8.8
+  - @computesdk/provider@1.0.7
+  - @computesdk/railway@1.1.13
+  - @computesdk/runloop@1.3.13
+  - @computesdk/vercel@1.6.13
+
 ## 3.1.6
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @computesdk/e2b
 
+## 1.7.13
+
+### Patch Changes
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+  - @computesdk/provider@1.0.7
+
 ## 1.7.12
 
 ### Patch Changes
