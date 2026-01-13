@@ -1444,11 +1444,12 @@ export class Sandbox {
    *
    * @example
    * ```typescript
-   * const overlay = await sandbox.createOverlay({
+   * // Prefer using sandbox.filesystem.overlay.create() for camelCase response
+   * const overlay = await sandbox.filesystem.overlay.create({
    *   source: '/templates/nextjs',
    *   target: 'project',
    * });
-   * console.log(overlay.copy_status); // 'pending' | 'in_progress' | 'complete' | 'failed'
+   * console.log(overlay.copyStatus); // 'pending' | 'in_progress' | 'complete' | 'failed'
    * ```
    */
   async createOverlay(options: CreateOverlayOptions): Promise<OverlayResponse> {
