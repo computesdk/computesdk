@@ -180,8 +180,20 @@ export class Overlay {
         symlinkedDirs: response.stats.symlinked_dirs,
         skipped: response.stats.skipped,
       },
-      copyStatus: response.copy_status as 'pending' | 'in_progress' | 'complete' | 'failed',
+      copyStatus: this.validateCopyStatus(response.copy_status),
       copyError: response.copy_error,
     };
+  }
+
+  /**
+   * Validate and return copy status, defaulting to 'pending' for unknown values
+   */
+  private validateCopyStatus(status: string): OverlayCopyStatus {
+    const validStatuses: OverlayCopyStatus[] = ['pending', 'in_progress', 'complete', 'failed'];
+    if (validStatuses.includes(status as OverlayCopyStatus)) {
+      return status as OverlayCopyStatus;
+    }
+    // Default to 'pending' for unknown status values (future-proofing)
+    return 'pending';
   }
 }
