@@ -28,6 +28,7 @@ import {
   Auth,
   Run,
   Child,
+  Overlay,
 } from './resources';
 
 // Re-export high-level classes and types
@@ -47,6 +48,15 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions } from './resources/run';
 export type { ServerStartOptions } from './resources/server';
+export type { OverlayCopyStatus, OverlayStats, OverlayInfo } from './resources/overlay';
+
+// Import overlay types for internal use and re-export CreateOverlayOptions
+import type {
+  CreateOverlayOptions,
+  OverlayResponse,
+  OverlayListResponse,
+} from './resources/overlay';
+export type { CreateOverlayOptions };
 
 // Import universal types
 import type { 
@@ -76,6 +86,14 @@ export type {
   ProviderSandboxInfo,
   SandboxFileSystem,
 };
+
+/**
+ * Extended filesystem interface with overlay support
+ */
+export interface ExtendedFileSystem extends SandboxFileSystem {
+  /** Overlay operations for template directories */
+  readonly overlay: Overlay;
+}
 
 export type {
   ClientFileEntry as FileEntry,
@@ -720,7 +738,7 @@ export interface BatchWriteResponse {
 export class Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
-  readonly filesystem: SandboxFileSystem;
+  readonly filesystem: ExtendedFileSystem;
 
   // Resource namespaces (singular naming convention)
   readonly terminal: Terminal;
@@ -813,7 +831,7 @@ export class Sandbox {
       this._token = localStorage.getItem('session_token');
     }
 
-    // Initialize filesystem interface
+    // Initialize filesystem interface with overlay support
     this.filesystem = {
       readFile: async (path: string) => this.readFile(path),
       writeFile: async (path: string, content: string) => {
@@ -838,7 +856,13 @@ export class Sandbox {
       },
       remove: async (path: string) => {
         await this.deleteFile(path);
-      }
+      },
+      overlay: new Overlay({
+        create: async (options: CreateOverlayOptions) => this.createOverlay(options),
+        list: async () => this.listOverlays(),
+        retrieve: async (id: string) => this.getOverlay(id),
+        destroy: async (id: string) => this.deleteOverlay(id),
+      }),
     };
 
     // Initialize resource namespaces (singular naming convention)
@@ -1400,6 +1424,68 @@ export class Sandbox {
     return this.request<BatchWriteResponse>('/files/batch', {
       method: 'POST',
       body: JSON.stringify({ files }),
+    });
+  }
+
+  // ============================================================================
+  // Filesystem Overlays
+  // ============================================================================
+
+  /**
+   * Create a new filesystem overlay from a template directory
+   *
+   * Overlays enable instant sandbox setup by symlinking template files first,
+   * then copying heavy directories (node_modules, .venv, etc.) in the background.
+   *
+   * @param options - Overlay creation options
+   * @param options.source - Absolute path to source directory (template)
+   * @param options.target - Relative path in sandbox where overlay will be mounted
+   * @returns Overlay response with copy status
+   *
+   * @example
+   * ```typescript
+   * // Prefer using sandbox.filesystem.overlay.create() for camelCase response
+   * const overlay = await sandbox.filesystem.overlay.create({
+   *   source: '/templates/nextjs',
+   *   target: 'project',
+   * });
+   * console.log(overlay.copyStatus); // 'pending' | 'in_progress' | 'complete' | 'failed'
+   * ```
+   */
+  async createOverlay(options: CreateOverlayOptions): Promise<OverlayResponse> {
+    return this.request<OverlayResponse>('/filesystem/overlays', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  /**
+   * List all filesystem overlays for the current sandbox
+   * @returns List of overlays with their copy status
+   */
+  async listOverlays(): Promise<OverlayListResponse> {
+    return this.request<OverlayListResponse>('/filesystem/overlays');
+  }
+
+  /**
+   * Get a specific filesystem overlay by ID
+   *
+   * Useful for polling the copy status of an overlay.
+   *
+   * @param id - Overlay ID
+   * @returns Overlay details with current copy status
+   */
+  async getOverlay(id: string): Promise<OverlayResponse> {
+    return this.request<OverlayResponse>(`/filesystem/overlays/${id}`);
+  }
+
+  /**
+   * Delete a filesystem overlay
+   * @param id - Overlay ID
+   */
+  async deleteOverlay(id: string): Promise<void> {
+    return this.request<void>(`/filesystem/overlays/${id}`, {
+      method: 'DELETE',
     });
   }
 
