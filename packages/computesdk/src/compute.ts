@@ -66,6 +66,8 @@ export interface CreateSandboxOptions {
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
+  /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
+  image?: string;
 }
 
 /**
@@ -499,7 +501,7 @@ function computeFactory(config: ExplicitComputeConfig): ComputeManager {
  * 1. As a ComputeManager singleton (accessed via properties like compute.sandbox)
  * 2. As a factory function (called with config to create new instances)
  */
-interface CallableCompute extends ComputeManager {
+export interface CallableCompute extends ComputeManager {
   /** Create a new compute instance with explicit configuration */
   (config: ExplicitComputeConfig): ComputeManager;
   /** Explicitly configure the singleton */
