@@ -244,31 +244,53 @@ export const hopx = createProvider<HopxSandbox, HopxConfig>({
             ? `${result.stdout}${result.stdout && result.stderr ? '\n' : ''}${result.stderr}`
             : result.stdout;
 
-          // Check for syntax errors in stderr or output and throw them
+          // Check for syntax/parse errors in stderr or output and throw them
           // This ensures invalid code triggers an exception as expected by the test suite
+          // 
+          // IMPORTANT: We distinguish between:
+          // - Syntax errors (invalid code that couldn't parse) → should THROW
+          // - Runtime errors (valid code that threw during execution) → should RETURN with non-zero exit
           const combinedOutput = `${result.stdout || ''} ${result.stderr || ''}`;
+          
+          // Indicators of syntax/parse errors (code couldn't be executed)
+          // Covers Python, Node.js, and Bun error formats
           const hasSyntaxError = 
+            // Python syntax errors
             combinedOutput.includes('SyntaxError') ||
             combinedOutput.includes('invalid syntax') ||
-            combinedOutput.includes('Unexpected token') ||
-            combinedOutput.includes('Unexpected identifier') ||
             combinedOutput.includes('IndentationError') ||
             combinedOutput.includes('TabError') ||
-            combinedOutput.includes('NameError') ||
-            combinedOutput.includes('name') && combinedOutput.includes('is not defined');
+            (combinedOutput.includes('NameError') && combinedOutput.includes('is not defined')) ||
+            // JavaScript/Node.js syntax errors
+            combinedOutput.includes('Unexpected token') ||
+            combinedOutput.includes('Unexpected identifier') ||
+            // Bun parser errors (JavaScript in HopX runs via Bun)
+            combinedOutput.includes('Unexpected end of file') ||
+            (combinedOutput.includes('Expected') && combinedOutput.includes('but found'));
+          
+          // Indicators of runtime errors (code ran but threw - should NOT throw, return result)
+          const isRuntimeError = 
+            combinedOutput.includes('throw ') ||
+            combinedOutput.includes('raise ') ||
+            combinedOutput.includes('Traceback (most recent call last)') ||
+            (combinedOutput.includes('Error:') && !combinedOutput.includes('SyntaxError')) ||
+            (combinedOutput.includes('Exception:') && !combinedOutput.includes('SyntaxError'));
 
-          if (hasSyntaxError) {
+          // Throw for syntax errors (unless it looks like a runtime error)
+          if (hasSyntaxError && !isRuntimeError) {
             throw new Error(`Syntax error: ${(result.stderr || result.stdout || '').trim()}`);
           }
 
-          // Also throw for non-zero exit codes with empty output (likely parse/syntax failure)
-          if (result.exitCode !== 0 && !result.stdout && !result.stderr) {
-            throw new Error(`Code execution failed with exit code ${result.exitCode}`);
+          // For non-zero exit codes with empty output, this indicates a parse failure
+          // that couldn't produce any output - throw as a syntax error
+          // Note: HopX SDK returns exit_code (snake_case) in ExecutionResult
+          if (result.exit_code !== 0 && !result.stdout && !result.stderr) {
+            throw new Error(`Code execution failed with exit code ${result.exit_code}`);
           }
 
           return {
             output,
-            exitCode: result.exitCode,
+            exitCode: result.exit_code,
             language: effectiveRuntime
           };
         } catch (error) {
