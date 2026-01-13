@@ -254,12 +254,10 @@ export const railway = defineInfraProvider<RailwayInstance, RailwayConfig>({
           }
         };
 
-        const data = await fetchRailway(apiKey, mutation);
-        
-        if (data.errors) {
-          console.warn(`Railway delete warning: ${data.errors.map((e: any) => e.message).join(', ')}`);
-        }
+        await fetchRailway(apiKey, mutation);
       } catch (error) {
+        // For destroy operations, we log warnings rather than throwing
+        // since the resource may already be gone
         console.warn(`Railway destroy warning: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
