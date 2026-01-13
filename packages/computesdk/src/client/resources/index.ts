@@ -15,3 +15,4 @@ export { Env } from './env';
 export { Auth, type AuthStatusInfo, type AuthInfo, type AuthEndpointsInfo } from './auth';
 export { Run, type CodeResult, type CommandResult, type CodeLanguage, type CodeRunOptions, type CommandRunOptions } from './run';
 export { Child } from './child';
+export { Overlay, type CreateOverlayOptions, type OverlayCopyStatus, type OverlayStats, type OverlayInfo, type OverlayResponse, type OverlayListResponse } from './overlay';
