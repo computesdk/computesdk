@@ -132,10 +132,7 @@ export const railway = defineInfraProvider<RailwayInstance, RailwayConfig>({
               projectId,
               environmentId,
               source: {
-                // Use ComputeSDK daemon image or custom image from options
-                image: options?.runtime === 'node' ? 'node:alpine' : 'python:alpine'
-                // TODO: Use actual daemon image once available
-                // image: 'computesdk/daemon:latest'
+                image: 'computesdk/compute:latest'
               },
               ...(Object.keys(envVars).length > 0 && {
                 variables: envVars
