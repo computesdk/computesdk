@@ -4,16 +4,15 @@ Infrastructure provider implementations for the ComputeSDK gateway server.
 
 ## Purpose
 
-This package contains infrastructure-only provider implementations (Railway, Vercel, etc.) that are used by the ComputeSDK gateway server to provision compute resources.
+This package contains infrastructure-only provider implementations used by the ComputeSDK gateway server to provision compute resources.
 
 **⚠️ This package is intended for internal use by the gateway server.** End users should import from provider-specific packages like `@computesdk/railway` instead.
 
 ## What's in here?
 
 - **Railway** - GraphQL API for creating/destroying Railway services
-- **Vercel** - API for managing Vercel deployments
-- **Namespace** - API for namespace management
-- And more infrastructure providers...
+
+Additional providers (Vercel, Render, Namespace, etc.) will be added as needed.
 
 Each provider exposes only infrastructure methods:
 - `create()` - Provision compute resource

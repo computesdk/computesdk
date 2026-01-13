@@ -29,6 +29,11 @@ export type ComputeConfig = Omit<ExplicitComputeConfig, 'provider'>;
  * packages while routing through the gateway. Returns a function that
  * creates pre-configured compute instances.
  *
+ * **Note:** This configures the global `compute` singleton. The returned
+ * instance shares global state - calling this multiple times with different
+ * configs will override previous configurations. This is intentional as
+ * the compute singleton is designed to be configured once per application.
+ *
  * @example
  * ```typescript
  * // Define Railway compute factory
