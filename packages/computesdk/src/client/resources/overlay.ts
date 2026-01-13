@@ -193,8 +193,7 @@ export class Overlay {
     if (validStatuses.includes(status as OverlayCopyStatus)) {
       return status as OverlayCopyStatus;
     }
-    // Log and default to 'pending' for unknown status values (future-proofing)
-    console.warn(`Overlay: unknown copy_status "${status}", defaulting to "pending"`);
+    // Default to 'pending' for unknown status values (future-proofing)
     return 'pending';
   }
 }
