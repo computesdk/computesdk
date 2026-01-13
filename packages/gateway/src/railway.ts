@@ -132,7 +132,7 @@ export const railway = defineInfraProvider<RailwayInstance, RailwayConfig>({
               projectId,
               environmentId,
               source: {
-                image: 'computesdk/compute:latest'
+                image: options?.image ?? 'computesdk/compute:latest'
               },
               ...(Object.keys(envVars).length > 0 && {
                 variables: envVars

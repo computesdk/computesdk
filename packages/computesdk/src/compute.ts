@@ -66,6 +66,8 @@ export interface CreateSandboxOptions {
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
+  /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
+  image?: string;
 }
 
 /**
