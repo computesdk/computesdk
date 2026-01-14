@@ -53,7 +53,9 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     tokenSecret: 'X-Modal-Token-Secret',
   },
   railway: {
-    apiToken: 'X-Railway-API-Token',
+    apiToken: 'X-Railway-API-Key',
+    projectId: 'X-Railway-Project-ID',
+    environmentId: 'X-Railway-Environment-ID',
   },
   daytona: {
     apiKey: 'X-Daytona-API-Key',

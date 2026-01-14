@@ -5,7 +5,7 @@
 export { Command } from './command';
 export { TerminalCommand } from './terminal-command';
 export { Terminal } from './terminal';
-export { Server, type ServerStartOptions } from './server';
+export { Server, type ServerStartOptions, type ServerLogsOptions, type ServerLogsInfo } from './server';
 export { Watcher } from './watcher';
 export { SessionToken, type SessionTokenInfo } from './session-token';
 export { MagicLink, type MagicLinkInfo } from './magic-link';

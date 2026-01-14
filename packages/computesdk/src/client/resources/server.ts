@@ -6,8 +6,10 @@ import type {
   ServersListResponse,
   ServerResponse,
   ServerStopResponse,
+  ServerLogsResponse,
   ServerInfo,
   ServerStatus,
+  ServerLogStream,
   RestartPolicy,
 } from '../index';
 
@@ -76,6 +78,26 @@ export interface ServerStartOptions {
  * await sandbox.server.restart('api');
  * ```
  */
+/**
+ * Options for retrieving server logs
+ */
+export interface ServerLogsOptions {
+  /** Which output stream to return: 'stdout', 'stderr', or 'combined' (default) */
+  stream?: ServerLogStream;
+}
+
+/**
+ * Server logs info returned from the logs method
+ */
+export interface ServerLogsInfo {
+  /** Server slug identifier */
+  slug: string;
+  /** Which stream was returned */
+  stream: ServerLogStream;
+  /** The captured logs */
+  logs: string;
+}
+
 export class Server {
   private startHandler: (options: ServerStartOptions) => Promise<ServerResponse>;
   private listHandler: () => Promise<ServersListResponse>;
@@ -83,6 +105,7 @@ export class Server {
   private stopHandler: (slug: string) => Promise<ServerStopResponse | void>;
   private restartHandler: (slug: string) => Promise<ServerResponse>;
   private updateStatusHandler: (slug: string, status: ServerStatus) => Promise<void>;
+  private logsHandler: (slug: string, options?: ServerLogsOptions) => Promise<ServerLogsResponse>;
 
   constructor(handlers: {
     start: (options: ServerStartOptions) => Promise<ServerResponse>;
@@ -91,6 +114,7 @@ export class Server {
     stop: (slug: string) => Promise<ServerStopResponse | void>;
     restart: (slug: string) => Promise<ServerResponse>;
     updateStatus: (slug: string, status: ServerStatus) => Promise<void>;
+    logs: (slug: string, options?: ServerLogsOptions) => Promise<ServerLogsResponse>;
   }) {
     this.startHandler = handlers.start;
     this.listHandler = handlers.list;
@@ -98,6 +122,7 @@ export class Server {
     this.stopHandler = handlers.stop;
     this.restartHandler = handlers.restart;
     this.updateStatusHandler = handlers.updateStatus;
+    this.logsHandler = handlers.logs;
   }
 
   /**
@@ -183,5 +208,29 @@ export class Server {
    */
   async updateStatus(slug: string, status: ServerStatus): Promise<void> {
     await this.updateStatusHandler(slug, status);
+  }
+
+  /**
+   * Retrieve captured output (logs) for a managed server
+   * @param slug - The server slug
+   * @param options - Options for log retrieval
+   * @returns Server logs info
+   *
+   * @example
+   * ```typescript
+   * // Get combined logs (default)
+   * const logs = await sandbox.server.logs('api');
+   * console.log(logs.logs);
+   *
+   * // Get only stdout
+   * const stdout = await sandbox.server.logs('api', { stream: 'stdout' });
+   *
+   * // Get only stderr
+   * const stderr = await sandbox.server.logs('api', { stream: 'stderr' });
+   * ```
+   */
+  async logs(slug: string, options?: ServerLogsOptions): Promise<ServerLogsInfo> {
+    const response = await this.logsHandler(slug, options);
+    return response.data;
   }
 }
