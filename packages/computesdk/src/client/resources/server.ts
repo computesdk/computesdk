@@ -19,8 +19,10 @@ import type {
 export interface ServerStartOptions {
   /** Unique server identifier (URL-safe) */
   slug: string;
-  /** Command to start the server */
-  command: string;
+  /** Install command to run before starting (optional, runs blocking, e.g., "npm install") */
+  install?: string;
+  /** Command to start the server (e.g., "npm run dev") */
+  start: string;
   /** Working directory (optional) */
   path?: string;
   /** Path to .env file relative to path (optional) */
@@ -50,14 +52,22 @@ export interface ServerStartOptions {
  * // Start a basic server
  * const server = await sandbox.server.start({
  *   slug: 'api',
- *   command: 'npm start',
+ *   start: 'npm start',
+ *   path: '/app',
+ * });
+ *
+ * // Start with install command (runs before start)
+ * const server = await sandbox.server.start({
+ *   slug: 'web',
+ *   install: 'npm install',
+ *   start: 'npm run dev',
  *   path: '/app',
  * });
  *
  * // Start with supervisor settings (auto-restart on failure)
  * const server = await sandbox.server.start({
  *   slug: 'web',
- *   command: 'node server.js',
+ *   start: 'node server.js',
  *   path: '/app',
  *   environment: { NODE_ENV: 'production', PORT: '3000' },
  *   restart_policy: 'on-failure',
@@ -128,6 +138,10 @@ export class Server {
   /**
    * Start a new managed server with optional supervisor settings
    *
+   * **Install Phase:**
+   * If `install` is provided, it runs blocking before `start` (e.g., "npm install").
+   * The server status will be `installing` during this phase.
+   *
    * **Restart Policies:**
    * - `never` (default): No automatic restart on exit
    * - `on-failure`: Restart only on non-zero exit code
@@ -145,14 +159,15 @@ export class Server {
    * // Basic server
    * const server = await sandbox.server.start({
    *   slug: 'web',
-   *   command: 'npm run dev',
+   *   start: 'npm run dev',
    *   path: '/app',
    * });
    *
-   * // With supervisor settings
+   * // With install command
    * const server = await sandbox.server.start({
    *   slug: 'api',
-   *   command: 'node server.js',
+   *   install: 'npm install',
+   *   start: 'node server.js',
    *   environment: { NODE_ENV: 'production' },
    *   restart_policy: 'always',
    *   max_restarts: 0, // unlimited
