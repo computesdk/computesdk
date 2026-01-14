@@ -1,7 +1,7 @@
 {
-  "name": "@computesdk/render",
-  "version": "1.1.15",
-  "description": "Render provider for ComputeSDK - managed cloud containers with automatic scaling",
+  "name": "@computesdk/gateway",
+  "version": "0.0.3",
+  "description": "Infrastructure provider implementations for ComputeSDK gateway server",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -28,24 +28,19 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "@computesdk/provider": "workspace:*"
   },
   "keywords": [
     "computesdk",
-    "render",
-    "sandbox",
-    "code-execution",
-    "cloud",
-    "compute",
-    "containers",
-    "provider",
-    "deployment"
+    "gateway",
+    "infrastructure",
+    "providers",
+    "internal"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/render"
+    "directory": "packages/gateway"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {

@@ -28,6 +28,7 @@ import {
   Auth,
   Run,
   Child,
+  Overlay,
 } from './resources';
 
 // Re-export high-level classes and types
@@ -46,6 +47,16 @@ export type { MagicLinkInfo } from './resources/magic-link';
 export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions } from './resources/run';
+export type { ServerStartOptions, ServerLogsOptions, ServerLogsInfo } from './resources/server';
+export type { OverlayCopyStatus, OverlayStats, OverlayInfo } from './resources/overlay';
+
+// Import overlay types for internal use and re-export CreateOverlayOptions
+import type {
+  CreateOverlayOptions,
+  OverlayResponse,
+  OverlayListResponse,
+} from './resources/overlay';
+export type { CreateOverlayOptions };
 
 // Import universal types
 import type { 
@@ -75,6 +86,14 @@ export type {
   ProviderSandboxInfo,
   SandboxFileSystem,
 };
+
+/**
+ * Extended filesystem interface with overlay support
+ */
+export interface ExtendedFileSystem extends SandboxFileSystem {
+  /** Overlay operations for template directories */
+  readonly overlay: Overlay;
+}
 
 export type {
   ClientFileEntry as FileEntry,
@@ -455,24 +474,63 @@ export interface TerminalResponse {
 
 /**
  * Server status types
+ *
+ * - `starting`: Initial startup of the server process
+ * - `running`: Server process is running
+ * - `ready`: Server is running and ready to accept traffic
+ * - `failed`: Server failed to start or encountered a fatal error
+ * - `stopped`: Server was intentionally stopped
+ * - `restarting`: Server is being automatically restarted by the supervisor
  */
-export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped';
+export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
+
+/**
+ * Server restart policy
+ * - `never`: No automatic restart (default)
+ * - `on-failure`: Restart only on non-zero exit code
+ * - `always`: Always restart on exit (including exit code 0)
+ */
+export type RestartPolicy = 'never' | 'on-failure' | 'always';
 
 /**
  * Server information
  */
 export interface ServerInfo {
+  /** Unique server identifier */
   slug: string;
+  /** Command used to start the server */
   command: string;
+  /** Working directory path */
   path: string;
+  /** Original path before resolution */
   original_path?: string;
+  /** Path to .env file */
   env_file?: string;
+  /** Inline environment variables */
+  environment?: Record<string, string>;
+  /** Auto-detected port number (populated when port monitor detects listening port) */
   port?: number;
+  /** Generated URL from subdomain + port (populated when port is detected) */
   url?: string;
+  /** Server lifecycle status */
   status: ServerStatus;
+  /** Process ID (direct process, not shell wrapper) */
   pid?: number;
-  terminal_id?: string;
+  /** Configured restart policy */
+  restart_policy?: RestartPolicy;
+  /** Maximum restart attempts (0 = unlimited) */
+  max_restarts?: number;
+  /** Delay between restarts in nanoseconds (input uses milliseconds via restart_delay_ms) */
+  restart_delay?: number;
+  /** Graceful shutdown timeout in nanoseconds (input uses milliseconds via stop_timeout_ms) */
+  stop_timeout?: number;
+  /** Number of times the server has been automatically restarted */
+  restart_count?: number;
+  /** Last exit code (null if process is still running) */
+  exit_code?: number | null;
+  /** When the server was created */
   created_at: string;
+  /** When the server was last updated */
   updated_at: string;
 }
 
@@ -506,6 +564,24 @@ export interface ServerStopResponse {
   message: string;
   data: {
     slug: string;
+  };
+}
+
+/**
+ * Server logs stream type
+ */
+export type ServerLogStream = 'stdout' | 'stderr' | 'combined';
+
+/**
+ * Server logs response
+ */
+export interface ServerLogsResponse {
+  status: string;
+  message: string;
+  data: {
+    slug: string;
+    stream: ServerLogStream;
+    logs: string;
   };
 }
 
@@ -680,7 +756,7 @@ export interface BatchWriteResponse {
 export class Sandbox {
   readonly sandboxId: string;
   readonly provider: string;
-  readonly filesystem: SandboxFileSystem;
+  readonly filesystem: ExtendedFileSystem;
 
   // Resource namespaces (singular naming convention)
   readonly terminal: Terminal;
@@ -773,7 +849,7 @@ export class Sandbox {
       this._token = localStorage.getItem('session_token');
     }
 
-    // Initialize filesystem interface
+    // Initialize filesystem interface with overlay support
     this.filesystem = {
       readFile: async (path: string) => this.readFile(path),
       writeFile: async (path: string, content: string) => {
@@ -798,7 +874,13 @@ export class Sandbox {
       },
       remove: async (path: string) => {
         await this.deleteFile(path);
-      }
+      },
+      overlay: new Overlay({
+        create: async (options: CreateOverlayOptions) => this.createOverlay(options),
+        list: async () => this.listOverlays(),
+        retrieve: async (id: string) => this.getOverlay(id),
+        destroy: async (id: string) => this.deleteOverlay(id),
+      }),
     };
 
     // Initialize resource namespaces (singular naming convention)
@@ -844,6 +926,7 @@ export class Sandbox {
       stop: async (slug) => { await this.stopServer(slug); },
       restart: async (slug) => this.restartServer(slug),
       updateStatus: async (slug, status) => { await this.updateServerStatus(slug, status); },
+      logs: async (slug, options) => this.getServerLogs(slug, options),
     });
 
     this.watcher = new Watcher({
@@ -1364,6 +1447,68 @@ export class Sandbox {
   }
 
   // ============================================================================
+  // Filesystem Overlays
+  // ============================================================================
+
+  /**
+   * Create a new filesystem overlay from a template directory
+   *
+   * Overlays enable instant sandbox setup by symlinking template files first,
+   * then copying heavy directories (node_modules, .venv, etc.) in the background.
+   *
+   * @param options - Overlay creation options
+   * @param options.source - Absolute path to source directory (template)
+   * @param options.target - Relative path in sandbox where overlay will be mounted
+   * @returns Overlay response with copy status
+   *
+   * @example
+   * ```typescript
+   * // Prefer using sandbox.filesystem.overlay.create() for camelCase response
+   * const overlay = await sandbox.filesystem.overlay.create({
+   *   source: '/templates/nextjs',
+   *   target: 'project',
+   * });
+   * console.log(overlay.copyStatus); // 'pending' | 'in_progress' | 'complete' | 'failed'
+   * ```
+   */
+  async createOverlay(options: CreateOverlayOptions): Promise<OverlayResponse> {
+    return this.request<OverlayResponse>('/filesystem/overlays', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  /**
+   * List all filesystem overlays for the current sandbox
+   * @returns List of overlays with their copy status
+   */
+  async listOverlays(): Promise<OverlayListResponse> {
+    return this.request<OverlayListResponse>('/filesystem/overlays');
+  }
+
+  /**
+   * Get a specific filesystem overlay by ID
+   *
+   * Useful for polling the copy status of an overlay.
+   *
+   * @param id - Overlay ID
+   * @returns Overlay details with current copy status
+   */
+  async getOverlay(id: string): Promise<OverlayResponse> {
+    return this.request<OverlayResponse>(`/filesystem/overlays/${id}`);
+  }
+
+  /**
+   * Delete a filesystem overlay
+   * @param id - Overlay ID
+   */
+  async deleteOverlay(id: string): Promise<void> {
+    return this.request<void>(`/filesystem/overlays/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================================================
   // Terminal Management
   // ============================================================================
 
@@ -1809,14 +1954,51 @@ export class Sandbox {
   }
 
   /**
-   * Start a new managed server
+   * Start a new managed server with optional supervisor settings
+   *
    * @param options - Server configuration
+   * @param options.slug - Unique server identifier
+   * @param options.command - Command to start the server
+   * @param options.path - Working directory (optional)
+   * @param options.env_file - Path to .env file relative to path (optional)
+   * @param options.environment - Inline environment variables (merged with env_file if both provided)
+   * @param options.restart_policy - When to automatically restart: 'never' (default), 'on-failure', 'always'
+   * @param options.max_restarts - Maximum restart attempts, 0 = unlimited (default: 0)
+   * @param options.restart_delay_ms - Delay between restart attempts in milliseconds (default: 1000)
+   * @param options.stop_timeout_ms - Graceful shutdown timeout in milliseconds (default: 10000)
+   *
+   * @example
+   * ```typescript
+   * // Basic server
+   * await sandbox.startServer({
+   *   slug: 'web',
+   *   command: 'npm run dev',
+   *   path: '/app',
+   * });
+   *
+   * // With supervisor settings
+   * await sandbox.startServer({
+   *   slug: 'api',
+   *   command: 'node server.js',
+   *   path: '/app',
+   *   environment: { NODE_ENV: 'production', PORT: '3000' },
+   *   restart_policy: 'on-failure',
+   *   max_restarts: 5,
+   *   restart_delay_ms: 2000,
+   *   stop_timeout_ms: 5000,
+   * });
+   * ```
    */
   async startServer(options: {
     slug: string;
     command: string;
     path?: string;
     env_file?: string;
+    environment?: Record<string, string>;
+    restart_policy?: RestartPolicy;
+    max_restarts?: number;
+    restart_delay_ms?: number;
+    stop_timeout_ms?: number;
   }): Promise<ServerResponse> {
     return this.request<ServerResponse>('/servers', {
       method: 'POST',
@@ -1855,6 +2037,25 @@ export class Sandbox {
       {
         method: 'POST',
       }
+    );
+  }
+
+  /**
+   * Get logs for a managed server
+   * @param slug - Server slug
+   * @param options - Options for log retrieval
+   */
+  async getServerLogs(
+    slug: string,
+    options?: { stream?: ServerLogStream }
+  ): Promise<ServerLogsResponse> {
+    const params = new URLSearchParams();
+    if (options?.stream) {
+      params.set('stream', options.stream);
+    }
+    const queryString = params.toString();
+    return this.request<ServerLogsResponse>(
+      `/servers/${encodeURIComponent(slug)}/logs${queryString ? `?${queryString}` : ''}`
     );
   }
 

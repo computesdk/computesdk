@@ -1,5 +1,81 @@
 # @computesdk/workbench
 
+## 3.1.9
+
+### Patch Changes
+
+- Updated dependencies [3333388]
+  - computesdk@1.13.0
+  - @computesdk/blaxel@1.3.15
+  - @computesdk/cloudflare@1.3.15
+  - @computesdk/codesandbox@1.5.15
+  - @computesdk/daytona@1.6.15
+  - @computesdk/e2b@1.7.15
+  - @computesdk/modal@1.8.10
+  - @computesdk/provider@1.0.9
+  - @computesdk/railway@1.1.15
+  - @computesdk/runloop@1.3.15
+  - @computesdk/vercel@1.6.15
+
+## 3.1.8
+
+### Patch Changes
+
+- Updated dependencies [4decff7]
+  - @computesdk/provider@1.0.8
+  - @computesdk/railway@1.1.14
+  - computesdk@1.12.1
+  - @computesdk/e2b@1.7.14
+  - @computesdk/daytona@1.6.14
+  - @computesdk/blaxel@1.3.14
+  - @computesdk/cloudflare@1.3.14
+  - @computesdk/codesandbox@1.5.14
+  - @computesdk/modal@1.8.9
+  - @computesdk/runloop@1.3.14
+  - @computesdk/vercel@1.6.14
+
+## 3.1.7
+
+### Patch Changes
+
+- fdda069: Add supervisor/daemon capabilities to server service
+
+  - Add restart policies: `never`, `on-failure`, `always`
+  - Add graceful shutdown with configurable timeout (SIGTERM → wait → SIGKILL)
+  - Add inline environment variables support
+  - Add process monitoring with `restart_count` and `exit_code` tracking
+  - Expose server namespace in workbench REPL for testing
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+  - @computesdk/blaxel@1.3.13
+  - @computesdk/cloudflare@1.3.13
+  - @computesdk/codesandbox@1.5.13
+  - @computesdk/daytona@1.6.13
+  - @computesdk/e2b@1.7.13
+  - @computesdk/modal@1.8.8
+  - @computesdk/provider@1.0.7
+  - @computesdk/railway@1.1.13
+  - @computesdk/runloop@1.3.13
+  - @computesdk/vercel@1.6.13
+
+## 3.1.6
+
+### Patch Changes
+
+- Updated dependencies [7c8d968]
+  - computesdk@1.11.1
+  - @computesdk/blaxel@1.3.12
+  - @computesdk/cloudflare@1.3.12
+  - @computesdk/codesandbox@1.5.12
+  - @computesdk/daytona@1.6.12
+  - @computesdk/e2b@1.7.12
+  - @computesdk/modal@1.8.7
+  - @computesdk/provider@1.0.6
+  - @computesdk/railway@1.1.12
+  - @computesdk/runloop@1.3.12
+  - @computesdk/vercel@1.6.12
+
 ## 3.1.5
 
 ### Patch Changes

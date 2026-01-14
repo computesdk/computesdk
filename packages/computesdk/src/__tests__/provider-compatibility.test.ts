@@ -477,6 +477,286 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
   });
 
   // ==========================================================================
+  // SERVER MANAGEMENT (supervisor/daemon patterns)
+  // ==========================================================================
+
+  describe('Server Management', () => {
+    const testSlug = 'test-server';
+
+    afterEach(async () => {
+      // Clean up any test servers
+      try {
+        await sandbox.server.stop(testSlug);
+      } catch {
+        // Ignore - server may not exist
+      }
+    });
+
+    it('sandbox.server.start({ slug, command })', async () => {
+      // Start a basic server
+      const server = await sandbox.server.start({
+        slug: testSlug,
+        command: 'python3 -m http.server 8080',
+      });
+
+      expect(server.slug).toBe(testSlug);
+      expect(server.command).toBe('python3 -m http.server 8080');
+      expect(server.status).toBeDefined();
+    }, 30000);
+
+    it('sandbox.server.start with environment variables', async () => {
+      // Start server with inline environment variables
+      const server = await sandbox.server.start({
+        slug: testSlug,
+        command: 'echo $TEST_VAR && sleep 10',
+        environment: { TEST_VAR: 'hello-world' },
+      });
+
+      expect(server.slug).toBe(testSlug);
+      // Note: environment field only returned after server-core PR #89 is deployed
+      if (server.environment !== undefined) {
+        expect(server.environment).toEqual({ TEST_VAR: 'hello-world' });
+      }
+    }, 30000);
+
+    it('sandbox.server.start with restart_policy', async () => {
+      // Start server with supervisor settings
+      const server = await sandbox.server.start({
+        slug: testSlug,
+        command: 'python3 -m http.server 8080',
+        restart_policy: 'on-failure',
+        max_restarts: 3,
+        restart_delay_ms: 1000,
+        stop_timeout_ms: 5000,
+      });
+
+      expect(server.slug).toBe(testSlug);
+      // Note: supervisor fields only returned after server-core PR #89 is deployed
+      if (server.restart_policy !== undefined) {
+        expect(server.restart_policy).toBe('on-failure');
+        expect(server.max_restarts).toBe(3);
+      }
+    }, 30000);
+
+    it('sandbox.server.list()', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // List servers
+      const servers = await sandbox.server.list();
+
+      expect(Array.isArray(servers)).toBe(true);
+      const found = servers.find((s) => s.slug === testSlug);
+      expect(found).toBeDefined();
+    }, 30000);
+
+    it('sandbox.server.retrieve(slug)', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // Retrieve server
+      const server = await sandbox.server.retrieve(testSlug);
+
+      expect(server.slug).toBe(testSlug);
+      expect(server.pid).toBeDefined();
+    }, 30000);
+
+    it('sandbox.server.stop(slug) - graceful shutdown', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // Stop server (SIGTERM → wait → SIGKILL)
+      await sandbox.server.stop(testSlug);
+
+      // Server should be stopped or removed from list
+      const servers = await sandbox.server.list();
+      const found = servers.find((s) => s.slug === testSlug);
+      // Server may be 'stopped' or removed from list entirely depending on backend
+      if (found) {
+        expect(found.status).toBe('stopped');
+      }
+    }, 30000);
+
+    it('sandbox.server.restart(slug)', async () => {
+      // Start a server first
+      await sandbox.server.start({
+        slug: testSlug,
+        command: 'sleep 60',
+      });
+
+      // Restart server
+      const restarted = await sandbox.server.restart(testSlug);
+
+      expect(restarted.slug).toBe(testSlug);
+      expect(['starting', 'running', 'restarting']).toContain(restarted.status);
+    }, 30000);
+  });
+
+  // ==========================================================================
+  // FILESYSTEM OVERLAYS (template directories)
+  // ==========================================================================
+
+  describe('Filesystem Overlays', () => {
+    let overlayId: string | null = null;
+
+    afterEach(async () => {
+      // Clean up any test overlays
+      if (overlayId) {
+        try {
+          await sandbox.filesystem.overlay.destroy(overlayId);
+        } catch {
+          // Ignore - overlay may not exist
+        }
+        overlayId = null;
+      }
+    });
+
+    it('sandbox.filesystem.overlay.create({ source, target })', async () => {
+      // First create a source directory to overlay from
+      await sandbox.filesystem.mkdir('overlay-source');
+      await sandbox.filesystem.writeFile('overlay-source/index.js', 'console.log("hello");');
+      await sandbox.filesystem.writeFile('overlay-source/package.json', '{"name": "test"}');
+      await sandbox.filesystem.mkdir('overlay-source/src');
+      await sandbox.filesystem.writeFile('overlay-source/src/app.js', 'export default {}');
+
+      // Get the absolute path to the source directory
+      const pwdResult = await sandbox.runCommand('pwd');
+      const workingDir = pwdResult.stdout.trim();
+      const absoluteSource = `${workingDir}/overlay-source`;
+
+      // Create overlay
+      const overlay = await sandbox.filesystem.overlay.create({
+        source: absoluteSource,
+        target: 'overlay-target',
+      });
+
+      overlayId = overlay.id;
+
+      expect(overlay.id).toBeDefined();
+      expect(overlay.source).toBe(absoluteSource);
+      expect(overlay.target).toBe('overlay-target');
+      expect(overlay.copyStatus).toBeDefined();
+      expect(['pending', 'in_progress', 'complete']).toContain(overlay.copyStatus);
+      expect(overlay.stats).toBeDefined();
+      expect(typeof overlay.stats.symlinkedFiles).toBe('number');
+      expect(typeof overlay.stats.symlinkedDirs).toBe('number');
+    }, 30000);
+
+    it('sandbox.filesystem.overlay.list()', async () => {
+      // Create a source directory and overlay first
+      await sandbox.filesystem.mkdir('overlay-list-source');
+      await sandbox.filesystem.writeFile('overlay-list-source/file.txt', 'content');
+
+      const pwdResult = await sandbox.runCommand('pwd');
+      const workingDir = pwdResult.stdout.trim();
+      const absoluteSource = `${workingDir}/overlay-list-source`;
+
+      const overlay = await sandbox.filesystem.overlay.create({
+        source: absoluteSource,
+        target: 'overlay-list-target',
+      });
+      overlayId = overlay.id;
+
+      // List overlays
+      const overlays = await sandbox.filesystem.overlay.list();
+
+      expect(Array.isArray(overlays)).toBe(true);
+      const found = overlays.find((o) => o.id === overlay.id);
+      expect(found).toBeDefined();
+      expect(found?.source).toBe(absoluteSource);
+    }, 30000);
+
+    it('sandbox.filesystem.overlay.retrieve(id) - polling copy status', async () => {
+      // Create a source directory and overlay
+      await sandbox.filesystem.mkdir('overlay-retrieve-source');
+      await sandbox.filesystem.writeFile('overlay-retrieve-source/file.txt', 'content');
+
+      const pwdResult = await sandbox.runCommand('pwd');
+      const workingDir = pwdResult.stdout.trim();
+      const absoluteSource = `${workingDir}/overlay-retrieve-source`;
+
+      const overlay = await sandbox.filesystem.overlay.create({
+        source: absoluteSource,
+        target: 'overlay-retrieve-target',
+      });
+      overlayId = overlay.id;
+
+      // Retrieve overlay (useful for polling copy status)
+      const retrieved = await sandbox.filesystem.overlay.retrieve(overlay.id);
+
+      expect(retrieved.id).toBe(overlay.id);
+      expect(retrieved.copyStatus).toBeDefined();
+      // Copy may have completed by now or still in progress
+      expect(['pending', 'in_progress', 'complete']).toContain(retrieved.copyStatus);
+    }, 30000);
+
+    it('sandbox.filesystem.overlay.destroy(id)', async () => {
+      // Create a source directory and overlay
+      await sandbox.filesystem.mkdir('overlay-delete-source');
+      await sandbox.filesystem.writeFile('overlay-delete-source/file.txt', 'content');
+
+      const pwdResult = await sandbox.runCommand('pwd');
+      const workingDir = pwdResult.stdout.trim();
+      const absoluteSource = `${workingDir}/overlay-delete-source`;
+
+      const overlay = await sandbox.filesystem.overlay.create({
+        source: absoluteSource,
+        target: 'overlay-delete-target',
+      });
+
+      // Delete overlay
+      await sandbox.filesystem.overlay.destroy(overlay.id);
+
+      // Verify it's gone
+      const overlays = await sandbox.filesystem.overlay.list();
+      const found = overlays.find((o) => o.id === overlay.id);
+      expect(found).toBeUndefined();
+
+      // Clear overlayId since we already deleted it
+      overlayId = null;
+    }, 30000);
+
+    it('overlay files are accessible in target directory', async () => {
+      // Create a source directory with files
+      await sandbox.filesystem.mkdir('overlay-access-source');
+      await sandbox.filesystem.writeFile('overlay-access-source/hello.txt', 'Hello from overlay!');
+      await sandbox.filesystem.writeFile('overlay-access-source/config.json', '{"key": "value"}');
+
+      const pwdResult = await sandbox.runCommand('pwd');
+      const workingDir = pwdResult.stdout.trim();
+      const absoluteSource = `${workingDir}/overlay-access-source`;
+
+      // Create overlay
+      const overlay = await sandbox.filesystem.overlay.create({
+        source: absoluteSource,
+        target: 'overlay-access-target',
+      });
+      overlayId = overlay.id;
+
+      // Verify files are accessible in target directory
+      const helloContent = await sandbox.filesystem.readFile('overlay-access-target/hello.txt');
+      expect(helloContent).toBe('Hello from overlay!');
+
+      const configContent = await sandbox.filesystem.readFile('overlay-access-target/config.json');
+      expect(configContent).toBe('{"key": "value"}');
+
+      // List files in target directory
+      const files = await sandbox.filesystem.readdir('overlay-access-target');
+      expect(files.length).toBe(2);
+      expect(files.map((f) => f.name).sort()).toEqual(['config.json', 'hello.txt']);
+    }, 30000);
+  });
+
+  // ==========================================================================
   // CLEANUP
   // ==========================================================================
 
@@ -532,4 +812,19 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
  *
  * URL GENERATION:
  *   sandbox.getUrl({ port })
+ *
+ * SERVER MANAGEMENT:
+ *   sandbox.server.start({ slug, command, environment, restart_policy, ... })
+ *   sandbox.server.list()
+ *   sandbox.server.retrieve(slug)
+ *   sandbox.server.stop(slug)
+ *   sandbox.server.restart(slug)
+ *   server.slug, server.status, server.pid, server.restart_count, server.exit_code
+ *
+ * FILESYSTEM OVERLAYS:
+ *   sandbox.filesystem.overlay.create({ source, target })
+ *   sandbox.filesystem.overlay.list()
+ *   sandbox.filesystem.overlay.retrieve(id)
+ *   sandbox.filesystem.overlay.destroy(id)
+ *   overlay.id, overlay.source, overlay.target, overlay.copyStatus, overlay.stats
  */

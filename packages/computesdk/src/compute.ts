@@ -66,6 +66,8 @@ export interface CreateSandboxOptions {
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
+  /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
+  image?: string;
 }
 
 /**
@@ -146,6 +148,56 @@ async function gatewayFetch<T>(
     
     throw error;
   }
+}
+
+/**
+ * Poll gateway until sandbox status becomes "ready" or timeout
+ * Uses same exponential backoff pattern as waitForComputeReady
+ *
+ * This handles the case where a sandbox is being created by another concurrent
+ * request and the gateway returns status: "creating". We poll until it's ready.
+ */
+async function waitForSandboxStatus(
+  config: GatewayConfig,
+  endpoint: string,
+  body: object,
+  options: { maxWaitMs?: number } = {}
+): Promise<{ success: boolean; data?: any }> {
+  const maxWaitMs = options.maxWaitMs ?? 60000; // 1 minute default (matches gateway timeout)
+  const initialDelayMs = 500;
+  const maxDelayMs = 2000;
+  const backoffFactor = 1.5;
+
+  const startTime = Date.now();
+  let currentDelay = initialDelayMs;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    const result = await gatewayFetch<any>(endpoint, config, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+
+    if (!result.success || !result.data) {
+      return result; // Not found or error
+    }
+
+    if (result.data.status !== 'creating') {
+      return result; // Ready or legacy (no status field)
+    }
+
+    // Still creating - wait and retry
+    if (process.env.COMPUTESDK_DEBUG) {
+      console.log(`[Compute] Sandbox still creating, waiting ${currentDelay}ms...`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, currentDelay));
+    currentDelay = Math.min(currentDelay * backoffFactor, maxDelayMs);
+  }
+
+  throw new Error(
+    `Sandbox is still being created after ${maxWaitMs}ms. ` +
+    `This may indicate the sandbox failed to start. Check your provider dashboard.`
+  );
 }
 
 /**
@@ -327,22 +379,16 @@ class ComputeManager {
 
       const { name, namespace, ...restOptions } = options;
 
-      const result = await gatewayFetch<{
-        sandboxId: string;
-        name: string;
-        namespace: string;
-        url: string;
-        token: string;
-        provider: string;
-        metadata?: Record<string, unknown>;
-      }>(`${config.gatewayUrl}/v1/sandboxes/find-or-create`, config, {
-        method: 'POST',
-        body: JSON.stringify({
+      // Use polling to handle concurrent creation (status: "creating")
+      const result = await waitForSandboxStatus(
+        config,
+        `${config.gatewayUrl}/v1/sandboxes/find-or-create`,
+        {
           namespace: namespace || 'default',
           name,
           ...restOptions,
-        }),
-      });
+        }
+      );
 
       if (!result.success || !result.data) {
         throw new Error(`Gateway returned invalid response`);
@@ -379,21 +425,15 @@ class ComputeManager {
     find: async (options: FindSandboxOptions): Promise<Sandbox | null> => {
       const config = this.getGatewayConfig();
 
-      const result = await gatewayFetch<{
-        sandboxId: string;
-        name: string;
-        namespace: string;
-        url: string;
-        token: string;
-        provider: string;
-        metadata?: Record<string, unknown>;
-      } | null>(`${config.gatewayUrl}/v1/sandboxes/find`, config, {
-        method: 'POST',
-        body: JSON.stringify({
+      // Use polling to handle concurrent creation (status: "creating")
+      const result = await waitForSandboxStatus(
+        config,
+        `${config.gatewayUrl}/v1/sandboxes/find`,
+        {
           namespace: options.namespace || 'default',
           name: options.name,
-        }),
-      });
+        }
+      );
 
       if (!result.success || !result.data) {
         return null;
@@ -461,7 +501,7 @@ function computeFactory(config: ExplicitComputeConfig): ComputeManager {
  * 1. As a ComputeManager singleton (accessed via properties like compute.sandbox)
  * 2. As a factory function (called with config to create new instances)
  */
-interface CallableCompute extends ComputeManager {
+export interface CallableCompute extends ComputeManager {
   /** Create a new compute instance with explicit configuration */
   (config: ExplicitComputeConfig): ComputeManager;
   /** Explicitly configure the singleton */

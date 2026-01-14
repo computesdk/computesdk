@@ -157,11 +157,21 @@ export async function getComputeInstance(state: WorkbenchState): Promise<any> {
       defaultProvider: providerFactory(config),
     });
   } else {
-    // Gateway mode: use the shared gateway compute instance from computesdk.
-    // The gateway must be configured via environment variables (for example, COMPUTESDK_API_KEY)
-    // or explicit configuration; if neither is provided, the gateway will throw an error.
+    // Gateway mode: use the callable compute() with explicit provider configuration.
+    // This ensures the workbench's selected provider is used, not auto-detected from env.
     const { compute: gatewayCompute } = await import('computesdk');
-    compute = gatewayCompute;
+
+    // Build explicit config with the selected provider
+    const providerConfig = getProviderConfig(providerName as ProviderName);
+    const gatewayConfig = getProviderConfig('gateway');
+
+    // Use the callable form to create a compute instance with explicit provider
+    compute = gatewayCompute({
+      provider: providerName as any,
+      computesdkApiKey: gatewayConfig.apiKey,
+      // Spread provider-specific config
+      [providerName]: providerConfig,
+    });
   }
   
   // Cache the instance

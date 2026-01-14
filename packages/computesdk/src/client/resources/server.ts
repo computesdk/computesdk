@@ -6,20 +6,63 @@ import type {
   ServersListResponse,
   ServerResponse,
   ServerStopResponse,
+  ServerLogsResponse,
   ServerInfo,
   ServerStatus,
+  ServerLogStream,
+  RestartPolicy,
 } from '../index';
+
+/**
+ * Options for starting a managed server
+ */
+export interface ServerStartOptions {
+  /** Unique server identifier (URL-safe) */
+  slug: string;
+  /** Command to start the server */
+  command: string;
+  /** Working directory (optional) */
+  path?: string;
+  /** Path to .env file relative to path (optional) */
+  env_file?: string;
+  /** Inline environment variables (merged with env_file if both provided) */
+  environment?: Record<string, string>;
+  /**
+   * When to automatically restart the server:
+   * - `never`: No automatic restart (default)
+   * - `on-failure`: Restart only on non-zero exit code
+   * - `always`: Always restart on exit (including exit code 0)
+   */
+  restart_policy?: RestartPolicy;
+  /** Maximum restart attempts (0 = unlimited, default: 0) */
+  max_restarts?: number;
+  /** Delay between restart attempts in milliseconds (default: 1000) */
+  restart_delay_ms?: number;
+  /** Graceful shutdown timeout in milliseconds - SIGTERM → wait → SIGKILL (default: 10000) */
+  stop_timeout_ms?: number;
+}
 
 /**
  * Server resource namespace
  *
  * @example
  * ```typescript
- * // Start a new server
+ * // Start a basic server
  * const server = await sandbox.server.start({
  *   slug: 'api',
  *   command: 'npm start',
  *   path: '/app',
+ * });
+ *
+ * // Start with supervisor settings (auto-restart on failure)
+ * const server = await sandbox.server.start({
+ *   slug: 'web',
+ *   command: 'node server.js',
+ *   path: '/app',
+ *   environment: { NODE_ENV: 'production', PORT: '3000' },
+ *   restart_policy: 'on-failure',
+ *   max_restarts: 5,
+ *   restart_delay_ms: 2000,
  * });
  *
  * // List all servers
@@ -28,38 +71,50 @@ import type {
  * // Retrieve a specific server
  * const server = await sandbox.server.retrieve('api');
  *
- * // Stop a server
+ * // Stop a server (graceful shutdown with SIGTERM → SIGKILL)
  * await sandbox.server.stop('api');
  *
  * // Restart a server
  * await sandbox.server.restart('api');
  * ```
  */
+/**
+ * Options for retrieving server logs
+ */
+export interface ServerLogsOptions {
+  /** Which output stream to return: 'stdout', 'stderr', or 'combined' (default) */
+  stream?: ServerLogStream;
+}
+
+/**
+ * Server logs info returned from the logs method
+ */
+export interface ServerLogsInfo {
+  /** Server slug identifier */
+  slug: string;
+  /** Which stream was returned */
+  stream: ServerLogStream;
+  /** The captured logs */
+  logs: string;
+}
+
 export class Server {
-  private startHandler: (options: {
-    slug: string;
-    command: string;
-    path?: string;
-    env_file?: string;
-  }) => Promise<ServerResponse>;
+  private startHandler: (options: ServerStartOptions) => Promise<ServerResponse>;
   private listHandler: () => Promise<ServersListResponse>;
   private retrieveHandler: (slug: string) => Promise<ServerResponse>;
   private stopHandler: (slug: string) => Promise<ServerStopResponse | void>;
   private restartHandler: (slug: string) => Promise<ServerResponse>;
   private updateStatusHandler: (slug: string, status: ServerStatus) => Promise<void>;
+  private logsHandler: (slug: string, options?: ServerLogsOptions) => Promise<ServerLogsResponse>;
 
   constructor(handlers: {
-    start: (options: {
-      slug: string;
-      command: string;
-      path?: string;
-      env_file?: string;
-    }) => Promise<ServerResponse>;
+    start: (options: ServerStartOptions) => Promise<ServerResponse>;
     list: () => Promise<ServersListResponse>;
     retrieve: (slug: string) => Promise<ServerResponse>;
     stop: (slug: string) => Promise<ServerStopResponse | void>;
     restart: (slug: string) => Promise<ServerResponse>;
     updateStatus: (slug: string, status: ServerStatus) => Promise<void>;
+    logs: (slug: string, options?: ServerLogsOptions) => Promise<ServerLogsResponse>;
   }) {
     this.startHandler = handlers.start;
     this.listHandler = handlers.list;
@@ -67,23 +122,44 @@ export class Server {
     this.stopHandler = handlers.stop;
     this.restartHandler = handlers.restart;
     this.updateStatusHandler = handlers.updateStatus;
+    this.logsHandler = handlers.logs;
   }
 
   /**
-   * Start a new managed server
+   * Start a new managed server with optional supervisor settings
+   *
+   * **Restart Policies:**
+   * - `never` (default): No automatic restart on exit
+   * - `on-failure`: Restart only on non-zero exit code
+   * - `always`: Always restart on exit (including exit code 0)
+   *
+   * **Graceful Shutdown:**
+   * When stopping a server, it first sends SIGTERM and waits for `stop_timeout_ms`
+   * before sending SIGKILL if the process hasn't exited.
+   *
    * @param options - Server configuration
-   * @param options.slug - Unique server slug (URL-safe identifier)
-   * @param options.command - Command to start the server
-   * @param options.path - Working directory (optional)
-   * @param options.env_file - Path to env file (optional)
    * @returns Server info
+   *
+   * @example
+   * ```typescript
+   * // Basic server
+   * const server = await sandbox.server.start({
+   *   slug: 'web',
+   *   command: 'npm run dev',
+   *   path: '/app',
+   * });
+   *
+   * // With supervisor settings
+   * const server = await sandbox.server.start({
+   *   slug: 'api',
+   *   command: 'node server.js',
+   *   environment: { NODE_ENV: 'production' },
+   *   restart_policy: 'always',
+   *   max_restarts: 0, // unlimited
+   * });
+   * ```
    */
-  async start(options: {
-    slug: string;
-    command: string;
-    path?: string;
-    env_file?: string;
-  }): Promise<ServerInfo> {
+  async start(options: ServerStartOptions): Promise<ServerInfo> {
     const response = await this.startHandler(options);
     return response.data.server;
   }
@@ -132,5 +208,29 @@ export class Server {
    */
   async updateStatus(slug: string, status: ServerStatus): Promise<void> {
     await this.updateStatusHandler(slug, status);
+  }
+
+  /**
+   * Retrieve captured output (logs) for a managed server
+   * @param slug - The server slug
+   * @param options - Options for log retrieval
+   * @returns Server logs info
+   *
+   * @example
+   * ```typescript
+   * // Get combined logs (default)
+   * const logs = await sandbox.server.logs('api');
+   * console.log(logs.logs);
+   *
+   * // Get only stdout
+   * const stdout = await sandbox.server.logs('api', { stream: 'stdout' });
+   *
+   * // Get only stderr
+   * const stderr = await sandbox.server.logs('api', { stream: 'stderr' });
+   * ```
+   */
+  async logs(slug: string, options?: ServerLogsOptions): Promise<ServerLogsInfo> {
+    const response = await this.logsHandler(slug, options);
+    return response.data;
   }
 }

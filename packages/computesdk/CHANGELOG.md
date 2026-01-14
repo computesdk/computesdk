@@ -1,5 +1,55 @@
 # computesdk
 
+## 1.13.0
+
+### Minor Changes
+
+- 3333388: Add filesystem overlay API for instant sandbox setup from template directories
+
+  - Add `sandbox.filesystem.overlay.create({ source, target })` to create overlays
+  - Add `sandbox.filesystem.overlay.list()` to list all overlays
+  - Add `sandbox.filesystem.overlay.retrieve(id)` to get overlay status (useful for polling)
+  - Add `sandbox.filesystem.overlay.destroy(id)` to delete overlays
+  - Overlays symlink template files for instant access, then copy heavy directories in background
+
+## 1.12.1
+
+### Patch Changes
+
+- 4decff7: feat: Add @computesdk/gateway package and remove mode system
+
+  - New `@computesdk/gateway` package with Railway infrastructure provider for gateway server use
+  - New `defineInfraProvider()` factory for infrastructure-only providers
+  - New `defineCompute()` factory for user-facing gateway routing
+  - Simplified `@computesdk/railway` from ~270 lines to ~55 lines (routes through gateway)
+  - Removed mode system (`ProviderMode`, `BaseProviderConfig`, `defaultMode`)
+  - Configurable Docker image with `computesdk/compute:latest` default
+  - Export `ExplicitComputeConfig` type from computesdk
+
+## 1.12.0
+
+### Minor Changes
+
+- fdda069: Add supervisor/daemon capabilities to server service
+
+  - Add restart policies: `never`, `on-failure`, `always`
+  - Add graceful shutdown with configurable timeout (SIGTERM → wait → SIGKILL)
+  - Add inline environment variables support
+  - Add process monitoring with `restart_count` and `exit_code` tracking
+  - Expose server namespace in workbench REPL for testing
+
+## 1.11.1
+
+### Patch Changes
+
+- 7c8d968: ## Handle `status: "creating"` in `find()` and `findOrCreate()`
+
+  Added polling support for the gateway's new sandbox lifecycle status tracking. When a sandbox is being created by a concurrent request, the gateway now returns `status: "creating"` instead of creating a duplicate sandbox.
+
+  The SDK now polls with exponential backoff (500ms → 2s, 1.5x factor) until the sandbox becomes ready or times out after 60 seconds.
+
+  This is the client-side companion to computesdk/edge#97.
+
 ## 1.11.0
 
 ### Minor Changes
