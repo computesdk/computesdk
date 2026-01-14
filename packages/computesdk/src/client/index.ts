@@ -47,7 +47,7 @@ export type { MagicLinkInfo } from './resources/magic-link';
 export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions } from './resources/run';
-export type { ServerStartOptions } from './resources/server';
+export type { ServerStartOptions, ServerLogsOptions, ServerLogsInfo } from './resources/server';
 export type { OverlayCopyStatus, OverlayStats, OverlayInfo } from './resources/overlay';
 
 // Import overlay types for internal use and re-export CreateOverlayOptions
@@ -568,6 +568,24 @@ export interface ServerStopResponse {
 }
 
 /**
+ * Server logs stream type
+ */
+export type ServerLogStream = 'stdout' | 'stderr' | 'combined';
+
+/**
+ * Server logs response
+ */
+export interface ServerLogsResponse {
+  status: string;
+  message: string;
+  data: {
+    slug: string;
+    stream: ServerLogStream;
+    logs: string;
+  };
+}
+
+/**
  * Server status update response
  */
 export interface ServerStatusUpdateResponse {
@@ -908,6 +926,7 @@ export class Sandbox {
       stop: async (slug) => { await this.stopServer(slug); },
       restart: async (slug) => this.restartServer(slug),
       updateStatus: async (slug, status) => { await this.updateServerStatus(slug, status); },
+      logs: async (slug, options) => this.getServerLogs(slug, options),
     });
 
     this.watcher = new Watcher({
@@ -2018,6 +2037,25 @@ export class Sandbox {
       {
         method: 'POST',
       }
+    );
+  }
+
+  /**
+   * Get logs for a managed server
+   * @param slug - Server slug
+   * @param options - Options for log retrieval
+   */
+  async getServerLogs(
+    slug: string,
+    options?: { stream?: ServerLogStream }
+  ): Promise<ServerLogsResponse> {
+    const params = new URLSearchParams();
+    if (options?.stream) {
+      params.set('stream', options.stream);
+    }
+    const queryString = params.toString();
+    return this.request<ServerLogsResponse>(
+      `/servers/${encodeURIComponent(slug)}/logs${queryString ? `?${queryString}` : ''}`
     );
   }
 
