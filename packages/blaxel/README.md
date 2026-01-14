@@ -8,60 +8,52 @@ Blaxel provider for ComputeSDK - Execute code in secure Blaxel cloud sandboxes.
 npm install @computesdk/blaxel
 ```
 
-## Usage
+## Quick Start
 
-### With ComputeSDK
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { blaxel } from '@computesdk/blaxel';
+import { compute } from 'computesdk';
 
-// Set as default provider
-const compute = createCompute({ 
-  provider: blaxel({ apiKey: process.env.BL_API_KEY }) 
-compute.setConfig({ 
-  provider: blaxel({ 
-    apiKey: process.env.BLAXEL_API_KEY,
-    workspace: process.env.BLAXEL_WORKSPACE 
-  }) 
-});
-
-// Create sandbox
+// Auto-detects Blaxel from BL_WORKSPACE/BL_API_KEY environment variables
 const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('console.log("Hello from Blaxel!")');
 console.log(result.stdout); // "Hello from Blaxel!"
 
-// Clean up
 await sandbox.destroy();
 ```
 
-### Direct Usage
+### Direct Mode
+
+For direct SDK usage without the gateway:
 
 ```typescript
 import { blaxel } from '@computesdk/blaxel';
 
-// Create provider with configuration
-const provider = blaxel({ 
-  workspace: 'your-workspace',
-  apiKey: 'your-api-key',
+const compute = blaxel({ 
+  workspace: process.env.BL_WORKSPACE,
+  apiKey: process.env.BL_API_KEY,
   image: 'blaxel/prod-py-app:latest',  // Python image
   memory: 8192,                         // 8GB RAM
   ports: [3000, 8080]                  // Exposed ports
 });
 
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ 
-  provider,
-  options: {
-    runtime: 'python',  // Runtime specified at creation time
-    timeout: 3600000,   // 1 hour timeout
-    envs: { 
-      DEBUG: 'true' 
-    }
+const sandbox = await compute.sandbox.create({
+  runtime: 'python',  // Runtime specified at creation time
+  timeout: 3600000,   // 1 hour timeout
+  envs: { 
+    DEBUG: 'true' 
   }
 });
+
+const result = await sandbox.runCode('print("Hello from Blaxel!")');
+console.log(result.stdout);
+
+await sandbox.destroy();
 ```
 
 ## Configuration
@@ -380,7 +372,15 @@ The provider automatically detects the runtime based on code patterns:
 ## Error Handling
 
 ```typescript
+import { blaxel } from '@computesdk/blaxel';
+
 try {
+  const compute = blaxel({ 
+    workspace: process.env.BL_WORKSPACE,
+    apiKey: process.env.BL_API_KEY
+  });
+  const sandbox = await compute.sandbox.create();
+  
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
@@ -398,27 +398,19 @@ try {
 - `1` - General error or runtime error
 - `127` - Command not found
 
-## Web Framework Integration
-
-Use with web frameworks via the request handler:
-
-```typescript
-import { handleComputeRequest } from 'computesdk';
-import { blaxel } from '@computesdk/blaxel';
-
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: blaxel({ apiKey: process.env.BL_API_KEY })
-  });
-}
-```
-
 ## Examples
 
 ### Data Processing
 
 ```typescript
+import { blaxel } from '@computesdk/blaxel';
+
+const compute = blaxel({ 
+  workspace: process.env.BL_WORKSPACE,
+  apiKey: process.env.BL_API_KEY
+});
+const sandbox = await compute.sandbox.create();
+
 const result = await sandbox.runCode(`
 import json
 
@@ -435,11 +427,21 @@ print(json.dumps(result))
 
 const output = JSON.parse(result.stdout);
 console.log(output); // { sum: 15, average: 3, max: 5 }
+
+await sandbox.destroy();
 ```
 
 ### File Processing
 
 ```typescript
+import { blaxel } from '@computesdk/blaxel';
+
+const compute = blaxel({ 
+  workspace: process.env.BL_WORKSPACE,
+  apiKey: process.env.BL_API_KEY
+});
+const sandbox = await compute.sandbox.create();
+
 // Create data file
 await sandbox.filesystem.writeFile('/tmp/data.json', 
   JSON.stringify({ users: ['Alice', 'Bob', 'Charlie'] })
@@ -465,11 +467,21 @@ with open('/tmp/result.json', 'w') as f:
 // Read result
 const resultData = await sandbox.filesystem.readFile('/tmp/result.json');
 console.log(JSON.parse(resultData));
+
+await sandbox.destroy();
 ```
 
 ### Web Scraping Example
 
 ```typescript
+import { blaxel } from '@computesdk/blaxel';
+
+const compute = blaxel({ 
+  workspace: process.env.BL_WORKSPACE,
+  apiKey: process.env.BL_API_KEY
+});
+const sandbox = await compute.sandbox.create();
+
 // Install dependencies
 await sandbox.runCommand('pip', ['install', 'requests', 'beautifulsoup4']);
 
@@ -497,11 +509,22 @@ print(json.dumps(result))
 `);
 
 console.log(JSON.parse(result.stdout));
+
+await sandbox.destroy();
 ```
 
 ### API Development
 
 ```typescript
+import { blaxel } from '@computesdk/blaxel';
+
+const compute = blaxel({ 
+  workspace: process.env.BL_WORKSPACE,
+  apiKey: process.env.BL_API_KEY,
+  ports: [3000]
+});
+const sandbox = await compute.sandbox.create();
+
 // Create a simple API server
 await sandbox.filesystem.writeFile('/tmp/server.js', `
 const http = require('http');
@@ -536,6 +559,8 @@ const privateUrl = await sandbox.getUrl({
   }
 });
 console.log(`Private API: ${privateUrl}`);
+
+await sandbox.destroy();
 ```
 
 ## Authentication Methods

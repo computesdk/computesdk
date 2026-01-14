@@ -7,6 +7,4 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   external: ['vitest'],
-  // Use build-time-only tsconfig
-  tsconfig: './config/tsconfig.json'
 });

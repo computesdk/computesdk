@@ -20,23 +20,16 @@ export MODAL_TOKEN_ID=your_token_id_here
 export MODAL_TOKEN_SECRET=your_token_secret_here
 ```
 
-## Usage
+## Quick Start
 
-### With ComputeSDK
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { modal } from '@computesdk/modal';
+import { compute } from 'computesdk';
 
-// Set as default provider
-const compute = createCompute({ 
-  provider: modal({ 
-    tokenId: process.env.MODAL_TOKEN_ID,
-    tokenSecret: process.env.MODAL_TOKEN_SECRET
-  }) 
-});
-
-// Create sandbox
+// Auto-detects Modal from MODAL_TOKEN_ID/MODAL_TOKEN_SECRET environment variables
 const sandbox = await compute.sandbox.create();
 
 // Execute Python code with GPU acceleration
@@ -60,25 +53,30 @@ print(f"Mean: {y.mean().item():.4f}")
 `);
 
 console.log(result.stdout);
-
-// Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
-### Direct Usage
+### Direct Mode
+
+For direct SDK usage without the gateway:
 
 ```typescript
 import { modal } from '@computesdk/modal';
 
-// Create provider
-const provider = modal({ 
-  tokenId: 'your_token_id',
-  tokenSecret: 'your_token_secret',
-  timeout: 600000 // 10 minutes
+const compute = modal({ 
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET
 });
 
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
+const sandbox = await compute.sandbox.create();
+
+const result = await sandbox.runCode(`
+import torch
+print(f"PyTorch version: {torch.__version__}")
+`);
+
+console.log(result.stdout);
+await sandbox.destroy();
 ```
 
 ## Configuration
@@ -149,24 +147,25 @@ const url = await sandbox.getUrl({ port: 3000 });
 console.log(`Server accessible at: ${url}`);
 ```
 
-#### Direct SDK Usage with Ports
+#### Direct Mode with Ports
 
 ```typescript
 import { modal } from '@computesdk/modal';
 
-// Create provider with ports
-const provider = modal({ 
-  tokenId: 'your_token_id',
-  tokenSecret: 'your_token_secret',
+const compute = modal({ 
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET,
   ports: [3000, 5000, 8080], // Multiple ports can be exposed
   timeout: 600000 // 10 minutes
 });
 
-const sandbox = await compute.sandbox.create({ provider });
+const sandbox = await compute.sandbox.create();
 
 // Access different services on different ports
 const webUrl = await sandbox.getUrl({ port: 3000 });
 const apiUrl = await sandbox.getUrl({ port: 8080 });
+
+await sandbox.destroy();
 ```
 
 **Note**: Ports are exposed with unencrypted tunnels by default for maximum compatibility. The tunnels are publicly accessible URLs managed by Modal.
@@ -356,7 +355,15 @@ const provider = modal({
 ## Error Handling
 
 ```typescript
+import { modal } from '@computesdk/modal';
+
 try {
+  const compute = modal({ 
+    tokenId: process.env.MODAL_TOKEN_ID,
+    tokenSecret: process.env.MODAL_TOKEN_SECRET
+  });
+  const sandbox = await compute.sandbox.create();
+  
   const result = await sandbox.runCode('invalid python code');
 } catch (error) {
   if (error.message.includes('Missing Modal API credentials')) {
@@ -371,30 +378,18 @@ try {
 }
 ```
 
-## Web Framework Integration
-
-Use with web frameworks via the request handler:
-
-```typescript
-import { handleComputeRequest } from 'computesdk';
-import { modal } from '@computesdk/modal';
-
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: modal({ 
-      tokenId: process.env.MODAL_TOKEN_ID,
-      tokenSecret: process.env.MODAL_TOKEN_SECRET
-    })
-  });
-}
-```
-
 ## Examples
 
 ### Machine Learning Pipeline
 
 ```typescript
+import { modal } from '@computesdk/modal';
+
+const compute = modal({ 
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET
+});
+
 const sandbox = await compute.sandbox.create();
 
 // Create ML project structure
@@ -463,11 +458,20 @@ console.log(result.stdout);
 // Verify model was saved
 const modelExists = await sandbox.filesystem.exists('/ml-project/models/model.pt');
 console.log('Model saved:', modelExists);
+
+await sandbox.destroy();
 ```
 
 ### GPU-Accelerated Inference
 
 ```typescript
+import { modal } from '@computesdk/modal';
+
+const compute = modal({ 
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET
+});
+
 const sandbox = await compute.sandbox.create();
 
 // GPU inference example
@@ -519,11 +523,19 @@ print(f"Device: {outputs.device}")
 `);
 
 console.log(result.stdout);
+await sandbox.destroy();
 ```
 
 ### Distributed Processing
 
 ```typescript
+import { modal } from '@computesdk/modal';
+
+const compute = modal({ 
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET
+});
+
 // Process multiple tasks in parallel
 const tasks = [
   'task1_data.json',
@@ -556,6 +568,9 @@ results = {
 
 print(json.dumps(results))
 `);
+    
+    await sandbox.destroy();
+    return result;
   })
 );
 

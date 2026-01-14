@@ -1,5 +1,111 @@
 # @computesdk/cmd
 
+## 0.4.1
+
+### Patch Changes
+
+- 40d66fc: ## Streaming Output Support for `runCommand()`
+
+  Added `onStdout` and `onStderr` callback options to `sandbox.runCommand()` for real-time output streaming:
+
+  ```typescript
+  await sandbox.runCommand("npm install", {
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  });
+  ```
+
+  ### Streaming Modes
+
+  | `background` | callbacks             | Behavior                           |
+  | ------------ | --------------------- | ---------------------------------- |
+  | `false`      | none                  | Wait for completion, return result |
+  | `true`       | none                  | Return immediately                 |
+  | `false`      | `onStdout`/`onStderr` | Stream output, wait for completion |
+  | `true`       | `onStdout`/`onStderr` | Stream output, return immediately  |
+
+  ### Two-Phase Streaming Flow
+
+  Implemented a two-phase streaming protocol to prevent race conditions with fast commands:
+
+  1. `POST /run/command` with `stream: true` returns a pending command with `cmd_id` and `channel`
+  2. SDK subscribes to the channel via WebSocket
+  3. SDK sends `command:start` to trigger execution
+  4. Server broadcasts `command:stdout`, `command:stderr`, `command:exit` events
+
+  This ensures the SDK is subscribed before the command runs.
+
+  ## `sandbox.destroy()` Fix
+
+  Fixed `sandbox.destroy()` to actually destroy the sandbox via the gateway API, not just disconnect the WebSocket.
+
+  ## Provider Compatibility Tests
+
+  Added comprehensive provider compatibility test suite that validates SDK functionality across providers (e2b, vercel, daytona, modal). Tests cover:
+
+  - Sandbox lifecycle (create, connect, destroy)
+  - File operations (read, write, exists, remove, mkdir, readdir)
+  - Command execution (with cwd, env, background, streaming)
+  - PTY terminals (create, write, output streaming, destroy)
+  - Exec terminals (execute commands with result tracking)
+  - URL generation for different ports
+
+  ## CI Integration
+
+  Added SDK integration test job to CI workflow that runs provider compatibility tests against e2b and vercel providers on PRs and main branch pushes.
+
+  ## Workbench Improvements
+
+  - Added SDK debugging documentation to README with examples for reproducing test failures
+  - Added verbose mode for WebSocket debugging
+  - Improved terminal and filesystem commands
+  - Added `cd` command support
+
+## 0.4.0
+
+### Minor Changes
+
+- 6b0c820: refactor: remove cmd() callable, separate shell wrapping from command building
+
+  **Breaking Change**: The `cmd` export is no longer callable. It's now a pure namespace for command builders.
+
+  **Before:**
+
+  ```typescript
+  import { cmd } from "@computesdk/cmd";
+
+  cmd.npm.install(); // Building ✅
+  cmd(npm.install(), { cwd }); // Wrapping ❌ NO LONGER WORKS
+  ```
+
+  **After:**
+
+  ```typescript
+  import { npm, shell } from "@computesdk/cmd";
+
+  npm.install(); // Building ✅
+  shell(npm.install(), { cwd }); // Wrapping ✅ Use shell() instead
+  ```
+
+  **Better (Recommended):**
+
+  ```typescript
+  // Let sandbox handle options
+  await sandbox.runCommand("npm install", { cwd: "/app" });
+  ```
+
+  **Why:**
+
+  - Separates concerns: building vs. shell wrapping
+  - Aligns with modern `runCommand(command, options)` API
+  - Removes confusion from dual-purpose export
+  - Completes the clean command execution refactor from #192 and #193
+
+  **Migration:**
+
+  - Replace `cmd(command, options)` with `shell(command, options)`
+  - Or better: use `sandbox.runCommand(command, options)` directly
+
 ## 0.3.1
 
 ### Patch Changes

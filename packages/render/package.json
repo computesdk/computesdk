@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/render",
-  "version": "1.1.4",
+  "version": "1.1.15",
   "description": "Render provider for ComputeSDK - managed cloud containers with automatic scaling",
   "author": "ComputeSDK Team",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [

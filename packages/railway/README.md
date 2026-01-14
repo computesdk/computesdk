@@ -18,23 +18,39 @@ RAILWAY_PROJECT_ID=your_railway_project_id
 RAILWAY_ENVIRONMENT_ID=your_railway_environment_id
 ```
 
-## Usage
+## Quick Start
+
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
+
+```typescript
+import { compute } from 'computesdk';
+
+// Auto-detects Railway from RAILWAY_API_KEY/RAILWAY_PROJECT_ID/RAILWAY_ENVIRONMENT_ID environment variables
+const sandbox = await compute.sandbox.create();
+console.log(`Created sandbox: ${sandbox.sandboxId}`);
+
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
 
 ```typescript
 import { railway } from '@computesdk/railway';
 
-const provider = railway({
-  apiKey: 'your_api_key',
-  projectId: 'your_project_id',
-  environmentId: 'your_environment_id'
+const compute = railway({
+  apiKey: process.env.RAILWAY_API_KEY,
+  projectId: process.env.RAILWAY_PROJECT_ID,
+  environmentId: process.env.RAILWAY_ENVIRONMENT_ID
 });
 
-// Create a sandbox
-const sandbox = await provider.sandbox.create({ runtime: 'node' });
+const sandbox = await compute.sandbox.create();
 console.log(`Created sandbox: ${sandbox.sandboxId}`);
 
-// Destroy the sandbox
-await provider.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ## Currently Implemented

@@ -1,32 +1,28 @@
 # E2B
 
-E2B provider for ComputeSDK - Execute code in full development environments with terminal support.
+E2B provider for ComputeSDK
 
-## Installation
+
+## Installation & Setup
 
 ```bash
-npm install @computesdk/e2b
+npm install computesdk
+
+# add to .env file
+COMPUTESDK_API_KEY=your_computesdk_api_key
+
+E2B_API_KEY=your_e2b_api_key
 ```
+
 
 ## Usage
 
-### With ComputeSDK
-
 ```typescript
-import { createCompute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-
-// Set as default provider
-const compute = createCompute({ 
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
-  apiKey: process.env.COMPUTESDK_API_KEY 
-});
+import { compute } from 'computesdk';
+// auto-detects provider from environment variables
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
-
-// Get instance
-const instance = sandbox.getInstance();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from E2B!")');
@@ -36,13 +32,6 @@ console.log(result.stdout); // "Hello from E2B!"
 await compute.sandbox.destroy(sandbox.sandboxId);
 ```
 
-## Configuration
-
-### Environment Variables
-
-```bash
-export E2B_API_KEY=e2b_your_api_key_here
-```
 
 ### Configuration Options
 
@@ -57,6 +46,19 @@ interface E2BConfig {
 }
 ```
 
+## Explicit Provider Configuration
+If you prefer to set the provider explicitly, you can do so as follows:
+```typescript
+// Set as explicit provider
+const sandbox = compute({ 
+  provider: 'e2b', 
+  e2b: {
+    e2bApiKey: process.env.E2B_API_KEY
+  },
+  apiKey: process.env.COMPUTESDK_API_KEY 
+}).sandbox.create();
+```
+
 ## Runtime Detection
 
 The provider automatically detects the runtime based on code patterns:
@@ -68,12 +70,3 @@ The provider automatically detects the runtime based on code patterns:
 - Python-specific syntax (`f"`, `__`, etc.)
 
 **Default:** Node.js for all other cases
-
-## SDK Reference Links:
-
-- **[Code Execution](/docs/reference/code-execution)** - Execute code snippets in various runtimes
-- **[Command Execution](/docs/reference/code-execution#basic-code-execution)** - Run shell commands and scripts
-- **[Filesystem Operations](/docs/reference/filesystem)** - Read, write, and manage files in sandboxes
-- **[Sandbox Management](/docs/reference/sandbox-management)** - Create, list, and destroy sandboxes
-- **[Error Handling](/docs/reference/api-integration#error-handling)** - Handle command failures and runtime errors
-- **[Web Framework Integration](/docs/reference/api-integration#web-framework-integration)** - Integrate with Express, Next.js, and other frameworks

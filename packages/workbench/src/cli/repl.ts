@@ -10,7 +10,7 @@
 import * as repl from 'repl';
 import * as cmd from '@computesdk/cmd';
 import type { WorkbenchState } from './state.js';
-import { runCommand, createProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose } from './commands.js';
+import { runCommand, defineProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose, connectToSandbox } from './commands.js';
 import { showHelp, showInfo } from './output.js';
 import { showProviders, showEnv, PROVIDER_NAMES } from './providers.js';
 import { isCommand } from './types.js';
@@ -34,7 +34,7 @@ import * as os from 'os';
  */
 export function createREPL(state: WorkbenchState): repl.REPLServer {
   const replServer = repl.start({
-    prompt: 'workbench> ',
+    prompt: '> ',  // Initial prompt, will be updated by state management
     useColors: true,
     terminal: true,
     useGlobal: false,
@@ -55,6 +55,9 @@ export function createREPL(state: WorkbenchState): repl.REPLServer {
   
   // Setup command history
   setupHistory(replServer);
+  
+  // Store replServer reference for prompt updates
+  state._replServer = replServer;
 
   return replServer;
 }
@@ -154,10 +157,7 @@ function injectCmdContext(replServer: repl.REPLServer) {
   // Compute
   replServer.context.compute = cmd.compute;
   
-  // Expose cmd namespace for cmd() wrapper
-  replServer.context.cmd = cmd.cmd;
-  
-  // Shell wrappers
+  // Shell wrappers (for wrapping commands with cwd/background options)
   replServer.context.shell = cmd.shell;
   replServer.context.sh = cmd.sh;
   replServer.context.bash = cmd.bash;
@@ -169,7 +169,7 @@ function injectCmdContext(replServer: repl.REPLServer) {
  */
 function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchState) {
   // Provider management
-  replServer.context.provider = createProviderCommand(state);
+  replServer.context.provider = defineProviderCommand(state);
   replServer.context.providers = () => showProviders();
   
   // Mode management
@@ -188,6 +188,10 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
   
   replServer.context.destroy = async () => {
     await destroySandbox(state);
+  };
+  
+  replServer.context.connect = async (url: string, token?: string) => {
+    await connectToSandbox(state, url, token);
   };
   
   replServer.context.info = () => showInfo(state);
@@ -209,6 +213,410 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
   // Environment/help
   replServer.context.env = () => showEnv();
   replServer.context.help = showHelp;
+  
+  // Expose sandbox methods directly in context
+  // These are lazy-evaluated to get the current sandbox
+  
+  // Expose getUrl directly
+  replServer.context.getUrl = async (options: { port: number; protocol?: string }) => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.getUrl(options);
+  };
+  
+  // Expose getInfo as sandboxInfo (since 'info' is already taken for workbench info)
+  replServer.context.sandboxInfo = async () => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.getInfo();
+  };
+  
+  // Expose runCode directly
+  replServer.context.runCode = async (code: string, runtime?: 'node' | 'python') => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.runCode(code, runtime);
+  };
+  
+  // Expose runCommand directly with full options support (background, cwd, env)
+  replServer.context.runCommand = async (
+    command: string,
+    options?: { background?: boolean; cwd?: string; env?: Record<string, string> }
+  ) => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.runCommand(command, options);
+  };
+  
+  // Expose sandbox creation methods (gateway mode only)
+  // These return clean { sandboxId, metadata } objects instead of full GeneratedSandbox
+  replServer.context.create = async (options?: Record<string, unknown>) => {
+    if (state.useDirectMode) {
+      throw new Error('Named sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+    }
+    
+    // Lazy-load dependencies
+    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
+    const { setSandbox } = await import('./state.js');
+    const { logSuccess } = await import('./output.js');
+    
+    // Prompt if switching from existing sandbox
+    const shouldSwitch = await confirmSandboxSwitch(state);
+    
+    if (!shouldSwitch) {
+      // User chose not to switch - create but don't activate
+      const compute = await getComputeInstance(state);
+      const sandbox = await compute.sandbox.create(options);
+      
+      return {
+        sandboxId: sandbox.sandboxId,
+        provider: sandbox.provider,
+        metadata: sandbox.getInstance().config.metadata || {}
+      };
+    }
+    
+    // Create sandbox (may throw error)
+    const compute = await getComputeInstance(state);
+    const sandbox = await compute.sandbox.create(options);
+    
+    // Only set as current after successful creation
+    setSandbox(state, sandbox, sandbox.provider);
+    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
+    
+    return {
+      sandboxId: sandbox.sandboxId,
+      provider: sandbox.provider,
+      metadata: sandbox.getInstance().config.metadata || {}
+    };
+  };
+  
+  replServer.context.findOrCreate = async (options: { name: string; namespace?: string; timeout?: number; runtime?: string }) => {
+    if (state.useDirectMode) {
+      throw new Error('Named sandboxes (findOrCreate) are only available in gateway mode. Use "mode gateway" to switch.');
+    }
+    
+    // Lazy-load dependencies
+    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
+    const { setSandbox } = await import('./state.js');
+    const { logSuccess } = await import('./output.js');
+    
+    // Prompt if switching
+    const shouldSwitch = await confirmSandboxSwitch(state);
+    
+    if (!shouldSwitch) {
+      const compute = await getComputeInstance(state);
+      const sandbox = await compute.sandbox.findOrCreate(options);
+      
+      return {
+        sandboxId: sandbox.sandboxId,
+        provider: sandbox.provider,
+        name: options.name,
+        namespace: options.namespace || 'default',
+        metadata: sandbox.getInstance().config.metadata || {}
+      };
+    }
+    
+    // Find or create sandbox
+    const compute = await getComputeInstance(state);
+    const sandbox = await compute.sandbox.findOrCreate(options);
+    
+    // Set as current after successful operation
+    setSandbox(state, sandbox, sandbox.provider);
+    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
+    
+    return {
+      sandboxId: sandbox.sandboxId,
+      provider: sandbox.provider,
+      name: options.name,
+      namespace: options.namespace || 'default',
+      metadata: sandbox.getInstance().config.metadata || {}
+    };
+  };
+  
+  replServer.context.find = async (options: { name: string; namespace?: string }) => {
+    if (state.useDirectMode) {
+      throw new Error('Named sandboxes (find) are only available in gateway mode. Use "mode gateway" to switch.');
+    }
+    
+    // Lazy-load dependencies
+    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
+    const { setSandbox } = await import('./state.js');
+    const { logSuccess } = await import('./output.js');
+    
+    // Find sandbox first (may return null)
+    const compute = await getComputeInstance(state);
+    const sandbox = await compute.sandbox.find(options);
+    
+    if (!sandbox) {
+      return null; // Not found, nothing to switch to
+    }
+    
+    // Prompt if switching
+    const shouldSwitch = await confirmSandboxSwitch(state);
+    
+    if (!shouldSwitch) {
+      return {
+        sandboxId: sandbox.sandboxId,
+        provider: sandbox.provider,
+        name: options.name,
+        namespace: options.namespace || 'default',
+        metadata: sandbox.getInstance().config.metadata || {}
+      };
+    }
+    
+    // Set as current
+    setSandbox(state, sandbox, sandbox.provider);
+    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
+    
+    return {
+      sandboxId: sandbox.sandboxId,
+      provider: sandbox.provider,
+      name: options.name,
+      namespace: options.namespace || 'default',
+      metadata: sandbox.getInstance().config.metadata || {}
+    };
+  };
+  
+  // Expose filesystem namespace
+  replServer.context.filesystem = {
+    get readFile() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.readFile(path);
+      };
+    },
+    get writeFile() {
+      return async (path: string, content: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.writeFile(path, content);
+      };
+    },
+    get mkdir() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.mkdir(path);
+      };
+    },
+    get readdir() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.readdir(path);
+      };
+    },
+    get exists() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.exists(path);
+      };
+    },
+    get remove() {
+      return async (path: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.filesystem.remove(path);
+      };
+    }
+  };
+  
+  // Expose child namespace for child sandbox operations (gateway mode only)
+  replServer.context.child = {
+    get create() {
+      return async () => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.create();
+      };
+    },
+    get list() {
+      return async () => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.list();
+      };
+    },
+    get retrieve() {
+      return async (subdomain: string) => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.retrieve(subdomain);
+      };
+    },
+    get destroy() {
+      return async (subdomain: string, options?: { deleteFiles?: boolean }) => {
+        if (state.useDirectMode) {
+          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
+        }
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const instance = sandbox.getInstance();
+        return instance.child.destroy(subdomain, options);
+      };
+    }
+  };
+  
+  // Expose server namespace for managed server operations
+  replServer.context.server = {
+    get start() {
+      return async (options: { slug: string; command: string; path?: string; env_file?: string; environment?: Record<string, string>; restart_policy?: 'never' | 'on-failure' | 'always'; max_restarts?: number; restart_delay_ms?: number; stop_timeout_ms?: number }) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.start(options);
+      };
+    },
+    get list() {
+      return async () => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.list();
+      };
+    },
+    get retrieve() {
+      return async (slug: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.retrieve(slug);
+      };
+    },
+    get stop() {
+      return async (slug: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.stop(slug);
+      };
+    },
+    get restart() {
+      return async (slug: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.server.restart(slug);
+      };
+    }
+  };
+
+  // Expose terminal namespace for PTY and exec terminal operations
+  replServer.context.terminal = {
+    get create() {
+      return async (options?: { shell?: string; encoding?: 'raw' | 'base64'; pty?: boolean }) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        const term = await sandbox.terminal.create(options);
+        
+        // In verbose mode, enable WebSocket debug logging and auto-log terminal events
+        if (state.verbose) {
+          // Enable WebSocket debug mode
+          if (term._ws) {
+            term._ws.config.debug = true;
+          }
+          
+          // Auto-register event handlers that log output
+          term.on('output', (data: string) => {
+            console.log('[terminal:output]', JSON.stringify(data));
+          });
+          term.on('error', (error: string) => {
+            console.log('[terminal:error]', error);
+          });
+          term.on('destroyed', () => {
+            console.log('[terminal:destroyed]');
+          });
+        }
+        
+        return term;
+      };
+    },
+    get list() {
+      return async () => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.terminal.list();
+      };
+    },
+    get retrieve() {
+      return async (id: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.terminal.retrieve(id);
+      };
+    },
+    get destroy() {
+      return async (id: string) => {
+        const sandbox = state.currentSandbox;
+        if (!sandbox) {
+          throw new Error('No active sandbox. Run a command to auto-create one.');
+        }
+        return sandbox.terminal.destroy(id);
+      };
+    }
+  };
+  
+  // Expose getInstance for advanced users
+  replServer.context.getInstance = () => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+    return sandbox.getInstance();
+  };
 }
 
 /**
@@ -218,10 +626,22 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   const originalEval = replServer.eval;
   
   // Track workbench command names for auto-calling
-  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose']);
+  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose', 'sandboxInfo', 'connect']);
   
   (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
+    
+    // Special handling for "provider local" variants
+    // Supports: "provider local", "provider local list", "provider local <subdomain>"
+    const providerLocalMatch = trimmedCmd.match(/^provider\s+local(?:\s+(\S+))?$/);
+    if (providerLocalMatch) {
+      const arg = providerLocalMatch[1];
+      const providerCmd = arg 
+        ? `await provider('local', '${arg}')`
+        : `await provider('local')`;
+      originalEval.call(this, providerCmd, context, filename, callback);
+      return;
+    }
     
     // Special handling for "provider <mode> <name>" syntax (without parentheses)
     // Supports: "provider e2b", "provider direct e2b", "provider gateway e2b"
@@ -304,7 +724,18 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
         return;
       }
       
-      // Not a command, return as-is
+      // Auto-await promises (so users don't need to type "await")
+      if (result && typeof result.then === 'function') {
+        try {
+          const output = await result;
+          callback(null, output);
+        } catch (error) {
+          callback(error as Error, undefined);
+        }
+        return;
+      }
+      
+      // Not a command or promise, return as-is
       callback(null, result);
     });
   };
@@ -318,17 +749,24 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
   
   // Workbench commands with their argument suggestions
   const workbenchCommands = {
-    'provider': [...PROVIDER_NAMES], // Use actual provider names from config
+    'provider': [...PROVIDER_NAMES, 'local'], // Include 'local' as a provider option
     'mode': ['gateway', 'direct'],
     'providers': [],
     'restart': [],
     'destroy': [],
+    'connect': [], // Connect takes a URL argument
     'info': [],
     'env': [],
     'help': [],
     'verbose': [],
     'exit': [],
     '.exit': [],
+    // Sandbox methods
+    'getUrl': [],
+    'runCode': [],
+    'sandboxInfo': [],
+    'getInstance': [],
+    // Filesystem is an object, so it gets dot notation autocomplete automatically
   };
   
   (replServer as any).completer = function (line: string, callback: (err: Error | null, result: [string[], string]) => void) {

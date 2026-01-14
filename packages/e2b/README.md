@@ -17,23 +17,38 @@ npm install @computesdk/e2b
 export E2B_API_KEY=e2b_your_api_key_here
 ```
 
-## Usage
+## Quick Start
 
-### With ComputeSDK
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+import { compute } from 'computesdk';
 
-// Set as default provider
-const compute = createCompute({ 
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }) 
-});
-
-// Create sandbox
+// Auto-detects E2B from E2B_API_KEY environment variable
 const sandbox = await compute.sandbox.create();
 
-// Execute Python code
+const result = await sandbox.runCode(`
+import pandas as pd
+print(pd.__version__)
+`);
+
+console.log(result.stdout);
+await sandbox.destroy();
+```
+
+### Direct Mode
+
+For direct SDK usage without the gateway:
+
+```typescript
+import { e2b } from '@computesdk/e2b';
+
+const compute = e2b({ apiKey: process.env.E2B_API_KEY });
+
+const sandbox = await compute.sandbox.create();
+
 const result = await sandbox.runCode(`
 import pandas as pd
 import numpy as np
@@ -45,30 +60,7 @@ print(f"Sum: {df.sum().sum()}")
 `);
 
 console.log(result.stdout);
-// Output:
-//    A  B
-// 0  1  4
-// 1  2  5
-// 2  3  6
-// Sum: 21
-
-// Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
-```
-
-### Direct Usage
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-// Create provider
-const provider = e2b({ 
-  apiKey: 'e2b_your_api_key',
-  timeout: 600000 // 10 minutes
-});
-
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
+await sandbox.destroy();
 ```
 
 ## Configuration
@@ -193,16 +185,10 @@ const existingTerminal = await sandbox.terminal.getById('terminal-id');
 ```typescript
 // Get sandbox info
 const info = await sandbox.getInfo();
-console.log(info.id, info.provider, info.status);
-
-// Get existing sandbox (reconnect)
-const existing = await compute.sandbox.getById(provider, 'sandbox-id');
+console.log(info.id, info.status, info.createdAt);
 
 // Destroy sandbox
-await compute.sandbox.destroy(provider, 'sandbox-id');
-
-// Note: E2B doesn't support listing all sandboxes
-// Each sandbox is managed individually
+await sandbox.destroy();
 ```
 
 ## Runtime Detection
@@ -220,7 +206,12 @@ The provider automatically detects the runtime based on code patterns:
 ## Error Handling
 
 ```typescript
+import { e2b } from '@computesdk/e2b';
+
 try {
+  const compute = e2b({ apiKey: process.env.E2B_API_KEY });
+  const sandbox = await compute.sandbox.create();
+  
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
   if (error.message.includes('Missing E2B API key')) {
@@ -231,25 +222,7 @@ try {
     console.error('Check your E2B API key');
   } else if (error.message.includes('quota exceeded')) {
     console.error('E2B usage limits reached');
-  } else if (error.message.includes('Syntax error')) {
-    console.error('Code has syntax errors');
   }
-}
-```
-
-## Web Framework Integration
-
-Use with web frameworks via the request handler:
-
-```typescript
-import { handleComputeRequest } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: e2b({ apiKey: process.env.E2B_API_KEY })
-  });
 }
 ```
 
@@ -258,6 +231,9 @@ export async function POST(request: Request) {
 ### Data Science Workflow
 
 ```typescript
+import { e2b } from '@computesdk/e2b';
+
+const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 const sandbox = await compute.sandbox.create();
 
 // Create project structure
@@ -319,11 +295,16 @@ console.log('Analysis results:', JSON.parse(results));
 // Check if chart was created
 const chartExists = await sandbox.filesystem.exists('/analysis/output/age_chart.png');
 console.log('Chart created:', chartExists);
+
+await sandbox.destroy();
 ```
 
 ### Interactive Terminal Session
 
 ```typescript
+import { e2b } from '@computesdk/e2b';
+
+const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 const sandbox = await compute.sandbox.create();
 
 // Create interactive Python terminal
@@ -349,14 +330,16 @@ await terminal.write('exit()\n');
 await new Promise(resolve => setTimeout(resolve, 2000));
 
 await terminal.kill();
+await sandbox.destroy();
 ```
 
 ### Machine Learning Pipeline
 
 ```typescript
-const sandbox = await compute.sandbox.create({
-  options: { timeout: 600000 } // 10 minutes for ML tasks
-});
+import { e2b } from '@computesdk/e2b';
+
+const compute = e2b({ apiKey: process.env.E2B_API_KEY });
+const sandbox = await compute.sandbox.create({ timeout: 600000 }); // 10 minutes for ML tasks
 
 // Create ML project structure
 await sandbox.filesystem.mkdir('/ml-project');
@@ -438,6 +421,8 @@ console.log('ML Results:', JSON.parse(results));
 // Verify model file exists
 const modelExists = await sandbox.filesystem.exists('/ml-project/models/linear_model.pkl');
 console.log('Model saved:', modelExists);
+
+await sandbox.destroy();
 ```
 
 ## Best Practices

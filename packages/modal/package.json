@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/modal",
-  "version": "1.7.1",
+  "version": "1.8.10",
   "description": "Modal provider for ComputeSDK - serverless Python execution with GPU support and zero cold starts",
   "author": "Garrison",
   "license": "MIT",
@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "modal": "^0.3.16",
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [

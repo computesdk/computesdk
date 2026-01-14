@@ -5,7 +5,41 @@
  */
 
 import { vi } from 'vitest'
-import type { Provider, ProviderSandbox, SandboxInfo, FileEntry, Runtime, CodeResult, CommandResult } from '../types/index.js'
+import type { FileEntry, Runtime, CodeResult, CommandResult } from '../types/index.js'
+import type { ProviderSandboxInfo } from '../types/index.js'
+
+// Note: Provider and ProviderSandbox are defined in @computesdk/provider (mother package)
+// For testing the grandmother package (computesdk), we create minimal mock interfaces
+interface Provider {
+  readonly name: string
+  getSupportedRuntimes(): Runtime[]
+  readonly sandbox: {
+    create(options?: any): Promise<ProviderSandbox>
+    getById(sandboxId: string): Promise<ProviderSandbox | null>
+    list(): Promise<ProviderSandbox[]>
+    destroy(sandboxId: string): Promise<void>
+  }
+}
+
+interface ProviderSandbox {
+  readonly sandboxId: string
+  readonly provider: string
+  getInstance(): unknown
+  runCode(code: string): Promise<CodeResult>
+  runCommand(command: string, args?: string[]): Promise<CommandResult>
+  getInfo(): Promise<ProviderSandboxInfo>
+  getUrl(options: { port: number; protocol?: string }): Promise<string>
+  getProvider(): Provider
+  destroy(): Promise<void>
+  readonly filesystem: {
+    readFile(path: string): Promise<string>
+    writeFile(path: string, content: string): Promise<void>
+    mkdir(path: string): Promise<void>
+    readdir(path: string): Promise<FileEntry[]>
+    exists(path: string): Promise<boolean>
+    remove(path: string): Promise<void>
+  }
+}
 
 /** Standard mock runtime support for testing */
 export const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
@@ -40,7 +74,7 @@ export class MockSandbox implements ProviderSandbox {
     }
   }
 
-  async getInfo(): Promise<SandboxInfo> {
+  async getInfo(): Promise<ProviderSandboxInfo> {
     return {
       id: this.sandboxId,
       provider: this.provider,
@@ -57,12 +91,7 @@ export class MockSandbox implements ProviderSandbox {
   }
 
   getProvider(): Provider {
-    // This will be set by the MockProvider when creating sandboxes
     return (this as any)._mockProvider
-  }
-
-  async kill(): Promise<void> {
-    // Mock implementation
   }
 
   async destroy(): Promise<void> {
@@ -83,10 +112,9 @@ export class MockSandbox implements ProviderSandbox {
       return [
         {
           name: 'test.txt',
-          path: `${path}/test.txt`,
-          isDirectory: false,
+          type: 'file',
           size: 100,
-          lastModified: new Date()
+          modified: new Date()
         }
       ]
     },

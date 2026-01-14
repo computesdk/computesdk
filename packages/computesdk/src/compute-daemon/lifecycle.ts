@@ -5,7 +5,7 @@
  * to become ready after installation.
  */
 
-import { ComputeClient } from '@computesdk/client';
+import { Sandbox } from '../client';
 
 /**
  * Options for waiting for compute daemon to be ready
@@ -26,7 +26,7 @@ export interface WaitForComputeReadyOptions {
  * with exponential backoff for faster success and less noise
  */
 export async function waitForComputeReady(
-  client: ComputeClient,
+  client: Sandbox,
   options: WaitForComputeReadyOptions = {}
 ): Promise<void> {
   const maxRetries = options.maxRetries ?? 30;

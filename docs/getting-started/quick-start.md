@@ -2,15 +2,6 @@
 
 Welcome to ComputeSDK! This guide will get you up and running with secure, isolated code execution across multiple cloud providers using a unified TypeScript interface.
 
-<br />
-
-<div class="bg-emerald-100/20 border-l-4 border-emerald-800/20 dark:bg-emerald-800/30 dark:border-emerald-100/20 p-6 my-2 rounded flex flex-col gap-4">
-  <strong>For a quick interactive demo of the SDK in action:</strong>
-  
-  ```bash
-  curl -fsSL https://computesdk.com/install.sh | sh
-  ```
-</div>
 
 <br />
 
@@ -21,45 +12,30 @@ Welcome to ComputeSDK! This guide will get you up and running with secure, isola
 
 ```bash
 COMPUTESDK_API_KEY=your_api_key_here
+
+PROVIDER_API_KEY=your_provider_api_key_here
 ```
 
 ## Installation
 
 ```bash
-# Core SDK
 npm install computesdk
-
-# Provider packages (install only what you need)
-npm install @computesdk/blaxel     # Blaxel provider
-npm install @computesdk/codesandbox # CodeSandbox provider
-npm install @computesdk/daytona    # Daytona provider
-npm install @computesdk/e2b        # E2B provider
-npm install @computesdk/modal      # Modal provider
-npm install @computesdk/vercel     # Vercel provider  
-
 ```
 
 ## Basic Usage
 
-```typescript
-import { createCompute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Railway, Modal, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCode()` executes code and returns the output, and `destroy()` tears down the sandbox to free resources.
 
-// Set default provider
-const compute = createCompute({ 
-  defaultProvider: e2b({ apiKey: process.env.E2B_API_KEY }),
-  apiKey: process.env.COMPUTESDK_API_KEY 
-});
+```typescript
+import { compute } from 'computesdk';
+
 
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
 
-// Get instance
-const instance = sandbox.getInstance();
-
 // Execute code
 const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.stdout); // "Hello World!"
+console.log(result.output); // "Hello World!"
 
 // Clean up
 await compute.sandbox.destroy(sandbox.sandboxId);
@@ -67,6 +43,8 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 
 
 ## Filesystem Operations
+
+Each sandbox has its own isolated filesystem. You can read, write, and manage files using absolute paths (starting with `/`). Files persist for the sandbox lifetime and are destroyed when you call `destroy()`.
 
 ```typescript
 // Write file
@@ -90,16 +68,20 @@ await sandbox.filesystem.remove('/tmp/hello.py');
 
 ## Shell Commands
 
+Use `runCommand()` for shell operations, package installation, or system commands. It provides full shell access with detailed execution results including stdout, stderr, exit codes, and execution time.
+
 ```typescript
 // Run shell command
-const result = await sandbox.runCommand('ls', ['-la']);
+const result = await sandbox.runCommand('ls -la');
 console.log(result.stdout);
 
 // With different working directory
-const result2 = await sandbox.runCommand('pwd', [], { cwd: '/tmp' });
+const result2 = await sandbox.runCommand('pwd', { cwd: '/tmp' });
 ```
 
 ## Error Handling
+
+ComputeSDK methods throw exceptions for API/network failures. For command execution errors, check the `exitCode` in the result rather than relying on exceptions. Exit code `0` indicates success, non-zero indicates failure.
 
 ```typescript
 try {
@@ -107,7 +89,69 @@ try {
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
   console.error('Execution failed:', error.message);
-  // Handle specific error types as needed
 }
 ```
 
+## Essential Patterns
+
+### Resource Cleanup (Critical for Production)
+
+Always destroy sandboxes when done to avoid resource leaks and unnecessary costs. Sandboxes consume resources until explicitly destroyed or they timeout.
+
+```typescript
+// ✅ Recommended: Use try-finally
+let sandbox;
+try {
+  sandbox = await compute.sandbox.create();
+  await sandbox.runCode('print("Hello")');
+} finally {
+  if (sandbox) {
+    await compute.sandbox.destroy(sandbox.sandboxId);
+  }
+}
+```
+
+### Error Handling with Exit Codes
+
+Commands return exit codes following Unix conventions: `0` means success, non-zero indicates failure. Always check `exitCode` rather than catching exceptions for command failures.
+
+```typescript
+const result = await sandbox.runCommand('npm test');
+if (result.exitCode !== 0) {
+  console.error('Tests failed:', result.stderr);
+} else {
+  console.log('Tests passed!', result.stdout);
+}
+```
+
+## Understanding Results
+
+### Code Execution Results
+
+When you call `runCode()`, you receive:
+- `output`: Combined stdout/stderr from your code
+- `exitCode`: `0` for success, non-zero for errors  
+- `language`: Detected or specified language (`'python'`, `'node'`, etc.)
+
+```typescript
+const result = await sandbox.runCode('print("Hello")');
+console.log(result.output);    // "Hello\n"
+console.log(result.exitCode);  // 0
+console.log(result.language);  // "python"
+```
+
+### Command Execution Results
+
+When you call `runCommand()`, you receive:
+- `stdout`: Standard output (normal program output)
+- `stderr`: Standard error (error messages and warnings)
+- `exitCode`: `0` for success, non-zero for failures
+- `durationMs`: Execution time in milliseconds
+
+```typescript
+const result = await sandbox.runCommand('npm install');
+console.log(result.stdout);      // Installation logs
+console.log(result.stderr);      // Warnings or errors
+console.log(result.exitCode);    // 0
+console.log(result.durationMs);  // 2341
+```

@@ -142,3 +142,49 @@ jobs:
          else
            echo "Skipping Modal integration tests - missing required secrets"
          fi
+
+  sdk-integration-tests:
+    runs-on: ubuntu-latest
+    needs: test
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
+
+    strategy:
+      matrix:
+        provider: [e2b, vercel, daytona, modal]
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: 'pnpm'
+    
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+    
+    - name: Build packages
+      run: pnpm build
+        
+    - name: Run Provider Compatibility Tests (${{ matrix.provider }})
+      env:
+        TEST_PROVIDER: ${{ matrix.provider }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+        E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+        E2B_TEMPLATE_ID: ${{ secrets.E2B_TEMPLATE_ID }}
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      run: |
+        echo "Running provider compatibility tests for $TEST_PROVIDER..."
+        pnpm --filter computesdk test provider-compatibility

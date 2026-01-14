@@ -34,8 +34,8 @@
   }'
  */
 
-import { createProvider } from 'computesdk';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Lambda sandbox interface
@@ -147,7 +147,7 @@ export const fetchLambda = async (
 /**
  * Create a Lambda provider instance using the factory pattern
  */
-export const lambda = createProvider<LambdaSandbox, LambdaConfig>({
+export const lambda = defineProvider<LambdaSandbox, LambdaConfig>({
   name: 'lambda',
   methods: {
     sandbox: {
@@ -299,7 +299,7 @@ docker run -d --name compute-app ${dockerImage} tail -f /dev/null`;
         throw new Error('Lambda runCode method not implemented yet');
       },
 
-      runCommand: async (_sandbox: LambdaSandbox, _command: string, _args?: string[], _options?: RunCommandOptions) => {
+      runCommand: async (_sandbox: LambdaSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Lambda runCommand method not implemented yet');
       },
 

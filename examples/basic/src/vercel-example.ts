@@ -1,7 +1,7 @@
 /**
  * Vercel Sandbox Provider Example
  * 
- * This example shows how to use the Vercel provider for Node.js and Python code execution.
+ * This example shows how to use ComputeSDK with the Vercel provider for Node.js and Python code execution.
  * 
  * Note: Filesystem operations are not yet implemented for Vercel provider.
  * Use E2B or Daytona providers for reliable filesystem support.
@@ -12,8 +12,7 @@
  * - VERCEL_PROJECT_ID environment variable
  */
 
-import { vercel } from '@computesdk/vercel';
-import { createCompute } from 'computesdk';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { NODEJS_SNIPPETS, PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -37,17 +36,18 @@ async function main() {
   }
   
   try {
-    // Configure compute with Vercel provider
-    const compute = createCompute({ 
-      provider: vercel({ 
+    // Gateway mode: configure compute to use Vercel provider
+    compute.setConfig({
+      provider: 'vercel',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      vercel: { 
         token: process.env.VERCEL_TOKEN,
         teamId: process.env.VERCEL_TEAM_ID,
-        projectId: process.env.VERCEL_PROJECT_ID,
-        ports: [3000] // Example port exposure
-      }) 
+        projectId: process.env.VERCEL_PROJECT_ID
+      }
     });
     
-    // Create sandbox using compute singleton
+    // Create sandbox
     const sandbox = await compute.sandbox.create();
     
     console.log('Created Vercel sandbox:', sandbox.sandboxId);
@@ -56,8 +56,8 @@ async function main() {
     // Execute Node.js code
     const nodeResult = await sandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
     
-    console.log('Node.js Output:', nodeResult.stdout);
-    console.log('Execution Time:', nodeResult.executionTime, 'ms');
+    console.log('Node.js Output:', nodeResult.output);
+    console.log('Exit code:', nodeResult.exitCode);
     
     // Note: Filesystem operations are not supported by Vercel's sandbox environment
     // console.log('\n--- Filesystem Operations ---');
@@ -70,13 +70,13 @@ async function main() {
     // Instead, demonstrate in-memory data processing
     const pythonResult = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
     
-    console.log('Python Output:', pythonResult.stdout);
-    console.log('Execution time:', pythonResult.executionTime, 'ms');
+    console.log('Python Output:', pythonResult.output);
     console.log('Exit code:', pythonResult.exitCode);
+    console.log('Language:', pythonResult.language);
     
     
     // Clean up
-    await sandbox.kill();
+    await sandbox.destroy();
     console.log('\nSandboxes cleaned up successfully');
     
   } catch (error) {

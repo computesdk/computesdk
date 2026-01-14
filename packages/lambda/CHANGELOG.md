@@ -1,5 +1,105 @@
 # @computesdk/lambda
 
+## 1.1.15
+
+### Patch Changes
+
+- Updated dependencies [3333388]
+  - computesdk@1.13.0
+
+## 1.1.14
+
+### Patch Changes
+
+- Updated dependencies [4decff7]
+  - computesdk@1.12.1
+
+## 1.1.13
+
+### Patch Changes
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+
+## 1.1.12
+
+### Patch Changes
+
+- Updated dependencies [7c8d968]
+  - computesdk@1.11.1
+
+## 1.1.11
+
+### Patch Changes
+
+- Updated dependencies [40d66fc]
+  - computesdk@1.11.0
+
+## 1.1.10
+
+### Patch Changes
+
+- computesdk@1.10.3
+
+## 1.1.9
+
+### Patch Changes
+
+- acdc8c6: fix: align provider factory with clean command execution
+
+  Updates all providers to use the new clean command signature introduced in #192.
+
+  **Changes:**
+
+  - Provider factory `runCommand` signature simplified from `(command, args?, options?)` to `(command, options?)`
+  - All 13 providers updated to handle `cwd`, `env`, and `background` options by wrapping commands with shell constructs
+  - Test suite updated to use clean command strings instead of args arrays
+
+  **Related:**
+
+  - Follows #192 which updated the gateway client to send clean commands
+  - Part of the larger refactor to remove client-side command preprocessing
+
+  **Migration:**
+  Providers now receive clean command strings and handle options uniformly:
+
+  ```typescript
+  // Before
+  runCommand(sandbox, "npm", ["install"], { cwd: "/app" });
+
+  // After
+  runCommand(sandbox, "npm install", { cwd: "/app" });
+  ```
+
+## 1.1.8
+
+### Patch Changes
+
+- Updated dependencies [07e0953]
+  - computesdk@1.10.2
+
+## 1.1.7
+
+### Patch Changes
+
+- Updated dependencies [fa18a99]
+  - computesdk@1.10.1
+
+## 1.1.6
+
+### Patch Changes
+
+- Updated dependencies [38caad9]
+- Updated dependencies [f2d4273]
+  - computesdk@1.10.0
+
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [251f324]
+  - computesdk@1.9.6
+
 ## 1.1.4
 
 ### Patch Changes
