@@ -61,7 +61,7 @@ export type { SandboxStatus, ProviderSandboxInfo } from './client/types';
 export { CommandExitError, isCommandExitError } from './client/types';
 
 // Re-export commonly used client utilities
-export { 
+export {
   TerminalInstance,
   FileWatcher,
   SignalService,
@@ -69,6 +69,9 @@ export {
   decodeBinaryMessage,
   MessageType
 } from './client';
+
+// Export WebSocket type for Node.js environments without native WebSocket
+export type { WebSocketConstructor } from './client';
 
 // ============================================================================
 // Compute API - Gateway HTTP Implementation
