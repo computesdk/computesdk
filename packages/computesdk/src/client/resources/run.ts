@@ -159,12 +159,13 @@ export class Run {
   /**
    * Wait for a background command to complete
    *
-   * Polls the command status with exponential backoff until the command
-   * is complete or fails. Throws an error if the command fails or times out.
+   * Uses the configured wait handler to block until the command
+   * is complete or fails (typically via server-side long-polling).
+   * Throws an error if the command fails or times out.
    *
    * @param terminalId - Terminal ID from background command result
    * @param cmdId - Command ID from background command result
-   * @param options - Polling options
+   * @param options - Wait options passed to the handler
    * @returns Command result with final status
    * @throws Error if command fails or times out
    */

@@ -70,6 +70,12 @@ import type {
 // Import command types for internal use
 import type { CommandWaitOptions, CommandResult as RunCommandResult } from './resources/run';
 
+/**
+ * Maximum timeout in seconds supported by the tunnel for long-polling requests.
+ * The tunnel uses X-Request-Timeout header to configure this.
+ */
+const MAX_TUNNEL_TIMEOUT_SECONDS = 300;
+
 // Import client-specific types
 import type {
   SandboxStatus,
@@ -1744,8 +1750,8 @@ export class Sandbox {
     cmdId: string,
     options?: CommandWaitOptions
   ): Promise<RunCommandResult> {
-    // Default to 5 minutes (max supported by tunnel), can be overridden
-    const timeoutSeconds = options?.timeoutSeconds ?? 300;
+    // Default to max supported by tunnel, can be overridden
+    const timeoutSeconds = options?.timeoutSeconds ?? MAX_TUNNEL_TIMEOUT_SECONDS;
 
     const response = await this.waitForCommandWithTimeout(terminalId, cmdId, timeoutSeconds);
 
@@ -1773,8 +1779,8 @@ export class Sandbox {
     const params = new URLSearchParams({ timeout: timeoutSeconds.toString() });
     const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait?${params}`;
 
-    // Use extended timeout for long-polling (max 300s supported by tunnel)
-    const requestTimeout = Math.min(timeoutSeconds, 300);
+    // Use extended timeout for long-polling
+    const requestTimeout = Math.min(timeoutSeconds, MAX_TUNNEL_TIMEOUT_SECONDS);
 
     return this.request<CommandDetailsResponse>(endpoint, {
       headers: {
