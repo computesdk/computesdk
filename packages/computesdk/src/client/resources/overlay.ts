@@ -6,6 +6,20 @@
  */
 
 /**
+ * Options for waiting for overlay copy completion
+ */
+export interface WaitForCompletionOptions {
+  /** Maximum number of retry attempts (default: 60) */
+  maxRetries?: number;
+  /** Initial delay between retries in milliseconds (default: 500) */
+  initialDelayMs?: number;
+  /** Maximum delay between retries in milliseconds (default: 5000) */
+  maxDelayMs?: number;
+  /** Backoff multiplier for exponential backoff (default: 1.5) */
+  backoffFactor?: number;
+}
+
+/**
  * Options for creating an overlay
  */
 export interface CreateOverlayOptions {
@@ -15,6 +29,8 @@ export interface CreateOverlayOptions {
   target: string;
   /** Glob patterns to ignore (e.g., ["node_modules", "*.log"]) */
   ignore?: string[];
+  /** If true, wait for background copy to complete before returning (default: false) */
+  waitForCompletion?: boolean | WaitForCompletionOptions;
 }
 
 /**
@@ -90,6 +106,16 @@ export interface OverlayListResponse {
  * });
  * console.log(overlay.copyStatus); // 'pending' | 'in_progress' | 'complete' | 'failed'
  *
+ * // Create an overlay and wait for background copy to complete
+ * const overlay = await sandbox.filesystem.overlay.create({
+ *   source: '/templates/nextjs',
+ *   target: 'project',
+ *   waitForCompletion: true, // blocks until copy is complete
+ * });
+ *
+ * // Wait for an existing overlay's copy to complete
+ * const overlay = await sandbox.filesystem.overlay.waitForCompletion('overlay-id');
+ *
  * // List all overlays
  * const overlays = await sandbox.filesystem.overlay.list();
  *
@@ -132,11 +158,21 @@ export class Overlay {
    * @param options.source - Absolute path to source directory
    * @param options.target - Relative path in sandbox
    * @param options.ignore - Glob patterns to ignore (e.g., ["node_modules", "*.log"])
+   * @param options.waitForCompletion - If true or options object, wait for background copy to complete
    * @returns Overlay info with copy status
    */
   async create(options: CreateOverlayOptions): Promise<OverlayInfo> {
     const response = await this.createHandler(options);
-    return this.toOverlayInfo(response);
+    const overlay = this.toOverlayInfo(response);
+
+    // If waitForCompletion is requested, poll until complete
+    if (options.waitForCompletion) {
+      const waitOptions =
+        typeof options.waitForCompletion === 'object' ? options.waitForCompletion : undefined;
+      return this.waitForCompletion(overlay.id, waitOptions);
+    }
+
+    return overlay;
   }
 
   /**
@@ -167,6 +203,56 @@ export class Overlay {
    */
   async destroy(id: string): Promise<void> {
     return this.destroyHandler(id);
+  }
+
+  /**
+   * Wait for an overlay's background copy to complete
+   *
+   * Polls the overlay status with exponential backoff until the copy
+   * is complete or fails. Throws an error if the copy fails or times out.
+   *
+   * @param id - Overlay ID
+   * @param options - Polling options
+   * @returns Overlay info with final copy status
+   * @throws Error if copy fails or times out
+   */
+  async waitForCompletion(id: string, options: WaitForCompletionOptions = {}): Promise<OverlayInfo> {
+    const maxRetries = options.maxRetries ?? 60;
+    const initialDelayMs = options.initialDelayMs ?? 500;
+    const maxDelayMs = options.maxDelayMs ?? 5000;
+    const backoffFactor = options.backoffFactor ?? 1.5;
+
+    let currentDelay = initialDelayMs;
+
+    for (let i = 0; i < maxRetries; i++) {
+      const overlay = await this.retrieve(id);
+
+      if (overlay.copyStatus === 'complete') {
+        return overlay;
+      }
+
+      if (overlay.copyStatus === 'failed') {
+        throw new Error(
+          `Overlay copy failed: ${overlay.copyError || 'Unknown error'}\n` +
+            `Overlay ID: ${id}`
+        );
+      }
+
+      // Still pending or in_progress, wait and retry
+      if (i < maxRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, currentDelay));
+        currentDelay = Math.min(currentDelay * backoffFactor, maxDelayMs);
+      }
+    }
+
+    // Timed out
+    const finalOverlay = await this.retrieve(id);
+    throw new Error(
+      `Overlay copy timed out after ${maxRetries} attempts.\n` +
+        `Overlay ID: ${id}\n` +
+        `Current status: ${finalOverlay.copyStatus}\n\n` +
+        `Try increasing maxRetries or check if the source directory is very large.`
+    );
   }
 
   /**
