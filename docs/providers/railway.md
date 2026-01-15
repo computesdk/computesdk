@@ -1,4 +1,6 @@
-# Deploy sandboxes on Railway with ComputeSDK
+# Railway
+
+## Deploy sandboxes on Railway with ComputeSDK
 
 Deploy and manage containerized sandboxes on Railway's infrastructure with ComputeSDK.
 
@@ -16,7 +18,7 @@ Railway is an infrastructure platform with instant deployments and automatic SSL
 
 ---
 
-## Step 1: Install ComputeSDK
+### Step 1: Install ComputeSDK
 
 Install the ComputeSDK package in your application:
 
@@ -26,7 +28,7 @@ npm install computesdk
 
 ---
 
-## Step 2: Configure environment variables
+### Step 2: Configure environment variables
 
 Add your credentials to a `.env` file:
 
@@ -44,7 +46,7 @@ See [Getting your Railway credentials](#getting-your-railway-credentials) for ho
 
 ---
 
-## Step 3: Create and manage sandboxes
+### Step 3: Create and manage sandboxes
 
 ComputeSDK auto-detects Railway as your provider from the environment variables:
 
@@ -67,7 +69,7 @@ Your sandboxes are now running on your self-hosted Railway infrastructure!
 
 ---
 
-## Explicit provider configuration (optional)
+### Explicit provider configuration (optional)
 
 If you prefer to configure the provider programmatically—useful for multi-provider setups or dynamic configuration—pass credentials directly:
 
@@ -87,7 +89,7 @@ const sandbox = await compute({
 
 ---
 
-## Configuration reference
+### Configuration reference
 
 The Railway provider accepts the following configuration options:
 
@@ -133,29 +135,28 @@ Click the button above or visit [railway.com/deploy/sandbox](https://railway.com
 
 Once you've deployed the template, collect these three values:
 
-**API Key**
+**API Token**
 
-1. Go to [Railway Dashboard → Account Settings → Tokens](https://railway.app/account/tokens)
-2. Click **"Create Token"**
-3. Name it (e.g., "ComputeSDK Integration")
-4. Copy the generated token
+1. Go to your Railway workspace settings
+2. Navigate to **Tokens**
+3. Create a **"New Token"**
+4. Name it (e.g., "ComputeSDK Integration") and copy the generated token
 
 **Project ID**
 
-Find it in the URL when viewing your deployed sandbox project:
-
-```
-https://railway.app/project/{PROJECT_ID}
-                            ^^^^^^^^^^^^
-                            Copy this value
-```
+1. Open your Railway project
+2. Go to **Settings**
+3. Copy the Project ID from the **Project Info** section
 
 **Environment ID**
 
-1. Open your Railway project
-2. Go to **Settings** → **Environments**
-3. Click on your target environment
-4. Copy the Environment ID from the details panel
+Find it in the URL when viewing your project settings:
+
+```
+https://railway.com/project/{PROJECT_ID}/settings?environmentId=={ENVIRONMENT_ID}
+```
+
+> **Note:** The sandbox ID returned by ComputeSDK is different from the service name shown in the Railway dashboard. The service name in Railway is the name of the deployed service, while the sandbox ID is the unique identifier for the sandbox instance running inside the service.
 
 
 ---
@@ -163,6 +164,5 @@ https://railway.app/project/{PROJECT_ID}
 ## Next steps
 
 - Learn about [sandbox lifecycle management](/docs/reference/computesandbox)
-- Explore [event handling](/docs/reference/computeevents) for sandbox events
-- Check out [example projects](https://github.com/computesdk/computesdk/tree/main/examples)
+- Explore [Sandbox methods](/docs/reference/sandbox)
 - View the [@computesdk/railway package](https://github.com/computesdk/computesdk/blob/main/packages/railway/README.md)
