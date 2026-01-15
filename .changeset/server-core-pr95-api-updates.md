@@ -1,5 +1,5 @@
 ---
-"@anthropic-ai/sdk": minor
+"computesdk": minor
 ---
 
 Breaking: Update SDK types to match server-core PR #95 API changes
