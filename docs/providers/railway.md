@@ -1,4 +1,6 @@
-# Deploy sandboxes on Railway with ComputeSDK
+# Railway
+
+## Deploy sandboxes on Railway with ComputeSDK
 
 Deploy and manage containerized sandboxes on Railway's infrastructure with ComputeSDK.
 
@@ -16,7 +18,7 @@ Railway is an infrastructure platform with instant deployments and automatic SSL
 
 ---
 
-## Step 1: Install ComputeSDK
+### Step 1: Install ComputeSDK
 
 Install the ComputeSDK package in your application:
 
@@ -26,7 +28,7 @@ npm install computesdk
 
 ---
 
-## Step 2: Configure environment variables
+### Step 2: Configure environment variables
 
 Add your credentials to a `.env` file:
 
@@ -44,7 +46,7 @@ See [Getting your Railway credentials](#getting-your-railway-credentials) for ho
 
 ---
 
-## Step 3: Create and manage sandboxes
+### Step 3: Create and manage sandboxes
 
 ComputeSDK auto-detects Railway as your provider from the environment variables:
 
@@ -67,7 +69,7 @@ Your sandboxes are now running on your self-hosted Railway infrastructure!
 
 ---
 
-## Explicit provider configuration (optional)
+### Explicit provider configuration (optional)
 
 If you prefer to configure the provider programmatically—useful for multi-provider setups or dynamic configuration—pass credentials directly:
 
@@ -87,7 +89,7 @@ const sandbox = await compute({
 
 ---
 
-## Configuration reference
+### Configuration reference
 
 The Railway provider accepts the following configuration options:
 
