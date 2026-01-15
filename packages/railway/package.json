@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/railway",
-  "version": "1.1.16",
+  "version": "1.1.17",
   "description": "Railway provider for ComputeSDK - simple cloud deployment for containerized sandboxes",
   "author": "ComputeSDK Team",
   "license": "MIT",
