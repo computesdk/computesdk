@@ -1,6 +1,6 @@
 {
   "name": "computesdk",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "A free and open-source toolkit for running other people's code in your applications.",
   "author": "Garrison",
   "license": "MIT",
