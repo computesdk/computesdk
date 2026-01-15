@@ -50,14 +50,17 @@ interface DaytonaConfig {
 ## Explicit Provider Configuration
 If you prefer to set the provider explicitly, you can do so as follows:
 ```typescript
-// Set as explicit provider
-const sandbox = compute({ 
-  provider: 'daytona', 
-  daytona: {
-    daytonaApiKey: process.env.DAYTONA_API_KEY
-  },
-  apiKey: process.env.COMPUTESDK_API_KEY 
-}).sandbox.create();
+import { compute } from 'computesdk';
+
+compute.setConfig({
+   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
+   provider: 'daytona',
+   daytona: {
+     apiKey: process.env.DAYTONA_API_KEY
+   }
+});
+
+const sandbox = await compute.sandbox.create();
 ```
 
 ## Runtime Detection
