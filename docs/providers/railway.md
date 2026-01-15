@@ -165,6 +165,5 @@ https://railway.app/project/{PROJECT_ID}
 ## Next steps
 
 - Learn about [sandbox lifecycle management](/docs/reference/computesandbox)
-- Explore [event handling](/docs/reference/computeevents) for sandbox events
-- Check out [example projects](https://github.com/computesdk/computesdk/tree/main/examples)
+- Explore [Sandbox methods](/docs/reference/sandbox)
 - View the [@computesdk/railway package](https://github.com/computesdk/computesdk/blob/main/packages/railway/README.md)
