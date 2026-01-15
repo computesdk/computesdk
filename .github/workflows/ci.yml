@@ -16,28 +16,44 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     steps:
+    - name: Check for Changeset Release
+      id: skip_check
+      run: |
+        if [[ "${{ github.head_ref }}" == "changeset-release/"* ]]; then
+          echo "skip=true" >> $GITHUB_OUTPUT
+          echo "Skipping tests for Changeset Release PR"
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
     - uses: actions/checkout@v4
+      if: steps.skip_check.outputs.skip != 'true'
       with:
         # For pull requests, checkout the PR head ref
         # For pushes, checkout the pushed ref (default behavior)
         ref: ${{ github.event.pull_request.head.sha || github.sha }}
     
     - name: Install pnpm
+      if: steps.skip_check.outputs.skip != 'true'
       uses: pnpm/action-setup@v4
     
     - name: Use Node.js
+      if: steps.skip_check.outputs.skip != 'true'
       uses: actions/setup-node@v4
       with:
         node-version: '24'
         cache: 'pnpm'
     
     - name: Install dependencies
+      if: steps.skip_check.outputs.skip != 'true'
       run: pnpm install --ignore-scripts
     
     - name: Build packages
+      if: steps.skip_check.outputs.skip != 'true'
       run: pnpm build
     
     - name: Run all tests (mock mode)
+      if: steps.skip_check.outputs.skip != 'true'
       run: pnpm test
       env:
         # Ensure tests run in mock mode
@@ -50,16 +66,18 @@ jobs:
         MODAL_TOKEN_SECRET: ""
     
     - name: Run type checking
+      if: steps.skip_check.outputs.skip != 'true'
       run: pnpm typecheck
     
     - name: Run linting
+      if: steps.skip_check.outputs.skip != 'true'
       run: pnpm lint
 
   provider-integration-tests:
     runs-on: ubuntu-latest
     needs: test  # Only run if basic tests pass
-    # Run on main branch pushes AND all pull requests
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
+    # Run on main branch pushes AND all pull requests (but skip for changeset releases)
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request') && !startsWith(github.head_ref, 'changeset-release/')
 
     strategy:
       matrix:
@@ -146,7 +164,7 @@ jobs:
   sdk-integration-tests:
     runs-on: ubuntu-latest
     needs: test
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request'
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request') && !startsWith(github.head_ref, 'changeset-release/')
 
     strategy:
       matrix:
