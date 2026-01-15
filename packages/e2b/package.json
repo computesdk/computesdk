@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/e2b",
-  "version": "1.7.16",
+  "version": "1.7.17",
   "description": "E2B provider for ComputeSDK - cloud sandboxes with full Linux environments, filesystem access, and microVM isolation",
   "author": "Garrison",
   "license": "MIT",
