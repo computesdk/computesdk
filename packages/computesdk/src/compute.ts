@@ -8,7 +8,7 @@
  * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config)
  */
 
-import { Sandbox } from './client';
+import { Sandbox, WebSocketConstructor } from './client';
 import { autoConfigureCompute } from './auto-detect';
 import { createConfigFromExplicit } from './explicit-config';
 import { waitForComputeReady } from './compute-daemon/lifecycle';
@@ -23,6 +23,7 @@ interface GatewayConfig {
   gatewayUrl: string;
   provider: string;
   providerHeaders: Record<string, string>;
+  WebSocket?: WebSocketConstructor;
 }
 
 /**
@@ -31,7 +32,7 @@ interface GatewayConfig {
 export interface ExplicitComputeConfig {
   /** Provider name to use */
   provider: ProviderName;
-  /** 
+  /**
    * ComputeSDK API key (required for gateway mode)
    * @deprecated Use `computesdkApiKey` for clarity
    */
@@ -40,6 +41,11 @@ export interface ExplicitComputeConfig {
   computesdkApiKey?: string;
   /** Optional gateway URL override */
   gatewayUrl?: string;
+  /**
+   * WebSocket implementation for environments without native WebSocket support.
+   * In Node.js < 22, pass the 'ws' package: `import WebSocket from 'ws'`
+   */
+  WebSocket?: WebSocketConstructor;
 
   /** Provider-specific configurations */
   e2b?: { apiKey?: string; projectId?: string; templateId?: string };
@@ -300,7 +306,7 @@ class ComputeManager {
           ...(name && { name }),
           ...(namespace && { namespace }),
         },
-        WebSocket: globalThis.WebSocket,
+        WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
           await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
@@ -338,7 +344,7 @@ class ComputeManager {
         provider,
         token: token || config.apiKey,
         metadata,
-        WebSocket: globalThis.WebSocket,
+        WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
           await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
@@ -406,7 +412,7 @@ class ComputeManager {
           name: result.data.name,
           namespace: result.data.namespace,
         },
-        WebSocket: globalThis.WebSocket,
+        WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
           await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
@@ -451,7 +457,7 @@ class ComputeManager {
           name,
           namespace,
         },
-        WebSocket: globalThis.WebSocket,
+        WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
           await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
