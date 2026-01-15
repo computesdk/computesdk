@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.17.0
+
+### Minor Changes
+
+- 79c9fc5: update websockets in setConfig and GatewayConfig
+
 ## 1.16.0
 
 ### Minor Changes
