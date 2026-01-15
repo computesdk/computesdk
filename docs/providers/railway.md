@@ -76,15 +76,17 @@ If you prefer to configure the provider programmatically—useful for multi-prov
 ```typescript
 import { compute } from 'computesdk';
 
-const sandbox = await compute({
-  provider: 'railway',
-  computesdkApiKey: 'your_computesdk_api_key',
-  railway: {
-    apiToken: 'your_railway_api_key',
-    projectId: 'your_railway_project_id',
-    environmentId: 'your_railway_environment_id'
-  }
-}).sandbox.create();
+compute.setConfig({
+   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
+   provider: 'railway',
+   railway: {
+     apiToken: process.env.RAILWAY_API_KEY,
+     projectId: process.env.RAILWAY_PROJECT_ID,
+     environmentId: process.env.RAILWAY_ENVIRONMENT_ID
+   }
+});
+
+const sandbox = await compute.sandbox.create();
 ```
 
 ---

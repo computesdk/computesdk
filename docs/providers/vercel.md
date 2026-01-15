@@ -53,16 +53,19 @@ interface VercelConfig {
 ## Explicit Provider Configuration
 If you prefer to set the provider explicitly, you can do so as follows:
 ```typescript
-// Set as explicit provider
-const sandbox = compute({
-  provider: 'vercel',
-  vercel: {
-    vercelToken: process.env.VERCEL_TOKEN,
-    vercelTeamId: process.env.VERCEL_TEAM_ID,
-    vercelProjectId: process.env.VERCEL_PROJECT_ID
-  },
-  apiKey: process.env.COMPUTESDK_API_KEY
-}).sandbox.create()
+import { compute } from 'computesdk';
+
+compute.setConfig({
+   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
+   provider: 'vercel',
+   vercel: {
+     token: process.env.VERCEL_TOKEN,
+     teamId: process.env.VERCEL_TEAM_ID,
+     projectId: process.env.VERCEL_PROJECT_ID
+   }
+});
+
+const sandbox = await compute.sandbox.create();
 ```
 
 

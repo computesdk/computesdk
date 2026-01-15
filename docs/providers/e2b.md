@@ -49,14 +49,17 @@ interface E2BConfig {
 ## Explicit Provider Configuration
 If you prefer to set the provider explicitly, you can do so as follows:
 ```typescript
-// Set as explicit provider
-const sandbox = compute({ 
-  provider: 'e2b', 
-  e2b: {
-    e2bApiKey: process.env.E2B_API_KEY
-  },
-  apiKey: process.env.COMPUTESDK_API_KEY 
-}).sandbox.create();
+import { compute } from 'computesdk';
+
+compute.setConfig({
+   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
+   provider: 'e2b',
+   e2b: {
+     apiKey: process.env.E2B_API_KEY
+   }
+});
+
+const sandbox = await compute.sandbox.create();
 ```
 
 ## Runtime Detection
