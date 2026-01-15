@@ -492,15 +492,15 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       }
     });
 
-    it('sandbox.server.start({ slug, command })', async () => {
+    it('sandbox.server.start({ slug, start })', async () => {
       // Start a basic server
       const server = await sandbox.server.start({
         slug: testSlug,
-        command: 'python3 -m http.server 8080',
+        start: 'python3 -m http.server 8080',
       });
 
       expect(server.slug).toBe(testSlug);
-      expect(server.command).toBe('python3 -m http.server 8080');
+      expect(server.start).toBe('python3 -m http.server 8080');
       expect(server.status).toBeDefined();
     }, 30000);
 
@@ -508,7 +508,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // Start server with inline environment variables
       const server = await sandbox.server.start({
         slug: testSlug,
-        command: 'echo $TEST_VAR && sleep 10',
+        start: 'echo $TEST_VAR && sleep 10',
         environment: { TEST_VAR: 'hello-world' },
       });
 
@@ -523,7 +523,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // Start server with supervisor settings
       const server = await sandbox.server.start({
         slug: testSlug,
-        command: 'python3 -m http.server 8080',
+        start: 'python3 -m http.server 8080',
         restart_policy: 'on-failure',
         max_restarts: 3,
         restart_delay_ms: 1000,
@@ -542,7 +542,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // Start a server first
       await sandbox.server.start({
         slug: testSlug,
-        command: 'sleep 60',
+        start: 'sleep 60',
       });
 
       // List servers
@@ -557,7 +557,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // Start a server first
       await sandbox.server.start({
         slug: testSlug,
-        command: 'sleep 60',
+        start: 'sleep 60',
       });
 
       // Retrieve server
@@ -571,7 +571,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // Start a server first
       await sandbox.server.start({
         slug: testSlug,
-        command: 'sleep 60',
+        start: 'sleep 60',
       });
 
       // Stop server (SIGTERM → wait → SIGKILL)
@@ -590,7 +590,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       // Start a server first
       await sandbox.server.start({
         slug: testSlug,
-        command: 'sleep 60',
+        start: 'sleep 60',
       });
 
       // Restart server
@@ -647,8 +647,8 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       expect(overlay.copyStatus).toBeDefined();
       expect(['pending', 'in_progress', 'complete']).toContain(overlay.copyStatus);
       expect(overlay.stats).toBeDefined();
-      expect(typeof overlay.stats.symlinkedFiles).toBe('number');
-      expect(typeof overlay.stats.symlinkedDirs).toBe('number');
+      expect(typeof overlay.stats.copiedFiles).toBe('number');
+      expect(typeof overlay.stats.copiedDirs).toBe('number');
     }, 30000);
 
     it('sandbox.filesystem.overlay.list()', async () => {

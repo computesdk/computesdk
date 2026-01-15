@@ -475,6 +475,7 @@ export interface TerminalResponse {
 /**
  * Server status types
  *
+ * - `installing`: Running install command (e.g., npm install) before starting
  * - `starting`: Initial startup of the server process
  * - `running`: Server process is running
  * - `ready`: Server is running and ready to accept traffic
@@ -482,7 +483,7 @@ export interface TerminalResponse {
  * - `stopped`: Server was intentionally stopped
  * - `restarting`: Server is being automatically restarted by the supervisor
  */
-export type ServerStatus = 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
+export type ServerStatus = 'installing' | 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
 
 /**
  * Server restart policy
@@ -498,8 +499,10 @@ export type RestartPolicy = 'never' | 'on-failure' | 'always';
 export interface ServerInfo {
   /** Unique server identifier */
   slug: string;
+  /** Install command (optional, runs blocking before start) */
+  install?: string;
   /** Command used to start the server */
-  command: string;
+  start: string;
   /** Working directory path */
   path: string;
   /** Original path before resolution */
@@ -1958,7 +1961,8 @@ export class Sandbox {
    *
    * @param options - Server configuration
    * @param options.slug - Unique server identifier
-   * @param options.command - Command to start the server
+   * @param options.install - Install command (optional, runs blocking before start, e.g., "npm install")
+   * @param options.start - Command to start the server (e.g., "npm run dev")
    * @param options.path - Working directory (optional)
    * @param options.env_file - Path to .env file relative to path (optional)
    * @param options.environment - Inline environment variables (merged with env_file if both provided)
@@ -1972,14 +1976,15 @@ export class Sandbox {
    * // Basic server
    * await sandbox.startServer({
    *   slug: 'web',
-   *   command: 'npm run dev',
+   *   start: 'npm run dev',
    *   path: '/app',
    * });
    *
-   * // With supervisor settings
+   * // With install command and supervisor settings
    * await sandbox.startServer({
    *   slug: 'api',
-   *   command: 'node server.js',
+   *   install: 'npm install',
+   *   start: 'node server.js',
    *   path: '/app',
    *   environment: { NODE_ENV: 'production', PORT: '3000' },
    *   restart_policy: 'on-failure',
@@ -1991,7 +1996,8 @@ export class Sandbox {
    */
   async startServer(options: {
     slug: string;
-    command: string;
+    install?: string;
+    start: string;
     path?: string;
     env_file?: string;
     environment?: Record<string, string>;

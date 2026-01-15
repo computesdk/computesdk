@@ -1,8 +1,8 @@
 /**
  * Overlay - Resource namespace for filesystem overlay operations
  *
- * Overlays enable instant sandbox setup from template directories by symlinking
- * files first for instant access, then copying heavy directories in the background.
+ * Overlays enable instant sandbox setup from template directories by copying
+ * files directly for isolation, with heavy directories copied in the background.
  */
 
 /**
@@ -13,6 +13,8 @@ export interface CreateOverlayOptions {
   source: string;
   /** Relative path in sandbox where overlay will be mounted */
   target: string;
+  /** Glob patterns to ignore (e.g., ["node_modules", "*.log"]) */
+  ignore?: string[];
 }
 
 /**
@@ -24,11 +26,11 @@ export type OverlayCopyStatus = 'pending' | 'in_progress' | 'complete' | 'failed
  * Statistics about an overlay
  */
 export interface OverlayStats {
-  /** Number of symlinked files */
-  symlinkedFiles: number;
-  /** Number of symlinked directories */
-  symlinkedDirs: number;
-  /** Paths that were skipped (e.g., .git) */
+  /** Number of copied files */
+  copiedFiles: number;
+  /** Number of copied directories (heavy dirs copied in background) */
+  copiedDirs: number;
+  /** Paths that were skipped (e.g., .git, ignored patterns) */
   skipped: string[];
 }
 
@@ -61,8 +63,8 @@ export interface OverlayResponse {
   target: string;
   created_at: string;
   stats: {
-    symlinked_files: number;
-    symlinked_dirs: number;
+    copied_files: number;
+    copied_dirs: number;
     skipped: string[];
   };
   copy_status: string;
@@ -122,13 +124,14 @@ export class Overlay {
   /**
    * Create a new overlay from a template directory
    *
-   * The overlay symlinks files from the source directory into the target path,
-   * allowing instant access to template files. Heavy directories (node_modules,
-   * .venv, etc.) are copied in the background.
+   * The overlay copies files from the source directory into the target path
+   * for better isolation. Heavy directories (node_modules, .venv, etc.) are
+   * copied in the background. Use the `ignore` option to exclude files/directories.
    *
    * @param options - Overlay creation options
    * @param options.source - Absolute path to source directory
    * @param options.target - Relative path in sandbox
+   * @param options.ignore - Glob patterns to ignore (e.g., ["node_modules", "*.log"])
    * @returns Overlay info with copy status
    */
   async create(options: CreateOverlayOptions): Promise<OverlayInfo> {
@@ -176,8 +179,8 @@ export class Overlay {
       target: response.target,
       createdAt: response.created_at,
       stats: {
-        symlinkedFiles: response.stats.symlinked_files,
-        symlinkedDirs: response.stats.symlinked_dirs,
+        copiedFiles: response.stats.copied_files,
+        copiedDirs: response.stats.copied_dirs,
         skipped: response.stats.skipped,
       },
       copyStatus: this.validateCopyStatus(response.copy_status),
