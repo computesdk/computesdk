@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/modal",
-  "version": "1.8.13",
+  "version": "1.8.14",
   "description": "Modal provider for ComputeSDK - serverless Python execution with GPU support and zero cold starts",
   "author": "Garrison",
   "license": "MIT",

@@ -6,6 +6,7 @@
  */
 
 import { GATEWAY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
+import type { WebSocketConstructor } from './client';
 
 /**
  * Check if gateway mode is enabled
@@ -187,6 +188,7 @@ export interface GatewayConfig {
   gatewayUrl: string;
   provider: string;
   providerHeaders: Record<string, string>;
+  WebSocket?: WebSocketConstructor;
 }
 
 /**
