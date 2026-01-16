@@ -48,7 +48,7 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions, CommandWaitOptions } from './resources/run';
 export type { ServerStartOptions, ServerLogsOptions, ServerLogsInfo } from './resources/server';
-export type { OverlayCopyStatus, OverlayStats, OverlayInfo, WaitForCompletionOptions } from './resources/overlay';
+export type { OverlayCopyStatus, OverlayStats, OverlayInfo, WaitForCompletionOptions, OverlayStrategy } from './resources/overlay';
 
 // Import overlay types for internal use and re-export CreateOverlayOptions
 import type {
