@@ -206,7 +206,7 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
       const { apiKey, ownerId } = getAndValidateCredentials(config);
 
       try {
-        const responseData = await fetchRender(apiKey, '/services?includePreviews=true&limit=20');
+        const responseData = await fetchRender(apiKey, '/services?includePreviews=true');
 
         // Extract services from the array response - each item has a "service" property
         const items = responseData || [];
