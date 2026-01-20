@@ -19,6 +19,7 @@ export const PROVIDER_AUTH = {
   e2b: [['E2B_API_KEY']],
   modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
   railway: [['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID']],
+  render: [['RENDER_API_KEY', 'RENDER_OWNER_ID']],
   daytona: [['DAYTONA_API_KEY']],
   vercel: [
     ['VERCEL_OIDC_TOKEN'],
@@ -56,6 +57,10 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     apiToken: 'X-Railway-API-Key',
     projectId: 'X-Railway-Project-ID',
     environmentId: 'X-Railway-Environment-ID',
+  },
+  render: {
+    apiKey: 'X-Render-API-Key',
+    ownerId: 'X-Render-Owner-ID',
   },
   daytona: {
     apiKey: 'X-Daytona-API-Key',
@@ -98,6 +103,10 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
     RAILWAY_PROJECT_ID: 'projectId',
     RAILWAY_ENVIRONMENT_ID: 'environmentId',
   },
+  render: {
+    RENDER_API_KEY: 'apiKey',
+    RENDER_OWNER_ID: 'ownerId',
+  },
   daytona: {
     DAYTONA_API_KEY: 'apiKey',
   },
@@ -130,6 +139,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   e2b: 'https://e2b.dev/dashboard',
   modal: 'https://modal.com/settings',
   railway: 'https://railway.app/account/tokens',
+  render: 'https://dashboard.render.com/account',
   daytona: 'https://daytona.io/dashboard',
   vercel: 'https://vercel.com/account/tokens',
   runloop: 'https://runloop.ai/dashboard',
