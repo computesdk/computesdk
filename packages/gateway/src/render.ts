@@ -178,11 +178,6 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
       try {
         const responseData = await fetchRender(apiKey, `/services/${instanceId}`);
 
-        if (responseData === null) {
-          return null;
-        }
-
-        // Service should be defined if we get here
         if (!responseData.id) {
           throw new Error('Service data is missing from Render response');
         }
