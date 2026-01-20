@@ -1,5 +1,17 @@
 # @computesdk/render
 
+## 1.2.0
+
+### Minor Changes
+
+- 128edac: refactor render package for gateway
+
+### Patch Changes
+
+- Updated dependencies [128edac]
+  - computesdk@1.18.0
+  - @computesdk/provider@1.0.14
+
 ## 1.1.19
 
 ### Patch Changes
