@@ -51,7 +51,7 @@ export interface ExplicitComputeConfig {
   e2b?: { apiKey?: string; projectId?: string; templateId?: string };
   modal?: { tokenId?: string; tokenSecret?: string };
   railway?: { apiToken?: string; projectId?: string; environmentId?: string };
-  render?: { apiKey?: string; serviceId?: string };
+  render?: { apiKey?: string; ownerId?: string };
   daytona?: { apiKey?: string };
   vercel?: { oidcToken?: string; token?: string; teamId?: string; projectId?: string };
   runloop?: { apiKey?: string };
