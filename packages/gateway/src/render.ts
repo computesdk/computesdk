@@ -124,9 +124,7 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
           },
           serviceDetails: {
             runtime: 'image',
-            envSpecificDetails: {
-              dockerCommand: '',
-            },
+            // envSpecificDetails omitted to use image's default CMD/ENTRYPOINT (daemon startup)
             pullRequestPreviewsEnabled: 'no',
             ...(envVarsList.length > 0 && {
               envVars: envVarsList
