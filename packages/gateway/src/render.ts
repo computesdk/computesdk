@@ -87,7 +87,6 @@ function buildDaemonEnvVars(daemonConfig?: DaemonConfig): Record<string, string>
   }
 
   return {
-    API_KEY: daemonConfig.accessToken,
     COMPUTESDK_ACCESS_TOKEN: daemonConfig.accessToken,
     ...(daemonConfig.gatewayUrl && { COMPUTESDK_GATEWAY_URL: daemonConfig.gatewayUrl }),
     ...daemonConfig.env,
