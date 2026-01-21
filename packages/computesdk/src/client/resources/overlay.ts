@@ -20,6 +20,13 @@ export interface WaitForCompletionOptions {
 }
 
 /**
+ * Strategy for creating an overlay
+ * - 'copy': Full copy of all files (standard behavior)
+ * - 'smart': Use symlinks for immutable packages (e.g. node_modules) for instant creation
+ */
+export type OverlayStrategy = 'copy' | 'smart';
+
+/**
  * Options for creating an overlay
  */
 export interface CreateOverlayOptions {
@@ -29,6 +36,8 @@ export interface CreateOverlayOptions {
   target: string;
   /** Glob patterns to ignore (e.g., ["node_modules", "*.log"]) */
   ignore?: string[];
+  /** Strategy to use (default: 'smart') */
+  strategy?: OverlayStrategy;
   /** If true, wait for background copy to complete before returning (default: false) */
   waitForCompletion?: boolean | WaitForCompletionOptions;
 }
@@ -60,6 +69,8 @@ export interface OverlayInfo {
   source: string;
   /** Relative path in sandbox */
   target: string;
+  /** Strategy used for the overlay */
+  strategy: OverlayStrategy;
   /** When the overlay was created */
   createdAt: string;
   /** Statistics about the overlay */
@@ -77,6 +88,7 @@ export interface OverlayResponse {
   id: string;
   source: string;
   target: string;
+  strategy?: string;
   created_at: string;
   stats: {
     copied_files: number;
@@ -158,6 +170,7 @@ export class Overlay {
    * @param options.source - Absolute path to source directory
    * @param options.target - Relative path in sandbox
    * @param options.ignore - Glob patterns to ignore (e.g., ["node_modules", "*.log"])
+   * @param options.strategy - Strategy to use ('copy' or 'smart')
    * @param options.waitForCompletion - If true or options object, wait for background copy to complete
    * @returns Overlay info with copy status
    */
@@ -263,6 +276,7 @@ export class Overlay {
       id: response.id,
       source: response.source,
       target: response.target,
+      strategy: this.validateStrategy(response.strategy),
       createdAt: response.created_at,
       stats: {
         copiedFiles: response.stats.copied_files,
@@ -272,6 +286,19 @@ export class Overlay {
       copyStatus: this.validateCopyStatus(response.copy_status),
       copyError: response.copy_error,
     };
+  }
+
+  /**
+   * Validate and return strategy, defaulting to 'copy' for unknown/missing values (legacy support)
+   */
+  private validateStrategy(strategy?: string): OverlayStrategy {
+    const validStrategies: OverlayStrategy[] = ['copy', 'smart'];
+    if (strategy && validStrategies.includes(strategy as OverlayStrategy)) {
+      return strategy as OverlayStrategy;
+    }
+    // Default to 'copy' for legacy servers that don't return strategy
+    // Or if we encounter an unknown strategy
+    return 'copy';
   }
 
   /**
