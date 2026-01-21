@@ -164,13 +164,23 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
         }
 
         // Step 3: Trigger deploy to start the service with env vars
-        await fetchRender(apiKey, `/services/${serviceId}/deploys`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({})
-        });
+        try {
+          await fetchRender(apiKey, `/services/${serviceId}/deploys`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+          });
+        } catch (deployError) {
+          const message =
+            deployError instanceof Error && deployError.message
+              ? deployError.message
+              : String(deployError);
+          throw new Error(
+            `Failed to trigger deployment for Render service ${serviceId} after configuring environment variables: ${message}`
+          );
+        }
 
         const instance: RenderInstance = {
           serviceId,
