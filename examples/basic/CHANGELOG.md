@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.33
+
+### Patch Changes
+
+- Updated dependencies [c2fa3f7]
+  - @computesdk/daytona@1.7.0
+
 ## 0.4.32
 
 ### Patch Changes
