@@ -106,10 +106,17 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
       const { apiKey, ownerId } = getAndValidateCredentials(config);
 
       try {
-        // Step 1: Create the service without env vars (autoDeploy: 'no' to prevent premature deploy)
+        // Build environment variables for daemon
+        const envVars = buildDaemonEnvVars(options?.daemonConfig);
+        const envVarsList = Object.entries(envVars).map(([key, value]) => ({
+          key,
+          value
+        }));
+
+        // Create service with env vars at top level (not inside serviceDetails)
         const createServiceData = {
           type: 'web_service',
-          autoDeploy: 'no',
+          autoDeploy: 'yes',
           image: {
             ownerId: ownerId,
             imagePath: options?.image ?? 'computesdk/compute:latest'
@@ -118,6 +125,7 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
             runtime: 'image',
             pullRequestPreviewsEnabled: 'no'
           },
+          ...(envVarsList.length > 0 && { envVars: envVarsList }),
           ownerId: ownerId,
           name: `computesdk-${Date.now()}`
         };
@@ -144,42 +152,14 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
           throw new Error(`Service ID is undefined. Full service object: ${JSON.stringify(service, null, 2)}`);
         }
 
-        const serviceId = service.id;
-
-        // Step 2: Add environment variables via PUT to /services/{serviceId}/env-vars
-        const envVars = buildDaemonEnvVars(options?.daemonConfig);
-        const envVarsList = Object.entries(envVars).map(([key, value]) => ({
-          key,
-          value
-        }));
-
-        if (envVarsList.length > 0) {
-          await fetchRender(apiKey, `/services/${serviceId}/env-vars`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(envVarsList)
-          });
-        }
-
-        // Step 3: Trigger deploy to start the service with env vars
-        await fetchRender(apiKey, `/services/${serviceId}/deploys`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({})
-        });
-
         const instance: RenderInstance = {
-          serviceId,
+          serviceId: service.id,
           ownerId,
         };
 
         return {
           instance,
-          instanceId: serviceId
+          instanceId: service.id
         };
       } catch (error) {
         throw new Error(
