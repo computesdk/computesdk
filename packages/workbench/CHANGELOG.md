@@ -1,5 +1,13 @@
 # @computesdk/workbench
 
+## 5.0.0
+
+### Patch Changes
+
+- Updated dependencies [7f1553f]
+- Updated dependencies [7f1553f]
+  - @computesdk/vercel@1.7.0
+
 ## 4.0.1
 
 ### Patch Changes

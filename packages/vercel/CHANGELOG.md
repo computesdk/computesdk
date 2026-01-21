@@ -1,5 +1,17 @@
 # @computesdk/vercel
 
+## 1.7.0
+
+### Minor Changes
+
+- 7f1553f: Add support for Vercel Sandbox snapshots:
+  - Implement `snapshot.create()` and `snapshot.delete()`.
+  - Support creating new sandboxes from snapshots via `sandbox.create({ snapshotId: '...' })`.
+
+### Patch Changes
+
+- 7f1553f: Update `@vercel/sandbox` dependency to latest version (`^1.2.0`).
+
 ## 1.6.21
 
 ### Patch Changes
