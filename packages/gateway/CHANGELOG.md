@@ -1,5 +1,21 @@
 # @computesdk/gateway
 
+## 0.2.0
+
+### Minor Changes
+
+- c2fa3f7: refactor api request for Render provider in gateway
+
+## 0.1.0
+
+### Minor Changes
+
+- 128edac: refactor render package for gateway
+
+### Patch Changes
+
+- @computesdk/provider@1.0.14
+
 ## 0.0.7
 
 ### Patch Changes

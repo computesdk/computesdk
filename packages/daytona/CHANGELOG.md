@@ -1,5 +1,19 @@
 # @computesdk/daytona
 
+## 1.7.0
+
+### Minor Changes
+
+- c2fa3f7: refactor api request for Render provider in gateway
+
+## 1.6.20
+
+### Patch Changes
+
+- Updated dependencies [128edac]
+  - computesdk@1.18.0
+  - @computesdk/provider@1.0.14
+
 ## 1.6.19
 
 ### Patch Changes

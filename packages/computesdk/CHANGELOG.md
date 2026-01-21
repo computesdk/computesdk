@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.18.0
+
+### Minor Changes
+
+- 128edac: refactor render package for gateway
+
 ## 1.17.0
 
 ### Minor Changes

@@ -131,8 +131,9 @@ export const railway = defineInfraProvider<RailwayInstance, RailwayConfig>({
             input: {
               projectId,
               environmentId,
+              templateServiceId: 'sandbox',
               source: {
-                image: options?.image ?? 'computesdk/compute:latest'
+                image: options?.image ?? 'computesdk/compute:latest',
               },
               ...(Object.keys(envVars).length > 0 && {
                 variables: envVars
