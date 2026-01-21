@@ -37,7 +37,7 @@ export class Terminal {
     pty?: boolean;
   }) => Promise<TerminalInstance>;
   private listHandler: () => Promise<TerminalResponse[]>;
-  private retrieveHandler: (id: string) => Promise<TerminalResponse>;
+  private retrieveHandler: (id: string) => Promise<TerminalInstance>;
   private destroyHandler: (id: string) => Promise<void>;
 
   constructor(handlers: {
@@ -47,7 +47,7 @@ export class Terminal {
       pty?: boolean;
     }) => Promise<TerminalInstance>;
     list: () => Promise<TerminalResponse[]>;
-    retrieve: (id: string) => Promise<TerminalResponse>;
+    retrieve: (id: string) => Promise<TerminalInstance>;
     destroy: (id: string) => Promise<void>;
   }) {
     this.createHandler = handlers.create;
@@ -84,9 +84,9 @@ export class Terminal {
   /**
    * Retrieve a specific terminal by ID
    * @param id - The terminal ID
-   * @returns Terminal response
+   * @returns Terminal instance
    */
-  async retrieve(id: string): Promise<TerminalResponse> {
+  async retrieve(id: string): Promise<TerminalInstance> {
     return this.retrieveHandler(id);
   }
 

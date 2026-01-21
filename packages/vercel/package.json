@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/vercel",
-  "version": "1.6.20",
+  "version": "1.6.21",
   "description": "Vercel Sandbox provider for ComputeSDK - serverless code execution for Python and Node.js on Vercel's edge network",
   "author": "Garrison",
   "license": "MIT",
@@ -25,10 +25,10 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@vercel/sandbox": "^0.0.13",
-    "ms": "^2.1.3",
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "@vercel/sandbox": "^1.2.0",
+    "computesdk": "workspace:*",
+    "ms": "^2.1.3"
   },
   "keywords": [
     "computesdk",
@@ -53,8 +53,8 @@
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
-    "@types/node": "^20.0.0",
     "@types/ms": "^0.7.34",
+    "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",

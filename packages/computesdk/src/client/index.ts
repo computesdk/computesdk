@@ -48,7 +48,7 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions, CommandWaitOptions } from './resources/run';
 export type { ServerStartOptions, ServerLogsOptions, ServerLogsInfo } from './resources/server';
-export type { OverlayCopyStatus, OverlayStats, OverlayInfo, WaitForCompletionOptions } from './resources/overlay';
+export type { OverlayCopyStatus, OverlayStats, OverlayInfo, WaitForCompletionOptions, OverlayStrategy } from './resources/overlay';
 
 // Import overlay types for internal use and re-export CreateOverlayOptions
 import type {
@@ -787,6 +787,7 @@ export class Sandbox {
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
+  private _terminals: Map<string, TerminalInstance> = new Map();
 
   constructor(config: SandboxConfig) {
     this.sandboxId = config.sandboxId;
@@ -1023,6 +1024,57 @@ export class Sandbox {
       await this._ws.connect();
     }
     return this._ws;
+  }
+
+  /**
+   * Create and configure a TerminalInstance from response data
+   */
+  private async hydrateTerminal(
+    data: TerminalResponse['data'], 
+    ws?: WebSocketManager | null
+  ): Promise<TerminalInstance> {
+    // Create TerminalInstance
+    const terminal = new TerminalInstance(
+      data.id,
+      data.pty,
+      data.status,
+      data.channel || null,
+      ws || null,
+      data.encoding || 'raw'
+    );
+
+    // Set up terminal handlers
+    const terminalId = data.id;
+
+    terminal.setExecuteHandler(async (command: string, background?: boolean) => {
+      return this.request<CommandExecutionResponse>(`/terminals/${terminalId}/execute`, {
+        method: 'POST',
+        body: JSON.stringify({ command, background }),
+      });
+    });
+
+    terminal.setListCommandsHandler(async () => {
+      return this.request<CommandsListResponse>(`/terminals/${terminalId}/commands`);
+    });
+
+    terminal.setRetrieveCommandHandler(async (cmdId: string) => {
+      return this.request<CommandDetailsResponse>(`/terminals/${terminalId}/commands/${cmdId}`);
+    });
+
+    terminal.setWaitCommandHandler(async (cmdId: string, timeout?: number) => {
+      const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
+      const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
+      return this.request<CommandDetailsResponse>(endpoint);
+    });
+
+    terminal.setDestroyHandler(async () => {
+      await this.request<void>(`/terminals/${terminalId}`, {
+        method: 'DELETE',
+      });
+      this._terminals.delete(terminalId);
+    });
+
+    return terminal;
   }
 
   // ============================================================================
@@ -1631,46 +1683,8 @@ export class Sandbox {
       });
     }
 
-    // Create TerminalInstance
-    const terminal = new TerminalInstance(
-      response.data.id,
-      response.data.pty,
-      response.data.status,
-      response.data.channel || null,
-      ws,
-      response.data.encoding || 'raw'
-    );
-
-    // Set up terminal handlers
-    const terminalId = response.data.id;
-
-    terminal.setExecuteHandler(async (command: string, background?: boolean) => {
-      return this.request<CommandExecutionResponse>(`/terminals/${terminalId}/execute`, {
-        method: 'POST',
-        body: JSON.stringify({ command, background }),
-      });
-    });
-
-    terminal.setListCommandsHandler(async () => {
-      return this.request<CommandsListResponse>(`/terminals/${terminalId}/commands`);
-    });
-
-    terminal.setRetrieveCommandHandler(async (cmdId: string) => {
-      return this.request<CommandDetailsResponse>(`/terminals/${terminalId}/commands/${cmdId}`);
-    });
-
-    terminal.setWaitCommandHandler(async (cmdId: string, timeout?: number) => {
-      const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
-      const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
-      return this.request<CommandDetailsResponse>(endpoint);
-    });
-
-    terminal.setDestroyHandler(async () => {
-      await this.request<void>(`/terminals/${terminalId}`, {
-        method: 'DELETE',
-      });
-    });
-
+    const terminal = await this.hydrateTerminal(response.data, ws);
+    this._terminals.set(terminal.id, terminal);
     return terminal;
   }
 
@@ -1685,8 +1699,26 @@ export class Sandbox {
   /**
    * Get terminal by ID
    */
-  async getTerminal(id: string): Promise<TerminalResponse> {
-    return this.request<TerminalResponse>(`/terminals/${id}`);
+  async getTerminal(id: string): Promise<TerminalInstance> {
+    // Check cache first
+    const cached = this._terminals.get(id);
+    if (cached) {
+      return cached;
+    }
+
+    // Retrieve from API
+    const response = await this.request<TerminalResponse>(`/terminals/${id}`);
+
+    // Connect WebSocket if needed for PTY
+    let ws: WebSocketManager | null = null;
+    if (response.data.pty) {
+      ws = await this.ensureWebSocket();
+      // Note: No need to wait for terminal:created as it already exists
+    }
+
+    const terminal = await this.hydrateTerminal(response.data, ws);
+    this._terminals.set(id, terminal);
+    return terminal;
   }
 
   // ============================================================================
@@ -2489,6 +2521,8 @@ export class Sandbox {
       this._ws.disconnect();
       this._ws = null;
     }
+    // Clear terminal cache as instances hold reference to closed WebSocket
+    this._terminals.clear();
   }
 }
 
