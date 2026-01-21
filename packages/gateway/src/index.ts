@@ -14,5 +14,9 @@ export type { RailwayConfig, RailwayInstance } from './railway.js';
 export { render } from './render.js';
 export type { RenderConfig, RenderInstance } from './render.js';
 
+// Export Namespace infrastructure provider
+export { namespace } from './namespace.js';
+export type { NamespaceConfig, NamespaceInstance } from './namespace.js';
+
 // Re-export infrastructure provider types from @computesdk/provider
 export type { InfraProvider, DaemonConfig } from '@computesdk/provider';
