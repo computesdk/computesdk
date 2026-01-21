@@ -1,5 +1,56 @@
 # @computesdk/workbench
 
+## 3.1.14
+
+### Patch Changes
+
+- Updated dependencies [128edac]
+  - computesdk@1.18.0
+  - @computesdk/blaxel@1.3.20
+  - @computesdk/cloudflare@1.3.20
+  - @computesdk/codesandbox@1.5.20
+  - @computesdk/daytona@1.6.20
+  - @computesdk/e2b@1.7.20
+  - @computesdk/modal@1.8.15
+  - @computesdk/provider@1.0.14
+  - @computesdk/railway@1.1.20
+  - @computesdk/runloop@1.3.20
+  - @computesdk/vercel@1.6.20
+
+## 3.1.13
+
+### Patch Changes
+
+- Updated dependencies [79c9fc5]
+  - computesdk@1.17.0
+  - @computesdk/blaxel@1.3.19
+  - @computesdk/cloudflare@1.3.19
+  - @computesdk/codesandbox@1.5.19
+  - @computesdk/daytona@1.6.19
+  - @computesdk/e2b@1.7.19
+  - @computesdk/modal@1.8.14
+  - @computesdk/provider@1.0.13
+  - @computesdk/railway@1.1.19
+  - @computesdk/runloop@1.3.19
+  - @computesdk/vercel@1.6.19
+
+## 3.1.12
+
+### Patch Changes
+
+- Updated dependencies [208a400]
+  - computesdk@1.16.0
+  - @computesdk/blaxel@1.3.18
+  - @computesdk/cloudflare@1.3.18
+  - @computesdk/codesandbox@1.5.18
+  - @computesdk/daytona@1.6.18
+  - @computesdk/e2b@1.7.18
+  - @computesdk/modal@1.8.13
+  - @computesdk/provider@1.0.12
+  - @computesdk/railway@1.1.18
+  - @computesdk/runloop@1.3.18
+  - @computesdk/vercel@1.6.18
+
 ## 3.1.11
 
 ### Patch Changes

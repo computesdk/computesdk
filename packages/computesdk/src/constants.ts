@@ -31,6 +31,7 @@ export const GATEWAY_URL = 'https://gateway.computesdk.com';
 export const PROVIDER_PRIORITY = [
   'e2b',
   'railway',
+  'render',
   'daytona',
   'modal',
   'runloop',
@@ -47,6 +48,7 @@ export const PROVIDER_PRIORITY = [
 export const PROVIDER_ENV_VARS = {
   e2b: ['E2B_API_KEY'],
   railway: ['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID'],
+  render: ['RENDER_API_KEY', 'RENDER_OWNER_ID'],
   daytona: ['DAYTONA_API_KEY'],
   modal: ['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET'],
   runloop: ['RUNLOOP_API_KEY'],

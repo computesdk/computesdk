@@ -60,14 +60,17 @@ interface ModalConfig {
 ## Explicit Provider Configuration
 If you prefer to set the provider explicitly, you can do so as follows:
 ```typescript
-// Set as explicit provider
-const sandbox = compute({ 
-  provider: 'modal', 
-  modal: {
-    modalTokenId: process.env.MODAL_TOKEN_ID,
-    modalTokenSecret: process.env.MODAL_TOKEN_SECRET
-  },
-  apiKey: process.env.COMPUTESDK_API_KEY 
-}).sandbox.create();
+import { compute } from 'computesdk';
+
+compute.setConfig({
+   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
+   provider: 'modal',
+   modal: {
+     tokenId: process.env.MODAL_TOKEN_ID,
+     tokenSecret: process.env.MODAL_TOKEN_SECRET
+   }
+});
+
+const sandbox = await compute.sandbox.create();
 ```
 Ports are exposed with unencrypted tunnels by default for maximum compatibility.

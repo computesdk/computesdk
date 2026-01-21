@@ -1,5 +1,27 @@
 # @computesdk/gateway
 
+## 0.1.0
+
+### Minor Changes
+
+- 128edac: refactor render package for gateway
+
+### Patch Changes
+
+- @computesdk/provider@1.0.14
+
+## 0.0.7
+
+### Patch Changes
+
+- @computesdk/provider@1.0.13
+
+## 0.0.6
+
+### Patch Changes
+
+- @computesdk/provider@1.0.12
+
 ## 0.0.5
 
 ### Patch Changes

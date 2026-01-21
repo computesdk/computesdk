@@ -106,6 +106,7 @@ For more control, use `setConfig()`:
 import { compute } from 'computesdk';
 
 compute.setConfig({
+  computesdkApiKey: 'your_computesdk_api_key',
   provider: 'e2b',
   e2b: { apiKey: 'your_api_key' }
 });
@@ -118,6 +119,7 @@ Switch providers at runtime:
 ```typescript
 // Use E2B for data science
 compute.setConfig({
+  computesdkApiKey: 'your_computesdk_api_key',
   provider: 'e2b',
   e2b: { apiKey: process.env.E2B_API_KEY }
 });
@@ -128,6 +130,7 @@ await e2bSandbox.destroy();
 
 // Switch to Modal for GPU workloads
 compute.setConfig({
+  computesdkApiKey: 'your_computesdk_api_key',
   provider: 'modal',
   modal: { 
     tokenId: process.env.MODAL_TOKEN_ID,
