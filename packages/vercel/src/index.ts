@@ -5,8 +5,11 @@
  * instead of the original ~350 lines of boilerplate.
  */
 
-import { Sandbox as VercelSandbox } from '@vercel/sandbox';
+import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+export type { VercelSandbox, VercelSnapshot };
+
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -34,7 +37,7 @@ export interface VercelConfig {
 /**
  * Create a Vercel provider instance using the factory pattern
  */
-export const vercel = defineProvider<VercelSandbox, VercelConfig>({
+export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSnapshot>({
   name: 'vercel',
   methods: {
     sandbox: {
@@ -81,22 +84,28 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
               `Vercel provider does not support reconnecting to existing sandboxes. Vercel sandboxes are ephemeral and must be created fresh each time.`
             );
           } else {
+            // Construct base params
+            const params: any = {
+              ports: config.ports,
+              timeout,
+            };
+
+            if (options?.snapshotId) {
+              params.source = {
+                type: 'snapshot',
+                snapshotId: options.snapshotId
+              };
+            }
+
             // Create new Vercel sandbox
             if (oidcToken) {
-              sandbox = await VercelSandbox.create(
-                {
-                  ports: config.ports,
-                  timeout,
-                }
-              );
+              sandbox = await VercelSandbox.create(params);
             } else {
-              sandbox = await VercelSandbox.create({
-                token,
-                teamId,
-                projectId,
-                ports: config.ports,
-                timeout,
-              });
+              // Add auth params
+              params.token = token;
+              params.teamId = teamId;
+              params.projectId = projectId;
+              sandbox = await VercelSandbox.create(params);
             }
           }
 
@@ -362,6 +371,66 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
         return sandbox;
       },
 
+    },
+
+    snapshot: {
+      create: async (config: VercelConfig, sandboxId: string) => {
+        // Check for OIDC token first (recommended method)
+        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+
+        let sandbox: VercelSandbox;
+
+        if (oidcToken) {
+          // Use OIDC token method
+          sandbox = await VercelSandbox.get({ sandboxId });
+        } else {
+          // Use traditional method
+          const token = config.token || process.env.VERCEL_TOKEN!;
+          const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
+          const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
+
+          sandbox = await VercelSandbox.get({
+            sandboxId,
+            token,
+            teamId,
+            projectId,
+          });
+        }
+
+        return await sandbox.snapshot();
+      },
+
+      list: async (_config: VercelConfig) => {
+        throw new Error(
+          `Vercel provider does not support listing snapshots.`
+        );
+      },
+
+      delete: async (config: VercelConfig, snapshotId: string) => {
+        // Check for OIDC token first (recommended method)
+        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+
+        let snapshot: VercelSnapshot;
+
+        if (oidcToken) {
+          // Use OIDC token method
+          snapshot = await VercelSnapshot.get({ snapshotId });
+        } else {
+          // Use traditional method
+          const token = config.token || process.env.VERCEL_TOKEN!;
+          const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
+          const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
+
+          snapshot = await VercelSnapshot.get({
+            snapshotId,
+            token,
+            teamId,
+            projectId,
+          });
+        }
+
+        await snapshot.delete();
+      }
     }
   }
 });
