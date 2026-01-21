@@ -154,13 +154,20 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
         }));
 
         if (envVarsList.length > 0) {
-          await fetchRender(apiKey, `/services/${serviceId}/env-vars`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(envVarsList)
-          });
+          try {
+            await fetchRender(apiKey, `/services/${serviceId}/env-vars`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(envVarsList)
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(
+              `Failed to configure environment variables for service ${serviceId}: ${message}`
+            );
+          }
         }
 
         // Step 3: Trigger deploy to start the service with env vars
