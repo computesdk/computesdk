@@ -1,5 +1,12 @@
 # computesdk
 
+## 1.18.1
+
+### Patch Changes
+
+- 688ca54: Fix `sandbox.terminal.retrieve(id)` to return a writable `TerminalInstance` instead of a static `TerminalResponse`.
+- 688ca54: feat(sdk): add support for smart overlay strategy
+
 ## 1.18.0
 
 ### Minor Changes
