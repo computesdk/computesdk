@@ -133,7 +133,7 @@ export const namespace = defineInfraProvider<NamespaceInstance, NamespaceConfig>
             image_ref: options?.image ?? 'computesdk/compute:latest',
             args: ['sleep', '300'],
             ...(Object.keys(envVars).length > 0 && {
-              env: Object.entries(envVars).map(([name, value]) => ({ name, value }))
+              environment: envVars
             })
           }],
           documented_purpose: config.documentedPurpose || 'ComputeSDK sandbox'
