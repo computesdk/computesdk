@@ -17,13 +17,14 @@ import {
   c,
   formatDuration,
 } from './output.js';
-import { 
-  isProviderReady, 
-  autoDetectProvider, 
+import {
+  isProviderReady,
+  autoDetectProvider,
   getProviderSetupHelp,
   isValidProvider,
   loadProvider,
   getProviderConfig,
+  PROVIDER_NAMES,
   type ProviderName,
 } from './providers.js';
 import * as readline from 'readline';
@@ -416,7 +417,7 @@ export async function switchProvider(state: WorkbenchState, mode: string, provid
   // Validate provider
   if (!isValidProvider(actualProvider)) {
     logError(`Unknown provider: ${actualProvider}`);
-    console.log(`Available providers: e2b, railway, daytona, modal, runloop, vercel, cloudflare, codesandbox, blaxel, local`);
+    console.log(`Available providers: ${PROVIDER_NAMES.filter(p => p !== 'gateway').join(', ')}, local`);
     return;
   }
   

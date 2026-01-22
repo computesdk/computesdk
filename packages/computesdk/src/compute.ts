@@ -58,6 +58,7 @@ export interface ExplicitComputeConfig {
   cloudflare?: { apiToken?: string; accountId?: string };
   codesandbox?: { apiKey?: string };
   blaxel?: { apiKey?: string; workspace?: string };
+  namespace?: { token?: string };
 }
 
 /**
