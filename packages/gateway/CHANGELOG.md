@@ -1,5 +1,11 @@
 # @computesdk/gateway
 
+## 0.3.0
+
+### Minor Changes
+
+- 64d560f: add namespace provider to gateway
+
 ## 0.2.1
 
 ### Patch Changes
