@@ -1,5 +1,23 @@
 # @computesdk/gateway
 
+## 0.3.0
+
+### Minor Changes
+
+- 64d560f: add namespace provider to gateway
+
+## 0.2.1
+
+### Patch Changes
+
+- @computesdk/provider@1.0.15
+
+## 0.2.0
+
+### Minor Changes
+
+- c2fa3f7: refactor api request for Render provider in gateway
+
 ## 0.1.0
 
 ### Minor Changes
