@@ -1,5 +1,13 @@
 # @computesdk/vercel
 
+## 1.7.1
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+  - @computesdk/provider@1.0.16
+
 ## 1.7.0
 
 ### Minor Changes
