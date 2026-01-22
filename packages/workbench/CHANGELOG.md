@@ -12,7 +12,6 @@
   - @computesdk/daytona@1.7.2
   - @computesdk/e2b@1.7.22
   - @computesdk/modal@1.8.17
-  - @computesdk/namespace@1.1.22
   - @computesdk/provider@1.0.16
   - @computesdk/railway@1.1.22
   - @computesdk/runloop@1.3.22
