@@ -39,6 +39,7 @@ export const PROVIDER_PRIORITY = [
   'cloudflare',
   'codesandbox',
   'blaxel',
+  'namespace',
 ] as const;
 
 /**
@@ -56,4 +57,5 @@ export const PROVIDER_ENV_VARS = {
   cloudflare: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
   codesandbox: ['CSB_API_KEY'],
   blaxel: ['BL_API_KEY', 'BL_WORKSPACE'],
+  namespace: ['NSC_TOKEN'],
 } as const;
