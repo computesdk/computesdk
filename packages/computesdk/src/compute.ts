@@ -76,6 +76,8 @@ export interface CreateSandboxOptions {
   namespace?: string;
   /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
   image?: string;
+  /** Provider-specific snapshot to create from (e.g., Vercel snapshots) */
+  snapshotId?: string;
 }
 
 /**
