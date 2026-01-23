@@ -61,7 +61,7 @@ export type { SandboxStatus, ProviderSandboxInfo } from './client/types';
 export { CommandExitError, isCommandExitError } from './client/types';
 
 // Export setup payload helpers
-export { buildSetupPayload, type SetupPayload, type SetupOverlayConfig } from './setup';
+export { buildSetupPayload, encodeSetupPayload, type SetupPayload, type SetupOverlayConfig } from './setup';
 
 // Re-export commonly used client utilities
 export {
