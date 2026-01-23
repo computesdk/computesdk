@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/hopx",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "HopX provider for ComputeSDK - cloud sandboxes with full Linux environments, filesystem access, and microVM isolation",
   "author": "ComputeSDK",
   "license": "MIT",
@@ -64,4 +64,3 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   }
 }
-
