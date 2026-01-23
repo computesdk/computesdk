@@ -486,7 +486,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
     afterEach(async () => {
       // Clean up any test servers
       try {
-        await sandbox.server.stop(testSlug);
+        await sandbox.server.delete(testSlug);
       } catch {
         // Ignore - server may not exist
       }
