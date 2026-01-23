@@ -19,7 +19,8 @@ import type {
   SandboxInfo,
   Runtime,
   CreateSandboxOptions,
-  FileEntry
+  FileEntry,
+  RunCommandOptions
 } from 'computesdk';
 
 /**
@@ -447,7 +448,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           return entries.map((entry: any) => ({
             name: entry.name,
             type: (entry.isDir || entry.isDirectory) ? 'directory' as const : 'file' as const,
-            path: entry.path || `${path}/${entry.name}`.replace(/\\/+/g, '/'),
+            path: entry.path || `${path}/${entry.name}`.replace(/\/+/g, '/'),
             isDirectory: Boolean(entry.isDir || entry.isDirectory || entry.type === 'directory'),
             size: entry.size || 0,
             lastModified: entry.modTime ? new Date(entry.modTime) : new Date()
