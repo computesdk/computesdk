@@ -48,9 +48,7 @@ export const buildSetupPayload = (options: BuildSetupPayloadOptions): SetupPaylo
     };
   });
 
-  const servers = options.servers?.map((server) => ({
-    ...server,
-  }));
+  const servers = options.servers;
 
   return {
     overlays: overlays?.length ? overlays : undefined,
