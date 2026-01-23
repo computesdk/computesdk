@@ -310,7 +310,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Arguments are properly quoted to handle special characters.
        */
       runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const args = options?.args ?? [];
         const startTime = Date.now();
 
         try {
