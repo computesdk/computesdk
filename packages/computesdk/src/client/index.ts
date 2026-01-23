@@ -2146,6 +2146,18 @@ export class Sandbox {
    *   restart_delay_ms: 2000,
    *   stop_timeout_ms: 5000,
    * });
+   *
+   * // With inline overlay dependencies
+   * await sandbox.startServer({
+   *   slug: 'web',
+   *   start: 'npm run dev',
+   *   path: '/app',
+   *   overlay: {
+   *     source: '/templates/nextjs',
+   *     target: 'app',
+   *     strategy: 'smart',
+   *   },
+   * });
    * ```
    */
   async startServer(options: {
@@ -2185,12 +2197,26 @@ export class Sandbox {
    * @param slug - Server slug
    */
   async stopServer(slug: string): Promise<ServerStopResponse> {
-    return this.request<ServerStopResponse>(
-      `/servers/${encodeURIComponent(slug)}/stop`,
-      {
+    const endpoint = `/servers/${encodeURIComponent(slug)}/stop`;
+    try {
+      return await this.request<ServerStopResponse>(endpoint, {
         method: 'POST',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const shouldFallback =
+        message.includes('Failed to parse JSON response from /servers') ||
+        message.includes('API request failed (404)') ||
+        message.includes('API request failed (405)');
+
+      if (!shouldFallback) {
+        throw error;
       }
-    );
+    }
+
+    return this.request<ServerStopResponse>(`/servers/${encodeURIComponent(slug)}`, {
+      method: 'DELETE',
+    });
   }
 
   /**
@@ -2261,7 +2287,12 @@ export class Sandbox {
    * Get readiness status for autostarted servers and overlays
    */
   async getReady(): Promise<ReadyResponse> {
-    return this.request<ReadyResponse>('/ready');
+    const response = await this.request<ReadyResponse>('/ready');
+    return {
+      ready: response.ready,
+      servers: response.servers ?? [],
+      overlays: response.overlays ?? [],
+    };
   }
 
   // ============================================================================

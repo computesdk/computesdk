@@ -88,6 +88,18 @@ export interface ServerStartOptions {
  *   restart_delay_ms: 2000,
  * });
  *
+ * // Start with inline overlay dependencies
+ * const server = await sandbox.server.start({
+ *   slug: 'web',
+ *   start: 'npm run dev',
+ *   path: '/app',
+ *   overlay: {
+ *     source: '/templates/nextjs',
+ *     target: 'app',
+ *     strategy: 'smart',
+ *   },
+ * });
+ *
  * // List all servers
  * const servers = await sandbox.server.list();
  *
