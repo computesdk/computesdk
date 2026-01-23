@@ -311,6 +311,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        */
       runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
+        const args = options?.args ?? [];
 
         try {
           // Construct full command with arguments, properly quoting each arg
