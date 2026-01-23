@@ -29,6 +29,7 @@ import {
   Run,
   Child,
   Overlay,
+  Ready,
 } from './resources';
 
 // Re-export high-level classes and types
@@ -48,6 +49,7 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions, CommandWaitOptions } from './resources/run';
 export type { ServerStartOptions, ServerLogsOptions, ServerLogsInfo } from './resources/server';
+export type { ReadyInfo } from './resources/ready';
 export type { OverlayCopyStatus, OverlayStats, OverlayInfo, WaitForCompletionOptions, OverlayStrategy } from './resources/overlay';
 
 // Import overlay types for internal use and re-export CreateOverlayOptions
@@ -520,6 +522,12 @@ export interface ServerInfo {
   env_file?: string;
   /** Inline environment variables */
   environment?: Record<string, string>;
+  /** Whether to auto-start the server on daemon boot */
+  autostart?: boolean;
+  /** If true, port allocation is strict (no auto-increment) */
+  strict_port?: boolean;
+  /** Overlay IDs this server depends on */
+  depends_on?: string[];
   /** Auto-detected port number (populated when port monitor detects listening port) */
   port?: number;
   /** Generated URL from subdomain + port (populated when port is detected) */
@@ -544,6 +552,35 @@ export interface ServerInfo {
   created_at: string;
   /** When the server was last updated */
   updated_at: string;
+}
+
+/**
+ * Ready server info returned by readiness endpoint
+ */
+export interface ReadyServerInfo {
+  slug: string;
+  port?: number;
+  url?: string;
+  status: ServerStatus;
+}
+
+/**
+ * Ready overlay info returned by readiness endpoint
+ */
+export interface ReadyOverlayInfo {
+  id: string;
+  source: string;
+  target: string;
+  copy_status: string;
+}
+
+/**
+ * Ready response (public endpoint)
+ */
+export interface ReadyResponse {
+  ready: boolean;
+  servers: ReadyServerInfo[];
+  overlays: ReadyOverlayInfo[];
 }
 
 /**
@@ -778,6 +815,7 @@ export class Sandbox {
   readonly sessionToken: SessionToken;
   readonly magicLink: MagicLink;
   readonly signal: Signal;
+  readonly ready: Ready;
   readonly file: File;
   readonly env: Env;
   readonly auth: Auth;
@@ -944,9 +982,14 @@ export class Sandbox {
       list: async () => this.listServers(),
       retrieve: async (slug) => this.getServer(slug),
       stop: async (slug) => { await this.stopServer(slug); },
+      delete: async (slug) => { await this.deleteServer(slug); },
       restart: async (slug) => this.restartServer(slug),
       updateStatus: async (slug, status) => { await this.updateServerStatus(slug, status); },
       logs: async (slug, options) => this.getServerLogs(slug, options),
+    });
+
+    this.ready = new Ready({
+      get: async () => this.getReady(),
     });
 
     this.watcher = new Watcher({
@@ -2071,6 +2114,12 @@ export class Sandbox {
    * @param options.path - Working directory (optional)
    * @param options.env_file - Path to .env file relative to path (optional)
    * @param options.environment - Inline environment variables (merged with env_file if both provided)
+   * @param options.port - Requested port (preallocated before start)
+   * @param options.strict_port - If true, fail instead of auto-incrementing when port is taken
+   * @param options.autostart - Auto-start on daemon boot (default: true)
+   * @param options.overlay - Inline overlay to create before starting
+   * @param options.overlays - Additional overlays to create before starting
+   * @param options.depends_on - Overlay IDs this server depends on
    * @param options.restart_policy - When to automatically restart: 'never' (default), 'on-failure', 'always'
    * @param options.max_restarts - Maximum restart attempts, 0 = unlimited (default: 0)
    * @param options.restart_delay_ms - Delay between restart attempts in milliseconds (default: 1000)
@@ -2106,6 +2155,12 @@ export class Sandbox {
     path?: string;
     env_file?: string;
     environment?: Record<string, string>;
+    port?: number;
+    strict_port?: boolean;
+    autostart?: boolean;
+    overlay?: Omit<CreateOverlayOptions, 'waitForCompletion'>;
+    overlays?: Array<Omit<CreateOverlayOptions, 'waitForCompletion'>>;
+    depends_on?: string[];
     restart_policy?: RestartPolicy;
     max_restarts?: number;
     restart_delay_ms?: number;
@@ -2126,16 +2181,26 @@ export class Sandbox {
   }
 
   /**
-   * Stop a managed server
+   * Stop a managed server (non-destructive)
    * @param slug - Server slug
    */
   async stopServer(slug: string): Promise<ServerStopResponse> {
     return this.request<ServerStopResponse>(
-      `/servers/${encodeURIComponent(slug)}`,
+      `/servers/${encodeURIComponent(slug)}/stop`,
       {
-        method: 'DELETE',
+        method: 'POST',
       }
     );
+  }
+
+  /**
+   * Delete a managed server configuration
+   * @param slug - Server slug
+   */
+  async deleteServer(slug: string): Promise<void> {
+    await this.request<void>(`/servers/${encodeURIComponent(slug)}`, {
+      method: 'DELETE',
+    });
   }
 
   /**
@@ -2186,6 +2251,17 @@ export class Sandbox {
         body: JSON.stringify({ status }),
       }
     );
+  }
+
+  // ============================================================================
+  // Ready Management
+  // ============================================================================
+
+  /**
+   * Get readiness status for autostarted servers and overlays
+   */
+  async getReady(): Promise<ReadyResponse> {
+    return this.request<ReadyResponse>('/ready');
   }
 
   // ============================================================================
