@@ -1,5 +1,14 @@
 # @computesdk/e2b
 
+## 1.7.24
+
+### Patch Changes
+
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+  - @computesdk/provider@1.0.18
+
 ## 1.7.23
 
 ### Patch Changes
