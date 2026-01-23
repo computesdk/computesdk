@@ -314,6 +314,18 @@ class ComputeManager {
         metadata?: Record<string, unknown>;
         name?: string;
         namespace?: string;
+        overlays?: Array<{
+          id: string;
+          source: string;
+          target: string;
+          copy_status: string;
+        }>;
+        servers?: Array<{
+          slug: string;
+          port?: number;
+          url?: string;
+          status: 'installing' | 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
+        }>;
       }>(`${config.gatewayUrl}/v1/sandboxes`, config, {
         method: 'POST',
         body: JSON.stringify(options || {}),
@@ -323,7 +335,7 @@ class ComputeManager {
         throw new Error(`Gateway returned invalid response`);
       }
 
-      const { sandboxId, url, token, provider, metadata, name, namespace } = result.data;
+      const { sandboxId, url, token, provider, metadata, name, namespace, overlays, servers } = result.data;
 
       const sandbox = new Sandbox({
         sandboxUrl: url,
@@ -334,6 +346,8 @@ class ComputeManager {
           ...metadata,
           ...(name && { name }),
           ...(namespace && { namespace }),
+          ...(overlays && { overlays }),
+          ...(servers && { servers }),
         },
         WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
