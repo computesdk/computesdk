@@ -12,7 +12,7 @@
  */
 
 import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
-import { createProvider } from 'computesdk';
+import { defineProvider } from 'computesdk';
 import type {
   CodeResult,
   CommandResult,
@@ -47,10 +47,8 @@ export interface HopxConfig {
  * - Persistent filesystem during session
  * - Automatic cleanup after timeout
  */
-export const hopx = createProvider<HopxSandbox, HopxConfig>({
+export const hopx = defineProvider<HopxSandbox, HopxConfig>({
   name: 'hopx',
-  // HopX has native sandbox capabilities, use direct mode
-  defaultMode: 'direct',
   methods: {
     sandbox: {
       /**
