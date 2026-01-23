@@ -308,7 +308,8 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Uses sandbox.commands.run() to execute shell commands.
        * Arguments are properly quoted to handle special characters.
        */
-      runCommand: async (sandbox: HopxSandbox, command: string, args: string[] = []): Promise<CommandResult> => {
+      runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+        const args = options?.args ?? [];
         const startTime = Date.now();
 
         try {
@@ -445,7 +446,8 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
 
           return entries.map((entry: any) => ({
             name: entry.name,
-            path: entry.path || `${path}/${entry.name}`.replace(/\/+/g, '/'),
+            type: (entry.isDir || entry.isDirectory) ? 'directory' as const : 'file' as const,
+            path: entry.path || `${path}/${entry.name}`.replace(/\\/+/g, '/'),
             isDirectory: Boolean(entry.isDir || entry.isDirectory || entry.type === 'directory'),
             size: entry.size || 0,
             lastModified: entry.modTime ? new Date(entry.modTime) : new Date()
