@@ -309,7 +309,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Uses sandbox.commands.run() to execute shell commands.
        * Arguments are properly quoted to handle special characters.
        */
-      runCommand: runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+      runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
           // Build command with options
