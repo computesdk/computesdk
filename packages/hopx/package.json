@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@hopx-ai/sdk": "^0.3.8",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "@computesdk/provider": "workspace:*"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
