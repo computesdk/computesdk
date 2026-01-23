@@ -309,27 +309,37 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Uses sandbox.commands.run() to execute shell commands.
        * Arguments are properly quoted to handle special characters.
        */
-      runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+      runCommand: runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
-        const args = options?.args ?? [];
-
         try {
-          // Construct full command with arguments, properly quoting each arg
-          const quotedArgs = args.map((arg: string) => {
-            if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('$') || arg.includes('`')) {
-              return `"${arg.replace(/"/g, '\\"')}"`;
-            }
-            return arg;
-          });
-          const fullCommand = quotedArgs.length > 0 ? `${command} ${quotedArgs.join(' ')}` : command;
-
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${v.replace(/"/g, '\\"')}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${options.cwd.replace(/"/g, '\\"')}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
+      
           // Execute command using sandbox.commands.run()
           const result = await sandbox.commands.run(fullCommand);
-
+      
           return {
             stdout: result.stdout || '',
             stderr: result.stderr || '',
-            exitCode: result.exit_code || 0,
+            exitCode: result.exit_code || 0,  // Note: HopX uses snake_case
             durationMs: Date.now() - startTime
           };
         } catch (error) {
@@ -343,7 +353,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
               durationMs: Date.now() - startTime
             };
           }
-
+          
           // Fallback for other errors (command not found, etc.)
           return {
             stdout: '',
