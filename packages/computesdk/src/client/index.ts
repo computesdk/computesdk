@@ -2197,26 +2197,12 @@ export class Sandbox {
    * @param slug - Server slug
    */
   async stopServer(slug: string): Promise<ServerStopResponse> {
-    const endpoint = `/servers/${encodeURIComponent(slug)}/stop`;
-    try {
-      return await this.request<ServerStopResponse>(endpoint, {
+    return this.request<ServerStopResponse>(
+      `/servers/${encodeURIComponent(slug)}/stop`,
+      {
         method: 'POST',
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const shouldFallback =
-        message.includes('Failed to parse JSON response from /servers') ||
-        message.includes('API request failed (404)') ||
-        message.includes('API request failed (405)');
-
-      if (!shouldFallback) {
-        throw error;
       }
-    }
-
-    return this.request<ServerStopResponse>(`/servers/${encodeURIComponent(slug)}`, {
-      method: 'DELETE',
-    });
+    );
   }
 
   /**
