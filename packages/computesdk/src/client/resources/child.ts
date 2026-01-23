@@ -3,6 +3,7 @@
  */
 
 import type { SandboxInfo, SandboxesListResponse } from '../index';
+import type { CreateSandboxOptions } from '../types';
 
 /**
  * Child resource namespace for managing child sandboxes
@@ -13,7 +14,23 @@ import type { SandboxInfo, SandboxesListResponse } from '../index';
  * @example
  * ```typescript
  * // Create a new child sandbox
- * const child = await sandbox.child.create();
+ * const child = await sandbox.child.create({
+ *   directory: '/custom/path',
+ *   overlays: [
+ *     {
+ *       source: '/templates/nextjs',
+ *       target: 'app',
+ *       strategy: 'smart',
+ *     },
+ *   ],
+ *   servers: [
+ *     {
+ *       slug: 'web',
+ *       start: 'npm run dev',
+ *       path: '/app',
+ *     },
+ *   ],
+ * });
  * console.log(child.url); // https://sandbox-12345.sandbox.computesdk.com
  *
  * // List all children
@@ -30,13 +47,13 @@ import type { SandboxInfo, SandboxesListResponse } from '../index';
  * ```
  */
 export class Child {
-  private createHandler: () => Promise<SandboxInfo>;
+  private createHandler: (options?: CreateSandboxOptions) => Promise<SandboxInfo>;
   private listHandler: () => Promise<SandboxesListResponse>;
   private retrieveHandler: (subdomain: string) => Promise<SandboxInfo>;
   private destroyHandler: (subdomain: string, deleteFiles: boolean) => Promise<void>;
 
   constructor(handlers: {
-    create: () => Promise<SandboxInfo>;
+    create: (options?: CreateSandboxOptions) => Promise<SandboxInfo>;
     list: () => Promise<SandboxesListResponse>;
     retrieve: (subdomain: string) => Promise<SandboxInfo>;
     destroy: (subdomain: string, deleteFiles: boolean) => Promise<void>;
@@ -51,8 +68,8 @@ export class Child {
    * Create a new child sandbox
    * @returns Child sandbox info including URL and subdomain
    */
-  async create(): Promise<SandboxInfo> {
-    return this.createHandler();
+  async create(options?: CreateSandboxOptions): Promise<SandboxInfo> {
+    return this.createHandler(options);
   }
 
   /**

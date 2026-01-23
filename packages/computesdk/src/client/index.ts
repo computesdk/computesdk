@@ -83,6 +83,7 @@ import type {
   SandboxStatus,
   ProviderSandboxInfo,
   FileEntry as ClientFileEntry,
+  CreateSandboxOptions,
 } from './types';
 
 import {
@@ -1045,7 +1046,7 @@ export class Sandbox {
     });
 
     this.child = new Child({
-      create: async () => this.createSandbox(),
+      create: async (options?: CreateSandboxOptions) => this.createSandbox(options),
       list: async () => this.listSandboxes(),
       retrieve: async (subdomain) => this.getSandbox(subdomain),
       destroy: async (subdomain, deleteFiles) => this.deleteSandbox(subdomain, deleteFiles),
@@ -2288,10 +2289,10 @@ export class Sandbox {
   /**
    * Create a new sandbox environment
    */
-  async createSandbox(): Promise<SandboxInfo> {
+  async createSandbox(options?: CreateSandboxOptions): Promise<SandboxInfo> {
     return this.request<SandboxInfo>('/sandboxes', {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify(options || {}),
     });
   }
 

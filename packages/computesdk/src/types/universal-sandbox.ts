@@ -121,8 +121,39 @@ export interface CreateSandboxOptions {
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
+  directory?: string;
+  overlays?: SandboxOverlayConfig[];
+  servers?: SandboxServerConfig[];
   // Allow provider-specific properties (e.g., sandboxId, domain for E2B)
   [key: string]: any;
+}
+
+export interface SandboxOverlayConfig {
+  source: string;
+  target: string;
+  ignore?: string[];
+  strategy?: 'copy' | 'smart';
+}
+
+export type SandboxRestartPolicy = 'never' | 'on-failure' | 'always';
+
+export interface SandboxServerConfig {
+  slug: string;
+  start: string;
+  install?: string;
+  path?: string;
+  port?: number;
+  strict_port?: boolean;
+  autostart?: boolean;
+  env_file?: string;
+  environment?: Record<string, string>;
+  restart_policy?: SandboxRestartPolicy;
+  max_restarts?: number;
+  restart_delay_ms?: number;
+  stop_timeout_ms?: number;
+  depends_on?: string[];
+  overlay?: SandboxOverlayConfig;
+  overlays?: SandboxOverlayConfig[];
 }
 
 /**
