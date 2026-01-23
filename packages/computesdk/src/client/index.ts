@@ -29,7 +29,6 @@ import {
   Run,
   Child,
   Overlay,
-  Ready,
 } from './resources';
 
 // Re-export high-level classes and types
@@ -49,7 +48,7 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions, CommandWaitOptions } from './resources/run';
 export type { ServerStartOptions, ServerLogsOptions, ServerLogsInfo } from './resources/server';
-export type { ReadyInfo } from './resources/ready';
+export type ReadyInfo = ReadyResponse;
 export type { OverlayCopyStatus, OverlayStats, OverlayInfo, WaitForCompletionOptions, OverlayStrategy } from './resources/overlay';
 
 // Import overlay types for internal use and re-export CreateOverlayOptions
@@ -453,6 +452,8 @@ export interface SandboxInfo {
   is_main: boolean;
   created_at: string;
   url: string;
+  overlays?: SandboxOverlayInfo[];
+  servers?: SandboxServerInfo[];
 }
 
 /**
@@ -556,9 +557,9 @@ export interface ServerInfo {
 }
 
 /**
- * Ready server info returned by readiness endpoint
+ * Sandbox server info returned by setup flows
  */
-export interface ReadyServerInfo {
+export interface SandboxServerInfo {
   slug: string;
   port?: number;
   url?: string;
@@ -566,9 +567,9 @@ export interface ReadyServerInfo {
 }
 
 /**
- * Ready overlay info returned by readiness endpoint
+ * Sandbox overlay info returned by setup flows
  */
-export interface ReadyOverlayInfo {
+export interface SandboxOverlayInfo {
   id: string;
   source: string;
   target: string;
@@ -580,8 +581,8 @@ export interface ReadyOverlayInfo {
  */
 export interface ReadyResponse {
   ready: boolean;
-  servers: ReadyServerInfo[];
-  overlays: ReadyOverlayInfo[];
+  servers: SandboxServerInfo[];
+  overlays: SandboxOverlayInfo[];
 }
 
 /**
@@ -816,7 +817,6 @@ export class Sandbox {
   readonly sessionToken: SessionToken;
   readonly magicLink: MagicLink;
   readonly signal: Signal;
-  readonly ready: Ready;
   readonly file: File;
   readonly env: Env;
   readonly auth: Auth;
@@ -987,10 +987,6 @@ export class Sandbox {
       restart: async (slug) => this.restartServer(slug),
       updateStatus: async (slug, status) => { await this.updateServerStatus(slug, status); },
       logs: async (slug, options) => this.getServerLogs(slug, options),
-    });
-
-    this.ready = new Ready({
-      get: async () => this.getReady(),
     });
 
     this.watcher = new Watcher({
@@ -2273,7 +2269,7 @@ export class Sandbox {
   /**
    * Get readiness status for autostarted servers and overlays
    */
-  async getReady(): Promise<ReadyResponse> {
+  async ready(): Promise<ReadyResponse> {
     const response = await this.request<ReadyResponse>('/ready');
     return {
       ready: response.ready,
