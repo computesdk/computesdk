@@ -1,5 +1,12 @@
 # computesdk
 
+## 1.20.0
+
+### Minor Changes
+
+- 2b30125: Add readiness support, setup payload helpers, and setup-aware sandbox creation options.
+- 2b30125: Add readiness support, setup payload helpers, and expanded sandbox/server creation options.
+
 ## 1.19.0
 
 ### Minor Changes
