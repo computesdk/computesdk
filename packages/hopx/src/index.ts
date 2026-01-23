@@ -12,7 +12,7 @@
  */
 
 import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
-import { defineProvider } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
 import type {
   CodeResult,
   CommandResult,
