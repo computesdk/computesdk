@@ -8,12 +8,13 @@
  * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config)
  */
 
-import { Sandbox, WebSocketConstructor } from './client';
+import { Sandbox, WebSocketConstructor, type ServerStartOptions } from './client';
 import { autoConfigureCompute } from './auto-detect';
 import { createConfigFromExplicit } from './explicit-config';
 import { waitForComputeReady } from './compute-daemon/lifecycle';
 import { GATEWAY_URL } from './constants';
 import type { ProviderName } from './provider-config';
+import type { SetupOverlayConfig } from './setup';
 
 /**
  * Gateway configuration
@@ -74,6 +75,9 @@ export interface CreateSandboxOptions {
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
+  directory?: string;
+  overlays?: SetupOverlayConfig[];
+  servers?: ServerStartOptions[];
   /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
   image?: string;
   /** Provider-specific snapshot to create from (e.g., Vercel snapshots) */
@@ -277,6 +281,27 @@ class ComputeManager {
   sandbox = {
     /**
      * Create a new sandbox
+     *
+     * @example
+     * ```typescript
+     * const sandbox = await compute.sandbox.create({
+     *   directory: '/custom/path',
+     *   overlays: [
+     *     {
+     *       source: '/templates/nextjs',
+     *       target: 'app',
+     *       strategy: 'smart',
+     *     },
+     *   ],
+     *   servers: [
+     *     {
+     *       slug: 'web',
+     *       start: 'npm run dev',
+     *       path: '/app',
+     *     },
+     *   ],
+     * });
+     * ```
      */
     create: async (options?: CreateSandboxOptions): Promise<Sandbox> => {
       const config = this.getGatewayConfig();
