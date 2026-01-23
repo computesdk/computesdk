@@ -1,5 +1,12 @@
 # @computesdk/lambda
 
+## 1.1.22
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+
 ## 1.1.21
 
 ### Patch Changes

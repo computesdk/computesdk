@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.18.2
+
+### Patch Changes
+
+- 59147ac: Add `snapshotId` to ComputeSDK sandbox create options for provider-specific snapshot creation.
+
 ## 1.18.1
 
 ### Patch Changes

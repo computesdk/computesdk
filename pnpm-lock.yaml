@@ -1149,6 +1149,12 @@ importers:
       '@computesdk/modal':
         specifier: workspace:*
         version: link:../modal
+      '@computesdk/namespace':
+        specifier: workspace:*
+        version: link:../namespace
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       '@computesdk/railway':
         specifier: workspace:*
         version: link:../railway
