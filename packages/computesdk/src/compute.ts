@@ -281,6 +281,27 @@ class ComputeManager {
   sandbox = {
     /**
      * Create a new sandbox
+     *
+     * @example
+     * ```typescript
+     * const sandbox = await compute.sandbox.create({
+     *   directory: '/custom/path',
+     *   overlays: [
+     *     {
+     *       source: '/templates/nextjs',
+     *       target: 'app',
+     *       strategy: 'smart',
+     *     },
+     *   ],
+     *   servers: [
+     *     {
+     *       slug: 'web',
+     *       start: 'npm run dev',
+     *       path: '/app',
+     *     },
+     *   ],
+     * });
+     * ```
      */
     create: async (options?: CreateSandboxOptions): Promise<Sandbox> => {
       const config = this.getGatewayConfig();
