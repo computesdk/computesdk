@@ -70,6 +70,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value })),
 						metadata: {
+							name: options?.sandboxId || `blaxel-${Date.now()}`,
 							labels: {
 								...options?.metadata?.labels,
 							}
