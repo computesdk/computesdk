@@ -268,6 +268,7 @@ ${c.bold('Running Commands:')}
     ${c.cyan('getUrl({ port: 3000 })')}   ${c.dim('// Get public URL')}
     ${c.cyan('runCode("console.log(\'hi\')", "node")')}
     ${c.cyan('sandboxInfo()')}            ${c.dim('// Get sandbox details')}
+    ${c.cyan('ready()')}                  ${c.dim('// Get readiness status')}
     ${c.cyan('getInstance()')}            ${c.dim('// Get native instance')}
   
   ${c.dim('Terminal (PTY & Exec):')}

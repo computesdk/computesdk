@@ -234,6 +234,22 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     }
     return sandbox.getInfo();
   };
+
+  // Expose ready status for autostarted servers/overlays
+  replServer.context.ready = async () => {
+    const sandbox = state.currentSandbox;
+    if (!sandbox) {
+      throw new Error('No active sandbox. Run a command to auto-create one.');
+    }
+
+    const sandboxReady = sandbox as unknown as { ready?: () => Promise<unknown> };
+
+    if (typeof sandboxReady.ready !== 'function') {
+      throw new Error('Ready status is not supported for this provider.');
+    }
+
+    return sandboxReady.ready();
+  };
   
   // Expose runCode directly
   replServer.context.runCode = async (code: string, runtime?: 'node' | 'python') => {
