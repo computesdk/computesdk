@@ -24,6 +24,7 @@ interface GatewayConfig {
   gatewayUrl: string;
   provider: string;
   providerHeaders: Record<string, string>;
+  requestTimeoutMs?: number;
   WebSocket?: WebSocketConstructor;
 }
 
@@ -42,6 +43,8 @@ export interface ExplicitComputeConfig {
   computesdkApiKey?: string;
   /** Optional gateway URL override */
   gatewayUrl?: string;
+  /** HTTP request timeout for gateway calls in milliseconds */
+  requestTimeoutMs?: number;
   /**
    * WebSocket implementation for environments without native WebSocket support.
    * In Node.js < 22, pass the 'ws' package: `import WebSocket from 'ws'`
@@ -115,7 +118,7 @@ async function gatewayFetch<T>(
   config: GatewayConfig,
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T }> {
-  const timeout = 30000;
+  const timeout = config.requestTimeoutMs ?? 30000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 

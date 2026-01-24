@@ -140,6 +140,7 @@ export function createConfigFromExplicit(config: ExplicitComputeConfig): Gateway
     gatewayUrl: config.gatewayUrl || GATEWAY_URL,
     provider: config.provider,
     providerHeaders,
+    requestTimeoutMs: config.requestTimeoutMs,
     WebSocket: config.WebSocket,
   };
 }

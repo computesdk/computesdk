@@ -194,6 +194,7 @@ export interface GatewayConfig {
   gatewayUrl: string;
   provider: string;
   providerHeaders: Record<string, string>;
+  requestTimeoutMs?: number;
   WebSocket?: WebSocketConstructor;
 }
 
