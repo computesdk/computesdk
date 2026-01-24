@@ -170,6 +170,7 @@ export async function getComputeInstance(state: WorkbenchState): Promise<any> {
     compute = gatewayCompute({
       provider: providerName as any,
       computesdkApiKey: gatewayConfig.apiKey,
+      requestTimeoutMs: 60000,
       // Spread provider-specific config
       [providerName]: providerConfig,
     });
