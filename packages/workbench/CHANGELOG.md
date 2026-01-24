@@ -1,5 +1,23 @@
 # @computesdk/workbench
 
+## 5.0.4
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+  - @computesdk/blaxel@1.3.25
+  - @computesdk/cloudflare@1.3.25
+  - @computesdk/codesandbox@1.5.25
+  - @computesdk/daytona@1.7.5
+  - @computesdk/e2b@1.7.25
+  - @computesdk/modal@1.8.20
+  - @computesdk/namespace@1.1.25
+  - @computesdk/provider@1.0.19
+  - @computesdk/railway@1.1.25
+  - @computesdk/runloop@1.3.25
+  - @computesdk/vercel@1.7.4
+
 ## 5.0.3
 
 ### Patch Changes
