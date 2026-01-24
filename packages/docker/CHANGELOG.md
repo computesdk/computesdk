@@ -1,5 +1,12 @@
 # @computesdk/docker
 
+## 1.2.24
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+
 ## 1.2.23
 
 ### Patch Changes

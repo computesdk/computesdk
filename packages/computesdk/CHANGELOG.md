@@ -1,5 +1,11 @@
 # computesdk
 
+## 1.21.0
+
+### Minor Changes
+
+- 7ba17e1: Add configurable gateway request timeouts for compute API calls.
+
 ## 1.20.0
 
 ### Minor Changes
