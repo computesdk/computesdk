@@ -203,7 +203,7 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
     it('Sandbox.create({ directory }) sets working directory', async () => {
       let directorySandbox: Sandbox | null = null;
       let directorySandboxId: string | null = null;
-      const directoryPath = '/workspace/sdk-directory';
+      const directoryPath = '/tmp/computesdk-sdk-directory';
 
       try {
         directorySandbox = await compute.sandbox.create({
