@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/workbench",
-  "version": "5.0.4",
+  "version": "5.0.5",
   "description": "Interactive REPL for testing ComputeSDK sandbox operations",
   "author": "Garrison",
   "license": "MIT",
