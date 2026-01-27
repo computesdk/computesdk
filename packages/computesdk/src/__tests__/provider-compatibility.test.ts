@@ -138,6 +138,68 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       sandboxId = sandbox.sandboxId;
     }, 60000);
 
+    it('Sandbox.create({ servers }) provisions ready server', async () => {
+      let serverSandbox: Sandbox | null = null;
+      let serverSandboxId: string | null = null;
+      const testServerSlug = 'setup-server';
+
+      const waitForReady = async (target: Sandbox, timeoutMs = 60000): Promise<Awaited<ReturnType<Sandbox['ready']>>> => {
+        const start = Date.now();
+
+        while (Date.now() - start < timeoutMs) {
+          const status = await target.ready();
+          if (status.ready && status.servers.length > 0) {
+            return status;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        throw new Error('Timed out waiting for sandbox ready status');
+      };
+
+      try {
+        serverSandbox = await compute.sandbox.create({
+          ...getCreateOptions(),
+          servers: [
+            {
+              slug: testServerSlug,
+              start: 'python3 -m http.server $PORT',
+              port: 8000,
+              autostart: true,
+            },
+          ],
+        } as any);
+
+        serverSandboxId = serverSandbox.sandboxId;
+
+        const readyInfo = await waitForReady(serverSandbox);
+        const serverInfo = readyInfo.servers.find((entry) => entry.slug === testServerSlug);
+
+        expect(serverInfo).toBeDefined();
+        expect(serverInfo?.port).toBeDefined();
+        expect(serverInfo?.url).toBeTruthy();
+        expect(['ready', 'running']).toContain(serverInfo?.status);
+
+        if (!serverInfo?.url) {
+          throw new Error('Server URL was not returned in ready status');
+        }
+
+        const response = await fetch(serverInfo.url);
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('Directory listing');
+      } finally {
+        if (serverSandboxId) {
+          try {
+            await compute.sandbox.destroy(serverSandboxId);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      }
+    }, 90000);
+
     it('Sandbox.connect(sandboxId, { domain })', async () => {
       // E2B: E2BInstance.connect(e2bInstanceId, { domain: 'e2b.dev' })
       // ComputeSDK: compute.sandbox.getById(sandboxId)
