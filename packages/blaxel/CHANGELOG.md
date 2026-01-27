@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.3.28
+
+### Patch Changes
+
+- a59fecf: update auth logic for blaxel via gateway error
+
 ## 1.3.27
 
 ### Patch Changes
