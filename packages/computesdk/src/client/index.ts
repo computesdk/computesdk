@@ -507,6 +507,33 @@ export type ServerStatus = 'installing' | 'starting' | 'running' | 'ready' | 'fa
 export type RestartPolicy = 'never' | 'on-failure' | 'always';
 
 /**
+ * Health check configuration for servers
+ * Polls the server to verify it's responding to requests
+ */
+export interface HealthCheckConfig {
+  /** Path to poll for health checks (default: "/") */
+  path?: string;
+  /** Interval between health checks in milliseconds (default: 2000) */
+  interval_ms?: number;
+  /** Timeout for each health check request in milliseconds (default: 1500) */
+  timeout_ms?: number;
+  /** Delay before starting health checks after port detection in milliseconds (default: 5000) */
+  delay_ms?: number;
+}
+
+/**
+ * Health check status information returned from server
+ */
+export interface HealthCheckStatus {
+  /** When the last health check was performed (ISO 8601) */
+  last_check?: string;
+  /** HTTP status code from the last health check */
+  last_status?: number;
+  /** Number of consecutive failed health checks */
+  consecutive_failures: number;
+}
+
+/**
  * Server information
  */
 export interface ServerInfo {
@@ -550,6 +577,12 @@ export interface ServerInfo {
   restart_count?: number;
   /** Last exit code (null if process is still running) */
   exit_code?: number | null;
+  /** Health check configuration (if configured) */
+  health_check?: HealthCheckConfig;
+  /** Whether the server is healthy (only present if health_check is configured) */
+  healthy?: boolean;
+  /** Health check status details (only present if health_check is configured) */
+  health_status?: HealthCheckStatus;
   /** When the server was created */
   created_at: string;
   /** When the server was last updated */
@@ -564,6 +597,10 @@ export interface SandboxServerInfo {
   port?: number;
   url?: string;
   status: ServerStatus;
+  /** Whether the server is healthy (only present if health_check is configured) */
+  healthy?: boolean;
+  /** Health check status details (only present if health_check is configured) */
+  health_check?: HealthCheckStatus;
 }
 
 /**
@@ -580,7 +617,10 @@ export interface SandboxOverlayInfo {
  * Ready response (public endpoint)
  */
 export interface ReadyResponse {
+  /** Whether all servers have ports allocated (URLs available) */
   ready: boolean;
+  /** Whether all servers with health checks are passing */
+  healthy?: boolean;
   servers: SandboxServerInfo[];
   overlays: SandboxOverlayInfo[];
 }

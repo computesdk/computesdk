@@ -137,6 +137,20 @@ export interface SandboxOverlayConfig {
 
 export type SandboxRestartPolicy = 'never' | 'on-failure' | 'always';
 
+/**
+ * Health check configuration for servers
+ */
+export interface SandboxHealthCheckConfig {
+  /** Path to poll for health checks (default: "/") */
+  path?: string;
+  /** Interval between health checks in milliseconds (default: 2000) */
+  interval_ms?: number;
+  /** Timeout for each health check request in milliseconds (default: 1500) */
+  timeout_ms?: number;
+  /** Delay before starting health checks after port detection in milliseconds (default: 5000) */
+  delay_ms?: number;
+}
+
 export interface SandboxServerConfig {
   slug: string;
   start: string;
@@ -154,6 +168,7 @@ export interface SandboxServerConfig {
   depends_on?: string[];
   overlay?: SandboxOverlayConfig;
   overlays?: SandboxOverlayConfig[];
+  health_check?: SandboxHealthCheckConfig;
 }
 
 /**

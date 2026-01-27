@@ -11,6 +11,7 @@ import type {
   ServerStatus,
   ServerLogStream,
   RestartPolicy,
+  HealthCheckConfig,
 } from '../index';
 import type { CreateOverlayOptions } from './overlay';
 
@@ -55,6 +56,11 @@ export interface ServerStartOptions {
   restart_delay_ms?: number;
   /** Graceful shutdown timeout in milliseconds - SIGTERM → wait → SIGKILL (default: 10000) */
   stop_timeout_ms?: number;
+  /**
+   * Health check configuration for monitoring server availability
+   * When configured, the server will be polled to verify it's responding to requests
+   */
+  health_check?: HealthCheckConfig;
 }
 
 /**
