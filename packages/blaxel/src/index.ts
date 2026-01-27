@@ -85,23 +85,27 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
 					};
 				} catch (error) {
-					if (error instanceof Error) {
-						if (error.message.includes('unauthorized') || error.message.includes('API key')) {
-							throw new Error(
-								`Blaxel authentication failed. Please check your BLAXEL_API_KEY environment variable.`
-							);
-						}
-						if (error.message.includes('quota') || error.message.includes('limit')) {
-							throw new Error(
-								`Blaxel quota exceeded. Please check your usage limits.`
-							);
-						}
-					}
 					const errorDetail = error instanceof Error
 						? error.message
 						: typeof error === 'object' && error !== null
 							? JSON.stringify(error)
 							: String(error);
+
+					if (
+						errorDetail.includes('unauthorized') ||
+						errorDetail.includes('Unauthorized') ||
+						errorDetail.includes('Forbidden') ||
+						errorDetail.includes('API key')
+					) {
+						throw new Error(
+							`Blaxel authentication failed: ${errorDetail}`
+						);
+					}
+					if (errorDetail.includes('quota') || errorDetail.includes('limit')) {
+						throw new Error(
+							`Blaxel quota exceeded: ${errorDetail}`
+						);
+					}
 					throw new Error(
 						`Failed to create Blaxel sandbox: ${errorDetail}`
 					);
@@ -441,22 +445,25 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 });
 
 async function handleBlaxelAuth(config: BlaxelConfig) {
-	// Check if auth is already set in the SDK
+	// Always apply config values to environment before authenticating.
+	// In the gateway path, credentials come from HTTP headers via config
+	// and must be set as env vars before @blaxel/core's settings.authenticate() is called.
+	if (config.workspace) {
+		process.env.BL_WORKSPACE = config.workspace;
+	} else if (!process.env.BL_WORKSPACE && process.env.BLAXEL_WORKSPACE) {
+		process.env.BL_WORKSPACE = process.env.BLAXEL_WORKSPACE;
+	}
+
+	if (config.apiKey) {
+		process.env.BL_API_KEY = config.apiKey;
+	} else if (!process.env.BL_API_KEY && process.env.BLAXEL_API_KEY) {
+		process.env.BL_API_KEY = process.env.BLAXEL_API_KEY;
+	}
+
 	try {
 		await settings.authenticate();
 	} catch (error) {
-		// If not, set the auth from the config
-		if (config.workspace || process.env.BLAXEL_WORKSPACE && typeof process !== 'undefined') {
-			process.env.BL_WORKSPACE = config.workspace || process.env.BLAXEL_WORKSPACE;
-		}
-		if (config.apiKey || process.env.BLAXEL_API_KEY && typeof process !== 'undefined') {
-			process.env.BL_API_KEY = config.apiKey || process.env.BLAXEL_API_KEY;
-		}
-		try {
-			await settings.authenticate();
-		} catch (error) {
-			throw new Error('Blaxel authentication failed. Please check the following documents for more information: https://docs.blaxel.ai/Security/Access-tokens#using-api-keys');
-		}
+		throw new Error('Blaxel authentication failed. Please check the following documents for more information: https://docs.blaxel.ai/Security/Access-tokens#using-api-keys');
 	}
 }
 
