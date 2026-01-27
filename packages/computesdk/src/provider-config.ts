@@ -83,8 +83,8 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     apiKey: 'X-CSB-API-Key',
   },
   blaxel: {
-    apiKey: 'X-BL-API-Key',
-    workspace: 'X-BL-Workspace',
+    apiKey: 'X-Blaxel-API-Key',
+    workspace: 'X-Blaxel-Workspace',
   },
   namespace: {
     token: 'X-Namespace-Token',

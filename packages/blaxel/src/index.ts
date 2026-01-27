@@ -97,8 +97,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 							);
 						}
 					}
+					const errorDetail = error instanceof Error
+						? error.message
+						: typeof error === 'object' && error !== null
+							? JSON.stringify(error)
+							: String(error);
 					throw new Error(
-						`Failed to create Blaxel sandbox: ${error instanceof Error ? error.message : String(error)}`
+						`Failed to create Blaxel sandbox: ${errorDetail}`
 					);
 				}
 			},
