@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.3.27
+
+### Patch Changes
+
+- 46e78a5: update with debugging for blaxel
+
 ## 1.3.26
 
 ### Patch Changes
