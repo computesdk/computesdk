@@ -1,5 +1,5 @@
 ---
-"computesdk": minor
+"computesdk": patch
 ---
 
 Add server health check support
