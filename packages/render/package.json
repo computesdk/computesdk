@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/render",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Render provider for ComputeSDK - managed cloud containers with automatic scaling",
   "author": "ComputeSDK Team",
   "license": "MIT",
