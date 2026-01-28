@@ -1,5 +1,21 @@
 # @computesdk/example-basic
 
+## 0.4.43
+
+### Patch Changes
+
+- Updated dependencies [123902e]
+- Updated dependencies [496f5ef]
+  - @computesdk/blaxel@1.4.0
+  - computesdk@3.0.0
+  - @computesdk/codesandbox@1.5.27
+  - @computesdk/daytona@1.7.7
+  - @computesdk/docker@1.2.26
+  - @computesdk/e2b@1.7.27
+  - @computesdk/modal@1.8.22
+  - @computesdk/runloop@1.3.27
+  - @computesdk/vercel@1.7.6
+
 ## 0.4.42
 
 ### Patch Changes
