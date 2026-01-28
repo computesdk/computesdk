@@ -1,5 +1,5 @@
 ---
-"computesdk": major
+"computesdk": patch
 ---
 
 Introducing ComputeSDK 2.0 with the Sandbox Gateway.
