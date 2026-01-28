@@ -4,7 +4,7 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance, settings } from '@blaxel/core';
+import { SandboxInstance } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -36,8 +36,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
-				await handleBlaxelAuth(config);
-
+				
 				// Determine the image to use
 				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
 
@@ -85,26 +84,34 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
 					};
 				} catch (error) {
-					if (error instanceof Error) {
-						if (error.message.includes('unauthorized') || error.message.includes('API key')) {
-							throw new Error(
-								`Blaxel authentication failed. Please check your BLAXEL_API_KEY environment variable.`
-							);
-						}
-						if (error.message.includes('quota') || error.message.includes('limit')) {
-							throw new Error(
-								`Blaxel quota exceeded. Please check your usage limits.`
-							);
-						}
+					const errorDetail = error instanceof Error
+						? error.message
+						: typeof error === 'object' && error !== null
+							? JSON.stringify(error)
+							: String(error);
+
+					if (
+						errorDetail.includes('unauthorized') ||
+						errorDetail.includes('Unauthorized') ||
+						errorDetail.includes('Forbidden') ||
+						errorDetail.includes('API key')
+					) {
+						throw new Error(
+							`Blaxel authentication failed: ${errorDetail}`
+						);
+					}
+					if (errorDetail.includes('quota') || errorDetail.includes('limit')) {
+						throw new Error(
+							`Blaxel quota exceeded: ${errorDetail}`
+						);
 					}
 					throw new Error(
-						`Failed to create Blaxel sandbox: ${error instanceof Error ? error.message : String(error)}`
+						`Failed to create Blaxel sandbox: ${errorDetail}`
 					);
 				}
 			},
 
 			getById: async (config: BlaxelConfig, sandboxId: string) => {
-				await handleBlaxelAuth(config);
 
 				try {
 					const sandbox = await SandboxInstance.get(sandboxId);
@@ -124,7 +131,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			list: async (config: BlaxelConfig) => {
-				await handleBlaxelAuth(config);
 
 				const sandboxList = await SandboxInstance.list();
 				return sandboxList.map(sandbox => ({
@@ -134,7 +140,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			destroy: async (config: BlaxelConfig, sandboxId: string) => {
-				await handleBlaxelAuth(config);
 
 				try {
 					await SandboxInstance.delete(sandboxId);
@@ -434,26 +439,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		}
 	}
 });
-
-async function handleBlaxelAuth(config: BlaxelConfig) {
-	// Check if auth is already set in the SDK
-	try {
-		await settings.authenticate();
-	} catch (error) {
-		// If not, set the auth from the config
-		if (config.workspace || process.env.BLAXEL_WORKSPACE && typeof process !== 'undefined') {
-			process.env.BL_WORKSPACE = config.workspace || process.env.BLAXEL_WORKSPACE;
-		}
-		if (config.apiKey || process.env.BLAXEL_API_KEY && typeof process !== 'undefined') {
-			process.env.BL_API_KEY = config.apiKey || process.env.BLAXEL_API_KEY;
-		}
-		try {
-			await settings.authenticate();
-		} catch (error) {
-			throw new Error('Blaxel authentication failed. Please check the following documents for more information: https://docs.blaxel.ai/Security/Access-tokens#using-api-keys');
-		}
-	}
-}
 
 /**
  * Parse TTL value from Blaxel's format to milliseconds
