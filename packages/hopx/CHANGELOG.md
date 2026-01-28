@@ -1,13 +1,5 @@
 # @computesdk/hopx
 
-## 0.2.3
-
-### Patch Changes
-
-- Updated dependencies [496f5ef]
-  - computesdk@3.0.0
-  - @computesdk/provider@1.0.21
-
 ## 0.2.2
 
 ### Patch Changes

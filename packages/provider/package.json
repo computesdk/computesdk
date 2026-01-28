@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/provider",
-  "version": "1.0.21",
+  "version": "1.0.20",
   "description": "Provider framework for ComputeSDK - define custom sandbox providers",
   "author": "Garrison",
   "license": "MIT",

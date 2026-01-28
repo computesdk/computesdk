@@ -1,12 +1,5 @@
 # @computesdk/aws-ecs
 
-## 1.1.27
-
-### Patch Changes
-
-- Updated dependencies [496f5ef]
-  - computesdk@3.0.0
-
 ## 1.1.26
 
 ### Patch Changes

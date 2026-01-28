@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/codesandbox",
-  "version": "1.5.27",
+  "version": "1.5.26",
   "description": "CodeSandbox provider for ComputeSDK - fast browser-compatible sandboxes with npm and Python support",
   "author": "Garrison",
   "license": "MIT",
