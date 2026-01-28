@@ -9,7 +9,7 @@ ComputeSDK gives you one consistent API to control sandboxes across multiple pro
 ComputeSDK operates on three core concepts:
 
 **Sandboxes** - Isolated compute environments where code executes safely  
-**Providers** - Cloud platforms hosting the sandboxes (E2B, Modal, Railway, etc.)  
+**Providers** - Cloud platforms hosting the sandboxes (E2B, Modal, Railway, Vercel, Daytona, Render, Blaxel, Namespace)  
 **Gateway** - ComputeSDK's orchestration layer that unifies provider APIs
 
 When you call `compute.sandbox.create()`, ComputeSDK:
@@ -22,7 +22,7 @@ This means you write code once and can switch providers by changing environment 
 
 ## Why ComputeSDK?
 
-🔄 **Provider-agnostic** - Switch between Railway, E2B, Vercel, Daytona, Modal and more without code changes  
+🔄 **Provider-agnostic** - Switch between E2B, Modal, Railway, Vercel, Daytona, and more without code changes  
 🛡️ **Security-first** - Isolated sandboxes protect your infrastructure  
 ⚡ **Developer experience** - Simple, TypeScript-native API  
 🌍 **Production-ready** - Used by teams building the next generation of developer tools
@@ -37,11 +37,14 @@ This means you write code once and can switch providers by changing environment 
 
 ## Features
 
-🚀 **Multi-provider support** - Railway, E2B, Vercel, Daytona, Modal and more  
+🚀 **Multi-provider support** - E2B, Modal, Railway, Vercel, Daytona, Render, Blaxel, Namespace  
 📁 **Filesystem operations** - Read, write, create directories  
 ⚡ **Command execution** - Run shell commands directly  
 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling  
 📦 **Simplicity** - Auto detection of providers and simple setup  
+🔗 **Overlays** - Bootstrap sandboxes from templates instantly  
+🖥️ **Managed servers** - Run dev servers with health checks and auto-restart  
+🔑 **Client-side access** - Delegate sandbox access to browser clients securely
 
 ## Quick Example
 
@@ -50,7 +53,7 @@ npm install computesdk
 
 export COMPUTESDK_API_KEY=your_computesdk_api_key
 
-export PROVIDER_API_KEY=your_provider_api_key
+export E2B_API_KEY=your_e2b_api_key
 ```
 
 
@@ -67,7 +70,7 @@ const result = await sandbox.runCode('print("Hello World!")');
 console.log(result.output); // "Hello World!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ## Next Steps

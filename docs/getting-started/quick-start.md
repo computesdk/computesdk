@@ -13,7 +13,8 @@ Welcome to ComputeSDK! This guide will get you up and running with secure, isola
 ```bash
 COMPUTESDK_API_KEY=your_api_key_here
 
-PROVIDER_API_KEY=your_provider_api_key_here
+# Add your provider API key (e.g., E2B, Modal, Railway, etc.)
+E2B_API_KEY=your_e2b_api_key_here
 ```
 
 ## Installation
@@ -38,7 +39,7 @@ const result = await sandbox.runCode('print("Hello World!")');
 console.log(result.output); // "Hello World!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 
@@ -106,7 +107,7 @@ try {
   await sandbox.runCode('print("Hello")');
 } finally {
   if (sandbox) {
-    await compute.sandbox.destroy(sandbox.sandboxId);
+    await sandbox.destroy();
   }
 }
 ```
@@ -155,3 +156,28 @@ console.log(result.stderr);      // Warnings or errors
 console.log(result.exitCode);    // 0
 console.log(result.durationMs);  // 2341
 ```
+
+## Named Sandboxes
+
+Named sandboxes let you create persistent, reusable sandbox instances. If a sandbox with the same name already exists, `findOrCreate()` returns the existing one instead of creating a duplicate.
+
+```typescript
+// Find or create a sandbox by name
+const sandbox = await compute.sandbox.findOrCreate({
+  name: 'my-project',
+  namespace: 'user-123',  // Optional: isolate by user, team, etc.
+});
+
+// The same call later returns the same sandbox
+const sameSandbox = await compute.sandbox.findOrCreate({
+  name: 'my-project',
+  namespace: 'user-123',
+});
+```
+
+## What's Next?
+
+- **[Overlays](/docs/features/overlays)** - Bootstrap sandboxes from templates instantly
+- **[Servers](/docs/features/servers)** - Run managed dev servers with health checks
+- **[Client-Side Access](/docs/features/client-access)** - Delegate sandbox access to browser clients
+- **[Named Sandboxes](/docs/features/named-sandboxes)** - Persistent, reusable sandbox patterns
