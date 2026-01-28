@@ -4,7 +4,7 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance } from '@blaxel/core';
+import { SandboxInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -36,7 +36,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
-				
+				const apiKey = config.apiKey|| (typeof process !== 'undefined' && process.env?.BL_API_KEY) || '';
+				const workspace = config.workspace || (typeof process !== 'undefined' && process.env?.BL_WORKSPACE) || '';
 				// Determine the image to use
 				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
 
@@ -60,6 +61,9 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 				const ttl = options?.timeout ? `${Math.ceil(options.timeout / 1000)}s` : undefined;
 
 				try {
+					// Initialize Blaxel SDK with credentials
+					initialize({ apikey: apiKey, workspace: workspace });
+
 					let sandbox: SandboxInstance;
 
 					// Create new Blaxel sandbox
@@ -81,7 +85,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 
 					return {
 						sandbox,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
+						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
 					};
 				} catch (error) {
 					const errorDetail = error instanceof Error
@@ -112,8 +116,11 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			getById: async (config: BlaxelConfig, sandboxId: string) => {
+				const apiKey = config.apiKey|| (typeof process !== 'undefined' && process.env?.BL_API_KEY) || '';
+				const workspace = config.workspace || (typeof process !== 'undefined' && process.env?.BL_WORKSPACE) || '';
 
 				try {
+					initialize({ apikey: apiKey, workspace: workspace });
 					const sandbox = await SandboxInstance.get(sandboxId);
 
 					if (!sandbox) {
@@ -122,7 +129,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 
 					return {
 						sandbox,
-						sandboxId
+						sandboxId,
 					};
 				} catch (error) {
 					// Sandbox doesn't exist or can't be accessed
@@ -132,6 +139,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 
 			list: async (config: BlaxelConfig) => {
 
+				initialize({ apikey: config.apiKey, workspace: config.workspace });
 				const sandboxList = await SandboxInstance.list();
 				return sandboxList.map(sandbox => ({
 					sandbox,
@@ -142,6 +150,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			destroy: async (config: BlaxelConfig, sandboxId: string) => {
 
 				try {
+				initialize({ apikey: config.apiKey, workspace: config.workspace });
 					await SandboxInstance.delete(sandboxId);
 				} catch (error) {
 					// Sandbox might already be destroyed or doesn't exist
