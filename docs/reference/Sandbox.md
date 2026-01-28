@@ -703,7 +703,164 @@ if (await sandbox.filesystem.exists(filePath)) {
 
 ---
 
-## `sandbox.terminals`
+## `sandbox.filesystem.overlay`
+
+Create filesystem overlays from template directories for instant sandbox setup. Overlays copy files from a source template into the sandbox, with optional smart strategies for performance.
+
+### `overlay.create(options)`
+
+Create a new overlay from a template directory.
+
+**Parameters:**
+
+- `options` (object, required): Overlay configuration
+  - `source` (string, required): Absolute path to source directory (template)
+  - `target` (string, required): Relative path in sandbox where overlay will be mounted
+  - `ignore` (string[], optional): Glob patterns to ignore (e.g., `["node_modules", "*.log"]`)
+  - `strategy` ('copy' | 'smart', optional): Creation strategy (default: 'smart')
+  - `waitForCompletion` (boolean | WaitOptions, optional): Wait for background copy to complete
+
+**WaitOptions interface:**
+- `maxRetries` (number, optional): Maximum polling attempts (default: 60)
+- `initialDelayMs` (number, optional): Initial delay between retries (default: 500)
+- `maxDelayMs` (number, optional): Maximum delay with backoff (default: 5000)
+- `backoffFactor` (number, optional): Exponential backoff multiplier (default: 1.5)
+
+**Returns:** `Promise<OverlayInfo>` - Overlay information with copy status
+
+**OverlayInfo interface:**
+- `id` (string): Unique overlay identifier
+- `source` (string): Absolute path to source directory
+- `target` (string): Relative path in sandbox
+- `strategy` ('copy' | 'smart'): Strategy used for the overlay
+- `createdAt` (string): ISO timestamp when overlay was created
+- `copyStatus` ('pending' | 'in_progress' | 'complete' | 'failed'): Background copy status
+- `copyError` (string, optional): Error message if copy failed
+- `stats.copiedFiles` (number): Number of files copied
+- `stats.copiedDirs` (number): Number of directories copied
+- `stats.skipped` (string[]): Paths that were skipped
+
+**Examples:**
+
+```typescript
+// Basic overlay with smart strategy
+const overlay = await sandbox.filesystem.overlay.create({
+  source: '/templates/nextjs',
+  target: './project',
+  strategy: 'smart',
+});
+console.log(overlay.copyStatus); // 'pending' or 'in_progress'
+
+// Wait for completion
+const overlay = await sandbox.filesystem.overlay.create({
+  source: '/templates/react',
+  target: './app',
+  waitForCompletion: true,
+});
+console.log(overlay.copyStatus); // 'complete'
+
+// With ignore patterns
+const overlay = await sandbox.filesystem.overlay.create({
+  source: '/templates/node',
+  target: './project',
+  ignore: ['node_modules', '.git', '*.log'],
+});
+```
+
+**Notes:**
+- `smart` strategy uses symlinks for immutable directories (like `node_modules`) for instant setup
+- Background copying happens asynchronously - use `waitForCompletion` or poll `copyStatus`
+- Use `ignore` patterns to skip unnecessary files and speed up creation
+
+<br/>
+<br/>
+
+---
+
+### `overlay.list()`
+
+List all overlays for the current sandbox.
+
+**Returns:** `Promise<OverlayInfo[]>` - Array of overlay information objects
+
+```typescript
+const overlays = await sandbox.filesystem.overlay.list();
+overlays.forEach(o => {
+  console.log(`${o.target}: ${o.copyStatus}`);
+});
+```
+
+<br/>
+<br/>
+
+---
+
+### `overlay.retrieve(id)`
+
+Retrieve a specific overlay by ID.
+
+**Parameters:**
+- `id` (string, required): Overlay ID
+
+**Returns:** `Promise<OverlayInfo>` - Overlay information
+
+```typescript
+const overlay = await sandbox.filesystem.overlay.retrieve('overlay-123');
+console.log(overlay.copyStatus);
+```
+
+<br/>
+<br/>
+
+---
+
+### `overlay.waitForCompletion(id, options?)`
+
+Wait for an overlay's background copy to complete.
+
+**Parameters:**
+- `id` (string, required): Overlay ID
+- `options` (WaitOptions, optional): Polling options
+
+**Returns:** `Promise<OverlayInfo>` - Overlay info with final copy status
+
+```typescript
+const overlay = await sandbox.filesystem.overlay.create({
+  source: '/templates/large-project',
+  target: './project',
+});
+
+// Do other setup...
+
+// Then wait for overlay
+const completed = await sandbox.filesystem.overlay.waitForCompletion(overlay.id);
+console.log(completed.copyStatus); // 'complete'
+```
+
+<br/>
+<br/>
+
+---
+
+### `overlay.destroy(id)`
+
+Delete an overlay.
+
+**Parameters:**
+- `id` (string, required): Overlay ID
+
+**Returns:** `Promise<void>`
+
+```typescript
+await sandbox.filesystem.overlay.destroy('overlay-123');
+```
+
+<br/>
+<br/>
+
+---
+
+## `sandbox.terminal`
 
 ### `terminals.create(options?)`
 
@@ -759,7 +916,7 @@ Create a terminal session in the sandbox with support for two modes: **PTY mode*
 
 ```typescript
 // PTY mode - Interactive shell with real-time output
-const pty = await sandbox.terminals.create({ 
+const pty = await sandbox.terminal.create({ 
   pty: true, 
   shell: '/bin/bash' 
 });
@@ -791,7 +948,7 @@ await pty.destroy();
 
 ```typescript
 // Exec mode - Command execution with tracking
-const exec = await sandbox.terminals.create({ pty: false });
+const exec = await sandbox.terminal.create({ pty: false });
 
 // Run command in foreground (waits for completion)
 const cmd = await exec.command.run('npm test');
@@ -812,7 +969,7 @@ await exec.destroy();
 
 ```typescript
 // Exec mode - Background execution with wait
-const exec = await sandbox.terminals.create({ pty: false });
+const exec = await sandbox.terminal.create({ pty: false });
 
 // Start long-running command in background
 const cmd = await exec.command.run('npm install', { background: true });
@@ -866,7 +1023,7 @@ List all active terminal sessions in the sandbox.
 
 ```typescript
 // List all terminals
-const terminals = await sandbox.terminals.list();
+const terminals = await sandbox.terminal.list();
 console.log(`Active terminals: ${terminals.length}`);
 
 terminals.forEach(term => {
@@ -903,7 +1060,7 @@ Retrieve information about a specific terminal by ID.
 
 ```typescript
 // Retrieve specific terminal
-const terminal = await sandbox.terminals.retrieve('term-abc123');
+const terminal = await sandbox.terminal.retrieve('term-abc123');
 console.log(`Terminal ${terminal.id}: ${terminal.status}`);
 
 // Check terminal type
@@ -937,13 +1094,13 @@ Destroy a terminal session and clean up all associated resources.
 
 ```typescript
 // Destroy a terminal by ID
-await sandbox.terminals.destroy('term-abc123');
+await sandbox.terminal.destroy('term-abc123');
 console.log('Terminal destroyed');
 
 // Destroy all terminals
-const terminals = await sandbox.terminals.list();
+const terminals = await sandbox.terminal.list();
 await Promise.all(
-  terminals.map(term => sandbox.terminals.destroy(term.id))
+  terminals.map(term => sandbox.terminal.destroy(term.id))
 );
 console.log('All terminals destroyed');
 ```
@@ -961,7 +1118,7 @@ console.log('All terminals destroyed');
 
 ## `sandbox.server`
 
-Manage long-running server processes:
+Manage long-running server processes with full lifecycle management, including install commands, restart policies, and health checks.
 
 ### `server.start(options)`
 
@@ -971,23 +1128,44 @@ Start a managed server process in the sandbox with automatic process management 
 
 - `options` (object, required): Server configuration
   - `slug` (string, required): Unique URL-safe identifier for the server
-  - `command` (string, required): Command to start the server process
+  - `start` (string, required): Command to start the server process
+  - `install` (string, optional): Install command to run before starting (e.g., "npm install")
   - `path` (string, optional): Working directory for command execution
   - `env_file` (string, optional): Path to environment file to load
+  - `environment` (Record<string, string>, optional): Inline environment variables
+  - `port` (number, optional): Requested port number (preallocated before start)
+  - `strict_port` (boolean, optional): If true, fail instead of auto-incrementing when port is taken
+  - `autostart` (boolean, optional): Whether to auto-start on daemon boot (default: true)
+  - `restart_policy` ('never' | 'on-failure' | 'always', optional): When to automatically restart the server
+  - `max_restarts` (number, optional): Maximum restart attempts (0 = unlimited, default: 0)
+  - `restart_delay_ms` (number, optional): Delay between restart attempts in milliseconds (default: 1000)
+  - `stop_timeout_ms` (number, optional): Graceful shutdown timeout - SIGTERM → wait → SIGKILL (default: 10000)
+  - `health_check` (HealthCheckConfig, optional): Health check configuration for monitoring server availability
+
+**HealthCheckConfig interface:**
+- `path` (string): HTTP path to check (e.g., '/', '/health')
+- `interval_ms` (number, optional): Polling interval in milliseconds
+- `timeout_ms` (number, optional): Request timeout in milliseconds
+- `delay_ms` (number, optional): Initial delay before starting health checks
 
 **Returns:** `Promise<ServerInfo>` - Server information including status, URL, and process details
 
 **ServerInfo interface:**
 - `slug` (string): Server identifier
-- `command` (string): The command being executed
+- `start` (string): The start command being executed
+- `install` (string, optional): The install command if specified
 - `path` (string): Working directory path
 - `original_path` (string, optional): Original path before resolution
 - `env_file` (string, optional): Environment file path if specified
 - `port` (number, optional): Detected port number
 - `url` (string, optional): Public URL when server is ready
-- `status` ('starting' | 'running' | 'ready' | 'failed' | 'stopped'): Current server status
+- `status` ('installing' | 'starting' | 'running' | 'ready' | 'failed' | 'stopped'): Current server status
 - `pid` (number, optional): Process ID when running
 - `terminal_id` (string, optional): Associated terminal session ID
+- `restart_policy` (string, optional): Configured restart policy
+- `restart_count` (number, optional): Number of times the server has been restarted
+- `healthy` (boolean, optional): Whether health check is passing
+- `health_status` (string, optional): Current health check status
 - `created_at` (string): ISO timestamp when server was created
 - `updated_at` (string): ISO timestamp of last status update
 
@@ -997,42 +1175,76 @@ Start a managed server process in the sandbox with automatic process management 
 // Basic server start
 const server = await sandbox.server.start({
   slug: 'api',
-  command: 'npm start'
+  start: 'npm start'
 });
 console.log(server.slug);     // "api"
 console.log(server.status);   // "starting"
-console.log(server.command);  // "npm start"
+
+// Server with install command (runs before start)
+const server = await sandbox.server.start({
+  slug: 'web',
+  install: 'npm install',
+  start: 'npm run dev',
+  path: '/app'
+});
+// Status will be 'installing' during npm install, then 'starting'
+
+// Server with restart policy
+const server = await sandbox.server.start({
+  slug: 'api',
+  start: 'node server.js',
+  restart_policy: 'on-failure',  // Restart only on non-zero exit code
+  max_restarts: 5,
+  restart_delay_ms: 2000
+});
+
+// Server with health check
+const server = await sandbox.server.start({
+  slug: 'web',
+  start: 'npm run dev',
+  health_check: {
+    path: '/health',
+    interval_ms: 5000,
+    timeout_ms: 3000
+  }
+});
+// Server will be 'ready' only after health check passes
 
 // Server with environment file
 const server = await sandbox.server.start({
   slug: 'api',
-  command: 'node server.js',
+  start: 'node server.js',
   env_file: '.env.production'
 });
-console.log(server.env_file); // ".env.production"
 
-// Check server status after starting
+// Full configuration example
 const server = await sandbox.server.start({
-  slug: 'api',
-  command: 'npm start'
+  slug: 'fullstack',
+  install: 'npm install',
+  start: 'npm run dev',
+  path: '/app',
+  port: 3000,
+  environment: {
+    NODE_ENV: 'development',
+    DEBUG: 'true'
+  },
+  restart_policy: 'always',
+  stop_timeout_ms: 15000,
+  health_check: {
+    path: '/',
+    interval_ms: 2000
+  }
 });
-console.log('Initial status:', server.status);  // "starting"
-
-// Error handling
-try {
-  const server = await sandbox.server.start({
-    slug: 'test-server',
-    command: 'invalid-command'
-  });
-} catch (error) {
-  console.error('Failed to start server:', error.message);
-}
 ```
 
 **Notes:**
 - The `slug` must be unique across all servers in the sandbox
-- Server processes continue running until explicitly stopped with `server.stop(slug)`
-- Available on all sandbox instances regardless of provider
+- The `install` command runs blocking before `start` - useful for `npm install`, `pip install`, etc.
+- Server status will be `installing` during install phase, then `starting`, then `running` or `ready`
+- Restart policies: `never` (default) = no auto-restart, `on-failure` = restart on non-zero exit, `always` = restart on any exit
+- Health checks: when configured, server is only marked `ready` after health check passes
+- Graceful shutdown: on stop, sends SIGTERM and waits `stop_timeout_ms` before SIGKILL
+- Server processes continue running until explicitly stopped with `server.stop(slug)` or `server.delete(slug)`
 
 <br/>
 <br/>
