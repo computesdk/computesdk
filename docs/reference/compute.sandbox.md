@@ -139,11 +139,10 @@ import { compute } from 'computesdk';
 // Basic cleanup after use
 const sandbox = await compute.sandbox.create();
 // ... use sandbox ...
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 
-// Destroy sandbox by stored ID
-const sandboxId = 'sb_abc123...';
-await compute.sandbox.destroy(sandboxId);
+// Alternative: destroy by ID
+await compute.sandbox.destroy(sandbox.sandboxId);
 
 // Batch cleanup - destroy multiple sandboxes
 const sandboxIds = ['sb_123...', 'sb_456...', 'sb_789...'];
@@ -151,7 +150,7 @@ await Promise.all(sandboxIds.map(id => compute.sandbox.destroy(id)));
 
 // With error handling
 try {
-  await compute.sandbox.destroy(sandbox.sandboxId);
+  await sandbox.destroy();
   console.log('Sandbox destroyed successfully');
 } catch (error) {
   console.error('Failed to destroy sandbox:', error.message);
@@ -164,12 +163,13 @@ try {
   await sandbox.runCode('console.log("Hello")');
 } finally {
   if (sandbox) {
-    await compute.sandbox.destroy(sandbox.sandboxId);
+    await sandbox.destroy();
   }
 }
 ```
 
 **Notes:**
+- You can call `sandbox.destroy()` directly on the sandbox instance, or `compute.sandbox.destroy(sandboxId)` with the ID
 - Destroying a sandbox terminates all running processes and releases all allocated resources
 - This operation is idempotent - calling destroy on an already-destroyed sandbox succeeds without error
 - Best practice: Use `finally` blocks or cleanup handlers to ensure sandboxes are destroyed even if errors occur
