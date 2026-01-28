@@ -1,5 +1,17 @@
 # @computesdk/gateway
 
+## 0.3.7
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 0.3.6
+
+### Patch Changes
+
+- @computesdk/provider@1.0.21
+
 ## 0.3.5
 
 ### Patch Changes
