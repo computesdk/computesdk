@@ -26,7 +26,7 @@ const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.stdout); // "Hello World!"
+console.log(result.output); // "Hello World!"
 
 // Clean up
 await sandbox.destroy();
@@ -159,17 +159,21 @@ const sandbox = await compute.sandbox.create();
 
 // With options
 const sandbox = await compute.sandbox.create({
-  runtime: 'python',
   timeout: 300000, // 5 minutes
-  metadata: { userId: '123' }
+  metadata: { userId: '123' },
+  namespace: 'my-org',
+  name: 'my-sandbox',
 });
 ```
 
 **Options:**
-- `runtime?: 'node' | 'python'` - Runtime environment (default: 'node')
 - `timeout?: number` - Timeout in milliseconds
 - `metadata?: Record<string, any>` - Custom metadata
 - `envs?: Record<string, string>` - Environment variables
+- `namespace?: string` - Namespace for organizing sandboxes
+- `name?: string` - Name for the sandbox (enables findOrCreate)
+- `overlays?: SetupOverlayConfig[]` - Template overlays to apply
+- `servers?: ServerStartOptions[]` - Servers to start automatically
 
 #### `compute.sandbox.getById(sandboxId)`
 
@@ -179,45 +183,55 @@ Get an existing sandbox by ID.
 const sandbox = await compute.sandbox.getById('sandbox-id');
 ```
 
-#### `compute.sandbox.list()`
+#### `compute.sandbox.findOrCreate(options)`
 
-List all active sandboxes.
+Find an existing sandbox by namespace and name, or create a new one.
 
 ```typescript
-const sandboxes = await compute.sandbox.list();
+const sandbox = await compute.sandbox.findOrCreate({
+  namespace: 'my-org',
+  name: 'my-project',
+});
+```
+
+#### `compute.sandbox.find(options)`
+
+Find an existing sandbox by namespace and name (returns null if not found).
+
+```typescript
+const sandbox = await compute.sandbox.find({
+  namespace: 'my-org',
+  name: 'my-project',
+});
 ```
 
 ### Sandbox Operations
 
-#### `sandbox.runCode(code, runtime?)`
+#### `sandbox.runCode(code, language?)`
 
 Execute code in the sandbox.
 
 ```typescript
 const result = await sandbox.runCode('print("Hello")', 'python');
-console.log(result.stdout); // "Hello"
-console.log(result.stderr);
+console.log(result.output); // "Hello"
 console.log(result.exitCode);
 ```
 
-#### `sandbox.runCommand(command, args?)`
+#### `sandbox.runCommand(command, options?)`
 
 Run a shell command.
 
 ```typescript
-const result = await sandbox.runCommand('npm', ['install', 'express']);
+const result = await sandbox.runCommand('npm install express');
 console.log(result.stdout);
-```
+console.log(result.exitCode);
 
-#### `sandbox.getInfo()`
-
-Get sandbox information.
-
-```typescript
-const info = await sandbox.getInfo();
-console.log(info.id);
-console.log(info.status); // 'running' | 'stopped' | 'error'
-console.log(info.createdAt);
+// With options
+const result = await sandbox.runCommand('npm install', {
+  cwd: '/app',
+  env: { NODE_ENV: 'production' },
+  background: true,
+});
 ```
 
 #### `sandbox.destroy()`
@@ -488,70 +502,12 @@ await exec.destroy();
 
 ## Examples
 
-### Data Science Workflow
-
-```typescript
-import { compute } from 'computesdk';
-
-// Assumes E2B_API_KEY is set in environment
-const sandbox = await compute.sandbox.create({ runtime: 'python' });
-
-// Create project structure
-await sandbox.filesystem.mkdir('/analysis');
-await sandbox.filesystem.mkdir('/analysis/data');
-await sandbox.filesystem.mkdir('/analysis/output');
-
-// Write input data
-const csvData = `name,age,city
-Alice,25,New York
-Bob,30,San Francisco
-Charlie,35,Chicago`;
-
-await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
-
-// Process data with Python
-const result = await sandbox.runCode(`
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Read data
-df = pd.read_csv('/analysis/data/people.csv')
-print("Data loaded:")
-print(df)
-
-# Calculate statistics
-avg_age = df['age'].mean()
-print(f"\\nAverage age: {avg_age}")
-
-# Save results
-import json
-results = {
-    'total_people': len(df),
-    'average_age': avg_age,
-    'cities': df['city'].unique().tolist()
-}
-
-with open('/analysis/output/results.json', 'w') as f:
-    json.dump(results, f, indent=2)
-
-print("Results saved!")
-`);
-
-console.log(result.stdout);
-
-// Read the results
-const results = await sandbox.filesystem.readFile('/analysis/output/results.json');
-console.log('Analysis results:', JSON.parse(results));
-
-await sandbox.destroy();
-```
-
 ### Multi-Step Build Process
 
 ```typescript
 import { compute } from 'computesdk';
 
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
+const sandbox = await compute.sandbox.create();
 
 // Create project structure
 await sandbox.filesystem.mkdir('/app');
@@ -579,7 +535,7 @@ console.log('Server ready!');
 `);
 
 // Install dependencies
-const installResult = await sandbox.runCommand('npm', ['install'], { cwd: '/app' });
+const installResult = await sandbox.runCommand('npm install', { cwd: '/app' });
 console.log('Install:', installResult.stdout);
 
 // Run the app
@@ -589,7 +545,7 @@ const proc = spawn('node', ['src/index.js'], { cwd: '/app' });
 proc.stdout.on('data', (data) => console.log(data.toString()));
 `);
 
-console.log(runResult.stdout);
+console.log(runResult.output);
 
 await sandbox.destroy();
 ```
@@ -599,7 +555,7 @@ await sandbox.destroy();
 ```typescript
 import { compute } from 'computesdk';
 
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
+const sandbox = await compute.sandbox.create();
 
 // Create exec mode terminal for command tracking
 const terminal = await sandbox.terminal.create({ pty: false });
@@ -633,7 +589,7 @@ await sandbox.destroy();
 ```typescript
 import { compute } from 'computesdk';
 
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
+const sandbox = await compute.sandbox.create();
 
 // Create PTY terminal for interactive shell
 const pty = await sandbox.terminal.create({ 
