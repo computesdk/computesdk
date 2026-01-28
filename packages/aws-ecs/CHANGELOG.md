@@ -1,5 +1,11 @@
 # @computesdk/aws-ecs
 
+## 1.1.28
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 1.1.27
 
 ### Patch Changes

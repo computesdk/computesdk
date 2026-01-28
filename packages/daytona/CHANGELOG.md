@@ -1,5 +1,11 @@
 # @computesdk/daytona
 
+## 1.7.8
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 1.7.7
 
 ### Patch Changes

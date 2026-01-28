@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.28
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 1.5.27
 
 ### Patch Changes

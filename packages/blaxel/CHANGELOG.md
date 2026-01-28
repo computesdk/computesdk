@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.4.1
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 1.4.0
 
 ### Minor Changes

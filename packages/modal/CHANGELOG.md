@@ -1,5 +1,11 @@
 # @computesdk/modal
 
+## 1.8.23
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 1.8.22
 
 ### Patch Changes
