@@ -1,5 +1,41 @@
 # @computesdk/workbench
 
+## 6.0.1
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+- Updated dependencies [ca82472]
+  - @computesdk/blaxel@1.4.1
+  - @computesdk/cloudflare@1.3.28
+  - @computesdk/codesandbox@1.5.28
+  - @computesdk/daytona@1.7.8
+  - @computesdk/e2b@1.7.28
+  - @computesdk/modal@1.8.23
+  - @computesdk/namespace@1.1.28
+  - @computesdk/railway@1.1.28
+  - @computesdk/runloop@1.3.28
+  - @computesdk/vercel@1.7.7
+
+## 6.0.0
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+- Updated dependencies [53506ed]
+  - @computesdk/blaxel@1.4.0
+  - computesdk@2.0.1
+  - @computesdk/cloudflare@1.3.27
+  - @computesdk/codesandbox@1.5.27
+  - @computesdk/daytona@1.7.7
+  - @computesdk/e2b@1.7.27
+  - @computesdk/modal@1.8.22
+  - @computesdk/namespace@1.1.27
+  - @computesdk/provider@1.0.21
+  - @computesdk/railway@1.1.27
+  - @computesdk/runloop@1.3.27
+  - @computesdk/vercel@1.7.6
+
 ## 5.0.7
 
 ### Patch Changes

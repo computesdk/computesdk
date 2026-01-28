@@ -1,5 +1,18 @@
 # @computesdk/avm
 
+## 0.1.28
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 0.1.27
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@2.0.1
+
 ## 0.1.26
 
 ### Patch Changes

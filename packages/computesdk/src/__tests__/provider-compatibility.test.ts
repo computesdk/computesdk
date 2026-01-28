@@ -200,6 +200,33 @@ describe.skipIf(!shouldRunTests)(`Provider Compatibility (${testProvider})`, () 
       }
     }, 90000);
 
+    it('Sandbox.create({ directory }) sets working directory', async () => {
+      let directorySandbox: Sandbox | null = null;
+      let directorySandboxId: string | null = null;
+      const directoryPath = '/tmp/computesdk-sdk-directory';
+
+      try {
+        directorySandbox = await compute.sandbox.create({
+          ...getCreateOptions(),
+          directory: directoryPath,
+        } as any);
+
+        directorySandboxId = directorySandbox.sandboxId;
+
+        const result = await directorySandbox.runCommand('pwd');
+        expect(result.stdout.trim()).toBe(directoryPath);
+      } finally {
+        if (directorySandboxId) {
+          try {
+            await compute.sandbox.destroy(directorySandboxId);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      }
+    }, 60000);
+
+
     it('Sandbox.connect(sandboxId, { domain })', async () => {
       // E2B: E2BInstance.connect(e2bInstanceId, { domain: 'e2b.dev' })
       // ComputeSDK: compute.sandbox.getById(sandboxId)

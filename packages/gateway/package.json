@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/gateway",
-  "version": "0.3.5",
+  "version": "0.3.7",
   "description": "Infrastructure provider implementations for ComputeSDK gateway server",
   "author": "ComputeSDK Team",
   "license": "MIT",

@@ -1,5 +1,23 @@
 # @computesdk/blaxel
 
+## 1.4.1
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 1.4.0
+
+### Minor Changes
+
+- 53506ed: refactor auth to use env vars
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@2.0.1
+  - @computesdk/provider@1.0.21
+
 ## 1.3.28
 
 ### Patch Changes
