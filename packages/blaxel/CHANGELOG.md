@@ -1,5 +1,17 @@
 # @computesdk/blaxel
 
+## 1.4.0
+
+### Minor Changes
+
+- 53506ed: refactor auth to use env vars
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@3.0.0
+  - @computesdk/provider@1.0.21
+
 ## 1.3.28
 
 ### Patch Changes

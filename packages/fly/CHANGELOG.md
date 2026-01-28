@@ -1,5 +1,13 @@
 # @computesdk/fly
 
+## 1.1.27
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@3.0.0
+  - @computesdk/provider@1.0.21
+
 ## 1.1.26
 
 ### Patch Changes
