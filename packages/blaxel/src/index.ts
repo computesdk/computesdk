@@ -4,7 +4,7 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance, settings } from '@blaxel/core';
+import { SandboxInstance } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -36,8 +36,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
-				await handleBlaxelAuth(config);
-
+				
 				// Determine the image to use
 				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
 
@@ -113,7 +112,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			getById: async (config: BlaxelConfig, sandboxId: string) => {
-				await handleBlaxelAuth(config);
 
 				try {
 					const sandbox = await SandboxInstance.get(sandboxId);
@@ -133,7 +131,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			list: async (config: BlaxelConfig) => {
-				await handleBlaxelAuth(config);
 
 				const sandboxList = await SandboxInstance.list();
 				return sandboxList.map(sandbox => ({
@@ -143,7 +140,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			destroy: async (config: BlaxelConfig, sandboxId: string) => {
-				await handleBlaxelAuth(config);
 
 				try {
 					await SandboxInstance.delete(sandboxId);
@@ -443,29 +439,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		}
 	}
 });
-
-async function handleBlaxelAuth(config: BlaxelConfig) {
-	// Always apply config values to environment before authenticating.
-	// In the gateway path, credentials come from HTTP headers via config
-	// and must be set as env vars before @blaxel/core's settings.authenticate() is called.
-	if (config.workspace) {
-		process.env.BL_WORKSPACE = config.workspace;
-	} else if (!process.env.BL_WORKSPACE && process.env.BLAXEL_WORKSPACE) {
-		process.env.BL_WORKSPACE = process.env.BLAXEL_WORKSPACE;
-	}
-
-	if (config.apiKey) {
-		process.env.BL_API_KEY = config.apiKey;
-	} else if (!process.env.BL_API_KEY && process.env.BLAXEL_API_KEY) {
-		process.env.BL_API_KEY = process.env.BLAXEL_API_KEY;
-	}
-
-	try {
-		await settings.authenticate();
-	} catch (error) {
-		throw new Error('Blaxel authentication failed. Please check the following documents for more information: https://docs.blaxel.ai/Security/Access-tokens#using-api-keys');
-	}
-}
 
 /**
  * Parse TTL value from Blaxel's format to milliseconds
