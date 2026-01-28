@@ -1,5 +1,11 @@
 # @computesdk/cloudflare
 
+## 1.3.28
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 1.3.27
 
 ### Patch Changes

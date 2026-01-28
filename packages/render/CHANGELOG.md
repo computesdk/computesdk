@@ -1,5 +1,11 @@
 # @computesdk/render
 
+## 1.2.8
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 1.2.7
 
 ### Patch Changes

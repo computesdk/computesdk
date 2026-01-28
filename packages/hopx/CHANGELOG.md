@@ -1,5 +1,11 @@
 # @computesdk/hopx
 
+## 0.2.4
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
 ## 0.2.3
 
 ### Patch Changes
