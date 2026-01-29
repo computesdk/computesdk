@@ -132,10 +132,15 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
               timeout,
             };
 
-            if (options?.snapshotId) {
+            // Support both ComputeSDK format (snapshotId at top level) and 
+            // Vercel SDK format (source.snapshotId nested)
+            const snapshotId = options?.snapshotId || 
+              (options?.source?.type === 'snapshot' && options?.source?.snapshotId);
+            
+            if (snapshotId) {
               params.source = {
                 type: 'snapshot',
-                snapshotId: options.snapshotId
+                snapshotId
               };
             }
 
