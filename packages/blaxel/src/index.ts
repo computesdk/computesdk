@@ -4,7 +4,7 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance } from '@blaxel/core';
+import { SandboxInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -36,7 +36,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
-				
 				// Determine the image to use
 				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
 
@@ -60,6 +59,9 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 				const ttl = options?.timeout ? `${Math.ceil(options.timeout / 1000)}s` : undefined;
 
 				try {
+					// Initialize Blaxel SDK with credentials
+					initializeBlaxel(config);
+
 					let sandbox: SandboxInstance;
 
 					// Create new Blaxel sandbox
@@ -81,7 +83,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 
 					return {
 						sandbox,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
+						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
 					};
 				} catch (error) {
 					const errorDetail = error instanceof Error
@@ -112,8 +114,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			getById: async (config: BlaxelConfig, sandboxId: string) => {
-
 				try {
+					initializeBlaxel(config);
 					const sandbox = await SandboxInstance.get(sandboxId);
 
 					if (!sandbox) {
@@ -122,7 +124,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 
 					return {
 						sandbox,
-						sandboxId
+						sandboxId,
 					};
 				} catch (error) {
 					// Sandbox doesn't exist or can't be accessed
@@ -131,7 +133,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			list: async (config: BlaxelConfig) => {
-
+				initializeBlaxel(config);
 				const sandboxList = await SandboxInstance.list();
 				return sandboxList.map(sandbox => ({
 					sandbox,
@@ -140,8 +142,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			destroy: async (config: BlaxelConfig, sandboxId: string) => {
-
 				try {
+					initializeBlaxel(config);
 					await SandboxInstance.delete(sandboxId);
 				} catch (error) {
 					// Sandbox might already be destroyed or doesn't exist
@@ -466,6 +468,15 @@ function parseTTLToMilliseconds(ttl: string | number | undefined): number {
 		case 'd': return value * 24 * 60 * 60 * 1000; // days to ms
 		default: return 300000; // Default fallback
 	}
+}
+
+/**
+ * Initialize the Blaxel SDK with credentials from config or environment variables
+ */
+function initializeBlaxel(config: BlaxelConfig): void {
+	const apiKey = config.apiKey || process.env?.BL_API_KEY!;
+	const workspace = config.workspace || process.env?.BL_WORKSPACE!;
+	initialize({ apikey: apiKey, workspace: workspace });
 }
 
 function convertSandboxStatus(status: string | undefined): 'running' | 'stopped' | 'error' {
