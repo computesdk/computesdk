@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/lambda",
-  "version": "1.1.26",
+  "version": "1.1.28",
   "description": "Lambda Labs provider for ComputeSDK - GPU-accelerated code execution for ML and AI workloads",
   "author": "ComputeSDK Team",
   "license": "MIT",
