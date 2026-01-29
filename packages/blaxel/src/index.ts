@@ -474,8 +474,8 @@ function parseTTLToMilliseconds(ttl: string | number | undefined): number {
  * Initialize the Blaxel SDK with credentials from config or environment variables
  */
 function initializeBlaxel(config: BlaxelConfig): void {
-	const apiKey = config.apiKey || process.env?.BL_API_KEY || '';
-	const workspace = config.workspace || process.env?.BL_WORKSPACE || '';
+	const apiKey = config.apiKey || process.env?.BL_API_KEY!;
+	const workspace = config.workspace || process.env?.BL_WORKSPACE!;
 	initialize({ apikey: apiKey, workspace: workspace });
 }
 
