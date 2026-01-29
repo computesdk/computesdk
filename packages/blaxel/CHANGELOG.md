@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.5.0
+
+### Minor Changes
+
+- 583d51f: update auth with initialize method
+
 ## 1.4.1
 
 ### Patch Changes
