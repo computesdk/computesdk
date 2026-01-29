@@ -36,8 +36,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
-				const apiKey = config.apiKey|| (typeof process !== 'undefined' && process.env?.BL_API_KEY) || '';
-				const workspace = config.workspace || (typeof process !== 'undefined' && process.env?.BL_WORKSPACE) || '';
 				// Determine the image to use
 				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
 
@@ -62,7 +60,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 
 				try {
 					// Initialize Blaxel SDK with credentials
-					initialize({ apikey: apiKey, workspace: workspace });
+					initializeBlaxel(config);
 
 					let sandbox: SandboxInstance;
 
@@ -116,11 +114,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			getById: async (config: BlaxelConfig, sandboxId: string) => {
-				const apiKey = config.apiKey|| (typeof process !== 'undefined' && process.env?.BL_API_KEY) || '';
-				const workspace = config.workspace || (typeof process !== 'undefined' && process.env?.BL_WORKSPACE) || '';
-
 				try {
-					initialize({ apikey: apiKey, workspace: workspace });
+					initializeBlaxel(config);
 					const sandbox = await SandboxInstance.get(sandboxId);
 
 					if (!sandbox) {
@@ -138,8 +133,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			list: async (config: BlaxelConfig) => {
-
-				initialize({ apikey: config.apiKey, workspace: config.workspace });
+				initializeBlaxel(config);
 				const sandboxList = await SandboxInstance.list();
 				return sandboxList.map(sandbox => ({
 					sandbox,
@@ -148,9 +142,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			destroy: async (config: BlaxelConfig, sandboxId: string) => {
-
 				try {
-				initialize({ apikey: config.apiKey, workspace: config.workspace });
+					initializeBlaxel(config);
 					await SandboxInstance.delete(sandboxId);
 				} catch (error) {
 					// Sandbox might already be destroyed or doesn't exist
@@ -475,6 +468,15 @@ function parseTTLToMilliseconds(ttl: string | number | undefined): number {
 		case 'd': return value * 24 * 60 * 60 * 1000; // days to ms
 		default: return 300000; // Default fallback
 	}
+}
+
+/**
+ * Initialize the Blaxel SDK with credentials from config or environment variables
+ */
+function initializeBlaxel(config: BlaxelConfig): void {
+	const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.BL_API_KEY) || '';
+	const workspace = config.workspace || (typeof process !== 'undefined' && process.env?.BL_WORKSPACE) || '';
+	initialize({ apikey: apiKey, workspace: workspace });
 }
 
 function convertSandboxStatus(status: string | undefined): 'running' | 'stopped' | 'error' {
