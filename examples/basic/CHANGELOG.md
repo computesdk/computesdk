@@ -1,5 +1,156 @@
 # @computesdk/example-basic
 
+## 0.4.44
+
+### Patch Changes
+
+- Updated dependencies [ca82472]
+  - @computesdk/blaxel@1.4.1
+  - @computesdk/codesandbox@1.5.28
+  - @computesdk/daytona@1.7.8
+  - @computesdk/docker@1.2.27
+  - @computesdk/e2b@1.7.28
+  - @computesdk/modal@1.8.23
+  - @computesdk/runloop@1.3.28
+  - @computesdk/vercel@1.7.7
+
+## 0.4.43
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+- Updated dependencies [53506ed]
+  - @computesdk/blaxel@1.4.0
+  - computesdk@2.0.1
+  - @computesdk/codesandbox@1.5.27
+  - @computesdk/daytona@1.7.7
+  - @computesdk/docker@1.2.26
+  - @computesdk/e2b@1.7.27
+  - @computesdk/modal@1.8.22
+  - @computesdk/runloop@1.3.27
+  - @computesdk/vercel@1.7.6
+
+## 0.4.42
+
+### Patch Changes
+
+- Updated dependencies [a59fecf]
+  - @computesdk/blaxel@1.3.28
+
+## 0.4.41
+
+### Patch Changes
+
+- Updated dependencies [46e78a5]
+  - @computesdk/blaxel@1.3.27
+
+## 0.4.40
+
+### Patch Changes
+
+- Updated dependencies [9946e72]
+  - computesdk@1.21.1
+  - @computesdk/blaxel@1.3.26
+  - @computesdk/codesandbox@1.5.26
+  - @computesdk/daytona@1.7.6
+  - @computesdk/docker@1.2.25
+  - @computesdk/e2b@1.7.26
+  - @computesdk/modal@1.8.21
+  - @computesdk/runloop@1.3.26
+  - @computesdk/vercel@1.7.5
+
+## 0.4.39
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+  - @computesdk/blaxel@1.3.25
+  - @computesdk/codesandbox@1.5.25
+  - @computesdk/daytona@1.7.5
+  - @computesdk/docker@1.2.24
+  - @computesdk/e2b@1.7.25
+  - @computesdk/modal@1.8.20
+  - @computesdk/runloop@1.3.25
+  - @computesdk/vercel@1.7.4
+
+## 0.4.38
+
+### Patch Changes
+
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+  - @computesdk/blaxel@1.3.24
+  - @computesdk/codesandbox@1.5.24
+  - @computesdk/daytona@1.7.4
+  - @computesdk/docker@1.2.23
+  - @computesdk/e2b@1.7.24
+  - @computesdk/modal@1.8.19
+  - @computesdk/runloop@1.3.24
+  - @computesdk/vercel@1.7.3
+
+## 0.4.37
+
+### Patch Changes
+
+- Updated dependencies [68b5296]
+  - computesdk@1.19.0
+  - @computesdk/blaxel@1.3.23
+  - @computesdk/codesandbox@1.5.23
+  - @computesdk/daytona@1.7.3
+  - @computesdk/docker@1.2.22
+  - @computesdk/e2b@1.7.23
+  - @computesdk/modal@1.8.18
+  - @computesdk/runloop@1.3.23
+  - @computesdk/vercel@1.7.2
+
+## 0.4.36
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+  - @computesdk/blaxel@1.3.22
+  - @computesdk/codesandbox@1.5.22
+  - @computesdk/daytona@1.7.2
+  - @computesdk/docker@1.2.21
+  - @computesdk/e2b@1.7.22
+  - @computesdk/modal@1.8.17
+  - @computesdk/runloop@1.3.22
+  - @computesdk/vercel@1.7.1
+
+## 0.4.35
+
+### Patch Changes
+
+- Updated dependencies [7f1553f]
+- Updated dependencies [7f1553f]
+  - @computesdk/vercel@1.7.0
+
+## 0.4.34
+
+### Patch Changes
+
+- Updated dependencies [688ca54]
+- Updated dependencies [688ca54]
+  - computesdk@1.18.1
+  - @computesdk/blaxel@1.3.21
+  - @computesdk/codesandbox@1.5.21
+  - @computesdk/daytona@1.7.1
+  - @computesdk/docker@1.2.20
+  - @computesdk/e2b@1.7.21
+  - @computesdk/modal@1.8.16
+  - @computesdk/runloop@1.3.21
+  - @computesdk/vercel@1.6.21
+
+## 0.4.33
+
+### Patch Changes
+
+- Updated dependencies [c2fa3f7]
+  - @computesdk/daytona@1.7.0
+
 ## 0.4.32
 
 ### Patch Changes

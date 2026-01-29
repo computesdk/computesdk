@@ -1,5 +1,62 @@
 # @computesdk/lambda
 
+## 1.1.28
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 1.1.27
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@2.0.1
+
+## 1.1.26
+
+### Patch Changes
+
+- Updated dependencies [9946e72]
+  - computesdk@1.21.1
+
+## 1.1.25
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+
+## 1.1.24
+
+### Patch Changes
+
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+
+## 1.1.23
+
+### Patch Changes
+
+- Updated dependencies [68b5296]
+  - computesdk@1.19.0
+
+## 1.1.22
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+
+## 1.1.21
+
+### Patch Changes
+
+- Updated dependencies [688ca54]
+- Updated dependencies [688ca54]
+  - computesdk@1.18.1
+
 ## 1.1.20
 
 ### Patch Changes

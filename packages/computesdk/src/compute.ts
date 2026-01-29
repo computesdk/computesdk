@@ -8,12 +8,13 @@
  * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config)
  */
 
-import { Sandbox, WebSocketConstructor } from './client';
+import { Sandbox, WebSocketConstructor, type ServerStartOptions } from './client';
 import { autoConfigureCompute } from './auto-detect';
 import { createConfigFromExplicit } from './explicit-config';
 import { waitForComputeReady } from './compute-daemon/lifecycle';
 import { GATEWAY_URL } from './constants';
 import type { ProviderName } from './provider-config';
+import type { SetupOverlayConfig } from './setup';
 
 /**
  * Gateway configuration
@@ -23,6 +24,7 @@ interface GatewayConfig {
   gatewayUrl: string;
   provider: string;
   providerHeaders: Record<string, string>;
+  requestTimeoutMs?: number;
   WebSocket?: WebSocketConstructor;
 }
 
@@ -41,6 +43,8 @@ export interface ExplicitComputeConfig {
   computesdkApiKey?: string;
   /** Optional gateway URL override */
   gatewayUrl?: string;
+  /** HTTP request timeout for gateway calls in milliseconds */
+  requestTimeoutMs?: number;
   /**
    * WebSocket implementation for environments without native WebSocket support.
    * In Node.js < 22, pass the 'ws' package: `import WebSocket from 'ws'`
@@ -58,6 +62,7 @@ export interface ExplicitComputeConfig {
   cloudflare?: { apiToken?: string; accountId?: string };
   codesandbox?: { apiKey?: string };
   blaxel?: { apiKey?: string; workspace?: string };
+  namespace?: { token?: string };
 }
 
 /**
@@ -73,8 +78,13 @@ export interface CreateSandboxOptions {
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
+  directory?: string;
+  overlays?: SetupOverlayConfig[];
+  servers?: ServerStartOptions[];
   /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
   image?: string;
+  /** Provider-specific snapshot to create from (e.g., Vercel snapshots) */
+  snapshotId?: string;
 }
 
 /**
@@ -108,7 +118,7 @@ async function gatewayFetch<T>(
   config: GatewayConfig,
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T }> {
-  const timeout = 30000;
+  const timeout = config.requestTimeoutMs ?? 30000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -274,6 +284,27 @@ class ComputeManager {
   sandbox = {
     /**
      * Create a new sandbox
+     *
+     * @example
+     * ```typescript
+     * const sandbox = await compute.sandbox.create({
+     *   directory: '/custom/path',
+     *   overlays: [
+     *     {
+     *       source: '/templates/nextjs',
+     *       target: 'app',
+     *       strategy: 'smart',
+     *     },
+     *   ],
+     *   servers: [
+     *     {
+     *       slug: 'web',
+     *       start: 'npm run dev',
+     *       path: '/app',
+     *     },
+     *   ],
+     * });
+     * ```
      */
     create: async (options?: CreateSandboxOptions): Promise<Sandbox> => {
       const config = this.getGatewayConfig();
@@ -286,6 +317,18 @@ class ComputeManager {
         metadata?: Record<string, unknown>;
         name?: string;
         namespace?: string;
+        overlays?: Array<{
+          id: string;
+          source: string;
+          target: string;
+          copy_status: string;
+        }>;
+        servers?: Array<{
+          slug: string;
+          port?: number;
+          url?: string;
+          status: 'installing' | 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
+        }>;
       }>(`${config.gatewayUrl}/v1/sandboxes`, config, {
         method: 'POST',
         body: JSON.stringify(options || {}),
@@ -295,7 +338,7 @@ class ComputeManager {
         throw new Error(`Gateway returned invalid response`);
       }
 
-      const { sandboxId, url, token, provider, metadata, name, namespace } = result.data;
+      const { sandboxId, url, token, provider, metadata, name, namespace, overlays, servers } = result.data;
 
       const sandbox = new Sandbox({
         sandboxUrl: url,
@@ -306,6 +349,8 @@ class ComputeManager {
           ...metadata,
           ...(name && { name }),
           ...(namespace && { namespace }),
+          ...(overlays && { overlays }),
+          ...(servers && { servers }),
         },
         WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {

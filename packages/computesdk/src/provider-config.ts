@@ -29,6 +29,7 @@ export const PROVIDER_AUTH = {
   cloudflare: [['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']],
   codesandbox: [['CSB_API_KEY']],
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
+  namespace: [['NSC_TOKEN']],
 } as const;
 
 /**
@@ -82,8 +83,11 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     apiKey: 'X-CSB-API-Key',
   },
   blaxel: {
-    apiKey: 'X-BL-API-Key',
-    workspace: 'X-BL-Workspace',
+    apiKey: 'X-Blaxel-API-Key',
+    workspace: 'X-Blaxel-Workspace',
+  },
+  namespace: {
+    token: 'X-Namespace-Token',
   },
 };
 
@@ -130,6 +134,9 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
     BL_API_KEY: 'apiKey',
     BL_WORKSPACE: 'workspace',
   },
+  namespace: {
+    NSC_TOKEN: 'token',
+  },
 };
 
 /**
@@ -146,6 +153,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   cloudflare: 'https://dash.cloudflare.com/profile/api-tokens',
   codesandbox: 'https://codesandbox.io/dashboard/settings',
   blaxel: 'https://blaxel.ai/dashboard',
+  namespace: 'https://cloud.namespace.so',
 };
 
 /**

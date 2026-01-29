@@ -1,5 +1,85 @@
 # @computesdk/blaxel
 
+## 1.4.1
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 1.4.0
+
+### Minor Changes
+
+- 53506ed: refactor auth to use env vars
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@2.0.1
+  - @computesdk/provider@1.0.21
+
+## 1.3.28
+
+### Patch Changes
+
+- a59fecf: update auth logic for blaxel via gateway error
+
+## 1.3.27
+
+### Patch Changes
+
+- 46e78a5: update with debugging for blaxel
+
+## 1.3.26
+
+### Patch Changes
+
+- Updated dependencies [9946e72]
+  - computesdk@1.21.1
+  - @computesdk/provider@1.0.20
+
+## 1.3.25
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+  - @computesdk/provider@1.0.19
+
+## 1.3.24
+
+### Patch Changes
+
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+  - @computesdk/provider@1.0.18
+
+## 1.3.23
+
+### Patch Changes
+
+- Updated dependencies [68b5296]
+  - computesdk@1.19.0
+  - @computesdk/provider@1.0.17
+
+## 1.3.22
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+  - @computesdk/provider@1.0.16
+
+## 1.3.21
+
+### Patch Changes
+
+- Updated dependencies [688ca54]
+- Updated dependencies [688ca54]
+  - computesdk@1.18.1
+  - @computesdk/provider@1.0.15
+
 ## 1.3.20
 
 ### Patch Changes

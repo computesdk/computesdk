@@ -110,27 +110,27 @@ describe('Auto-Detection', () => {
     });
 
     it('falls back to auto-detection if override provider credentials missing', () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+
       process.env.COMPUTESDK_PROVIDER = 'modal';
       // Missing modal credentials
       process.env.E2B_API_KEY = 'key';
-      
+
       expect(detectProvider()).toBe('e2b');
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('COMPUTESDK_PROVIDER is set to "modal"')
       );
-      
+
       consoleWarnSpy.mockRestore();
     });
 
     it('follows priority order when multiple providers are configured', () => {
       // Set up multiple providers
-      process.env.BLAXEL_API_KEY = 'key';
+      process.env.BL_API_KEY = 'key';
       process.env.BL_WORKSPACE = 'workspace';
       process.env.DAYTONA_API_KEY = 'key';
       process.env.E2B_API_KEY = 'key';
-      
+
       // E2B should win (highest priority)
       expect(detectProvider()).toBe('e2b');
     });
@@ -144,7 +144,7 @@ describe('Auto-Detection', () => {
 
     it('throws when gateway mode enabled but no provider detected', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
-      
+
       expect(() => autoConfigureCompute()).toThrow(
         /COMPUTESDK_API_KEY is set but no provider detected/
       );
@@ -153,9 +153,9 @@ describe('Auto-Detection', () => {
     it('returns gateway config when properly configured', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
-      
+
       const config = autoConfigureCompute();
-      
+
       expect(config).toBeDefined();
       expect(config?.provider).toBe('e2b');
       expect(config?.apiKey).toBe('test_key');
@@ -167,7 +167,7 @@ describe('Auto-Detection', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
       process.env.COMPUTESDK_GATEWAY_URL = 'invalid-url';
-      
+
       expect(() => autoConfigureCompute()).toThrow(/Invalid gateway URL/);
     });
 
@@ -175,7 +175,7 @@ describe('Auto-Detection', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
       process.env.COMPUTESDK_GATEWAY_URL = 'https://custom-gateway.example.com';
-      
+
       const config = autoConfigureCompute();
       expect(config).toBeDefined();
       expect(config?.gatewayUrl).toBe('https://custom-gateway.example.com');
@@ -185,25 +185,25 @@ describe('Auto-Detection', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
       process.env.COMPUTESDK_GATEWAY_URL = 'http://localhost:3000';
-      
+
       const config = autoConfigureCompute();
       expect(config).toBeDefined();
       expect(config?.gatewayUrl).toBe('http://localhost:3000');
     });
 
     it('shows debug logs when COMPUTESDK_DEBUG is enabled', () => {
-      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
       process.env.COMPUTESDK_DEBUG = 'true';
-      
+
       autoConfigureCompute();
-      
+
       expect(consoleLogSpy).toHaveBeenCalledWith(
         expect.stringContaining('Auto-detected e2b provider')
       );
-      
+
       consoleLogSpy.mockRestore();
     });
   });

@@ -48,6 +48,7 @@ export type { SignalStatusInfo } from './resources/signal';
 export type { AuthStatusInfo, AuthInfo, AuthEndpointsInfo } from './resources/auth';
 export type { CodeResult, CommandResult, CodeLanguage, CodeRunOptions, CommandRunOptions, CommandWaitOptions } from './resources/run';
 export type { ServerStartOptions, ServerLogsOptions, ServerLogsInfo } from './resources/server';
+export type ReadyInfo = ReadyResponse;
 export type { OverlayCopyStatus, OverlayStats, OverlayInfo, WaitForCompletionOptions, OverlayStrategy } from './resources/overlay';
 
 // Import overlay types for internal use and re-export CreateOverlayOptions
@@ -81,6 +82,7 @@ import type {
   SandboxStatus,
   ProviderSandboxInfo,
   FileEntry as ClientFileEntry,
+  CreateSandboxOptions,
 } from './types';
 
 import {
@@ -450,6 +452,8 @@ export interface SandboxInfo {
   is_main: boolean;
   created_at: string;
   url: string;
+  overlays?: SandboxOverlayInfo[];
+  servers?: SandboxServerInfo[];
 }
 
 /**
@@ -503,6 +507,33 @@ export type ServerStatus = 'installing' | 'starting' | 'running' | 'ready' | 'fa
 export type RestartPolicy = 'never' | 'on-failure' | 'always';
 
 /**
+ * Health check configuration for servers
+ * Polls the server to verify it's responding to requests
+ */
+export interface HealthCheckConfig {
+  /** Path to poll for health checks (default: "/") */
+  path?: string;
+  /** Interval between health checks in milliseconds (default: 2000) */
+  interval_ms?: number;
+  /** Timeout for each health check request in milliseconds (default: 1500) */
+  timeout_ms?: number;
+  /** Delay before starting health checks after port detection in milliseconds (default: 5000) */
+  delay_ms?: number;
+}
+
+/**
+ * Health check status information returned from server
+ */
+export interface HealthCheckStatus {
+  /** When the last health check was performed (ISO 8601) */
+  last_check?: string;
+  /** HTTP status code from the last health check */
+  last_status?: number;
+  /** Number of consecutive failed health checks */
+  consecutive_failures: number;
+}
+
+/**
  * Server information
  */
 export interface ServerInfo {
@@ -520,6 +551,12 @@ export interface ServerInfo {
   env_file?: string;
   /** Inline environment variables */
   environment?: Record<string, string>;
+  /** Whether to auto-start the server on daemon boot */
+  autostart?: boolean;
+  /** If true, port allocation is strict (no auto-increment) */
+  strict_port?: boolean;
+  /** Overlay IDs this server depends on */
+  depends_on?: string[];
   /** Auto-detected port number (populated when port monitor detects listening port) */
   port?: number;
   /** Generated URL from subdomain + port (populated when port is detected) */
@@ -540,10 +577,52 @@ export interface ServerInfo {
   restart_count?: number;
   /** Last exit code (null if process is still running) */
   exit_code?: number | null;
+  /** Health check configuration (if configured) */
+  health_check?: HealthCheckConfig;
+  /** Whether the server is healthy (only present if health_check is configured) */
+  healthy?: boolean;
+  /** Health check status details (only present if health_check is configured) */
+  health_status?: HealthCheckStatus;
   /** When the server was created */
   created_at: string;
   /** When the server was last updated */
   updated_at: string;
+}
+
+/**
+ * Sandbox server info returned by setup flows
+ */
+export interface SandboxServerInfo {
+  slug: string;
+  port?: number;
+  url?: string;
+  status: ServerStatus;
+  /** Whether the server is healthy (only present if health_check is configured) */
+  healthy?: boolean;
+  /** Health check status details (only present if health_check is configured) */
+  health_check?: HealthCheckStatus;
+}
+
+/**
+ * Sandbox overlay info returned by setup flows
+ */
+export interface SandboxOverlayInfo {
+  id: string;
+  source: string;
+  target: string;
+  copy_status: string;
+}
+
+/**
+ * Ready response (public endpoint)
+ */
+export interface ReadyResponse {
+  /** Whether all servers have ports allocated (URLs available) */
+  ready: boolean;
+  /** Whether all servers with health checks are passing */
+  healthy?: boolean;
+  servers: SandboxServerInfo[];
+  overlays: SandboxOverlayInfo[];
 }
 
 /**
@@ -787,6 +866,7 @@ export class Sandbox {
   private _token: string | null = null;
   private _ws: WebSocketManager | null = null;
   private WebSocketImpl: WebSocketConstructor;
+  private _terminals: Map<string, TerminalInstance> = new Map();
 
   constructor(config: SandboxConfig) {
     this.sandboxId = config.sandboxId;
@@ -943,6 +1023,7 @@ export class Sandbox {
       list: async () => this.listServers(),
       retrieve: async (slug) => this.getServer(slug),
       stop: async (slug) => { await this.stopServer(slug); },
+      delete: async (slug) => { await this.deleteServer(slug); },
       restart: async (slug) => this.restartServer(slug),
       updateStatus: async (slug, status) => { await this.updateServerStatus(slug, status); },
       logs: async (slug, options) => this.getServerLogs(slug, options),
@@ -1001,7 +1082,7 @@ export class Sandbox {
     });
 
     this.child = new Child({
-      create: async () => this.createSandbox(),
+      create: async (options?: CreateSandboxOptions) => this.createSandbox(options),
       list: async () => this.listSandboxes(),
       retrieve: async (subdomain) => this.getSandbox(subdomain),
       destroy: async (subdomain, deleteFiles) => this.deleteSandbox(subdomain, deleteFiles),
@@ -1023,6 +1104,57 @@ export class Sandbox {
       await this._ws.connect();
     }
     return this._ws;
+  }
+
+  /**
+   * Create and configure a TerminalInstance from response data
+   */
+  private async hydrateTerminal(
+    data: TerminalResponse['data'], 
+    ws?: WebSocketManager | null
+  ): Promise<TerminalInstance> {
+    // Create TerminalInstance
+    const terminal = new TerminalInstance(
+      data.id,
+      data.pty,
+      data.status,
+      data.channel || null,
+      ws || null,
+      data.encoding || 'raw'
+    );
+
+    // Set up terminal handlers
+    const terminalId = data.id;
+
+    terminal.setExecuteHandler(async (command: string, background?: boolean) => {
+      return this.request<CommandExecutionResponse>(`/terminals/${terminalId}/execute`, {
+        method: 'POST',
+        body: JSON.stringify({ command, background }),
+      });
+    });
+
+    terminal.setListCommandsHandler(async () => {
+      return this.request<CommandsListResponse>(`/terminals/${terminalId}/commands`);
+    });
+
+    terminal.setRetrieveCommandHandler(async (cmdId: string) => {
+      return this.request<CommandDetailsResponse>(`/terminals/${terminalId}/commands/${cmdId}`);
+    });
+
+    terminal.setWaitCommandHandler(async (cmdId: string, timeout?: number) => {
+      const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
+      const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
+      return this.request<CommandDetailsResponse>(endpoint);
+    });
+
+    terminal.setDestroyHandler(async () => {
+      await this.request<void>(`/terminals/${terminalId}`, {
+        method: 'DELETE',
+      });
+      this._terminals.delete(terminalId);
+    });
+
+    return terminal;
   }
 
   // ============================================================================
@@ -1631,46 +1763,8 @@ export class Sandbox {
       });
     }
 
-    // Create TerminalInstance
-    const terminal = new TerminalInstance(
-      response.data.id,
-      response.data.pty,
-      response.data.status,
-      response.data.channel || null,
-      ws,
-      response.data.encoding || 'raw'
-    );
-
-    // Set up terminal handlers
-    const terminalId = response.data.id;
-
-    terminal.setExecuteHandler(async (command: string, background?: boolean) => {
-      return this.request<CommandExecutionResponse>(`/terminals/${terminalId}/execute`, {
-        method: 'POST',
-        body: JSON.stringify({ command, background }),
-      });
-    });
-
-    terminal.setListCommandsHandler(async () => {
-      return this.request<CommandsListResponse>(`/terminals/${terminalId}/commands`);
-    });
-
-    terminal.setRetrieveCommandHandler(async (cmdId: string) => {
-      return this.request<CommandDetailsResponse>(`/terminals/${terminalId}/commands/${cmdId}`);
-    });
-
-    terminal.setWaitCommandHandler(async (cmdId: string, timeout?: number) => {
-      const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
-      const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
-      return this.request<CommandDetailsResponse>(endpoint);
-    });
-
-    terminal.setDestroyHandler(async () => {
-      await this.request<void>(`/terminals/${terminalId}`, {
-        method: 'DELETE',
-      });
-    });
-
+    const terminal = await this.hydrateTerminal(response.data, ws);
+    this._terminals.set(terminal.id, terminal);
     return terminal;
   }
 
@@ -1685,8 +1779,26 @@ export class Sandbox {
   /**
    * Get terminal by ID
    */
-  async getTerminal(id: string): Promise<TerminalResponse> {
-    return this.request<TerminalResponse>(`/terminals/${id}`);
+  async getTerminal(id: string): Promise<TerminalInstance> {
+    // Check cache first
+    const cached = this._terminals.get(id);
+    if (cached) {
+      return cached;
+    }
+
+    // Retrieve from API
+    const response = await this.request<TerminalResponse>(`/terminals/${id}`);
+
+    // Connect WebSocket if needed for PTY
+    let ws: WebSocketManager | null = null;
+    if (response.data.pty) {
+      ws = await this.ensureWebSocket();
+      // Note: No need to wait for terminal:created as it already exists
+    }
+
+    const terminal = await this.hydrateTerminal(response.data, ws);
+    this._terminals.set(id, terminal);
+    return terminal;
   }
 
   // ============================================================================
@@ -2039,6 +2151,12 @@ export class Sandbox {
    * @param options.path - Working directory (optional)
    * @param options.env_file - Path to .env file relative to path (optional)
    * @param options.environment - Inline environment variables (merged with env_file if both provided)
+   * @param options.port - Requested port (preallocated before start)
+   * @param options.strict_port - If true, fail instead of auto-incrementing when port is taken
+   * @param options.autostart - Auto-start on daemon boot (default: true)
+   * @param options.overlay - Inline overlay to create before starting
+   * @param options.overlays - Additional overlays to create before starting
+   * @param options.depends_on - Overlay IDs this server depends on
    * @param options.restart_policy - When to automatically restart: 'never' (default), 'on-failure', 'always'
    * @param options.max_restarts - Maximum restart attempts, 0 = unlimited (default: 0)
    * @param options.restart_delay_ms - Delay between restart attempts in milliseconds (default: 1000)
@@ -2065,6 +2183,18 @@ export class Sandbox {
    *   restart_delay_ms: 2000,
    *   stop_timeout_ms: 5000,
    * });
+   *
+   * // With inline overlay dependencies
+   * await sandbox.startServer({
+   *   slug: 'web',
+   *   start: 'npm run dev',
+   *   path: '/app',
+   *   overlay: {
+   *     source: '/templates/nextjs',
+   *     target: 'app',
+   *     strategy: 'smart',
+   *   },
+   * });
    * ```
    */
   async startServer(options: {
@@ -2074,6 +2204,12 @@ export class Sandbox {
     path?: string;
     env_file?: string;
     environment?: Record<string, string>;
+    port?: number;
+    strict_port?: boolean;
+    autostart?: boolean;
+    overlay?: Omit<CreateOverlayOptions, 'waitForCompletion'>;
+    overlays?: Array<Omit<CreateOverlayOptions, 'waitForCompletion'>>;
+    depends_on?: string[];
     restart_policy?: RestartPolicy;
     max_restarts?: number;
     restart_delay_ms?: number;
@@ -2094,16 +2230,26 @@ export class Sandbox {
   }
 
   /**
-   * Stop a managed server
+   * Stop a managed server (non-destructive)
    * @param slug - Server slug
    */
   async stopServer(slug: string): Promise<ServerStopResponse> {
     return this.request<ServerStopResponse>(
-      `/servers/${encodeURIComponent(slug)}`,
+      `/servers/${encodeURIComponent(slug)}/stop`,
       {
-        method: 'DELETE',
+        method: 'POST',
       }
     );
+  }
+
+  /**
+   * Delete a managed server configuration
+   * @param slug - Server slug
+   */
+  async deleteServer(slug: string): Promise<void> {
+    await this.request<void>(`/servers/${encodeURIComponent(slug)}`, {
+      method: 'DELETE',
+    });
   }
 
   /**
@@ -2157,16 +2303,32 @@ export class Sandbox {
   }
 
   // ============================================================================
+  // Ready Management
+  // ============================================================================
+
+  /**
+   * Get readiness status for autostarted servers and overlays
+   */
+  async ready(): Promise<ReadyResponse> {
+    const response = await this.request<ReadyResponse>('/ready');
+    return {
+      ready: response.ready,
+      servers: response.servers ?? [],
+      overlays: response.overlays ?? [],
+    };
+  }
+
+  // ============================================================================
   // Sandbox Management
   // ============================================================================
 
   /**
    * Create a new sandbox environment
    */
-  async createSandbox(): Promise<SandboxInfo> {
+  async createSandbox(options?: CreateSandboxOptions): Promise<SandboxInfo> {
     return this.request<SandboxInfo>('/sandboxes', {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify(options || {}),
     });
   }
 
@@ -2489,6 +2651,8 @@ export class Sandbox {
       this._ws.disconnect();
       this._ws = null;
     }
+    // Clear terminal cache as instances hold reference to closed WebSocket
+    this._terminals.clear();
   }
 }
 

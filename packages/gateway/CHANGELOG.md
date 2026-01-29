@@ -1,5 +1,65 @@
 # @computesdk/gateway
 
+## 0.3.7
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 0.3.6
+
+### Patch Changes
+
+- @computesdk/provider@1.0.21
+
+## 0.3.5
+
+### Patch Changes
+
+- @computesdk/provider@1.0.20
+
+## 0.3.4
+
+### Patch Changes
+
+- @computesdk/provider@1.0.19
+
+## 0.3.3
+
+### Patch Changes
+
+- @computesdk/provider@1.0.18
+
+## 0.3.2
+
+### Patch Changes
+
+- @computesdk/provider@1.0.17
+
+## 0.3.1
+
+### Patch Changes
+
+- @computesdk/provider@1.0.16
+
+## 0.3.0
+
+### Minor Changes
+
+- 64d560f: add namespace provider to gateway
+
+## 0.2.1
+
+### Patch Changes
+
+- @computesdk/provider@1.0.15
+
+## 0.2.0
+
+### Minor Changes
+
+- c2fa3f7: refactor api request for Render provider in gateway
+
 ## 0.1.0
 
 ### Minor Changes

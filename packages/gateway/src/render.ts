@@ -108,13 +108,12 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
       try {
         // Build environment variables for daemon
         const envVars = buildDaemonEnvVars(options?.daemonConfig);
-
-        // Convert env vars to Render format
         const envVarsList = Object.entries(envVars).map(([key, value]) => ({
           key,
           value
         }));
 
+        // Create service with env vars at top level (not inside serviceDetails)
         const createServiceData = {
           type: 'web_service',
           autoDeploy: 'yes',
@@ -124,12 +123,9 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
           },
           serviceDetails: {
             runtime: 'image',
-            // envSpecificDetails omitted to use image's default CMD/ENTRYPOINT (daemon startup)
-            pullRequestPreviewsEnabled: 'no',
-            ...(envVarsList.length > 0 && {
-              envVars: envVarsList
-            })
+            pullRequestPreviewsEnabled: 'no'
           },
+          ...(envVarsList.length > 0 && { envVars: envVarsList }),
           ownerId: ownerId,
           name: `computesdk-${Date.now()}`
         };

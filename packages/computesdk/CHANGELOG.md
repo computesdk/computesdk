@@ -1,5 +1,125 @@
 # computesdk
 
+## 2.0.1
+
+### Patch Changes
+
+- 53506ed: Introducing ComputeSDK 2.0 with the Sandbox Gateway.
+
+  The Gateway allows you to use the same SDK with ANY provider—including your existing cloud infrastructure—by simply bringing your own keys. Change providers by updating environment variables, not code.
+
+  **Supported Providers (8):** E2B, Modal, Railway, Vercel, Daytona, Render, Blaxel, and Namespace.
+
+  **New Features:**
+
+  - **Namespaces**: Organize sandboxes by user, project, or entity. Combined with named sandboxes, enables idempotent creation via `compute.sandbox.findOrCreate()`.
+
+  - **Servers**: Supervised processes with full lifecycle management:
+
+    - `install` command that runs before `start` (e.g., `npm install`)
+    - Restart policies: `never`, `on-failure`, `always`
+    - Health checks for readiness detection
+    - Graceful shutdown with SIGTERM/SIGKILL handling
+
+  - **Overlays**: Instantly bootstrap sandboxes from template directories:
+
+    - `smart` strategy uses symlinks for instant setup
+    - Background copying for heavy directories
+    - `waitForCompletion` option to block until ready
+
+  - **Client-Side Access**: Delegate sandbox access to browser clients securely:
+
+    - Session tokens for scoped credentials
+    - Magic links for one-click browser authentication
+
+  - **File Watchers**: Real-time filesystem change events via WebSocket
+
+  - **Signal Service**: Port detection and error events for dev server workflows
+
+  - **Environment Management**: First-class `.env` file operations
+
+## 2.0.0
+
+### Major Changes
+
+- Introducing the **Sandbox Gateway** as a first-class citizen in ComputeSDK v2.
+
+  The Gateway allows you to use the same SDK with ANY provider—including your existing cloud infrastructure—by simply bringing your own keys. Change providers by updating environment variables, not code.
+
+  **Supported Providers (8):** E2B, Modal, Railway, Vercel, Daytona, Render, Blaxel, and Namespace.
+
+### New Features
+
+- **Namespaces**: Organize sandboxes by user, project, or entity. Combined with named sandboxes, enables idempotent creation via `compute.sandbox.findOrCreate()`.
+
+- **Servers**: Supervised processes with full lifecycle management:
+
+  - `install` command that runs before `start` (e.g., `npm install`)
+  - Restart policies: `never`, `on-failure`, `always`
+  - Health checks for readiness detection
+  - Graceful shutdown with SIGTERM/SIGKILL handling
+
+- **Overlays**: Instantly bootstrap sandboxes from template directories:
+
+  - `smart` strategy uses symlinks for instant setup
+  - Background copying for heavy directories
+  - `waitForCompletion` option to block until ready
+
+- **Client-Side Access**: Delegate sandbox access to browser clients securely:
+
+  - Session tokens for scoped credentials
+  - Magic links for one-click browser authentication
+
+- **File Watchers**: Real-time filesystem change events via WebSocket
+
+- **Signal Service**: Port detection and error events for dev server workflows
+
+- **Environment Management**: First-class `.env` file operations
+
+## 1.21.1
+
+### Patch Changes
+
+- 9946e72: Add server health check support
+
+  - Add `health_check` configuration option to `ServerStartOptions` and `SandboxServerConfig`
+  - Add `HealthCheckConfig` interface with `path`, `interval_ms`, `timeout_ms`, and `delay_ms` options
+  - Add `healthy` and `health_status` fields to `ServerInfo` response
+  - Add `healthy` field to `ReadyResponse` for overall health status
+  - Add `healthy` and `health_check` fields to `SandboxServerInfo` in ready response
+
+## 1.21.0
+
+### Minor Changes
+
+- 7ba17e1: Add configurable gateway request timeouts for compute API calls.
+
+## 1.20.0
+
+### Minor Changes
+
+- 2b30125: Add readiness support, setup payload helpers, and setup-aware sandbox creation options.
+- 2b30125: Add readiness support, setup payload helpers, and expanded sandbox/server creation options.
+
+## 1.19.0
+
+### Minor Changes
+
+- 68b5296: Add readiness support, setup payload helpers, and expanded sandbox/server creation options.
+
+## 1.18.2
+
+### Patch Changes
+
+- 59147ac: Add `snapshotId` to ComputeSDK sandbox create options for provider-specific snapshot creation.
+
+## 1.18.1
+
+### Patch Changes
+
+- 688ca54: Fix `sandbox.terminal.retrieve(id)` to return a writable `TerminalInstance` instead of a static `TerminalResponse`.
+- 688ca54: feat(sdk): add support for smart overlay strategy
+
 ## 1.18.0
 
 ### Minor Changes

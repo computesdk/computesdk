@@ -175,8 +175,14 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Blaxel-Workspace'] = process.env.BL_WORKSPACE;
       }
       break;
+
+    case 'namespace':
+      if (process.env.NSC_TOKEN) {
+        headers['X-Namespace-Token'] = process.env.NSC_TOKEN;
+      }
+      break;
   }
-  
+
   return headers;
 }
 
@@ -188,6 +194,7 @@ export interface GatewayConfig {
   gatewayUrl: string;
   provider: string;
   providerHeaders: Record<string, string>;
+  requestTimeoutMs?: number;
   WebSocket?: WebSocketConstructor;
 }
 
@@ -237,7 +244,8 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Vercel:     export VERCEL_TOKEN=xxx VERCEL_TEAM_ID=xxx VERCEL_PROJECT_ID=xxx\n` +
       `  Cloudflare: export CLOUDFLARE_API_TOKEN=xxx CLOUDFLARE_ACCOUNT_ID=xxx\n` +
       `  CodeSandbox: export CSB_API_KEY=xxx\n` +
-      `  Blaxel:     export BL_API_KEY=xxx BL_WORKSPACE=xxx\n\n` +
+      `  Blaxel:     export BL_API_KEY=xxx BL_WORKSPACE=xxx\n` +
+      `  Namespace:  export NSC_TOKEN=xxx\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=e2b\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`

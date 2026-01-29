@@ -11,7 +11,9 @@ import type {
   ServerStatus,
   ServerLogStream,
   RestartPolicy,
+  HealthCheckConfig,
 } from '../index';
+import type { CreateOverlayOptions } from './overlay';
 
 /**
  * Options for starting a managed server
@@ -29,6 +31,18 @@ export interface ServerStartOptions {
   env_file?: string;
   /** Inline environment variables (merged with env_file if both provided) */
   environment?: Record<string, string>;
+  /** Requested port number (preallocated before start) */
+  port?: number;
+  /** If true, fail instead of auto-incrementing when port is taken */
+  strict_port?: boolean;
+  /** Whether to auto-start the server on daemon boot (default: true) */
+  autostart?: boolean;
+  /** Inline overlay to create before starting the server */
+  overlay?: Omit<CreateOverlayOptions, 'waitForCompletion'>;
+  /** Additional overlays to create before starting the server */
+  overlays?: Array<Omit<CreateOverlayOptions, 'waitForCompletion'>>;
+  /** Overlay IDs this server depends on (waits for copy completion) */
+  depends_on?: string[];
   /**
    * When to automatically restart the server:
    * - `never`: No automatic restart (default)
@@ -42,6 +56,11 @@ export interface ServerStartOptions {
   restart_delay_ms?: number;
   /** Graceful shutdown timeout in milliseconds - SIGTERM → wait → SIGKILL (default: 10000) */
   stop_timeout_ms?: number;
+  /**
+   * Health check configuration for monitoring server availability
+   * When configured, the server will be polled to verify it's responding to requests
+   */
+  health_check?: HealthCheckConfig;
 }
 
 /**
@@ -75,6 +94,18 @@ export interface ServerStartOptions {
  *   restart_delay_ms: 2000,
  * });
  *
+ * // Start with inline overlay dependencies
+ * const server = await sandbox.server.start({
+ *   slug: 'web',
+ *   start: 'npm run dev',
+ *   path: '/app',
+ *   overlay: {
+ *     source: '/templates/nextjs',
+ *     target: 'app',
+ *     strategy: 'smart',
+ *   },
+ * });
+ *
  * // List all servers
  * const servers = await sandbox.server.list();
  *
@@ -83,6 +114,9 @@ export interface ServerStartOptions {
  *
  * // Stop a server (graceful shutdown with SIGTERM → SIGKILL)
  * await sandbox.server.stop('api');
+ *
+ * // Delete a server config
+ * await sandbox.server.delete('api');
  *
  * // Restart a server
  * await sandbox.server.restart('api');
@@ -113,6 +147,7 @@ export class Server {
   private listHandler: () => Promise<ServersListResponse>;
   private retrieveHandler: (slug: string) => Promise<ServerResponse>;
   private stopHandler: (slug: string) => Promise<ServerStopResponse | void>;
+  private deleteHandler: (slug: string) => Promise<void>;
   private restartHandler: (slug: string) => Promise<ServerResponse>;
   private updateStatusHandler: (slug: string, status: ServerStatus) => Promise<void>;
   private logsHandler: (slug: string, options?: ServerLogsOptions) => Promise<ServerLogsResponse>;
@@ -122,6 +157,7 @@ export class Server {
     list: () => Promise<ServersListResponse>;
     retrieve: (slug: string) => Promise<ServerResponse>;
     stop: (slug: string) => Promise<ServerStopResponse | void>;
+    delete: (slug: string) => Promise<void>;
     restart: (slug: string) => Promise<ServerResponse>;
     updateStatus: (slug: string, status: ServerStatus) => Promise<void>;
     logs: (slug: string, options?: ServerLogsOptions) => Promise<ServerLogsResponse>;
@@ -130,6 +166,7 @@ export class Server {
     this.listHandler = handlers.list;
     this.retrieveHandler = handlers.retrieve;
     this.stopHandler = handlers.stop;
+    this.deleteHandler = handlers.delete;
     this.restartHandler = handlers.restart;
     this.updateStatusHandler = handlers.updateStatus;
     this.logsHandler = handlers.logs;
@@ -199,11 +236,19 @@ export class Server {
   }
 
   /**
-   * Stop a server by slug
+   * Stop a server by slug (non-destructive)
    * @param slug - The server slug
    */
   async stop(slug: string): Promise<void> {
     await this.stopHandler(slug);
+  }
+
+  /**
+   * Delete a server config by slug (stops + removes persistence)
+   * @param slug - The server slug
+   */
+  async delete(slug: string): Promise<void> {
+    await this.deleteHandler(slug);
   }
 
   /**

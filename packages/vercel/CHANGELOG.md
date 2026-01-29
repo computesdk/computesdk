@@ -1,5 +1,81 @@
 # @computesdk/vercel
 
+## 1.7.7
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 1.7.6
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@2.0.1
+  - @computesdk/provider@1.0.21
+
+## 1.7.5
+
+### Patch Changes
+
+- Updated dependencies [9946e72]
+  - computesdk@1.21.1
+  - @computesdk/provider@1.0.20
+
+## 1.7.4
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+  - @computesdk/provider@1.0.19
+
+## 1.7.3
+
+### Patch Changes
+
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+  - @computesdk/provider@1.0.18
+
+## 1.7.2
+
+### Patch Changes
+
+- Updated dependencies [68b5296]
+  - computesdk@1.19.0
+  - @computesdk/provider@1.0.17
+
+## 1.7.1
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+  - @computesdk/provider@1.0.16
+
+## 1.7.0
+
+### Minor Changes
+
+- 7f1553f: Add support for Vercel Sandbox snapshots:
+  - Implement `snapshot.create()` and `snapshot.delete()`.
+  - Support creating new sandboxes from snapshots via `sandbox.create({ snapshotId: '...' })`.
+
+### Patch Changes
+
+- 7f1553f: Update `@vercel/sandbox` dependency to latest version (`^1.2.0`).
+
+## 1.6.21
+
+### Patch Changes
+
+- Updated dependencies [688ca54]
+- Updated dependencies [688ca54]
+  - computesdk@1.18.1
+  - @computesdk/provider@1.0.15
+
 ## 1.6.20
 
 ### Patch Changes

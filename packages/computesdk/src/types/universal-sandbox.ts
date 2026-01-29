@@ -121,8 +121,54 @@ export interface CreateSandboxOptions {
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
+  directory?: string;
+  overlays?: SandboxOverlayConfig[];
+  servers?: SandboxServerConfig[];
   // Allow provider-specific properties (e.g., sandboxId, domain for E2B)
   [key: string]: any;
+}
+
+export interface SandboxOverlayConfig {
+  source: string;
+  target: string;
+  ignore?: string[];
+  strategy?: 'copy' | 'smart';
+}
+
+export type SandboxRestartPolicy = 'never' | 'on-failure' | 'always';
+
+/**
+ * Health check configuration for servers
+ */
+export interface SandboxHealthCheckConfig {
+  /** Path to poll for health checks (default: "/") */
+  path?: string;
+  /** Interval between health checks in milliseconds (default: 2000) */
+  interval_ms?: number;
+  /** Timeout for each health check request in milliseconds (default: 1500) */
+  timeout_ms?: number;
+  /** Delay before starting health checks after port detection in milliseconds (default: 5000) */
+  delay_ms?: number;
+}
+
+export interface SandboxServerConfig {
+  slug: string;
+  start: string;
+  install?: string;
+  path?: string;
+  port?: number;
+  strict_port?: boolean;
+  autostart?: boolean;
+  env_file?: string;
+  environment?: Record<string, string>;
+  restart_policy?: SandboxRestartPolicy;
+  max_restarts?: number;
+  restart_delay_ms?: number;
+  stop_timeout_ms?: number;
+  depends_on?: string[];
+  overlay?: SandboxOverlayConfig;
+  overlays?: SandboxOverlayConfig[];
+  health_check?: SandboxHealthCheckConfig;
 }
 
 /**

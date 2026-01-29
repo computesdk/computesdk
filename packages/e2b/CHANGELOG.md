@@ -1,5 +1,69 @@
 # @computesdk/e2b
 
+## 1.7.28
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 1.7.27
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@2.0.1
+  - @computesdk/provider@1.0.21
+
+## 1.7.26
+
+### Patch Changes
+
+- Updated dependencies [9946e72]
+  - computesdk@1.21.1
+  - @computesdk/provider@1.0.20
+
+## 1.7.25
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+  - @computesdk/provider@1.0.19
+
+## 1.7.24
+
+### Patch Changes
+
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+  - @computesdk/provider@1.0.18
+
+## 1.7.23
+
+### Patch Changes
+
+- Updated dependencies [68b5296]
+  - computesdk@1.19.0
+  - @computesdk/provider@1.0.17
+
+## 1.7.22
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+  - @computesdk/provider@1.0.16
+
+## 1.7.21
+
+### Patch Changes
+
+- Updated dependencies [688ca54]
+- Updated dependencies [688ca54]
+  - computesdk@1.18.1
+  - @computesdk/provider@1.0.15
+
 ## 1.7.20
 
 ### Patch Changes
