@@ -31,6 +31,73 @@ export interface VercelConfig {
   ports?: number[];
 }
 
+/**
+ * Resolved Vercel credentials with the authentication method to use
+ */
+interface ResolvedCredentials {
+  /** Whether to use OIDC authentication (no explicit credentials needed) */
+  useOidc: boolean;
+  /** Token for traditional auth (only used if useOidc is false) */
+  token: string;
+  /** Team ID for traditional auth (only used if useOidc is false) */
+  teamId: string;
+  /** Project ID for traditional auth (only used if useOidc is false) */
+  projectId: string;
+}
+
+/**
+ * Resolve Vercel credentials with proper precedence:
+ * 1. Config values (from setConfig) always win
+ * 2. Environment variables are used as fallback
+ * 3. OIDC is only used when no config credentials are provided
+ */
+function resolveCredentials(config: VercelConfig): ResolvedCredentials {
+  // Get values from config first, then fall back to environment
+  const token = config.token || (typeof process !== 'undefined' && process.env?.VERCEL_TOKEN) || '';
+  const teamId = config.teamId || (typeof process !== 'undefined' && process.env?.VERCEL_TEAM_ID) || '';
+  const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.VERCEL_PROJECT_ID) || '';
+  
+  // Check if config explicitly provided credentials (config takes precedence)
+  const hasConfigCredentials = !!(config.token || config.teamId || config.projectId);
+  
+  // Only use OIDC if:
+  // 1. No config credentials were provided, AND
+  // 2. OIDC token is available in environment
+  const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+  const useOidc = !hasConfigCredentials && !!oidcToken;
+  
+  return { useOidc, token, teamId, projectId };
+}
+
+/**
+ * Validate that we have sufficient credentials to authenticate
+ */
+function validateCredentials(creds: ResolvedCredentials): void {
+  if (creds.useOidc) {
+    // OIDC auth - no additional validation needed
+    return;
+  }
+  
+  // Traditional auth - need all three
+  if (!creds.token) {
+    throw new Error(
+      `Missing Vercel authentication. Either:\n` +
+      `1. Use OIDC token: Run 'vercel env pull' to get VERCEL_OIDC_TOKEN, or\n` +
+      `2. Use traditional method: Provide 'token' in config or set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
+    );
+  }
+  if (!creds.teamId) {
+    throw new Error(
+      `Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID environment variable.`
+    );
+  }
+  if (!creds.projectId) {
+    throw new Error(
+      `Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID environment variable.`
+    );
+  }
+}
+
 
 
 
@@ -43,34 +110,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
     sandbox: {
       // Collection operations (map to compute.sandbox.*)
       create: async (config: VercelConfig, options?: CreateSandboxOptions) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
-
-        // Fall back to traditional method (token + teamId + projectId)
-        const token = config.token || (typeof process !== 'undefined' && process.env?.VERCEL_TOKEN) || '';
-        const teamId = config.teamId || (typeof process !== 'undefined' && process.env?.VERCEL_TEAM_ID) || '';
-        const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.VERCEL_PROJECT_ID) || '';
-
-        // Validate authentication - either OIDC token OR traditional method
-        if (!oidcToken && (!token || !teamId || !projectId)) {
-          if (!oidcToken && !token) {
-            throw new Error(
-              `Missing Vercel authentication. Either:\n` +
-              `1. Use OIDC token: Run 'vercel env pull' to get VERCEL_OIDC_TOKEN, or\n` +
-              `2. Use traditional method: Provide 'token' in config or set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
-            );
-          }
-          if (!oidcToken && !teamId) {
-            throw new Error(
-              `Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID environment variable.`
-            );
-          }
-          if (!oidcToken && !projectId) {
-            throw new Error(
-              `Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID environment variable.`
-            );
-          }
-        }
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
 
         const timeout = config.timeout || 300000;
 
@@ -90,23 +132,26 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
               timeout,
             };
 
-            if (options?.snapshotId) {
+            // Support both ComputeSDK format (snapshotId at top level) and 
+            // Vercel SDK format (source.snapshotId nested)
+            const snapshotId = options?.snapshotId || 
+              (options?.source?.type === 'snapshot' && options?.source?.snapshotId);
+            
+            if (snapshotId) {
               params.source = {
                 type: 'snapshot',
-                snapshotId: options.snapshotId
+                snapshotId
               };
             }
 
-            // Create new Vercel sandbox
-            if (oidcToken) {
-              sandbox = await VercelSandbox.create(params);
-            } else {
-              // Add auth params
-              params.token = token;
-              params.teamId = teamId;
-              params.projectId = projectId;
-              sandbox = await VercelSandbox.create(params);
+            // Add auth params if not using OIDC
+            if (!creds.useOidc) {
+              params.token = creds.token;
+              params.teamId = creds.teamId;
+              params.projectId = creds.projectId;
             }
+
+            sandbox = await VercelSandbox.create(params);
           }
 
           return {
@@ -133,26 +178,22 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       },
 
       getById: async (config: VercelConfig, sandboxId: string) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
 
         try {
           let sandbox: VercelSandbox;
 
-          if (oidcToken) {
+          if (creds.useOidc) {
             // Use OIDC token method
             sandbox = await VercelSandbox.get({ sandboxId });
           } else {
             // Use traditional method
-            const token = config.token || process.env.VERCEL_TOKEN!;
-            const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
-            const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
-
             sandbox = await VercelSandbox.get({
               sandboxId,
-              token,
-              teamId,
-              projectId,
+              token: creds.token,
+              teamId: creds.teamId,
+              projectId: creds.projectId,
             });
           }
 
@@ -173,26 +214,22 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       },
 
       destroy: async (config: VercelConfig, sandboxId: string) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
 
         try {
           let sandbox: VercelSandbox;
 
-          if (oidcToken) {
+          if (creds.useOidc) {
             // Use OIDC token method
             sandbox = await VercelSandbox.get({ sandboxId });
           } else {
             // Use traditional method
-            const token = config.token || process.env.VERCEL_TOKEN!;
-            const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
-            const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
-
             sandbox = await VercelSandbox.get({
               sandboxId,
-              token,
-              teamId,
-              projectId,
+              token: creds.token,
+              teamId: creds.teamId,
+              projectId: creds.projectId,
             });
           }
 
@@ -375,25 +412,21 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
 
     snapshot: {
       create: async (config: VercelConfig, sandboxId: string) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
 
         let sandbox: VercelSandbox;
 
-        if (oidcToken) {
+        if (creds.useOidc) {
           // Use OIDC token method
           sandbox = await VercelSandbox.get({ sandboxId });
         } else {
           // Use traditional method
-          const token = config.token || process.env.VERCEL_TOKEN!;
-          const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
-          const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
-
           sandbox = await VercelSandbox.get({
             sandboxId,
-            token,
-            teamId,
-            projectId,
+            token: creds.token,
+            teamId: creds.teamId,
+            projectId: creds.projectId,
           });
         }
 
@@ -407,25 +440,21 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       },
 
       delete: async (config: VercelConfig, snapshotId: string) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
 
         let snapshot: VercelSnapshot;
 
-        if (oidcToken) {
+        if (creds.useOidc) {
           // Use OIDC token method
           snapshot = await VercelSnapshot.get({ snapshotId });
         } else {
           // Use traditional method
-          const token = config.token || process.env.VERCEL_TOKEN!;
-          const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
-          const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
-
           snapshot = await VercelSnapshot.get({
             snapshotId,
-            token,
-            teamId,
-            projectId,
+            token: creds.token,
+            teamId: creds.teamId,
+            projectId: creds.projectId,
           });
         }
 
