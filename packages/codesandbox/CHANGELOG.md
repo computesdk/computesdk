@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.30
+
+### Patch Changes
+
+- Updated dependencies [9e7e50a]
+  - computesdk@2.1.0
+  - @computesdk/provider@1.0.23
+
 ## 1.5.29
 
 ### Patch Changes
