@@ -92,6 +92,27 @@ describe('Vercel Snapshot Support', () => {
     }));
   });
 
+  it('should create a sandbox from a snapshot using nested source format', async () => {
+    // This format matches the Vercel SDK's native format
+    // The gateway may pass options in this format
+    await provider.sandbox.create({ 
+      source: { 
+        type: 'snapshot', 
+        snapshotId: 'snap-456' 
+      } 
+    } as any);
+
+    expect(VercelSandbox.create).toHaveBeenCalledWith(expect.objectContaining({
+      source: {
+        type: 'snapshot',
+        snapshotId: 'snap-456'
+      },
+      token: 'mock-token',
+      teamId: 'mock-team',
+      projectId: 'mock-project'
+    }));
+  });
+
   it('should throw when listing snapshots', async () => {
     if (!provider.snapshot) {
       throw new Error('Snapshot manager not initialized');
