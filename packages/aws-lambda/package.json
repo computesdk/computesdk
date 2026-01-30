@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/aws-lambda",
-  "version": "1.1.28",
+  "version": "1.1.29",
   "description": "AWS Lambda provider for ComputeSDK - serverless code execution on AWS Lambda functions",
   "author": "ComputeSDK Team",
   "license": "MIT",

@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.0.2
+
+### Patch Changes
+
+- e3ed89b: feat(sdk): add support for smart overlay strategy
+
 ## 2.0.1
 
 ### Patch Changes
