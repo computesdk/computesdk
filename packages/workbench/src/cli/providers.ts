@@ -264,6 +264,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/blaxel');
       case 'namespace':
         return await import('@computesdk/namespace');
+      case 'hopx':
+        return await import('@computesdk/hopx');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }

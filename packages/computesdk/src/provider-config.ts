@@ -30,6 +30,7 @@ export const PROVIDER_AUTH = {
   codesandbox: [['CSB_API_KEY']],
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
   namespace: [['NSC_TOKEN']],
+  hopx: [['HOPX_API_KEY']],
 } as const;
 
 /**
@@ -89,6 +90,9 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
   namespace: {
     token: 'X-Namespace-Token',
   },
+  hopx: {
+    apiKey: 'X-HOPX-API-Key',
+  },
 };
 
 /**
@@ -137,6 +141,9 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
   namespace: {
     NSC_TOKEN: 'token',
   },
+  hopx: {
+    HOPX_API_KEY: 'apiKey',
+  },
 };
 
 /**
@@ -154,6 +161,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   codesandbox: 'https://codesandbox.io/dashboard/settings',
   blaxel: 'https://blaxel.ai/dashboard',
   namespace: 'https://cloud.namespace.so',
+  hopx: 'https://hopx.ai/dashboard',
 };
 
 /**
