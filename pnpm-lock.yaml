@@ -965,6 +965,9 @@ importers:
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../e2b
+      '@computesdk/hopx':
+        specifier: workspace:*
+        version: link:../hopx
       '@computesdk/modal':
         specifier: workspace:*
         version: link:../modal
