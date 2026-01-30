@@ -63,6 +63,7 @@ export interface ExplicitComputeConfig {
   codesandbox?: { apiKey?: string };
   blaxel?: { apiKey?: string; workspace?: string };
   namespace?: { token?: string };
+  hopx?: { apiKey?: string };
 }
 
 /**
