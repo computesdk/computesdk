@@ -131,7 +131,6 @@ export const railway = defineInfraProvider<RailwayInstance, RailwayConfig>({
             input: {
               projectId,
               environmentId,
-              templateServiceId: 'sandbox',
               source: {
                 image: options?.image ?? 'computesdk/compute:latest',
               },
