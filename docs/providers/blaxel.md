@@ -48,8 +48,6 @@ interface BlaxelConfig {
   region?: string;
   /** Default memory allocation in MB (default: 4096) */
   memory?: number;
-  /** Default ports for sandbox (default: [3000]) */
-  ports?: number[];
 }
 ```
 
