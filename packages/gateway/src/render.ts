@@ -239,5 +239,42 @@ export const render = defineInfraProvider<RenderInstance, RenderConfig>({
         console.warn(`Render destroy warning: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
+
+    getDaemonUrl: async (config: RenderConfig, instanceId: string) => {
+      const { apiKey } = getAndValidateCredentials(config);
+
+      try {
+        // Retrieve the service to get its URL
+        const responseData = await fetchRender(apiKey, `/services/${instanceId}`);
+
+        if (!responseData) {
+          throw new Error('No service data returned from Render API');
+        }
+
+        // Render services have a serviceDetails.url field for web services
+        // The URL format is typically: https://{service-name}.onrender.com
+        // The daemon runs on port 18080 and Render routes all traffic to the PORT env var
+        const serviceDetails = responseData.serviceDetails;
+        let baseUrl: string | undefined;
+
+        if (serviceDetails?.url) {
+          baseUrl = serviceDetails.url;
+        } else if (responseData.slug) {
+          // Fallback: construct URL from service slug
+          baseUrl = `https://${responseData.slug}.onrender.com`;
+        }
+
+        if (!baseUrl) {
+          throw new Error(`No URL found for Render service ${instanceId}. Make sure the service is deployed and has a public URL.`);
+        }
+
+        // Return the base HTTPS URL - Render routes traffic to the daemon's PORT
+        return baseUrl.replace(/\/$/, '');
+      } catch (error) {
+        throw new Error(
+          `Failed to get Render daemon URL: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
   },
 });

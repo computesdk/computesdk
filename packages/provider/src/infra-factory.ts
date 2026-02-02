@@ -22,6 +22,13 @@ export interface InfraProviderMethods<TInstance = any, TConfig = any> {
   
   /** Destroy an instance */
   destroy: (config: TConfig, instanceId: string) => Promise<void>;
+
+  /** 
+   * Get the public URL to the daemon running on port 18080 (optional).
+   * Used for direct proxy routing in hybrid mode - all traffic is proxied
+   * through the daemon which handles port forwarding internally.
+   */
+  getDaemonUrl?: (config: TConfig, instanceId: string) => Promise<string>;
 }
 
 /**
@@ -53,6 +60,13 @@ export interface InfraProvider<TInstance = any> {
   getById: (instanceId: string) => Promise<{ instance: TInstance; instanceId: string } | null>;
   list: () => Promise<Array<{ instance: TInstance; instanceId: string }>>;
   destroy: (instanceId: string) => Promise<void>;
+  /** 
+   * Get the public URL to the daemon running on port 18080 (optional).
+   * Returns undefined if the provider doesn't support direct URL access.
+   * Used for hybrid proxy mode - traffic is routed directly to the daemon
+   * which handles internal port forwarding via X-Forward-To-Port header.
+   */
+  getDaemonUrl?: (instanceId: string) => Promise<string>;
 }
 
 /**
@@ -103,7 +117,7 @@ export function defineInfraProvider<TInstance, TConfig = any>(
   config: InfraProviderConfig<TInstance, TConfig>
 ): (providerConfig: TConfig) => InfraProvider<TInstance> {
   return (providerConfig: TConfig) => {
-    return {
+    const provider: InfraProvider<TInstance> = {
       name: config.name,
       
       create: async (options) => {
@@ -122,5 +136,14 @@ export function defineInfraProvider<TInstance, TConfig = any>(
         await config.methods.destroy(providerConfig, instanceId);
       }
     };
+
+    // Add getDaemonUrl if the provider implements it
+    if (config.methods.getDaemonUrl) {
+      provider.getDaemonUrl = async (instanceId) => {
+        return await config.methods.getDaemonUrl!(providerConfig, instanceId);
+      };
+    }
+
+    return provider;
   };
 }

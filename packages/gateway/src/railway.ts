@@ -62,7 +62,8 @@ const GRAPHQL_QUERIES = {
   CREATE_SERVICE: `mutation ServiceCreate($input: ServiceCreateInput!) { serviceCreate(input: $input) { id name } }`,
   GET_SERVICE: `query Service($serviceId: String!) { service(id: $serviceId) { id name createdAt } }`,
   LIST_SERVICES: `query Project($projectId: String!) { project(id: $projectId) { services { edges { node { id name createdAt updatedAt } } } } }`,
-  DELETE_SERVICE: `mutation ServiceDelete($id: String!) { serviceDelete(id: $id) }`
+  DELETE_SERVICE: `mutation ServiceDelete($id: String!) { serviceDelete(id: $id) }`,
+  GET_DOMAINS: `query Domains($serviceId: String!, $environmentId: String!, $projectId: String!) { domains(serviceId: $serviceId, environmentId: $environmentId, projectId: $projectId) { domain targetPort } }`
 };
 
 const handleGraphQLErrors = (data: any) => {
@@ -260,6 +261,38 @@ export const railway = defineInfraProvider<RailwayInstance, RailwayConfig>({
         // For destroy operations, we log warnings rather than throwing
         // since the resource may already be gone
         console.warn(`Railway destroy warning: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+
+    getDaemonUrl: async (config: RailwayConfig, instanceId: string) => {
+      const { apiKey, projectId, environmentId } = getAndValidateCredentials(config);
+
+      try {
+        const query = {
+          query: GRAPHQL_QUERIES.GET_DOMAINS,
+          variables: {
+            serviceId: instanceId,
+            environmentId,
+            projectId
+          }
+        };
+
+        const responseData = await fetchRailway(apiKey, query);
+        const domains = responseData?.domains || [];
+
+        if (domains.length === 0) {
+          throw new Error(`No domains found for Railway service ${instanceId}. Make sure the service has a domain assigned.`);
+        }
+
+        // Find the domain targeting port 18080 (daemon port), or use the first available domain
+        // The daemon listens on 18080 and handles internal port forwarding
+        const daemonDomain = domains.find((d: any) => d.targetPort === 18080) || domains[0];
+
+        return `https://${daemonDomain.domain}`;
+      } catch (error) {
+        throw new Error(
+          `Failed to get Railway daemon URL: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     },
   },
