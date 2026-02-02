@@ -62,6 +62,7 @@
     "@computesdk/codesandbox": "workspace:*",
     "@computesdk/daytona": "workspace:*",
     "@computesdk/e2b": "workspace:*",
+    "@computesdk/hopx": "workspace:*",
     "@computesdk/modal": "workspace:*",
     "@computesdk/railway": "workspace:*",
     "@computesdk/runloop": "workspace:*",
@@ -97,6 +98,9 @@
       "optional": true
     },
     "@computesdk/namespace": {
+      "optional": true
+    },
+    "@computesdk/hopx": {
       "optional": true
     }
   },

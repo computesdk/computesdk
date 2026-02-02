@@ -40,6 +40,7 @@ export const PROVIDER_PRIORITY = [
   'codesandbox',
   'blaxel',
   'namespace',
+  'hopx',
 ] as const;
 
 /**
@@ -58,4 +59,5 @@ export const PROVIDER_ENV_VARS = {
   codesandbox: ['CSB_API_KEY'],
   blaxel: ['BL_API_KEY', 'BL_WORKSPACE'],
   namespace: ['NSC_TOKEN'],
+  hopx: ['HOPX_API_KEY'],
 } as const;

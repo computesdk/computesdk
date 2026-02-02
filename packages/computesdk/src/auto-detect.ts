@@ -181,6 +181,12 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Namespace-Token'] = process.env.NSC_TOKEN;
       }
       break;
+
+    case 'hopx':
+      if (process.env.HOPX_API_KEY) {
+        headers['X-HOPX-API-Key'] = process.env.HOPX_API_KEY;
+      }
+      break;
   }
 
   return headers;
@@ -245,7 +251,8 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Cloudflare: export CLOUDFLARE_API_TOKEN=xxx CLOUDFLARE_ACCOUNT_ID=xxx\n` +
       `  CodeSandbox: export CSB_API_KEY=xxx\n` +
       `  Blaxel:     export BL_API_KEY=xxx BL_WORKSPACE=xxx\n` +
-      `  Namespace:  export NSC_TOKEN=xxx\n\n` +
+      `  Namespace:  export NSC_TOKEN=xxx\n` +
+      `  HopX:       export HOPX_API_KEY=xxx\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=e2b\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`
