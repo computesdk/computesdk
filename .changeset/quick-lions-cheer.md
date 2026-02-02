@@ -2,4 +2,4 @@
 "@computesdk/gateway": patch
 ---
 
-fix: remove templateServiceId from Railway service creation to resolve API errors
+fix: use proper UUID-based templateId and templateServiceId for Railway service creation
