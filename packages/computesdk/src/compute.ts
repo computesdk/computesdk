@@ -61,7 +61,7 @@ export interface ExplicitComputeConfig {
   runloop?: { apiKey?: string };
   cloudflare?: { apiToken?: string; accountId?: string };
   codesandbox?: { apiKey?: string };
-  blaxel?: { apiKey?: string; workspace?: string };
+  blaxel?: { apiKey?: string; workspace?: string; image?: string; region?: string; memory?: number };
   namespace?: { token?: string };
   hopx?: { apiKey?: string };
 }
