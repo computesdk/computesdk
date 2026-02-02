@@ -60,8 +60,8 @@ export interface ExplicitComputeConfig {
   vercel?: { oidcToken?: string; token?: string; teamId?: string; projectId?: string };
   runloop?: { apiKey?: string };
   cloudflare?: { apiToken?: string; accountId?: string };
-  codesandbox?: { apiKey?: string };
-  blaxel?: { apiKey?: string; workspace?: string };
+  codesandbox?: { apiKey?: string; templateId?: string; timeout?: number };
+  blaxel?: { apiKey?: string; workspace?: string; image?: string; region?: string; memory?: number};
   namespace?: { token?: string };
 }
 
