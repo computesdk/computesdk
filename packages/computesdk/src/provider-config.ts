@@ -81,7 +81,7 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     accountId: 'X-Cloudflare-Account-Id',
   },
   codesandbox: {
-    apiKey: 'X-CODESANDBOX-API-Key',
+    apiKey: 'X-CodeSandbox-API-Key',
   },
   blaxel: {
     apiKey: 'X-Blaxel-API-Key',
