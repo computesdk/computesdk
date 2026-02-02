@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.1.0
+
+### Minor Changes
+
+- 9e7e50a: update gateway headers for codesandbox auth
+
 ## 2.0.2
 
 ### Patch Changes

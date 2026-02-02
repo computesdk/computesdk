@@ -1,5 +1,12 @@
 # @computesdk/gateway
 
+## 0.3.9
+
+### Patch Changes
+
+- 17953d6: fix: remove templateServiceId from Railway service creation to resolve API errors
+  - @computesdk/provider@1.0.23
+
 ## 0.3.8
 
 ### Patch Changes

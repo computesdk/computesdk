@@ -1,5 +1,12 @@
 # @computesdk/provider
 
+## 1.0.23
+
+### Patch Changes
+
+- Updated dependencies [9e7e50a]
+  - computesdk@2.1.0
+
 ## 1.0.22
 
 ### Patch Changes
