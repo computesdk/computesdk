@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.1.1
+
+### Patch Changes
+
+- 2c9468b: Fix ready() method to pass through the healthy property from the API response
+
 ## 2.1.0
 
 ### Minor Changes
