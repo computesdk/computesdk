@@ -137,7 +137,7 @@ export function createConfigFromExplicit(config: ExplicitComputeConfig): Gateway
   // Create and return gateway config
   return {
     apiKey: computesdkApiKey,
-    gatewayUrl: config.gatewayUrl || GATEWAY_URL,
+    gatewayUrl: config.gatewayUrl || process.env.COMPUTESDK_GATEWAY_URL || GATEWAY_URL,
     provider: config.provider,
     providerHeaders,
     requestTimeoutMs: config.requestTimeoutMs,

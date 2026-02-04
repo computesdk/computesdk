@@ -2313,6 +2313,7 @@ export class Sandbox {
     const response = await this.request<ReadyResponse>('/ready');
     return {
       ready: response.ready,
+      healthy: response.healthy,
       servers: response.servers ?? [],
       overlays: response.overlays ?? [],
     };
