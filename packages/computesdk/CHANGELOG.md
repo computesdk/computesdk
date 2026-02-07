@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.1.2
+
+### Patch Changes
+
+- a5a7f63: Fix edge gateway timeout by sending X-Request-Timeout header and add timeout option to runCommand()
+
 ## 2.1.1
 
 ### Patch Changes
