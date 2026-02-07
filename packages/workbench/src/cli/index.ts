@@ -34,6 +34,7 @@ export async function startWorkbench(): Promise<void> {
     state.currentProvider = 'local';
     state.useDirectMode = false;
     state.verbose = true; // Enable verbose for local debugging
+    process.env.COMPUTESDK_DEBUG = '1'; // Enable SDK debug logging
   } else {
     const hasGateway = state.availableProviders.includes('gateway');
     const backendProviders = state.availableProviders.filter(p => p !== 'gateway' && p !== 'local');
