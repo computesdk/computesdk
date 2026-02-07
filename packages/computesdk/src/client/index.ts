@@ -1168,6 +1168,13 @@ export class Sandbox {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
+    // Debug logging for request start
+    if (process.env.COMPUTESDK_DEBUG) {
+      console.log(`[ComputeSDK] Request: ${options.method || 'GET'} ${this.config.sandboxUrl}${endpoint}`);
+      console.log(`[ComputeSDK]   Sandbox ID: ${this.config.sandboxId}`);
+      console.log(`[ComputeSDK]   Token: ${this._token || '(no token)'}`);
+    }
+
     try {
       const headers: Record<string, string> = {
         ...this.config.headers,
@@ -1222,6 +1229,17 @@ export class Sandbox {
               `API request failed (${response.status}): ${error}`
             );
           }
+        }
+
+        // Enhanced debug logging for 403 errors
+        if (response.status === 403 && process.env.COMPUTESDK_DEBUG) {
+          console.error(`[ComputeSDK] 403 Forbidden Debug Info:`);
+          console.error(`  Endpoint: ${endpoint}`);
+          console.error(`  Method: ${options.method || 'GET'}`);
+          console.error(`  Sandbox URL: ${this.config.sandboxUrl}`);
+          console.error(`  Sandbox ID: ${this.config.sandboxId}`);
+          console.error(`  Token: ${this._token || '(no token)'}`);
+          console.error(`  Error: ${error}`);
         }
 
         throw new Error(`API request failed (${response.status}): ${error}`);
