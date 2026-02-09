@@ -531,10 +531,13 @@ export function showMode(state: WorkbenchState): void {
  */
 export function toggleVerbose(state: WorkbenchState): void {
   state.verbose = !state.verbose;
+  // Also enable SDK debug logging when verbose is on
   if (state.verbose) {
-    logSuccess('Verbose mode enabled - will show full command results');
+    process.env.COMPUTESDK_DEBUG = '1';
+    logSuccess('Verbose mode enabled - will show full command results and SDK debug logs');
     console.log(c.dim('Commands will return full result objects with metadata\n'));
   } else {
+    delete process.env.COMPUTESDK_DEBUG;
     logSuccess('Verbose mode disabled - showing clean output only');
     console.log(c.dim('Commands will only show stdout/stderr\n'));
   }
@@ -549,6 +552,7 @@ export function showVerbose(state: WorkbenchState): void {
   
   if (state.verbose) {
     console.log(c.dim('Commands return full result objects with metadata'));
+    console.log(c.dim('SDK debug logging is enabled'));
   } else {
     console.log(c.dim('Commands show only stdout/stderr'));
   }
@@ -804,6 +808,7 @@ export async function connectToLocal(state: WorkbenchState, subdomain?: string):
     
     // Enable verbose mode for local provider (useful for debugging)
     state.verbose = true;
+    process.env.COMPUTESDK_DEBUG = '1';
     
     spinner.succeed(`Connected to local sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
     console.log(c.dim(`Sandbox: ${targetSubdomain}`));

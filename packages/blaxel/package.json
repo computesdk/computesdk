@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/blaxel",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Blaxel provider for ComputeSDK - lightweight cloud sandboxes for code execution",
   "author": "ComputeSDK",
   "license": "MIT",

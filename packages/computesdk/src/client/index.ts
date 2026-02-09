@@ -1144,7 +1144,9 @@ export class Sandbox {
     terminal.setWaitCommandHandler(async (cmdId: string, timeout?: number) => {
       const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
       const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
-      return this.request<CommandDetailsResponse>(endpoint);
+      return this.request<CommandDetailsResponse>(endpoint, {
+        headers: timeout ? { 'X-Request-Timeout': timeout.toString() } : undefined,
+      });
     });
 
     terminal.setDestroyHandler(async () => {
@@ -1167,6 +1169,13 @@ export class Sandbox {
   ): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+    // Debug logging for request start
+    if (process.env.COMPUTESDK_DEBUG) {
+      console.log(`[ComputeSDK] Request: ${options.method || 'GET'} ${this.config.sandboxUrl}${endpoint}`);
+      console.log(`[ComputeSDK]   Sandbox ID: ${this.config.sandboxId}`);
+      console.log(`[ComputeSDK]   Token: ${this._token || '(no token)'}`);
+    }
 
     try {
       const headers: Record<string, string> = {
@@ -1222,6 +1231,17 @@ export class Sandbox {
               `API request failed (${response.status}): ${error}`
             );
           }
+        }
+
+        // Enhanced debug logging for 403 errors
+        if (response.status === 403 && process.env.COMPUTESDK_DEBUG) {
+          console.error(`[ComputeSDK] 403 Forbidden Debug Info:`);
+          console.error(`  Endpoint: ${endpoint}`);
+          console.error(`  Method: ${options.method || 'GET'}`);
+          console.error(`  Sandbox URL: ${this.config.sandboxUrl}`);
+          console.error(`  Sandbox ID: ${this.config.sandboxId}`);
+          console.error(`  Token: ${this._token || '(no token)'}`);
+          console.error(`  Error: ${error}`);
         }
 
         throw new Error(`API request failed (${response.status}): ${error}`);
@@ -1841,7 +1861,9 @@ export class Sandbox {
   ): Promise<CommandDetailsResponse> {
     const params = timeout ? new URLSearchParams({ timeout: timeout.toString() }) : '';
     const endpoint = `/terminals/${terminalId}/commands/${cmdId}/wait${params ? `?${params}` : ''}`;
-    return this.request<CommandDetailsResponse>(endpoint);
+    return this.request<CommandDetailsResponse>(endpoint, {
+      headers: timeout ? { 'X-Request-Timeout': timeout.toString() } : undefined,
+    });
   }
 
   /**
@@ -2418,6 +2440,7 @@ export class Sandbox {
    * @param options.env - Environment variables (server uses cmd.Env)
    * @param options.onStdout - Callback for streaming stdout data
    * @param options.onStderr - Callback for streaming stderr data
+   * @param options.timeout - Timeout in seconds (max 300 for long-running commands)
    * @returns Command execution result
    * 
    * @example
@@ -2439,6 +2462,9 @@ export class Sandbox {
    *   onStdout: (data) => console.log(data),
    *   onStderr: (data) => console.error(data),
    * })
+   * 
+   * // With timeout for long-running commands
+   * await sandbox.runCommand('npm install', { timeout: 120 })
    * ```
    */
   async runCommand(
@@ -2449,6 +2475,8 @@ export class Sandbox {
       env?: Record<string, string>;
       onStdout?: (data: string) => void;
       onStderr?: (data: string) => void;
+      /** Timeout in seconds (max 300 for long-running commands) */
+      timeout?: number;
     }
   ): Promise<{
     stdout: string;
@@ -2459,7 +2487,16 @@ export class Sandbox {
     const hasStreamingCallbacks = options?.onStdout || options?.onStderr;
     
     if (!hasStreamingCallbacks) {
-      // Non-streaming mode: use existing behavior
+      // Non-streaming mode
+      if (options?.timeout && !options?.background) {
+        // For timeout support on foreground commands, run as background + wait
+        // This uses the X-Request-Timeout header for proper edge gateway timeout
+        return this.run.command(command, {
+          ...options,
+          background: true,
+          waitForCompletion: { timeoutSeconds: options.timeout },
+        });
+      }
       return this.run.command(command, options);
     }
 
@@ -2545,9 +2582,23 @@ export class Sandbox {
     }
 
     // Non-background streaming: wait for command to complete
-    return new Promise((resolve) => {
+    const commandPromise = new Promise<{ stdout: string; stderr: string; exitCode: number; durationMs: number }>((resolve) => {
       resolvePromise = resolve;
     });
+
+    // Add timeout if specified
+    if (options?.timeout) {
+      const timeoutMs = options.timeout * 1000;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          cleanup();
+          reject(new Error(`Command timed out after ${options.timeout} seconds`));
+        }, timeoutMs);
+      });
+      return Promise.race([commandPromise, timeoutPromise]);
+    }
+
+    return commandPromise;
   }
 
   /**
