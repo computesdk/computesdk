@@ -21,6 +21,8 @@ export interface ProviderTestConfig {
   timeout?: number;
   /** Skip tests that require real API calls */
   skipIntegration?: boolean;
+  /** Ports to expose when creating sandboxes (needed for getUrl tests on some providers) */
+  ports?: number[];
 }
 
 /**
@@ -28,7 +30,7 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function defineProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false } = config;
+  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false, ports = [3000, 8080] } = config;
 
   return () => {
     // Get supported runtimes dynamically from provider
@@ -39,7 +41,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
       if (skipIntegration) {
         return createMockSandbox(config);
       } else {
-        return await provider.sandbox.create({ runtime });
+        return await provider.sandbox.create({ runtime, ports });
       }
     };
 
