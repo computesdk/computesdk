@@ -112,8 +112,10 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
             const sandboxOptions: any = {}; // Using 'any' since Modal SDK is alpha
             
             // Configure ports if provided (using unencrypted ports by default)
-            if (config.ports && config.ports.length > 0) {
-              sandboxOptions.unencryptedPorts = config.ports;
+            // options.ports takes precedence over config.ports
+            const ports = options?.ports ?? config.ports;
+            if (ports && ports.length > 0) {
+              sandboxOptions.unencryptedPorts = ports;
             }
             
             // Add timeout if specified

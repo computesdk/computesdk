@@ -127,8 +127,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
             );
           } else {
             // Construct base params
+            // options.ports takes precedence over config.ports
             const params: any = {
-              ports: config.ports,
+              ports: options?.ports ?? config.ports,
               timeout,
             };
 
