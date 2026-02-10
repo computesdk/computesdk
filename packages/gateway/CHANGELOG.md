@@ -1,5 +1,11 @@
 # @computesdk/gateway
 
+## 0.3.12
+
+### Patch Changes
+
+- @computesdk/provider@1.0.26
+
 ## 0.3.11
 
 ### Patch Changes

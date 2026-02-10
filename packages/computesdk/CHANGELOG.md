@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.2.0
+
+### Minor Changes
+
+- 55b793e: add render to autodetect
+
 ## 2.1.2
 
 ### Patch Changes
