@@ -5,5 +5,6 @@ runProviderTestSuite({
   name: 'e2b',
   provider: e2b({}),
   supportsFilesystem: true,  // E2B supports filesystem operations
-  skipIntegration: !process.env.E2B_API_KEY
+  skipIntegration: !process.env.E2B_API_KEY,
+  ports: [3000, 8080]  // Enable getUrl tests
 });

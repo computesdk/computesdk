@@ -30,7 +30,7 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function defineProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false, ports = [3000, 8080] } = config;
+  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false, ports } = config;
 
   return () => {
     // Get supported runtimes dynamically from provider
@@ -41,7 +41,12 @@ export function defineProviderTests(config: ProviderTestConfig) {
       if (skipIntegration) {
         return createMockSandbox(config);
       } else {
-        return await provider.sandbox.create({ runtime, ports });
+        // Only pass ports if explicitly configured (some providers don't support it)
+        const createOptions: any = { runtime };
+        if (ports && ports.length > 0) {
+          createOptions.ports = ports;
+        }
+        return await provider.sandbox.create(createOptions);
       }
     };
 
@@ -181,25 +186,30 @@ print(json.dumps(data, indent=2))
           expect(info.status).toBeDefined();
         });
 
-        it('should get sandbox URL for a port', async () => {
-          const url = await sandbox.getUrl({ port: 3000 });
-          
-          expect(url).toBeDefined();
-          expect(typeof url).toBe('string');
-          expect(url.length).toBeGreaterThan(0);
-          // URL should contain the port number or be a valid URL format
-          expect(url).toMatch(/^(https?|wss?):\/\/.+/);
-        });
+        // getUrl tests only run if ports are configured (some providers require upfront port config)
+        if (ports && ports.length > 0) {
+          it('should get sandbox URL for a port', async () => {
+            const url = await sandbox.getUrl({ port: ports[0] });
+            
+            expect(url).toBeDefined();
+            expect(typeof url).toBe('string');
+            expect(url.length).toBeGreaterThan(0);
+            // URL should contain the port number or be a valid URL format
+            expect(url).toMatch(/^(https?|wss?):\/\/.+/);
+          });
 
-        it('should get sandbox URL with custom protocol', async () => {
-          const url = await sandbox.getUrl({ port: 8080, protocol: 'wss' });
-          
-          expect(url).toBeDefined();
-          expect(typeof url).toBe('string');
-          // Should respect the protocol if the provider supports it
-          // Some providers may ignore protocol and always return https
-          expect(url).toMatch(/^(https?|wss?):\/\/.+/);
-        });
+          if (ports.length > 1) {
+            it('should get sandbox URL with custom protocol', async () => {
+              const url = await sandbox.getUrl({ port: ports[1], protocol: 'wss' });
+              
+              expect(url).toBeDefined();
+              expect(typeof url).toBe('string');
+              // Should respect the protocol if the provider supports it
+              // Some providers may ignore protocol and always return https
+              expect(url).toMatch(/^(https?|wss?):\/\/.+/);
+            });
+          }
+        }
 
         it('should handle invalid commands gracefully', async () => {
           const result = await sandbox.runCommand('nonexistent-command-12345');
