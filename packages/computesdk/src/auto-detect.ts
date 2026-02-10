@@ -187,6 +187,15 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-HOPX-API-Key'] = process.env.HOPX_API_KEY;
       }
       break;
+
+    case 'render':
+      if (process.env.RENDER_API_KEY) {
+        headers['X-Render-API-Key'] = process.env.RENDER_API_KEY;
+      }
+      if (process.env.RENDER_OWNER_ID) {
+        headers['X-Render-Owner-ID'] = process.env.RENDER_OWNER_ID;
+      }
+      break;
   }
 
   return headers;
@@ -252,7 +261,8 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  CodeSandbox: export CSB_API_KEY=xxx\n` +
       `  Blaxel:     export BL_API_KEY=xxx BL_WORKSPACE=xxx\n` +
       `  Namespace:  export NSC_TOKEN=xxx\n` +
-      `  HopX:       export HOPX_API_KEY=xxx\n\n` +
+      `  HopX:       export HOPX_API_KEY=xxx\n` +
+      `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=e2b\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`
