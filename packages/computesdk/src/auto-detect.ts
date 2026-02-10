@@ -264,7 +264,7 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  HopX:       export HOPX_API_KEY=xxx\n` +
       `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
-      `  export COMPUTESDK_PROVIDER=e2b\n\n` +
+      `  export COMPUTESDK_PROVIDER=<provider>\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`
     );
   }
