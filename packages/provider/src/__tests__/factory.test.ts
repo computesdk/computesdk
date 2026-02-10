@@ -119,6 +119,61 @@ describe('Factory', () => {
       const info = await sandbox.getInfo()
       expect(info.id).toBe('test-123')
       expect(info.provider).toBe('mock')
+
+      // Test getUrl method
+      const url = await sandbox.getUrl({ port: 3000 })
+      expect(url).toBe('https://test-123-3000.mock.dev')
+      expect(methods.getUrl).toHaveBeenCalledWith(
+        { id: 'test-123', status: 'running' },
+        { port: 3000 }
+      )
+    })
+
+    it('should call getUrl with protocol option', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-456', status: 'running' },
+          sandboxId: 'test-456'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCode: vi.fn().mockResolvedValue({
+          output: '',
+          exitCode: 0,
+          language: 'python'
+        } as CodeResult),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 50
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-456',
+          provider: 'mock',
+          runtime: 'python' as Runtime,
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('wss://test-456-8080.mock.dev')
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+
+      const url = await sandbox.getUrl({ port: 8080, protocol: 'wss' })
+      expect(url).toBe('wss://test-456-8080.mock.dev')
+      expect(methods.getUrl).toHaveBeenCalledWith(
+        { id: 'test-456', status: 'running' },
+        { port: 8080, protocol: 'wss' }
+      )
     })
   })
 })
