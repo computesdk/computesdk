@@ -75,6 +75,7 @@ ComputeSDK automatically detects providers based on environment variables:
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` |
 | **Railway** | `RAILWAY_TOKEN` |
 | **Daytona** | `DAYTONA_API_KEY` |
+| **HopX** | `HOPX_API_KEY` |
 | **Runloop** | `RUNLOOP_API_KEY` |
 | **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` |
 | **Cloudflare** | `CLOUDFLARE_API_TOKEN` |
