@@ -127,11 +127,15 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
             );
           } else {
             // Construct base params
-            // options.ports takes precedence over config.ports
             const params: any = {
-              ports: options?.ports ?? config.ports,
               timeout,
             };
+            
+            // Only add ports if explicitly configured (options.ports takes precedence)
+            const ports = options?.ports ?? config.ports;
+            if (ports && ports.length > 0) {
+              params.ports = ports;
+            }
 
             // Support both ComputeSDK format (snapshotId at top level) and 
             // Vercel SDK format (source.snapshotId nested)
