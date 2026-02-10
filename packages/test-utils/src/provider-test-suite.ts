@@ -179,6 +179,26 @@ print(json.dumps(data, indent=2))
           expect(info.status).toBeDefined();
         });
 
+        it('should get sandbox URL for a port', async () => {
+          const url = await sandbox.getUrl({ port: 3000 });
+          
+          expect(url).toBeDefined();
+          expect(typeof url).toBe('string');
+          expect(url.length).toBeGreaterThan(0);
+          // URL should contain the port number or be a valid URL format
+          expect(url).toMatch(/^(https?|wss?):\/\/.+/);
+        });
+
+        it('should get sandbox URL with custom protocol', async () => {
+          const url = await sandbox.getUrl({ port: 8080, protocol: 'wss' });
+          
+          expect(url).toBeDefined();
+          expect(typeof url).toBe('string');
+          // Should respect the protocol if the provider supports it
+          // Some providers may ignore protocol and always return https
+          expect(url).toMatch(/^(https?|wss?):\/\/.+/);
+        });
+
         it('should handle invalid commands gracefully', async () => {
           const result = await sandbox.runCommand('nonexistent-command-12345');
           expect(result.exitCode).not.toBe(0);

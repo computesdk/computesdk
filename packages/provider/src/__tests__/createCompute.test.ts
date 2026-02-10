@@ -120,6 +120,10 @@ describe('createCompute function', () => {
     expect(typeof sandbox.getInfo).toBe('function')
     expect(typeof sandbox.getUrl).toBe('function')
     expect(typeof sandbox.destroy).toBe('function')
+
+    // Actually call getUrl to verify it works
+    const url = await sandbox.getUrl({ port: 3000 })
+    expect(url).toBe('https://test-123-3000.mock.dev')
   })
 
   it('should support both defaultProvider and provider keys', () => {
