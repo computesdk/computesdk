@@ -96,11 +96,6 @@ export type {
   BootOptions,
   ConnectOptions,
   MountOptions,
-  
-  // Auth types
-  AuthInitOptions,
-  AuthFailedError,
-  AuthInitResult,
 } from './types';
 
 export { PreviewMessageType } from './types';
@@ -127,29 +122,7 @@ export function configureAPIKey(key: string): void {
   );
 }
 
-// Auth namespace (not fully supported for remote sandboxes)
-export const auth = {
-  init(options: { clientId: string; scope: string; editorOrigin?: string }) {
-    console.warn('auth.init is not supported for remote sandboxes');
-    return { status: 'authorized' as const };
-  },
-  
-  startAuthFlow(options?: { popup?: boolean }) {
-    throw new Error('auth.startAuthFlow is not supported for remote sandboxes');
-  },
-  
-  async loggedIn(): Promise<void> {
-    // Always resolves immediately for remote sandboxes
-    return Promise.resolve();
-  },
-  
-  async logout(options?: { ignoreRevokeError?: boolean }): Promise<void> {
-    // No-op for remote sandboxes
-    console.warn('auth.logout is not supported for remote sandboxes');
-  },
-  
-  on(event: 'logged-out' | 'auth-failed', listener: () => void): () => void {
-    // Return no-op unsubscribe
-    return () => {};
-  }
-};
+// Note: WebContainer's `auth` namespace is not exported.
+// It's specific to StackBlitz OAuth for private npm packages.
+// For computesdk, authentication is handled via the `token` option in boot().
+// Private npm packages should be configured via .npmrc or env vars on the sandbox.
