@@ -100,7 +100,7 @@ export type {
 
 export { PreviewMessageType } from './types';
 
-// Utility for iframe preview reloading (no-op for remote)
+// Utility for iframe preview reloading
 export async function reloadPreview(
   preview: HTMLIFrameElement, 
   hardRefreshTimeout?: number
@@ -112,17 +112,8 @@ export async function reloadPreview(
   preview.src = src;
 }
 
-// API key configuration (no-op for remote - auth is handled differently)
-export function configureAPIKey(key: string): void {
-  // No-op for remote sandboxes
-  // Auth is handled via the ConnectOptions.token
-  console.warn(
-    'configureAPIKey is not used for remote sandboxes. ' +
-    'Pass your token via ConnectOptions.token in WebContainer.connect()'
-  );
-}
-
-// Note: WebContainer's `auth` namespace is not exported.
-// It's specific to StackBlitz OAuth for private npm packages.
+// Note: WebContainer's `auth` namespace and `configureAPIKey` are not exported.
+// - `auth` is specific to StackBlitz OAuth for private npm packages
+// - `configureAPIKey` is for WebContainer commercial licensing
 // For computesdk, authentication is handled via the `token` option in boot().
 // Private npm packages should be configured via .npmrc or env vars on the sandbox.
