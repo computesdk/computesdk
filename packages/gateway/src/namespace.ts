@@ -274,5 +274,11 @@ export const namespace = defineInfraProvider<NamespaceInstance, NamespaceConfig>
         console.warn(`Namespace destroy warning: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
+
+    getDaemonUrl: async (_config: NamespaceConfig, _instanceId: string) => {
+      // Namespace API doesn't currently expose public URLs for instances
+      // Namespace instances use internal networking and require tunnel-based access
+      throw new Error('Namespace getDaemonUrl not implemented - Namespace instances use tunnel-based access only');
+    },
   },
 });
