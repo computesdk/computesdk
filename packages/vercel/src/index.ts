@@ -1,13 +1,17 @@
 /**
  * Vercel Provider - Factory-based Implementation
  * 
- * Demonstrates the new createProvider() factory pattern with ~50 lines
+ * Demonstrates the new defineProvider() factory pattern with ~50 lines
  * instead of the original ~350 lines of boilerplate.
  */
 
-import { Sandbox as VercelSandbox } from '@vercel/sandbox';
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+export type { VercelSandbox, VercelSnapshot };
+
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Vercel sandbox provider configuration
@@ -23,95 +27,93 @@ export interface VercelConfig {
   runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Ports to expose */
+  ports?: number[];
 }
-
-
 
 /**
- * Shared command execution logic for Vercel provider
- * This eliminates duplication between runCode and runCommand
+ * Resolved Vercel credentials with the authentication method to use
  */
-async function executeVercelCommand(sandbox: VercelSandbox, command: string, args: string[] = []): Promise<ExecutionResult> {
-  const startTime = Date.now();
+interface ResolvedCredentials {
+  /** Whether to use OIDC authentication (no explicit credentials needed) */
+  useOidc: boolean;
+  /** Token for traditional auth (only used if useOidc is false) */
+  token: string;
+  /** Team ID for traditional auth (only used if useOidc is false) */
+  teamId: string;
+  /** Project ID for traditional auth (only used if useOidc is false) */
+  projectId: string;
+}
 
-  try {
-    // Execute command directly (non-detached returns CommandFinished)
-    const finishedCommand = await sandbox.runCommand(command, args);
+/**
+ * Resolve Vercel credentials with proper precedence:
+ * 1. Config values (from setConfig) always win
+ * 2. Environment variables are used as fallback
+ * 3. OIDC is only used when no config credentials are provided
+ */
+function resolveCredentials(config: VercelConfig): ResolvedCredentials {
+  // Get values from config first, then fall back to environment
+  const token = config.token || (typeof process !== 'undefined' && process.env?.VERCEL_TOKEN) || '';
+  const teamId = config.teamId || (typeof process !== 'undefined' && process.env?.VERCEL_TEAM_ID) || '';
+  const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.VERCEL_PROJECT_ID) || '';
+  
+  // Check if config explicitly provided credentials (config takes precedence)
+  const hasConfigCredentials = !!(config.token || config.teamId || config.projectId);
+  
+  // Only use OIDC if:
+  // 1. No config credentials were provided, AND
+  // 2. OIDC token is available in environment
+  const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+  const useOidc = !hasConfigCredentials && !!oidcToken;
+  
+  return { useOidc, token, teamId, projectId };
+}
 
-    // Use single logs() iteration to avoid "multiple consumers" warning
-    let stdout = '';
-    let stderr = '';
-
-    // Single iteration over logs - this is the most reliable approach
-    for await (const log of finishedCommand.logs()) {
-      if (log.stream === 'stdout') {
-        stdout += log.data;
-      } else if (log.stream === 'stderr') {
-        stderr += log.data;
-      }
-    }
-
-    return {
-      stdout,
-      stderr,
-      exitCode: finishedCommand.exitCode,
-      executionTime: Date.now() - startTime,
-      sandboxId: sandbox.sandboxId,
-      provider: 'vercel'
-    };
-  } catch (error) {
-    // For command execution, return error result instead of throwing
-    // This handles cases like "command not found" where Vercel API returns 400
-    return {
-      stdout: '',
-      stderr: error instanceof Error ? error.message : String(error),
-      exitCode: 127, // Standard "command not found" exit code
-      executionTime: Date.now() - startTime,
-      sandboxId: sandbox.sandboxId,
-      provider: 'vercel'
-    };
+/**
+ * Validate that we have sufficient credentials to authenticate
+ */
+function validateCredentials(creds: ResolvedCredentials): void {
+  if (creds.useOidc) {
+    // OIDC auth - no additional validation needed
+    return;
+  }
+  
+  // Traditional auth - need all three
+  if (!creds.token) {
+    throw new Error(
+      `Missing Vercel authentication. Either:\n` +
+      `1. Use OIDC token: Run 'vercel env pull' to get VERCEL_OIDC_TOKEN, or\n` +
+      `2. Use traditional method: Provide 'token' in config or set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
+    );
+  }
+  if (!creds.teamId) {
+    throw new Error(
+      `Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID environment variable.`
+    );
+  }
+  if (!creds.projectId) {
+    throw new Error(
+      `Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID environment variable.`
+    );
   }
 }
+
+
+
 
 /**
  * Create a Vercel provider instance using the factory pattern
  */
-export const vercel = createProvider<VercelSandbox, VercelConfig>({
+export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSnapshot>({
   name: 'vercel',
   methods: {
     sandbox: {
       // Collection operations (map to compute.sandbox.*)
       create: async (config: VercelConfig, options?: CreateSandboxOptions) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
 
-        // Fall back to traditional method (token + teamId + projectId)
-        const token = config.token || (typeof process !== 'undefined' && process.env?.VERCEL_TOKEN) || '';
-        const teamId = config.teamId || (typeof process !== 'undefined' && process.env?.VERCEL_TEAM_ID) || '';
-        const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.VERCEL_PROJECT_ID) || '';
-
-        // Validate authentication - either OIDC token OR traditional method
-        if (!oidcToken && (!token || !teamId || !projectId)) {
-          if (!oidcToken && !token) {
-            throw new Error(
-              `Missing Vercel authentication. Either:\n` +
-              `1. Use OIDC token: Run 'vercel env pull' to get VERCEL_OIDC_TOKEN, or\n` +
-              `2. Use traditional method: Provide 'token' in config or set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
-            );
-          }
-          if (!oidcToken && !teamId) {
-            throw new Error(
-              `Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID environment variable.`
-            );
-          }
-          if (!oidcToken && !projectId) {
-            throw new Error(
-              `Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID environment variable.`
-            );
-          }
-        }
-
-        const runtime = options?.runtime || config.runtime || 'node';
         const timeout = config.timeout || 300000;
 
         try {
@@ -124,18 +126,37 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
               `Vercel provider does not support reconnecting to existing sandboxes. Vercel sandboxes are ephemeral and must be created fresh each time.`
             );
           } else {
-            // Create new Vercel sandbox using the appropriate authentication method
-            if (oidcToken) {
-              // Use OIDC token method (simpler, recommended)
-              sandbox = await VercelSandbox.create();
-            } else {
-              // Use traditional method (token + teamId + projectId)
-              sandbox = await VercelSandbox.create({
-                token,
-                teamId,
-                projectId,
-              });
+            // Construct base params
+            const params: any = {
+              timeout,
+            };
+            
+            // Only add ports if explicitly configured (options.ports takes precedence)
+            const ports = options?.ports ?? config.ports;
+            if (ports && ports.length > 0) {
+              params.ports = ports;
             }
+
+            // Support both ComputeSDK format (snapshotId at top level) and 
+            // Vercel SDK format (source.snapshotId nested)
+            const snapshotId = options?.snapshotId || 
+              (options?.source?.type === 'snapshot' && options?.source?.snapshotId);
+            
+            if (snapshotId) {
+              params.source = {
+                type: 'snapshot',
+                snapshotId
+              };
+            }
+
+            // Add auth params if not using OIDC
+            if (!creds.useOidc) {
+              params.token = creds.token;
+              params.teamId = creds.teamId;
+              params.projectId = creds.projectId;
+            }
+
+            sandbox = await VercelSandbox.create(params);
           }
 
           return {
@@ -162,26 +183,22 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       },
 
       getById: async (config: VercelConfig, sandboxId: string) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
 
         try {
           let sandbox: VercelSandbox;
 
-          if (oidcToken) {
+          if (creds.useOidc) {
             // Use OIDC token method
             sandbox = await VercelSandbox.get({ sandboxId });
           } else {
             // Use traditional method
-            const token = config.token || process.env.VERCEL_TOKEN!;
-            const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
-            const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
-
             sandbox = await VercelSandbox.get({
               sandboxId,
-              token,
-              teamId,
-              projectId,
+              token: creds.token,
+              teamId: creds.teamId,
+              projectId: creds.projectId,
             });
           }
 
@@ -202,26 +219,22 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       },
 
       destroy: async (config: VercelConfig, sandboxId: string) => {
-        // Check for OIDC token first (recommended method)
-        const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
 
         try {
           let sandbox: VercelSandbox;
 
-          if (oidcToken) {
+          if (creds.useOidc) {
             // Use OIDC token method
             sandbox = await VercelSandbox.get({ sandboxId });
           } else {
             // Use traditional method
-            const token = config.token || process.env.VERCEL_TOKEN!;
-            const teamId = config.teamId || process.env.VERCEL_TEAM_ID!;
-            const projectId = config.projectId || process.env.VERCEL_PROJECT_ID!;
-
             sandbox = await VercelSandbox.get({
               sandboxId,
-              token,
-              teamId,
-              projectId,
+              token: creds.token,
+              teamId: creds.teamId,
+              projectId: creds.projectId,
             });
           }
 
@@ -233,77 +246,98 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime, config?: VercelConfig): Promise<ExecutionResult> => {
+      runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime, config?: VercelConfig): Promise<CodeResult> => {
+        const startTime = Date.now();
+
+        // Auto-detect runtime if not specified
+        const effectiveRuntime = runtime || config?.runtime || (
+          // Strong Python indicators
+          code.includes('print(') ||
+            code.includes('import ') ||
+            code.includes('def ') ||
+            code.includes('sys.') ||
+            code.includes('json.') ||
+            code.includes('__') ||
+            code.includes('f"') ||
+            code.includes("f'") ||
+            code.includes('raise ')
+            ? 'python'
+            // Default to Node.js for all other cases (including ambiguous)
+            : 'node'
+        );
+
+        // Use base64 encoding for both runtimes for reliability and consistency
+        const encoded = Buffer.from(code).toString('base64');
+        const commandString = effectiveRuntime === 'python'
+          ? `echo "${encoded}" | base64 -d | python3`
+          : `echo "${encoded}" | base64 -d | node`;
+
+        const result = await sandbox.runCommand('sh', ['-c', commandString]);
+        // Call stdout/stderr sequentially to avoid "Multiple consumers for logs" warning
+        const stdout = await result.stdout();
+        const stderr = await result.stderr();
+
+        // Check for syntax errors and throw them
+        if (result.exitCode !== 0 && stderr) {
+          if (stderr.includes('SyntaxError') ||
+            stderr.includes('invalid syntax') ||
+            stderr.includes('Unexpected token') ||
+            stderr.includes('Unexpected identifier')) {
+            throw new Error(`Syntax error: ${stderr.trim()}`);
+          }
+        }
+
+        return {
+          output: stdout + stderr,
+          exitCode: result.exitCode,
+          language: effectiveRuntime,
+        };
+      },
+
+      runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || config?.runtime || (
-            // Strong Python indicators
-            code.includes('print(') ||
-              code.includes('import ') ||
-              code.includes('def ') ||
-              code.includes('sys.') ||
-              code.includes('json.') ||
-              code.includes('__') ||
-              code.includes('f"') ||
-              code.includes("f'") ||
-              code.includes('raise ')
-              ? 'python'
-              // Default to Node.js for all other cases (including ambiguous)
-              : 'node'
-          );
-
-          // Use base64 encoding for both runtimes for reliability and consistency
-          const encoded = Buffer.from(code).toString('base64');
-          let commandString;
-
-          if (effectiveRuntime === 'python') {
-            // Execute Python code with base64 encoding
-            commandString = `echo "${encoded}" | base64 -d | python3`;
-          } else {
-            // Execute Node.js code with base64 encoding
-            commandString = `echo "${encoded}" | base64 -d | node`;
+          // Build command with options
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           }
 
-          // Use shared command execution logic
-          const result = await executeVercelCommand(sandbox, 'sh', ['-c', commandString]);
+          const result = await sandbox.runCommand('sh', ['-c', fullCommand]);
+          // Call stdout/stderr sequentially to avoid "Multiple consumers for logs" warning
+          const stdout = await result.stdout();
+          const stderr = await result.stderr();
 
-          // Check for syntax errors and throw them
-          if (result.exitCode !== 0 && result.stderr) {
-            // Check for common syntax error patterns
-            if (result.stderr.includes('SyntaxError') ||
-              result.stderr.includes('invalid syntax') ||
-              result.stderr.includes('Unexpected token') ||
-              result.stderr.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${result.stderr.trim()}`);
-            }
-          }
-
-          return result;
+          return {
+            stdout,
+            stderr,
+            exitCode: result.exitCode,
+            durationMs: Date.now() - startTime,
+          };
         } catch (error) {
-          // Re-throw syntax errors
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `Vercel execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
+          return {
+            stdout: '',
+            stderr: error instanceof Error ? error.message : String(error),
+            exitCode: 127,
+            durationMs: Date.now() - startTime,
+          };
         }
-      },
-
-      runCommand: async (sandbox: VercelSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
-        // Handle background command execution
-        const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-        
-        const result = await executeVercelCommand(sandbox, finalCommand, finalArgs);
-        
-        return {
-          ...result,
-          isBackground,
-          // For background commands, we can't get a real PID, but we can indicate it's running
-          ...(isBackground && { pid: -1 })
-        };
       },
 
       getInfo: async (sandbox: VercelSandbox): Promise<SandboxInfo> => {
@@ -340,11 +374,97 @@ export const vercel = createProvider<VercelSandbox, VercelConfig>({
         }
       },
 
+      filesystem: {
+        readFile: async (sandbox: VercelSandbox, path: string): Promise<string> => {
+          const stream = await sandbox.readFile({ path });
+          if (!stream) {
+            throw new Error(`File not found: ${path}`);
+          }
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          return Buffer.concat(chunks).toString('utf-8');
+        },
+
+        writeFile: async (sandbox: VercelSandbox, path: string, content: string): Promise<void> => {
+          await sandbox.writeFiles([{ path, content: Buffer.from(content) }]);
+        },
+
+        mkdir: async (sandbox: VercelSandbox, path: string): Promise<void> => {
+          await sandbox.mkDir(path);
+        },
+
+        readdir: async (_sandbox: VercelSandbox, _path: string): Promise<FileEntry[]> => {
+          throw new Error('Vercel sandbox does not support readdir. Use runCommand to list directory contents.');
+        },
+
+        exists: async (_sandbox: VercelSandbox, _path: string): Promise<boolean> => {
+          throw new Error('Vercel sandbox does not support exists. Use runCommand to check file existence.');
+        },
+
+        remove: async (_sandbox: VercelSandbox, _path: string): Promise<void> => {
+          throw new Error('Vercel sandbox does not support remove. Use runCommand to delete files.');
+        }
+      },
+
       // Provider-specific typed getInstance method
       getInstance: (sandbox: VercelSandbox): VercelSandbox => {
         return sandbox;
       },
 
+    },
+
+    snapshot: {
+      create: async (config: VercelConfig, sandboxId: string) => {
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
+
+        let sandbox: VercelSandbox;
+
+        if (creds.useOidc) {
+          // Use OIDC token method
+          sandbox = await VercelSandbox.get({ sandboxId });
+        } else {
+          // Use traditional method
+          sandbox = await VercelSandbox.get({
+            sandboxId,
+            token: creds.token,
+            teamId: creds.teamId,
+            projectId: creds.projectId,
+          });
+        }
+
+        return await sandbox.snapshot();
+      },
+
+      list: async (_config: VercelConfig) => {
+        throw new Error(
+          `Vercel provider does not support listing snapshots.`
+        );
+      },
+
+      delete: async (config: VercelConfig, snapshotId: string) => {
+        // Resolve credentials with proper precedence (config wins over env)
+        const creds = resolveCredentials(config);
+
+        let snapshot: VercelSnapshot;
+
+        if (creds.useOidc) {
+          // Use OIDC token method
+          snapshot = await VercelSnapshot.get({ snapshotId });
+        } else {
+          // Use traditional method
+          snapshot = await VercelSnapshot.get({
+            snapshotId,
+            token: creds.token,
+            teamId: creds.teamId,
+            projectId: creds.projectId,
+          });
+        }
+
+        await snapshot.delete();
+      }
     }
   }
 });

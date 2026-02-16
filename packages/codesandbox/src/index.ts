@@ -6,8 +6,9 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Codesandbox-specific configuration options
@@ -26,7 +27,7 @@ export interface CodesandboxConfig {
 /**
  * Create a Codesandbox provider instance using the factory pattern
  */
-export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>({
+export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig>({
   name: 'codesandbox',
   methods: {
     sandbox: {
@@ -138,7 +139,7 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
       },
 
       // Instance operations (sandbox.*)
-      runCode: async (sandbox: CodesandboxSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: CodesandboxSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
 
         try {
@@ -179,7 +180,7 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
           const output = await client.commands.run(command);
 
           // Check for syntax errors in the output and throw them (similar to other providers)
-          if (output.includes('SyntaxError') || 
+          if (output.includes('SyntaxError') ||
               output.includes('invalid syntax') ||
               output.includes('Unexpected token') ||
               output.includes('Unexpected identifier')) {
@@ -187,12 +188,9 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
           }
 
           return {
-            stdout: output,
-            stderr: '',
+            output: output,
             exitCode: 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'codesandbox'
+            language: effectiveRuntime
           };
         } catch (error) {
           // Re-throw syntax errors
@@ -205,44 +203,49 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
         }
       },
 
-      runCommand: async (sandbox: CodesandboxSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: CodesandboxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
-
-        // Handle background command execution outside try block so it's accessible everywhere
-        const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
 
         try {
           // Connect to the sandbox client using sandbox.connect()
           const client = await sandbox.connect();
+
+          // Build command with options
+          let fullCommand = command;
           
-          // Construct full command with arguments
-          const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using CodeSandbox client.commands.run()
-          // This returns the full output as a string
           const output = await client.commands.run(fullCommand);
 
           return {
             stdout: output,
             stderr: '',
             exitCode: 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'codesandbox',
-            isBackground,
-            // For background commands, we can't get a real PID, but we can indicate it's running
-            ...(isBackground && { pid: -1 })
+            durationMs: Date.now() - startTime
           };
         } catch (error) {
-          // For command failures, return error info instead of throwing
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127, // Command not found exit code
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'codesandbox',
-            isBackground  // Use the same value even for errors
+            exitCode: 127,
+            durationMs: Date.now() - startTime
           };
         }
       },
@@ -297,10 +300,9 @@ export const codesandbox = createProvider<CodesandboxSandbox, CodesandboxConfig>
 
           return entries.map((entry: any) => ({
             name: entry.name,
-            path: `${path}/${entry.name}`.replace(/\/+/g, '/'),
-            isDirectory: entry.isDirectory || false,
+            type: entry.isDirectory ? 'directory' as const : 'file' as const,
             size: entry.size || 0,
-            lastModified: entry.lastModified ? new Date(entry.lastModified) : new Date()
+            modified: entry.lastModified ? new Date(entry.lastModified) : new Date()
           }));
         },
 

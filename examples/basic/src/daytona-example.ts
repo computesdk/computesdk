@@ -1,15 +1,14 @@
 /**
  * Daytona Provider Example
  * 
- * This example shows how to use the Daytona provider for Python code execution
+ * This example shows how to use ComputeSDK with the Daytona provider for Python code execution
  * with filesystem support (but without terminal methods).
  * 
  * Prerequisites:
  * Set DAYTONA_API_KEY environment variable
  */
 
-import { daytona } from '@computesdk/daytona';
-import { createCompute } from 'computesdk';
+import { compute } from 'computesdk';
 import { config } from 'dotenv';
 import { PYTHON_SNIPPETS } from './constants/code-snippets';
 config(); // Load environment variables from .env file
@@ -25,22 +24,24 @@ async function main() {
   }
 
   try {
-    // Configure compute with Daytona provider
-    const compute = createCompute({ provider: daytona({ apiKey: process.env.DAYTONA_API_KEY }) });
+    // Gateway mode: configure compute to use Daytona provider
+    compute.setConfig({
+      provider: 'daytona',
+      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+      daytona: { apiKey: process.env.DAYTONA_API_KEY }
+    });
 
-    // Create sandbox using compute singleton
+    // Create sandbox
     const sandbox = await compute.sandbox.create();
 
     console.log('Created Daytona sandbox:', sandbox.sandboxId);
 
-    
-
     // Execute Python code
     const result = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
 
-    console.log('Output:', result.stdout);
-    console.log('Execution time:', result.executionTime, 'ms');
+    console.log('Output:', result.output);
     console.log('Exit code:', result.exitCode);
+    console.log('Language:', result.language);
 
     // Get sandbox info
     const info = await sandbox.getInfo();
@@ -72,7 +73,7 @@ print("This script was written via filesystem!")
     console.log('Files in /tmp:', files.map((f: any) => f.name));
 
     // Clean up
-    await sandbox.kill();
+    await sandbox.destroy();
     console.log('\nDaytona sandbox terminated successfully');
 
   } catch (error) {

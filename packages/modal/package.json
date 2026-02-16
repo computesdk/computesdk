@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/modal",
-  "version": "1.4.1",
-  "description": "Modal provider for ComputeSDK",
+  "version": "1.8.28",
+  "description": "Modal provider for ComputeSDK - serverless Python execution with GPU support and zero cold starts",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -29,23 +29,27 @@
   },
   "dependencies": {
     "modal": "^0.3.16",
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "modal",
     "sandbox",
     "code-execution",
     "python",
     "cloud",
     "compute",
-    "serverless"
+    "serverless",
+    "provider",
+    "gpu"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/modal"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/modal",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

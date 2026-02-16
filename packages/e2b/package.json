@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/e2b",
-  "version": "1.6.1",
-  "description": "E2B provider for ComputeSDK",
+  "version": "1.7.33",
+  "description": "E2B provider for ComputeSDK - cloud sandboxes with full Linux environments, filesystem access, and microVM isolation",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -29,22 +29,27 @@
   },
   "dependencies": {
     "e2b": "^2.0.1",
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [
+    "computesdk",
     "e2b",
     "sandbox",
     "code-execution",
     "python",
+    "javascript",
     "cloud",
-    "compute"
+    "compute",
+    "provider",
+    "containers"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/e2b"
   },
-  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/e2b",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

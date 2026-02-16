@@ -152,7 +152,7 @@ async function getIntegrationBinding() {
 }
 
 // Create provider with proper binding
-const createProviderForTests = async () => {
+const defineProviderForTests = async () => {
   let binding = createSandboxBinding();
   
   if (!skipIntegration) {
@@ -172,7 +172,7 @@ describe('Standardized Test Suite', () => {
   let testProvider: any;
   
   beforeAll(async () => {
-    testProvider = await createProviderForTests();
+    testProvider = await defineProviderForTests();
   });
 
   // Since we can't easily modify runProviderTestSuite, let's run the basic tests
@@ -183,7 +183,7 @@ describe('Standardized Test Suite', () => {
     // Only test sandbox creation in unit test mode
     if (skipIntegration) {
       try {
-        const result = await testProvider.sandbox.create({});
+        const result = await testProvider.sandbox.create();
         expect(result).toBeDefined();
         expect(result.sandboxId).toBeDefined();
       } catch (error) {

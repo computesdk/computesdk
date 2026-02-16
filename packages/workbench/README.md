@@ -1,0 +1,382 @@
+# @computesdk/workbench
+
+Interactive REPL for testing ComputeSDK sandbox operations with instant feedback and autocomplete.
+
+## Features
+
+- 🚀 **Zero ceremony** - Just run commands, no sandbox ID management
+- ✨ **Tab autocomplete** - All 100+ `@computesdk/cmd` functions autocomplete
+- 🔄 **Provider switching** - Seamlessly switch between e2b, railway, daytona, etc.
+- ⚡ **Smart evaluation** - Type `npm.install('express')` and it just runs
+- 📊 **Real-time feedback** - See timing, output, and errors instantly
+
+## Installation
+
+```bash
+npm install -D @computesdk/workbench
+
+# Install at least one provider
+npm install @computesdk/e2b
+# or
+npm install @computesdk/railway
+# or any other provider
+```
+
+## Quick Start
+
+1. **Configure credentials** in `.env`:
+
+```bash
+# E2B Provider
+E2B_API_KEY=e2b_your_api_key_here
+
+# Railway Provider  
+RAILWAY_API_KEY=your_railway_api_key
+RAILWAY_PROJECT_ID=your_project_id
+RAILWAY_ENVIRONMENT_ID=your_environment_id
+```
+
+2. **Start workbench**:
+
+```bash
+npx workbench
+```
+
+3. **Run commands** (autocomplete works!):
+
+```
+workbench> npm.install('express')
+⏳ Creating sandbox with e2b...
+✅ Sandbox ready (1.2s)
+Running: npm install express
+✅ Completed (3.2s)
+
+workbench> git.clone('https://github.com/user/repo')
+Running: git clone https://github.com/user/repo
+✅ Completed (2.1s)
+
+workbench> ls('/home')
+Running: ls /home
+total 8
+drwxr-xr-x 3 user user 4096 Dec 12 19:00 node_modules
+drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
+✅ Completed (0.1s)
+```
+
+## Commands
+
+### Workbench Commands
+
+- `provider <name>` - Switch provider via gateway (e.g., `provider e2b`)
+- `provider direct <name>` - Switch to direct provider connection (e.g., `provider direct e2b`)
+- `providers` - List all providers with status
+- `restart` - Restart current sandbox
+- `destroy` - Destroy current sandbox
+- `connect <url> [token]` - Connect to existing sandbox via URL (e.g., `connect https://sandbox-123.localhost:8080` or `connect https://sandbox-123.localhost:8080 your_token`)
+- `info` - Show sandbox info (provider, uptime)
+- `env` - Show environment/credentials status
+- `help` - Show this help
+- `exit` - Exit workbench
+
+**Provider Modes:**
+- **Gateway mode (default)**: Routes through ComputeSDK API, zero-config setup
+  - Example: `provider e2b` uses E2B via gateway
+  - Requires: `COMPUTESDK_API_KEY` + provider credentials
+- **Direct mode**: Connects directly to provider, requires provider packages
+  - Example: `provider direct e2b` connects directly to E2B
+  - Requires: Provider package installed (`@computesdk/e2b`) + provider credentials
+
+### Running Commands
+
+Just type any `@computesdk/cmd` function. Tab autocomplete works!
+
+**Package Managers:**
+```javascript
+npm.install('express')
+npm.run('dev')
+pnpm.install()
+yarn.add('lodash')
+pip.install('requests')
+```
+
+**Git:**
+```javascript
+git.clone('https://...')
+git.commit('Initial commit')
+git.push()
+```
+
+**Filesystem:**
+```javascript
+mkdir('/app/src')
+ls('/home')
+cat('/home/file.txt')
+cp('/src', '/dest', { recursive: true })
+rm('/file.txt')              // Remove file
+rm.rf('/directory')          // Force remove anything
+rm.auto('/path')             // Smart remove (auto-detects file vs directory)
+```
+
+**Network:**
+```javascript
+curl('https://api.example.com')
+wget('https://file.com/download.zip')
+```
+
+**And 100+ more!** Press Tab to explore.
+
+## Provider Switching
+
+### Gateway Mode (Default - Zero Config)
+
+Switch between providers via the gateway:
+
+```
+workbench> provider e2b
+✅ Switched to e2b (via gateway)
+
+workbench> npm.install('express')
+⏳ Creating sandbox with e2b (via gateway)...
+✅ Sandbox ready (1.2s)
+Running: npm install express
+✅ Completed (3.2s)
+
+workbench> provider railway
+Destroy current sandbox? (y/N): y
+✅ Switched to railway (via gateway)
+```
+
+### Direct Mode (Advanced)
+
+Connect directly to providers (requires provider packages):
+
+```
+workbench> provider direct e2b
+✅ Switched to e2b (direct)
+
+workbench> pwd()
+⏳ Creating sandbox with e2b (direct)...
+✅ Sandbox ready (2.5s)
+Running: pwd
+/home
+✅ Completed (0.1s)
+```
+
+## Connect to Existing Sandboxes
+
+You can connect to an existing sandbox instance via its URL. This is particularly useful for:
+- Connecting to locally running sandboxes
+- Attaching to sandboxes created by other tools
+- Debugging existing sandbox instances
+
+### Without Authentication
+
+```
+workbench> connect https://sandbox-123.localhost:8080
+⏳ Connecting to https://sandbox-123.localhost:8080...
+✅ Connected to sandbox (0.5s)
+Provider: e2b
+Sandbox ID: sandbox-123
+
+connected:sandbox-123> ls('/home')
+Running: ls /home
+total 8
+drwxr-xr-x 3 user user 4096 Dec 12 19:00 app
+✅ Completed (0.1s)
+```
+
+### With Access Token
+
+If the sandbox requires authentication, you can provide an access token:
+
+```
+workbench> connect https://sandbox-123.localhost:8080 your_access_token_here
+⏳ Connecting to https://sandbox-123.localhost:8080...
+✅ Connected to sandbox (0.5s)
+Provider: e2b
+Sandbox ID: sandbox-123
+```
+
+Note: When you exit the workbench after connecting to an external sandbox, it will disconnect without destroying the sandbox (since you don't own it).
+
+## Creating and Switching Sandboxes
+
+When you create a sandbox using `create()`, `findOrCreate()`, or `find()`, it automatically becomes your current active sandbox. All subsequent commands will run on this sandbox.
+
+```javascript
+> create({ namespace: "h" })
+✅ Switched to sandbox sandbox-123
+{ sandboxId: 'sandbox-123', provider: 'gateway', metadata: {} }
+gateway:sandbox-123>  // Prompt shows you're now on this sandbox
+
+> ls('/home')  // Runs on sandbox-123
+```
+
+### Switching Between Sandboxes
+
+If you already have an active sandbox and create/find another one, the workbench will prompt you:
+
+```javascript
+e2b:sandbox-456> create({ namespace: "prod" })
+Switch to new sandbox? (Y/n): y
+✅ Switched to sandbox sandbox-789
+gateway:sandbox-789>
+```
+
+Press Enter or type "y" to switch. Type "n" to create the sandbox without switching to it.
+
+## Tab Autocomplete
+
+Autocomplete works for all commands:
+
+```
+workbench> npm.<TAB>
+install  run  init  uninstall
+
+workbench> git.<TAB>
+add  branch  checkout  clone  commit  diff  fetch  
+init  log  pull  push  reset  stash  status
+
+workbench> provider <TAB>
+e2b  railway  daytona  modal  runloop  vercel
+```
+
+## Supported Providers
+
+### Gateway Provider (Zero-Config)
+
+The **gateway** provider uses the ComputeSDK API to automatically route to any provider:
+
+- No provider packages needed
+- Just set `COMPUTESDK_API_KEY` + provider credentials
+- Auto-detects provider from your environment
+
+### Direct Provider Packages
+
+Install any combination of:
+
+- `@computesdk/e2b` - E2B sandboxes
+- `@computesdk/railway` - Railway environments
+- `@computesdk/daytona` - Daytona workspaces
+- `@computesdk/modal` - Modal containers
+- `@computesdk/runloop` - Runloop instances
+- `@computesdk/vercel` - Vercel functions
+- `@computesdk/cloudflare` - Cloudflare Workers
+- `@computesdk/codesandbox` - CodeSandbox boxes
+- `@computesdk/blaxel` - Blaxel environments
+
+## Environment Variables
+
+Set provider credentials in `.env`:
+
+```bash
+# Gateway Provider (Zero-Config)
+COMPUTESDK_API_KEY=computesdk_live_xxx
+
+# E2B
+E2B_API_KEY=e2b_xxx
+
+# Railway
+RAILWAY_API_KEY=xxx
+RAILWAY_PROJECT_ID=xxx
+RAILWAY_ENVIRONMENT_ID=xxx
+
+# Daytona
+DAYTONA_API_KEY=xxx
+
+# Modal
+MODAL_TOKEN_ID=xxx
+MODAL_TOKEN_SECRET=xxx
+
+# Runloop
+RUNLOOP_API_KEY=xxx
+
+# Vercel
+VERCEL_TOKEN=xxx
+VERCEL_TEAM_ID=xxx
+VERCEL_PROJECT_ID=xxx
+
+# Cloudflare
+CLOUDFLARE_API_TOKEN=xxx
+CLOUDFLARE_ACCOUNT_ID=xxx
+
+# CodeSandbox
+CSB_API_KEY=xxx
+
+# Blaxel
+BL_API_KEY=xxx
+BL_WORKSPACE=xxx
+```
+
+## Tips
+
+- **Command history**: Use ↑/↓ arrows to navigate previous commands
+- **Exit gracefully**: Type `exit` or `.exit`, optionally destroy sandbox
+- **Check status**: Run `env` to see which providers are configured
+- **Auto-create**: First command automatically creates a sandbox
+- **Stay in context**: Workbench maintains "current sandbox" - no IDs to track
+
+## Debugging SDK Tests
+
+The workbench is a full Node.js REPL with the ComputeSDK pre-loaded. You can reproduce any SDK test by calling the same methods interactively.
+
+### SDK to Workbench Mapping
+
+| SDK Test Code | Workbench Equivalent |
+|---------------|---------------------|
+| `sandbox.runCommand('echo hi')` | `runCommand('echo hi')` or `getInstance().runCommand(...)` |
+| `sandbox.terminal.create()` | `terminal.create()` |
+| `sandbox.filesystem.readFile(path)` | `filesystem.readFile(path)` |
+| `sandbox.getInfo()` | `sandboxInfo()` |
+| `sandbox.getUrl({ port })` | `getUrl({ port: 3000 })` |
+
+### Example: Reproducing a Failing Test
+
+If this test fails:
+
+```typescript
+// From provider-compatibility.test.ts
+it('command with streaming callbacks', async () => {
+  let stdoutCalled = false;
+  const result = await sandbox.runCommand('echo "hello"', {
+    onStdout: () => { stdoutCalled = true; },
+  });
+  expect(stdoutCalled).toBe(true);
+});
+```
+
+Reproduce it in workbench:
+
+```javascript
+> ls('/home')  // Auto-creates sandbox
+> const sandbox = getInstance()
+> let stdoutCalled = false
+> const result = await sandbox.runCommand('echo "hello"', {
+    onStdout: (data) => { console.log('STDOUT:', data); stdoutCalled = true }
+  })
+> stdoutCalled  // Should be true
+> result
+```
+
+### Verbose Mode
+
+Enable verbose mode to see full response objects and WebSocket debug info:
+
+```javascript
+> verbose()  // Toggle on - shows full results and WebSocket frames
+> ls('/home')
+> verbose()  // Toggle off
+```
+
+### Direct Shell Commands
+
+Prefix with `$` to run shell commands directly (bypasses `@computesdk/cmd`):
+
+```javascript
+> $echo "hello" | tr 'a-z' 'A-Z'
+> $for i in 1 2 3; do echo $i; done
+```
+
+## License
+
+MIT

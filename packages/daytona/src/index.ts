@@ -6,8 +6,9 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type { Runtime, ExecutionResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -24,7 +25,7 @@ export interface DaytonaConfig {
 /**
  * Create a Daytona provider instance using the factory pattern
  */
-export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
+export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
   methods: {
     sandbox: {
@@ -134,7 +135,7 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       // Instance operations (sandbox.*)
-      runCode: async (sandbox: DaytonaSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (sandbox: DaytonaSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
 
         try {
@@ -188,12 +189,9 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
           const actualExitCode = hasError ? 1 : (response.exitCode || 0);
 
           return {
-            stdout: hasError ? '' : output,
-            stderr: hasError ? output : '',
+            output: output,
             exitCode: actualExitCode,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'daytona'
+            language: effectiveRuntime
           };
         } catch (error) {
           // Re-throw syntax errors
@@ -206,29 +204,39 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      runCommand: async (sandbox: DaytonaSandbox, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
+      runCommand: async (sandbox: DaytonaSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Handle background command execution
-          const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
+          // Build command with options
+          let fullCommand = command;
           
-          // Construct full command with arguments
-          const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using Daytona's process.executeCommand method
           const response = await sandbox.process.executeCommand(fullCommand);
 
           return {
             stdout: response.result || '',
-            stderr: '', // Daytona doesn't separate stderr in the response
+            stderr: '',
             exitCode: response.exitCode || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId: sandbox.id,
-            provider: 'daytona',
-            isBackground,
-            // For background commands, we can't get a real PID, but we can indicate it's running
-            ...(isBackground && { pid: -1 })
+            durationMs: Date.now() - startTime
           };
         } catch (error) {
           throw new Error(
@@ -337,10 +345,9 @@ export const daytona = createProvider<DaytonaSandbox, DaytonaConfig>({
 
                 entries.push({
                   name,
-                  path: `${path}/${name}`.replace(/\/+/g, '/'), // Clean up double slashes
-                  isDirectory,
+                  type: isDirectory ? 'directory' as const : 'file' as const,
                   size,
-                  lastModified: new Date() // ls -la date parsing is complex, use current time
+                  modified: new Date() // ls -la date parsing is complex, use current time
                 });
               }
             }

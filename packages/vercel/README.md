@@ -35,21 +35,17 @@ export VERCEL_PROJECT_ID=your_project_id_here
 
 Get your token from [Vercel Account Tokens](https://vercel.com/account/tokens)
 
-## Usage
+## Quick Start
 
-### With ComputeSDK
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { vercel } from '@computesdk/vercel';
+import { compute } from 'computesdk';
 
-// Set as default provider
-const compute = createCompute({ 
-  provider: vercel({ runtime: 'node' }) 
-});
-
-// Create sandbox
-const sandbox = await compute.sandbox.create({});
+// Auto-detects Vercel from VERCEL_OIDC_TOKEN or VERCEL_TOKEN environment variables
+const sandbox = await compute.sandbox.create();
 
 // Execute Node.js code
 const result = await sandbox.runCode('console.log("Hello from Vercel!");');
@@ -59,26 +55,30 @@ console.log(result.stdout); // "Hello from Vercel!"
 const pythonResult = await sandbox.runCode('print("Hello from Python!")', 'python');
 console.log(pythonResult.stdout); // "Hello from Python!"
 
-// Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
-### Direct Usage
+### Direct Mode
+
+For direct SDK usage without the gateway:
 
 ```typescript
 import { vercel } from '@computesdk/vercel';
 
-// Create provider with explicit config
-const provider = vercel({
-  token: 'your-token',
-  teamId: 'your-team-id', 
-  projectId: 'your-project-id',
+const compute = vercel({
+  token: process.env.VERCEL_TOKEN,
+  teamId: process.env.VERCEL_TEAM_ID, 
+  projectId: process.env.VERCEL_PROJECT_ID,
   runtime: 'python',
   timeout: 600000 // 10 minutes
 });
 
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
+const sandbox = await compute.sandbox.create();
+
+const result = await sandbox.runCode('console.log("Hello from Vercel!");');
+console.log(result.stdout);
+
+await sandbox.destroy();
 ```
 
 ## Configuration
@@ -215,7 +215,16 @@ The provider automatically detects the runtime based on code patterns:
 ## Error Handling
 
 ```typescript
+import { vercel } from '@computesdk/vercel';
+
 try {
+  const compute = vercel({ 
+    token: process.env.VERCEL_TOKEN,
+    teamId: process.env.VERCEL_TEAM_ID,
+    projectId: process.env.VERCEL_PROJECT_ID
+  });
+  const sandbox = await compute.sandbox.create();
+  
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
   if (error.message.includes('Missing Vercel authentication')) {
@@ -230,30 +239,15 @@ try {
 }
 ```
 
-## Web Framework Integration
-
-Use with web frameworks via the request handler:
-
-```typescript
-import { handleComputeRequest } from 'computesdk';
-import { vercel } from '@computesdk/vercel';
-
-export async function POST(request: Request) {
-  return handleComputeRequest({
-    request,
-    provider: vercel({ runtime: 'node' })
-  });
-}
-```
-
 ## Examples
 
 ### Node.js Web Server Simulation
 
 ```typescript
-const sandbox = await compute.sandbox.create({
-  provider: vercel({ runtime: 'node' })
-});
+import { vercel } from '@computesdk/vercel';
+
+const compute = vercel({ runtime: 'node' });
+const sandbox = await compute.sandbox.create();
 
 const result = await sandbox.runCode(`
 const http = require('http');
@@ -281,14 +275,16 @@ console.log('Response:', JSON.stringify(response, null, 2));
 `);
 
 console.log(result.stdout);
+await sandbox.destroy();
 ```
 
 ### Python Data Processing
 
 ```typescript
-const sandbox = await compute.sandbox.create({
-  provider: vercel({ runtime: 'python' })
-});
+import { vercel } from '@computesdk/vercel';
+
+const compute = vercel({ runtime: 'python' });
+const sandbox = await compute.sandbox.create();
 
 const result = await sandbox.runCode(`
 import json
@@ -324,14 +320,16 @@ for product, revenue in sorted(product_sales.items(), key=lambda x: x[1], revers
 `);
 
 console.log(result.stdout);
+await sandbox.destroy();
 ```
 
 ### Filesystem Operations Pipeline
 
 ```typescript
-const sandbox = await compute.sandbox.create({
-  provider: vercel({ runtime: 'python' })
-});
+import { vercel } from '@computesdk/vercel';
+
+const compute = vercel({ runtime: 'python' });
+const sandbox = await compute.sandbox.create();
 
 // Create project structure
 await sandbox.filesystem.mkdir('/tmp/project');
@@ -435,15 +433,17 @@ console.log('Generated files:');
 outputFiles.forEach(file => {
   console.log(`  ${file.name} (${file.size} bytes)`);
 });
+
+await sandbox.destroy();
 ```
 
 ### Package Installation and Usage
 
 ```typescript
-// Node.js example with package installation
-const sandbox = await compute.sandbox.create({
-  provider: vercel({ runtime: 'node' })
-});
+import { vercel } from '@computesdk/vercel';
+
+const compute = vercel({ runtime: 'node' });
+const sandbox = await compute.sandbox.create();
 
 // Install lodash
 const installResult = await sandbox.runCommand('npm', ['install', 'lodash']);
@@ -473,6 +473,7 @@ console.log('Oldest person:', oldest.name);
 `);
 
 console.log(result.stdout);
+await sandbox.destroy();
 ```
 
 ## Best Practices

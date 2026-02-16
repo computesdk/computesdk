@@ -17,21 +17,17 @@ npm install @computesdk/codesandbox
 export CSB_API_KEY=your_api_key_here
 ```
 
-## Usage
+## Quick Start
 
-### With ComputeSDK
+### Gateway Mode (Recommended)
+
+Use the gateway for zero-config auto-detection:
 
 ```typescript
-import { createCompute } from 'computesdk';
-import { codesandbox } from '@computesdk/codesandbox';
+import { compute } from 'computesdk';
 
-// Set as default provider
-const compute = createCompute({ 
-  provider: codesandbox({ apiKey: process.env.CSB_API_KEY }) 
-});
-
-// Create sandbox
-const sandbox = await compute.sandbox.create({});
+// Auto-detects CodeSandbox from CSB_API_KEY environment variable
+const sandbox = await compute.sandbox.create();
 
 // Execute JavaScript/Node.js code
 const result = await sandbox.runCode(`
@@ -66,24 +62,28 @@ console.log(pythonResult.stdout);
 // }
 // Running in: CodeSandbox
 
-// Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
-### Direct Usage
+### Direct Mode
+
+For direct SDK usage without the gateway:
 
 ```typescript
 import { codesandbox } from '@computesdk/codesandbox';
 
-// Create provider
-const provider = codesandbox({ 
-  apiKey: 'your_api_key',
+const compute = codesandbox({ 
+  apiKey: process.env.CSB_API_KEY,
   templateId: 'universal', // Optional: specify template
   timeout: 600000 // 10 minutes
 });
 
-// Use with compute singleton
-const sandbox = await compute.sandbox.create({ provider });
+const sandbox = await compute.sandbox.create();
+
+const result = await sandbox.runCode('console.log("Hello from CodeSandbox!");');
+console.log(result.stdout);
+
+await sandbox.destroy();
 ```
 
 ## Configuration

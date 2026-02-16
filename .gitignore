@@ -23,5 +23,23 @@ dist-ssr
 *.sln
 *.sw?
 
+# Storybook
 *storybook.log
 storybook-static
+
+# Temporary folders
+tmp/
+temp/
+
+# Claude AI project instructions (should not be committed)
+CLAUDE.md
+AGENTS.md
+configuration-docs-alignment-checklist.md
+documentation-update-checklist.md
+CONCEPTS.md
+
+.vercel
+
+workbench-cheatsheet.md
+# Superset
+.superset/

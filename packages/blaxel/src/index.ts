@@ -4,17 +4,10 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance, settings } from '@blaxel/core';
-import { createProvider, createBackgroundCommand } from 'computesdk';
-import type {
-	ExecutionResult,
-	SandboxInfo,
-	Runtime,
-	CreateSandboxOptions,
-	FileEntry,
-	RunCommandOptions,
-	SandboxStatus
-} from 'computesdk';
+import { SandboxInstance, initialize } from '@blaxel/core';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -37,14 +30,12 @@ export interface BlaxelConfig {
 /**
  * Create a Blaxel provider instance using the factory pattern
  */
-export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
+export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 	name: 'blaxel',
 	methods: {
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
-				await handleBlaxelAuth(config);
-
 				// Determine the image to use
 				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
 
@@ -68,6 +59,9 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 				const ttl = options?.timeout ? `${Math.ceil(options.timeout / 1000)}s` : undefined;
 
 				try {
+					// Initialize Blaxel SDK with credentials
+					initializeBlaxel(config);
+
 					let sandbox: SandboxInstance;
 
 					// Create new Blaxel sandbox
@@ -77,6 +71,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value })),
 						metadata: {
+							name: options?.sandboxId || `blaxel-${Date.now()}`,
 							labels: {
 								...options?.metadata?.labels,
 							}
@@ -88,31 +83,39 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 
 					return {
 						sandbox,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
+						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
 					};
 				} catch (error) {
-					if (error instanceof Error) {
-						if (error.message.includes('unauthorized') || error.message.includes('API key')) {
-							throw new Error(
-								`Blaxel authentication failed. Please check your BLAXEL_API_KEY environment variable.`
-							);
-						}
-						if (error.message.includes('quota') || error.message.includes('limit')) {
-							throw new Error(
-								`Blaxel quota exceeded. Please check your usage limits.`
-							);
-						}
+					const errorDetail = error instanceof Error
+						? error.message
+						: typeof error === 'object' && error !== null
+							? JSON.stringify(error)
+							: String(error);
+
+					if (
+						errorDetail.includes('unauthorized') ||
+						errorDetail.includes('Unauthorized') ||
+						errorDetail.includes('Forbidden') ||
+						errorDetail.includes('API key')
+					) {
+						throw new Error(
+							`Blaxel authentication failed: ${errorDetail}`
+						);
+					}
+					if (errorDetail.includes('quota') || errorDetail.includes('limit')) {
+						throw new Error(
+							`Blaxel quota exceeded: ${errorDetail}`
+						);
 					}
 					throw new Error(
-						`Failed to create Blaxel sandbox: ${error instanceof Error ? error.message : String(error)}`
+						`Failed to create Blaxel sandbox: ${errorDetail}`
 					);
 				}
 			},
 
 			getById: async (config: BlaxelConfig, sandboxId: string) => {
-				await handleBlaxelAuth(config);
-
 				try {
+					initializeBlaxel(config);
 					const sandbox = await SandboxInstance.get(sandboxId);
 
 					if (!sandbox) {
@@ -121,7 +124,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 
 					return {
 						sandbox,
-						sandboxId
+						sandboxId,
 					};
 				} catch (error) {
 					// Sandbox doesn't exist or can't be accessed
@@ -130,8 +133,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			list: async (config: BlaxelConfig) => {
-				await handleBlaxelAuth(config);
-
+				initializeBlaxel(config);
 				const sandboxList = await SandboxInstance.list();
 				return sandboxList.map(sandbox => ({
 					sandbox,
@@ -140,9 +142,8 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			destroy: async (config: BlaxelConfig, sandboxId: string) => {
-				await handleBlaxelAuth(config);
-
 				try {
+					initializeBlaxel(config);
 					await SandboxInstance.delete(sandboxId);
 				} catch (error) {
 					// Sandbox might already be destroyed or doesn't exist
@@ -151,7 +152,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 			},
 
 			// Instance operations (map to individual Sandbox methods)
-			runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+			runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
 				const startTime = Date.now();
 
 				try {
@@ -207,7 +208,7 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						? `python3 -c "${escapedCode}"`
 						: `node -e "${escapedCode}"`;
 
-					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, false, command);
+					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, command);
 
 					// Check for syntax errors and throw them
 					if (exitCode !== 0 && stderr) {
@@ -220,13 +221,13 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 						}
 					}
 
+					// Combine stdout and stderr into output
+					const output = stderr ? `${stdout}\n${stderr}`.trim() : stdout;
+
 					return {
-						stdout,
-						stderr,
+						output,
 						exitCode,
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel'
+						language: effectiveRuntime
 					};
 				} catch (error) {
 					// Re-throw syntax errors
@@ -236,50 +237,55 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 
 					// For runtime errors, return a result instead of throwing
 					return {
-						stdout: '',
-						stderr: error instanceof Error ? error.message : String(error),
+						output: error instanceof Error ? error.message : String(error),
 						exitCode: 1,
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel'
+						language: runtime || 'node'
 					};
 				}
 			},
 
-			runCommand: async (sandbox: SandboxInstance, command: string, args: string[] = [], options?: RunCommandOptions): Promise<ExecutionResult> => {
-				const startTime = Date.now();
+		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+			const startTime = Date.now();
 
-				try {
-					// Handle background command execution
-					const { command: finalCommand, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-
-					// Construct full command
-					const fullCommand = finalArgs.length > 0 ? `${finalCommand} ${finalArgs.join(' ')}` : finalCommand;
-
-					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, isBackground, fullCommand);
-
-					return {
-						stdout,
-						stderr,
-						exitCode,
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel',
-						isBackground,
-						...(isBackground && { pid: -1 })
-					};
-				} catch (error) {
-					// For command failures, return error info instead of throwing
-					return {
-						stdout: '',
-						stderr: error instanceof Error ? error.message : String(error),
-						exitCode: 127, // Command not found exit code
-						executionTime: Date.now() - startTime,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-						provider: 'blaxel'
-					};
+			try {
+				// Build command with options
+				let fullCommand = command;
+				
+				// Handle environment variables
+				if (options?.env && Object.keys(options.env).length > 0) {
+					const envPrefix = Object.entries(options.env)
+						.map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+						.join(' ');
+					fullCommand = `${envPrefix} ${fullCommand}`;
 				}
-			},
+				
+				// Handle working directory
+				if (options?.cwd) {
+					fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+				}
+				
+				// Handle background execution
+				if (options?.background) {
+					fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+				}
+
+				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand);
+
+				return {
+					stdout,
+					stderr,
+					exitCode,
+					durationMs: Date.now() - startTime
+				};
+			} catch (error) {
+				return {
+					stdout: '',
+					stderr: error instanceof Error ? error.message : String(error),
+					exitCode: 127,
+					durationMs: Date.now() - startTime
+				};
+			}
+		},
 
 			getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
 				return {
@@ -393,19 +399,17 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 					for (const file of files) {
 						entries.push({
 							name: file.name,
-							path: `${path}/${file.name}`,
-							isDirectory: false,
+							type: 'file' as const,
 							size: file.size || 0,
-							lastModified: new Date(file.lastModified || Date.now())
+							modified: new Date(file.lastModified || Date.now())
 						});
 					}
 					for (const directory of directories) {
 						entries.push({
 							name: directory.name,
-							path: `${path}/${directory.name}`,
-							isDirectory: true,
+							type: 'directory' as const,
 							size: 0,
-							lastModified: new Date()
+							modified: new Date()
 						});
 					}
 					return entries;
@@ -439,73 +443,6 @@ export const blaxel = createProvider<SandboxInstance, BlaxelConfig>({
 });
 
 /**
- * Create a properly typed compute instance for Blaxel
- * This version provides full type safety for getInstance() calls
- * 
- * @example
- * ```typescript
- * import { createBlaxelCompute } from '@computesdk/blaxel'
- * 
- * const compute = createBlaxelCompute({ workspace: 'your-workspace', apiKey: 'your-key' });
- * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed as SandboxInstance!
- * ```
- */
-export function createBlaxelCompute(config: BlaxelConfig): {
-	sandbox: {
-		create(): Promise<{
-			sandboxId: string;
-			provider: string;
-			runCode(code: string, runtime?: import('computesdk').Runtime): Promise<import('computesdk').ExecutionResult>;
-			runCommand(command: string, args?: string[]): Promise<import('computesdk').ExecutionResult>;
-			getInfo(): Promise<import('computesdk').SandboxInfo>;
-			getUrl(options: { port: number; protocol?: string }): Promise<string>;
-			getProvider(): ReturnType<typeof blaxel>;
-			getInstance(): SandboxInstance; // ✅ Properly typed!
-			kill(): Promise<void>;
-			destroy(): Promise<void>;
-			filesystem: import('computesdk').SandboxFileSystem;
-		}>;
-	};
-} {
-	const provider = blaxel(config);
-
-	return {
-		sandbox: {
-			create: async () => {
-				const sandbox = await provider.sandbox.create();
-				return {
-					...sandbox,
-					getInstance: (): SandboxInstance => {
-						return sandbox.getInstance() as SandboxInstance;
-					}
-				};
-			}
-		}
-	};
-}
-
-async function handleBlaxelAuth(config: BlaxelConfig) {
-	// Check if auth is already set in the SDK
-	try {
-		await settings.authenticate();
-	} catch (error) {
-		// If not, set the auth from the config
-		if (config.workspace || process.env.BLAXEL_WORKSPACE && typeof process !== 'undefined') {
-			process.env.BL_WORKSPACE = config.workspace || process.env.BLAXEL_WORKSPACE;
-		}
-		if (config.apiKey || process.env.BLAXEL_API_KEY && typeof process !== 'undefined') {
-			process.env.BL_API_KEY = config.apiKey || process.env.BLAXEL_API_KEY;
-		}
-		try {
-			await settings.authenticate();
-		} catch (error) {
-			throw new Error('Blaxel authentication failed. Please check the following documents for more information: https://docs.blaxel.ai/Security/Access-tokens#using-api-keys');
-		}
-	}
-}
-
-/**
  * Parse TTL value from Blaxel's format to milliseconds
  * Supports formats like "30m", "24h", "7d" or plain numbers (seconds)
  */
@@ -533,7 +470,16 @@ function parseTTLToMilliseconds(ttl: string | number | undefined): number {
 	}
 }
 
-function convertSandboxStatus(status: string | undefined): SandboxStatus {
+/**
+ * Initialize the Blaxel SDK with credentials from config or environment variables
+ */
+function initializeBlaxel(config: BlaxelConfig): void {
+	const apiKey = config.apiKey || process.env?.BL_API_KEY!;
+	const workspace = config.workspace || process.env?.BL_WORKSPACE!;
+	initialize({ apikey: apiKey, workspace: workspace });
+}
+
+function convertSandboxStatus(status: string | undefined): 'running' | 'stopped' | 'error' {
 	switch (status?.toLowerCase()) {
 		case 'deployed': return 'running';
 		case 'deleting': return 'stopped';
@@ -548,21 +494,17 @@ function convertSandboxStatus(status: string | undefined): SandboxStatus {
  */
 async function executeWithStreaming(
 	sandbox: SandboxInstance,
-	isBackground: boolean,
 	command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 	// Execute the command
 	const result = await sandbox.process.exec({ command });
 
-	if (!isBackground) {
-		// Wait for process completion
-		await sandbox.process.wait(result.name);
-	}
+	// Wait for process completion
+	await sandbox.process.wait(result.name);
 
 	// Get final process result for exit code
 	const processResult = await sandbox.process.get(result.name);
 
-	// TODO: Handle proper stdout/stderr streaming
 	return {
 		stdout: processResult.logs,
 		stderr: processResult.logs,

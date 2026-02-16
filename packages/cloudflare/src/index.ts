@@ -6,14 +6,9 @@
  */
 
 import { getSandbox } from '@cloudflare/sandbox';
-import { createProvider } from 'computesdk';
-import type { 
-  ExecutionResult, 
-  SandboxInfo, 
-  Runtime,
-  CreateSandboxOptions,
-  FileEntry
-} from 'computesdk';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Cloudflare-specific configuration options
@@ -74,7 +69,7 @@ function detectRuntime(code: string): Runtime {
 /**
  * Create a Cloudflare provider instance using the factory pattern
  */
-export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
+export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
   name: 'cloudflare',
   methods: {
     sandbox: {
@@ -186,7 +181,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (cloudflareSandbox: CloudflareSandbox, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (cloudflareSandbox: CloudflareSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
 
         try {
@@ -215,34 +210,28 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
             }
             
             result = {
-              stdout,
-              stderr,
+              output: stdout,
               exitCode: 0, // Cloudflare code interpreter doesn't expose exit codes directly
-              executionTime: Date.now() - startTime,
-              sandboxId,
-              provider: 'cloudflare'
+              language: 'python'
             };
           } else {
             // For Node.js/JavaScript, use exec with node command
             const execResult = await sandbox.exec(`node -e "${code.replace(/"/g, '\\"')}"`);
             
             result = {
-              stdout: execResult.stdout || '',
-              stderr: execResult.stderr || '',
+              output: (execResult.stdout || '') + (execResult.stderr || ''),
               exitCode: execResult.exitCode || 0,
-              executionTime: Date.now() - startTime,
-              sandboxId,
-              provider: 'cloudflare'
+              language: 'node'
             };
           }
 
           // Check for syntax errors
-          if (result.stderr && (
-            result.stderr.includes('SyntaxError') ||
-            result.stderr.includes('invalid syntax') ||
-            result.stderr.includes('Unexpected token')
+          if (result.output && (
+            result.output.includes('SyntaxError') ||
+            result.output.includes('invalid syntax') ||
+            result.output.includes('Unexpected token')
           )) {
-            throw new Error(`Syntax error: ${result.stderr.trim()}`);
+            throw new Error(`Syntax error: ${result.output.trim()}`);
           }
 
           return result;
@@ -258,14 +247,32 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
         }
       },
 
-      runCommand: async (cloudflareSandbox: CloudflareSandbox, command: string, args: string[] = []): Promise<ExecutionResult> => {
+      runCommand: async (cloudflareSandbox: CloudflareSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
           const { sandbox, sandboxId } = cloudflareSandbox;
+
+          // Build command with options
+          let fullCommand = command;
           
-          // Construct full command with arguments
-          const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
+          
+          // Handle background execution
+          if (options?.background) {
+            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          }
 
           // Execute command using Cloudflare's exec method
           const execResult = await sandbox.exec(fullCommand);
@@ -274,9 +281,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
             stdout: execResult.stdout || '',
             stderr: execResult.stderr || '',
             exitCode: execResult.exitCode || 0,
-            executionTime: Date.now() - startTime,
-            sandboxId,
-            provider: 'cloudflare'
+            durationMs: Date.now() - startTime
           };
         } catch (error) {
           // For command failures, return error info instead of throwing
@@ -284,9 +289,7 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127, // Command not found exit code
-            executionTime: Date.now() - startTime,
-            sandboxId: cloudflareSandbox.sandboxId,
-            provider: 'cloudflare'
+            durationMs: Date.now() - startTime
           };
         }
       },
@@ -409,10 +412,9 @@ export const cloudflare = createProvider<CloudflareSandbox, CloudflareConfig>({
 
               return {
                 name,
-                path: `${path}/${name}`.replace('//', '/'),
-                isDirectory: permissions.startsWith('d'),
+                type: permissions.startsWith('d') ? 'directory' as const : 'file' as const,
                 size,
-                lastModified: isNaN(date.getTime()) ? new Date() : date
+                modified: isNaN(date.getTime()) ? new Date() : date
               };
             });
           } catch (error) {

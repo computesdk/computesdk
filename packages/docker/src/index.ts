@@ -1,21 +1,20 @@
 import Docker from 'dockerode';
 import { PassThrough } from 'stream';
-import { createProvider, createBackgroundCommand } from 'computesdk';
+import { defineProvider } from '@computesdk/provider';
 import type {
   Runtime,
-  ExecutionResult,
+  CodeResult,
+  CommandResult,
   RunCommandOptions,
   CreateSandboxOptions,
   SandboxInfo,
   FileEntry,
-} from 'computesdk';
+} from '@computesdk/provider';
 
 import { defaultDockerConfig } from './types/types';
 import type {
   DockerConfig,
   DockerSandboxHandle,
-  DockerSandboxAPI,
-  CreateDockerCompute,
   DockerImage,
   PortBindings,
 } from './types/types';
@@ -142,7 +141,7 @@ function pickImageForRuntime(runtime: Runtime, configured?: DockerImage): Docker
   };
 }
 
-export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
+export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
   name: PROVIDER,
   methods: {
     sandbox: {
@@ -297,7 +296,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         }
       },
 
-      runCode: async (handle: DockerSandboxHandle, code: string, runtime?: Runtime): Promise<ExecutionResult> => {
+      runCode: async (handle: DockerSandboxHandle, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const start = Date.now();
 
         // Resolve runtime: param → label → error
@@ -333,43 +332,19 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
         }
 
         return {
-          stdout,
-          stderr,
+          output: stdout + stderr,
           exitCode,
-          executionTime: Date.now() - start,
-          sandboxId: handle.containerId,
-          provider: PROVIDER,
+          language: rt,
         };
       },
 
       runCommand: async (
         handle: DockerSandboxHandle,
         command: string,
-        args: string[] = [],
-        options?: RunCommandOptions
-      ): Promise<ExecutionResult> => {
+        args: string[] = []
+      ): Promise<CommandResult> => {
         const start = Date.now();
-        const { command: finalCmd, args: finalArgs, isBackground } = createBackgroundCommand(command, args, options);
-        let shell = finalArgs.length ? `${finalCmd} ${finalArgs.join(' ')}` : finalCmd;
-
-        let pid: number | undefined;
-
-        if (isBackground) {
-          shell = `(${shell}) & echo $!`;
-          const r = await runExec(handle, shell);
-          const m = r.stdout.trim().split(/\s+/).pop();
-          pid = m && /^\d+$/.test(m) ? Number(m) : undefined;
-          return {
-            stdout: r.stdout,
-            stderr: r.stderr,
-            exitCode: r.exitCode,
-            executionTime: Date.now() - start,
-            sandboxId: handle.containerId,
-            provider: PROVIDER,
-            isBackground: true,
-            ...(pid ? { pid } : {}),
-          };
-        }
+        const shell = args.length ? `${command} ${args.join(' ')}` : command;
 
         const { stdout, stderr, exitCode } = await runExec(handle, shell);
 
@@ -377,9 +352,7 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
           stdout,
           stderr,
           exitCode,
-          executionTime: Date.now() - start,
-          sandboxId: handle.containerId,
-          provider: PROVIDER,
+          durationMs: Date.now() - start,
         };
       },
 
@@ -461,10 +434,9 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
             const size = Number(parts[4]) || 0;
             entries.push({
               name,
-              path: `${path.replace(/\/$/, '')}/${name}`,
-              isDirectory: isDir,
+              type: isDir ? 'directory' as const : 'file' as const,
               size,
-              lastModified: new Date(),
+              modified: new Date(),
             });
           }
           return entries;
@@ -486,19 +458,3 @@ export const docker = createProvider<DockerSandboxHandle, DockerConfig>({
   },
 });
 
-// ---------------------- convenience creator (optional) ----------------------
-
-export function createDockerCompute(config: DockerConfig): CreateDockerCompute {
-  const provider = docker(config);
-  return {
-    sandbox: {
-      create: async (options) => {
-        const sb = await provider.sandbox.create(options);
-        return {
-          ...sb,
-          getInstance: (): DockerSandboxHandle => sb.getInstance() as DockerSandboxHandle,
-        } as unknown as DockerSandboxAPI;
-      },
-    },
-  };
-}

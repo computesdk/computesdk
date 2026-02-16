@@ -1,365 +1,597 @@
 /**
- * Compute Singleton - Main API Orchestrator
+ * Compute API - Gateway HTTP Implementation
  *
- * Provides the unified compute.* API and delegates to specialized managers
+ * Provides the unified compute.* API using direct HTTP calls to the gateway.
+ * The `compute` export works as both a singleton and a callable function:
+ *
+ * - Singleton: `compute.sandbox.create()` (auto-detects from env vars)
+ * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config)
  */
 
-import { ComputeClient } from '@computesdk/client';
-import type { ComputeAPI, CreateSandboxParams, CreateSandboxParamsWithOptionalProvider, ComputeConfig, Sandbox, Provider, TypedSandbox, TypedComputeAPI } from './types';
+import { Sandbox, WebSocketConstructor, type ServerStartOptions } from './client';
+import { autoConfigureCompute } from './auto-detect';
+import { createConfigFromExplicit } from './explicit-config';
+import { waitForComputeReady } from './compute-daemon/lifecycle';
+import { GATEWAY_URL } from './constants';
+import type { ProviderName } from './provider-config';
+import type { SetupOverlayConfig } from './setup';
 
 /**
- * Authorization response from license server
+ * Gateway configuration
  */
-interface AuthorizationResponse {
-  jwt: string;
-  sandbox_url: string;
-  preview_url: string;
+interface GatewayConfig {
+  apiKey: string;
+  gatewayUrl: string;
+  provider: string;
+  providerHeaders: Record<string, string>;
+  requestTimeoutMs?: number;
+  WebSocket?: WebSocketConstructor;
 }
 
 /**
- * Authorize license key and get JWT token + URLs from license server
+ * Explicit compute configuration for callable mode
  */
-async function authorizeApiKey(apiKey: string): Promise<AuthorizationResponse> {
+export interface ExplicitComputeConfig {
+  /** Provider name to use */
+  provider: ProviderName;
+  /**
+   * ComputeSDK API key (required for gateway mode)
+   * @deprecated Use `computesdkApiKey` for clarity
+   */
+  apiKey?: string;
+  /** ComputeSDK API key (required for gateway mode) */
+  computesdkApiKey?: string;
+  /** Optional gateway URL override */
+  gatewayUrl?: string;
+  /** HTTP request timeout for gateway calls in milliseconds */
+  requestTimeoutMs?: number;
+  /**
+   * WebSocket implementation for environments without native WebSocket support.
+   * In Node.js < 22, pass the 'ws' package: `import WebSocket from 'ws'`
+   */
+  WebSocket?: WebSocketConstructor;
+
+  /** Provider-specific configurations */
+  e2b?: { apiKey?: string; projectId?: string; templateId?: string };
+  modal?: { tokenId?: string; tokenSecret?: string };
+  railway?: { apiToken?: string; projectId?: string; environmentId?: string };
+  render?: { apiKey?: string; serviceId?: string };
+  daytona?: { apiKey?: string };
+  vercel?: { oidcToken?: string; token?: string; teamId?: string; projectId?: string };
+  runloop?: { apiKey?: string };
+  cloudflare?: { apiToken?: string; accountId?: string };
+  codesandbox?: { apiKey?: string; templateId?: string; timeout?: number };
+  blaxel?: { apiKey?: string; workspace?: string; image?: string; region?: string; memory?: number };
+  namespace?: { token?: string };
+  hopx?: { apiKey?: string };
+}
+
+/**
+ * Options for creating a sandbox via the gateway
+ * 
+ * Note: Runtime is determined by the provider, not specified at creation time.
+ * Use sandbox.runCode(code, runtime) to specify which runtime to use for execution.
+ */
+export interface CreateSandboxOptions {
+  timeout?: number;
+  templateId?: string;
+  metadata?: Record<string, any>;
+  envs?: Record<string, string>;
+  name?: string;
+  namespace?: string;
+  directory?: string;
+  overlays?: SetupOverlayConfig[];
+  servers?: ServerStartOptions[];
+  /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
+  image?: string;
+  /** Provider-specific snapshot to create from (e.g., Vercel snapshots) */
+  snapshotId?: string;
+}
+
+/**
+ * Options for finding or creating a named sandbox
+ */
+export interface FindOrCreateSandboxOptions extends CreateSandboxOptions {
+  name: string;
+  namespace?: string;
+}
+
+/**
+ * Options for finding a named sandbox
+ */
+export interface FindSandboxOptions {
+  name: string;
+  namespace?: string;
+}
+
+/**
+ * Options for extending sandbox timeout
+ */
+export interface ExtendTimeoutOptions {
+  duration?: number;
+}
+
+/**
+ * Helper to call gateway API with retry logic
+ */
+async function gatewayFetch<T>(
+  url: string,
+  config: GatewayConfig,
+  options: RequestInit = {}
+): Promise<{ success: boolean; data?: T }> {
+  const timeout = config.requestTimeoutMs ?? 30000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
-    const response = await fetch('https://preview.computesdk.com/__api/license/authorize', {
-      method: 'POST',
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        'X-ComputeSDK-API-Key': config.apiKey,
+        'X-Provider': config.provider,
+        ...config.providerHeaders,
+        ...options.headers,
       },
-      body: JSON.stringify({
-        key: apiKey,
-        increment_usage: 1
-      })
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      throw new Error(`License authorization failed: ${response.statusText}`);
+      if (response.status === 404) {
+        return { success: false };
+      }
+
+      const errorText = await response.text().catch(() => response.statusText);
+      
+      // Build helpful error message
+      let errorMessage = `Gateway API error: ${errorText}`;
+      if (response.status === 401) {
+        errorMessage = `Invalid ComputeSDK API key. Check your COMPUTESDK_API_KEY environment variable.`;
+      } else if (response.status === 403) {
+        errorMessage = `Access forbidden. Your API key may not have permission to use provider "${config.provider}".`;
+      }
+
+      throw new Error(errorMessage);
     }
 
-    const data = await response.json();
-
-    if (!data.jwt) {
-      throw new Error('No JWT token received from license server');
-    }
-
-    if (!data.sandbox_url) {
-      throw new Error('No sandbox_url received from license server');
-    }
-
-    if (!data.preview_url) {
-      throw new Error('No preview_url received from license server');
-    }
-
-    return {
-      jwt: data.jwt,
-      sandbox_url: data.sandbox_url,
-      preview_url: data.preview_url
-    };
+    return await response.json();
   } catch (error) {
-    throw new Error(`Failed to authorize API key: ${error}`);
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout}ms`);
+    }
+    
+    throw error;
   }
 }
 
 /**
- * Install and start compute CLI inside a sandbox
+ * Poll gateway until sandbox status becomes "ready" or timeout
+ * Uses same exponential backoff pattern as waitForComputeReady
+ *
+ * This handles the case where a sandbox is being created by another concurrent
+ * request and the gateway returns status: "creating". We poll until it's ready.
  */
-async function installComputeInSandbox(
-  sandbox: Sandbox,
-  config?: { apiKey?: string; jwt?: string }
-): Promise<AuthorizationResponse | null> {
-  try {
-    console.log('Installing and starting compute CLI in sandbox...');
+async function waitForSandboxStatus(
+  config: GatewayConfig,
+  endpoint: string,
+  body: object,
+  options: { maxWaitMs?: number } = {}
+): Promise<{ success: boolean; data?: any }> {
+  const maxWaitMs = options.maxWaitMs ?? 60000; // 1 minute default (matches gateway timeout)
+  const initialDelayMs = 500;
+  const maxDelayMs = 2000;
+  const backoffFactor = 1.5;
 
-    // Get JWT token and URLs from API key if provided
-    let authResponse: AuthorizationResponse | null = null;
-    let jwt = config?.jwt;
+  const startTime = Date.now();
+  let currentDelay = initialDelayMs;
 
-    if (config?.apiKey && !jwt) {
-      console.log('Authorizing API key and getting JWT token...');
-      authResponse = await authorizeApiKey(config.apiKey);
-      jwt = authResponse.jwt;
+  while (Date.now() - startTime < maxWaitMs) {
+    const result = await gatewayFetch<any>(endpoint, config, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+
+    if (!result.success || !result.data) {
+      return result; // Not found or error
     }
 
-    // Build install command with authentication
-    let installCommand = 'curl -fsSL https://computesdk.com/install.sh | sh';
-
-    if (jwt) {
-      installCommand = `curl -fsSL https://computesdk.com/install.sh | sh -s -- --jwt ${jwt}`;
+    if (result.data.status !== 'creating') {
+      return result; // Ready or legacy (no status field)
     }
 
-    // Run the install script (it will handle installation and starting compute)
-    const result = await sandbox.runCommand('sh', ['-c', installCommand]);
-
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to install and start compute CLI: ${result.stderr}`);
+    // Still creating - wait and retry
+    if (process.env.COMPUTESDK_DEBUG) {
+      console.log(`[Compute] Sandbox still creating, waiting ${currentDelay}ms...`);
     }
 
-    console.log('Compute CLI installed and started successfully');
-
-    return authResponse;
-  } catch (error) {
-    throw new Error(`Failed to install compute CLI in sandbox: ${error}`);
+    await new Promise(resolve => setTimeout(resolve, currentDelay));
+    currentDelay = Math.min(currentDelay * backoffFactor, maxDelayMs);
   }
+
+  throw new Error(
+    `Sandbox is still being created after ${maxWaitMs}ms. ` +
+    `This may indicate the sandbox failed to start. Check your provider dashboard.`
+  );
 }
 
 /**
- * Compute singleton implementation - orchestrates all compute operations
+ * Compute singleton implementation
  */
-class ComputeManager implements ComputeAPI {
-  private config: ComputeConfig | null = null;
-  private typedState: {
-    isTyped: boolean;
-    provider: Provider | null;
-  } = { isTyped: false, provider: null };
-  private computeAuth: { apiKey?: string; jwt?: string } = {};
+class ComputeManager {
+  private config: GatewayConfig | null = null;
+  private autoConfigured = false;
 
   /**
-   * Set default configuration with generic type preservation
+   * Lazy auto-configure from environment if not explicitly configured
    */
-  setConfig<TProvider extends Provider>(config: ComputeConfig<TProvider>): void {
-    // Validate that at least one provider is specified
-    if (!config.defaultProvider && !config.provider) {
-      throw new Error('Either defaultProvider or provider must be specified in setConfig');
+  private ensureConfigured(): void {
+    if (this.config) return;
+    if (this.autoConfigured) return;
+
+    const config = autoConfigureCompute();
+    this.autoConfigured = true;
+
+    if (config) {
+      this.config = config;
     }
-
-    // Handle backwards compatibility: if both are provided, defaultProvider takes precedence
-    if (config.defaultProvider && config.provider) {
-      console.warn('Both defaultProvider and provider specified in setConfig. Using defaultProvider. The provider key is deprecated, please use defaultProvider instead.');
-    }
-
-    // Normalize config to always have both fields for internal use (backward compatibility)
-    const actualProvider = config.defaultProvider || config.provider!;
-    this.config = {
-      provider: actualProvider,
-      defaultProvider: actualProvider,
-      apiKey: config.apiKey,
-      jwt: config.jwt
-    };
-
-    // Store compute auth credentials
-    this.computeAuth = {
-      apiKey: config.apiKey,
-      jwt: config.jwt
-    };
-
-    // Store typed state for type-aware operations
-    this.typedState = {
-      isTyped: true,
-      provider: actualProvider
-    };
   }
 
   /**
-   * Get current configuration
+   * Get gateway config, throwing if not configured
    */
-  getConfig(): ComputeConfig | null {
+  private getGatewayConfig(): GatewayConfig {
+    this.ensureConfigured();
+
+    if (!this.config) {
+      throw new Error(
+        'No ComputeSDK configuration found.\n\n' +
+        'Options:\n' +
+        '1. Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)\n' +
+        '2. Explicit: Call compute.setConfig({ provider: "e2b", computesdkApiKey: "...", e2b: { apiKey: "..." } })\n' +
+        '3. Use provider directly: import { e2b } from \'@computesdk/e2b\'\n\n' +
+        'Docs: https://computesdk.com/docs/quickstart'
+      );
+    }
+
     return this.config;
   }
 
   /**
-   * Clear current configuration
+   * Explicitly configure the compute singleton
+   * 
+   * @example
+   * ```typescript
+   * import { compute } from 'computesdk';
+   * 
+   * compute.setConfig({
+   *   provider: 'e2b',
+   *   apiKey: 'computesdk_xxx',
+   *   e2b: { apiKey: 'e2b_xxx' }
+   * });
+   * 
+   * const sandbox = await compute.sandbox.create();
+   * ```
    */
-  clearConfig(): void {
-    this.config = null;
-  }
-
-  /**
-   * Get the default provider, throwing if not configured
-   */
-  private getDefaultProvider(): Provider {
-    const provider = this.config?.defaultProvider || this.config?.provider;
-    if (!provider) {
-      throw new Error(
-        'No default provider configured. Either call compute.setConfig({ defaultProvider }) or pass provider explicitly.'
-      );
-    }
-    return provider;
+  setConfig(config: ExplicitComputeConfig): void {
+    const gatewayConfig = createConfigFromExplicit(config);
+    this.config = gatewayConfig;
+    this.autoConfigured = false;
   }
 
   sandbox = {
     /**
-     * Create a sandbox from a provider (or default provider if configured)
-     * 
+     * Create a new sandbox
+     *
      * @example
      * ```typescript
-     * import { e2b } from '@computesdk/e2b'
-     * import { compute } from 'computesdk'
-     * 
-     * // With explicit provider
      * const sandbox = await compute.sandbox.create({
-     *   provider: e2b({ apiKey: 'your-key' })
-     * })
-     * 
-      * // With default provider (both forms work)
-      * compute.setConfig({ defaultProvider: e2b({ apiKey: 'your-key' }) })
-      * const sandbox1 = await compute.sandbox.create({})
-      * const sandbox2 = await compute.sandbox.create()
+     *   directory: '/custom/path',
+     *   overlays: [
+     *     {
+     *       source: '/templates/nextjs',
+     *       target: 'app',
+     *       strategy: 'smart',
+     *     },
+     *   ],
+     *   servers: [
+     *     {
+     *       slug: 'web',
+     *       start: 'npm run dev',
+     *       path: '/app',
+     *     },
+     *   ],
+     * });
      * ```
      */
-    create: async (params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<Sandbox> => {
-      const provider = params && 'provider' in params && params.provider ? params.provider : this.getDefaultProvider();
-      const options = params?.options;
-      const sandbox = await provider.sandbox.create(options);
+    create: async (options?: CreateSandboxOptions): Promise<Sandbox> => {
+      const config = this.getGatewayConfig();
 
-      // Install compute CLI in the sandbox with auth credentials if available
-      const authResponse = await installComputeInSandbox(sandbox, this.computeAuth);
+      const result = await gatewayFetch<{
+        sandboxId: string;
+        url: string;
+        token: string;
+        provider: string;
+        metadata?: Record<string, unknown>;
+        name?: string;
+        namespace?: string;
+        overlays?: Array<{
+          id: string;
+          source: string;
+          target: string;
+          copy_status: string;
+        }>;
+        servers?: Array<{
+          slug: string;
+          port?: number;
+          url?: string;
+          status: 'installing' | 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
+        }>;
+      }>(`${config.gatewayUrl}/v1/sandboxes`, config, {
+        method: 'POST',
+        body: JSON.stringify(options || {}),
+      });
 
-      // If we have authorization info, use ComputeClient instead of provider sandbox
-      let finalSandbox: Sandbox = sandbox;
-      if (authResponse) {
-        finalSandbox = new ComputeClient({
-          sandboxUrl: authResponse.sandbox_url,
-          sandboxId: sandbox.sandboxId,
-          provider: sandbox.provider,
-          token: authResponse.jwt
-        }) as Sandbox;
+      if (!result.success || !result.data) {
+        throw new Error(`Gateway returned invalid response`);
       }
 
-      // If we have typed state and no explicit provider passed, cast to typed sandbox
-      // This enables proper type inference for getInstance() when using default provider
-      if (this.typedState.isTyped && (!params || !('provider' in params && params.provider))) {
-        return finalSandbox as TypedSandbox<any>;
-      }
+      const { sandboxId, url, token, provider, metadata, name, namespace, overlays, servers } = result.data;
 
-      return finalSandbox;
+      const sandbox = new Sandbox({
+        sandboxUrl: url,
+        sandboxId,
+        provider,
+        token: token || config.apiKey,
+        metadata: {
+          ...metadata,
+          ...(name && { name }),
+          ...(namespace && { namespace }),
+          ...(overlays && { overlays }),
+          ...(servers && { servers }),
+        },
+        WebSocket: config.WebSocket || globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
+      });
+
+      await waitForComputeReady(sandbox);
+
+      return sandbox;
     },
 
     /**
-     * Get an existing sandbox by ID from a provider (or default provider if configured)
+     * Get an existing sandbox by ID
      */
-    getById: async (providerOrSandboxId: Provider | string, sandboxId?: string): Promise<Sandbox | null> => {
-      if (typeof providerOrSandboxId === 'string') {
-        // Called with just sandboxId, use default provider
-        const provider = this.getDefaultProvider();
-        const sandbox = await provider.sandbox.getById(providerOrSandboxId);
-        
-        // If we have typed state, cast to typed sandbox for proper getInstance() typing
-        if (this.typedState.isTyped && sandbox) {
-          return sandbox as TypedSandbox<any>;
-        }
-        
-        return sandbox;
-      } else {
-        // Called with provider and sandboxId
-        if (!sandboxId) {
-          throw new Error('sandboxId is required when provider is specified');
-        }
-        return await providerOrSandboxId.sandbox.getById(sandboxId);
+    getById: async (sandboxId: string): Promise<Sandbox | null> => {
+      const config = this.getGatewayConfig();
+
+      const result = await gatewayFetch<{
+        url: string;
+        token: string;
+        provider: string;
+        metadata?: Record<string, unknown>;
+      }>(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config);
+
+      if (!result.success || !result.data) {
+        return null;
       }
+
+      const { url, token, provider, metadata } = result.data;
+
+      const sandbox = new Sandbox({
+        sandboxUrl: url,
+        sandboxId,
+        provider,
+        token: token || config.apiKey,
+        metadata,
+        WebSocket: config.WebSocket || globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
+      });
+
+      await waitForComputeReady(sandbox);
+
+      return sandbox;
     },
 
     /**
-     * List all active sandboxes from a provider (or default provider if configured)
+     * List all active sandboxes
      */
-    list: async (provider?: Provider): Promise<Sandbox[]> => {
-      const actualProvider = provider || this.getDefaultProvider();
-      const sandboxes = await actualProvider.sandbox.list();
-      
-      // If we have typed state and no explicit provider passed, cast to typed sandboxes
-      if (this.typedState.isTyped && !provider) {
-        return sandboxes as TypedSandbox<any>[];
-      }
-      
-      return sandboxes;
+    list: async (): Promise<Sandbox[]> => {
+      throw new Error(
+        'The gateway does not support listing sandboxes. Use getById() with a known sandbox ID instead.'
+      );
     },
 
     /**
-     * Destroy a sandbox via a provider (or default provider if configured)
+     * Destroy a sandbox
      */
-    destroy: async (providerOrSandboxId: Provider | string, sandboxId?: string): Promise<void> => {
-      if (typeof providerOrSandboxId === 'string') {
-        // Called with just sandboxId, use default provider
-        const provider = this.getDefaultProvider();
-        return await provider.sandbox.destroy(providerOrSandboxId);
-      } else {
-        // Called with provider and sandboxId
-        if (!sandboxId) {
-          throw new Error('sandboxId is required when provider is specified');
+    destroy: async (sandboxId: string): Promise<void> => {
+      const config = this.getGatewayConfig();
+
+      await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
+     * Find existing or create new sandbox by (namespace, name)
+     */
+    findOrCreate: async (options: FindOrCreateSandboxOptions): Promise<Sandbox> => {
+      const config = this.getGatewayConfig();
+
+      const { name, namespace, ...restOptions } = options;
+
+      // Use polling to handle concurrent creation (status: "creating")
+      const result = await waitForSandboxStatus(
+        config,
+        `${config.gatewayUrl}/v1/sandboxes/find-or-create`,
+        {
+          namespace: namespace || 'default',
+          name,
+          ...restOptions,
         }
-        return await providerOrSandboxId.sandbox.destroy(sandboxId);
+      );
+
+      if (!result.success || !result.data) {
+        throw new Error(`Gateway returned invalid response`);
       }
-    }
+
+      const { sandboxId, url, token, provider, metadata } = result.data;
+
+      const sandbox = new Sandbox({
+        sandboxUrl: url,
+        sandboxId,
+        provider,
+        token: token || config.apiKey,
+        metadata: {
+          ...metadata,
+          name: result.data.name,
+          namespace: result.data.namespace,
+        },
+        WebSocket: config.WebSocket || globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
+      });
+
+      await waitForComputeReady(sandbox);
+
+      return sandbox;
+    },
+
+    /**
+     * Find existing sandbox by (namespace, name) without creating
+     */
+    find: async (options: FindSandboxOptions): Promise<Sandbox | null> => {
+      const config = this.getGatewayConfig();
+
+      // Use polling to handle concurrent creation (status: "creating")
+      const result = await waitForSandboxStatus(
+        config,
+        `${config.gatewayUrl}/v1/sandboxes/find`,
+        {
+          namespace: options.namespace || 'default',
+          name: options.name,
+        }
+      );
+
+      if (!result.success || !result.data) {
+        return null;
+      }
+
+      const { sandboxId, url, token, provider, metadata, name, namespace } = result.data;
+
+      const sandbox = new Sandbox({
+        sandboxUrl: url,
+        sandboxId,
+        provider,
+        token: token || config.apiKey,
+        metadata: {
+          ...metadata,
+          name,
+          namespace,
+        },
+        WebSocket: config.WebSocket || globalThis.WebSocket,
+        destroyHandler: async () => {
+          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+            method: 'DELETE',
+          });
+        },
+      });
+
+      await waitForComputeReady(sandbox);
+
+      return sandbox;
+    },
+
+    /**
+     * Extend sandbox timeout/expiration
+     */
+    extendTimeout: async (sandboxId: string, options?: ExtendTimeoutOptions): Promise<void> => {
+      const config = this.getGatewayConfig();
+      const duration = options?.duration ?? 900000; // Default to 15 minutes
+
+      await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}/extend`, config, {
+        method: 'POST',
+        body: JSON.stringify({ duration }),
+      });
+    },
   };
-
-  // Future: compute.blob.*, compute.database.*, compute.git.* will be added here
-  // blob = new BlobManager();
-  // database = new DatabaseManager();  
-  // git = new GitManager();
-
-
 }
 
 /**
- * Singleton instance - the main API (untyped)
+ * Singleton instance
  */
-export const compute: ComputeAPI = new ComputeManager();
-
-
+const singletonInstance = new ComputeManager();
 
 /**
- * Create a compute instance with proper typing
+ * Factory function for explicit configuration
+ */
+function computeFactory(config: ExplicitComputeConfig): ComputeManager {
+  const gatewayConfig = createConfigFromExplicit(config);
+  const manager = new ComputeManager();
+  manager['config'] = gatewayConfig;
+  return manager;
+}
+
+/**
+ * Callable compute interface - dual nature as both singleton and factory
  * 
+ * This interface represents the compute export's two modes:
+ * 1. As a ComputeManager singleton (accessed via properties like compute.sandbox)
+ * 2. As a factory function (called with config to create new instances)
+ */
+export interface CallableCompute extends ComputeManager {
+  /** Create a new compute instance with explicit configuration */
+  (config: ExplicitComputeConfig): ComputeManager;
+  /** Explicitly configure the singleton */
+  setConfig(config: ExplicitComputeConfig): void;
+}
+
+/**
+ * Callable compute - works as both singleton and factory function
+ *
  * @example
  * ```typescript
- * import { e2b } from '@computesdk/e2b'
- * import { createCompute } from 'computesdk'
- * 
- * const compute = createCompute({
- *   defaultProvider: e2b({ apiKey: 'your-key' }),
- * });
- * 
- * const sandbox = await compute.sandbox.create();
- * const instance = sandbox.getInstance(); // ✅ Properly typed E2B Sandbox!
+ * import { compute } from 'computesdk';
+ *
+ * // Singleton mode (auto-detects from env vars)
+ * const sandbox1 = await compute.sandbox.create();
+ *
+ * // Callable mode (explicit config)
+ * const sandbox2 = await compute({
+ *   provider: 'e2b',
+ *   apiKey: 'computesdk_xxx',
+ *   e2b: { apiKey: 'e2b_xxx' }
+ * }).sandbox.create();
  * ```
  */
-export function createCompute<TProvider extends Provider>(config: ComputeConfig<TProvider>): TypedComputeAPI<TProvider> {
-  const manager = new ComputeManager();
-
-  // Set config directly without calling the public setConfig method
-  const actualProvider = config.defaultProvider || config.provider!;
-  manager['config'] = {
-    provider: actualProvider,
-    defaultProvider: actualProvider,
-    apiKey: config.apiKey,
-    jwt: config.jwt
-  };
-  manager['typedState'] = {
-    isTyped: true,
-    provider: actualProvider
-  };
-  manager['computeAuth'] = {
-    apiKey: config.apiKey,
-    jwt: config.jwt
-  };
-
-  return {
-    setConfig: <T extends Provider>(cfg: ComputeConfig<T>) => createCompute(cfg),
-    getConfig: () => manager.getConfig(),
-    clearConfig: () => manager.clearConfig(),
-
-    sandbox: {
-      create: async (params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>) => {
-        const sandbox = await manager.sandbox.create(params);
-        // The sandbox should now have the correct getInstance typing from the generic Sandbox<TSandbox>
-        return sandbox as TypedSandbox<TProvider>;
-      },
-
-      getById: async (sandboxId: string) => {
-        const sandbox = await manager.sandbox.getById(sandboxId);
-        return sandbox ? sandbox as TypedSandbox<TProvider> : null;
-      },
-
-      list: async () => {
-        const sandboxes = await manager.sandbox.list();
-        return sandboxes as TypedSandbox<TProvider>[];
-      },
-
-      destroy: async (sandboxId: string) => {
-        return await manager.sandbox.destroy(sandboxId);
+export const compute: CallableCompute = new Proxy(
+  computeFactory as any,
+  {
+    get(_target, prop, _receiver) {
+      const singleton = singletonInstance as any;
+      const value = singleton[prop];
+      if (typeof value === 'function') {
+        return value.bind(singletonInstance);
       }
+      return value;
+    },
+    apply(_target, _thisArg, args) {
+      return computeFactory(args[0] as ExplicitComputeConfig);
     }
-  } as TypedComputeAPI<TProvider>;
-}
-
-
-
+  }
+);

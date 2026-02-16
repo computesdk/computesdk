@@ -1,0 +1,115 @@
+{
+  "name": "@computesdk/workbench",
+  "version": "7.0.5",
+  "description": "Interactive REPL for testing ComputeSDK sandbox operations",
+  "author": "Garrison",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "workbench": "./dist/bin/workbench.js",
+    "workbench-ts": "./src/bin/workbench-ts.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./helpers": {
+      "types": "./dist/helpers.d.ts",
+      "import": "./dist/helpers.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "dev:ts": "tsx src/bin/workbench-ts.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "computesdk",
+    "sandbox",
+    "repl",
+    "cli",
+    "developer-tools",
+    "testing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/workbench"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "dependencies": {
+    "@computesdk/cmd": "workspace:*",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*",
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "@computesdk/blaxel": "workspace:*",
+    "@computesdk/cloudflare": "workspace:*",
+    "@computesdk/codesandbox": "workspace:*",
+    "@computesdk/daytona": "workspace:*",
+    "@computesdk/e2b": "workspace:*",
+    "@computesdk/hopx": "workspace:*",
+    "@computesdk/modal": "workspace:*",
+    "@computesdk/railway": "workspace:*",
+    "@computesdk/runloop": "workspace:*",
+    "@computesdk/vercel": "workspace:*",
+    "@computesdk/namespace": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@computesdk/e2b": {
+      "optional": true
+    },
+    "@computesdk/railway": {
+      "optional": true
+    },
+    "@computesdk/daytona": {
+      "optional": true
+    },
+    "@computesdk/modal": {
+      "optional": true
+    },
+    "@computesdk/runloop": {
+      "optional": true
+    },
+    "@computesdk/vercel": {
+      "optional": true
+    },
+    "@computesdk/cloudflare": {
+      "optional": true
+    },
+    "@computesdk/codesandbox": {
+      "optional": true
+    },
+    "@computesdk/blaxel": {
+      "optional": true
+    },
+    "@computesdk/namespace": {
+      "optional": true
+    },
+    "@computesdk/hopx": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "rimraf": "^5.0.0",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

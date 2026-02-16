@@ -1,0 +1,60 @@
+{
+  "name": "@computesdk/provider",
+  "version": "1.0.26",
+  "description": "Provider framework for ComputeSDK - define custom sandbox providers",
+  "author": "Garrison",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "computesdk",
+    "provider",
+    "framework",
+    "sandbox",
+    "cloud",
+    "compute"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git"
+  },
+  "homepage": "https://www.computesdk.com/",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "dependencies": {
+    "@computesdk/cmd": "workspace:*",
+    "computesdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
