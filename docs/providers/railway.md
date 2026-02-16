@@ -45,7 +45,7 @@ Once you've deployed the template, collect these three values:
 
 **API Token**
 
-1. Go to your Railway workspace settings
+1. Go to your Railway workspace settings (note: not "project" level)
 2. Navigate to **Tokens**
 3. Create a **"New Token"**
 4. Name it (e.g., "ComputeSDK Integration") and copy the generated token
