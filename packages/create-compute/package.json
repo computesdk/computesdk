@@ -1,7 +1,7 @@
 {
   "name": "create-compute",
   "version": "0.2.0",
-  "description": "Create ComputeSDK projects with a single command",
+  "description": "Spin up a cloud sandbox and start coding in an interactive REPL",
   "author": "Garrison",
   "license": "MIT",
   "type": "module",
@@ -16,18 +16,19 @@
     "build": "tsup",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
-    "test": "echo 'nothing here'",
-    "test:watch": "echo 'nothing here'",
-    "test:coverage": "echo 'nothing here'",
-    "typecheck": "echo 'nothing here'",
-    "lint": "echo 'nothing here'"
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
   },
   "keywords": [
     "create",
-    "init",
-    "scaffold",
-    "computesdk",
     "sandbox",
+    "repl",
+    "computesdk",
+    "cloud",
     "cli"
   ],
   "repository": {
@@ -39,8 +40,11 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
+    "@clack/prompts": "^0.7.0",
     "commander": "^11.1.0",
-    "picocolors": "^1.0.0"
+    "computesdk": "workspace:*",
+    "picocolors": "^1.0.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
