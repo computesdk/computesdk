@@ -18,6 +18,7 @@ import { compute, type Sandbox } from 'computesdk';
 import { detectAvailableProviders, getProviderStatus, buildProviderConfig, type ProviderStatus } from './providers.js';
 import { startPTY } from './pty.js';
 import { startREPL } from './repl.js';
+import { resolveApiKey, clearStoredCredentials } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,12 +30,26 @@ const packageJson = JSON.parse(
 
 async function main() {
   console.log();
+
+  // Handle --logout before anything else
+  if (process.argv.includes('--logout')) {
+    clearStoredCredentials();
+    p.intro(pc.cyan(`create-compute v${packageJson.version}`));
+    p.log.success('Logged out. Stored credentials removed.');
+    p.outro(pc.green('Done!'));
+    process.exit(0);
+  }
+
   p.intro(pc.cyan(`create-compute v${packageJson.version}`));
 
-  // Check for gateway API key
-  if (!process.env.COMPUTESDK_API_KEY) {
-    p.log.error('COMPUTESDK_API_KEY not set');
-    p.log.info('Get your API key at https://computesdk.com');
+  // Resolve API key: env var > stored creds > browser auth
+  const forceLogin = process.argv.includes('--login');
+  try {
+    const apiKey = await resolveApiKey({ forceLogin });
+    process.env.COMPUTESDK_API_KEY = apiKey;
+  } catch (error) {
+    p.log.error((error as Error).message);
+    p.log.info(`Get your API key at ${pc.cyan('https://console.computesdk.com')}`);
     p.outro(pc.red('Setup incomplete'));
     process.exit(1);
   }
