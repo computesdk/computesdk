@@ -1,138 +1,37 @@
-/**
- * create-compute
- *
- * Spin up a cloud sandbox and start coding.
- *
- * Usage:
- *   npx create-compute
- *   npm create compute
- */
+import { Command } from 'commander'
+import pc from 'picocolors'
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 
-import 'dotenv/config';
-import * as p from '@clack/prompts';
-import pc from 'picocolors';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { compute, type Sandbox } from 'computesdk';
-import { detectAvailableProviders, getProviderStatus, buildProviderConfig, type ProviderStatus } from './providers.js';
-import { startPTY } from './pty.js';
-import { startREPL } from './repl.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // Read package.json to get version
 const packageJson = JSON.parse(
   readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')
-);
+)
 
-async function main() {
-  console.log();
-  p.intro(pc.cyan(`create-compute v${packageJson.version}`));
+const program = new Command()
 
-  // Check for gateway API key
-  if (!process.env.COMPUTESDK_API_KEY) {
-    p.log.error('COMPUTESDK_API_KEY not set');
-    p.log.info('Get your API key at https://computesdk.com');
-    p.outro(pc.red('Setup incomplete'));
-    process.exit(1);
-  }
+program
+  .name('create-compute')
+  .description('Create ComputeSDK projects with a single command')
+  .version(packageJson.version)
+  .argument('[project-name]', 'Name of your project')
+  .option('-t, --template <template>', 'Template to use', 'basic')
+  .action((projectName, options) => {
+    console.log(pc.bold(pc.cyan('\n📦 Welcome to create-compute!\n')))
+    
+    if (projectName) {
+      console.log(`Creating a new ComputeSDK project: ${pc.green(projectName)}`)
+      console.log(`Using template: ${pc.yellow(options.template)}`)
+    } else {
+      console.log('No project name provided. Run with a project name:')
+      console.log(pc.gray('  npx create-compute my-app'))
+    }
+    
+    console.log(pc.gray('\nThis CLI is under development. Check back soon!'))
+  })
 
-  // Detect available providers
-  const available = detectAvailableProviders();
-  const providerStatus = getProviderStatus();
-
-  if (available.length === 0) {
-    p.log.error('No provider credentials detected');
-    p.log.info('Set one of: E2B_API_KEY, MODAL_TOKEN_ID, RAILWAY_API_KEY, etc.');
-    p.outro(pc.red('Setup incomplete'));
-    process.exit(1);
-  }
-
-  // Build provider options for select
-  const providerOptions = providerStatus
-    .filter((status: ProviderStatus) => status.ready)
-    .map((status: ProviderStatus) => ({
-      value: status.name,
-      label: status.name,
-    }));
-
-  // Select provider
-  const provider = await p.select({
-    message: 'Select provider',
-    options: providerOptions,
-  });
-
-  if (p.isCancel(provider)) {
-    p.cancel('Cancelled');
-    process.exit(0);
-  }
-
-  // Select mode
-  const mode = await p.select({
-    message: 'Select mode',
-    options: [
-      { 
-        value: 'repl', 
-        label: 'REPL',
-      },
-      { 
-        value: 'pty', 
-        label: 'Shell (PTY)',
-      },
-    ],
-  });
-
-  if (p.isCancel(mode)) {
-    p.cancel('Cancelled');
-    process.exit(0);
-  }
-
-  // Create sandbox
-  const spinner = p.spinner();
-  spinner.start('Creating sandbox...');
-
-  let sandbox: Sandbox;
-  try {
-    // Configure compute with provider and credentials from env
-    const config = buildProviderConfig(provider as string);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    compute.setConfig(config as any);
-    sandbox = await compute.sandbox.create();
-    spinner.stop(`Sandbox ready: ${pc.cyan(sandbox.sandboxId)}`);
-  } catch (error) {
-    spinner.stop(pc.red('Failed to create sandbox'));
-    p.log.error((error as Error).message);
-    process.exit(1);
-  }
-
-  // Start selected mode
-  if (mode === 'pty') {
-    p.log.info('Connecting to shell... ' + pc.gray('(.exit or Ctrl+D to quit)'));
-    console.log();
-    await startPTY(sandbox);
-  } else {
-    p.log.info('Starting REPL... ' + pc.gray('(.exit or Ctrl+D to quit)'));
-    console.log();
-    await startREPL(sandbox, provider as string);
-  }
-
-  // Cleanup
-  const cleanupSpinner = p.spinner();
-  cleanupSpinner.start('Cleaning up...');
-  
-  try {
-    await sandbox.destroy();
-    cleanupSpinner.stop('Sandbox destroyed');
-  } catch {
-    cleanupSpinner.stop(pc.yellow('Cleanup warning'));
-  }
-
-  p.outro(pc.green('Done!'));
-}
-
-main().catch((error) => {
-  console.error(pc.red(`\nError: ${error.message}`));
-  process.exit(1);
-});
+program.parse()

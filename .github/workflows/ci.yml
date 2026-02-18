@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test:
+    runs-on: namespace-profile-default
+    env:
+      AWS_LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+    - name: Check for Changeset Release
+      id: skip_check
+      run: |
+        if [[ "${{ github.head_ref || github.ref_name }}" == "changeset-release/"* ]]; then
+          echo "skip=true" >> $GITHUB_OUTPUT
+          echo "Skipping tests for Changeset Release PR"
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
+    - uses: actions/checkout@v4
+      if: steps.skip_check.outputs.skip != 'true'
+      with:
+        # For pull requests, checkout the PR head ref
+        # For pushes, checkout the pushed ref (default behavior)
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    
+    - name: Install pnpm
+      if: steps.skip_check.outputs.skip != 'true'
+      uses: pnpm/action-setup@v4
+    
+    - name: Use Node.js
+      if: steps.skip_check.outputs.skip != 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: 'pnpm'
+    
+    - name: Install dependencies
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm install --ignore-scripts
+    
+    - name: Build packages
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm build
+    
+    - name: Run all tests (mock mode)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm test
+      env:
+        # Ensure tests run in mock mode
+        E2B_API_KEY: ""
+        VERCEL_TOKEN: ""
+        VERCEL_TEAM_ID: ""
+        VERCEL_PROJECT_ID: ""
+        DAYTONA_API_KEY: ""
+        MODAL_TOKEN_ID: ""
+        MODAL_TOKEN_SECRET: ""
+    
+    - name: Run type checking
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm typecheck
+    
+    - name: Run linting
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm lint
+
+  provider-integration-tests:
+    runs-on: namespace-profile-default
+    needs: test  # Only run if basic tests pass
+    # Run on all pull requests (but skip for changeset releases)
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+
+    strategy:
+      matrix:
+        provider: [e2b, vercel, daytona, modal]
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # For pull requests, checkout the PR head ref
+        # For pushes to main, checkout the pushed ref
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: 'pnpm'
+    
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+    
+    - name: Build packages
+      run: pnpm build
+        
+    - name: Run E2B Integration Tests
+      if: matrix.provider == 'e2b'
+      env:
+         E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+      run: |
+         if [ -n "$E2B_API_KEY" ]; then
+           echo "Running E2B integration tests with real API..."
+           pnpm --filter @computesdk/e2b test
+         else
+           echo "Skipping E2B integration tests - no API key provided"
+         fi
+        
+    - name: Run Vercel Integration Tests
+      if: matrix.provider == 'vercel'
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+      run: |
+         if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_TEAM_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+           echo "Running Vercel integration tests with real API..."
+           pnpm --filter @computesdk/vercel test
+         else
+           echo "Skipping Vercel integration tests - missing required secrets"
+         fi
+        
+    - name: Run Daytona Integration Tests
+      if: matrix.provider == 'daytona'
+      env:
+        DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+      run: |
+         if [ -n "$DAYTONA_API_KEY" ]; then
+           echo "Running Daytona integration tests with real API..."
+           pnpm --filter @computesdk/daytona test
+         else
+           echo "Skipping Daytona integration tests - no API key provided"
+         fi
+        
+    - name: Run Modal Integration Tests
+      if: matrix.provider == 'modal'
+      env:
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+      run: |
+         if [ -n "$MODAL_TOKEN_ID" ] && [ -n "$MODAL_TOKEN_SECRET" ]; then
+           echo "Running Modal integration tests with real API..."
+           pnpm --filter @computesdk/modal test
+         else
+           echo "Skipping Modal integration tests - missing required secrets"
+         fi
+
+  sdk-integration-tests:
+    runs-on: namespace-profile-default
+    needs: test
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+
+    strategy:
+      matrix:
+        provider: [e2b, vercel, daytona, modal]
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: 'pnpm'
+    
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+    
+    - name: Build packages
+      run: pnpm build
+        
+    - name: Run Provider Compatibility Tests (${{ matrix.provider }})
+      env:
+        TEST_PROVIDER: ${{ matrix.provider }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+        E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+        E2B_TEMPLATE_ID: ${{ secrets.E2B_TEMPLATE_ID }}
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      run: |
+        echo "Running provider compatibility tests for $TEST_PROVIDER..."
+        pnpm --filter computesdk test provider-compatibility

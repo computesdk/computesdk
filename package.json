@@ -1,8 +1,8 @@
 {
-  "name": "server-core",
-  "version": "0.0.0",
+  "name": "computesdk",
+  "version": "0.1.0",
   "private": true,
-  "description": "ComputeSDK Server Core - Go services and TypeScript SDK monorepo",
+  "description": "A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
   "scripts": {
     "build": "pnpm --filter '@computesdk/cmd' run build && pnpm --filter computesdk run build && pnpm --filter '@computesdk/provider' run build && pnpm --filter '@computesdk/test-utils' run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!@computesdk/provider' --filter '!@computesdk/cmd' --filter '!@computesdk/test-utils' --filter '!@computesdk/avm' --filter '!@computesdk/aws-ecs' --filter '!@computesdk/aws-lambda' --filter '!@computesdk/lambda' --filter '!@computesdk/docker' run build",
     "clean": "pnpm -r run clean",
@@ -15,6 +15,7 @@
     "changeset": "changeset",
     "version": "changeset version && pnpm install --no-frozen-lockfile",
     "release": "pnpm run build && changeset publish",
+    "prepare": "husky",
     "workbench": "node packages/workbench/dist/bin/workbench.js",
     "workbench:ts": "pnpm --filter @computesdk/workbench run dev:ts"
   },
@@ -22,7 +23,9 @@
     "sandbox",
     "code-execution",
     "cloud",
-    "computesdk"
+    "e2b",
+    "vercel",
+    "daytona"
   ],
   "author": "Garrison",
   "license": "MIT",
@@ -44,5 +47,5 @@
     "node": ">=18.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.15.0+sha512.76e2379760a4328ec4415815bcd6628dee727af3779aaa4c914e3944156c4299921a89f976381ee107d41f12cfa4b66681ca9c718f0668fa0831ed4c6d8ba56c"
+  "packageManager": "pnpm@9.0.0"
 }
