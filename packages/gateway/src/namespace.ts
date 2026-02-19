@@ -131,7 +131,6 @@ export const namespace = defineInfraProvider<NamespaceInstance, NamespaceConfig>
           containers: [{
             name: 'main-container',
             image_ref: options?.image ?? 'computesdk/compute:latest',
-            args: ['sleep', '300'],
             ...(Object.keys(envVars).length > 0 && {
               environment: envVars
             })
