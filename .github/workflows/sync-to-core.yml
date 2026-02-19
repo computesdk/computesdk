@@ -32,10 +32,23 @@ jobs:
         run: |
           git clone https://x-access-token:${{ secrets.ORG_REPO_TOKEN }}@github.com/computesdk/computesdk-core.git core-mirror
       
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      
       - name: Sync packages to core
         run: |
           # Only sync packages/ - other files are managed in core
           rsync -av --delete packages/ core-mirror/packages/
+      
+      - name: Regenerate lockfile
+        run: |
+          cd core-mirror
+          pnpm install --no-frozen-lockfile
       
       - name: Check for changes
         id: check
