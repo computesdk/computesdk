@@ -1,0 +1,102 @@
+name: Sync to computesdk-core
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/**'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force sync even if no changes detected'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Skip if this push came from the sync bot (prevents infinite loop)
+    if: github.actor != 'github-actions[bot]'
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout OSS repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Clone computesdk-core repository
+        run: |
+          git clone https://x-access-token:${{ secrets.CORE_REPO_TOKEN }}@github.com/computesdk/computesdk-core.git core-mirror
+      
+      - name: Sync packages to core
+        run: |
+          # Only sync packages/ - other files are managed in core
+          rsync -av --delete packages/ core-mirror/packages/
+      
+      - name: Check for changes
+        id: check
+        run: |
+          cd core-mirror
+          git add -A
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create or update PR
+        if: steps.check.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CORE_REPO_TOKEN }}
+        run: |
+          cd core-mirror
+          
+          BRANCH_NAME="sync/from-oss"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if branch exists on remote
+          if git ls-remote --exit-code --heads origin "$BRANCH_NAME" > /dev/null 2>&1; then
+            git fetch origin "$BRANCH_NAME"
+            git checkout "$BRANCH_NAME"
+            git reset --hard origin/main
+          else
+            git checkout -b "$BRANCH_NAME"
+          fi
+          
+          # Apply changes
+          git add -A
+          git commit -m "Sync packages from OSS
+
+          Source commit: ${{ github.sha }}
+          Triggered by: ${{ github.event.head_commit.message }}"
+          
+          # Force push to update branch
+          git push origin "$BRANCH_NAME" --force
+          
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr list --repo computesdk/computesdk-core --head "$BRANCH_NAME" --state open --json number --jq '.[0].number')
+          
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updated existing PR #$EXISTING_PR"
+          else
+            gh pr create \
+              --repo computesdk/computesdk-core \
+              --title "Sync packages from OSS" \
+              --body "Automated sync of \`packages/\` from [computesdk](https://github.com/computesdk/computesdk) (OSS repo).
+
+          **Source commit:** ${{ github.sha }}
+          **Trigger:** ${{ github.event.head_commit.message }}
+
+          This PR will be automatically updated with new changes until merged.
+          
+          > **Note:** This likely came from an external contributor's PR on the OSS repo." \
+              --head "$BRANCH_NAME" \
+              --base main
+            echo "Created new PR"
+          fi
