@@ -11,13 +11,39 @@ import * as os from 'os';
 import * as fs from 'fs';
 import pc from 'picocolors';
 import type { Sandbox } from 'computesdk';
+import { startPTY } from './pty.js';
+
+type SessionResult = 'exit' | 'shell';
 
 /**
  * Start REPL mode
+ *
+ * Loops between REPL sessions and PTY sessions.
+ * Each /shell command closes the readline cleanly, runs PTY,
+ * then creates a fresh readline on return.
  */
 export async function startREPL(sandbox: Sandbox, provider: string): Promise<void> {
+  while (true) {
+    const result = await runSession(sandbox);
+    if (result === 'exit') break;
+
+    // result === 'shell' — drop into PTY, then loop back
+    console.log(pc.gray('  Entering PTY shell... (.exit or Ctrl+D to return to REPL)'));
+    console.log();
+    await startPTY(sandbox);
+    console.log(pc.gray('  Back in REPL.'));
+  }
+}
+
+/**
+ * Run a single REPL session.
+ *
+ * Creates a readline interface, processes commands, and returns
+ * 'exit' when the user wants to quit or 'shell' when they want PTY.
+ */
+function runSession(sandbox: Sandbox): Promise<SessionResult> {
   const sandboxId = sandbox.sandboxId;
-  
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -29,32 +55,34 @@ export async function startREPL(sandbox: Sandbox, provider: string): Promise<voi
   // Load history
   loadHistory(rl);
 
-  return new Promise<void>((resolve) => {
-    // Handle Ctrl+C and Ctrl+D
+  return new Promise<SessionResult>((resolve) => {
+    let resolved = false;
+    const done = (result: SessionResult) => {
+      if (resolved) return;
+      resolved = true;
+      rl.close();
+      resolve(result);
+    };
+
     rl.on('SIGINT', () => {
-      // Ctrl+C - just show new prompt
       console.log();
       rl.prompt();
     });
-    
+
     rl.on('close', () => {
-      // Ctrl+D or .exit
-      resolve();
+      done('exit');
     });
 
     rl.on('line', async (line) => {
       const trimmed = line.trim();
 
-      // Skip empty lines
       if (!trimmed) {
         rl.prompt();
         return;
       }
 
-      // Handle .exit
       if (trimmed === '.exit') {
-        rl.close();
-        resolve();
+        done('exit');
         return;
       }
 
@@ -62,30 +90,24 @@ export async function startREPL(sandbox: Sandbox, provider: string): Promise<voi
       saveToHistory(trimmed);
 
       try {
-        // Check for special commands (start with /)
         if (trimmed.startsWith('/')) {
-          const shouldExit = await handleSpecialCommand(sandbox, trimmed, rl);
-          if (shouldExit) {
-            rl.close();
-            resolve();
+          const result = await handleSpecialCommand(sandbox, trimmed);
+          if (result === 'exit' || result === 'shell') {
+            done(result);
             return;
           }
         } else {
-          // Execute as shell command
           await executeCommand(sandbox, trimmed);
         }
       } catch (error) {
         console.log(pc.red(`✗ ${(error as Error).message}`));
       }
 
-      rl.prompt();
+      if (!resolved) {
+        rl.prompt();
+      }
     });
 
-    rl.on('close', () => {
-      resolve();
-    });
-
-    // Start prompting
     rl.prompt();
   });
 }
@@ -120,13 +142,12 @@ async function executeCommand(sandbox: Sandbox, command: string): Promise<void> 
 
 /**
  * Handle special commands (prefixed with /)
- * Returns true if should exit
+ * Returns 'exit' to quit, 'shell' for PTY, or null to continue
  */
 async function handleSpecialCommand(
   sandbox: Sandbox,
   input: string,
-  rl: readline.Interface
-): Promise<boolean> {
+): Promise<SessionResult | null> {
   const [cmd, ...args] = input.slice(1).split(/\s+/);
 
   switch (cmd.toLowerCase()) {
@@ -134,7 +155,7 @@ async function handleSpecialCommand(
     case 'h':
     case '?':
       showHelp();
-      return false;
+      return null;
 
     case 'info':
     case 'i':
@@ -142,7 +163,7 @@ async function handleSpecialCommand(
       console.log(pc.bold('  Sandbox Info'));
       console.log(`  ID: ${pc.cyan(sandbox.sandboxId)}`);
       console.log();
-      return false;
+      return null;
 
     case 'url':
     case 'u':
@@ -157,17 +178,21 @@ async function handleSpecialCommand(
           console.log(pc.cyan(url));
         }
       }
-      return false;
+      return null;
+
+    case 'shell':
+    case 'sh':
+      return 'shell';
 
     case 'exit':
     case 'quit':
     case 'q':
-      return true;
+      return 'exit';
 
     default:
       console.log(pc.yellow(`Unknown command: /${cmd}`));
       console.log(pc.gray('Type /help for available commands'));
-      return false;
+      return null;
   }
 }
 
@@ -185,11 +210,11 @@ function showHelp(): void {
   console.log();
   console.log(pc.bold('  Special Commands') + pc.gray(' (prefix with /)'));
   console.log();
+  console.log(pc.cyan('    /shell') + pc.gray('       Drop into interactive PTY (vim, htop, etc.)'));
   console.log(pc.cyan('    /help') + pc.gray('        Show this help'));
   console.log(pc.cyan('    /info') + pc.gray('        Show sandbox info'));
   console.log(pc.cyan('    /url 3000') + pc.gray('    Get public URL for port'));
   console.log(pc.cyan('    /exit') + pc.gray('        Exit and cleanup'));
-  console.log(pc.cyan('    .exit') + pc.gray('        Exit and cleanup'));
   console.log();
 }
 
@@ -206,7 +231,7 @@ function loadHistory(rl: readline.Interface): void {
         .split('\n')
         .filter(line => line.trim())
         .reverse();
-      
+
       for (const line of history.slice(0, 1000)) {
         (rl as unknown as { history: string[] }).history?.push(line);
       }

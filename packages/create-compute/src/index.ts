@@ -16,7 +16,6 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { compute, type Sandbox } from 'computesdk';
 import { detectAvailableProviders, getProviderStatus, buildProviderConfig, type ProviderStatus } from './providers.js';
-import { startPTY } from './pty.js';
 import { startREPL } from './repl.js';
 import { resolveApiKey, clearStoredCredentials } from './auth.js';
 
@@ -84,26 +83,6 @@ async function main() {
     process.exit(0);
   }
 
-  // Select mode
-  const mode = await p.select({
-    message: 'Select mode',
-    options: [
-      { 
-        value: 'repl', 
-        label: 'REPL',
-      },
-      { 
-        value: 'pty', 
-        label: 'Shell (PTY)',
-      },
-    ],
-  });
-
-  if (p.isCancel(mode)) {
-    p.cancel('Cancelled');
-    process.exit(0);
-  }
-
   // Create sandbox
   const spinner = p.spinner();
   spinner.start('Creating sandbox...');
@@ -122,16 +101,10 @@ async function main() {
     process.exit(1);
   }
 
-  // Start selected mode
-  if (mode === 'pty') {
-    p.log.info('Connecting to shell... ' + pc.gray('(.exit or Ctrl+D to quit)'));
-    console.log();
-    await startPTY(sandbox);
-  } else {
-    p.log.info('Starting REPL... ' + pc.gray('(.exit or Ctrl+D to quit)'));
-    console.log();
-    await startREPL(sandbox, provider as string);
-  }
+  // Start REPL (use /shell to drop into PTY when needed)
+  p.log.info('Starting REPL... ' + pc.gray('(/shell for interactive PTY, /exit to quit)'));
+  console.log();
+  await startREPL(sandbox, provider as string);
 
   // Cleanup
   const cleanupSpinner = p.spinner();
