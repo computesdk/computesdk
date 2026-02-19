@@ -30,7 +30,7 @@ jobs:
       
       - name: Clone computesdk-core repository
         run: |
-          git clone https://x-access-token:${{ secrets.CORE_REPO_TOKEN }}@github.com/computesdk/computesdk-core.git core-mirror
+          git clone https://x-access-token:${{ secrets.ORG_REPO_TOKEN }}@github.com/computesdk/computesdk-core.git core-mirror
       
       - name: Sync packages to core
         run: |
@@ -51,7 +51,7 @@ jobs:
       - name: Create or update PR
         if: steps.check.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ secrets.CORE_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
         run: |
           cd core-mirror
           
