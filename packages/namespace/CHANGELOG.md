@@ -1,5 +1,11 @@
 # @computesdk/namespace
 
+## 1.3.0
+
+### Minor Changes
+
+- 866f7c8: Update namespace provider to infra model provider
+
 ## 1.2.0
 
 ### Minor Changes
