@@ -17,8 +17,10 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # Skip if this push came from the sync bot (prevents infinite loop)
-    if: github.actor != 'github-actions[bot]'
+    # Skip if this push came from the sync bot or from core sync (prevents infinite loop)
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, 'Sync packages from computesdk-core')
     permissions:
       contents: read
     
@@ -40,29 +42,8 @@ jobs:
         with:
           node-version: '24'
       
-      - name: Sync packages to core
-        run: |
-          # Only sync packages/ - other files are managed in core
-          rsync -av --delete packages/ core-mirror/packages/
-      
-      - name: Regenerate lockfile
-        run: |
-          cd core-mirror
-          pnpm install --no-frozen-lockfile
-      
-      - name: Check for changes
-        id: check
-        run: |
-          cd core-mirror
-          git add -A
-          if git diff --staged --quiet; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Create or update PR
-        if: steps.check.outputs.has_changes == 'true'
+      - name: Setup git and branch
+        id: setup
         env:
           GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
         run: |
@@ -76,18 +57,50 @@ jobs:
           # Check if branch exists on remote
           if git ls-remote --exit-code --heads origin "$BRANCH_NAME" > /dev/null 2>&1; then
             git fetch origin "$BRANCH_NAME"
-            git checkout "$BRANCH_NAME"
-            git reset --hard origin/main
+            git fetch origin main
+            # Create/reset branch from origin/main without tracking
+            git checkout -B "$BRANCH_NAME" origin/main
           else
-            git checkout -b "$BRANCH_NAME"
+            git fetch origin main
+            git checkout -b "$BRANCH_NAME" origin/main
           fi
           
-          # Apply changes
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+      
+      - name: Sync packages to core
+        run: |
+          # Only sync packages/ - other files are managed in core
+          rsync -av --delete packages/ core-mirror/packages/
+      
+      - name: Regenerate lockfile
+        run: |
+          cd core-mirror
+          pnpm install --no-frozen-lockfile
+      
+      - name: Check for changes and commit
+        id: check
+        run: |
+          cd core-mirror
           git add -A
-          git commit -m "Sync packages from OSS
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes to sync"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            git commit -m "Sync packages from OSS
 
           Source commit: ${{ github.sha }}
           Triggered by: ${{ github.event.head_commit.message }}"
+          fi
+      
+      - name: Push branch and create/update PR
+        if: steps.check.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
+        run: |
+          cd core-mirror
+          
+          BRANCH_NAME="${{ steps.setup.outputs.branch_name }}"
           
           # Force push to update branch
           git push origin "$BRANCH_NAME" --force
