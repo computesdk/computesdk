@@ -60,13 +60,13 @@ export interface CreateBlueprintTemplateOptions {
   }>;
   /** Resource size for devboxes created from this blueprint */
   resourceSize?:
-    | "X_SMALL"
-    | "SMALL"
-    | "MEDIUM"
-    | "LARGE"
-    | "X_LARGE"
-    | "XX_LARGE"
-    | "CUSTOM_SIZE";
+  | "X_SMALL"
+  | "SMALL"
+  | "MEDIUM"
+  | "LARGE"
+  | "X_LARGE"
+  | "XX_LARGE"
+  | "CUSTOM_SIZE";
   /** CPU architecture */
   architecture?: "x86_64" | "arm64";
   /** Custom CPU cores (requires CUSTOM_SIZE) */
@@ -118,7 +118,7 @@ export const runloop = defineProvider<
 
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: {
-              keep_alive_time_seconds: timeout || options?.timeout || 300000,
+              keep_alive_time_seconds: timeout || options?.timeout || 1800,
             },
             name: options?.sandboxId,
             metadata: options?.metadata,
@@ -147,13 +147,12 @@ export const runloop = defineProvider<
           };
 
           return {
-            sandbox: runloopSandbox, 
+            sandbox: runloopSandbox,
             sandboxId: dbx.id,
           };
         } catch (error) {
           throw new Error(
-            `Failed to create Runloop devbox: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to create Runloop devbox: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -362,8 +361,7 @@ export const runloop = defineProvider<
             throw error;
           }
           throw new Error(
-            `Runloop execution failed: ${
-              error instanceof Error ? error.message : String(error)
+            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -402,8 +400,7 @@ export const runloop = defineProvider<
           return tunnel.url;
         } catch (error) {
           throw new Error(
-            `Failed to get Runloop URL for port ${options.port}: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -420,8 +417,7 @@ export const runloop = defineProvider<
             return result.stdout;
           } catch (error) {
             throw new Error(
-              `Failed to read file ${path}: ${
-                error instanceof Error ? error.message : String(error)
+              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)
               }`
             );
           }
@@ -437,14 +433,13 @@ export const runloop = defineProvider<
             // Use command-based approach for file writing since API writeFileContents may have issues
             const encoded = Buffer.from(content).toString('base64');
             const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
-            
+
             if (result.exitCode !== 0) {
               throw new Error(`Command failed: ${result.stderr}`);
             }
           } catch (error) {
             throw new Error(
-              `Failed to write file ${path}: ${
-                error instanceof Error ? error.message : String(error)
+              `Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)
               }`
             );
           }
@@ -514,7 +509,7 @@ export const runloop = defineProvider<
           }
         },
       },
-      
+
       // Provider-specific typed getInstance method
       getInstance: (sandbox): Runloop.DevboxView => {
         return sandbox;
@@ -544,8 +539,7 @@ export const runloop = defineProvider<
           return blueprint;
         } catch (error) {
           throw new Error(
-            `Failed to create blueprint template: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to create blueprint template: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -574,8 +568,7 @@ export const runloop = defineProvider<
           return response.blueprints || [];
         } catch (error) {
           throw new Error(
-            `Failed to list blueprint templates: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to list blueprint templates: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -598,8 +591,7 @@ export const runloop = defineProvider<
           await client.blueprints.delete(blueprintId);
         } catch (error) {
           throw new Error(
-            `Failed to delete blueprint template ${blueprintId}: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to delete blueprint template ${blueprintId}: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -639,8 +631,7 @@ export const runloop = defineProvider<
           return snapshot;
         } catch (error) {
           throw new Error(
-            `Failed to create snapshot for sandbox ${sandboxId}: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to create snapshot for sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -670,8 +661,7 @@ export const runloop = defineProvider<
           return response.snapshots || [];
         } catch (error) {
           throw new Error(
-            `Failed to list snapshots: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to list snapshots: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }
@@ -692,8 +682,7 @@ export const runloop = defineProvider<
           await client.devboxes.deleteDiskSnapshot(snapshotId);
         } catch (error) {
           throw new Error(
-            `Failed to delete snapshot ${snapshotId}: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to delete snapshot ${snapshotId}: ${error instanceof Error ? error.message : String(error)
             }`
           );
         }

@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@vercel/sandbox": "^1.2.0",
+    "@vercel/sandbox": "^1.6.0",
     "computesdk": "workspace:*",
     "ms": "^2.1.3"
   },

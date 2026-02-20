@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "e2b": "^2.0.1",
+    "e2b": "^2.12.1",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },

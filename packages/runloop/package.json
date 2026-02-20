@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@runloop/api-client": "^0.44.0",
+    "@runloop/api-client": "^1.8.1",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
