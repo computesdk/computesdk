@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/blaxel",
-  "version": "1.5.7",
+  "version": "1.5.6",
   "description": "Blaxel provider for ComputeSDK - lightweight cloud sandboxes for code execution",
   "author": "ComputeSDK",
   "license": "MIT",
@@ -30,7 +30,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "@blaxel/core": "^0.2.66"
+    "@blaxel/core": "^0.2.42"
   },
   "keywords": [
     "computesdk",
