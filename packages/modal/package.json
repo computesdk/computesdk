@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "modal": "^0.3.16",
+    "modal": "^0.6.3",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },

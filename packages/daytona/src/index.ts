@@ -106,9 +106,9 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
 
         try {
           const daytona = new Daytona({ apiKey: apiKey });
-          const sandboxes = await daytona.list();
+          const result = await daytona.list();
 
-          return sandboxes.map((session: any) => ({
+          return result.items.map((session: any) => ({
             sandbox: session,
             sandboxId: session.id
           }));
