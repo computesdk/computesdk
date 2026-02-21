@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.5.7
+
+### Patch Changes
+
+- f07f3b0: Bump package version
+
 ## 1.5.6
 
 ### Patch Changes
