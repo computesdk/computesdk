@@ -7,6 +7,13 @@
 - Updated dependencies [866f7c8]
   - @computesdk/namespace@1.3.0
 
+## 8.0.1
+
+### Patch Changes
+
+- Updated dependencies [f07f3b0]
+  - @computesdk/blaxel@1.5.7
+
 ## 8.0.0
 
 ### Patch Changes
@@ -75,65 +82,63 @@
 
 ### Patch Changes
 
-- Updated dependencies [2c9468b]
-  - computesdk@2.1.1
-  - @computesdk/blaxel@1.5.3
-  - @computesdk/cloudflare@1.3.31
-  - @computesdk/codesandbox@1.5.31
-  - @computesdk/daytona@1.7.11
-  - @computesdk/e2b@1.7.31
-  - @computesdk/hopx@0.2.7
-  - @computesdk/modal@1.8.26
-  - @computesdk/namespace@1.1.31
-  - @computesdk/provider@1.0.24
-  - @computesdk/railway@1.1.31
-  - @computesdk/runloop@1.3.31
-  - @computesdk/vercel@1.7.10
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+  - @computesdk/blaxel@1.3.24
+  - @computesdk/cloudflare@1.3.24
+  - @computesdk/codesandbox@1.5.24
+  - @computesdk/daytona@1.6.24
+  - @computesdk/e2b@1.7.24
+  - @computesdk/modal@1.8.21
+  - @computesdk/namespace@1.1.24
+  - @computesdk/provider@1.0.18
+  - @computesdk/railway@1.1.24
+  - @computesdk/runloop@1.3.24
+  - @computesdk/vercel@1.6.24
 
 ## 7.0.2
 
 ### Patch Changes
 
-- Updated dependencies [9e7e50a]
-  - computesdk@2.1.0
-  - @computesdk/blaxel@1.5.2
-  - @computesdk/cloudflare@1.3.30
-  - @computesdk/codesandbox@1.5.30
-  - @computesdk/daytona@1.7.10
-  - @computesdk/e2b@1.7.30
-  - @computesdk/hopx@0.2.6
-  - @computesdk/modal@1.8.25
-  - @computesdk/namespace@1.1.30
-  - @computesdk/provider@1.0.23
-  - @computesdk/railway@1.1.30
-  - @computesdk/runloop@1.3.30
-  - @computesdk/vercel@1.7.9
+- Updated dependencies [68b5296]
+  - computesdk@1.19.0
+  - @computesdk/blaxel@1.3.23
+  - @computesdk/cloudflare@1.3.23
+  - @computesdk/codesandbox@1.5.23
+  - @computesdk/daytona@1.6.23
+  - @computesdk/e2b@1.7.23
+  - @computesdk/modal@1.8.20
+  - @computesdk/namespace@1.1.23
+  - @computesdk/provider@1.0.17
+  - @computesdk/railway@1.1.23
+  - @computesdk/runloop@1.3.23
+  - @computesdk/vercel@1.6.23
 
 ## 7.0.1
 
 ### Patch Changes
 
-- Updated dependencies [6c54170]
-- Updated dependencies [e3ed89b]
-  - @computesdk/vercel@1.7.8
-  - computesdk@2.0.2
-  - @computesdk/blaxel@1.5.1
-  - @computesdk/cloudflare@1.3.29
-  - @computesdk/codesandbox@1.5.29
-  - @computesdk/daytona@1.7.9
-  - @computesdk/e2b@1.7.29
-  - @computesdk/modal@1.8.24
-  - @computesdk/namespace@1.1.29
-  - @computesdk/provider@1.0.22
-  - @computesdk/railway@1.1.29
-  - @computesdk/runloop@1.3.29
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+  - @computesdk/blaxel@1.3.22
+  - @computesdk/cloudflare@1.3.22
+  - @computesdk/codesandbox@1.5.22
+  - @computesdk/daytona@1.7.2
+  - @computesdk/e2b@1.7.22
+  - @computesdk/modal@1.8.17
+  - @computesdk/provider@1.0.16
+  - @computesdk/railway@1.1.22
+  - @computesdk/runloop@1.3.22
+  - @computesdk/vercel@1.7.1
 
 ## 7.0.0
 
 ### Patch Changes
 
-- Updated dependencies [583d51f]
-  - @computesdk/blaxel@1.5.0
+- Updated dependencies [7f1553f]
+- Updated dependencies [7f1553f]
+  - @computesdk/vercel@1.7.0
 
 ## 6.0.1
 
@@ -231,14 +236,14 @@
   - @computesdk/blaxel@1.3.24
   - @computesdk/cloudflare@1.3.24
   - @computesdk/codesandbox@1.5.24
-  - @computesdk/daytona@1.7.4
+  - @computesdk/daytona@1.6.24
   - @computesdk/e2b@1.7.24
   - @computesdk/modal@1.8.19
   - @computesdk/namespace@1.1.24
   - @computesdk/provider@1.0.18
   - @computesdk/railway@1.1.24
   - @computesdk/runloop@1.3.24
-  - @computesdk/vercel@1.7.3
+  - @computesdk/vercel@1.6.24
 
 ## 5.0.2
 
@@ -249,14 +254,14 @@
   - @computesdk/blaxel@1.3.23
   - @computesdk/cloudflare@1.3.23
   - @computesdk/codesandbox@1.5.23
-  - @computesdk/daytona@1.7.3
+  - @computesdk/daytona@1.6.23
   - @computesdk/e2b@1.7.23
   - @computesdk/modal@1.8.18
   - @computesdk/namespace@1.1.23
   - @computesdk/provider@1.0.17
   - @computesdk/railway@1.1.23
   - @computesdk/runloop@1.3.23
-  - @computesdk/vercel@1.7.2
+  - @computesdk/vercel@1.6.23
 
 ## 5.0.1
 
@@ -1021,7 +1026,7 @@
   - @computesdk/modal@1.6.1
   - @computesdk/railway@1.1.1
   - @computesdk/runloop@1.3.1
-  - @computesdk/vercel@1.6.1
+  - @computesdk/vercel@1.7.1
 
 ## 1.0.0
 
