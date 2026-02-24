@@ -256,6 +256,7 @@ npm install @computesdk/modal      # Modal provider
 npm install @computesdk/railway    # Railway provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/islo       # Islo provider
 ```
 
 Direct mode usage:
@@ -273,6 +274,7 @@ See individual provider READMEs for details:
 - **[@computesdk/railway](./packages/railway)** - Full-stack deployments
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
+- **[@computesdk/islo](./packages/islo)** - Secure VM sandboxes with streamed command execution
 
 ## Building Custom Providers
 
