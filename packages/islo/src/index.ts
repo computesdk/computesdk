@@ -235,7 +235,8 @@ export const islo = defineProvider<IsloSandbox, IsloConfig>({
         code: string,
         runtime?: Runtime
       ): Promise<CodeResult> => {
-        const effectiveRuntime = runtime || detectRuntime(code);
+        const effectiveRuntime =
+          runtime || detectRuntime(code, inferRuntimeFromImage(sandbox.image));
         const command = buildRuntimeCommand(code, effectiveRuntime);
 
         const result = await runCommandViaSse(sandbox, command, {
@@ -264,17 +265,26 @@ export const islo = defineProvider<IsloSandbox, IsloConfig>({
         const timeoutMs = parsePositiveInt(options?.timeout) ?? sandbox.timeoutMs;
 
         const shellCommand = buildShellCommand(command, options);
-        const result = await runCommandViaSse(sandbox, shellCommand, {
-          cwd: options?.cwd,
-          timeoutMs,
-        });
+        try {
+          const result = await runCommandViaSse(sandbox, shellCommand, {
+            cwd: options?.cwd,
+            timeoutMs,
+          });
 
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-          durationMs: Date.now() - startTime,
-        };
+          return {
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
+            durationMs: Date.now() - startTime,
+          };
+        } catch (error) {
+          return {
+            stdout: '',
+            stderr: error instanceof Error ? error.message : String(error),
+            exitCode: 127,
+            durationMs: Date.now() - startTime,
+          };
+        }
       },
 
       getInfo: async (sandbox: IsloSandbox): Promise<SandboxInfo> => {
@@ -397,7 +407,16 @@ function createSandboxState(
   };
 }
 
-function detectRuntime(code: string): Runtime {
+function detectRuntime(code: string, fallback: Runtime = 'node'): Runtime {
+  if (
+    code.includes('console.log(') ||
+    code.includes('process.') ||
+    code.includes('require(') ||
+    code.includes('throw new Error')
+  ) {
+    return 'node';
+  }
+
   if (
     code.includes('print(') ||
     code.includes('import ') ||
@@ -408,7 +427,7 @@ function detectRuntime(code: string): Runtime {
     return 'python';
   }
 
-  return 'node';
+  return fallback;
 }
 
 function inferRuntimeFromImage(image: string): Runtime {
@@ -433,7 +452,7 @@ function buildRuntimeCommand(code: string, runtime: Runtime): string {
   const encoded = Buffer.from(code, 'utf8').toString('base64');
 
   if (runtime === 'python') {
-    return `echo "${encoded}" | base64 -d | (command -v python3 >/dev/null 2>&1 && python3 || python)`;
+    return `echo "${encoded}" | base64 -d | (if command -v python3 >/dev/null 2>&1; then python3; else python; fi)`;
   }
 
   if (runtime === 'deno') {

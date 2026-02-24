@@ -14,7 +14,7 @@ Install and authenticate with Islo CLI (recommended):
 
 ```bash
 curl -fsSL https://islo.dev/install.sh | bash
-islo auth login
+islo login
 ```
 
 Set API URL:
