@@ -1,4 +1,7 @@
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
+import { resolve as resolvePath } from 'path';
 
 import type {
   Runtime,
@@ -65,6 +68,8 @@ export interface IsloConfig {
   apiUrl?: string;
   /** Islo bearer token. Defaults to ISLO_BEARER_TOKEN */
   bearerToken?: string;
+  /** Path to Islo auth file. Defaults to ISLO_AUTH_FILE or ~/.islo/auth.json */
+  authFilePath?: string;
   /** Optional tenant context header. Defaults to ISLO_PUBLIC_TENANT_ID */
   tenantPublicId?: string;
   /** Optional user context header. Defaults to ISLO_PUBLIC_USER_ID */
@@ -319,13 +324,16 @@ function resolveConfig(config: IsloConfig): ResolvedConfig {
   );
 
   const bearerToken =
-    config.bearerToken ||
-    (typeof process !== 'undefined' ? process.env?.ISLO_BEARER_TOKEN : '') ||
+    asNonEmptyString(config.bearerToken) ||
+    asNonEmptyString(
+      typeof process !== 'undefined' ? process.env?.ISLO_BEARER_TOKEN : undefined
+    ) ||
+    readTokenFromAuthFile(config.authFilePath) ||
     '';
 
   if (!bearerToken) {
     throw new Error(
-      `Missing Islo bearer token. Provide 'bearerToken' in config or set ISLO_BEARER_TOKEN environment variable.`
+      `Missing Islo bearer token. Set ISLO_BEARER_TOKEN, pass 'bearerToken', or run 'islo auth login' so ~/.islo/auth.json contains a session token.`
     );
   }
 
@@ -748,6 +756,26 @@ function asNonEmptyString(value: unknown): string | undefined {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readTokenFromAuthFile(authFilePath?: string): string | undefined {
+  const resolvedAuthPath =
+    asNonEmptyString(authFilePath) ||
+    asNonEmptyString(process.env.ISLO_AUTH_FILE) ||
+    resolvePath(homedir(), '.islo', 'auth.json');
+
+  try {
+    const raw = readFileSync(resolvedAuthPath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    return (
+      asNonEmptyString(parsed.session_token) ||
+      asNonEmptyString(parsed.access_token) ||
+      asNonEmptyString(parsed.bearer_token)
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function createSandboxName(): string {

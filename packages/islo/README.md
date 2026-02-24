@@ -10,16 +10,23 @@ npm install @computesdk/islo
 
 ## Setup
 
-Set required environment variables:
+Install and authenticate with Islo CLI (recommended):
+
+```bash
+curl -fsSL https://islo.dev/install.sh | bash
+islo auth login
+```
+
+Set API URL:
 
 ```bash
 export ISLO_API_URL=https://api.islo.dev
-export ISLO_BEARER_TOKEN=your_islo_bearer_token
 ```
 
 Optional:
 
 ```bash
+export ISLO_BEARER_TOKEN=your_islo_bearer_token
 export ISLO_PUBLIC_TENANT_ID=tenant_public_id
 export ISLO_PUBLIC_USER_ID=user_public_id
 export ISLO_IMAGE=docker.io/library/python:3.12-slim
@@ -51,7 +58,8 @@ await sandbox.destroy();
 ```typescript
 interface IsloConfig {
   apiUrl?: string;
-  bearerToken?: string;
+  bearerToken?: string; // optional if ~/.islo/auth.json has session_token
+  authFilePath?: string; // optional override for auth file path
   tenantPublicId?: string;
   userPublicId?: string;
   image?: string;
@@ -68,4 +76,5 @@ interface IsloConfig {
 
 - `sandboxId` is the Islo sandbox name.
 - Command execution uses Islo's SSE streaming endpoint (`/exec/stream`).
+- If `bearerToken`/`ISLO_BEARER_TOKEN` is not set, the provider reads `~/.islo/auth.json`.
 - Filesystem methods are not implemented in this provider.
