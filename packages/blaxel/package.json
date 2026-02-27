@@ -30,7 +30,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "@blaxel/core": "^0.2.66"
+    "@blaxel/core": "^0.2.67"
   },
   "keywords": [
     "computesdk",
