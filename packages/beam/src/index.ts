@@ -14,7 +14,7 @@
  */
 
 import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CodeResult,
   CommandResult,
@@ -53,7 +53,7 @@ function configureBeamOpts(config: BeamConfig): void {
     beamOpts.gatewayUrl = config.gatewayUrl;
   }
   if (config.timeout) {
-    beamOpts.timeout = config.timeout;
+    (beamOpts as any).timeout = config.timeout;
   }
 }
 
@@ -63,6 +63,63 @@ function configureBeamOpts(config: BeamConfig): void {
 function shellEscape(arg: string): string {
   if (arg === '') return "''";
   return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Detect Node parser/compile failures while avoiding runtime SyntaxError matches.
+ */
+function isNodeParserFailure(output: string): boolean {
+  const hasSyntaxMarker =
+    output.includes('SyntaxError') ||
+    output.includes('Unexpected token') ||
+    output.includes('Unexpected identifier') ||
+    output.includes('Unexpected end of input') ||
+    output.includes('Invalid or unexpected token');
+
+  const hasCompileContext =
+    output.includes('[eval]') ||
+    output.includes('makeContextifyScript') ||
+    output.includes('compileScript') ||
+    output.includes('wrapSafe');
+
+  const hasRuntimeSyntaxSignature =
+    output.includes('at JSON.parse') ||
+    output.includes('JSON.parse (<anonymous>)') ||
+    output.includes('in JSON at position');
+
+  return hasSyntaxMarker && hasCompileContext && !hasRuntimeSyntaxSignature;
+}
+
+/**
+ * Detect Python parser failures (syntax/indentation/tab) emitted by python -c.
+ */
+function isPythonParserFailure(output: string): boolean {
+  const hasSyntaxMarker =
+    output.includes('SyntaxError') ||
+    output.includes('IndentationError') ||
+    output.includes('TabError');
+
+  const hasStringFileContext = output.includes('File "<string>"');
+  const hasRuntimeTraceback = output.includes('Traceback (most recent call last)');
+
+  return hasSyntaxMarker && hasStringFileContext && !hasRuntimeTraceback;
+}
+
+/**
+ * Detect parser/compile failures that should throw instead of returning CodeResult.
+ */
+function isParserFailure(output: string, runtime: Runtime): boolean {
+  if (!output.trim()) return false;
+
+  if (runtime === 'node') {
+    return isNodeParserFailure(output);
+  }
+
+  if (runtime === 'python') {
+    return isPythonParserFailure(output);
+  }
+
+  return false;
 }
 
 /**
@@ -215,25 +272,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
           const combinedOutput = `${stdoutStr || ''} ${stderrStr || ''}`;
 
-          const hasSyntaxError =
-            combinedOutput.includes('SyntaxError') ||
-            combinedOutput.includes('invalid syntax') ||
-            combinedOutput.includes('IndentationError') ||
-            combinedOutput.includes('TabError') ||
-            (combinedOutput.includes('NameError') && combinedOutput.includes('is not defined')) ||
-            combinedOutput.includes('Unexpected token') ||
-            combinedOutput.includes('Unexpected identifier') ||
-            combinedOutput.includes('Unexpected end of file') ||
-            (combinedOutput.includes('Expected') && combinedOutput.includes('but found'));
-
-          const isRuntimeError =
-            combinedOutput.includes('throw ') ||
-            combinedOutput.includes('raise ') ||
-            combinedOutput.includes('Traceback (most recent call last)') ||
-            (combinedOutput.includes('Error:') && !combinedOutput.includes('SyntaxError')) ||
-            (combinedOutput.includes('Exception:') && !combinedOutput.includes('SyntaxError'));
-
-          if (hasSyntaxError && !isRuntimeError) {
+          if (proc.exitCode !== 0 && isParserFailure(combinedOutput, effectiveRuntime)) {
             throw new Error(`Syntax error: ${(stderrStr || stdoutStr || '').trim()}`);
           }
 
@@ -268,13 +307,13 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]: [string, string]) => `${k}="${v.replace(/"/g, '\\"')}"`)
+              .map(([k, v]: [string, string]) => `${k}="${escapeShellArg(v)}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
 
           if (options?.cwd) {
-            fullCommand = `cd "${options.cwd.replace(/"/g, '\\"')}" && ${fullCommand}`;
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
 
           if (options?.background) {

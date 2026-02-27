@@ -196,6 +196,15 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Render-Owner-ID'] = process.env.RENDER_OWNER_ID;
       }
       break;
+
+    case 'beam':
+      if (process.env.BEAM_TOKEN) {
+        headers['X-Beam-Token'] = process.env.BEAM_TOKEN;
+      }
+      if (process.env.BEAM_WORKSPACE_ID) {
+        headers['X-Beam-Workspace-Id'] = process.env.BEAM_WORKSPACE_ID;
+      }
+      break;
   }
 
   return headers;
@@ -262,7 +271,8 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Blaxel:     export BL_API_KEY=xxx BL_WORKSPACE=xxx\n` +
       `  Namespace:  export NSC_TOKEN=xxx\n` +
       `  HopX:       export HOPX_API_KEY=xxx\n` +
-      `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n\n` +
+      `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n` +
+      `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=<provider>\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`

@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@beamcloud/beam-js": "file:../../../beam-js",
+    "@beamcloud/beam-js": "1.0.0-rc.30",
     "computesdk": "workspace:*",
     "@computesdk/provider": "workspace:*"
   },
