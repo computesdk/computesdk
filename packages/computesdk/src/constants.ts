@@ -41,6 +41,7 @@ export const PROVIDER_PRIORITY = [
   'blaxel',
   'namespace',
   'hopx',
+  'beam',
 ] as const;
 
 /**
@@ -60,4 +61,5 @@ export const PROVIDER_ENV_VARS = {
   blaxel: ['BL_API_KEY', 'BL_WORKSPACE'],
   namespace: ['NSC_TOKEN'],
   hopx: ['HOPX_API_KEY'],
+  beam: ['BEAM_TOKEN', 'BEAM_WORKSPACE_ID'],
 } as const;
