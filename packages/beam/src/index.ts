@@ -353,10 +353,37 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
        * Get sandbox information
        */
       getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
+        // Derive runtime from sandbox instance if available; otherwise default to 'python'
+        let runtime: Runtime = 'python';
+        const anySandbox = sandbox as any;
+
+        if (typeof anySandbox.runtime === 'string') {
+          const lower = anySandbox.runtime.toLowerCase();
+          if (lower.includes('node')) {
+            runtime = 'node';
+          } else if (lower.includes('python')) {
+            runtime = 'python';
+          }
+        } else if (typeof anySandbox.image === 'string') {
+          const imageStr = anySandbox.image.toLowerCase();
+          if (imageStr.includes('node')) {
+            runtime = 'node';
+          } else if (imageStr.includes('python')) {
+            runtime = 'python';
+          }
+        } else if (typeof anySandbox.imageName === 'string') {
+          const imageNameStr = anySandbox.imageName.toLowerCase();
+          if (imageNameStr.includes('node')) {
+            runtime = 'node';
+          } else if (imageNameStr.includes('python')) {
+            runtime = 'python';
+          }
+        }
+
         return {
           id: sandbox.containerId,
           provider: 'beam',
-          runtime: 'python',
+          runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
