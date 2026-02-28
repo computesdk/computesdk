@@ -63,6 +63,7 @@
     "@computesdk/daytona": "workspace:*",
     "@computesdk/e2b": "workspace:*",
     "@computesdk/beam": "workspace:*",
+    "@computesdk/just-bash": "workspace:*",
     "@computesdk/hopx": "workspace:*",
     "@computesdk/modal": "workspace:*",
     "@computesdk/railway": "workspace:*",
@@ -105,6 +106,9 @@
       "optional": true
     },
     "@computesdk/beam": {
+      "optional": true
+    },
+    "@computesdk/just-bash": {
       "optional": true
     }
   },

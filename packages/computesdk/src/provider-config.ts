@@ -32,6 +32,7 @@ export const PROVIDER_AUTH = {
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
+  'just-bash': [[]],
 } as const;
 
 /**
@@ -98,6 +99,7 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     token: 'X-Beam-Token',
     workspaceId: 'X-Beam-Workspace-Id',
   },
+  'just-bash': {},
 };
 
 /**
@@ -154,6 +156,7 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
     BEAM_TOKEN: 'token',
     BEAM_WORKSPACE_ID: 'workspaceId',
   },
+  'just-bash': {},
 };
 
 /**
@@ -173,6 +176,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   namespace: 'https://cloud.namespace.so',
   hopx: 'https://hopx.ai/dashboard',
   beam: 'https://app.beam.cloud',
+  'just-bash': 'https://github.com/vercel-labs/just-bash',
 };
 
 /**

@@ -80,8 +80,9 @@ ComputeSDK automatically detects providers based on environment variables:
 | **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` |
 | **Cloudflare** | `CLOUDFLARE_API_TOKEN` |
 | **CodeSandbox** | `CODESANDBOX_TOKEN` |
+| **just-bash** | *(none - always available)* |
 
-Detection order: **E2B → Railway → Daytona → Modal → Runloop → Vercel → Cloudflare → CodeSandbox**
+Detection order: **E2B → Railway → Daytona → Modal → Runloop → Vercel → Cloudflare → CodeSandbox → just-bash**
 
 ## Configuration
 
@@ -256,6 +257,7 @@ npm install @computesdk/modal      # Modal provider
 npm install @computesdk/railway    # Railway provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
 ```
 
 Direct mode usage:
@@ -273,6 +275,7 @@ See individual provider READMEs for details:
 - **[@computesdk/railway](./packages/railway)** - Full-stack deployments
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
+- **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
 
 ## Building Custom Providers
 
