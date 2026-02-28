@@ -993,6 +993,9 @@ importers:
 
   packages/workbench:
     dependencies:
+      '@computesdk/beam':
+        specifier: workspace:*
+        version: link:../beam
       '@computesdk/blaxel':
         specifier: workspace:*
         version: link:../blaxel
