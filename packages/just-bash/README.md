@@ -61,8 +61,101 @@ interface JustBashConfig {
   env?: Record<string, string>;
   /** Working directory (defaults to /home/user) */
   cwd?: string;
+  /** Custom filesystem implementation (see Filesystem Backends below) */
+  fs?: IFileSystem;
+  /** Custom commands created with defineCommand() (see Custom Commands below) */
+  customCommands?: CustomCommand[];
+  /** Network configuration for curl (disabled by default) */
+  network?: NetworkConfig;
 }
 ```
+
+## Filesystem Backends
+
+By default, just-bash uses an **InMemoryFs** — a pure in-memory filesystem. You can swap in alternative backends depending on your use case:
+
+### InMemoryFs (default)
+
+All files live in memory. Fast, deterministic, fully isolated.
+
+```typescript
+const compute = justBash({}); // InMemoryFs is the default
+```
+
+### OverlayFs (copy-on-write)
+
+Reads from a real directory on disk; writes stay in memory. The underlying directory is never modified.
+
+```typescript
+import { OverlayFs } from 'just-bash';
+
+const compute = justBash({
+  fs: new OverlayFs({ root: '/path/to/project' }),
+  cwd: '/path/to/project',
+});
+```
+
+### ReadWriteFs (direct disk access)
+
+Reads and writes go directly to a real directory. Use with caution — changes are real.
+
+```typescript
+import { ReadWriteFs } from 'just-bash';
+
+const compute = justBash({
+  fs: new ReadWriteFs({ root: '/tmp/sandbox' }),
+});
+```
+
+### MountableFs (compose multiple filesystems)
+
+Mount different filesystem backends at different paths.
+
+```typescript
+import { MountableFs, InMemoryFs } from 'just-bash';
+import { OverlayFs } from 'just-bash';
+
+const compute = justBash({
+  fs: new MountableFs({
+    base: new InMemoryFs(),
+    mounts: [
+      { mountPoint: '/project', filesystem: new OverlayFs({ root: '/real/project' }) },
+    ],
+  }),
+  cwd: '/project',
+});
+```
+
+## Custom Commands
+
+You can extend just-bash with custom commands using `defineCommand()`:
+
+```typescript
+import { justBash } from '@computesdk/just-bash';
+import { defineCommand } from 'just-bash';
+
+const hello = defineCommand('hello', async (args, ctx) => {
+  const name = args[0] || 'world';
+  return {
+    stdout: `Hello, ${name}!\n`,
+    stderr: '',
+    exitCode: 0,
+  };
+});
+
+const compute = justBash({ customCommands: [hello] });
+const sandbox = await compute.sandbox.create();
+
+const result = await sandbox.runCommand('hello Alice');
+console.log(result.stdout); // "Hello, Alice!\n"
+```
+
+Custom commands receive a context object (`ctx`) with access to:
+- `ctx.fs` — the virtual filesystem
+- `ctx.cwd` — current working directory
+- `ctx.env` — environment variables
+- `ctx.stdin` — standard input
+- `ctx.exec(command)` — run subcommands
 
 ## API Reference
 
@@ -276,10 +369,10 @@ await sandbox.destroy();
 
 ## Limitations
 
-- **No Network Access** - `getUrl()` is not supported; `curl` requires explicit network config on the Bash instance
+- **No Network Access** - `getUrl()` is not supported; `curl` requires explicit `network` config
 - **No Real Processes** - Commands are interpreted in TypeScript, not executed as real OS processes
 - **No Node.js Runtime** - `runCode` with `node` runtime executes as bash, not actual Node.js
-- **In-Memory Filesystem** - Files do not persist between sandbox sessions
+- **In-Memory by Default** - Files don't persist unless you use `OverlayFs`, `ReadWriteFs`, or `MountableFs`
 - **Python via Pyodide** - Python support requires `python: true` and uses pyodide (WebAssembly-based)
 
 ## When to Use just-bash

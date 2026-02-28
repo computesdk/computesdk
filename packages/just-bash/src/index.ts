@@ -14,7 +14,7 @@
  */
 
 import { Bash } from 'just-bash';
-import type { BashExecResult } from 'just-bash';
+import type { BashExecResult, BashOptions } from 'just-bash';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CodeResult,
@@ -33,11 +33,24 @@ export interface JustBashConfig {
   /** Enable Python support via pyodide (disabled by default) */
   python?: boolean;
   /** Initial files to populate in the virtual filesystem */
-  files?: Record<string, string>;
+  files?: BashOptions['files'];
   /** Initial environment variables */
   env?: Record<string, string>;
   /** Working directory (defaults to /home/user) */
   cwd?: string;
+  /**
+   * Custom filesystem implementation.
+   * Defaults to InMemoryFs. Use OverlayFs for copy-on-write over a real directory,
+   * ReadWriteFs for direct disk access, or MountableFs to combine multiple filesystems.
+   */
+  fs?: BashOptions['fs'];
+  /**
+   * Custom commands to register alongside built-in commands.
+   * Created with `defineCommand()` from just-bash.
+   */
+  customCommands?: BashOptions['customCommands'];
+  /** Network configuration for commands like curl */
+  network?: BashOptions['network'];
 }
 
 /** Internal sandbox state */
@@ -84,6 +97,9 @@ export const justBash = defineProvider<JustBashSandbox, JustBashConfig>({
           },
           cwd: config.cwd || '/home/user',
           python: config.python ?? (options?.runtime === 'python'),
+          fs: config.fs,
+          customCommands: config.customCommands,
+          network: config.network,
         });
 
         const sandbox: JustBashSandbox = {
