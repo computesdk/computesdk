@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isGatewayModeEnabled, detectProvider, autoConfigureCompute } from '../auto-detect';
 
+
 describe('Auto-Detection', () => {
   const originalEnv = process.env;
 
@@ -97,6 +98,12 @@ describe('Auto-Detection', () => {
       expect(detectProvider()).toBe('blaxel');
     });
 
+    it('detects beam when both vars are set', () => {
+      process.env.BEAM_TOKEN = 'beam_token';
+      process.env.BEAM_WORKSPACE_ID = 'workspace_id';
+      expect(detectProvider()).toBe('beam');
+    });
+
     it('returns null when no provider vars are set', () => {
       expect(detectProvider()).toBe(null);
     });
@@ -161,6 +168,21 @@ describe('Auto-Detection', () => {
       expect(config?.apiKey).toBe('test_key');
       expect(config?.gatewayUrl).toBeDefined();
       expect(config?.providerHeaders).toBeDefined();
+    });
+
+    it('includes beam provider headers when beam is detected', () => {
+      process.env.COMPUTESDK_API_KEY = 'test_key';
+      process.env.BEAM_TOKEN = 'beam_token';
+      process.env.BEAM_WORKSPACE_ID = 'workspace_id';
+
+      const config = autoConfigureCompute();
+
+      expect(config).toBeDefined();
+      expect(config?.provider).toBe('beam');
+      expect(config?.providerHeaders).toEqual({
+        'X-Beam-Token': 'beam_token',
+        'X-Beam-Workspace-Id': 'workspace_id',
+      });
     });
 
     it('validates gateway URL when COMPUTESDK_GATEWAY_URL is set', () => {

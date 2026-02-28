@@ -64,6 +64,7 @@ export interface ExplicitComputeConfig {
   blaxel?: { apiKey?: string; workspace?: string; image?: string; region?: string; memory?: number };
   namespace?: { token?: string };
   hopx?: { apiKey?: string };
+  beam?: { token?: string; workspaceId?: string };
 }
 
 /**

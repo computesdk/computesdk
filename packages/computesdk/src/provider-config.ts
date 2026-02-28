@@ -31,6 +31,7 @@ export const PROVIDER_AUTH = {
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
+  beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
 } as const;
 
 /**
@@ -93,6 +94,10 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
   hopx: {
     apiKey: 'X-HOPX-API-Key',
   },
+  beam: {
+    token: 'X-Beam-Token',
+    workspaceId: 'X-Beam-Workspace-Id',
+  },
 };
 
 /**
@@ -145,6 +150,10 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
   hopx: {
     HOPX_API_KEY: 'apiKey',
   },
+  beam: {
+    BEAM_TOKEN: 'token',
+    BEAM_WORKSPACE_ID: 'workspaceId',
+  },
 };
 
 /**
@@ -163,6 +172,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   blaxel: 'https://blaxel.ai/dashboard',
   namespace: 'https://cloud.namespace.so',
   hopx: 'https://hopx.ai/dashboard',
+  beam: 'https://app.beam.cloud',
 };
 
 /**

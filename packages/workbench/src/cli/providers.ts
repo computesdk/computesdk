@@ -257,7 +257,10 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'vercel':
         return await import('@computesdk/vercel');
       case 'cloudflare':
+        // @ts-ignore - @cloudflare/sandbox types may not be available
         return await import('@computesdk/cloudflare');
+      case 'beam':
+        return await import('@computesdk/beam');
       case 'codesandbox':
         return await import('@computesdk/codesandbox');
       case 'blaxel':
