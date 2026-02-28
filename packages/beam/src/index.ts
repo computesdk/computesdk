@@ -149,6 +149,11 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           );
         }
 
+        if (!beamOpts.workspaceId) {
+          throw new Error(
+            `Missing Beam workspace ID. Provide 'workspaceId' in config or set BEAM_WORKSPACE_ID environment variable.`
+          );
+        }
         try {
           if (options?.sandboxId) {
             const instance = await Sandbox.connect(options.sandboxId);
