@@ -58,7 +58,7 @@ await sandbox.destroy();
 ```typescript
 interface IsloConfig {
   apiUrl?: string;
-  bearerToken?: string; // optional if ~/.islo/auth.json has session_token
+  bearerToken?: string; // optional if token is available via ISLO_BEARER_TOKEN, keychain, or auth file
   authFilePath?: string; // optional override for auth file path
   tenantPublicId?: string;
   userPublicId?: string;
@@ -76,5 +76,8 @@ interface IsloConfig {
 
 - `sandboxId` is the Islo sandbox name.
 - Command execution uses Islo's SSE streaming endpoint (`/exec/stream`).
-- If `bearerToken`/`ISLO_BEARER_TOKEN` is not set, the provider reads `~/.islo/auth.json`.
+- If `bearerToken`/`ISLO_BEARER_TOKEN` is not set, the provider tries:
+  1. Islo auth file paths (`ISLO_AUTH_FILE`, `~/.islo/auth.json`, `~/.config/islo/auth.json`)
+  2. OS keychain entry used by `islo login` (`islo.dev.cli` / `tokens`)
+- To force file-based token storage in Islo CLI, use `ISLO_TOKEN_STORAGE=file` before `islo login`.
 - Filesystem methods are not implemented in this provider.

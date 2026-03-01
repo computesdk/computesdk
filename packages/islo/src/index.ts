@@ -1,4 +1,5 @@
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { spawnSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { resolve as resolvePath } from 'path';
@@ -16,6 +17,8 @@ const DEFAULT_API_URL = 'https://api.islo.dev';
 const DEFAULT_NODE_IMAGE = 'docker.io/library/node:20-bookworm';
 const DEFAULT_PYTHON_IMAGE = 'docker.io/library/python:3.12-slim';
 const DEFAULT_TIMEOUT_MS = 300000;
+const KEYCHAIN_SERVICE = 'islo.dev.cli';
+const KEYCHAIN_ACCOUNT = 'tokens';
 
 interface IsloNetwork {
   ip?: string | null;
@@ -68,7 +71,7 @@ export interface IsloConfig {
   apiUrl?: string;
   /** Islo bearer token. Defaults to ISLO_BEARER_TOKEN */
   bearerToken?: string;
-  /** Path to Islo auth file. Defaults to ISLO_AUTH_FILE or ~/.islo/auth.json */
+  /** Path to Islo auth file. Defaults to ISLO_AUTH_FILE, ~/.islo/auth.json, or ~/.config/islo/auth.json */
   authFilePath?: string;
   /** Optional tenant context header. Defaults to ISLO_PUBLIC_TENANT_ID */
   tenantPublicId?: string;
@@ -339,11 +342,12 @@ function resolveConfig(config: IsloConfig): ResolvedConfig {
       typeof process !== 'undefined' ? process.env?.ISLO_BEARER_TOKEN : undefined
     ) ||
     readTokenFromAuthFile(config.authFilePath) ||
+    readTokenFromKeychain() ||
     '';
 
   if (!bearerToken) {
     throw new Error(
-      `Missing Islo bearer token. Set ISLO_BEARER_TOKEN, pass 'bearerToken', or run 'islo auth login' so ~/.islo/auth.json contains a session token.`
+      `Missing Islo bearer token. Set ISLO_BEARER_TOKEN, pass 'bearerToken', or run 'islo login' so credentials are available in your OS keychain (or in ~/.islo/auth.json when ISLO_TOKEN_STORAGE=file).`
     );
   }
 
@@ -778,22 +782,121 @@ function asNonEmptyString(value: unknown): string | undefined {
 }
 
 function readTokenFromAuthFile(authFilePath?: string): string | undefined {
-  const resolvedAuthPath =
-    asNonEmptyString(authFilePath) ||
-    asNonEmptyString(process.env.ISLO_AUTH_FILE) ||
-    resolvePath(homedir(), '.islo', 'auth.json');
+  const paths = [
+    asNonEmptyString(authFilePath),
+    asNonEmptyString(process.env.ISLO_AUTH_FILE),
+    resolvePath(homedir(), '.islo', 'auth.json'),
+    resolvePath(homedir(), '.config', 'islo', 'auth.json'),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const path of paths) {
+    try {
+      const raw = readFileSync(path, 'utf8');
+      const token = parseTokenFromSecret(raw);
+      if (token) {
+        return token;
+      }
+    } catch {
+      // Keep trying the next location.
+    }
+  }
+
+  return undefined;
+}
+
+function readTokenFromKeychain(): string | undefined {
+  if (typeof process === 'undefined') {
+    return undefined;
+  }
+
+  if (process.platform === 'darwin') {
+    return readTokenFromMacosKeychain();
+  }
+
+  if (process.platform === 'linux') {
+    return readTokenFromLinuxKeyring();
+  }
+
+  return undefined;
+}
+
+function readTokenFromMacosKeychain(): string | undefined {
+  try {
+    const result = spawnSync(
+      'security',
+      [
+        'find-generic-password',
+        '-s',
+        KEYCHAIN_SERVICE,
+        '-a',
+        KEYCHAIN_ACCOUNT,
+        '-w',
+      ],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 1500,
+      }
+    );
+
+    if (result.status !== 0 || result.error) {
+      return undefined;
+    }
+
+    return parseTokenFromSecret(result.stdout);
+  } catch {
+    return undefined;
+  }
+}
+
+function readTokenFromLinuxKeyring(): string | undefined {
+  // Try both common attribute names used by secret storage backends.
+  const lookups: string[][] = [
+    ['lookup', 'service', KEYCHAIN_SERVICE, 'username', KEYCHAIN_ACCOUNT],
+    ['lookup', 'service', KEYCHAIN_SERVICE, 'account', KEYCHAIN_ACCOUNT],
+  ];
+
+  for (const args of lookups) {
+    try {
+      const result = spawnSync('secret-tool', args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 1500,
+      });
+
+      if (result.status !== 0 || result.error) {
+        continue;
+      }
+
+      const token = parseTokenFromSecret(result.stdout);
+      if (token) {
+        return token;
+      }
+    } catch {
+      // Keep trying other lookup variants.
+    }
+  }
+
+  return undefined;
+}
+
+function parseTokenFromSecret(secret: string): string | undefined {
+  const trimmed = secret.trim();
+  if (!trimmed) {
+    return undefined;
+  }
 
   try {
-    const raw = readFileSync(resolvedAuthPath, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
     return (
       asNonEmptyString(parsed.session_token) ||
       asNonEmptyString(parsed.access_token) ||
-      asNonEmptyString(parsed.bearer_token)
+      asNonEmptyString(parsed.bearer_token) ||
+      asNonEmptyString(parsed.token)
     );
   } catch {
-    return undefined;
+    // Some storage backends may return the token string directly.
+    return asNonEmptyString(trimmed);
   }
 }
 
