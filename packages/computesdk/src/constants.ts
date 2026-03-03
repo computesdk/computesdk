@@ -42,7 +42,6 @@ export const PROVIDER_PRIORITY = [
   'namespace',
   'hopx',
   'beam',
-  'just-bash',
 ] as const;
 
 /**
