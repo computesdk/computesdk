@@ -62,4 +62,5 @@ export const PROVIDER_ENV_VARS = {
   namespace: ['NSC_TOKEN'],
   hopx: ['HOPX_API_KEY'],
   beam: ['BEAM_TOKEN', 'BEAM_WORKSPACE_ID'],
+  'just-bash': [] as const,
 } as const;

@@ -261,6 +261,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/cloudflare');
       case 'beam':
         return await import('@computesdk/beam');
+      case 'just-bash':
+        return await import('@computesdk/just-bash');
       case 'codesandbox':
         return await import('@computesdk/codesandbox');
       case 'blaxel':

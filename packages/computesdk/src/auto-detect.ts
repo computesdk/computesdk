@@ -205,6 +205,10 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Beam-Workspace-Id'] = process.env.BEAM_WORKSPACE_ID;
       }
       break;
+
+    case 'just-bash':
+      // No headers needed - just-bash runs locally
+      break;
   }
 
   return headers;
@@ -272,7 +276,8 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Namespace:  export NSC_TOKEN=xxx\n` +
       `  HopX:       export HOPX_API_KEY=xxx\n` +
       `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n` +
-      `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n\n` +
+      `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n` +
+      `  just-bash:  (no credentials needed - local sandbox)\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=<provider>\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`
