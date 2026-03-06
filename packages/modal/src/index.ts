@@ -106,7 +106,9 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           } else {
             // Create new Modal sandbox with Node.js (more appropriate for a Node.js SDK)
             const app = await App.lookup('computesdk-modal', { createIfMissing: true });
-            const image = await app.imageFromRegistry('node:20');
+            // Use custom image if provided in options, otherwise default to node:20
+            const imageName = options?.image ?? 'node:20';
+            const image = await app.imageFromRegistry(imageName);
             
             // Configure sandbox options
             const sandboxOptions: any = {}; // Using 'any' since Modal SDK is alpha
