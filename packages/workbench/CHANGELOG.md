@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 12.0.0
+
+### Patch Changes
+
+- Updated dependencies [bc2193c]
+  - @computesdk/blaxel@1.6.0
+
 ## 11.0.0
 
 ### Patch Changes
