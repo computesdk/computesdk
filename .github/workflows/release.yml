@@ -33,7 +33,9 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --ignore-scripts
+        run: |
+          pnpm install --ignore-scripts
+          pnpm rebuild esbuild
 
       - name: Build packages
         run: pnpm build

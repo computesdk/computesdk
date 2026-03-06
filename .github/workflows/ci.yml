@@ -44,8 +44,10 @@ jobs:
     
     - name: Install dependencies
       if: steps.skip_check.outputs.skip != 'true'
-      run: pnpm install --ignore-scripts
-    
+      run: |
+        pnpm install --ignore-scripts
+        pnpm rebuild esbuild
+
     - name: Build packages
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm build
@@ -99,8 +101,10 @@ jobs:
         cache: 'pnpm'
     
     - name: Install dependencies
-      run: pnpm install --ignore-scripts
-    
+      run: |
+        pnpm install --ignore-scripts
+        pnpm rebuild esbuild
+
     - name: Build packages
       run: pnpm build
         
@@ -184,8 +188,10 @@ jobs:
         cache: 'pnpm'
     
     - name: Install dependencies
-      run: pnpm install --ignore-scripts
-    
+      run: |
+        pnpm install --ignore-scripts
+        pnpm rebuild esbuild
+
     - name: Build packages
       run: pnpm build
         
