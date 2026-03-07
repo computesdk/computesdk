@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isGatewayModeEnabled, detectProvider, autoConfigureCompute } from '../auto-detect';
 
-
 describe('Auto-Detection', () => {
   const originalEnv = process.env;
 
@@ -98,12 +97,6 @@ describe('Auto-Detection', () => {
       expect(detectProvider()).toBe('blaxel');
     });
 
-    it('detects beam when both vars are set', () => {
-      process.env.BEAM_TOKEN = 'beam_token';
-      process.env.BEAM_WORKSPACE_ID = 'workspace_id';
-      expect(detectProvider()).toBe('beam');
-    });
-
     it('returns null when no provider vars are set', () => {
       expect(detectProvider()).toBe(null);
     });
@@ -170,25 +163,10 @@ describe('Auto-Detection', () => {
       expect(config?.providerHeaders).toBeDefined();
     });
 
-    it('includes beam provider headers when beam is detected', () => {
-      process.env.COMPUTESDK_API_KEY = 'test_key';
-      process.env.BEAM_TOKEN = 'beam_token';
-      process.env.BEAM_WORKSPACE_ID = 'workspace_id';
-
-      const config = autoConfigureCompute();
-
-      expect(config).toBeDefined();
-      expect(config?.provider).toBe('beam');
-      expect(config?.providerHeaders).toEqual({
-        'X-Beam-Token': 'beam_token',
-        'X-Beam-Workspace-Id': 'workspace_id',
-      });
-    });
-
-    it('validates gateway URL when COMPUTESDK_GATEWAY_URL is set', () => {
+    it('validates gateway URL when COMPUTESDK_TRIBUTARY_URL is set', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
-      process.env.COMPUTESDK_GATEWAY_URL = 'invalid-url';
+      process.env.COMPUTESDK_TRIBUTARY_URL = 'invalid-url';
 
       expect(() => autoConfigureCompute()).toThrow(/Invalid gateway URL/);
     });
@@ -196,7 +174,7 @@ describe('Auto-Detection', () => {
     it('accepts valid HTTPS gateway URL', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
-      process.env.COMPUTESDK_GATEWAY_URL = 'https://custom-gateway.example.com';
+      process.env.COMPUTESDK_TRIBUTARY_URL = 'https://custom-gateway.example.com';
 
       const config = autoConfigureCompute();
       expect(config).toBeDefined();
@@ -206,7 +184,7 @@ describe('Auto-Detection', () => {
     it('accepts valid HTTP gateway URL', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
-      process.env.COMPUTESDK_GATEWAY_URL = 'http://localhost:3000';
+      process.env.COMPUTESDK_TRIBUTARY_URL = 'http://localhost:3000';
 
       const config = autoConfigureCompute();
       expect(config).toBeDefined();

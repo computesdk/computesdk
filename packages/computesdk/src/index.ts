@@ -5,23 +5,23 @@
  *
  * Using ComputeSDK (Recommended):
  *   import { compute } from 'computesdk';
- *   
+ *
  *   Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)
- *   Or explicit: compute.setConfig({ 
- *     provider: 'e2b', 
- *     computesdkApiKey: '...', 
- *     e2b: { apiKey: '...' } 
+ *   Or explicit: compute.setConfig({
+ *     provider: 'e2b',
+ *     computesdkApiKey: '...',
+ *     e2b: { apiKey: '...' }
  *   })
  *
  * Using Providers Directly (Advanced):
  *   import { e2b } from '@computesdk/e2b';
  *   const compute = e2b({ apiKey: '...' });
- *   
- *   Useful for local providers (Docker) or provider-specific features
+ *
+ *   Useful for local providers (Docker) or provider-specific features.
  */
 
 // ============================================================================
-// Universal Sandbox Interface & Types  
+// Universal Sandbox Interface & Types
 // ============================================================================
 
 // Export universal Sandbox interface and supporting types
@@ -99,7 +99,7 @@ export {
 
 // Export provider configuration utilities
 export {
-  GATEWAY_URL,
+  TRIBUTARY_URL,
   PROVIDER_PRIORITY,
   PROVIDER_ENV_VARS,
 } from './constants';

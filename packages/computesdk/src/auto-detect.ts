@@ -5,7 +5,7 @@
  * Enables zero-config usage of ComputeSDK.
  */
 
-import { GATEWAY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
+import { TRIBUTARY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
 import type { WebSocketConstructor } from './client';
 
 /**
@@ -196,19 +196,6 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Render-Owner-ID'] = process.env.RENDER_OWNER_ID;
       }
       break;
-
-    case 'beam':
-      if (process.env.BEAM_TOKEN) {
-        headers['X-Beam-Token'] = process.env.BEAM_TOKEN;
-      }
-      if (process.env.BEAM_WORKSPACE_ID) {
-        headers['X-Beam-Workspace-Id'] = process.env.BEAM_WORKSPACE_ID;
-      }
-      break;
-
-    case 'just-bash':
-      // No headers needed - just-bash runs locally
-      break;
   }
 
   return headers;
@@ -275,16 +262,14 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Blaxel:     export BL_API_KEY=xxx BL_WORKSPACE=xxx\n` +
       `  Namespace:  export NSC_TOKEN=xxx\n` +
       `  HopX:       export HOPX_API_KEY=xxx\n` +
-      `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n` +
-      `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n` +
-      `  just-bash:  (no credentials needed - local sandbox)\n\n` +
+      `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=<provider>\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`
     );
   }
 
-  const gatewayUrl = process.env.COMPUTESDK_GATEWAY_URL || GATEWAY_URL;
+  const gatewayUrl = process.env.COMPUTESDK_TRIBUTARY_URL || TRIBUTARY_URL;
   const computesdkApiKey = process.env.COMPUTESDK_API_KEY!;
   const providerHeaders = getProviderHeaders(provider);
 
@@ -295,7 +280,7 @@ export function autoConfigureCompute(): GatewayConfig | null {
     throw new Error(
       `Invalid gateway URL: "${gatewayUrl}"\n\n` +
       `The URL must be a valid HTTP/HTTPS URL.\n` +
-      `Check your COMPUTESDK_GATEWAY_URL environment variable.`
+      `Check your COMPUTESDK_TRIBUTARY_URL environment variable.`
     );
   }
 
