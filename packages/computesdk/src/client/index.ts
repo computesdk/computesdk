@@ -2650,10 +2650,10 @@ export class Sandbox {
     const baseDomain = parts.slice(1).join('.'); // Extract "sandbox.computesdk.com"
 
     // ComputeSDK has two domains:
-    // - sandbox.computesdk.com: Management/control plane
-    // - preview.computesdk.com: Preview URLs for services
+    // - sandbox.{baseDomain}: Management/control plane
+    // - preview.{baseDomain}: Preview URLs for services
     // When getting a URL for a port, we need the preview domain
-    const previewDomain = baseDomain.replace('sandbox.computesdk.com', 'preview.computesdk.com');
+    const previewDomain = baseDomain.replace(/^sandbox\./, 'preview.');
 
     // ComputeSDK URL pattern: ${subdomain}-${port}.${previewDomain}
     // Examples:

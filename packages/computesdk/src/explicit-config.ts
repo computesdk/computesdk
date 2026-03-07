@@ -14,7 +14,7 @@ import {
   PROVIDER_ENV_MAP,
   type ProviderName,
 } from './provider-config';
-import { GATEWAY_URL } from './constants';
+import { TRIBUTARY_URL } from './constants';
 
 /**
  * Build provider-specific headers for gateway authentication
@@ -137,7 +137,7 @@ export function createConfigFromExplicit(config: ExplicitComputeConfig): Gateway
   // Create and return gateway config
   return {
     apiKey: computesdkApiKey,
-    gatewayUrl: config.gatewayUrl || process.env.COMPUTESDK_GATEWAY_URL || GATEWAY_URL,
+    gatewayUrl: config.gatewayUrl || process.env.COMPUTESDK_TRIBUTARY_URL || TRIBUTARY_URL,
     provider: config.provider,
     providerHeaders,
     requestTimeoutMs: config.requestTimeoutMs,

@@ -497,14 +497,18 @@ async function executeWithStreaming(
 	command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 	// Execute the command
-	const processResult = await sandbox.process.exec({
-		command,
-		waitForCompletion: true,
-	});
+	const result = await sandbox.process.exec({ command });
+
+	// Wait for process completion
+	await sandbox.process.wait(result.name);
+
+	// Get final process result for exit code
+	const processResult = await sandbox.process.get(result.name);
+
 	return {
-		stdout: processResult.stdout,
-		stderr: processResult.stderr,
-		exitCode: processResult.exitCode || 0,
+		stdout: processResult.logs,
+		stderr: processResult.logs,
+		exitCode: processResult.exitCode || 0
 	};
 }
 
