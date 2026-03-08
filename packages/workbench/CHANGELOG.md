@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 13.0.0
+
+### Patch Changes
+
+- Updated dependencies [6fad31f]
+  - @computesdk/just-bash@0.2.0
+
 ## 12.0.0
 
 ### Patch Changes
