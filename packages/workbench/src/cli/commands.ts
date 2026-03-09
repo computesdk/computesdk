@@ -144,7 +144,8 @@ export async function getComputeInstance(state: WorkbenchState): Promise<any> {
   if (useDirect) {
     // Direct mode: load the provider package directly
     const providerModule = await loadProvider(providerName as ProviderName);
-    // Provider packages export using camelCase identifiers (e.g. 'just-bash' -> 'justBash')
+    // Hyphenated provider names export under a camelCase identifier (e.g. 'just-bash' -> 'justBash');
+    // single-word providers (e2b, modal, etc.) match directly.
     const exportName = providerName.replace(/-([a-z])/g, (_: string, c: string) => c.toUpperCase());
     const providerFactory = providerModule[exportName] ?? providerModule[providerName];
     
