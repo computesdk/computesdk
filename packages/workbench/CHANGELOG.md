@@ -1,5 +1,16 @@
 # @computesdk/workbench
 
+## 14.0.0
+
+### Minor Changes
+
+- 711625d: fix workbench implementation of just-bash
+
+### Patch Changes
+
+- Updated dependencies [711625d]
+  - @computesdk/just-bash@0.3.0
+
 ## 13.0.0
 
 ### Patch Changes
