@@ -73,7 +73,7 @@ const activeSandboxes = new Map<string, JustBashSandbox>();
  * - Python support via pyodide
  * - No external dependencies or authentication required
  */
-export const justBash = defineProvider<JustBashSandbox, JustBashConfig>({
+const _provider = defineProvider<JustBashSandbox, JustBashConfig>({
   name: 'just-bash',
   methods: {
     sandbox: {
@@ -331,6 +331,8 @@ export const justBash = defineProvider<JustBashSandbox, JustBashConfig>({
     },
   },
 });
+
+export const justBash = (config: JustBashConfig = {}) => _provider(config);
 
 // Export types
 export type { JustBashSandbox };
