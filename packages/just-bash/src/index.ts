@@ -334,6 +334,3 @@ export const justBash = defineProvider<JustBashSandbox, JustBashConfig>({
 
 // Export types
 export type { JustBashSandbox };
-
-// Hyphenated alias so workbench can access via providerModule['just-bash']
-export { justBash as 'just-bash' };

@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import * as indexExports from '../index';
 import { justBash } from '../index';
 
 describe('just-bash provider', () => {
@@ -10,6 +11,10 @@ describe('just-bash provider', () => {
       await provider.sandbox.destroy(sandboxId);
       sandboxId = null;
     }
+  });
+
+  it('should export justBash as a named export', () => {
+    expect(typeof indexExports.justBash).toBe('function');
   });
 
   it('should create a provider with the correct name', () => {
