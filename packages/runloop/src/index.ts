@@ -279,15 +279,13 @@ export const runloop = defineProvider<
             const isSyntaxError = actualStderr.includes('SyntaxError');
 
             if (isSyntaxError) {
-              // For syntax errors, throw            
+              // For syntax errors, throw
               const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
               throw new Error(`Syntax error: ${syntaxErrorLine}`);
             } else {
               // For runtime errors, return a result instead of throwing
               return {
-                output:
-                  actualStderr ||
-                  "Error: Runtime error occurred during execution",
+                output: actualStderr || 'Error: Runtime error occurred during execution',
                 exitCode: 1,
                 language: effectiveRuntime,
               };
@@ -295,16 +293,11 @@ export const runloop = defineProvider<
           }
 
           // Re-throw syntax errors
-          if (
-            error instanceof Error &&
-            error.message.includes("Syntax error")
-          ) {
+          if (error instanceof Error && error.message.includes('Syntax error')) {
             throw error;
           }
           throw new Error(
-            `Runloop execution failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       },
