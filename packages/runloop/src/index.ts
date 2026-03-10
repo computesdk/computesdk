@@ -89,7 +89,7 @@ export interface CreateBlueprintTemplateOptions {
 export const runloop = defineProvider<
   Runloop.DevboxView,         // TSandbox
   RunloopConfig,              // TConfig
-  RunloopTemplate,            // TTemplate
+  RunloopTemplate,            // TTemplate 
   RunloopSnapshot             // TSnapshot
 >({
   name: "runloop",
@@ -145,7 +145,7 @@ export const runloop = defineProvider<
           // Create a RunloopSandbox object that contains both devbox and client
           const runloopSandbox = {
             ...dbx,  // Spread all DevboxView properties
-            client: client // Add client for method access
+            client: client  // Add client for method access
           };
 
           return {
@@ -154,9 +154,8 @@ export const runloop = defineProvider<
           };
         } catch (error) {
           throw new Error(
-            `Failed to create Runloop devbox: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to create Runloop devbox: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
@@ -218,11 +217,7 @@ export const runloop = defineProvider<
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (
-        sandbox: any,
-        code: string,
-        runtime?: Runtime,
-      ): Promise<CodeResult> => {
+      runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const startTime = Date.now();
         const devbox = sandbox;
         const client = sandbox.client;
@@ -249,7 +244,7 @@ export const runloop = defineProvider<
           const encoded = Buffer.from(code).toString('base64');
 
           let command;
-          if (effectiveRuntime === "python") {
+          if (effectiveRuntime === 'python') {
             command = `echo "${encoded}" | base64 -d | python3`;
           } else {
             command = `echo "${encoded}" | base64 -d | node`;
@@ -264,12 +259,10 @@ export const runloop = defineProvider<
           // Check for syntax errors and throw them (similar to Vercel behavior)
           if (executionResult.exit_status !== 0 && executionResult.stderr) {
             // Check for common syntax error patterns
-            if (
-              executionResult.stderr.includes("SyntaxError") ||
-              executionResult.stderr.includes("invalid syntax") ||
-              executionResult.stderr.includes("Unexpected token") ||
-              executionResult.stderr.includes("Unexpected identifier")
-            ) {
+            if (executionResult.stderr.includes('SyntaxError') ||
+            executionResult.stderr.includes('invalid syntax') ||
+            executionResult.stderr.includes('Unexpected token') ||
+            executionResult.stderr.includes('Unexpected identifier')) {
               throw new Error(`Syntax error: ${executionResult.stderr.trim()}`);
             }
           }
