@@ -353,9 +353,8 @@ export const runloop = defineProvider<
             throw error;
           }
           throw new Error(
-            `Runloop execution failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
@@ -394,7 +393,7 @@ export const runloop = defineProvider<
         } catch (error) {
           throw new Error(
             `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)
-            }`,
+            }`
           );
         }
       },
@@ -410,9 +409,8 @@ export const runloop = defineProvider<
             return result.stdout;
           } catch (error) {
             throw new Error(
-              `Failed to read file ${path}: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
+              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)
+              }`
             );
           }
         },
@@ -421,7 +419,7 @@ export const runloop = defineProvider<
           sandbox: any,
           path: string,
           content: string,
-          runCommand: any,
+          runCommand: any
         ): Promise<void> => {
           try {
             // Use command-based approach for file writing since API writeFileContents may have issues
@@ -479,7 +477,7 @@ export const runloop = defineProvider<
 
             return {
               name,
-              type: isDirectory ? ("directory" as const) : ("file" as const),
+              type: isDirectory ? 'directory' as const : 'file' as const,
               size: parseInt(parts[4]) || 0,
               modified: new Date(),
             };
