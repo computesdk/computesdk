@@ -631,7 +631,7 @@ export const runloop = defineProvider<
       },
 
       list: async (
-        config: RunloopConfig, 
+        config: RunloopConfig,
         options?: ListSnapshotsOptions
       ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
