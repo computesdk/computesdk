@@ -380,7 +380,7 @@ export const runloop = defineProvider<
 
       getUrl: async (
         sandbox: any,
-        options: { port: number },
+        options: { port: number }
       ): Promise<string> => {
         const devbox = sandbox;
         const client = sandbox.client;
@@ -393,8 +393,7 @@ export const runloop = defineProvider<
           return tunnel.url;
         } catch (error) {
           throw new Error(
-            `Failed to get Runloop URL for port ${options.port}: ${
-              error instanceof Error ? error.message : String(error)
+            `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)
             }`,
           );
         }
@@ -402,11 +401,7 @@ export const runloop = defineProvider<
 
       // Optional filesystem methods - using Runloop's file operations
       filesystem: {
-        readFile: async (
-          sandbox: any,
-          path: string,
-          runCommand: any,
-        ): Promise<string> => {
+        readFile: async (sandbox: any, path: string, runCommand: any): Promise<string> => {
           try {
             const result = await runCommand(sandbox, `cat "${path}"`);
             if (result.exitCode !== 0) {
@@ -441,9 +436,8 @@ export const runloop = defineProvider<
             }
           } catch (error) {
             throw new Error(
-              `Failed to write file ${path}: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
+              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)
+              }`
             );
           }
         },
@@ -451,7 +445,7 @@ export const runloop = defineProvider<
         mkdir: async (
           sandbox: any,
           path: string,
-          runCommand: any,
+          runCommand: any
         ): Promise<void> => {
           const result = await runCommand(sandbox, `mkdir -p "${path}"`);
           if (result.exitCode !== 0) {
@@ -464,7 +458,7 @@ export const runloop = defineProvider<
         readdir: async (
           sandbox: any,
           path: string,
-          runCommand: any,
+          runCommand: any
         ): Promise<FileEntry[]> => {
           const result = await runCommand(sandbox, `ls -la "${path}"`);
 
@@ -495,7 +489,7 @@ export const runloop = defineProvider<
         exists: async (
           sandbox: any,
           path: string,
-          runCommand: any,
+          runCommand: any
         ): Promise<boolean> => {
           const result = await runCommand(sandbox, `test -e "${path}"`);
           return result.exitCode === 0;
@@ -504,7 +498,7 @@ export const runloop = defineProvider<
         remove: async (
           sandbox: any,
           path: string,
-          runCommand: any,
+          runCommand: any
         ): Promise<void> => {
           const result = await runCommand(sandbox, `rm -rf "${path}"`);
           if (result.exitCode !== 0) {
@@ -542,9 +536,8 @@ export const runloop = defineProvider<
           return blueprint;
         } catch (error) {
           throw new Error(
-            `Failed to create blueprint template: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to create blueprint template: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
@@ -553,9 +546,7 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         if (!apiKey) {
-          throw new Error(
-            "Missing Runloop API key for listing blueprint templates",
-          );
+          throw new Error("Missing Runloop API key for listing blueprint templates");
         }
 
         try {
@@ -572,9 +563,8 @@ export const runloop = defineProvider<
           return response.blueprints || [];
         } catch (error) {
           throw new Error(
-            `Failed to list blueprint templates: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to list blueprint templates: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
@@ -596,9 +586,8 @@ export const runloop = defineProvider<
           await client.api.blueprints.delete(blueprintId);
         } catch (error) {
           throw new Error(
-            `Failed to delete blueprint template ${blueprintId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to delete blueprint template ${blueprintId}: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
@@ -637,9 +626,8 @@ export const runloop = defineProvider<
           return snapshot;
         } catch (error) {
           throw new Error(
-            `Failed to create snapshot for sandbox ${sandboxId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to create snapshot for sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
@@ -689,9 +677,8 @@ export const runloop = defineProvider<
           await client.api.devboxes.deleteDiskSnapshot(snapshotId);
         } catch (error) {
           throw new Error(
-            `Failed to delete snapshot ${snapshotId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to delete snapshot ${snapshotId}: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
