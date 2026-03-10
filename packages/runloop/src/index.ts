@@ -142,7 +142,7 @@ export const runloop = defineProvider<
           const dbx = await client.api.devboxes.createAndAwaitRunning(
             devboxParams,
           );
-          console.log("dbx", dbx.id);
+
           // Create a RunloopSandbox object that contains both devbox and client
           const runloopSandbox = {
             ...dbx, // Spread all DevboxView properties
