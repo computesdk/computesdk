@@ -1,5 +1,11 @@
 # @computesdk/just-bash
 
+## 0.4.0
+
+### Minor Changes
+
+- 0e4da83: fix empty object issue
+
 ## 0.3.0
 
 ### Minor Changes
