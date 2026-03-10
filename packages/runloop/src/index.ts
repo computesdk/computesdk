@@ -60,13 +60,13 @@ export interface CreateBlueprintTemplateOptions {
   }>;
   /** Resource size for devboxes created from this blueprint */
   resourceSize?:
-    | "X_SMALL"
-    | "SMALL"
-    | "MEDIUM"
-    | "LARGE"
-    | "X_LARGE"
-    | "XX_LARGE"
-    | "CUSTOM_SIZE";
+  | "X_SMALL"
+  | "SMALL"
+  | "MEDIUM"
+  | "LARGE"
+  | "X_LARGE"
+  | "XX_LARGE"
+  | "CUSTOM_SIZE";
   /** CPU architecture */
   architecture?: "x86_64" | "arm64";
   /** Custom CPU cores (requires CUSTOM_SIZE) */
@@ -87,10 +87,10 @@ export interface CreateBlueprintTemplateOptions {
  * Create a Runloop provider instance using the factory pattern
  */
 export const runloop = defineProvider<
-  Runloop.DevboxView, // TSandbox
-  RunloopConfig, // TConfig
-  RunloopTemplate, // TTemplate
-  RunloopSnapshot // TSnapshot
+  Runloop.DevboxView,         // TSandbox
+  RunloopConfig,              // TConfig
+  RunloopTemplate,            // TTemplate
+  RunloopSnapshot             // TSnapshot
 >({
   name: "runloop",
   methods: {
@@ -105,7 +105,7 @@ export const runloop = defineProvider<
 
         if (!apiKey) {
           throw new Error(
-            `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`,
+            `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`
           );
         }
 
@@ -137,7 +137,6 @@ export const runloop = defineProvider<
               // empty
             }
           }
-          devboxParams.launch_parameters!.architecture = "x86_64";
 
           const dbx = await client.api.devboxes.createAndAwaitRunning(
             devboxParams,
@@ -145,8 +144,8 @@ export const runloop = defineProvider<
 
           // Create a RunloopSandbox object that contains both devbox and client
           const runloopSandbox = {
-            ...dbx, // Spread all DevboxView properties
-            client: client, // Add client for method access
+            ...dbx,  // Spread all DevboxView properties
+            client: client // Add client for method access
           };
 
           return {
@@ -229,24 +228,25 @@ export const runloop = defineProvider<
         const client = sandbox.client;
 
         // Auto-detect runtime if not specified
-        const effectiveRuntime: Runtime =
-          runtime || // Strong Python indicators
-          ((code.includes("print(") ||
-          code.includes("import ") ||
-          code.includes("def ") ||
-          code.includes("sys.") ||
-          code.includes("json.") ||
-          code.includes("__") ||
-          code.includes('f"') ||
-          code.includes("f'") ||
-          code.includes("raise ")
-            ? "python"
-            : // Default to Node.js for all other cases (including ambiguous)
-              "node") as Runtime);
+        const effectiveRuntime: Runtime = runtime || (
+          // Strong Python indicators
+          code.includes('print(') ||
+            code.includes('import ') ||
+            code.includes('def ') ||
+            code.includes('sys.') ||
+            code.includes('json.') ||
+            code.includes('__') ||
+            code.includes('f"') ||
+            code.includes("f'") ||
+            code.includes('raise ')
+            ? 'python'
+            // Default to Node.js for all other cases (including ambiguous)
+            : 'node'
+        ) as Runtime;
 
         try {
           // Use base64 encoding for both runtimes for reliability and consistency
-          const encoded = Buffer.from(code).toString("base64");
+          const encoded = Buffer.from(code).toString('base64');
 
           let command;
           if (effectiveRuntime === "python") {
