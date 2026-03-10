@@ -324,7 +324,7 @@ export const runloop = defineProvider<
       runCommand: async (
         sandbox: any,
         command: string,
-        options?: RunCommandOptions,
+        options?: RunCommandOptions
       ): Promise<CommandResult> => {
         const startTime = Date.now();
         const devbox = sandbox;
@@ -338,15 +338,13 @@ export const runloop = defineProvider<
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
               .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(" ");
+              .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
 
           // Handle working directory
           if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(
-              options.cwd,
-            )}" && ${fullCommand}`;
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
 
           // Handle background execution
