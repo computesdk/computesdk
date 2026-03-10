@@ -1,5 +1,16 @@
 # @computesdk/workbench
 
+## 15.0.0
+
+### Minor Changes
+
+- 0e4da83: fix empty object issue
+
+### Patch Changes
+
+- Updated dependencies [0e4da83]
+  - @computesdk/just-bash@0.4.0
+
 ## 14.0.0
 
 ### Minor Changes
