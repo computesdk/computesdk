@@ -240,6 +240,7 @@ export const runloop = defineProvider<
         ) as Runtime;
 
         try {
+
           // Use base64 encoding for both runtimes for reliability and consistency
           const encoded = Buffer.from(code).toString('base64');
 
@@ -423,18 +424,15 @@ export const runloop = defineProvider<
         ): Promise<void> => {
           try {
             // Use command-based approach for file writing since API writeFileContents may have issues
-            const encoded = Buffer.from(content).toString("base64");
-            const result = await runCommand(
-              sandbox,
-              `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`,
-            );
+            const encoded = Buffer.from(content).toString('base64');
+            const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
 
             if (result.exitCode !== 0) {
               throw new Error(`Command failed: ${result.stderr}`);
             }
           } catch (error) {
             throw new Error(
-              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)
+              `Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)
               }`
             );
           }
@@ -448,7 +446,7 @@ export const runloop = defineProvider<
           const result = await runCommand(sandbox, `mkdir -p "${path}"`);
           if (result.exitCode !== 0) {
             throw new Error(
-              `Failed to create directory ${path}: ${result.stderr}`,
+              `Failed to create directory ${path}: ${result.stderr}`
             );
           }
         },
@@ -462,7 +460,7 @@ export const runloop = defineProvider<
 
           if (result.exitCode !== 0) {
             throw new Error(
-              `Failed to list directory ${path}: ${result.stderr}`,
+              `Failed to list directory ${path}: ${result.stderr}`
             );
           }
 
@@ -515,13 +513,13 @@ export const runloop = defineProvider<
     template: {
       create: async (
         config: RunloopConfig,
-        options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams,
+        options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams
       ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         if (!apiKey) {
           throw new Error(
-            "Missing Runloop API key for blueprint template creation",
+            "Missing Runloop API key for blueprint template creation"
           );
         }
 
@@ -544,7 +542,9 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         if (!apiKey) {
-          throw new Error("Missing Runloop API key for listing blueprint templates");
+          throw new Error(
+            "Missing Runloop API key for listing blueprint templates"
+          );
         }
 
         try {
@@ -572,7 +572,7 @@ export const runloop = defineProvider<
 
         if (!apiKey) {
           throw new Error(
-            "Missing Runloop API key for blueprint template deletion",
+            "Missing Runloop API key for blueprint template deletion"
           );
         }
 
@@ -596,7 +596,7 @@ export const runloop = defineProvider<
       create: async (
         config: RunloopConfig,
         sandboxId: string,
-        options?: CreateSnapshotOptions,
+        options?: CreateSnapshotOptions
       ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
@@ -630,7 +630,10 @@ export const runloop = defineProvider<
         }
       },
 
-      list: async (config: RunloopConfig, options?: ListSnapshotsOptions) => {
+      list: async (
+        config: RunloopConfig, 
+        options?: ListSnapshotsOptions
+      ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         if (!apiKey) {
@@ -647,9 +650,7 @@ export const runloop = defineProvider<
             listParams.limit = options.limit;
           }
 
-          const response = await client.api.devboxes.listDiskSnapshots(
-            listParams
-          );
+          const response = await client.api.devboxes.listDiskSnapshots(listParams);
           return response.snapshots || [];
         } catch (error) {
           throw new Error(
