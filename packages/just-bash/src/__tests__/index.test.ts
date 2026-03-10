@@ -25,6 +25,23 @@ describe('just-bash provider', () => {
     expect(provider.name).toBe('just-bash');
   });
 
+  it('should create a provider with no args (default config)', () => {
+    provider = justBash();
+    expect(provider.name).toBe('just-bash');
+  });
+
+  it('should create and destroy a sandbox with no args', async () => {
+    provider = justBash();
+    const sandbox = await provider.sandbox.create();
+    sandboxId = sandbox.sandboxId;
+
+    expect(sandbox.sandboxId).toBeTruthy();
+    expect(sandbox.provider).toBe('just-bash');
+
+    await sandbox.destroy();
+    sandboxId = null;
+  });
+
   it('should create and destroy a sandbox', async () => {
     provider = justBash({});
     const sandbox = await provider.sandbox.create();
