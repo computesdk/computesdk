@@ -621,7 +621,7 @@ export const runloop = defineProvider<
 
           const snapshot = await client.api.devboxes.snapshotDisk(
             sandboxId,
-            snapshotParams,
+            snapshotParams
           );
           return snapshot;
         } catch (error) {
@@ -650,14 +650,13 @@ export const runloop = defineProvider<
           }
 
           const response = await client.api.devboxes.listDiskSnapshots(
-            listParams,
+            listParams
           );
           return response.snapshots || [];
         } catch (error) {
           throw new Error(
-            `Failed to list snapshots: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to list snapshots: ${error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
