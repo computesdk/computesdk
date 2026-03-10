@@ -260,32 +260,27 @@ export const runloop = defineProvider<
           if (executionResult.exit_status !== 0 && executionResult.stderr) {
             // Check for common syntax error patterns
             if (executionResult.stderr.includes('SyntaxError') ||
-            executionResult.stderr.includes('invalid syntax') ||
-            executionResult.stderr.includes('Unexpected token') ||
-            executionResult.stderr.includes('Unexpected identifier')) {
+              executionResult.stderr.includes('invalid syntax') ||
+              executionResult.stderr.includes('Unexpected token') ||
+              executionResult.stderr.includes('Unexpected identifier')) {
               throw new Error(`Syntax error: ${executionResult.stderr.trim()}`);
             }
           }
 
           return {
-            output:
-              (executionResult.stdout || "") + (executionResult.stderr || ""),
+            output: (executionResult.stdout || "") + (executionResult.stderr || ""),
             exitCode: executionResult.exit_status || 0,
             language: effectiveRuntime,
           };
         } catch (error) {
           // Handle Runloop execution errors
-          if (error instanceof Error && error.message === "exit status 1") {
-            const actualStderr = (error as any)?.result?.stderr || "";
-            const isSyntaxError = actualStderr.includes("SyntaxError");
+          if (error instanceof Error && error.message === 'exit status 1') {
+            const actualStderr = (error as any)?.result?.stderr || '';
+            const isSyntaxError = actualStderr.includes('SyntaxError');
 
             if (isSyntaxError) {
-              // For syntax errors, throw
-              const syntaxErrorLine =
-                actualStderr
-                  .split("\n")
-                  .find((line: string) => line.includes("SyntaxError")) ||
-                "SyntaxError: Invalid syntax in code";
+              // For syntax errors, throw            
+              const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
               throw new Error(`Syntax error: ${syntaxErrorLine}`);
             } else {
               // For runtime errors, return a result instead of throwing
