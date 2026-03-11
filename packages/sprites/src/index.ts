@@ -2,7 +2,6 @@
  * Sprites Provider - Factory-based Implementation
  *
  * Cloud sandbox provider using the factory pattern.
- * API methods are stubbed and ready to be wired up.
  */
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
@@ -144,10 +143,14 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           }
 
           const data = await res.json() as SpritesSandbox[];
-          return data.map((sprite: SpritesSandbox) => ({
-            sandbox: sprite,
-            sandboxId: sprite.name,
-          }));
+          return data.map((sprite: SpritesSandbox) => {
+            sprite._token = token;
+            sprite._baseUrl = baseUrl;
+            return {
+              sandbox: sprite,
+              sandboxId: sprite.name,
+            };
+          });
         } catch (error) {
           return [];
         }
@@ -262,7 +265,11 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         const name = sandbox.name;
         const startTime = Date.now();
 
-        // Use bash with stdin to capture exit code via delimiter
+        // Limitation: The Sprites exec API returns a single response body, so
+        // stdout and stderr are merged via 2>&1. The combined output is assigned
+        // to stdout or stderr based on exit code. This means stderr writes from
+        // successful commands (e.g., warnings) appear in stdout, and stdout from
+        // failed commands is attributed to stderr.
         const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
         let shellCmd = command;
 
@@ -271,8 +278,14 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         }
 
         if (options?.env) {
+          const safeKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
           const envPrefix = Object.entries(options.env)
-            .map(([k, v]) => `${k}=${escapeShellArg(v)}`)
+            .map(([k, v]) => {
+              if (!safeKeyPattern.test(k)) {
+                throw new Error(`Invalid environment variable name: ${k}`);
+              }
+              return `${k}=${escapeShellArg(v)}`;
+            })
             .join(' ');
           shellCmd = `${envPrefix} ${shellCmd}`;
         }
@@ -376,9 +389,10 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       },
 
       getUrl: async (sandbox: SpritesSandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        // The sprite object has a `url` field from the API response.
-        // For port-specific access, the proxy WebSocket is at /v1/sprites/{name}/proxy
-        // but for HTTP access the sprite's url field is the public endpoint.
+        // Note: options.port is accepted for interface compatibility but not used.
+        // Sprites exposes a single public URL per sprite and does not support
+        // port-based routing. The API's /proxy endpoint uses WebSocket-based TCP
+        // tunneling, not HTTP port mapping like E2B or Modal.
         if (sandbox.url) {
           const protocol = options.protocol || 'https';
           const baseHost = sandbox.url.replace(/^https?:\/\//, '');
