@@ -1,41 +1,5 @@
 # @computesdk/workbench
 
-## 15.0.0
-
-### Minor Changes
-
-- 0e4da83: fix empty object issue
-
-### Patch Changes
-
-- Updated dependencies [0e4da83]
-  - @computesdk/just-bash@0.4.0
-
-## 14.0.0
-
-### Minor Changes
-
-- 711625d: fix workbench implementation of just-bash
-
-### Patch Changes
-
-- Updated dependencies [711625d]
-  - @computesdk/just-bash@0.3.0
-
-## 13.0.0
-
-### Patch Changes
-
-- Updated dependencies [6fad31f]
-  - @computesdk/just-bash@0.2.0
-
-## 12.0.0
-
-### Patch Changes
-
-- Updated dependencies [bc2193c]
-  - @computesdk/blaxel@1.6.0
-
 ## 11.0.0
 
 ### Patch Changes

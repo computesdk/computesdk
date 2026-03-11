@@ -22,7 +22,7 @@ export {
 /**
  * Default gateway URL for sandbox lifecycle operations
  */
-export const GATEWAY_URL = 'https://gateway.computesdk.com';
+export const TRIBUTARY_URL = 'https://tributary.edge.computesdk.com';
 
 /**
  * Provider detection priority order
@@ -41,7 +41,6 @@ export const PROVIDER_PRIORITY = [
   'blaxel',
   'namespace',
   'hopx',
-  'beam',
 ] as const;
 
 /**
@@ -61,6 +60,4 @@ export const PROVIDER_ENV_VARS = {
   blaxel: ['BL_API_KEY', 'BL_WORKSPACE'],
   namespace: ['NSC_TOKEN'],
   hopx: ['HOPX_API_KEY'],
-  beam: ['BEAM_TOKEN', 'BEAM_WORKSPACE_ID'],
-  'just-bash': [] as const,
 } as const;

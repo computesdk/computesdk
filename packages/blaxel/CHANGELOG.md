@@ -1,11 +1,5 @@
 # @computesdk/blaxel
 
-## 1.6.0
-
-### Minor Changes
-
-- bc2193c: update to Blaxel provider runCommand
-
 ## 1.5.9
 
 ### Patch Changes

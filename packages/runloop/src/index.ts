@@ -5,7 +5,7 @@
  * Reduces ~400 lines of boilerplate to ~100 lines of core logic.
  */
 
-import { RunloopSDK, type Runloop } from "@runloop/api-client";
+import { Runloop } from "@runloop/api-client";
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
 import type {
   CodeResult,
@@ -112,7 +112,7 @@ export const runloop = defineProvider<
         const timeout = config.timeout;
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
@@ -138,9 +138,7 @@ export const runloop = defineProvider<
             }
           }
 
-          const dbx = await client.api.devboxes.createAndAwaitRunning(
-            devboxParams,
-          );
+          const dbx = await client.devboxes.createAndAwaitRunning(devboxParams);
 
           // Create a RunloopSandbox object that contains both devbox and client
           const runloopSandbox = {
@@ -164,11 +162,11 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
-          const devbox = await client.api.devboxes.retrieve(sandboxId);
+          const devbox = await client.devboxes.retrieve(sandboxId);
 
           return {
             sandbox: devbox,
@@ -184,11 +182,11 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
-          const response = await client.api.devboxes.list();
+          const response = await client.devboxes.list();
           const devboxes = response.devboxes || [];
 
           return devboxes.map((devbox) => ({
@@ -205,11 +203,11 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
-          await client.api.devboxes.shutdown(sandboxId);
+          await client.devboxes.shutdown(sandboxId);
         } catch (error) {
           // Devbox might already be destroyed or doesn't exist
           // This is acceptable for destroy operations
@@ -252,10 +250,14 @@ export const runloop = defineProvider<
           }
 
           // Execute code using Runloop's executeAsync
-          const executionResult =
-            await client.api.devboxes.executeAndAwaitCompletion(devbox.id, {
-              command: command,
-            });
+          const execution = await client.devboxes.executeAsync(devbox.id, {
+            command: command,
+          });
+
+          const executionResult = await client.devboxes.executions.awaitCompleted(
+            devbox.id,
+            execution.execution_id
+          );
 
           // Check for syntax errors and throw them (similar to Vercel behavior)
           if (executionResult.exit_status !== 0 && executionResult.stderr) {
@@ -334,10 +336,15 @@ export const runloop = defineProvider<
             fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           }
 
+          const execution = await client.devboxes.executeAsync(devbox.id, {
+            command: fullCommand,
+          });
+
           const executionResult =
-            await client.api.devboxes.executeAndAwaitCompletion(devbox.id, {
-              command: fullCommand,
-            });
+            await client.devboxes.executions.awaitCompleted(
+              devbox.id,
+              execution.execution_id
+            );
 
           return {
             stdout: executionResult.stdout || "",
@@ -386,7 +393,7 @@ export const runloop = defineProvider<
         const client = sandbox.client;
 
         try {
-          const tunnel = await client.api.devboxes.createTunnel(devbox.id, {
+          const tunnel = await client.devboxes.createTunnel(devbox.id, {
             port: options.port,
           });
 
@@ -524,11 +531,11 @@ export const runloop = defineProvider<
         }
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
-          const blueprint = await client.api.blueprints.create(options);
+          const blueprint = await client.blueprints.create(options);
           return blueprint;
         } catch (error) {
           throw new Error(
@@ -548,7 +555,7 @@ export const runloop = defineProvider<
         }
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
@@ -557,7 +564,7 @@ export const runloop = defineProvider<
             listParams.limit = options.limit;
           }
 
-          const response = await client.api.blueprints.list(listParams);
+          const response = await client.blueprints.list(listParams);
           return response.blueprints || [];
         } catch (error) {
           throw new Error(
@@ -577,11 +584,11 @@ export const runloop = defineProvider<
         }
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
-          await client.api.blueprints.delete(blueprintId);
+          await client.blueprints.delete(blueprintId);
         } catch (error) {
           throw new Error(
             `Failed to delete blueprint template ${blueprintId}: ${error instanceof Error ? error.message : String(error)
@@ -605,7 +612,7 @@ export const runloop = defineProvider<
         }
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
@@ -617,7 +624,7 @@ export const runloop = defineProvider<
             snapshotParams.metadata = options.metadata;
           }
 
-          const snapshot = await client.api.devboxes.snapshotDisk(
+          const snapshot = await client.devboxes.snapshotDisk(
             sandboxId,
             snapshotParams
           );
@@ -641,7 +648,7 @@ export const runloop = defineProvider<
         }
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
@@ -650,7 +657,7 @@ export const runloop = defineProvider<
             listParams.limit = options.limit;
           }
 
-          const response = await client.api.devboxes.listDiskSnapshots(listParams);
+          const response = await client.devboxes.listDiskSnapshots(listParams);
           return response.snapshots || [];
         } catch (error) {
           throw new Error(
@@ -668,11 +675,11 @@ export const runloop = defineProvider<
         }
 
         try {
-          const client = new RunloopSDK({
+          const client = new Runloop({
             bearerToken: apiKey,
           });
 
-          await client.api.devboxes.deleteDiskSnapshot(snapshotId);
+          await client.devboxes.deleteDiskSnapshot(snapshotId);
         } catch (error) {
           throw new Error(
             `Failed to delete snapshot ${snapshotId}: ${error instanceof Error ? error.message : String(error)

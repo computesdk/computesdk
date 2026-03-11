@@ -661,7 +661,7 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
     
     // Special handling for "provider <mode> <name>" syntax (without parentheses)
     // Supports: "provider e2b", "provider direct e2b", "provider gateway e2b"
-    const providerMatch = trimmedCmd.match(/^provider(?:\s+(direct|gateway))?\s+([\w-]+)$/);
+    const providerMatch = trimmedCmd.match(/^provider(?:\s+(direct|gateway))?\s+(\w+)$/);
     if (providerMatch) {
       const mode = providerMatch[1] || null; // 'direct', 'gateway', or null
       const providerName = providerMatch[2];

@@ -7,6 +7,9 @@
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "computesdk-cloudflare": "./dist/setup.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,7 +18,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src/worker"
   ],
   "scripts": {
     "build": "tsup",
@@ -28,7 +32,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@cloudflare/sandbox": "^0.3.0",
+    "@cloudflare/sandbox": "^0.7.0",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },

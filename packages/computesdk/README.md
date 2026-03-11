@@ -2,6 +2,8 @@
 
 The gateway SDK for running code in remote sandboxes. Zero-config auto-detection with support for E2B, Modal, Railway, Daytona, Vercel, and more.
 
+Integration tests run against staging when credentials are available.
+
 ## Installation
 
 ```bash

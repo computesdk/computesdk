@@ -26,13 +26,14 @@ export const PROVIDER_AUTH = {
     ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
   ],
   runloop: [['RUNLOOP_API_KEY']],
-  cloudflare: [['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']],
+  cloudflare: [
+    ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
+    ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
+  ],
   codesandbox: [['CSB_API_KEY']],
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
-  beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
-  'just-bash': [[]],
 } as const;
 
 /**
@@ -79,6 +80,8 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     apiKey: 'X-Runloop-API-Key',
   },
   cloudflare: {
+    sandboxUrl: 'X-Cloudflare-Sandbox-Url',
+    sandboxSecret: 'X-Cloudflare-Sandbox-Secret',
     apiToken: 'X-Cloudflare-API-Token',
     accountId: 'X-Cloudflare-Account-Id',
   },
@@ -95,11 +98,6 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
   hopx: {
     apiKey: 'X-HOPX-API-Key',
   },
-  beam: {
-    token: 'X-Beam-Token',
-    workspaceId: 'X-Beam-Workspace-Id',
-  },
-  'just-bash': {},
 };
 
 /**
@@ -135,6 +133,8 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
     RUNLOOP_API_KEY: 'apiKey',
   },
   cloudflare: {
+    CLOUDFLARE_SANDBOX_URL: 'sandboxUrl',
+    CLOUDFLARE_SANDBOX_SECRET: 'sandboxSecret',
     CLOUDFLARE_API_TOKEN: 'apiToken',
     CLOUDFLARE_ACCOUNT_ID: 'accountId',
   },
@@ -152,11 +152,6 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
   hopx: {
     HOPX_API_KEY: 'apiKey',
   },
-  beam: {
-    BEAM_TOKEN: 'token',
-    BEAM_WORKSPACE_ID: 'workspaceId',
-  },
-  'just-bash': {},
 };
 
 /**
@@ -175,8 +170,6 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   blaxel: 'https://blaxel.ai/dashboard',
   namespace: 'https://cloud.namespace.so',
   hopx: 'https://hopx.ai/dashboard',
-  beam: 'https://app.beam.cloud',
-  'just-bash': 'https://github.com/vercel-labs/just-bash',
 };
 
 /**
