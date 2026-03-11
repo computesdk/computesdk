@@ -69,8 +69,8 @@ jobs:
       
       - name: Sync packages to core
         run: |
-          # Only sync packages/ - other files are managed in core
-          rsync -av --delete packages/ core-mirror/packages/
+          # Sync packages/ to core (additive only - core may have extra files not in OSS)
+          rsync -av packages/ core-mirror/packages/
       
       - name: Regenerate lockfile
         run: |
