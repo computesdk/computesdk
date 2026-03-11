@@ -33,6 +33,14 @@ export interface SpritesConfig {
 }
 
 /**
+ * Strip terminal control characters (SOH, etc.) from exec output
+ */
+function stripControlChars(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/[\x00-\x08\x0e-\x1f]/g, '');
+}
+
+/**
  * Create a Sprites provider instance using the factory pattern
  */
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
@@ -183,10 +191,11 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         );
 
         // Use base64 encoding to safely pass code via shell
+        // Wrap with exit code capture using a unique delimiter
         const encoded = Buffer.from(code).toString('base64');
-        const shellCmd = effectiveRuntime === 'python'
-          ? `echo "${encoded}" | base64 -d | python3`
-          : `echo "${encoded}" | base64 -d | node`;
+        const interpreter = effectiveRuntime === 'python' ? 'python3' : 'node';
+        const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
+        const shellCmd = `echo "${encoded}" | base64 -d | ${interpreter} 2>&1; echo "${delimiter}$?"`;
 
         const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
         url.searchParams.set('cmd', 'bash');
@@ -202,22 +211,43 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
             body: shellCmd,
           });
 
-          const output = await res.text();
+          const raw = await res.text();
 
           if (!res.ok) {
-            if (output.includes('SyntaxError') || output.includes('invalid syntax') ||
-                output.includes('Unexpected token') || output.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${output.trim()}`);
-            }
+            throw new Error(`Sprites API error (${res.status}): ${raw}`);
+          }
+
+          // Parse exit code from delimiter
+          const delimIdx = raw.lastIndexOf(delimiter);
+          let output: string;
+          let exitCode: number;
+
+          if (delimIdx !== -1) {
+            output = stripControlChars(raw.substring(0, delimIdx));
+            exitCode = parseInt(raw.substring(delimIdx + delimiter.length).trim(), 10) || 0;
+          } else {
+            output = stripControlChars(raw);
+            exitCode = 0;
+          }
+
+          // Throw on syntax errors
+          if (exitCode !== 0 && (
+            output.includes('SyntaxError') || output.includes('invalid syntax') ||
+            output.includes('Unexpected token') || output.includes('Unexpected identifier')
+          )) {
+            throw new Error(`Syntax error: ${output.trim()}`);
           }
 
           return {
             output,
-            exitCode: res.ok ? 0 : 1,
+            exitCode,
             language: effectiveRuntime,
           };
         } catch (error) {
-          if (error instanceof Error && error.message.includes('Syntax error')) {
+          if (error instanceof Error && (
+            error.message.includes('Syntax error') ||
+            error.message.includes('Sprites API error')
+          )) {
             throw error;
           }
           throw new Error(
@@ -232,36 +262,65 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         const name = sandbox.name;
         const startTime = Date.now();
 
-        const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
-
-        // Split command into cmd + args for query params
-        const parts = command.split(' ');
-        parts.forEach(part => url.searchParams.append('cmd', part));
+        // Use bash with stdin to capture exit code via delimiter
+        const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
+        let shellCmd = command;
 
         if (options?.cwd) {
-          url.searchParams.set('dir', options.cwd);
+          shellCmd = `cd ${escapeShellArg(options.cwd)} && ${shellCmd}`;
         }
 
         if (options?.env) {
-          Object.entries(options.env).forEach(([k, v]) => {
-            url.searchParams.append('env', `${k}=${v}`);
-          });
+          const envPrefix = Object.entries(options.env)
+            .map(([k, v]) => `${k}=${escapeShellArg(v)}`)
+            .join(' ');
+          shellCmd = `${envPrefix} ${shellCmd}`;
         }
+
+        shellCmd = `${shellCmd} 2>&1; echo "${delimiter}$?"`;
+
+        const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
+        url.searchParams.set('cmd', 'bash');
+        url.searchParams.set('stdin', 'true');
 
         try {
           const res = await fetch(url.toString(), {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
+              'Content-Type': 'text/plain',
             },
+            body: shellCmd,
           });
 
-          const output = await res.text();
+          const raw = await res.text();
+
+          if (!res.ok) {
+            return {
+              stdout: '',
+              stderr: raw,
+              exitCode: 1,
+              durationMs: Date.now() - startTime,
+            };
+          }
+
+          // Parse exit code from delimiter
+          const delimIdx = raw.lastIndexOf(delimiter);
+          let output: string;
+          let exitCode: number;
+
+          if (delimIdx !== -1) {
+            output = stripControlChars(raw.substring(0, delimIdx));
+            exitCode = parseInt(raw.substring(delimIdx + delimiter.length).trim(), 10) || 0;
+          } else {
+            output = stripControlChars(raw);
+            exitCode = 0;
+          }
 
           return {
-            stdout: res.ok ? output : '',
-            stderr: res.ok ? '' : output,
-            exitCode: res.ok ? 0 : 1,
+            stdout: exitCode === 0 ? output : '',
+            stderr: exitCode !== 0 ? output : '',
+            exitCode,
             durationMs: Date.now() - startTime,
           };
         } catch (error) {
@@ -457,19 +516,29 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           const baseUrl = sandbox._baseUrl;
           const name = sandbox.name;
 
-          // No dedicated exists endpoint; try reading the file
-          const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/read`);
-          url.searchParams.set('path', filePath);
-          url.searchParams.set('workingDir', '/');
+          // Try reading as a file first
+          const fileUrl = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/read`);
+          fileUrl.searchParams.set('path', filePath);
+          fileUrl.searchParams.set('workingDir', '/');
 
-          const res = await fetch(url.toString(), {
+          const fileRes = await fetch(fileUrl.toString(), {
             method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
 
-          return res.ok;
+          if (fileRes.ok) return true;
+
+          // If file read fails, try listing as a directory
+          const dirUrl = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/list`);
+          dirUrl.searchParams.set('path', filePath);
+          dirUrl.searchParams.set('workingDir', '/');
+
+          const dirRes = await fetch(dirUrl.toString(), {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+
+          return dirRes.ok;
         },
 
         remove: async (sandbox: SpritesSandbox, filePath: string): Promise<void> => {
