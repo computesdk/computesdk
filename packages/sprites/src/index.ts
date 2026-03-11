@@ -78,7 +78,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
 
           return {
             sandbox: data,
-            sandboxId: data.id,
+            sandboxId: data.name,
           };
         } catch (error) {
           if (error instanceof Error && error.message.includes('Sprites API error')) {
@@ -112,7 +112,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
 
           return {
             sandbox: data,
-            sandboxId: data.id,
+            sandboxId: data.name,
           };
         } catch (error) {
           return null;
@@ -138,7 +138,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           const data = await res.json() as SpritesSandbox[];
           return data.map((sprite: SpritesSandbox) => ({
             sandbox: sprite,
-            sandboxId: sprite.id,
+            sandboxId: sprite.name,
           }));
         } catch (error) {
           return [];
@@ -165,7 +165,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       runCode: async (sandbox: SpritesSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         const token = sandbox._token;
         const baseUrl = sandbox._baseUrl;
-        const name = sandbox.id;
+        const name = sandbox.name;
 
         // Auto-detect runtime if not specified
         const effectiveRuntime = runtime || (
@@ -229,7 +229,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       runCommand: async (sandbox: SpritesSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const token = sandbox._token;
         const baseUrl = sandbox._baseUrl;
-        const name = sandbox.id;
+        const name = sandbox.name;
         const startTime = Date.now();
 
         const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
@@ -277,7 +277,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       getInfo: async (sandbox: SpritesSandbox): Promise<SandboxInfo> => {
         const token = sandbox._token;
         const baseUrl = sandbox._baseUrl;
-        const name = sandbox.id;
+        const name = sandbox.name;
 
         try {
           const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(name)}`, {
@@ -329,7 +329,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         // Fallback: fetch fresh sprite data to get the url
         const token = sandbox._token;
         const baseUrl = sandbox._baseUrl;
-        const name = sandbox.id;
+        const name = sandbox.name;
 
         const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(name)}`, {
           method: 'GET',
@@ -353,7 +353,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         readFile: async (sandbox: SpritesSandbox, filePath: string): Promise<string> => {
           const token = sandbox._token;
           const baseUrl = sandbox._baseUrl;
-          const name = sandbox.id;
+          const name = sandbox.name;
 
           const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/read`);
           url.searchParams.set('path', filePath);
@@ -376,7 +376,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         writeFile: async (sandbox: SpritesSandbox, filePath: string, content: string): Promise<void> => {
           const token = sandbox._token;
           const baseUrl = sandbox._baseUrl;
-          const name = sandbox.id;
+          const name = sandbox.name;
 
           const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/write`);
           url.searchParams.set('path', filePath);
@@ -400,7 +400,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         mkdir: async (sandbox: SpritesSandbox, dirPath: string): Promise<void> => {
           const token = sandbox._token;
           const baseUrl = sandbox._baseUrl;
-          const name = sandbox.id;
+          const name = sandbox.name;
 
           // Use writeFile with mkdir=true to create a placeholder, ensuring the directory exists
           // Alternatively, write an empty .keep file in the directory
@@ -426,7 +426,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         readdir: async (sandbox: SpritesSandbox, dirPath: string): Promise<FileEntry[]> => {
           const token = sandbox._token;
           const baseUrl = sandbox._baseUrl;
-          const name = sandbox.id;
+          const name = sandbox.name;
 
           const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/list`);
           url.searchParams.set('path', dirPath);
@@ -455,7 +455,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         exists: async (sandbox: SpritesSandbox, filePath: string): Promise<boolean> => {
           const token = sandbox._token;
           const baseUrl = sandbox._baseUrl;
-          const name = sandbox.id;
+          const name = sandbox.name;
 
           // No dedicated exists endpoint; try reading the file
           const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/read`);
@@ -475,7 +475,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         remove: async (sandbox: SpritesSandbox, filePath: string): Promise<void> => {
           const token = sandbox._token;
           const baseUrl = sandbox._baseUrl;
-          const name = sandbox.id;
+          const name = sandbox.name;
 
           const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/delete`);
           url.searchParams.set('path', filePath);
