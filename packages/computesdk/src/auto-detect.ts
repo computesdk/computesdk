@@ -206,6 +206,12 @@ export function getProviderHeaders(provider: string): Record<string, string> {
       }
       break;
 
+    case 'sprites':
+      if (process.env.SPRITES_TOKEN) {
+        headers['X-Sprites-Token'] = process.env.SPRITES_TOKEN;
+      }
+      break;
+
     case 'just-bash':
       // No headers needed - just-bash runs locally
       break;
@@ -277,6 +283,7 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  HopX:       export HOPX_API_KEY=xxx\n` +
       `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n` +
       `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n` +
+      `  Sprites:    export SPRITES_TOKEN=xxx\n` +
       `  just-bash:  (no credentials needed - local sandbox)\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=<provider>\n\n` +
