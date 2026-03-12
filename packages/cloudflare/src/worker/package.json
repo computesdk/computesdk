@@ -1,0 +1,8 @@
+{
+  "name": "computesdk-sandbox-worker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cloudflare/sandbox": "^0.7.0"
+  }
+}
