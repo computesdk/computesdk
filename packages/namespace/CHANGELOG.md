@@ -1,18 +1,5 @@
 # @computesdk/namespace
 
-## 1.6.0
-
-### Minor Changes
-
-- d3341e6: implement refactored provider package for namespace
-- d3341e6: Update namespace provider to infra model provider
-
-### Patch Changes
-
-- Updated dependencies [d3341e6]
-  - computesdk@2.5.0
-  - @computesdk/provider@1.0.30
-
 ## 1.5.1
 
 ### Patch Changes
