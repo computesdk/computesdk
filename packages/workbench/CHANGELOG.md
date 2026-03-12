@@ -1,5 +1,31 @@
 # @computesdk/workbench
 
+## 16.0.0
+
+### Minor Changes
+
+- 3c4e595: Add sprites provider package
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+  - @computesdk/sprites@0.1.0
+  - @computesdk/beam@0.1.1
+  - @computesdk/blaxel@1.6.1
+  - @computesdk/cloudflare@1.3.36
+  - @computesdk/codesandbox@1.5.37
+  - @computesdk/daytona@1.7.17
+  - @computesdk/e2b@1.7.37
+  - @computesdk/hopx@0.2.13
+  - @computesdk/just-bash@0.4.1
+  - @computesdk/modal@1.8.32
+  - @computesdk/namespace@1.5.1
+  - @computesdk/provider@1.0.29
+  - @computesdk/railway@1.1.36
+  - @computesdk/runloop@1.3.37
+  - @computesdk/vercel@1.7.16
+
 ## 15.0.0
 
 ### Minor Changes

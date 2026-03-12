@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.4.0
+
+### Minor Changes
+
+- 3c4e595: Add sprites provider package
+
 ## 2.3.0
 
 ### Minor Changes
