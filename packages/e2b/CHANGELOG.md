@@ -1,5 +1,14 @@
 # @computesdk/e2b
 
+## 1.7.38
+
+### Patch Changes
+
+- d3341e6: Update packages for direct providers, fix runloop keep_alive default, and update daytona list method
+- Updated dependencies [d3341e6]
+  - computesdk@2.5.0
+  - @computesdk/provider@1.0.30
+
 ## 1.7.37
 
 ### Patch Changes
