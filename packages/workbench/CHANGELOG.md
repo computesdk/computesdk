@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 17.0.0
+
+### Patch Changes
+
+- Updated dependencies [65d38ed]
+  - @computesdk/cloudflare@1.4.0
+
 ## 16.0.0
 
 ### Minor Changes
