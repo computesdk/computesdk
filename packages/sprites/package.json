@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/blaxel",
-  "version": "1.6.1",
-  "description": "Blaxel provider for ComputeSDK - lightweight cloud sandboxes for code execution",
-  "author": "ComputeSDK",
+  "name": "@computesdk/sprites",
+  "version": "0.1.0",
+  "description": "Sprites provider for ComputeSDK - cloud sandboxes powered by Sprites",
+  "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -29,23 +29,21 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*",
-    "@blaxel/core": "^0.2.71"
+    "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",
-    "blaxel",
+    "sprites",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "provider",
-    "containers"
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/blaxel"
+    "directory": "packages/sprites"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {

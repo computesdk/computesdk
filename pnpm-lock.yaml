@@ -935,8 +935,42 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@runloop/api-client':
-        specifier: ^1.8.1
-        version: 1.8.1
+        specifier: ^1.11.0
+        version: 1.11.0
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.5
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.0(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/sprites:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -1072,6 +1106,9 @@ importers:
       '@computesdk/runloop':
         specifier: workspace:*
         version: link:../runloop
+      '@computesdk/sprites':
+        specifier: workspace:*
+        version: link:../sprites
       '@computesdk/vercel':
         specifier: workspace:*
         version: link:../vercel
@@ -2918,8 +2955,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@runloop/api-client@1.8.1':
-    resolution: {integrity: sha512-IZc2TVdf1WRkQ+MLYNiQPFxMSDvdGwsixAzUjCC9BRb+2u+v4u6OzDV6gKwTCLVJ0xjOrNly89VwacO9lClPRQ==}
+  '@runloop/api-client@1.11.0':
+    resolution: {integrity: sha512-3m31w9k6xwfcYbkQrZfkdGdR5ZJPgGTADpHie+edJcoAzS/u0dpcZnuWOoM06b1Z5+wRXyOxW475wJN9eIioBw==}
 
   '@sentry/core@9.46.0':
     resolution: {integrity: sha512-it7JMFqxVproAgEtbLgCVBYtQ9fIb+Bu0JD+cEplTN/Ukpe6GaolyYib5geZqslVxhp2sQgT+58aGvfd/k0N8Q==}
@@ -9216,7 +9253,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@runloop/api-client@1.8.1':
+  '@runloop/api-client@1.11.0':
     dependencies:
       '@types/node': 18.19.123
       '@types/node-fetch': 2.6.13
@@ -9757,7 +9794,7 @@ snapshots:
   '@types/node-fetch@2.6.13':
     dependencies:
       '@types/node': 20.19.5
-      form-data: 4.0.4
+      form-data: 4.0.5
 
   '@types/node@12.20.55': {}
 
@@ -10102,7 +10139,7 @@ snapshots:
   axios@1.11.0:
     dependencies:
       follow-redirects: 1.15.11
-      form-data: 4.0.4
+      form-data: 4.0.5
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
       - debug

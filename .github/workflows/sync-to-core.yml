@@ -69,12 +69,14 @@ jobs:
       
       - name: Sync packages to core
         run: |
-          # Only sync packages/ - other files are managed in core
-          rsync -av --delete packages/ core-mirror/packages/
+          # Sync packages/ to core (additive only - core may have extra files not in OSS)
+          rsync -av packages/ core-mirror/packages/
       
       - name: Regenerate lockfile
         run: |
           cd core-mirror
+          # Remove stale esbuild binary from runner image to avoid version conflict during postinstall
+          rm -f "$(which esbuild 2>/dev/null)" 2>/dev/null || true
           pnpm install --no-frozen-lockfile
       
       - name: Check for changes and commit

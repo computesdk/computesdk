@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import * as indexExports from '../index';
 import { justBash } from '../index';
 
 describe('just-bash provider', () => {
@@ -12,9 +13,33 @@ describe('just-bash provider', () => {
     }
   });
 
+  it('should be resolvable via camelCase conversion of the hyphenated provider name', () => {
+    // Workbench resolves hyphenated provider names by converting to camelCase:
+    // 'just-bash' -> 'justBash'. This test guards against regressions in that contract.
+    const exportName = 'just-bash'.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+    expect(typeof (indexExports as Record<string, unknown>)[exportName]).toBe('function');
+  });
+
   it('should create a provider with the correct name', () => {
     provider = justBash({});
     expect(provider.name).toBe('just-bash');
+  });
+
+  it('should create a provider with no args (default config)', () => {
+    provider = justBash();
+    expect(provider.name).toBe('just-bash');
+  });
+
+  it('should create and destroy a sandbox with no args', async () => {
+    provider = justBash();
+    const sandbox = await provider.sandbox.create();
+    sandboxId = sandbox.sandboxId;
+
+    expect(sandbox.sandboxId).toBeTruthy();
+    expect(sandbox.provider).toBe('just-bash');
+
+    await sandbox.destroy();
+    sandboxId = null;
   });
 
   it('should create and destroy a sandbox', async () => {
