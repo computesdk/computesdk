@@ -1,0 +1,21 @@
+{
+  "name": "computesdk-sandbox",
+  "main": "index.ts",
+  "compatibility_date": "2025-10-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "./Dockerfile",
+      "max_instances": 10
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "Sandbox", "name": "Sandbox" }
+    ]
+  },
+  "migrations": [
+    { "new_sqlite_classes": ["Sandbox"], "tag": "v1" }
+  ]
+}

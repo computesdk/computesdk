@@ -26,7 +26,10 @@ export const PROVIDER_AUTH = {
     ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
   ],
   runloop: [['RUNLOOP_API_KEY']],
-  cloudflare: [['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']],
+  cloudflare: [
+    ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
+    ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
+  ],
   codesandbox: [['CSB_API_KEY']],
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
@@ -80,6 +83,8 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     apiKey: 'X-Runloop-API-Key',
   },
   cloudflare: {
+    sandboxUrl: 'X-Cloudflare-Sandbox-Url',
+    sandboxSecret: 'X-Cloudflare-Sandbox-Secret',
     apiToken: 'X-Cloudflare-API-Token',
     accountId: 'X-Cloudflare-Account-Id',
   },
@@ -139,6 +144,8 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
     RUNLOOP_API_KEY: 'apiKey',
   },
   cloudflare: {
+    CLOUDFLARE_SANDBOX_URL: 'sandboxUrl',
+    CLOUDFLARE_SANDBOX_SECRET: 'sandboxSecret',
     CLOUDFLARE_API_TOKEN: 'apiToken',
     CLOUDFLARE_ACCOUNT_ID: 'accountId',
   },

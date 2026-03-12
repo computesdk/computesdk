@@ -1,12 +1,15 @@
 {
   "name": "@computesdk/cloudflare",
-  "version": "1.3.36",
+  "version": "1.4.1",
   "description": "Cloudflare provider for ComputeSDK - edge code execution using Cloudflare Workers and Durable Objects",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "computesdk-cloudflare": "./dist/setup.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,7 +18,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src/worker"
   ],
   "scripts": {
     "build": "tsup",
@@ -28,7 +32,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@cloudflare/sandbox": "^0.3.0",
+    "@cloudflare/sandbox": "^0.7.0",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
