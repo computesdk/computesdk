@@ -1,5 +1,11 @@
 # @computesdk/cloudflare
 
+## 1.4.1
+
+### Patch Changes
+
+- 0d0f3d6: fresh build
+
 ## 1.4.0
 
 ### Minor Changes
