@@ -1,5 +1,11 @@
 # @computesdk/cloudflare
 
+## 1.5.0
+
+### Minor Changes
+
+- ce531c2: remove cloudflare from excluded package builds
+
 ## 1.4.1
 
 ### Patch Changes

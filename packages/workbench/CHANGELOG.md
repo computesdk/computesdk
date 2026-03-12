@@ -1,5 +1,16 @@
 # @computesdk/workbench
 
+## 18.0.0
+
+### Minor Changes
+
+- ce531c2: remove cloudflare from excluded package builds
+
+### Patch Changes
+
+- Updated dependencies [ce531c2]
+  - @computesdk/cloudflare@1.5.0
+
 ## 17.0.1
 
 ### Patch Changes
