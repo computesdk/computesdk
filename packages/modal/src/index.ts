@@ -13,7 +13,7 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 // Import Modal SDK
-import { App, Sandbox, initializeClient } from 'modal';
+import { App, ModalClient, Sandbox, initializeClient } from 'modal';
 
 /**
  * Modal-specific configuration options
@@ -94,20 +94,20 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
 
         try {
           // Initialize Modal client with credentials
-          initializeClient({ tokenId, tokenSecret });
+          const client = new ModalClient({ tokenId, tokenSecret });
 
           let sandbox: any;
           let sandboxId: string;
 
           if (options?.sandboxId) {
             // Reconnect to existing Modal sandbox
-            sandbox = await Sandbox.fromId(options.sandboxId);
+            sandbox = await client.sandboxes.fromId(options.sandboxId);
             sandboxId = options.sandboxId;
           } else {
             // Create new Modal sandbox with Node.js (more appropriate for a Node.js SDK)
-            const app = await App.lookup('computesdk-modal', { createIfMissing: true });
-            const image = await app.imageFromRegistry('node:20');
-            
+            const app = await client.apps.fromName('computesdk-modal', { createIfMissing: true });
+            const image = await client.images.fromRegistry('node:20');
+
             // Configure sandbox options
             const sandboxOptions: any = {}; // Using 'any' since Modal SDK is alpha
             
@@ -123,7 +123,7 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
               sandboxOptions.timeout = config.timeout;
             }
             
-            sandbox = await app.createSandbox(image, sandboxOptions);
+            sandbox = await client.sandboxes.create(app, image, sandboxOptions);
             sandboxId = sandbox.sandboxId;
           }
 
@@ -160,8 +160,8 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
         const tokenSecret = config.tokenSecret || process.env.MODAL_TOKEN_SECRET!;
 
         try {
-          initializeClient({ tokenId, tokenSecret });
-          const sandbox = await Sandbox.fromId(sandboxId);
+          const client = new ModalClient({ tokenId, tokenSecret });
+          const sandbox = await client.sandboxes.fromId(sandboxId);
 
           const modalSandbox: ModalSandbox = {
             sandbox,
@@ -184,9 +184,13 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
         );
       },
 
-      destroy: async (_config: ModalConfig, sandboxId: string) => {
+      destroy: async (config: ModalConfig, sandboxId: string) => {
+        const tokenId = config.tokenId || process.env.MODAL_TOKEN_ID!;
+        const tokenSecret = config.tokenSecret || process.env.MODAL_TOKEN_SECRET!;
+
         try {
-          const sandbox = await Sandbox.fromId(sandboxId);
+          const client = new ModalClient({ tokenId, tokenSecret });
+          const sandbox = await client.sandboxes.fromId(sandboxId);
           if (sandbox && typeof sandbox.terminate === 'function') {
             await sandbox.terminate();
           }
