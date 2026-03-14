@@ -1,11 +1,8 @@
 name: Sync to computesdk-core
 
+# Disabled: sync is unreliable due to runner environment issues (esbuild, pnpm).
+# Re-enable when stabilized. Manual sync via workflow_dispatch still available.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'packages/**'
   workflow_dispatch:
     inputs:
       force:
