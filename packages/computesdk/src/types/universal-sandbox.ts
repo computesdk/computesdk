@@ -23,7 +23,7 @@
  *   // Just implement core methods
  * }
  * ```
- * 
+ *
  * @example Full implementation
  * ```typescript
  * class FullSandbox implements Sandbox {
@@ -31,6 +31,8 @@
  * }
  * ```
  */
+
+import type { CodeSearchOptions, CodeSearchResult } from '../code-search';
 
 /**
  * Supported runtime environments
@@ -106,6 +108,26 @@ export interface SandboxFileSystem {
   mkdir(path: string): Promise<void>;
   exists(path: string): Promise<boolean>;
   remove(path: string): Promise<void>;
+
+  /**
+   * Semantic code search powered by Morph WarpGrep.
+   *
+   * Searches the sandbox filesystem for code matching a natural-language query.
+   *
+   * @param query - Natural-language description of what to find
+   * @param directory - Root directory to search (defaults to "/home/user")
+   * @param options - Optional configuration (API key, excludes, includes)
+   * @returns Array of code search results with file paths, content, and line ranges
+   *
+   * @example
+   * ```typescript
+   * const results = await sandbox.filesystem.codeSearch('Find authentication middleware');
+   * for (const r of results) {
+   *   console.log(`${r.file}: ${r.content.slice(0, 100)}`);
+   * }
+   * ```
+   */
+  codeSearch?(query: string, directory?: string, options?: CodeSearchOptions): Promise<CodeSearchResult[]>;
 }
 
 /**
