@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.5.0
+
+### Minor Changes
+
+- fa0211f: implement refactored provider package for namespace
+
 ## 2.4.0
 
 ### Minor Changes
