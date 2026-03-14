@@ -47,7 +47,8 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@computesdk/cmd": "workspace:*"
+    "@computesdk/cmd": "workspace:*",
+    "@morphllm/morphsdk": "^0.2.143"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

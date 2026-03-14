@@ -14,6 +14,7 @@ import { TerminalInstance } from './terminal';
 import { FileWatcher } from './file-watcher';
 import { SignalService } from './signal-service';
 import { escapeArgs, mkdir, test } from '@computesdk/cmd';
+import { executeCodeSearch } from '../code-search';
 
 // Import resource namespaces
 import {
@@ -982,6 +983,9 @@ export class Sandbox {
       },
       remove: async (path: string) => {
         await this.deleteFile(path);
+      },
+      codeSearch: async (query, directory, options) => {
+        return executeCodeSearch(this, query, directory, options);
       },
       overlay: new Overlay({
         create: async (options: CreateOverlayOptions) => this.createOverlay(options),
