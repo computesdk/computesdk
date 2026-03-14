@@ -1,116 +1,117 @@
 /**
  * Code Search Example
  *
- * This example shows how to use ComputeSDK's codeSearch feature, powered by
- * Morph WarpGrep, to run semantic code searches inside a sandbox.
+ * Shows two ways to use Morph WarpGrep code search with ComputeSDK:
+ *   1. Gateway mode:  sandbox.filesystem.codeSearch()
+ *   2. Direct mode:   executeCodeSearch(sandbox, ...)  — works with ANY provider
  *
  * Prerequisites:
- *   - MORPH_API_KEY (or COMPUTESDK_API_KEY) – get yours at https://morphllm.com/dashboard
- *   - A sandbox provider API key (e.g. E2B_API_KEY)
+ *   - MORPH_API_KEY – get yours at https://morphllm.com/dashboard
+ *   - A sandbox provider API key (e.g. E2B_API_KEY, MODAL_TOKEN_ID/SECRET)
  */
 
-import { compute } from 'computesdk';
+import { compute, executeCodeSearch } from 'computesdk';
 import { config } from 'dotenv';
-config(); // Load environment variables from .env file
+config();
+
+// Sample files to write into the sandbox
+const FILES: Record<string, string> = {
+  '/workspace/src/auth/middleware.ts': `
+import jwt from 'jsonwebtoken';
+
+export function authMiddleware(req: any, res: any, next: any) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET!);
+    next();
+  } catch { res.status(401).json({ error: 'Invalid token' }); }
+}`,
+  '/workspace/src/routes/api.ts': `
+import { Router } from 'express';
+import { authMiddleware } from '../auth/middleware';
+
+const router = Router();
+router.get('/users', authMiddleware, (req, res) => res.json([]));
+router.post('/users', authMiddleware, (req, res) => res.status(201).json(req.body));
+export default router;`,
+  '/workspace/src/db/connection.ts': `
+import { Pool } from 'pg';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const query = (text: string, params?: any[]) => pool.query(text, params);
+export const getClient = () => pool.connect();`,
+};
+
+// ----------------------------------------------------------------
+// 1. Gateway mode — sandbox.filesystem.codeSearch()
+// ----------------------------------------------------------------
+async function gatewayExample() {
+  console.log('=== Gateway Mode ===\n');
+
+  compute.setConfig({
+    provider: 'e2b',
+    apiKey: process.env.COMPUTESDK_API_KEY || 'local',
+    e2b: { apiKey: process.env.E2B_API_KEY },
+  });
+
+  const sandbox = await compute.sandbox.create();
+  for (const [path, content] of Object.entries(FILES)) {
+    await sandbox.filesystem.writeFile(path, content);
+  }
+
+  const results = await sandbox.filesystem.codeSearch!(
+    'How is authentication handled?',
+    '/workspace',
+  );
+
+  console.log(`Found ${results.length} result(s):`);
+  for (const r of results) console.log(`  ${r.file}`);
+
+  await sandbox.destroy();
+}
+
+// ----------------------------------------------------------------
+// 2. Direct mode — executeCodeSearch(sandbox, ...) with any provider
+// ----------------------------------------------------------------
+async function directExample() {
+  console.log('\n=== Direct Mode (works with any provider) ===\n');
+
+  // Works the same with: modal(), e2b(), daytona(), etc.
+  const { modal } = await import('@computesdk/modal');
+  const provider = modal({
+    tokenId: process.env.MODAL_TOKEN_ID,
+    tokenSecret: process.env.MODAL_TOKEN_SECRET,
+  });
+
+  const sandbox = await provider.sandbox.create();
+
+  for (const [path, content] of Object.entries(FILES)) {
+    await sandbox.runCommand(`mkdir -p $(dirname ${path}) && cat > ${path} << 'FILEEOF'\n${content}\nFILEEOF`);
+  }
+
+  // executeCodeSearch works with ANY sandbox — gateway or direct
+  const results = await executeCodeSearch(
+    sandbox,
+    'How is authentication handled?',
+    '/workspace',
+  );
+
+  console.log(`Found ${results.length} result(s):`);
+  for (const r of results) console.log(`  ${r.file}`);
+
+  await sandbox.destroy();
+}
 
 async function main() {
   if (!process.env.MORPH_API_KEY) {
-    console.error('Please set MORPH_API_KEY environment variable');
-    console.error('Get yours at https://morphllm.com/dashboard');
+    console.error('Set MORPH_API_KEY — get yours at https://morphllm.com/dashboard');
     process.exit(1);
   }
 
-  try {
-    // Configure compute – adjust the provider to match your setup
-    compute.setConfig({
-      provider: 'e2b',
-      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
-      e2b: { apiKey: process.env.E2B_API_KEY },
-    });
-
-    // Create a sandbox
-    const sandbox = await compute.sandbox.create();
-    console.log('Created sandbox:', sandbox.sandboxId);
-
-    // Write some sample files so there is code to search through
-    await sandbox.filesystem.writeFile(
-      '/home/user/auth.ts',
-      `export function verifyToken(token: string): boolean {
-  // TODO: implement JWT verification
-  return token.length > 0;
+  // Run whichever mode you have credentials for
+  if (process.env.E2B_API_KEY) await gatewayExample();
+  if (process.env.MODAL_TOKEN_ID) await directExample();
 }
 
-export function hashPassword(password: string): string {
-  return password; // placeholder
-}
-`,
-    );
-    await sandbox.filesystem.writeFile(
-      '/home/user/server.ts',
-      `import { verifyToken } from './auth';
-
-export function handleRequest(req: any) {
-  const token = req.headers['authorization'];
-  if (!verifyToken(token)) {
-    return { status: 401, body: 'Unauthorized' };
-  }
-  return { status: 200, body: 'OK' };
-}
-`,
-    );
-
-    // ---------------------------------------------------------------
-    // 1. Direct usage via sandbox.filesystem.codeSearch()
-    // ---------------------------------------------------------------
-    console.log('\n--- Direct codeSearch usage ---');
-
-    const results = await sandbox.filesystem.codeSearch!(
-      'How is authentication handled?',
-      '/home/user',
-      { morphApiKey: process.env.MORPH_API_KEY },
-    );
-
-    console.log(`Found ${results.length} result(s):\n`);
-    for (const r of results) {
-      console.log(`File: ${r.file}`);
-      console.log(`Lines: ${JSON.stringify(r.lines)}`);
-      console.log(r.content.slice(0, 300));
-      console.log('---');
-    }
-
-    // ---------------------------------------------------------------
-    // 2. Using codeSearch as an agent tool
-    // ---------------------------------------------------------------
-    // In an agent loop you might expose codeSearch as a tool definition:
-    //
-    //   {
-    //     name: 'code_search',
-    //     description: 'Semantic search over the codebase',
-    //     parameters: {
-    //       query: { type: 'string', description: 'What to search for' },
-    //     },
-    //     execute: async ({ query }) => {
-    //       const hits = await sandbox.filesystem.codeSearch!(query, '/home/user', {
-    //         morphApiKey: process.env.MORPH_API_KEY,
-    //         excludes: ['node_modules', '.git', 'dist'],
-    //       });
-    //       return hits.map(h => `${h.file}:\n${h.content}`).join('\n\n');
-    //     },
-    //   }
-
-    // Clean up
-    await sandbox.destroy();
-    console.log('\nSandbox cleaned up successfully');
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error:', error.message);
-      if (error.message.includes('API key')) {
-        console.error('Make sure MORPH_API_KEY is set. Get yours at https://morphllm.com/dashboard');
-      }
-    } else {
-      console.error('Unknown error:', error);
-    }
-  }
-}
-
-main();
+main().catch(console.error);

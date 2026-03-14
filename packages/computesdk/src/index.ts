@@ -60,7 +60,8 @@ export { Sandbox, Sandbox as GatewaySandbox } from './client';
 export type { SandboxStatus, ProviderSandboxInfo } from './client/types';
 export { CommandExitError, isCommandExitError } from './client/types';
 
-// Export code search types
+// Export code search
+export { executeCodeSearch } from './code-search';
 export type { CodeSearchResult, CodeSearchOptions } from './code-search';
 
 // Export setup payload helpers
