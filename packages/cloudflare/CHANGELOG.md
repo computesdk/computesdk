@@ -1,23 +1,5 @@
 # @computesdk/cloudflare
 
-## 1.5.0
-
-### Minor Changes
-
-- ce531c2: remove cloudflare from excluded package builds
-
-## 1.4.1
-
-### Patch Changes
-
-- 0d0f3d6: fresh build
-
-## 1.4.0
-
-### Minor Changes
-
-- 65d38ed: Add direct mode support: remote mode via HTTP gateway Worker (CLOUDFLARE_SANDBOX_URL + CLOUDFLARE_SANDBOX_SECRET) and direct mode via Durable Object binding
-
 ## 1.3.36
 
 ### Patch Changes

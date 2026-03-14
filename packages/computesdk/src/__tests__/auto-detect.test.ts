@@ -185,10 +185,10 @@ describe('Auto-Detection', () => {
       });
     });
 
-    it('validates gateway URL when COMPUTESDK_GATEWAY_URL is set', () => {
+    it('validates gateway URL when COMPUTESDK_TRIBUTARY_URL is set', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
-      process.env.COMPUTESDK_GATEWAY_URL = 'invalid-url';
+      process.env.COMPUTESDK_TRIBUTARY_URL = 'invalid-url';
 
       expect(() => autoConfigureCompute()).toThrow(/Invalid gateway URL/);
     });
@@ -196,7 +196,7 @@ describe('Auto-Detection', () => {
     it('accepts valid HTTPS gateway URL', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
-      process.env.COMPUTESDK_GATEWAY_URL = 'https://custom-gateway.example.com';
+      process.env.COMPUTESDK_TRIBUTARY_URL = 'https://custom-gateway.example.com';
 
       const config = autoConfigureCompute();
       expect(config).toBeDefined();
@@ -206,7 +206,7 @@ describe('Auto-Detection', () => {
     it('accepts valid HTTP gateway URL', () => {
       process.env.COMPUTESDK_API_KEY = 'test_key';
       process.env.E2B_API_KEY = 'e2b_key';
-      process.env.COMPUTESDK_GATEWAY_URL = 'http://localhost:3000';
+      process.env.COMPUTESDK_TRIBUTARY_URL = 'http://localhost:3000';
 
       const config = autoConfigureCompute();
       expect(config).toBeDefined();

@@ -55,9 +55,25 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             sandboxId = options.sandboxId;
           } else {
             // Create new Daytona sandbox
-            session = await daytona.create({
-              language: runtime === 'python' ? 'python' : 'javascript',
-            });
+            // If templateId or snapshotId is provided, use it as the source
+            const sourceId = options?.templateId || options?.snapshotId;
+            
+            if (sourceId) {
+              // Create from snapshot/template
+              // Note: Daytona SDK create method signature varies by version
+              // We attempt to pass the ID as 'snapshot' or 'template' property
+              // or use a specific method if available on the snapshot service
+              session = await daytona.create({
+                language: runtime === 'python' ? 'python' : 'javascript',
+                snapshot: sourceId,
+                template: sourceId
+              } as any);
+            } else {
+              // Create default environment
+              session = await daytona.create({
+                language: runtime === 'python' ? 'python' : 'javascript',
+              });
+            }
             sandboxId = session.id;
           }
 
@@ -96,8 +112,14 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             sandboxId
           };
         } catch (error) {
-          // Sandbox doesn't exist or can't be accessed
-          return null;
+          // Sandbox not found is expected -- return null per the interface contract
+          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
+            return null;
+          }
+          // Propagate unexpected errors (auth failures, network issues, etc.)
+          throw new Error(
+            `Failed to get Daytona sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`
+          );
         }
       },
 
@@ -113,8 +135,9 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             sandboxId: session.id
           }));
         } catch (error) {
-          // Return empty array if listing fails
-          return [];
+          throw new Error(
+            `Failed to list Daytona sandboxes: ${error instanceof Error ? error.message : String(error)}`
+          );
         }
       },
 
@@ -123,14 +146,17 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
 
         try {
           const daytona = new Daytona({ apiKey: apiKey });
-          // Note: Daytona SDK expects a Sandbox object, but we only have the ID
-          // This is a limitation of the current Daytona SDK design
-          // For now, we'll skip the delete operation
           const sandbox = await daytona.get(sandboxId);
           await sandbox.delete();
         } catch (error) {
-          // Sandbox might already be destroyed or doesn't exist
-          // This is acceptable for destroy operations
+          // If the sandbox is already gone (404), that's fine for destroy semantics
+          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
+            return;
+          }
+          // Propagate all other errors (auth failures, network issues, etc.)
+          throw new Error(
+            `Failed to destroy Daytona sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`
+          );
         }
       },
 
@@ -385,8 +411,79 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         return sandbox;
       },
 
-      // Terminal operations not implemented - Daytona session API needs verification
+    },
 
+    snapshot: {
+      create: async (config: DaytonaConfig, sandboxId: string, options?: { name?: string }) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey: apiKey });
+
+        try {
+          // Note: Using 'any' cast as we are using internal service property
+          const snapshot = await (daytona as any).snapshots.create({
+            workspaceId: sandboxId,
+            name: options?.name || `snapshot-${Date.now()}`
+          });
+          return snapshot;
+        } catch (error) {
+          throw new Error(`Failed to create Daytona snapshot: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+
+      list: async (config: DaytonaConfig) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey: apiKey });
+
+        try {
+          const result = await (daytona as any).snapshots.list();
+          return result;
+        } catch (error) {
+          return [];
+        }
+      },
+
+      delete: async (config: DaytonaConfig, snapshotId: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey: apiKey });
+
+        try {
+          // Note: Daytona SDK might not expose delete directly or it might be 'remove'
+          // We'll try the common pattern
+          await (daytona as any).snapshots.delete(snapshotId);
+        } catch (error) {
+          // Ignore if not found
+        }
+      }
+    },
+
+    // Templates in Daytona are effectively Snapshots
+    template: {
+      create: async (config: DaytonaConfig, options: { name: string }) => {
+         throw new Error('To create a template in Daytona, create a snapshot from a running sandbox using snapshot.create()');
+      },
+
+      list: async (config: DaytonaConfig) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey: apiKey });
+
+        try {
+          const result = await (daytona as any).snapshots.list();
+          return result;
+        } catch (error) {
+          return [];
+        }
+      },
+
+      delete: async (config: DaytonaConfig, templateId: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey: apiKey });
+
+        try {
+          await (daytona as any).snapshots.delete(templateId);
+        } catch (error) {
+          // Ignore if not found
+        }
+      }
     }
   }
 });

@@ -22,7 +22,7 @@ export {
 /**
  * Default gateway URL for sandbox lifecycle operations
  */
-export const GATEWAY_URL = 'https://gateway.computesdk.com';
+export const TRIBUTARY_URL = 'https://tributary.edge.computesdk.com';
 
 /**
  * Provider detection priority order

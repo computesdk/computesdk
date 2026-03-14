@@ -97,6 +97,28 @@ export interface RunCommandOptions {
 }
 
 /**
+ * Snapshot information
+ */
+export interface Snapshot {
+  /** Unique identifier for the snapshot */
+  id: string;
+  /** Provider hosting the snapshot */
+  provider: string;
+  /** When the snapshot was created */
+  createdAt: Date;
+  /** Additional provider-specific metadata */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Options for creating a snapshot
+ */
+export interface CreateSnapshotOptions {
+  name?: string;
+  metadata?: Record<string, any>;
+}
+
+/**
  * Filesystem operations interface
  */
 export interface SandboxFileSystem {

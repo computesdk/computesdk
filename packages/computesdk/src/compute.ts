@@ -12,7 +12,7 @@ import { Sandbox, WebSocketConstructor, type ServerStartOptions } from './client
 import { autoConfigureCompute } from './auto-detect';
 import { createConfigFromExplicit } from './explicit-config';
 import { waitForComputeReady } from './compute-daemon/lifecycle';
-import { GATEWAY_URL } from './constants';
+import { TRIBUTARY_URL } from './constants';
 import type { ProviderName } from './provider-config';
 import type { SetupOverlayConfig } from './setup';
 
@@ -117,7 +117,7 @@ export interface ExtendTimeoutOptions {
 /**
  * Helper to call gateway API with retry logic
  */
-async function gatewayFetch<T>(
+async function tributaryFetch<T>(
   url: string,
   config: GatewayConfig,
   options: RequestInit = {}
@@ -193,7 +193,7 @@ async function waitForSandboxStatus(
   let currentDelay = initialDelayMs;
 
   while (Date.now() - startTime < maxWaitMs) {
-    const result = await gatewayFetch<any>(endpoint, config, {
+    const result = await tributaryFetch<any>(endpoint, config, {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -313,7 +313,7 @@ class ComputeManager {
     create: async (options?: CreateSandboxOptions): Promise<Sandbox> => {
       const config = this.getGatewayConfig();
 
-      const result = await gatewayFetch<{
+      const result = await tributaryFetch<{
         sandboxId: string;
         url: string;
         token: string;
@@ -358,7 +358,7 @@ class ComputeManager {
         },
         WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+          await tributaryFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
           });
         },
@@ -375,7 +375,7 @@ class ComputeManager {
     getById: async (sandboxId: string): Promise<Sandbox | null> => {
       const config = this.getGatewayConfig();
 
-      const result = await gatewayFetch<{
+      const result = await tributaryFetch<{
         url: string;
         token: string;
         provider: string;
@@ -396,7 +396,7 @@ class ComputeManager {
         metadata,
         WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+          await tributaryFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
           });
         },
@@ -422,7 +422,7 @@ class ComputeManager {
     destroy: async (sandboxId: string): Promise<void> => {
       const config = this.getGatewayConfig();
 
-      await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+      await tributaryFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
         method: 'DELETE',
       });
     },
@@ -464,7 +464,7 @@ class ComputeManager {
         },
         WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+          await tributaryFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
           });
         },
@@ -509,7 +509,7 @@ class ComputeManager {
         },
         WebSocket: config.WebSocket || globalThis.WebSocket,
         destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
+          await tributaryFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
             method: 'DELETE',
           });
         },
@@ -527,9 +527,74 @@ class ComputeManager {
       const config = this.getGatewayConfig();
       const duration = options?.duration ?? 900000; // Default to 15 minutes
 
-      await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}/extend`, config, {
+      await tributaryFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}/extend`, config, {
         method: 'POST',
         body: JSON.stringify({ duration }),
+      });
+    },
+  };
+
+  snapshot = {
+    /**
+     * Create a snapshot from a running sandbox
+     * 
+     * @param sandboxId ID of the sandbox to snapshot
+     * @param options Snapshot options (name, metadata)
+     */
+    create: async (sandboxId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
+      const config = this.getGatewayConfig();
+
+      const result = await tributaryFetch<{
+        id: string;
+        provider: string;
+        createdAt: string;
+        metadata?: Record<string, any>;
+      }>(`${config.gatewayUrl}/v1/snapshots`, config, {
+        method: 'POST',
+        body: JSON.stringify({ sandboxId, ...options }),
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(`Gateway returned invalid response`);
+      }
+
+      return {
+        ...result.data,
+        createdAt: new Date(result.data.createdAt),
+      };
+    },
+
+    /**
+     * List all snapshots
+     */
+    list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
+      const config = this.getGatewayConfig();
+
+      const result = await tributaryFetch<Array<{
+        id: string;
+        provider: string;
+        createdAt: string;
+        metadata?: Record<string, any>;
+      }>>(`${config.gatewayUrl}/v1/snapshots`, config);
+
+      if (!result.success || !result.data) {
+        return [];
+      }
+
+      return result.data.map(s => ({
+        ...s,
+        createdAt: new Date(s.createdAt),
+      }));
+    },
+
+    /**
+     * Delete a snapshot
+     */
+    delete: async (snapshotId: string): Promise<void> => {
+      const config = this.getGatewayConfig();
+
+      await tributaryFetch(`${config.gatewayUrl}/v1/snapshots/${snapshotId}`, config, {
+        method: 'DELETE',
       });
     },
   };

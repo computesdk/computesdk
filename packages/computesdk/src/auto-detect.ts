@@ -5,7 +5,7 @@
  * Enables zero-config usage of ComputeSDK.
  */
 
-import { GATEWAY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
+import { TRIBUTARY_URL, PROVIDER_PRIORITY, PROVIDER_ENV_VARS, type ProviderName } from './constants';
 import type { WebSocketConstructor } from './client';
 
 /**
@@ -291,7 +291,7 @@ export function autoConfigureCompute(): GatewayConfig | null {
     );
   }
 
-  const gatewayUrl = process.env.COMPUTESDK_GATEWAY_URL || GATEWAY_URL;
+  const gatewayUrl = process.env.COMPUTESDK_TRIBUTARY_URL || TRIBUTARY_URL;
   const computesdkApiKey = process.env.COMPUTESDK_API_KEY!;
   const providerHeaders = getProviderHeaders(provider);
 
@@ -302,7 +302,7 @@ export function autoConfigureCompute(): GatewayConfig | null {
     throw new Error(
       `Invalid gateway URL: "${gatewayUrl}"\n\n` +
       `The URL must be a valid HTTP/HTTPS URL.\n` +
-      `Check your COMPUTESDK_GATEWAY_URL environment variable.`
+      `Check your COMPUTESDK_TRIBUTARY_URL environment variable.`
     );
   }
 

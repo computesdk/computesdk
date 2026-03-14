@@ -27,7 +27,7 @@ export interface CodesandboxConfig {
 /**
  * Create a Codesandbox provider instance using the factory pattern
  */
-export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig>({
+export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
   name: 'codesandbox',
   methods: {
     sandbox: {
@@ -52,6 +52,10 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig>
             // Resume existing CodeSandbox using sdk.sandboxes.resume()
             sandbox = await sdk.sandboxes.resume(options.sandboxId);
             sandboxId = options.sandboxId;
+          } else if (options?.snapshotId) {
+            // Resume from snapshot - in CodeSandbox, snapshots are hibernated sandboxes
+            sandbox = await sdk.sandboxes.resume(options.snapshotId);
+            sandboxId = options.snapshotId;
           } else {
             // Create new CodeSandbox using sdk.sandboxes.create()
             const createOptions: any = {};
@@ -329,6 +333,90 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig>
         return sandbox;
       },
 
+    },
+
+    snapshot: {
+      create: async (config: CodesandboxConfig, sandboxId: string, options?: { name?: string }) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
+
+        if (!apiKey) {
+          throw new Error(
+            `Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`
+          );
+        }
+
+        const sdk = new CodeSandbox(apiKey);
+
+        try {
+          // Resume the sandbox first, then hibernate to create a snapshot
+          const sandbox = await sdk.sandboxes.resume(sandboxId);
+          
+          // Hibernate creates a checkpoint/snapshot of the sandbox
+          // Cast to any to avoid type issues with SDK version
+          await (sandbox as any).hibernate();
+          
+          // The hibernated sandbox becomes a snapshot we can fork
+          return {
+            id: sandbox.id,
+            provider: 'codesandbox',
+            createdAt: new Date(),
+            metadata: {
+              name: options?.name,
+              bootupType: sandbox.bootupType
+            }
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create CodeSandbox snapshot: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      list: async (_config: CodesandboxConfig) => {
+        throw new Error(
+          `CodeSandbox provider does not support listing snapshots. Use the dashboard to manage snapshots.`
+        );
+      },
+
+      delete: async (config: CodesandboxConfig, snapshotId: string) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
+
+        if (!apiKey) {
+          throw new Error(
+            `Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`
+          );
+        }
+
+        const sdk = new CodeSandbox(apiKey);
+
+        try {
+          // Shutdown the snapshot (hibernated sandbox)
+          await sdk.sandboxes.shutdown(snapshotId);
+        } catch (error) {
+          // Ignore if not found
+        }
+      }
+    },
+
+    // Templates in CodeSandbox are handled via templateId on create
+    template: {
+      create: async (_config: CodesandboxConfig, _options: { name: string }) => {
+        throw new Error(
+          `CodeSandbox templates must be created via the CodeSandbox dashboard or CLI. Use templateId in sandbox.create() to specify a template.`
+        );
+      },
+
+      list: async (_config: CodesandboxConfig) => {
+        throw new Error(
+          `CodeSandbox provider does not support listing templates via API. Use the dashboard to manage templates.`
+        );
+      },
+
+      delete: async (_config: CodesandboxConfig, _templateId: string) => {
+        throw new Error(
+          `CodeSandbox templates must be deleted via the CodeSandbox dashboard or CLI.`
+        );
+      }
     }
   }
 });
