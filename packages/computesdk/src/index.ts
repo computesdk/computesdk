@@ -36,6 +36,7 @@ export type {
   CodeResult,
   CommandResult,
   SandboxInfo,
+  Snapshot,
   FileEntry,
   RunCommandOptions,
   SandboxFileSystem,
@@ -99,7 +100,7 @@ export {
 
 // Export provider configuration utilities
 export {
-  GATEWAY_URL,
+  TRIBUTARY_URL,
   PROVIDER_PRIORITY,
   PROVIDER_ENV_VARS,
 } from './constants';

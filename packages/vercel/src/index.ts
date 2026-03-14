@@ -465,6 +465,41 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
 
         await snapshot.delete();
       }
+    },
+
+    // Vercel doesn't have a separate "template" concept - snapshots serve as templates
+    template: {
+      create: async (_config: VercelConfig, _options: { name: string }) => {
+        throw new Error(
+          `Vercel does not support creating templates directly. Use snapshot.create() to create a snapshot from a running sandbox.`
+        );
+      },
+
+      list: async (_config: VercelConfig) => {
+        throw new Error(
+          `Vercel provider does not support listing templates.`
+        );
+      },
+
+      delete: async (config: VercelConfig, templateId: string) => {
+        // Reuse snapshot.delete since Vercel doesn't have separate templates
+        const creds = resolveCredentials(config);
+
+        let snapshot: VercelSnapshot;
+
+        if (creds.useOidc) {
+          snapshot = await VercelSnapshot.get({ snapshotId: templateId });
+        } else {
+          snapshot = await VercelSnapshot.get({
+            snapshotId: templateId,
+            token: creds.token,
+            teamId: creds.teamId,
+            projectId: creds.projectId,
+          });
+        }
+
+        await snapshot.delete();
+      }
     }
   }
 });

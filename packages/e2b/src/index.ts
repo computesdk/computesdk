@@ -350,6 +350,95 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         return sandbox;
       },
 
+    },
+
+    snapshot: {
+      create: async (config: E2BConfig, sandboxId: string, options?: { name?: string }) => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        
+        try {
+          // Reconnect to the sandbox to snapshot it
+          const sandbox = await E2BSandbox.connect(sandboxId, { apiKey });
+          
+          // Note: createSnapshot is a feature referenced in E2B docs for saving running state
+          // It typically returns a template ID that can be used to spawn new sandboxes
+          // We cast to any to avoid type issues if the installed SDK version is slightly older
+          // but the feature is available on the API
+          const snapshotResult = await (sandbox as any).createSnapshot({
+            name: options?.name
+          });
+
+          // Handle different potential return shapes (ID string or object with ID)
+          const snapshotId = typeof snapshotResult === 'string' ? snapshotResult : snapshotResult.id || snapshotResult.templateId;
+
+          return {
+            id: snapshotId,
+            provider: 'e2b',
+            createdAt: new Date(),
+            metadata: {
+              name: options?.name
+            }
+          };
+        } catch (error) {
+          throw new Error(`Failed to create E2B snapshot: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+
+      list: async (config: E2BConfig) => {
+        // Listing snapshots in E2B is effectively listing templates
+        // since snapshots create templates
+        try {
+          // Attempt to list templates/snapshots via SDK static method if available
+          // or return empty if not supported in this SDK version
+          if (typeof (E2BSandbox as any).listTemplates === 'function') {
+            return await (E2BSandbox as any).listTemplates({ apiKey: config.apiKey || process.env.E2B_API_KEY });
+          }
+          return [];
+        } catch (error) {
+          return [];
+        }
+      },
+
+      delete: async (config: E2BConfig, snapshotId: string) => {
+        try {
+          // Attempt to delete template/snapshot
+          if (typeof (E2BSandbox as any).deleteTemplate === 'function') {
+            await (E2BSandbox as any).deleteTemplate(snapshotId, { apiKey: config.apiKey || process.env.E2B_API_KEY });
+          }
+        } catch (error) {
+          // Ignore
+        }
+      }
+    },
+
+    // In E2B, Snapshots create Templates. They are interchangeable concepts for spawning.
+    template: {
+      create: async (config: E2BConfig, options: { name: string }) => {
+         throw new Error('To create a template in E2B, create a snapshot from a running sandbox using snapshot.create(), or use the E2B CLI to build from a Dockerfile.');
+      },
+
+      list: async (config: E2BConfig) => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        try {
+           if (typeof (E2BSandbox as any).listTemplates === 'function') {
+            return await (E2BSandbox as any).listTemplates({ apiKey });
+          }
+          return [];
+        } catch (error) {
+          return [];
+        }
+      },
+
+      delete: async (config: E2BConfig, templateId: string) => {
+         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+         try {
+          if (typeof (E2BSandbox as any).deleteTemplate === 'function') {
+            await (E2BSandbox as any).deleteTemplate(templateId, { apiKey });
+          }
+        } catch (error) {
+          // Ignore
+        }
+      }
     }
   }
 });

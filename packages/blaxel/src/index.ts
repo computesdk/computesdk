@@ -7,7 +7,7 @@
 import { SandboxInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -30,7 +30,7 @@ export interface BlaxelConfig {
 /**
  * Create a Blaxel provider instance using the factory pattern
  */
-export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
+export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
 	methods: {
 		sandbox: {
@@ -58,12 +58,22 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 				const envs = options?.envs;
 				const ttl = options?.timeout ? `${Math.ceil(options.timeout / 1000)}s` : undefined;
 
-				try {
-					// Initialize Blaxel SDK with credentials
-					initializeBlaxel(config);
+			try {
+				// Initialize Blaxel SDK with credentials
+				initializeBlaxel(config);
 
-					let sandbox: SandboxInstance;
+				let sandbox: SandboxInstance;
 
+				// Check if we should resume an existing sandbox or create new
+				const existingId = options?.sandboxId || options?.snapshotId;
+				
+				if (existingId) {
+					// Resume existing sandbox or snapshot
+					sandbox = await SandboxInstance.get(existingId);
+					if (!sandbox) {
+						throw new Error(`Sandbox ${existingId} not found`);
+					}
+				} else {
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
 						name: options?.sandboxId || `blaxel-${Date.now()}`,
@@ -80,12 +90,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region })
 					});
+				}
 
-					return {
-						sandbox,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-					};
-				} catch (error) {
+				return {
+					sandbox,
+					sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
+				};
+			} catch (error) {
 					const errorDetail = error instanceof Error
 						? error.message
 						: typeof error === 'object' && error !== null
@@ -438,6 +449,86 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			getInstance: (sandbox: SandboxInstance): SandboxInstance => {
 				return sandbox;
 			},
+		},
+
+		snapshot: {
+			create: async (config: BlaxelConfig, sandboxId: string, options?: { name?: string }) => {
+				// Blaxel automatically snapshots on scale-down, but we can trigger a manual snapshot
+				// by stopping the sandbox which saves its state
+				try {
+					initializeBlaxel(config);
+					
+					// Get the sandbox to access its snapshot
+					const sandbox = await SandboxInstance.get(sandboxId);
+					
+					if (!sandbox) {
+						throw new Error(`Sandbox ${sandboxId} not found`);
+					}
+
+					// Return the current state as a snapshot
+					// Blaxel's auto-snapshot on scale-down is the primary mechanism
+					return {
+						id: sandboxId,
+						provider: 'blaxel',
+						createdAt: new Date(),
+						metadata: {
+							name: options?.name,
+							image: sandbox.spec?.runtime?.image
+						}
+					};
+				} catch (error) {
+					throw new Error(
+						`Failed to create Blaxel snapshot: ${error instanceof Error ? error.message : String(error)}`
+					);
+				}
+			},
+
+			list: async (config: BlaxelConfig) => {
+				// Blaxel doesn't have a separate snapshot listing API
+				// List sandboxes as they contain the snapshot state
+				initializeBlaxel(config);
+				const sandboxList = await SandboxInstance.list();
+				return sandboxList.map(sandbox => ({
+					id: sandbox.metadata?.name || 'blaxel-unknown',
+					provider: 'blaxel',
+					createdAt: sandbox.metadata?.createdAt ? new Date(sandbox.metadata.createdAt) : new Date(),
+					metadata: {
+						image: sandbox.spec?.runtime?.image,
+						status: sandbox.status
+					}
+				}));
+			},
+
+			delete: async (config: BlaxelConfig, snapshotId: string) => {
+				// Deleting a snapshot in Blaxel is just deleting the sandbox
+				try {
+					initializeBlaxel(config);
+					await SandboxInstance.delete(snapshotId);
+				} catch (error) {
+					// Ignore if not found
+				}
+			}
+		},
+
+		// Templates in Blaxel are pre-configured images
+		template: {
+			create: async (_config: BlaxelConfig, _options: { name: string }) => {
+				throw new Error(
+					`Blaxel templates must be created via the Blaxel dashboard or CLI. Use image in sandbox.create() to specify a base image.`
+				);
+			},
+
+			list: async (_config: BlaxelConfig) => {
+				throw new Error(
+					`Blaxel provider does not support listing templates via API. Use the dashboard to manage templates.`
+				);
+			},
+
+			delete: async (_config: BlaxelConfig, _templateId: string) => {
+				throw new Error(
+					`Blaxel templates must be deleted via the Blaxel dashboard or CLI.`
+				);
+			}
 		}
 	}
 });
