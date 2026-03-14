@@ -51,6 +51,22 @@ function shellEscape(arg: string): string {
 }
 
 /**
+ * Ensure ripgrep is available in the sandbox, installing it if missing.
+ */
+async function ensureRipgrep(sandbox: Sandbox): Promise<void> {
+  const check = await sandbox.runCommand('which rg');
+  if (check.exitCode === 0) return;
+  const install = await sandbox.runCommand(
+    'apt-get update -qq && apt-get install -y -qq ripgrep 2>/dev/null || apk add ripgrep 2>/dev/null',
+  );
+  if (install.exitCode !== 0) {
+    throw new Error(
+      'codeSearch requires ripgrep (rg) but it is not installed and auto-install failed. Install ripgrep manually in the sandbox.',
+    );
+  }
+}
+
+/**
  * Build `RemoteCommands` that delegate to `sandbox.runCommand()`.
  */
 /** @internal Exported for testing only. */
@@ -129,6 +145,7 @@ export async function executeCodeSearch(
   }
 
   const client = new WarpGrepClient({ morphApiKey });
+  await ensureRipgrep(sandbox);
   const remoteCommands = buildRemoteCommands(sandbox, directory);
 
   const result = await client.execute({
