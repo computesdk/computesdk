@@ -114,7 +114,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         const creds = resolveCredentials(config);
         validateCredentials(creds);
 
-        const timeout = config.timeout || 300000;
+        // options.timeout takes precedence over config.timeout
+        const timeout = options?.timeout ?? config.timeout ?? 300000;
 
         try {
           let sandbox: VercelSandbox;
@@ -126,27 +127,55 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
               `Vercel provider does not support reconnecting to existing sandboxes. Vercel sandboxes are ephemeral and must be created fresh each time.`
             );
           } else {
-            // Construct base params
+            // Destructure known ComputeSDK fields, collect the rest for passthrough
+            const {
+              runtime: optRuntime,
+              timeout: _timeout,
+              envs: _envs, // Vercel SDK does not support envs at sandbox creation time
+              name: _name,
+              metadata: _metadata,
+              templateId,
+              snapshotId: optSnapshotId,
+              sandboxId: _sandboxId,
+              namespace: _namespace,
+              directory: _directory,
+              overlays: _overlays,
+              servers: _servers,
+              ports: optPorts,
+              source: optSource,
+              ...providerOptions
+            } = options || {};
+
+            // Construct base params, spreading provider-specific options
             const params: any = {
               timeout,
+              ...providerOptions, // Spread provider-specific options (e.g., resources, networkPolicy, signal)
             };
             
             // Only add ports if explicitly configured (options.ports takes precedence)
-            const ports = options?.ports ?? config.ports;
+            const ports = optPorts ?? config.ports;
             if (ports && ports.length > 0) {
               params.ports = ports;
             }
 
-            // Support both ComputeSDK format (snapshotId at top level) and 
+            // Pass runtime if specified (Vercel supports runtime selection)
+            if (optRuntime) {
+              params.runtime = optRuntime;
+            }
+
+            // Support both ComputeSDK format (snapshotId/templateId at top level) and 
             // Vercel SDK format (source.snapshotId nested)
-            const snapshotId = options?.snapshotId || 
-              (options?.source?.type === 'snapshot' && options?.source?.snapshotId);
+            const snapshotId = optSnapshotId || templateId ||
+              (optSource?.type === 'snapshot' && optSource?.snapshotId);
             
             if (snapshotId) {
               params.source = {
                 type: 'snapshot',
                 snapshotId
               };
+            } else if (optSource) {
+              // Pass through source as-is (e.g., git or tarball sources)
+              params.source = optSource;
             }
 
             // Add auth params if not using OIDC

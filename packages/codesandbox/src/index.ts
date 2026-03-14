@@ -57,11 +57,37 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             sandbox = await sdk.sandboxes.resume(options.snapshotId);
             sandboxId = options.snapshotId;
           } else {
+            // Destructure known ComputeSDK fields, collect the rest for passthrough
+            const {
+              runtime: _runtime,
+              timeout: _timeout,
+              envs,
+              name: _name,
+              metadata: _metadata,
+              templateId: optTemplateId,
+              snapshotId: _snapshotId,
+              sandboxId: _sandboxId,
+              namespace: _namespace,
+              directory: _directory,
+              overlays: _overlays,
+              servers: _servers,
+              ...providerOptions
+            } = options || {};
+
             // Create new CodeSandbox using sdk.sandboxes.create()
-            const createOptions: any = {};
+            const createOptions: any = {
+              ...providerOptions, // Spread provider-specific options
+            };
             
-            if (config.templateId) {
-              createOptions.id = config.templateId;
+            // options.templateId takes precedence over config.templateId
+            const templateId = optTemplateId || config.templateId;
+            if (templateId) {
+              createOptions.id = templateId;
+            }
+
+            // Remap envs to envVars
+            if (envs && Object.keys(envs).length > 0) {
+              createOptions.envVars = envs;
             }
 
             sandbox = await sdk.sandboxes.create(createOptions);

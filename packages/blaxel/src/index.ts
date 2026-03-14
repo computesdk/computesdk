@@ -36,12 +36,29 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
+				// Destructure known ComputeSDK fields, collect the rest for passthrough
+				const {
+					runtime: optRuntime,
+					timeout: optTimeout,
+					envs,
+					name,
+					metadata,
+					templateId: _templateId,
+					snapshotId,
+					sandboxId: optSandboxId,
+					namespace: _namespace,
+					directory: _directory,
+					overlays: _overlays,
+					servers: _servers,
+					...providerOptions
+				} = options || {};
+
 				// Determine the image to use
 				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
 
 				// Override with runtime-specific image if runtime is specified and no explicit image
-				if (!config.image && options?.runtime) {
-					switch (options.runtime) {
+				if (!config.image && optRuntime) {
+					switch (optRuntime) {
 						case 'python':
 							image = 'blaxel/prod-py-app:latest';
 							break;
@@ -55,8 +72,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}
 				const memory = config.memory;
 				const region = config.region;
-				const envs = options?.envs;
-				const ttl = options?.timeout ? `${Math.ceil(options.timeout / 1000)}s` : undefined;
+				const ttl = optTimeout ? `${Math.ceil(optTimeout / 1000)}s` : undefined;
 
 			try {
 				// Initialize Blaxel SDK with credentials
@@ -65,7 +81,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				let sandbox: SandboxInstance;
 
 				// Check if we should resume an existing sandbox or create new
-				const existingId = options?.sandboxId || options?.snapshotId;
+				const existingId = optSandboxId || snapshotId;
 				
 				if (existingId) {
 					// Resume existing sandbox or snapshot
@@ -76,19 +92,20 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				} else {
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
-						name: options?.sandboxId || `blaxel-${Date.now()}`,
+						name: name || optSandboxId || `blaxel-${Date.now()}`,
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
 						metadata: {
-							name: options?.sandboxId || `blaxel-${Date.now()}`,
+							name: name || optSandboxId || `blaxel-${Date.now()}`,
 							labels: {
-								...options?.metadata?.labels,
+								...metadata?.labels,
 							}
 						},
 						ttl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
-						...(region && { region })
+						...(region && { region }),
+						...providerOptions, // Spread provider-specific options
 					});
 				}
 

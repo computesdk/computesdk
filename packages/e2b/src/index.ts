@@ -50,7 +50,8 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         }
 
 
-        const timeout = config.timeout || 300000;
+        // options.timeout takes precedence over config.timeout
+        const timeout = options?.timeout ?? config.timeout ?? 300000;
 
         try {
           let sandbox: E2BSandbox;
@@ -64,21 +65,39 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
             });
             sandboxId = options.sandboxId;
           } else {
+            // Destructure known ComputeSDK fields, collect the rest for passthrough
+            const {
+              runtime: _runtime,
+              timeout: _timeout,
+              envs,
+              name: _name,
+              metadata,
+              templateId,
+              snapshotId,
+              sandboxId: _sandboxId,
+              namespace: _namespace,
+              directory: _directory,
+              overlays: _overlays,
+              servers: _servers,
+              ...providerOptions
+            } = options || {};
+
+            // Build create options, spreading provider-specific options (e.g., domain)
+            const createOpts: Record<string, any> = {
+              apiKey: apiKey,
+              timeoutMs: timeout,
+              envs,
+              metadata,
+              ...providerOptions, // Spread provider-specific options (e.g., domain)
+            };
+
             // Create new E2B session
-            if (options?.templateId) {
-              sandbox = await E2BSandbox.create(options.templateId, {
-                apiKey: apiKey,
-                timeoutMs: timeout,
-                domain: options?.domain,
-                envs: options?.envs,
-              });
+            // E2B supports both templateId and snapshotId (snapshotId maps to template)
+            const templateOrSnapshot = templateId || snapshotId;
+            if (templateOrSnapshot) {
+              sandbox = await E2BSandbox.create(templateOrSnapshot, createOpts);
             } else {
-              sandbox = await E2BSandbox.create({
-                apiKey: apiKey,
-                timeoutMs: timeout,
-                domain: options?.domain,
-                envs: options?.envs,
-              });
+              sandbox = await E2BSandbox.create(createOpts);
             }
             sandboxId = sandbox.sandboxId || `e2b-${Date.now()}`;
           }

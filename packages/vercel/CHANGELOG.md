@@ -1,14 +1,5 @@
 # @computesdk/vercel
 
-## 1.7.17
-
-### Patch Changes
-
-- fa0211f: Update packages for direct providers, fix runloop keep_alive default, and update daytona list method
-- Updated dependencies [fa0211f]
-  - computesdk@2.5.0
-  - @computesdk/provider@1.0.30
-
 ## 1.7.16
 
 ### Patch Changes
