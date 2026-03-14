@@ -41,6 +41,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         }
 
         const runtime = options?.runtime || config.runtime || 'node';
+        const timeout = options?.timeout ?? config.timeout;
 
         try {
           // Initialize Daytona client
@@ -54,26 +55,60 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             session = await daytona.get(options.sandboxId);
             sandboxId = options.sandboxId;
           } else {
-            // Create new Daytona sandbox
-            // If templateId or snapshotId is provided, use it as the source
-            const sourceId = options?.templateId || options?.snapshotId;
-            
-            if (sourceId) {
-              // Create from snapshot/template
-              // Note: Daytona SDK create method signature varies by version
-              // We attempt to pass the ID as 'snapshot' or 'template' property
-              // or use a specific method if available on the snapshot service
-              session = await daytona.create({
-                language: runtime === 'python' ? 'python' : 'javascript',
-                snapshot: sourceId,
-                template: sourceId
-              } as any);
-            } else {
-              // Create default environment
-              session = await daytona.create({
-                language: runtime === 'python' ? 'python' : 'javascript',
-              });
+            // Destructure known ComputeSDK fields, collect the rest for passthrough
+            const {
+              runtime: _runtime,
+              timeout: _timeout,
+              envs,
+              name,
+              metadata,
+              templateId,
+              snapshotId,
+              sandboxId: _sandboxId,
+              namespace: _namespace,
+              directory: _directory,
+              overlays: _overlays,
+              servers: _servers,
+              ...providerOptions
+            } = options || {};
+
+            // Build create params from options
+            // Daytona SDK uses envVars (not envs), labels (not metadata)
+            const createParams: Record<string, any> = {
+              language: runtime === 'python' ? 'python' : 'javascript',
+              ...providerOptions, // Spread provider-specific options (e.g., resources, public, autoStopInterval)
+            };
+
+            // Remap ComputeSDK fields to Daytona SDK fields
+            if (envs && Object.keys(envs).length > 0) {
+              createParams.envVars = envs;
             }
+
+            if (name) {
+              createParams.name = name;
+            }
+
+            // Pass metadata as labels (Daytona uses labels: Record<string, string>)
+            if (metadata && typeof metadata === 'object') {
+              const labels: Record<string, string> = {};
+              for (const [k, v] of Object.entries(metadata)) {
+                labels[k] = typeof v === 'string' ? v : JSON.stringify(v);
+              }
+              createParams.labels = labels;
+            }
+
+            // If templateId or snapshotId is provided, use it as the source
+            const sourceId = templateId || snapshotId;
+            if (sourceId) {
+              createParams.snapshot = sourceId;
+            }
+
+            // Daytona SDK accepts timeout in seconds as a second argument
+            const createOptions = timeout
+              ? { timeout: Math.ceil(timeout / 1000) }
+              : undefined;
+
+            session = await daytona.create(createParams as any, createOptions);
             sandboxId = session.id;
           }
 

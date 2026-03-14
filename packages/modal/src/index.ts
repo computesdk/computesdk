@@ -106,26 +106,36 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           } else {
             // Create new Modal sandbox
             const app = await App.lookup('computesdk-modal', { createIfMissing: true });
+
+            // Destructure known ComputeSDK fields, collect the rest for passthrough
+            const {
+              runtime: _runtime,
+              timeout: optTimeout,
+              envs,
+              name,
+              metadata: _metadata,
+              templateId,
+              snapshotId,
+              sandboxId: _sandboxId,
+              namespace: _namespace,
+              directory: _directory,
+              overlays: _overlays,
+              servers: _servers,
+              ports: optPorts,
+              ...providerOptions
+            } = options || {};
             
             let image;
-            if (options?.snapshotId) {
-              // Create from snapshot
-              // Note: We assume snapshotId is a valid Modal SandboxSnapshot ID or Image ID
-              // Try to load it as a snapshot first, then as an image
+            // Modal supports snapshotId and templateId (both map to image)
+            const sourceId = snapshotId || templateId;
+            if (sourceId) {
+              // Create from snapshot/template
               try {
-                // Try as SandboxSnapshot (for memory/fs snapshots)
-                // Note: The specific class might be SandboxSnapshot or similar depending on SDK version
-                // We use 'any' to avoid type issues with alpha SDK
-                const snapshot = await (Sandbox as any).fromSnapshot(options.snapshotId);
-                // If it's a snapshot, we might need to restore it differently
-                // But typically we pass it to createSandbox or similar.
-                // For now, let's assume it works like an image or has a method to spawn.
-                // Actually, the docs say: sb = modal.Sandbox.from_id(id) is for connecting.
-                // For restoring: Sandbox.create(image=snapshot)
+                const snapshot = await (Sandbox as any).fromSnapshot(sourceId);
                 image = snapshot;
               } catch (e) {
-                // Fallback: try to treat it as a registry image or generic image
-                image = await app.imageFromRegistry(options.snapshotId); 
+                // Fallback: try to treat it as a registry image
+                image = await app.imageFromRegistry(sourceId); 
               }
             } else {
               // Default to Node.js (more appropriate for a Node.js SDK)
@@ -133,18 +143,32 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
             }
             
             // Configure sandbox options
-            const sandboxOptions: any = {}; // Using 'any' since Modal SDK is alpha
+            // Modal SDK uses: env, timeoutMs, name, workdir, unencryptedPorts, gpu, cpu, etc.
+            const sandboxOptions: any = {
+              ...providerOptions, // Spread provider-specific options (e.g., gpu, cpu, memoryMiB, workdir, secrets, volumes)
+            };
             
             // Configure ports if provided (using unencrypted ports by default)
             // options.ports takes precedence over config.ports
-            const ports = options?.ports ?? config.ports;
+            const ports = optPorts ?? config.ports;
             if (ports && ports.length > 0) {
               sandboxOptions.unencryptedPorts = ports;
             }
             
-            // Add timeout if specified
-            if (config.timeout) {
-              sandboxOptions.timeout = config.timeout;
+            // options.timeout takes precedence over config.timeout
+            const timeout = optTimeout ?? config.timeout;
+            if (timeout) {
+              sandboxOptions.timeoutMs = timeout;
+            }
+
+            // Remap envs to env (Modal uses 'env')
+            if (envs && Object.keys(envs).length > 0) {
+              sandboxOptions.env = envs;
+            }
+
+            // Pass sandbox name
+            if (name) {
+              sandboxOptions.name = name;
             }
             
             sandbox = await app.createSandbox(image, sandboxOptions);

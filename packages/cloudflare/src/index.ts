@@ -216,15 +216,39 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
       // ─── Collection operations ───────────────────────────────────────
 
       create: async (config: CloudflareConfig, options?: CreateSandboxOptions) => {
-        const sandboxId = options?.sandboxId || `cf-sandbox-${Date.now()}`;
-        const envVars = { ...config.envVars, ...options?.envs };
+        // Destructure known ComputeSDK fields, collect the rest for passthrough
+        const {
+          runtime: _runtime,
+          timeout: optTimeout,
+          envs,
+          name: _name,
+          metadata: _metadata,
+          templateId: _templateId,
+          snapshotId: _snapshotId,
+          sandboxId: optSandboxId,
+          namespace: _namespace,
+          directory: _directory,
+          overlays: _overlays,
+          servers: _servers,
+          ports: _ports,
+          ...rest
+        } = options || {};
+
+        const sandboxId = optSandboxId || `cf-sandbox-${Date.now()}`;
+        const envVars = { ...config.envVars, ...envs };
+        // options.timeout takes precedence over config.timeout
+        const timeout = optTimeout ?? config.timeout;
 
         // Remote mode
         if (isRemote(config)) {
           await workerRequest(
             { sandboxId, remote: true, sandboxUrl: config.sandboxUrl, sandboxSecret: config.sandboxSecret, exposedPorts: new Map() },
             '/v1/sandbox/create',
-            { envVars: Object.keys(envVars).length > 0 ? envVars : undefined }
+            {
+              envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+              ...(timeout ? { timeout } : {}),
+              ...rest, // Pass through provider-specific options
+            }
           );
 
           return {

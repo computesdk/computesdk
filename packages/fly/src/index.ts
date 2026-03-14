@@ -32,6 +32,8 @@ export interface FlyConfig {
   apiHostname?: string;
   /** App name - if not provided, defaults to 'computesdk' */
   appName?: string;
+  /** Execution timeout in milliseconds */
+  timeout?: number;
 }
 
 export const getAndValidateCredentials = (config: FlyConfig) => {
@@ -160,14 +162,31 @@ export const fly = defineProvider<FlyMachine, FlyConfig>({
           // 1. Ensure the app exists (create if needed)
           await ensureAppExists(apiToken, apiHostname, appName, org);
 
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            runtime: optRuntime,
+            timeout: optTimeout,
+            envs,
+            name,
+            metadata,
+            templateId: _templateId,
+            snapshotId: _snapshotId,
+            sandboxId: _sandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            overlays: _overlays,
+            servers: _servers,
+            ...providerOptions
+          } = options || {};
+
           // 2. Determine the image based on runtime
-          const image = options?.runtime 
-            ? (RUNTIME_IMAGES[options.runtime] || RUNTIME_IMAGES.default)
+          const image = optRuntime 
+            ? (RUNTIME_IMAGES[optRuntime] || RUNTIME_IMAGES.default)
             : RUNTIME_IMAGES.default;
 
           // 3. Create the machine (no app creation here)
           const machineConfig: any = {
-            name: `machine-${Date.now()}`, // Unique machine name
+            name: name || `machine-${Date.now()}`,
             region,
             config: {
               image,
@@ -175,16 +194,38 @@ export const fly = defineProvider<FlyMachine, FlyConfig>({
                 cpu_kind: 'shared',
                 cpus: 1,
                 memory_mb: 256
-              }
+              },
+              ...providerOptions, // Spread provider-specific options into machine config
             }
           };
 
+          // Add environment variables if provided
+          if (envs && Object.keys(envs).length > 0) {
+            machineConfig.config.env = envs;
+          }
+
+          // Add metadata as labels
+          if (metadata && typeof metadata === 'object') {
+            machineConfig.config.metadata = Object.fromEntries(
+              Object.entries(metadata).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])
+            );
+          }
+
+          // Configure auto-stop timeout if specified (convert ms to seconds)
+          const timeout = optTimeout ?? config.timeout;
+          if (timeout) {
+            const timeoutSeconds = Math.ceil(timeout / 1000);
+            machineConfig.config.auto_destroy = true;
+            machineConfig.config.restart = { policy: 'no' };
+            machineConfig.config.stop_config = { timeout: timeoutSeconds };
+          }
+
           // Add init command for node/python to keep container running
-          if (options?.runtime === 'node') {
+          if (optRuntime === 'node') {
             machineConfig.config.init = {
               cmd: ['node', '-e', 'require("http").createServer((req,res)=>{res.end("ok")}).listen(80)']
             };
-          } else if (options?.runtime === 'python') {
+          } else if (optRuntime === 'python') {
             machineConfig.config.init = {
               cmd: ['python', '-c', 'import http.server;http.server.HTTPServer(("",80),http.server.SimpleHTTPRequestHandler).serve_forever()']
             };

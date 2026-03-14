@@ -116,25 +116,47 @@ export const runloop = defineProvider<
             bearerToken: apiKey,
           });
 
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            runtime: _runtime,
+            timeout: optTimeout,
+            envs,
+            name,
+            metadata,
+            templateId,
+            snapshotId: _snapshotId,
+            sandboxId: optSandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            overlays: _overlays,
+            servers: _servers,
+            ...providerOptions
+          } = options || {};
+
+          // Convert ms to seconds for Runloop's keep_alive_time_seconds
+          // options.timeout takes precedence over config.timeout
+          const effectiveTimeout = optTimeout ?? timeout;
+          const keepAliveSeconds = effectiveTimeout
+            ? Math.ceil(effectiveTimeout / 1000)
+            : 1800;
+
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: {
-              keep_alive_time_seconds: timeout || options?.timeout || 1800,
+              keep_alive_time_seconds: keepAliveSeconds,
             },
-            name: options?.sandboxId,
-            metadata: options?.metadata,
-            environment_variables: options?.envs,
+            name: name || optSandboxId,
+            metadata,
+            environment_variables: envs,
+            ...providerOptions, // Spread provider-specific options (e.g., blueprint params, resource_size)
           };
 
           // Use blueprint if specified
-          if (options?.templateId) {
-            const templateId = options?.templateId;
+          if (templateId) {
             // Check template prefix to determine parameter type
-            if (templateId?.startsWith("bpt_")) {
+            if (templateId.startsWith("bpt_")) {
               devboxParams.blueprint_id = templateId;
-            } else if (templateId?.startsWith("snp_")) {
+            } else if (templateId.startsWith("snp_")) {
               devboxParams.snapshot_id = templateId;
-            } else {
-              // empty
             }
           }
 
