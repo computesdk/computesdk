@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.5.1
+
+### Patch Changes
+
+- 49d4fc0: Fix startup speed.
+
 ## 2.4.0
 
 ### Minor Changes

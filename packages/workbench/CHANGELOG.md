@@ -1,5 +1,27 @@
 # @computesdk/workbench
 
+## 18.0.1
+
+### Patch Changes
+
+- Updated dependencies [49d4fc0]
+  - computesdk@2.5.1
+  - @computesdk/beam@0.1.3
+  - @computesdk/blaxel@1.6.3
+  - @computesdk/cloudflare@1.5.1
+  - @computesdk/codesandbox@1.5.39
+  - @computesdk/daytona@1.7.19
+  - @computesdk/e2b@1.7.39
+  - @computesdk/hopx@0.2.15
+  - @computesdk/just-bash@0.4.3
+  - @computesdk/modal@1.8.34
+  - @computesdk/namespace@1.6.1
+  - @computesdk/provider@1.0.31
+  - @computesdk/railway@1.1.38
+  - @computesdk/runloop@1.3.39
+  - @computesdk/sprites@0.1.2
+  - @computesdk/vercel@1.7.18
+
 ## 16.0.0
 
 ### Minor Changes
