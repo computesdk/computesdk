@@ -1,13 +1,5 @@
 # @computesdk/render
 
-## 1.2.17
-
-### Patch Changes
-
-- Updated dependencies [5454416]
-  - computesdk@2.5.0
-  - @computesdk/provider@1.0.30
-
 ## 1.2.16
 
 ### Patch Changes
