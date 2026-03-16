@@ -1,5 +1,14 @@
 # @computesdk/cloudflare
 
+## 1.3.37
+
+### Patch Changes
+
+- 5454416: Forward CreateSandboxOptions consistently to all provider SDKs. Known fields (timeout, envs, name, metadata, templateId, snapshotId) are now properly mapped and forwarded with correct renaming per provider. Arbitrary provider-specific options are passed through via rest-spread so users can set options like cpu, memory, gpu, resources, etc. through the unified interface.
+- Updated dependencies [5454416]
+  - computesdk@2.5.0
+  - @computesdk/provider@1.0.30
+
 ## 1.3.36
 
 ### Patch Changes
