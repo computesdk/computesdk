@@ -1,12 +1,5 @@
 # @computesdk/avm
 
-## 0.1.37
-
-### Patch Changes
-
-- Updated dependencies [5454416]
-  - computesdk@2.5.0
-
 ## 0.1.36
 
 ### Patch Changes
