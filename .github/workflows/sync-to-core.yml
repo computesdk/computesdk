@@ -1,8 +1,14 @@
 name: Sync to computesdk-core
 
-# Disabled: sync is unreliable due to runner environment issues (esbuild, pnpm).
-# Re-enable when stabilized. Manual sync via workflow_dispatch still available.
+# Triggers:
+#   1. When the "Version Packages" changeset PR is merged (bumps versions, deletes changesets)
+#   2. Manual workflow_dispatch for ad-hoc syncs
+#
+# This workflow syncs package.json version fields and consumed changeset deletions
+# back to computesdk-core so the mirror workflow doesn't re-introduce stale versions.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       force:
@@ -12,7 +18,7 @@ on:
         type: boolean
 
 jobs:
-  sync:
+  sync-versions:
     runs-on: ubuntu-latest
     # Skip if this push came from the sync bot or from core sync (prevents infinite loop)
     if: |
@@ -27,26 +33,47 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Check if sync is needed
+        id: should-sync
+        run: |
+          # Only sync when version-related files changed (Version Packages merge)
+          # or when manually triggered
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "Manual trigger - will sync"
+            exit 0
+          fi
+
+          # Check if the commit message indicates a version bump
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if echo "$COMMIT_MSG" | grep -qiE "^Version Packages"; then
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "Version Packages commit detected - will sync"
+          else
+            echo "needed=false" >> $GITHUB_OUTPUT
+            echo "Not a version commit, skipping sync"
+          fi
+
       - name: Clone computesdk-core repository
+        if: steps.should-sync.outputs.needed == 'true'
         run: |
           git clone https://x-access-token:${{ secrets.ORG_REPO_TOKEN }}@github.com/computesdk/computesdk-core.git core-mirror
       
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-      
       - name: Setup Node.js
+        if: steps.should-sync.outputs.needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
       
       - name: Setup git and branch
+        if: steps.should-sync.outputs.needed == 'true'
         id: setup
         env:
           GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
         run: |
           cd core-mirror
           
-          BRANCH_NAME="sync/from-oss"
+          BRANCH_NAME="sync/version-bump-from-oss"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -55,7 +82,6 @@ jobs:
           if git ls-remote --exit-code --heads origin "$BRANCH_NAME" > /dev/null 2>&1; then
             git fetch origin "$BRANCH_NAME"
             git fetch origin main
-            # Create/reset branch from origin/main without tracking
             git checkout -B "$BRANCH_NAME" origin/main
           else
             git fetch origin main
@@ -64,19 +90,44 @@ jobs:
           
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
       
-      - name: Sync packages to core
+      - name: Sync version fields and changeset deletions
+        if: steps.should-sync.outputs.needed == 'true'
         run: |
-          # Sync packages/ to core (additive only - core may have extra files not in OSS)
-          rsync -av packages/ core-mirror/packages/
-      
-      - name: Regenerate lockfile
-        run: |
-          cd core-mirror
-          # Remove stale esbuild binary from runner image to avoid version conflict during postinstall
-          rm -f "$(which esbuild 2>/dev/null)" 2>/dev/null || true
-          pnpm install --no-frozen-lockfile
+          # 1. Update package.json version fields in computesdk-core to match OSS
+          for oss_pkg in packages/*/package.json; do
+            pkg_dir=$(basename "$(dirname "$oss_pkg")")
+            core_pkg="core-mirror/packages/$pkg_dir/package.json"
+            
+            if [ -f "$core_pkg" ]; then
+              oss_version=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$oss_pkg','utf8')).version)")
+              core_version=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$core_pkg','utf8')).version)")
+              
+              if [ "$oss_version" != "$core_version" ]; then
+                node -e "
+                  const fs = require('fs');
+                  const pkg = JSON.parse(fs.readFileSync('$core_pkg', 'utf8'));
+                  pkg.version = '$oss_version';
+                  fs.writeFileSync('$core_pkg', JSON.stringify(pkg, null, 2) + '\n');
+                "
+                echo "Updated $pkg_dir: $core_version -> $oss_version"
+              fi
+            fi
+          done
+
+          # 2. Remove changesets in computesdk-core that no longer exist in OSS
+          #    (they were consumed by the changesets release action)
+          for core_cs in core-mirror/.changeset/*.md; do
+            cs_name=$(basename "$core_cs")
+            [ "$cs_name" = "README.md" ] && continue
+            
+            if [ ! -f ".changeset/$cs_name" ]; then
+              rm "$core_cs"
+              echo "Removed consumed changeset: $cs_name"
+            fi
+          done
       
       - name: Check for changes and commit
+        if: steps.should-sync.outputs.needed == 'true'
         id: check
         run: |
           cd core-mirror
@@ -86,14 +137,14 @@ jobs:
             echo "No changes to sync"
           else
             echo "has_changes=true" >> $GITHUB_OUTPUT
-            git commit -m "Sync packages from OSS
+            git commit -m "Sync version bumps from OSS release
 
           Source commit: ${{ github.sha }}
           Triggered by: ${{ github.event.head_commit.message }}"
           fi
       
       - name: Push branch and create/update PR
-        if: steps.check.outputs.has_changes == 'true'
+        if: steps.should-sync.outputs.needed == 'true' && steps.check.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
         run: |
@@ -101,7 +152,6 @@ jobs:
           
           BRANCH_NAME="${{ steps.setup.outputs.branch_name }}"
           
-          # Force push to update branch
           git push origin "$BRANCH_NAME" --force
           
           # Check if PR already exists
@@ -110,17 +160,14 @@ jobs:
           if [ -n "$EXISTING_PR" ]; then
             echo "Updated existing PR #$EXISTING_PR"
           else
+            PR_BODY="Automated sync of package version bumps and consumed changeset deletions from the OSS repo."
+            PR_BODY="$PR_BODY"$'\n\n'"Triggered by a **Version Packages** merge. Updates package.json version fields and removes consumed changesets."
+            PR_BODY="$PR_BODY"$'\n\n'"**Source commit:** ${{ github.sha }}"
+            
             gh pr create \
               --repo computesdk/computesdk-core \
-              --title "Sync packages from OSS" \
-              --body "Automated sync of \`packages/\` from [computesdk](https://github.com/computesdk/computesdk) (OSS repo).
-
-          **Source commit:** ${{ github.sha }}
-          **Trigger:** ${{ github.event.head_commit.message }}
-
-          This PR will be automatically updated with new changes until merged.
-          
-          > **Note:** This likely came from an external contributor's PR on the OSS repo." \
+              --title "Sync version bumps from OSS release" \
+              --body "$PR_BODY" \
               --head "$BRANCH_NAME" \
               --base main
             echo "Created new PR"
