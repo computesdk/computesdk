@@ -1,5 +1,17 @@
 # @computesdk/daytona
 
+## 1.7.18
+
+### Patch Changes
+
+- 49d4fc0: fix silent error swallowing in destroy, getById, and list methods that prevented callers from detecting failures
+- 49d4fc0: Forward CreateSandboxOptions consistently to all provider SDKs. Known fields (timeout, envs, name, metadata, templateId, snapshotId) are now properly mapped and forwarded with correct renaming per provider. Arbitrary provider-specific options are passed through via rest-spread so users can set options like cpu, memory, gpu, resources, etc. through the unified interface.
+- 49d4fc0: Update packages for direct providers, fix runloop keep_alive default, and update daytona list method
+- Updated dependencies [49d4fc0]
+- Updated dependencies [49d4fc0]
+  - computesdk@2.5.0
+  - @computesdk/provider@1.0.30
+
 ## 1.7.17
 
 ### Patch Changes

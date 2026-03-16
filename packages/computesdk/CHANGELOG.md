@@ -1,5 +1,15 @@
 # computesdk
 
+## 2.5.0
+
+### Minor Changes
+
+- 49d4fc0: implement refactored provider package for namespace
+
+### Patch Changes
+
+- 49d4fc0: Fix startup speed.
+
 ## 2.4.0
 
 ### Minor Changes
