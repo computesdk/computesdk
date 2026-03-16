@@ -58,10 +58,38 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         }
 
         try {
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            runtime: _runtime,
+            timeout: _timeout,
+            envs,
+            name,
+            metadata,
+            templateId: _templateId,
+            snapshotId: _snapshotId,
+            sandboxId: optSandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            overlays: _overlays,
+            servers: _servers,
+            ...providerOptions
+          } = options || {};
+
           const body: Record<string, any> = {
-            name: options?.sandboxId || `sprite-${Date.now()}`,
+            name: name || optSandboxId || `sprite-${Date.now()}`,
             url_settings: { auth: 'public' },
+            ...providerOptions, // Spread provider-specific options
           };
+
+          // Remap envs to env_vars
+          if (envs && Object.keys(envs).length > 0) {
+            body.env_vars = envs;
+          }
+
+          // Pass metadata
+          if (metadata && typeof metadata === 'object') {
+            body.metadata = metadata;
+          }
 
           const res = await fetch(`${baseUrl}/sprites`, {
             method: 'POST',

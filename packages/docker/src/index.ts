@@ -180,16 +180,27 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         const chosenImage = pickImageForRuntime(effectiveRuntime, cfg.image);
         await ensureImage(docker, chosenImage);
 
+        // Merge environment variables: config.container.env < options.envs
+        const mergedEnv = { ...cfg.container?.env, ...options?.envs };
+
         // Build container create options
         const hb = toHostBindings(cfg.container?.ports);
         const createOptions = {
           Image: chosenImage.name,
           Tty: pick(cfg.container?.tty, false),
           OpenStdin: pick(cfg.container?.openStdin, false),
-          Labels: { [LABEL_KEY]: 'true', [LABEL_RUNTIME]: effectiveRuntime }, // <-- store runtime per sandbox
+          Labels: {
+            // User metadata is spread first with a namespaced prefix so it
+            // cannot overwrite the reserved discovery/runtime labels below.
+            ...(options?.metadata ? Object.fromEntries(
+              Object.entries(options.metadata).map(([k, v]) => [`com.computesdk.meta.${k}`, typeof v === 'string' ? v : JSON.stringify(v)])
+            ) : {}),
+            [LABEL_KEY]: 'true',
+            [LABEL_RUNTIME]: effectiveRuntime,
+          },
           WorkingDir: cfg.container?.workdir,
-          Env: cfg.container?.env
-            ? Object.entries(cfg.container.env).map(([k, v]) => `${k}=${v}`)
+          Env: Object.keys(mergedEnv).length > 0
+            ? Object.entries(mergedEnv).map(([k, v]) => `${k}=${v}`)
             : undefined,
           Cmd: KEEPALIVE_CMD, // keep container alive
           HostConfig: {

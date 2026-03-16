@@ -1,12 +1,5 @@
 # @computesdk/aws-lambda
 
-## 1.1.37
-
-### Patch Changes
-
-- Updated dependencies [fa0211f]
-  - computesdk@2.5.0
-
 ## 1.1.36
 
 ### Patch Changes

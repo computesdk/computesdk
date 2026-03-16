@@ -1,18 +1,5 @@
 # @computesdk/namespace
 
-## 1.6.0
-
-### Minor Changes
-
-- fa0211f: implement refactored provider package for namespace
-- fa0211f: Update namespace provider to infra model provider
-
-### Patch Changes
-
-- Updated dependencies [fa0211f]
-  - computesdk@2.5.0
-  - @computesdk/provider@1.0.30
-
 ## 1.5.1
 
 ### Patch Changes

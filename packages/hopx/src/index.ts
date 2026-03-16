@@ -69,7 +69,9 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
         }
 
         // Convert timeout from milliseconds to seconds (HopX uses seconds)
-        const timeoutSeconds = config.timeout ? Math.ceil(config.timeout / 1000) : undefined;
+        // options.timeout takes precedence over config.timeout
+        const timeout = options?.timeout ?? config.timeout;
+        const timeoutSeconds = timeout ? Math.ceil(timeout / 1000) : undefined;
 
         try {
           let sandbox: HopxSandbox;
@@ -80,24 +82,46 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
             sandbox = await HopxSandbox.connect(options.sandboxId, apiKey, config.baseURL);
             sandboxId = options.sandboxId;
           } else {
+            // Destructure known ComputeSDK fields, collect the rest for passthrough
+            const {
+              runtime: _runtime,
+              timeout: _timeout,
+              envs,
+              name,
+              metadata: _metadata,
+              templateId,
+              snapshotId,
+              sandboxId: _sandboxId,
+              namespace: _namespace,
+              directory: _directory,
+              overlays: _overlays,
+              servers: _servers,
+              ...providerOptions
+            } = options || {};
+
             // Create new HopX sandbox using Sandbox.create()
-            // Use templateId if provided, otherwise use template name or default to 'code-interpreter'
             const createOptions: any = {
               apiKey,
               baseURL: config.baseURL,
               timeoutSeconds,
+              ...providerOptions, // Spread provider-specific options
             };
 
-            // Handle template specification (templateId takes precedence)
-            if (options?.templateId) {
-              createOptions.templateId = options.templateId;
+            // Handle template specification (templateId/snapshotId takes precedence)
+            if (templateId || snapshotId) {
+              createOptions.templateId = templateId || snapshotId;
             } else {
               createOptions.template = config.template || 'code-interpreter';
             }
 
-            // Pass environment variables if provided
-            if (options?.envs) {
-              createOptions.envVars = options.envs;
+            // Remap envs to envVars
+            if (envs) {
+              createOptions.envVars = envs;
+            }
+
+            // Pass sandbox name
+            if (name) {
+              createOptions.name = name;
             }
 
             sandbox = await HopxSandbox.create(createOptions);

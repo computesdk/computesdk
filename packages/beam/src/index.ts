@@ -160,17 +160,41 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             return { sandbox: instance, sandboxId: instance.containerId };
           }
 
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            runtime: optRuntime,
+            timeout: optTimeout,
+            envs,
+            name,
+            metadata: _metadata,
+            templateId: _templateId,
+            snapshotId: _snapshotId,
+            sandboxId: _sandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            overlays: _overlays,
+            servers: _servers,
+            ...providerOptions
+          } = options || {};
+
           const sandboxConfig: any = {
-            name: options?.name || `computesdk-${Date.now()}`,
+            name: name || `computesdk-${Date.now()}`,
             keepWarmSeconds: 300,
+            ...providerOptions, // Spread provider-specific options
           };
 
-          if (options?.runtime === 'node') {
+          // options.timeout takes precedence over config.timeout
+          const timeout = optTimeout ?? config.timeout;
+          if (timeout) {
+            sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
+          }
+
+          if (optRuntime === 'node') {
             sandboxConfig.image = Image.fromRegistry('node:20-slim');
           }
 
-          if (options?.envs) {
-            sandboxConfig.envVars = Object.entries(options.envs).map(([name, value]) => `${name}=${value}`);
+          if (envs) {
+            sandboxConfig.envVars = Object.entries(envs).map(([name, value]) => `${name}=${value}`);
           }
 
           const sandbox = new Sandbox(sandboxConfig);
