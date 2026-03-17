@@ -20,7 +20,7 @@ beforeAll(async () => {
   if (!skipIntegration) {
     // Only setup Miniflare for integration tests
     const workerScript = readFileSync(resolve(__dirname, '../../test-worker.js'), 'utf8');
-    
+
     mf = new Miniflare({
       modules: true,
       script: workerScript,
@@ -96,7 +96,7 @@ describe('Miniflare Integration Tests', () => {
       // Test direct interaction with Miniflare
       const response = await mf.dispatchFetch('http://localhost/');
       expect(response.status).toBe(200);
-      
+
       const text = await response.text();
       expect(text).toBe('Hello from Miniflare test worker!');
     }
@@ -107,16 +107,16 @@ describe('Miniflare Integration Tests', () => {
       // Get bindings from Miniflare
       const env = await mf.getBindings();
       expect((env as any).SandboxDO).toBeDefined();
-      
+
       // Create Durable Object ID and stub
       const SandboxDO = (env as any).SandboxDO;
       const id = SandboxDO.idFromName('test-sandbox');
       const stub = SandboxDO.get(id);
-      
+
       // Test Durable Object interaction
       const response = await stub.fetch('http://localhost/health');
       const data = await response.json();
-      
+
       expect(data.status).toBe('ok');
       expect(data.provider).toBe('cloudflare-miniflare');
     }
@@ -154,7 +154,7 @@ async function getIntegrationBinding() {
 // Create provider with proper binding
 const defineProviderForTests = async () => {
   let binding = createSandboxBinding();
-  
+
   if (!skipIntegration) {
     // For integration tests, get the real Miniflare binding
     binding = await getIntegrationBinding();
@@ -170,7 +170,7 @@ const defineProviderForTests = async () => {
 // Use a describe block to handle async provider creation
 describe('Standardized Test Suite', () => {
   let testProvider: any;
-  
+
   beforeAll(async () => {
     testProvider = await defineProviderForTests();
   });
@@ -179,7 +179,7 @@ describe('Standardized Test Suite', () => {
   it('should have valid provider instance for testing', async () => {
     expect(testProvider).toBeDefined();
     expect(testProvider.name).toBe('cloudflare');
-    
+
     // Only test sandbox creation in unit test mode
     if (skipIntegration) {
       try {
@@ -188,6 +188,59 @@ describe('Standardized Test Suite', () => {
         expect(result.sandboxId).toBeDefined();
       } catch (error) {
         // Expected in some test scenarios
+      }
+    }
+  });
+
+  it('generates unique sandbox IDs under concurrency', async () => {
+    if (skipIntegration) {
+      const results = await Promise.all(Array.from({ length: 20 }, () => testProvider.sandbox.create()));
+      const sandboxIds = results.map((result: { sandboxId: string }) => result.sandboxId);
+
+      expect(new Set(sandboxIds).size).toBe(sandboxIds.length);
+    }
+  });
+
+  it('defers remote create until the first remote operation', async () => {
+    if (skipIntegration) {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ stdout: 'v22.0.0\n', stderr: '', exitCode: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const remoteProvider = cloudflare({
+          sandboxUrl: 'https://example.com',
+          sandboxSecret: 'secret',
+          envVars: { TEST_ENV: 'value' },
+        });
+
+        const created = await remoteProvider.sandbox.create();
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        const result = await created.runCommand('node -v');
+        expect(result.exitCode).toBe(0);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const call = fetchMock.mock.calls[0];
+        expect(call?.[0]).toBe('https://example.com/v1/sandbox/exec');
+
+        const requestInit = call?.[1];
+        expect(typeof requestInit?.body).toBe('string');
+        if (typeof requestInit?.body !== 'string') {
+          throw new Error('Expected worker request body to be a string');
+        }
+
+        const body = JSON.parse(requestInit.body) as Record<string, unknown>;
+        expect(body.sandboxId).toBe(created.sandboxId);
+        expect(body.command).toBe('node -v');
+        expect(body.initEnvVars).toEqual({ TEST_ENV: 'value' });
+      } finally {
+        vi.unstubAllGlobals();
       }
     }
   });

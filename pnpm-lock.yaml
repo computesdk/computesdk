@@ -276,8 +276,8 @@ importers:
   packages/cloudflare:
     dependencies:
       '@cloudflare/sandbox':
-        specifier: ^0.7.0
-        version: 0.7.17(@xterm/xterm@5.5.0)
+        specifier: ^0.7.18
+        version: 0.7.18(@xterm/xterm@5.5.0)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -1625,8 +1625,8 @@ packages:
     resolution: {integrity: sha512-YLPHc8yASwjNkmcDMQMY35yiWjoKAKnhUbPRszBRS0YgH+IXtsMp61j+yTcnCE3oO2DgP0U3iejLC8FTtKDC8Q==}
     engines: {node: '>=16.13'}
 
-  '@cloudflare/sandbox@0.7.17':
-    resolution: {integrity: sha512-dS6IdIq8OHg7jg08wz18BtP6TkBSaVrixq+kN4Zm5/6N9Vir+PbfebEFL23lM5UcaPoKx6Gttnhby8e79PSMOA==}
+  '@cloudflare/sandbox@0.7.18':
+    resolution: {integrity: sha512-v9hNXik88TfhLu83RRf1I8t98L86bt2RJVJB+EPIyZB7vBVwsx8w/veQ1BoJfbf/MSETtc/zLpQROgtbe5RYRw==}
     peerDependencies:
       '@openai/agents': ^0.3.3
       '@opencode-ai/sdk': ^1.1.40
@@ -7986,7 +7986,7 @@ snapshots:
     dependencies:
       mime: 3.0.0
 
-  '@cloudflare/sandbox@0.7.17(@xterm/xterm@5.5.0)':
+  '@cloudflare/sandbox@0.7.18(@xterm/xterm@5.5.0)':
     dependencies:
       '@cloudflare/containers': 0.1.1
       aws4fetch: 1.0.20
