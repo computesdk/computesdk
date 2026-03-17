@@ -7,6 +7,7 @@
     {
       "class_name": "Sandbox",
       "image": "./Dockerfile",
+      "instance_type": "basic",
       "max_instances": 1000
     }
   ],
