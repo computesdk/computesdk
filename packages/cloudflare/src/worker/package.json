@@ -4,5 +4,8 @@
   "type": "module",
   "dependencies": {
     "@cloudflare/sandbox": "^0.7.18"
+  },
+  "devDependencies": {
+    "wrangler": "^4.74.0"
   }
 }

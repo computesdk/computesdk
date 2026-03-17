@@ -1,11 +1,5 @@
 # @computesdk/cloudflare
 
-## 1.6.0
-
-### Minor Changes
-
-- 9f9e67d: implement cloudflare team fix
-
 ## 1.3.36
 
 ### Patch Changes
