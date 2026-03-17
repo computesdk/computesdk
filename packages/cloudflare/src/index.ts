@@ -68,6 +68,8 @@ interface CloudflareSandbox {
   remote: boolean;
   sandboxUrl?: string;
   sandboxSecret?: string;
+  pendingEnvVars?: Record<string, string>;
+  remoteInitialized?: boolean;
   // Direct mode fields
   sandbox?: any; // The @cloudflare/sandbox instance
 }
@@ -80,22 +82,22 @@ function isRemote(config: CloudflareConfig): boolean {
 
 function detectRuntime(code: string): Runtime {
   if (code.includes('print(') ||
-      code.includes('import ') ||
-      code.includes('def ') ||
-      code.includes('sys.') ||
-      code.includes('json.') ||
-      code.includes('__') ||
-      code.includes('f"') ||
-      code.includes("f'") ||
-      code.includes('raise ')) {
+    code.includes('import ') ||
+    code.includes('def ') ||
+    code.includes('sys.') ||
+    code.includes('json.') ||
+    code.includes('__') ||
+    code.includes('f"') ||
+    code.includes("f'") ||
+    code.includes('raise ')) {
     return 'python';
   }
   if (code.includes('console.log') ||
-      code.includes('process.') ||
-      code.includes('require(') ||
-      code.includes('module.exports') ||
-      code.includes('__dirname') ||
-      code.includes('__filename')) {
+    code.includes('process.') ||
+    code.includes('require(') ||
+    code.includes('module.exports') ||
+    code.includes('__dirname') ||
+    code.includes('__filename')) {
     return 'node';
   }
   return 'python';
@@ -109,6 +111,10 @@ function runtimeToLanguage(runtime: Runtime): 'python' | 'javascript' | 'typescr
     case 'deno': return 'typescript';
     default: return 'python';
   }
+}
+
+function createSandboxId(): string {
+  return `cf-sandbox-${crypto.randomUUID()}`;
 }
 
 /**
@@ -140,6 +146,26 @@ async function workerRequest(
     throw new Error(data.error || `Worker request failed: ${res.status}`);
   }
 
+  return data;
+}
+
+async function workerRequestWithInit(
+  cfSandbox: CloudflareSandbox,
+  path: string,
+  body: Record<string, any> = {}
+): Promise<any> {
+  if (!cfSandbox.remote || cfSandbox.remoteInitialized) {
+    return workerRequest(cfSandbox, path, body);
+  }
+
+  const initEnvVars = cfSandbox.pendingEnvVars;
+  const requestBody = initEnvVars && Object.keys(initEnvVars).length > 0
+    ? { ...body, initEnvVars }
+    : body;
+
+  const data = await workerRequest(cfSandbox, path, requestBody);
+  cfSandbox.pendingEnvVars = undefined;
+  cfSandbox.remoteInitialized = true;
   return data;
 }
 
@@ -234,29 +260,22 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           ...rest
         } = options || {};
 
-        const sandboxId = optSandboxId || `cf-sandbox-${Date.now()}`;
+        const sandboxId = optSandboxId || createSandboxId();
         const envVars = { ...config.envVars, ...envs };
         // options.timeout takes precedence over config.timeout
         const timeout = optTimeout ?? config.timeout;
+        const sleepAfter = timeout ? `${Math.ceil(timeout / 1000)}s` : undefined;
 
         // Remote mode
         if (isRemote(config)) {
-          await workerRequest(
-            { sandboxId, remote: true, sandboxUrl: config.sandboxUrl, sandboxSecret: config.sandboxSecret, exposedPorts: new Map() },
-            '/v1/sandbox/create',
-            {
-              envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
-              ...(timeout ? { timeout } : {}),
-              ...rest, // Pass through provider-specific options
-            }
-          );
-
           return {
             sandbox: {
               sandboxId,
               remote: true,
               sandboxUrl: config.sandboxUrl,
               sandboxSecret: config.sandboxSecret,
+              pendingEnvVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+              remoteInitialized: false,
               exposedPorts: new Map(),
             },
             sandboxId
@@ -274,7 +293,11 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         }
 
         try {
-          const sandbox = await getSandbox(config.sandboxBinding, sandboxId, config.sandboxOptions);
+          const sandboxOpts = { ...config.sandboxOptions };
+          if (sleepAfter) {
+            sandboxOpts.sleepAfter = sleepAfter;
+          }
+          const sandbox = await getSandbox(config.sandboxBinding, sandboxId, sandboxOpts);
 
           if (Object.keys(envVars).length > 0) {
             await sandbox.setEnvVars(envVars);
@@ -314,6 +337,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
               remote: true,
               sandboxUrl: config.sandboxUrl,
               sandboxSecret: config.sandboxSecret,
+              remoteInitialized: true,
               exposedPorts: new Map(),
             };
             // Verify sandbox is alive
@@ -374,7 +398,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
         // Remote mode
         if (cfSandbox.remote) {
-          const execution = await workerRequest(cfSandbox, '/v1/sandbox/runCode', { code, language });
+          const execution = await workerRequestWithInit(cfSandbox, '/v1/sandbox/runCode', { code, language });
           return processExecution(execution, detectedRuntime);
         }
 
@@ -399,7 +423,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
               fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
             }
 
-            const result = await workerRequest(cfSandbox, '/v1/sandbox/exec', {
+            const result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exec', {
               command: fullCommand,
               cwd: options?.cwd,
               env: options?.env,
@@ -454,7 +478,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
       getInfo: async (cfSandbox: CloudflareSandbox): Promise<SandboxInfo> => {
         try {
           if (cfSandbox.remote) {
-            await workerRequest(cfSandbox, '/v1/sandbox/info');
+            await workerRequestWithInit(cfSandbox, '/v1/sandbox/info');
           } else {
             await cfSandbox.sandbox.exec('true');
           }
@@ -497,7 +521,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
         let preview: any;
         if (cfSandbox.remote) {
-          preview = await workerRequest(cfSandbox, '/v1/sandbox/exposePort', { port, options: {} });
+          preview = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exposePort', { port, options: {} });
         } else {
           preview = await cfSandbox.sandbox.exposePort(port, {});
         }
@@ -512,7 +536,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
       filesystem: {
         readFile: async (cfSandbox: CloudflareSandbox, path: string): Promise<string> => {
           if (cfSandbox.remote) {
-            const file = await workerRequest(cfSandbox, '/v1/sandbox/readFile', { path });
+            const file = await workerRequestWithInit(cfSandbox, '/v1/sandbox/readFile', { path });
             return file.content || '';
           }
           const file = await cfSandbox.sandbox.readFile(path);
@@ -521,7 +545,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
         writeFile: async (cfSandbox: CloudflareSandbox, path: string, content: string): Promise<void> => {
           if (cfSandbox.remote) {
-            await workerRequest(cfSandbox, '/v1/sandbox/writeFile', { path, content });
+            await workerRequestWithInit(cfSandbox, '/v1/sandbox/writeFile', { path, content });
             return;
           }
           await cfSandbox.sandbox.writeFile(path, content);
@@ -529,7 +553,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
         mkdir: async (cfSandbox: CloudflareSandbox, path: string): Promise<void> => {
           if (cfSandbox.remote) {
-            await workerRequest(cfSandbox, '/v1/sandbox/mkdir', { path });
+            await workerRequestWithInit(cfSandbox, '/v1/sandbox/mkdir', { path });
             return;
           }
           await cfSandbox.sandbox.mkdir(path, { recursive: true });
@@ -539,7 +563,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           // Both modes use ls -la since there's no native readdir
           let result: any;
           if (cfSandbox.remote) {
-            result = await workerRequest(cfSandbox, '/v1/sandbox/exec', {
+            result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exec', {
               command: `ls -la "${shellEscape(path)}"`,
               cwd: '/',
             });
@@ -556,7 +580,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
         exists: async (cfSandbox: CloudflareSandbox, path: string): Promise<boolean> => {
           if (cfSandbox.remote) {
-            const result = await workerRequest(cfSandbox, '/v1/sandbox/exists', { path });
+            const result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exists', { path });
             return result.exists;
           }
           const result = await cfSandbox.sandbox.exists(path);
@@ -565,7 +589,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
         remove: async (cfSandbox: CloudflareSandbox, path: string): Promise<void> => {
           if (cfSandbox.remote) {
-            await workerRequest(cfSandbox, '/v1/sandbox/deleteFile', { path });
+            await workerRequestWithInit(cfSandbox, '/v1/sandbox/deleteFile', { path });
             return;
           }
           await cfSandbox.sandbox.deleteFile(path);
