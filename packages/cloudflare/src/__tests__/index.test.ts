@@ -191,6 +191,15 @@ describe('Standardized Test Suite', () => {
       }
     }
   });
+
+  it('generates unique sandbox IDs under concurrency', async () => {
+    if (skipIntegration) {
+      const results = await Promise.all(Array.from({ length: 20 }, () => testProvider.sandbox.create()));
+      const sandboxIds = results.map((result: { sandboxId: string }) => result.sandboxId);
+
+      expect(new Set(sandboxIds).size).toBe(sandboxIds.length);
+    }
+  });
 });
 
 // Run the standardized test suite with mock binding for unit tests

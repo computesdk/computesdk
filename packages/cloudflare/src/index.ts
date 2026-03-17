@@ -111,6 +111,10 @@ function runtimeToLanguage(runtime: Runtime): 'python' | 'javascript' | 'typescr
   }
 }
 
+function createSandboxId(): string {
+  return `cf-sandbox-${crypto.randomUUID()}`;
+}
+
 /**
  * Make an authenticated request to the remote gateway Worker
  */
@@ -234,7 +238,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           ...rest
         } = options || {};
 
-        const sandboxId = optSandboxId || `cf-sandbox-${Date.now()}`;
+        const sandboxId = optSandboxId || createSandboxId();
         const envVars = { ...config.envVars, ...envs };
         // options.timeout takes precedence over config.timeout
         const timeout = optTimeout ?? config.timeout;

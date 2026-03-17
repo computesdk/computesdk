@@ -54,8 +54,6 @@ export default {
 
       if (url.pathname === '/v1/sandbox/create') {
         if (body.envVars) await sandbox.setEnvVars(body.envVars);
-        // Trigger lazy container start
-        await sandbox.exec('true');
         return Response.json({ sandboxId, status: 'running' });
       }
 

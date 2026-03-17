@@ -32,7 +32,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@cloudflare/sandbox": "^0.7.0",
+    "@cloudflare/sandbox": "^0.7.18",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
