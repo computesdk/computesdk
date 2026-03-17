@@ -200,6 +200,50 @@ describe('Standardized Test Suite', () => {
       expect(new Set(sandboxIds).size).toBe(sandboxIds.length);
     }
   });
+
+  it('defers remote create until the first remote operation', async () => {
+    if (skipIntegration) {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ stdout: 'v22.0.0\n', stderr: '', exitCode: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const remoteProvider = cloudflare({
+          sandboxUrl: 'https://example.com',
+          sandboxSecret: 'secret',
+          envVars: { TEST_ENV: 'value' },
+        });
+
+        const created = await remoteProvider.sandbox.create();
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        const result = await created.runCommand('node -v');
+        expect(result.exitCode).toBe(0);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const call = fetchMock.mock.calls[0];
+        expect(call?.[0]).toBe('https://example.com/v1/sandbox/exec');
+
+        const requestInit = call?.[1];
+        expect(typeof requestInit?.body).toBe('string');
+        if (typeof requestInit?.body !== 'string') {
+          throw new Error('Expected worker request body to be a string');
+        }
+
+        const body = JSON.parse(requestInit.body) as Record<string, unknown>;
+        expect(body.sandboxId).toBe(created.sandboxId);
+        expect(body.command).toBe('node -v');
+        expect(body.initEnvVars).toEqual({ TEST_ENV: 'value' });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+  });
 });
 
 // Run the standardized test suite with mock binding for unit tests

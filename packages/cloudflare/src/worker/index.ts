@@ -50,6 +50,10 @@ export default {
     try {
       const sandbox = getSandbox(env.Sandbox, sandboxId);
 
+      if (body.initEnvVars) {
+        await sandbox.setEnvVars(body.initEnvVars);
+      }
+
       // --- Sandbox lifecycle ---
 
       if (url.pathname === '/v1/sandbox/create') {
