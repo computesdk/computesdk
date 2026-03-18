@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.62
+
+### Patch Changes
+
+- Updated dependencies [18f1317]
+  - @computesdk/codesandbox@1.5.40
+
 ## 0.4.61
 
 ### Patch Changes
