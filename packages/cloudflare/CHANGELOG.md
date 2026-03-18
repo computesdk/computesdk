@@ -1,15 +1,5 @@
 # @computesdk/cloudflare
 
-## 1.6.0
-
-### Minor Changes
-
-- 9415068: implement cloudflare team fix
-
-### Patch Changes
-
-- 9415068: update wrangler v
-
 ## 1.3.36
 
 ### Patch Changes

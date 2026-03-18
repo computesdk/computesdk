@@ -78,7 +78,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             const createOptions: any = {
               ...providerOptions, // Spread provider-specific options
             };
-            
+
             // options.templateId takes precedence over config.templateId
             const templateId = optTemplateId || config.templateId;
             if (templateId) {
@@ -160,11 +160,18 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         const sdk = new CodeSandbox(apiKey);
 
         try {
-          // Shutdown the sandbox using sdk.sandboxes.shutdown() to clean it up
           await sdk.sandboxes.shutdown(sandboxId);
+        } catch {
+          // Ignore — may already be stopped
+        }
+
+        try {
+          await sdk.sandboxes.delete(sandboxId);
         } catch (error) {
-          // Sandbox might already be shutdown or doesn't exist
-          // This is acceptable for destroy operations
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.includes('not found') && !message.includes('404')) {
+            throw new Error(`Failed to delete CodeSandbox sandbox "${sandboxId}": ${message}`);
+          }
         }
       },
 
@@ -179,15 +186,15 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           // Auto-detect runtime if not specified
           const effectiveRuntime = runtime || (
             // Strong Python indicators
-            code.includes('print(') || 
-            code.includes('import ') ||
-            code.includes('def ') ||
-            code.includes('sys.') ||
-            code.includes('json.') ||
-            code.includes('__') ||
-            code.includes('f"') ||
-            code.includes("f'") ||
-            code.includes('raise ')
+            code.includes('print(') ||
+              code.includes('import ') ||
+              code.includes('def ') ||
+              code.includes('sys.') ||
+              code.includes('json.') ||
+              code.includes('__') ||
+              code.includes('f"') ||
+              code.includes("f'") ||
+              code.includes('raise ')
               ? 'python'
               // Default to Node.js for all other cases (including ambiguous)
               : 'node'
@@ -211,9 +218,9 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
 
           // Check for syntax errors in the output and throw them (similar to other providers)
           if (output.includes('SyntaxError') ||
-              output.includes('invalid syntax') ||
-              output.includes('Unexpected token') ||
-              output.includes('Unexpected identifier')) {
+            output.includes('invalid syntax') ||
+            output.includes('Unexpected token') ||
+            output.includes('Unexpected identifier')) {
             throw new Error(`Syntax error: ${output.trim()}`);
           }
 
@@ -242,7 +249,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
 
           // Build command with options
           let fullCommand = command;
-          
+
           // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
@@ -250,12 +257,12 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
-          
+
           // Handle working directory
           if (options?.cwd) {
             fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
-          
+
           // Handle background execution
           if (options?.background) {
             fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
@@ -376,11 +383,11 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         try {
           // Resume the sandbox first, then hibernate to create a snapshot
           const sandbox = await sdk.sandboxes.resume(sandboxId);
-          
+
           // Hibernate creates a checkpoint/snapshot of the sandbox
           // Cast to any to avoid type issues with SDK version
           await (sandbox as any).hibernate();
-          
+
           // The hibernated sandbox becomes a snapshot we can fork
           return {
             id: sandbox.id,
