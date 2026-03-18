@@ -1,30 +1,5 @@
 # @computesdk/workbench
 
-## 20.0.0
-
-### Patch Changes
-
-- 8683a77: feat: add Freestyle as a new compute provider with Node.js and Python runtime support
-- Updated dependencies [8683a77]
-- Updated dependencies [8683a77]
-  - @computesdk/freestyle@0.1.0
-  - computesdk@2.5.2
-  - @computesdk/codesandbox@1.5.40
-  - @computesdk/beam@0.1.4
-  - @computesdk/blaxel@1.6.4
-  - @computesdk/cloudflare@1.6.1
-  - @computesdk/daytona@1.7.20
-  - @computesdk/e2b@1.7.40
-  - @computesdk/hopx@0.2.16
-  - @computesdk/just-bash@0.4.4
-  - @computesdk/modal@1.8.35
-  - @computesdk/namespace@1.6.2
-  - @computesdk/provider@1.0.32
-  - @computesdk/railway@1.1.39
-  - @computesdk/runloop@1.3.40
-  - @computesdk/sprites@0.1.3
-  - @computesdk/vercel@1.7.19
-
 ## 16.0.0
 
 ### Minor Changes
