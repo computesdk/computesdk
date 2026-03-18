@@ -43,6 +43,7 @@ export const PROVIDER_PRIORITY = [
   'hopx',
   'beam',
   'sprites',
+  'freestyle',
 ] as const;
 
 /**
@@ -64,5 +65,6 @@ export const PROVIDER_ENV_VARS = {
   hopx: ['HOPX_API_KEY'],
   beam: ['BEAM_TOKEN', 'BEAM_WORKSPACE_ID'],
   sprites: ['SPRITES_TOKEN'],
+  freestyle: ['FREESTYLE_API_KEY'],
   'just-bash': [] as const,
 } as const;

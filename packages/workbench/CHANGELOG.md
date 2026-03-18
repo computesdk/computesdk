@@ -1,12 +1,5 @@
 # @computesdk/workbench
 
-## 19.0.1
-
-### Patch Changes
-
-- Updated dependencies [18f1317]
-  - @computesdk/codesandbox@1.5.40
-
 ## 16.0.0
 
 ### Minor Changes

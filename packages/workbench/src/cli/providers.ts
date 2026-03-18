@@ -273,6 +273,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/hopx');
       case 'sprites':
         return await import('@computesdk/sprites');
+      case 'freestyle':
+        return await import('@computesdk/freestyle');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }

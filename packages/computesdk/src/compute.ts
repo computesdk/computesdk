@@ -66,6 +66,7 @@ export interface ExplicitComputeConfig {
   hopx?: { apiKey?: string };
   beam?: { token?: string; workspaceId?: string };
   sprites?: { apiKey?: string };
+  freestyle?: { apiKey?: string };
   'just-bash'?: {}; // Local sandbox - no config needed
 }
 
