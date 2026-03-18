@@ -1,7 +1,7 @@
 {
-  "name": "@computesdk/codesandbox",
-  "version": "1.5.39",
-  "description": "CodeSandbox provider for ComputeSDK - fast browser-compatible sandboxes with npm and Python support",
+  "name": "@computesdk/freestyle",
+  "version": "0.0.1",
+  "description": "Freestyle provider for ComputeSDK - cloud sandboxes powered by Freestyle",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -28,26 +28,25 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@codesandbox/sdk": "^2.4.2",
+    "freestyle-sandboxes": "^0.1.33",
+    "@freestyle-sh/with-python": "^0.2.8",
+    "@freestyle-sh/with-nodejs": "^0.2.8",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",
-    "codesandbox",
+    "freestyle",
     "sandbox",
     "code-execution",
-    "javascript",
-    "python",
     "cloud",
     "compute",
-    "provider",
-    "microvm"
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/codesandbox"
+    "directory": "packages/freestyle"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {

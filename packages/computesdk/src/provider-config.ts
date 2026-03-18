@@ -36,6 +36,7 @@ export const PROVIDER_AUTH = {
   hopx: [['HOPX_API_KEY']],
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
   sprites: [['SPRITES_TOKEN']],
+  freestyle: [['FREESTYLE_API_KEY']],
   'just-bash': [[]],
 } as const;
 
@@ -108,6 +109,9 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
   sprites: {
     apiKey: 'X-Sprites-Token',
   },
+  freestyle: {
+    apiKey: 'X-Freestyle-API-Key',
+  },
   'just-bash': {},
 };
 
@@ -170,6 +174,9 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
   sprites: {
     SPRITES_TOKEN: 'apiKey',
   },
+  freestyle: {
+    FREESTYLE_API_KEY: 'apiKey',
+  },
   'just-bash': {},
 };
 
@@ -191,6 +198,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   hopx: 'https://hopx.ai/dashboard',
   beam: 'https://app.beam.cloud',
   sprites: 'https://sprites.dev',
+  freestyle: 'https://dash.freestyle.sh',
   'just-bash': 'https://github.com/vercel-labs/just-bash',
 };
 

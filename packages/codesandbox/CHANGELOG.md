@@ -1,11 +1,5 @@
 # Changelog
 
-## 1.5.40
-
-### Patch Changes
-
-- 18f1317: fix: codesandbox destroy() now uses sdk shutdown() then sdk delete()
-
 ## 1.5.37
 
 ### Patch Changes
