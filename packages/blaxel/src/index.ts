@@ -54,19 +54,19 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				} = options || {};
 
 				// Determine the image to use
-				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
+				let image = config.image || 'blaxel/base-image:latest';  // Default to prod-base
 
 				// Override with runtime-specific image if runtime is specified and no explicit image
 				if (!config.image && optRuntime) {
 					switch (optRuntime) {
 						case 'python':
-							image = 'blaxel/prod-py-app:latest';
+							image = 'blaxel/py-app:latest';
 							break;
 						case 'node':
-							image = 'blaxel/prod-ts-app:latest';
+							image = 'blaxel/ts-app:latest';
 							break;
 						default:
-							image = 'blaxel/prod-base:latest';
+							image = 'blaxel/base-image:latest';
 							break;
 					}
 				}
@@ -603,10 +603,12 @@ async function executeWithStreaming(
 		command,
 		waitForCompletion: true,
 	});
+	// Handle union type - ProcessResponseWithLog has stdout/stderr
+	const result = processResult as { stdout?: string; stderr?: string; exitCode?: number };
 	return {
-		stdout: processResult.stdout,
-		stderr: processResult.stderr,
-		exitCode: processResult.exitCode || 0,
+		stdout: result.stdout || '',
+		stderr: result.stderr || '',
+		exitCode: result.exitCode || 0,
 	};
 }
 
