@@ -1,5 +1,11 @@
 # @computesdk/cloudflare
 
+## 1.6.2
+
+### Patch Changes
+
+- 5f3b790: Add SANDBOX_POLL_INTERVAL_MS var to wrangler config per Cloudflare request
+
 ## 1.6.1
 
 ### Patch Changes
