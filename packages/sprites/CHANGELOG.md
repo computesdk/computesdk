@@ -1,5 +1,13 @@
 # @computesdk/sprites
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+  - @computesdk/provider@1.0.32
+
 ## 0.1.0
 
 ### Minor Changes
