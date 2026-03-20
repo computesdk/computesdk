@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 20.0.1
+
+### Patch Changes
+
+- Updated dependencies [29143f3]
+  - @computesdk/blaxel@1.6.5
+
 ## 20.0.0
 
 ### Patch Changes
