@@ -54,19 +54,19 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				} = options || {};
 
 				// Determine the image to use
-				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
+				let image = config.image || 'blaxel/base-image:latest';  // Default to prod-base
 
 				// Override with runtime-specific image if runtime is specified and no explicit image
 				if (!config.image && optRuntime) {
 					switch (optRuntime) {
 						case 'python':
-							image = 'blaxel/prod-py-app:latest';
+							image = 'blaxel/py-app:latest';
 							break;
 						case 'node':
-							image = 'blaxel/prod-ts-app:latest';
+							image = 'blaxel/ts-app:latest';
 							break;
 						default:
-							image = 'blaxel/prod-base:latest';
+							image = 'blaxel/base-image:latest';
 							break;
 					}
 				}
@@ -92,12 +92,12 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				} else {
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
-						name: name || optSandboxId || `blaxel-${Date.now()}`,
+						name: name || optSandboxId,
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
 						metadata: {
-							name: name || optSandboxId || `blaxel-${Date.now()}`,
+							name: name || optSandboxId,
 							labels: {
 								...metadata?.labels,
 							}

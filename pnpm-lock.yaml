@@ -239,8 +239,8 @@ importers:
   packages/blaxel:
     dependencies:
       '@blaxel/core':
-        specifier: ^0.2.70
-        version: 0.2.71(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.2.75
+        version: 0.2.75(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -1561,8 +1561,8 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@blaxel/core@0.2.71':
-    resolution: {integrity: sha512-gXGF6bITKQS4N2wWz7SO/nLT26mgzrpplDO2wQDnuncjN/+11Ye8YZGqgU6mNb1Td7WzAegCpEhRv5+sDEsZPw==}
+  '@blaxel/core@0.2.75':
+    resolution: {integrity: sha512-EvRVFEqMn8wZ0iJaUhRvqquU4vSfYcUrsmm9mIbCpY36C1wh9C2qBuPZlPRmEf8O+VAfVD6gr1VXYNXofZq5BA==}
     engines: {node: '>=18'}
 
   '@borewit/text-codec@0.2.1':
@@ -7871,7 +7871,7 @@ snapshots:
       - debug
       - utf-8-validate
 
-  '@blaxel/core@0.2.71(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@blaxel/core@0.2.75(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
       '@modelcontextprotocol/sdk': 1.26.0(zod@3.25.76)
