@@ -17,5 +17,8 @@
   },
   "migrations": [
     { "new_sqlite_classes": ["Sandbox"], "tag": "v1" }
-  ]
+  ],
+  "vars": {
+    "SANDBOX_POLL_INTERVAL_MS": "200"
+  }
 }
