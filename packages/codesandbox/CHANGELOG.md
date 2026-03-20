@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.40
+
+### Patch Changes
+
+- 5f1b08f: fix: codesandbox destroy() now uses sdk shutdown() then sdk delete()
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+  - @computesdk/provider@1.0.32
+
 ## 1.5.37
 
 ### Patch Changes

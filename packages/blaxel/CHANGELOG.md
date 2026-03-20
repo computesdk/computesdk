@@ -1,5 +1,14 @@
 # @computesdk/blaxel
 
+## 1.6.4
+
+### Patch Changes
+
+- 5e8b787: Update @blaxel/core to version 0.2.75 and refactor image names
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+  - @computesdk/provider@1.0.32
+
 ## 1.6.1
 
 ### Patch Changes

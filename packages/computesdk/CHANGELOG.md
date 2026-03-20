@@ -1,5 +1,11 @@
 # computesdk
 
+## 2.5.2
+
+### Patch Changes
+
+- 5f1b08f: feat: add Freestyle as a new compute provider with Node.js and Python runtime support
+
 ## 2.4.0
 
 ### Minor Changes
