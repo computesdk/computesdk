@@ -41,7 +41,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					runtime: optRuntime,
 					timeout: optTimeout,
 					envs,
-					name,
+					name: _name,
 					metadata,
 					templateId: _templateId,
 					snapshotId,
@@ -92,16 +92,10 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				} else {
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
-						name: name || optSandboxId,
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
-						metadata: {
-							name: name || optSandboxId,
-							labels: {
-								...metadata?.labels,
-							}
-						},
+						...(metadata?.labels && { labels: metadata.labels }),
 						ttl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
@@ -609,10 +603,12 @@ async function executeWithStreaming(
 		command,
 		waitForCompletion: true,
 	});
+	// Handle union type - ProcessResponseWithLog has stdout/stderr
+	const result = processResult as { stdout?: string; stderr?: string; exitCode?: number };
 	return {
-		stdout: processResult.stdout,
-		stderr: processResult.stderr,
-		exitCode: processResult.exitCode || 0,
+		stdout: result.stdout || '',
+		stderr: result.stderr || '',
+		exitCode: result.exitCode || 0,
 	};
 }
 

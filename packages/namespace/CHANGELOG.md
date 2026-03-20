@@ -1,13 +1,5 @@
 # @computesdk/namespace
 
-## 1.6.2
-
-### Patch Changes
-
-- Updated dependencies [8683a77]
-  - computesdk@2.5.2
-  - @computesdk/provider@1.0.32
-
 ## 1.5.1
 
 ### Patch Changes
