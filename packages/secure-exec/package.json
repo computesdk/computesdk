@@ -1,5 +1,5 @@
 {
-  "name": "@computesdk/secure-exec-nodejs",
+  "name": "@computesdk/secure-exec",
   "version": "0.1.0",
   "description": "Secure Exec provider for ComputeSDK - V8 isolate-based sandboxed JavaScript execution with JSON return values",
   "author": "ComputeSDK",
@@ -55,7 +55,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/NathanFlurry/computesdk.git",
-    "directory": "packages/secure-exec-nodejs"
+    "directory": "packages/secure-exec"
   },
   "homepage": "https://secureexec.dev",
   "bugs": {
