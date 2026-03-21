@@ -1,0 +1,64 @@
+{
+  "name": "@computesdk/secure-exec",
+  "version": "0.1.0",
+  "description": "Secure Exec provider for ComputeSDK - V8 isolate-based sandboxed JavaScript execution with JSON return values",
+  "author": "ComputeSDK",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "secure-exec": "0.1.1-rc.3",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "keywords": [
+    "computesdk",
+    "secure-exec",
+    "sandbox",
+    "v8-isolate",
+    "code-execution",
+    "javascript",
+    "provider",
+    "security"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NathanFlurry/computesdk.git",
+    "directory": "packages/secure-exec"
+  },
+  "homepage": "https://secureexec.dev",
+  "bugs": {
+    "url": "https://github.com/NathanFlurry/computesdk/issues"
+  }
+}
