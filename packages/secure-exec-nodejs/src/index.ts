@@ -17,10 +17,11 @@ import {
   NodeRuntime,
   createNodeDriver,
   createNodeRuntimeDriverFactory,
+  createNodeV8Runtime,
   allowAll,
   createInMemoryFileSystem,
 } from 'secure-exec';
-import type { ExecResult, RunResult, StdioEvent } from 'secure-exec';
+import type { ExecResult, RunResult, StdioEvent, NodeRuntimeDriverFactory, SystemDriver } from 'secure-exec';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CodeResult,
@@ -60,6 +61,34 @@ interface SecureExecSandbox {
 const activeSandboxes = new Map<string, SecureExecSandbox>();
 
 /**
+ * Singleton runtime infrastructure. The V8 runtime, system driver, and
+ * runtime driver factory are expensive to create — initialize them once
+ * and share across all sandboxes. The promise is created lazily on first
+ * sandbox create and never re-created.
+ */
+interface SharedRuntime {
+  systemDriver: SystemDriver;
+  runtimeDriverFactory: NodeRuntimeDriverFactory;
+}
+
+let sharedRuntimePromise: Promise<SharedRuntime> | null = null;
+
+function getSharedRuntime(config: SecureExecConfig): Promise<SharedRuntime> {
+  if (!sharedRuntimePromise) {
+    sharedRuntimePromise = (async () => {
+      const systemDriver = createNodeDriver({
+        filesystem: createInMemoryFileSystem(),
+        permissions: config.permissions ?? allowAll,
+      });
+      const v8Runtime = await createNodeV8Runtime();
+      const runtimeDriverFactory = createNodeRuntimeDriverFactory({ v8Runtime });
+      return { systemDriver, runtimeDriverFactory };
+    })();
+  }
+  return sharedRuntimePromise;
+}
+
+/**
  * Collect stdio output during an execution
  */
 function createStdioCollector() {
@@ -94,14 +123,12 @@ const _provider = defineProvider<SecureExecSandbox, SecureExecConfig>({
           return { sandbox: existing, sandboxId: existing.id };
         }
 
-        const systemDriver = createNodeDriver({
-          filesystem: createInMemoryFileSystem(),
-          permissions: config.permissions ?? allowAll,
-        });
+        // Await the singleton shared runtime (created once, reused for all sandboxes)
+        const { systemDriver, runtimeDriverFactory } = await getSharedRuntime(config);
 
         const runtime = new NodeRuntime({
           systemDriver,
-          runtimeDriverFactory: createNodeRuntimeDriverFactory(),
+          runtimeDriverFactory,
           memoryLimit: config.memoryLimit ?? 128 * 1024 * 1024,
           cpuTimeLimitMs: config.cpuTimeLimitMs ?? 30000,
         });
