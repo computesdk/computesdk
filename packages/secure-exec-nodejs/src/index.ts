@@ -73,24 +73,23 @@ interface SharedRuntime {
 
 let sharedRuntimePromise: Promise<SharedRuntime> | null = null;
 
+async function initSharedRuntime(config: SecureExecConfig): Promise<SharedRuntime> {
+  const systemDriver = createNodeDriver({
+    filesystem: createInMemoryFileSystem(),
+    permissions: config.permissions ?? allowAll,
+  });
+  const v8Runtime = await createNodeV8Runtime();
+  const runtimeDriverFactory = createNodeRuntimeDriverFactory({ v8Runtime });
+  return { systemDriver, runtimeDriverFactory };
+}
+
 function getSharedRuntime(config: SecureExecConfig): Promise<SharedRuntime> {
   if (!sharedRuntimePromise) {
-    sharedRuntimePromise = (async () => {
-      const systemDriver = createNodeDriver({
-        filesystem: createInMemoryFileSystem(),
-        permissions: config.permissions ?? allowAll,
-      });
-      const v8Runtime = await createNodeV8Runtime();
-      const runtimeDriverFactory = createNodeRuntimeDriverFactory({ v8Runtime });
-      return { systemDriver, runtimeDriverFactory };
-    })();
+    sharedRuntimePromise = initSharedRuntime(config);
   }
   return sharedRuntimePromise;
 }
 
-/**
- * Collect stdio output during an execution
- */
 function createStdioCollector() {
   let stdout = '';
   let stderr = '';
@@ -101,13 +100,6 @@ function createStdioCollector() {
   return { hook, getStdout: () => stdout, getStderr: () => stderr };
 }
 
-/**
- * Create a secure-exec provider instance.
- *
- * Executes JavaScript in a V8 isolate with Node.js API compatibility.
- * Shell commands are evaluated as JavaScript — the return value is
- * JSON-serialized and placed in stdout.
- */
 const _provider = defineProvider<SecureExecSandbox, SecureExecConfig>({
   name: 'secure-exec',
   methods: {
@@ -117,13 +109,11 @@ const _provider = defineProvider<SecureExecSandbox, SecureExecConfig>({
           options?.sandboxId ||
           `secure-exec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-        // Reconnect to existing sandbox
         if (options?.sandboxId && activeSandboxes.has(options.sandboxId)) {
           const existing = activeSandboxes.get(options.sandboxId)!;
           return { sandbox: existing, sandboxId: existing.id };
         }
 
-        // Await the singleton shared runtime (created once, reused for all sandboxes)
         const { systemDriver, runtimeDriverFactory } = await getSharedRuntime(config);
 
         const runtime = new NodeRuntime({
@@ -165,36 +155,24 @@ const _provider = defineProvider<SecureExecSandbox, SecureExecConfig>({
         }
       },
 
-      /**
-       * Execute code and return combined stdout/stderr output.
-       *
-       * Uses `runtime.exec()` which runs the code and captures console output.
-       */
       runCode: async (
         sandbox: SecureExecSandbox,
         code: string,
         _runtime?: Runtime
       ): Promise<CodeResult> => {
         const collector = createStdioCollector();
-
         try {
           const result: ExecResult = await sandbox.runtime.exec(code, {
             env: sandbox.config.env,
             cwd: sandbox.config.cwd ?? '/home/user',
             onStdio: collector.hook,
           });
-
           const stdout = collector.getStdout();
           const stderr = collector.getStderr();
           const output = stderr
             ? `${stdout}${stdout && stderr ? '\n' : ''}${stderr}`
             : stdout;
-
-          return {
-            output,
-            exitCode: result.code,
-            language: 'javascript',
-          };
+          return { output, exitCode: result.code, language: 'javascript' };
         } catch (error) {
           const stdout = collector.getStdout();
           const stderr = collector.getStderr();
@@ -202,54 +180,27 @@ const _provider = defineProvider<SecureExecSandbox, SecureExecConfig>({
           const output = stderr
             ? `${stdout}${stdout && stderr ? '\n' : ''}${stderr}\n${errMsg}`
             : `${stdout}${stdout ? '\n' : ''}${errMsg}`;
-
-          return {
-            output,
-            exitCode: 1,
-            language: 'javascript',
-          };
+          return { output, exitCode: 1, language: 'javascript' };
         }
       },
 
-      /**
-       * Evaluate the command string as JavaScript and return the result as JSON.
-       *
-       * The command is wrapped so its return value is captured via `runtime.run()`.
-       * The JSON-serialized result is placed in `stdout`. Any console output
-       * during evaluation ends up in `stderr`.
-       *
-       * Example:
-       *   runCommand('1 + 2')           → { stdout: '3', ... }
-       *   runCommand('({a: 1, b: 2})')  → { stdout: '{"a":1,"b":2}', ... }
-       *   runCommand('require("os").platform()') → { stdout: '"linux"', ... }
-       */
       runCommand: async (
         sandbox: SecureExecSandbox,
         command: string,
-        options?: RunCommandOptions
+        _options?: RunCommandOptions
       ): Promise<CommandResult> => {
         const startTime = Date.now();
-        const collector = createStdioCollector();
-
         try {
-          const result: RunResult = await sandbox.runtime.run(command, options?.cwd);
-
-          const consoleOutput = collector.getStdout();
-          const consoleErrors = collector.getStderr();
-
-          // Serialize the return value to JSON
+          const result: RunResult = await sandbox.runtime.run(command);
           let jsonResult: string;
           try {
             jsonResult = JSON.stringify(result.exports);
           } catch {
             jsonResult = String(result.exports);
           }
-
-          // stdout = JSON-serialized return value
-          // stderr = any console.error/warn output during evaluation
           return {
             stdout: jsonResult,
-            stderr: consoleErrors,
+            stderr: '',
             exitCode: result.code,
             durationMs: Date.now() - startTime,
           };
@@ -288,51 +239,36 @@ const _provider = defineProvider<SecureExecSandbox, SecureExecConfig>({
       },
 
       filesystem: {
-        readFile: async (
-          sandbox: SecureExecSandbox,
-          path: string
-        ): Promise<string> => {
+        readFile: async (sandbox: SecureExecSandbox, path: string): Promise<string> => {
           const result = await sandbox.runtime.run(
             `require('fs').readFileSync(${JSON.stringify(path)}, 'utf8')`
           );
           return String(result.exports ?? '');
         },
-
-        writeFile: async (
-          sandbox: SecureExecSandbox,
-          path: string,
-          content: string
-        ): Promise<void> => {
+        writeFile: async (sandbox: SecureExecSandbox, path: string, content: string): Promise<void> => {
           await sandbox.runtime.run(
             `require('fs').mkdirSync(require('path').dirname(${JSON.stringify(path)}), { recursive: true }); ` +
             `require('fs').writeFileSync(${JSON.stringify(path)}, ${JSON.stringify(content)})`
           );
         },
-
         mkdir: async (sandbox: SecureExecSandbox, path: string): Promise<void> => {
           await sandbox.runtime.run(
             `require('fs').mkdirSync(${JSON.stringify(path)}, { recursive: true })`
           );
         },
-
-        readdir: async (
-          sandbox: SecureExecSandbox,
-          path: string
-        ): Promise<FileEntry[]> => {
+        readdir: async (sandbox: SecureExecSandbox, path: string): Promise<FileEntry[]> => {
           const result = await sandbox.runtime.run(
             `require('fs').readdirSync(${JSON.stringify(path)}, { withFileTypes: true })` +
             `.map(e => ({ name: e.name, type: e.isDirectory() ? 'directory' : 'file' }))`
           );
           return (result.exports as FileEntry[]) ?? [];
         },
-
         exists: async (sandbox: SecureExecSandbox, path: string): Promise<boolean> => {
           const result = await sandbox.runtime.run(
             `require('fs').existsSync(${JSON.stringify(path)})`
           );
           return result.exports === true;
         },
-
         remove: async (sandbox: SecureExecSandbox, path: string): Promise<void> => {
           await sandbox.runtime.run(
             `require('fs').rmSync(${JSON.stringify(path)}, { recursive: true, force: true })`
