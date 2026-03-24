@@ -1,0 +1,66 @@
+{
+  "name": "@computesdk/secure-exec",
+  "version": "0.1.0",
+  "description": "Secure execution provider for ComputeSDK - isolated sandbox environments using secure-exec",
+  "author": "ComputeSDK",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "secure-exec": "^0.1.1-rc.3",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
+  },
+  "keywords": [
+    "computesdk",
+    "secure-exec",
+    "sandbox",
+    "code-execution",
+    "python",
+    "javascript",
+    "compute",
+    "provider",
+    "isolated",
+    "vm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/secure-exec"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

@@ -71,7 +71,8 @@
     "@computesdk/vercel": "workspace:*",
     "@computesdk/namespace": "workspace:*",
     "@computesdk/sprites": "workspace:*",
-    "@computesdk/freestyle": "workspace:*"
+    "@computesdk/freestyle": "workspace:*",
+    "@computesdk/secure-exec": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
@@ -117,6 +118,9 @@
       "optional": true
     },
     "@computesdk/freestyle": {
+      "optional": true
+    },
+    "@computesdk/secure-exec": {
       "optional": true
     }
   },
