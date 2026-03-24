@@ -20,3 +20,13 @@ export type {
 // Provider-specific types (defined in this package)
 // Includes: Provider, ProviderSandbox, TypedProviderSandbox, and all manager interfaces
 export * from './provider';
+
+// Re-export storage types explicitly for clarity
+export type {
+  StorageObject,
+  UploadOptions,
+  DownloadResult,
+  ListOptions,
+  ListResult,
+  StorageProvider,
+} from './provider';

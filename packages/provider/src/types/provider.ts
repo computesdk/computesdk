@@ -368,3 +368,95 @@ export interface BlaxelProviderConfig {
 
 // Note: Gateway-specific types (ExplicitComputeConfig, etc.) are in computesdk package
 
+/**
+ * Storage Provider Types
+ * 
+ * Unified interface for object storage providers (S3, R2, Tigris, etc.)
+ */
+
+/**
+ * Storage object metadata
+ */
+export interface StorageObject {
+  /** Bucket name */
+  bucket: string;
+  /** Object key/path */
+  key: string;
+  /** Object size in bytes */
+  size: number;
+  /** ETag (entity tag) for the object */
+  etag?: string;
+  /** Last modified date */
+  lastModified?: Date;
+  /** Optional metadata */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Options for uploading objects
+ */
+export interface UploadOptions {
+  /** MIME content type */
+  contentType?: string;
+  /** Custom metadata */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Result from a download operation
+ */
+export interface DownloadResult {
+  /** Object data as Uint8Array (cross-platform compatible) */
+  data: Uint8Array;
+  /** Object size in bytes */
+  size: number;
+  /** MIME content type */
+  contentType?: string;
+  /** ETag (entity tag) */
+  etag?: string;
+  /** Last modified date */
+  lastModified?: Date;
+  /** Custom metadata */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Options for listing objects
+ */
+export interface ListOptions {
+  /** Prefix to filter objects */
+  prefix?: string;
+  /** Maximum number of keys to return */
+  maxKeys?: number;
+  /** Continuation token for pagination */
+  continuationToken?: string;
+}
+
+/**
+ * Result from a list operation
+ */
+export interface ListResult {
+  /** List of objects */
+  objects: StorageObject[];
+  /** Whether there are more results */
+  truncated: boolean;
+  /** Continuation token for next page */
+  continuationToken?: string;
+}
+
+/**
+ * Base storage provider interface
+ * 
+ * All storage providers (S3, R2, Tigris) implement this interface
+ */
+export interface StorageProvider {
+  /** Upload data to storage */
+  upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject>;
+  /** Download data from storage */
+  download(bucket: string, key: string): Promise<DownloadResult>;
+  /** Delete object from storage */
+  delete(bucket: string, key: string): Promise<void>;
+  /** List objects in bucket */
+  list(bucket: string, options?: ListOptions): Promise<ListResult>;
+}
+

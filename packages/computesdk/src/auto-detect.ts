@@ -23,8 +23,8 @@ function hasProviderEnv(provider: ProviderName): boolean {
   if (typeof process === 'undefined') return false;
   
   const requiredVars = PROVIDER_ENV_VARS[provider];
-  if (!requiredVars) return false; // Safety check for invalid provider names
-  
+  if (!requiredVars || requiredVars.length === 0) return false; // No env vars = not auto-detectable
+
   return requiredVars.every(varName => !!process.env?.[varName]);
 }
 
@@ -215,6 +215,10 @@ export function getProviderHeaders(provider: string): Record<string, string> {
     case 'just-bash':
       // No headers needed - just-bash runs locally
       break;
+
+    case 'secure-exec':
+      // No headers needed - secure-exec runs locally
+      break;
   }
 
   return headers;
@@ -284,7 +288,8 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n` +
       `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n` +
       `  Sprites:    export SPRITES_TOKEN=xxx\n` +
-      `  just-bash:  (no credentials needed - local sandbox)\n\n` +
+      `  just-bash:  (no credentials needed - local sandbox)\n` +
+      `  secure-exec: (no credentials needed - local sandbox)\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
       `  export COMPUTESDK_PROVIDER=<provider>\n\n` +
       `Docs: https://computesdk.com/docs/quickstart`

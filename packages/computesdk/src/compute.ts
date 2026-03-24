@@ -68,6 +68,7 @@ export interface ExplicitComputeConfig {
   sprites?: { apiKey?: string };
   freestyle?: { apiKey?: string };
   'just-bash'?: {}; // Local sandbox - no config needed
+  'secure-exec'?: {}; // Local sandbox - no config needed
 }
 
 /**
