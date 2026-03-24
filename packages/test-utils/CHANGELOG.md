@@ -1,5 +1,11 @@
 # @computesdk/test-utils
 
+## 1.6.0
+
+### Minor Changes
+
+- b1d5204: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
 ## 1.5.1
 
 ### Patch Changes
