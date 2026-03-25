@@ -1,5 +1,13 @@
 # @computesdk/modal
 
+## 1.8.36
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
 ## 1.8.35
 
 ### Patch Changes
