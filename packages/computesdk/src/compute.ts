@@ -67,6 +67,7 @@ export interface ExplicitComputeConfig {
   beam?: { token?: string; workspaceId?: string };
   sprites?: { apiKey?: string };
   freestyle?: { apiKey?: string };
+  upstash?: { apiKey?: string };
   'just-bash'?: {}; // Local sandbox - no config needed
   'secure-exec'?: {}; // Local sandbox - no config needed
 }

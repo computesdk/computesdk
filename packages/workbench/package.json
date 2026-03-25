@@ -72,7 +72,8 @@
     "@computesdk/namespace": "workspace:*",
     "@computesdk/sprites": "workspace:*",
     "@computesdk/freestyle": "workspace:*",
-    "@computesdk/secure-exec": "workspace:*"
+    "@computesdk/secure-exec": "workspace:*",
+    "@computesdk/upstash": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
@@ -121,6 +122,9 @@
       "optional": true
     },
     "@computesdk/secure-exec": {
+      "optional": true
+    },
+    "@computesdk/upstash": {
       "optional": true
     }
   },

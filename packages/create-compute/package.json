@@ -43,8 +43,8 @@
     "@clack/prompts": "^0.7.0",
     "commander": "^11.1.0",
     "computesdk": "workspace:*",
-    "picocolors": "^1.0.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "picocolors": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

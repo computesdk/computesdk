@@ -219,6 +219,12 @@ export function getProviderHeaders(provider: string): Record<string, string> {
     case 'secure-exec':
       // No headers needed - secure-exec runs locally
       break;
+
+    case 'upstash':
+      if (process.env.UPSTASH_BOX_API_KEY) {
+        headers['X-Upstash-Box-API-Key'] = process.env.UPSTASH_BOX_API_KEY;
+      }
+      break;
   }
 
   return headers;
@@ -288,6 +294,7 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n` +
       `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n` +
       `  Sprites:    export SPRITES_TOKEN=xxx\n` +
+      `  Upstash:    export UPSTASH_BOX_API_KEY=xxx\n` +
       `  just-bash:  (no credentials needed - local sandbox)\n` +
       `  secure-exec: (no credentials needed - local sandbox)\n\n` +
       `Or set COMPUTESDK_PROVIDER to specify explicitly:\n` +
