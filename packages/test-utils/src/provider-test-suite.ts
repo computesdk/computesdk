@@ -23,6 +23,8 @@ export interface ProviderTestConfig {
   skipIntegration?: boolean;
   /** Ports to expose when creating sandboxes (needed for getUrl tests on some providers) */
   ports?: number[];
+  /** Base path for filesystem tests (default: '/tmp') */
+  filesystemBasePath?: string;
 }
 
 /**
@@ -30,7 +32,7 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function defineProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false, ports } = config;
+  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false, ports, filesystemBasePath = '/tmp' } = config;
 
   return () => {
     // Get supported runtimes dynamically from provider
@@ -219,8 +221,8 @@ print(json.dumps(data, indent=2))
         // Filesystem tests (only for first runtime to avoid duplication)
         if (supportsFilesystem && runtime === supportedRuntimes[0]) {
           describe('Filesystem Operations', () => {
-            const testFilePath = '/tmp/test-file.txt';
-            const testDirPath = '/tmp/test-dir';
+            const testFilePath = `${filesystemBasePath}/test-file.txt`;
+            const testDirPath = `${filesystemBasePath}/test-dir`;
             const testContent = 'Hello, ComputeSDK filesystem!';
 
             it('should write and read files', async () => {

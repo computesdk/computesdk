@@ -272,13 +272,9 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     return sandbox.runCommand(command, options);
   };
   
-  // Expose sandbox creation methods (gateway mode only)
+  // Expose sandbox creation methods
   // These return clean { sandboxId, metadata } objects instead of full GeneratedSandbox
   replServer.context.create = async (options?: Record<string, unknown>) => {
-    if (state.useDirectMode) {
-      throw new Error('Named sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
-    }
-    
     // Lazy-load dependencies
     const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
     const { setSandbox } = await import('./state.js');
@@ -291,26 +287,26 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
       // User chose not to switch - create but don't activate
       const compute = await getComputeInstance(state);
       const sandbox = await compute.sandbox.create(options);
-      
+
       return {
         sandboxId: sandbox.sandboxId,
         provider: sandbox.provider,
-        metadata: sandbox.getInstance().config.metadata || {}
+        metadata: sandbox.getInstance?.()?.config?.metadata || {}
       };
     }
-    
+
     // Create sandbox (may throw error)
     const compute = await getComputeInstance(state);
     const sandbox = await compute.sandbox.create(options);
-    
+
     // Only set as current after successful creation
     setSandbox(state, sandbox, sandbox.provider);
     logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
-    
+
     return {
       sandboxId: sandbox.sandboxId,
       provider: sandbox.provider,
-      metadata: sandbox.getInstance().config.metadata || {}
+      metadata: sandbox.getInstance?.()?.config?.metadata || {}
     };
   };
   
