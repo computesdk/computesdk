@@ -4,6 +4,13 @@
 
 ### Patch Changes
 
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+
+## 1.0.33
+
+### Patch Changes
+
 - Updated dependencies [0b97465]
   - computesdk@2.5.3
 

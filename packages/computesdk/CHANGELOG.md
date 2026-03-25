@@ -4,6 +4,12 @@
 
 ### Patch Changes
 
+- 45f918b: Add Upstash Box provider package with support for sandbox CRUD, code execution, shell commands, filesystem operations, preview URLs, and snapshots
+
+## 2.5.3
+
+### Patch Changes
+
 - 0b97465: Add Upstash Box provider package with support for sandbox CRUD, code execution, shell commands, filesystem operations, preview URLs, and snapshots
 
 ## 2.5.2
