@@ -37,6 +37,7 @@ export const PROVIDER_AUTH = {
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
   sprites: [['SPRITES_TOKEN']],
   freestyle: [['FREESTYLE_API_KEY']],
+  upstash: [['UPSTASH_BOX_API_KEY']],
   'just-bash': [[]],
   'secure-exec': [[]],
 } as const;
@@ -113,6 +114,9 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
   freestyle: {
     apiKey: 'X-Freestyle-API-Key',
   },
+  upstash: {
+    apiKey: 'X-Upstash-Box-API-Key',
+  },
   'just-bash': {},
   'secure-exec': {},
 };
@@ -179,6 +183,9 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
   freestyle: {
     FREESTYLE_API_KEY: 'apiKey',
   },
+  upstash: {
+    UPSTASH_BOX_API_KEY: 'apiKey',
+  },
   'just-bash': {},
   'secure-exec': {},
 };
@@ -202,6 +209,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   beam: 'https://app.beam.cloud',
   sprites: 'https://sprites.dev',
   freestyle: 'https://dash.freestyle.sh',
+  upstash: 'https://console.upstash.com',
   'just-bash': 'https://github.com/vercel-labs/just-bash',
   'secure-exec': 'https://github.com/anomalyco/secure-exec',
 };

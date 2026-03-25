@@ -277,6 +277,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/freestyle');
       case 'secure-exec':
         return await import('@computesdk/secure-exec');
+      case 'upstash':
+        return await import('@computesdk/upstash');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }

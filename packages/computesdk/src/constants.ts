@@ -44,6 +44,7 @@ export const PROVIDER_PRIORITY = [
   'beam',
   'sprites',
   'freestyle',
+  'upstash',
   'secure-exec',
 ] as const;
 
@@ -67,6 +68,7 @@ export const PROVIDER_ENV_VARS = {
   beam: ['BEAM_TOKEN', 'BEAM_WORKSPACE_ID'],
   sprites: ['SPRITES_TOKEN'],
   freestyle: ['FREESTYLE_API_KEY'],
+  upstash: ['UPSTASH_BOX_API_KEY'],
   'just-bash': [] as const,
   'secure-exec': [] as const,
 } as const;

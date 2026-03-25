@@ -1,7 +1,7 @@
 {
-  "name": "@computesdk/r2",
-  "version": "1.0.0",
-  "description": "Cloudflare R2 storage provider for ComputeSDK - S3-compatible object storage",
+  "name": "@computesdk/upstash",
+  "version": "0.1.0",
+  "description": "Upstash Box provider for ComputeSDK - cloud sandboxes with code execution, filesystem access, and AI agent support",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -28,24 +28,26 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.450.0",
-    "@aws-sdk/lib-storage": "^3.450.0",
-    "@computesdk/provider": "workspace:*"
+    "@upstash/box": "^0.1.28",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",
-    "cloudflare",
-    "r2",
-    "storage",
-    "object-storage",
+    "upstash",
+    "box",
+    "sandbox",
+    "code-execution",
+    "python",
+    "javascript",
     "cloud",
-    "s3-compatible",
+    "compute",
     "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/r2-storage"
+    "directory": "packages/upstash"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {
