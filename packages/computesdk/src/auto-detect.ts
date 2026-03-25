@@ -21,7 +21,7 @@ export function isGatewayModeEnabled(): boolean {
  */
 function hasProviderEnv(provider: ProviderName): boolean {
   if (typeof process === 'undefined') return false;
-  
+
   const requiredVars = PROVIDER_ENV_VARS[provider];
   if (!requiredVars || requiredVars.length === 0) return false; // No env vars = not auto-detectable
 
@@ -38,14 +38,14 @@ function getProviderEnvStatus(provider: ProviderName): {
   isComplete: boolean;
 } {
   const requiredVars = PROVIDER_ENV_VARS[provider];
-  
+
   if (typeof process === 'undefined' || !requiredVars) {
     return { provider, present: [], missing: requiredVars ? [...requiredVars] : [], isComplete: false };
   }
-  
+
   const present = requiredVars.filter(varName => !!process.env?.[varName]);
   const missing = requiredVars.filter(varName => !process.env?.[varName]);
-  
+
   return {
     provider,
     present: [...present],
@@ -65,13 +65,13 @@ function getProviderEnvStatus(provider: ProviderName): {
  */
 export function detectProvider(): string | null {
   if (typeof process === 'undefined') return null;
-  
+
   // Check for explicit override
   const explicit = process.env.COMPUTESDK_PROVIDER?.toLowerCase();
   if (explicit && hasProviderEnv(explicit as ProviderName)) {
     return explicit;
   }
-  
+
   // Warn if explicit provider set but credentials missing
   if (explicit && !hasProviderEnv(explicit as ProviderName)) {
     console.warn(
@@ -80,14 +80,14 @@ export function detectProvider(): string | null {
       `   Falling back to auto-detection...`
     );
   }
-  
+
   // Auto-detect based on priority order
   for (const provider of PROVIDER_PRIORITY) {
     if (hasProviderEnv(provider)) {
       return provider;
     }
   }
-  
+
   return null;
 }
 
@@ -97,16 +97,16 @@ export function detectProvider(): string | null {
  */
 export function getProviderHeaders(provider: string): Record<string, string> {
   if (typeof process === 'undefined') return {};
-  
+
   const headers: Record<string, string> = {};
-  
+
   switch (provider) {
     case 'e2b':
       if (process.env.E2B_API_KEY) {
         headers['X-E2B-API-Key'] = process.env.E2B_API_KEY;
       }
       break;
-      
+
     case 'railway':
       if (process.env.RAILWAY_API_KEY) {
         headers['X-Railway-API-Key'] = process.env.RAILWAY_API_KEY;
@@ -118,13 +118,13 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Railway-Environment-ID'] = process.env.RAILWAY_ENVIRONMENT_ID;
       }
       break;
-      
+
     case 'daytona':
       if (process.env.DAYTONA_API_KEY) {
         headers['X-Daytona-API-Key'] = process.env.DAYTONA_API_KEY;
       }
       break;
-      
+
     case 'modal':
       if (process.env.MODAL_TOKEN_ID) {
         headers['X-Modal-Token-ID'] = process.env.MODAL_TOKEN_ID;
@@ -133,13 +133,13 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Modal-Token-Secret'] = process.env.MODAL_TOKEN_SECRET;
       }
       break;
-      
+
     case 'runloop':
       if (process.env.RUNLOOP_API_KEY) {
         headers['X-Runloop-API-Key'] = process.env.RUNLOOP_API_KEY;
       }
       break;
-      
+
     case 'vercel':
       if (process.env.VERCEL_TOKEN) {
         headers['X-Vercel-Token'] = process.env.VERCEL_TOKEN;
@@ -151,7 +151,7 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Vercel-Project-ID'] = process.env.VERCEL_PROJECT_ID;
       }
       break;
-      
+
     case 'cloudflare':
       if (process.env.CLOUDFLARE_API_TOKEN) {
         headers['X-Cloudflare-API-Token'] = process.env.CLOUDFLARE_API_TOKEN;
@@ -160,13 +160,13 @@ export function getProviderHeaders(provider: string): Record<string, string> {
         headers['X-Cloudflare-Account-ID'] = process.env.CLOUDFLARE_ACCOUNT_ID;
       }
       break;
-      
+
     case 'codesandbox':
       if (process.env.CSB_API_KEY) {
         headers['X-CodeSandbox-API-Key'] = process.env.CSB_API_KEY;
       }
       break;
-      
+
     case 'blaxel':
       if (process.env.BL_API_KEY) {
         headers['X-Blaxel-API-Key'] = process.env.BL_API_KEY;
@@ -209,6 +209,12 @@ export function getProviderHeaders(provider: string): Record<string, string> {
     case 'sprites':
       if (process.env.SPRITES_TOKEN) {
         headers['X-Sprites-Token'] = process.env.SPRITES_TOKEN;
+      }
+      break;
+
+    case 'agentuity':
+      if (process.env.AGENTUITY_SDK_KEY) {
+        headers['X-Agentuity-SDK-Key'] = process.env.AGENTUITY_SDK_KEY;
       }
       break;
 
@@ -258,22 +264,22 @@ export function autoConfigureCompute(): GatewayConfig | null {
   if (!provider) {
     // Build detailed diagnostic information
     const detectionResults = PROVIDER_PRIORITY.map(p => getProviderEnvStatus(p));
-    
+
     // Create status indicators
     const statusLines = detectionResults.map(result => {
-      const status = result.isComplete ? '✅' : 
-                     result.present.length > 0 ? '⚠️ ' : '❌';
+      const status = result.isComplete ? '✅' :
+        result.present.length > 0 ? '⚠️ ' : '❌';
       const ratio = `${result.present.length}/${result.present.length + result.missing.length}`;
       let line = `  ${status} ${result.provider.padEnd(12)} ${ratio} credentials`;
-      
+
       // Show what's missing for partial matches
       if (result.present.length > 0 && result.missing.length > 0) {
         line += ` (missing: ${result.missing.join(', ')})`;
       }
-      
+
       return line;
     });
-    
+
     throw new Error(
       `COMPUTESDK_API_KEY is set but no provider detected.\n\n` +
       `Provider detection results:\n` +
@@ -294,6 +300,7 @@ export function autoConfigureCompute(): GatewayConfig | null {
       `  Render:     export RENDER_API_KEY=xxx RENDER_OWNER_ID=xxx\n` +
       `  Beam:       export BEAM_TOKEN=xxx BEAM_WORKSPACE_ID=xxx\n` +
       `  Sprites:    export SPRITES_TOKEN=xxx\n` +
+      `  Agentuity:  export AGENTUITY_SDK_KEY=xxx\n` +
       `  Upstash:    export UPSTASH_BOX_API_KEY=xxx\n` +
       `  just-bash:  (no credentials needed - local sandbox)\n` +
       `  secure-exec: (no credentials needed - local sandbox)\n\n` +
@@ -331,6 +338,6 @@ export function autoConfigureCompute(): GatewayConfig | null {
     provider,
     providerHeaders
   };
-  
+
   return config;
 }

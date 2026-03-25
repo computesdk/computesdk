@@ -36,6 +36,7 @@ export const PROVIDER_AUTH = {
   hopx: [['HOPX_API_KEY']],
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
   sprites: [['SPRITES_TOKEN']],
+  agentuity: [['AGENTUITY_SDK_KEY']],
   freestyle: [['FREESTYLE_API_KEY']],
   upstash: [['UPSTASH_BOX_API_KEY']],
   'just-bash': [[]],
@@ -111,6 +112,9 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
   sprites: {
     apiKey: 'X-Sprites-Token',
   },
+  agentuity: {
+    apiKey: 'X-Agentuity-SDK-Key',
+  },
   freestyle: {
     apiKey: 'X-Freestyle-API-Key',
   },
@@ -180,6 +184,9 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
   sprites: {
     SPRITES_TOKEN: 'apiKey',
   },
+  agentuity: {
+    AGENTUITY_SDK_KEY: 'apiKey',
+  },
   freestyle: {
     FREESTYLE_API_KEY: 'apiKey',
   },
@@ -208,6 +215,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   hopx: 'https://hopx.ai/dashboard',
   beam: 'https://app.beam.cloud',
   sprites: 'https://sprites.dev',
+  agentuity: 'https://console.agentuity.com',
   freestyle: 'https://dash.freestyle.sh',
   upstash: 'https://console.upstash.com',
   'just-bash': 'https://github.com/vercel-labs/just-bash',

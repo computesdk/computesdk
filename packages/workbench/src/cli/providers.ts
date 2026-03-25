@@ -273,6 +273,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/hopx');
       case 'sprites':
         return await import('@computesdk/sprites');
+      case 'agentuity':
+        return await import('@computesdk/agentuity');
       case 'freestyle':
         return await import('@computesdk/freestyle');
       case 'secure-exec':

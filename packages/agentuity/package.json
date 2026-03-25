@@ -1,7 +1,7 @@
 {
-  "name": "@computesdk/r2",
-  "version": "1.0.0",
-  "description": "Cloudflare R2 storage provider for ComputeSDK - S3-compatible object storage",
+  "name": "@computesdk/agentuity",
+  "version": "0.0.1",
+  "description": "Agentuity provider for ComputeSDK - isolated cloud sandboxes with native filesystem, snapshot/checkpoint support, and flexible runtimes",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -28,24 +28,25 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.450.0",
-    "@aws-sdk/lib-storage": "^3.450.0",
-    "@computesdk/provider": "workspace:*"
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",
-    "cloudflare",
-    "r2",
-    "storage",
-    "object-storage",
+    "agentuity",
+    "sandbox",
+    "code-execution",
+    "python",
+    "javascript",
     "cloud",
-    "s3-compatible",
-    "provider"
+    "compute",
+    "provider",
+    "containers"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/r2-storage"
+    "directory": "packages/agentuity"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {

@@ -66,6 +66,7 @@ export interface ExplicitComputeConfig {
   hopx?: { apiKey?: string };
   beam?: { token?: string; workspaceId?: string };
   sprites?: { apiKey?: string };
+  agentuity?: { apiKey?: string; region?: string; baseURL?: string };
   freestyle?: { apiKey?: string };
   upstash?: { apiKey?: string };
   'just-bash'?: {}; // Local sandbox - no config needed
@@ -150,7 +151,7 @@ async function tributaryFetch<T>(
       }
 
       const errorText = await response.text().catch(() => response.statusText);
-      
+
       // Build helpful error message
       let errorMessage = `Gateway API error: ${errorText}`;
       if (response.status === 401) {
@@ -165,11 +166,11 @@ async function tributaryFetch<T>(
     return await response.json();
   } catch (error) {
     clearTimeout(timeoutId);
-    
+
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`Request timed out after ${timeout}ms`);
     }
-    
+
     throw error;
   }
 }
