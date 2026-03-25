@@ -1,5 +1,31 @@
 # @computesdk/workbench
 
+## 21.0.0
+
+### Patch Changes
+
+- 0b97465: Add Upstash Box provider package with support for sandbox CRUD, code execution, shell commands, filesystem operations, preview URLs, and snapshots
+- Updated dependencies [0b97465]
+  - @computesdk/upstash@0.2.0
+  - computesdk@2.5.3
+  - @computesdk/beam@0.1.5
+  - @computesdk/blaxel@1.6.6
+  - @computesdk/cloudflare@1.6.3
+  - @computesdk/codesandbox@1.5.41
+  - @computesdk/daytona@1.7.21
+  - @computesdk/e2b@1.7.41
+  - @computesdk/freestyle@0.1.1
+  - @computesdk/hopx@0.2.17
+  - @computesdk/just-bash@0.4.5
+  - @computesdk/modal@1.8.36
+  - @computesdk/namespace@1.6.3
+  - @computesdk/railway@1.1.40
+  - @computesdk/runloop@1.3.41
+  - @computesdk/secure-exec@0.1.1
+  - @computesdk/sprites@0.1.4
+  - @computesdk/vercel@1.7.20
+  - @computesdk/provider@1.0.33
+
 ## 20.0.2
 
 ### Patch Changes
