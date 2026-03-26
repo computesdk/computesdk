@@ -71,6 +71,7 @@ export interface ExplicitComputeConfig {
   upstash?: { apiKey?: string };
   'just-bash'?: {}; // Local sandbox - no config needed
   'secure-exec'?: {}; // Local sandbox - no config needed
+  computesdk?: {}; // ComputeSDK provider - no config needed
 }
 
 /**

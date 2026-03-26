@@ -54,6 +54,7 @@ export const PROVIDER_PRIORITY = [
  * @deprecated Use PROVIDER_AUTH from provider-config instead
  */
 export const PROVIDER_ENV_VARS = {
+  computesdk: ['COMPUTESDK_API_KEY'],  // ComputeSDK native - requires COMPUTESDK_API_KEY
   e2b: ['E2B_API_KEY'],
   railway: ['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID'],
   render: ['RENDER_API_KEY', 'RENDER_OWNER_ID'],

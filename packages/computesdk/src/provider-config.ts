@@ -16,6 +16,7 @@
  *   -> Ready if OIDC_TOKEN is set, OR if all three traditional vars are set
  */
 export const PROVIDER_AUTH = {
+  computesdk: [['COMPUTESDK_API_KEY']],  // ComputeSDK native - requires COMPUTESDK_API_KEY
   e2b: [['E2B_API_KEY']],
   modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
   railway: [['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID']],
@@ -122,6 +123,7 @@ export const PROVIDER_HEADERS: Record<ProviderName, Record<string, string>> = {
     apiKey: 'X-Upstash-Box-API-Key',
   },
   'just-bash': {},
+  computesdk: {},
   'secure-exec': {},
 };
 
@@ -194,6 +196,7 @@ export const PROVIDER_ENV_MAP: Record<ProviderName, Record<string, string>> = {
     UPSTASH_BOX_API_KEY: 'apiKey',
   },
   'just-bash': {},
+  computesdk: {},
   'secure-exec': {},
 };
 
@@ -219,6 +222,7 @@ export const PROVIDER_DASHBOARD_URLS: Record<ProviderName, string> = {
   freestyle: 'https://dash.freestyle.sh',
   upstash: 'https://console.upstash.com',
   'just-bash': 'https://github.com/vercel-labs/just-bash',
+  computesdk: 'https://computesdk.com/dashboard',
   'secure-exec': 'https://github.com/anomalyco/secure-exec',
 };
 
