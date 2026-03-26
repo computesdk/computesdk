@@ -4,6 +4,12 @@
 
 ### Minor Changes
 
+- 1881674: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+## 1.6.0
+
+### Minor Changes
+
 - 45f918b: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
 
 ## 1.6.0
