@@ -6,20 +6,13 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-describe('create-compute', () => {
+describe('@computesdk/cli', () => {
   it('should have a valid package.json', () => {
     const packageJson = JSON.parse(
       readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')
     )
     
-    expect(packageJson.name).toBe('create-compute')
-    expect(packageJson.version).toBe('0.2.4')
-    expect(packageJson.bin).toHaveProperty('create-compute')
-  })
-  
-  it('should export a CLI entry point', async () => {
-    // This is a placeholder test
-    // In a real implementation, we would test the CLI functionality
-    expect(true).toBe(true)
+    expect(packageJson.name).toBe('@computesdk/cli')
+    expect(packageJson.bin).toHaveProperty('compute')
   })
 })
