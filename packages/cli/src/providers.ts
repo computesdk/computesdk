@@ -96,10 +96,17 @@ export function isGatewayAvailable(): boolean {
 export function buildProviderConfig(provider: string): Record<string, unknown> {
   const config: Record<string, unknown> = {
     provider,
-    computesdkApiKey: process.env.COMPUTESDK_API_KEY,
+    apiKey: process.env.COMPUTESDK_API_KEY,  // Gateway API key (top-level)
   };
 
-  // Add provider-specific config from env vars (not for computesdk)
+  // For 'computesdk' provider, nest the API key under the provider config too
+  if (provider === 'computesdk') {
+    config.computesdk = {
+      computesdk_api_key: process.env.COMPUTESDK_API_KEY,
+    };
+  }
+
+  // Add provider-specific config from env vars (for other providers)
   if (provider !== 'computesdk') {
     const providerConfig = getProviderConfigFromEnv(provider as ProviderName);
     if (Object.keys(providerConfig).length > 0) {
