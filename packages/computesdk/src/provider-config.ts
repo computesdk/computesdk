@@ -45,6 +45,50 @@ export const PROVIDER_AUTH = {
 } as const;
 
 /**
+ * Browser provider auth requirements
+ *
+ * Separate from sandbox providers — browser providers manage cloud browser
+ * sessions rather than code execution environments.
+ */
+export const BROWSER_PROVIDER_AUTH = {
+  browserbase: [['BROWSERBASE_API_KEY']],
+} as const;
+
+/**
+ * All supported browser provider names
+ */
+export const BROWSER_PROVIDER_NAMES = Object.keys(BROWSER_PROVIDER_AUTH) as BrowserProviderName[];
+
+/**
+ * Browser provider name type
+ */
+export type BrowserProviderName = keyof typeof BROWSER_PROVIDER_AUTH;
+
+/**
+ * Check if a browser provider name is valid
+ */
+export function isValidBrowserProvider(name: string): name is BrowserProviderName {
+  return name in BROWSER_PROVIDER_AUTH;
+}
+
+/**
+ * Environment variable to config field mapping for browser providers
+ */
+export const BROWSER_PROVIDER_ENV_MAP: Record<BrowserProviderName, Record<string, string>> = {
+  browserbase: {
+    BROWSERBASE_API_KEY: 'apiKey',
+    BROWSERBASE_PROJECT_ID: 'projectId',
+  },
+};
+
+/**
+ * Dashboard URLs for browser providers
+ */
+export const BROWSER_PROVIDER_DASHBOARD_URLS: Record<BrowserProviderName, string> = {
+  browserbase: 'https://www.browserbase.com/settings',
+};
+
+/**
  * All supported provider names (excluding gateway which is special)
  */
 export const PROVIDER_NAMES = Object.keys(PROVIDER_AUTH) as ProviderName[];

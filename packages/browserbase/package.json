@@ -1,9 +1,10 @@
 {
-  "name": "@computesdk/upstash",
-  "version": "0.2.0",
-  "description": "Upstash Box provider for ComputeSDK - cloud sandboxes with code execution, filesystem access, and AI agent support",
+  "name": "@computesdk/browserbase",
+  "version": "0.1.0",
+  "description": "Browserbase browser provider for ComputeSDK - cloud browser sessions with stealth mode, proxies, and session replay",
   "author": "Garrison",
   "license": "MIT",
+  "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -28,26 +29,27 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@upstash/box": "^0.1.28",
+    "@browserbasehq/sdk": "^2.0.0",
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "dotenv": "^16.0.0",
+    "playwright-core": "^1.40.0"
   },
   "keywords": [
     "computesdk",
-    "upstash",
-    "box",
-    "sandbox",
-    "code-execution",
-    "python",
-    "javascript",
-    "cloud",
-    "compute",
+    "browserbase",
+    "browser",
+    "headless",
+    "playwright",
+    "puppeteer",
+    "stealth",
+    "proxy",
     "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/upstash"
+    "directory": "packages/browserbase"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {

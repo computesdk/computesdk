@@ -30,3 +30,6 @@ export type {
   ListResult,
   StorageProvider,
 } from './provider';
+
+// Browser provider types
+export * from './browser';
