@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/freestyle",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Freestyle provider for ComputeSDK - cloud sandboxes powered by Freestyle",
   "author": "Garrison",
   "license": "MIT",

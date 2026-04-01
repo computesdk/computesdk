@@ -4,6 +4,13 @@
 
 ### Patch Changes
 
+- Updated dependencies [3e6a91a]
+  - @computesdk/provider@1.1.0
+
+## 1.1.1
+
+### Patch Changes
+
 - Updated dependencies [9a312d2]
   - @computesdk/provider@1.1.0
 
