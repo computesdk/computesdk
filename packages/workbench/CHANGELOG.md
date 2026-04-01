@@ -1,5 +1,31 @@
 # @computesdk/workbench
 
+## 21.0.1
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+  - @computesdk/agentuity@0.0.3
+  - @computesdk/beam@0.1.6
+  - @computesdk/blaxel@1.6.7
+  - @computesdk/cloudflare@1.6.4
+  - @computesdk/codesandbox@1.5.42
+  - @computesdk/daytona@1.7.22
+  - @computesdk/e2b@1.7.42
+  - @computesdk/freestyle@0.1.2
+  - @computesdk/hopx@0.2.18
+  - @computesdk/just-bash@0.4.6
+  - @computesdk/modal@1.8.37
+  - @computesdk/namespace@1.6.4
+  - @computesdk/railway@1.1.41
+  - @computesdk/runloop@1.3.42
+  - @computesdk/secure-exec@0.1.2
+  - @computesdk/sprites@0.1.5
+  - @computesdk/upstash@0.2.1
+  - @computesdk/vercel@1.7.21
+
 ## 21.0.0
 
 ### Patch Changes
