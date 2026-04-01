@@ -17,6 +17,13 @@ export {
   getProviderConfigFromEnv,
   isProviderAuthComplete,
   getMissingEnvVars,
+  // Browser providers
+  BROWSER_PROVIDER_AUTH,
+  BROWSER_PROVIDER_NAMES,
+  BROWSER_PROVIDER_ENV_MAP,
+  BROWSER_PROVIDER_DASHBOARD_URLS,
+  type BrowserProviderName,
+  isValidBrowserProvider,
 } from './provider-config';
 
 /**

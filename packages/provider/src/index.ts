@@ -32,6 +32,19 @@ export type {
 export { createCompute } from './compute';
 export type { CreateComputeConfig, ComputeAPI } from './compute';
 
+// Export browser provider factory
+export { defineBrowserProvider } from './browser-factory';
+export type {
+  BrowserProviderConfig,
+  BrowserSessionMethods,
+  BrowserProfileMethods,
+  BrowserExtensionMethods,
+  BrowserPoolMethods,
+  BrowserLogMethods,
+  BrowserRecordingMethods,
+  BrowserPageMethods,
+} from './browser-factory';
+
 // Export utilities
 export { calculateBackoff, escapeShellArg } from './utils';
 

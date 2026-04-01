@@ -44,12 +44,17 @@ const packageJson = JSON.parse(
   readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')
 );
 
+// Detect if running from dev workspace
+const isDevBuild = import.meta.url.includes('worktrees') || 
+                   import.meta.url.includes('/packages/cli/');
+const VERSION = isDevBuild ? `${packageJson.version}-dev` : packageJson.version;
+
 const program = new Command();
 
 program
   .name('compute')
   .description('Cloud-native workspace management')
-  .version(packageJson.version)
+  .version(VERSION)
   .enablePositionalOptions()
   .passThroughOptions();
 
@@ -61,7 +66,7 @@ program
   .action(async (opts) => {
     if (opts.logout) {
       console.log();
-      p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+      p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
       clearStoredCredentials();
       p.log.success('Logged out. Stored credentials removed.');
       p.outro(pc.green('Done!'));
@@ -70,7 +75,7 @@ program
 
     if (opts.login) {
       console.log();
-      p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+      p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
       await ensureAuth({ forceLogin: true });
       p.outro(pc.green('Authenticated!'));
       process.exit(0);
@@ -91,7 +96,7 @@ program
   .option('--no-attach', 'Create workspace but do not attach')
   .action(async (repo, options) => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
 
     await ensureAuth();
 
@@ -205,7 +210,7 @@ sandboxCmd
   .action(async (opts) => {
     if (!opts.silent) {
       console.log();
-      p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+      p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     }
 
     await ensureAuth();
@@ -282,7 +287,7 @@ sandboxCmd
   .option('-p, --provider <provider>', 'provider to use')
   .action(async (sandboxIds: string[] | undefined, opts) => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     
     // Load state
     const { loadState, saveState } = await import('./workspace-cli.js');
@@ -362,7 +367,7 @@ sandboxCmd
   .description('List all sandboxes')
   .action(async () => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     await sandboxList();
   });
 
@@ -374,7 +379,7 @@ sandboxCmd
   .option('-p, --provider <provider>', 'provider to use')
   .action(async (sandboxId: string | undefined, opts) => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
 
     await ensureAuth();
     const provider = await resolveProvider(opts.provider);
@@ -476,7 +481,7 @@ program
   .option('-p, --provider <provider>', 'provider to use')
   .action(async (sandboxId: string | undefined, opts) => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
 
     await ensureAuth();
     const provider = await resolveProvider(opts.provider);
@@ -552,7 +557,7 @@ workspaceCmd
   .option('--no-attach', 'Create workspace but do not attach')
   .action(async (repo, options) => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
 
     await ensureAuth();
 
@@ -596,7 +601,7 @@ workspaceCmd
   .description('List all workspaces')
   .action(async () => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     await workspaceList();
   });
 
@@ -607,7 +612,7 @@ workspaceCmd
   .argument('[id]', 'Workspace ID (repo:branch format, optional - will show picker if not provided)')
   .action(async (id: string | undefined) => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
 
     // If no ID provided, show interactive picker
     if (!id) {
@@ -660,7 +665,7 @@ workspaceCmd
   .argument('[id]', 'Workspace ID (optional - will show picker if not provided)')
   .action(async (id: string | undefined) => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
 
     // If no ID provided, show interactive picker
     if (!id) {
@@ -762,7 +767,7 @@ program
   .description('List all providers and their configuration status')
   .action(async () => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
 
     const statuses = getProviderStatus();
 
@@ -785,7 +790,7 @@ program
   .description('Authenticate with ComputeSDK')
   .action(async () => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     await ensureAuth({ forceLogin: true });
     p.outro(pc.green('Authenticated!'));
   });
@@ -795,7 +800,7 @@ program
   .description('Clear stored credentials')
   .action(() => {
     console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${packageJson.version}`));
+    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     clearStoredCredentials();
     p.log.success('Logged out. Stored credentials removed.');
     p.outro(pc.green('Done!'));
