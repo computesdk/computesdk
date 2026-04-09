@@ -21,7 +21,7 @@ import type {
 
 const DEFAULT_API_URL = 'https://api.tensorlake.ai';
 const DEFAULT_PROXY_URL = 'https://sandbox.tensorlake.ai';
-const DEFAULT_IMAGE = 'python:3.11-slim';
+const DEFAULT_IMAGE = 'ubuntu-minimal';
 const POLL_INTERVAL_MS = 500;
 const SANDBOX_READY_TIMEOUT_MS = 120_000;
 
@@ -448,7 +448,7 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         }
 
         if (options?.background) {
-          fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          fullCommand = `${fullCommand} > /dev/null 2>&1 &`;
         }
 
         try {
