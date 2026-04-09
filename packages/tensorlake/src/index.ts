@@ -22,7 +22,8 @@ import type {
 const DEFAULT_API_URL = 'https://api.tensorlake.ai';
 const DEFAULT_PROXY_URL = 'https://sandbox.tensorlake.ai';
 const DEFAULT_IMAGE = 'ubuntu-minimal';
-const POLL_INTERVAL_MS = 500;
+const POLL_INITIAL_MS = 100;
+const POLL_MAX_MS = 500;
 const SANDBOX_READY_TIMEOUT_MS = 120_000;
 
 export interface TensorlakeConfig {
@@ -32,7 +33,7 @@ export interface TensorlakeConfig {
   apiUrl?: string;
   /** Override for the sandbox proxy URL (default: https://sandbox.tensorlake.ai) */
   proxyUrl?: string;
-  /** Default container image for new sandboxes (default: python:3.11-slim) */
+  /** Default container image for new sandboxes (default: ubuntu-minimal) */
   image?: string;
   /** Default timeout in seconds for sandboxes */
   timeout?: number;
@@ -196,10 +197,12 @@ async function waitForRunning(
   sandboxId: string
 ): Promise<void> {
   const deadline = Date.now() + SANDBOX_READY_TIMEOUT_MS;
+  let delay = POLL_INITIAL_MS;
   while (Date.now() < deadline) {
     const resp = await managementRequest(config, 'GET', `/sandboxes/${sandboxId}`);
     if (!resp.ok) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay * 2, POLL_MAX_MS);
       continue;
     }
     const info: { status: string; outcome?: string } = await resp.json();
@@ -210,10 +213,38 @@ async function waitForRunning(
           (info.outcome ? ` (outcome: ${info.outcome})` : '')
       );
     }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, POLL_MAX_MS);
   }
   throw new Error(
     `Tensorlake sandbox ${sandboxId} did not reach 'running' status within ${SANDBOX_READY_TIMEOUT_MS / 1000}s`
+  );
+}
+
+/** Probe the sandbox proxy until it responds, ensuring the agent is ready before returning.
+ *  Probes /health first (same endpoint computesdk's waitForComputeReady checks), falling back
+ *  to /api/v1/processes so the first waitForComputeReady attempt succeeds immediately.
+ */
+async function waitForProxy(ctx: TensorlakeSandboxContext): Promise<void> {
+  const deadline = Date.now() + SANDBOX_READY_TIMEOUT_MS;
+  let delay = POLL_INITIAL_MS;
+  while (Date.now() < deadline) {
+    try {
+      // Probe /health first — same endpoint waitForComputeReady uses, so if this
+      // succeeds the client-side health check will pass on its first attempt.
+      const resp = await proxyRequest(ctx, 'GET', '/health');
+      if (resp.ok || resp.status === 404) return;
+      // Fallback: some proxy versions may not expose /health but do expose the process API
+      const fallback = await proxyRequest(ctx, 'GET', '/api/v1/processes');
+      if (fallback.ok || fallback.status === 404) return;
+    } catch {
+      // proxy not yet reachable
+    }
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, POLL_MAX_MS);
+  }
+  throw new Error(
+    `Tensorlake sandbox ${ctx.sandboxId} proxy did not become ready within ${SANDBOX_READY_TIMEOUT_MS / 1000}s`
   );
 }
 
@@ -253,12 +284,14 @@ async function pollProcess(
   timeoutMs?: number
 ): Promise<ProcessInfo> {
   const deadline = timeoutMs != null ? Date.now() + timeoutMs : Infinity;
+  let delay = POLL_INITIAL_MS;
   while (Date.now() < deadline) {
     const resp = await proxyRequest(ctx, 'GET', `/api/v1/processes/${pid}`);
     await requireOk(resp, `get_process(${pid})`);
     const info: ProcessInfo = await resp.json();
     if (info.status !== 'running') return info;
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, POLL_MAX_MS);
   }
   // Kill on timeout
   await proxyRequest(ctx, 'DELETE', `/api/v1/processes/${pid}`);
@@ -323,10 +356,11 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         const created: { sandbox_id: string; status: string } = await resp.json();
         const sandboxId = created.sandbox_id;
 
-        // Wait for the sandbox to be ready
-        await waitForRunning(config, sandboxId);
-
+        // Wait for the sandbox VM and its proxy agent to be ready
         const ctx: TensorlakeSandboxContext = { sandboxId, config };
+        await waitForRunning(config, sandboxId);
+        await waitForProxy(ctx);
+
         return { sandbox: ctx, sandboxId };
       },
 
@@ -397,8 +431,10 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         try {
           const proc = await startProcess(ctx, command, args);
           const info = await pollProcess(ctx, proc.pid);
-          const stdout = await getOutput(ctx, proc.pid, 'stdout');
-          const stderr = await getOutput(ctx, proc.pid, 'stderr');
+          const [stdout, stderr] = await Promise.all([
+            getOutput(ctx, proc.pid, 'stdout'),
+            getOutput(ctx, proc.pid, 'stderr'),
+          ]);
 
           const exitCode = info.exit_code ?? 0;
 
@@ -458,13 +494,21 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
             ['-c', fullCommand],
             Object.keys(env).length > 0 ? env : undefined
           );
-          const info = await pollProcess(
-            ctx,
-            proc.pid,
-            options?.background ? 5_000 : undefined
-          );
-          const stdout = await getOutput(ctx, proc.pid, 'stdout');
-          const stderr = await getOutput(ctx, proc.pid, 'stderr');
+
+          if (options?.background) {
+            return {
+              stdout: '',
+              stderr: '',
+              exitCode: 0,
+              durationMs: Date.now() - startTime,
+            };
+          }
+
+          const info = await pollProcess(ctx, proc.pid);
+          const [stdout, stderr] = await Promise.all([
+            getOutput(ctx, proc.pid, 'stdout'),
+            getOutput(ctx, proc.pid, 'stderr'),
+          ]);
 
           return {
             stdout,
@@ -578,25 +622,12 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         },
 
         exists: async (ctx: TensorlakeSandboxContext, path: string): Promise<boolean> => {
-          const resp = await proxyRequest(ctx, 'GET', '/api/v1/files', undefined, {
-            path,
-          });
-
-          if (resp.ok) return true;
-          if (resp.status === 404) return false;
-
-          // Some implementations may return non-OK for directory path; try list endpoint then.
-          try {
-            const dirResp = await proxyRequest(ctx, 'GET', '/api/v1/files/list', undefined, {
-              path,
-            });
-            if (dirResp.ok) return true;
-            if (dirResp.status === 404) return false;
-          } catch {
-            // ignore and continue
-          }
-
-          return false;
+          // Check file and directory endpoints in parallel to avoid sequential fallback latency.
+          const [fileResp, dirResp] = await Promise.all([
+            proxyRequest(ctx, 'GET', '/api/v1/files', undefined, { path }).catch(() => null),
+            proxyRequest(ctx, 'GET', '/api/v1/files/list', undefined, { path }).catch(() => null),
+          ]);
+          return (fileResp?.ok || dirResp?.ok) ?? false;
         },
 
         remove: async (ctx: TensorlakeSandboxContext, path: string): Promise<void> => {
