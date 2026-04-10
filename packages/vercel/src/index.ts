@@ -7,6 +7,7 @@
 
 import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
 
@@ -98,6 +99,21 @@ function validateCredentials(creds: ResolvedCredentials): void {
   }
 }
 
+/**
+ * Get a writable stream that collects UTF-8 string data and buffers it
+ * in memory, returning the full concatenated string when done.
+ */
+function getUtf8Sink() {
+  const chunks: string[] = [];
+  const sink = new Writable({
+    write(chunk, _enc, cb) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") :
+        String(chunk));
+      cb();
+    },
+  });
+  return { sink, value: () => chunks.join("") };
+}
 
 
 
@@ -337,26 +353,24 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
-          
-          // Handle working directory
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
-          
-          // Handle background execution
-          if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          }
 
-          const result = await sandbox.runCommand('sh', ['-c', fullCommand]);
-          // Call stdout/stderr sequentially to avoid "Multiple consumers for logs" warning
-          const stdout = await result.stdout();
-          const stderr = await result.stderr();
+          // If running in the background, don't capture stdout/stderr
+          const stdout = options?.background ? undefined : getUtf8Sink();
+          const stderr = options?.background ? undefined : getUtf8Sink();
+
+          const result = await sandbox.runCommand({
+            cmd: 'sh',
+            args: ['-c', fullCommand],
+            cwd: options?.cwd,
+            detached: options?.background,
+            stdout: stdout?.sink,
+            stderr: stderr?.sink,
+          });
 
           return {
-            stdout,
-            stderr,
-            exitCode: result.exitCode,
+            stdout: stdout?.value() ?? '',
+            stderr: stderr?.value() ?? '',
+            exitCode: result.exitCode ?? 0,
             durationMs: Date.now() - startTime,
           };
         } catch (error) {
