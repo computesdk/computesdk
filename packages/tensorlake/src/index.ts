@@ -22,7 +22,7 @@ import type {
 const DEFAULT_API_URL = 'https://api.tensorlake.ai';
 const DEFAULT_PROXY_URL = 'https://sandbox.tensorlake.ai';
 const DEFAULT_IMAGE = 'ubuntu-minimal';
-const POLL_INITIAL_MS = 100;
+const POLL_INITIAL_MS = 25;
 const POLL_MAX_MS = 500;
 const SANDBOX_READY_TIMEOUT_MS = 120_000;
 
@@ -278,24 +278,35 @@ async function startProcess(
   return resp.json();
 }
 
-async function pollProcess(
+/** Wait for a process to finish. If it is already done (status from startProcess), returns immediately. */
+async function waitForProcess(
   ctx: TensorlakeSandboxContext,
-  pid: number,
+  proc: ProcessInfo,
   timeoutMs?: number
 ): Promise<ProcessInfo> {
+  // Fast path: process already finished by the time startProcess responded.
+  if (proc.status !== 'running') return proc;
+
   const deadline = timeoutMs != null ? Date.now() + timeoutMs : Infinity;
   let delay = POLL_INITIAL_MS;
+  let firstPoll = true;
   while (Date.now() < deadline) {
-    const resp = await proxyRequest(ctx, 'GET', `/api/v1/processes/${pid}`);
-    await requireOk(resp, `get_process(${pid})`);
+    // First re-poll fires immediately (no sleep) — catches commands that finish
+    // during the startProcess network round-trip (~20–50ms).
+    if (!firstPoll) {
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay * 2, POLL_MAX_MS);
+    }
+    firstPoll = false;
+
+    const resp = await proxyRequest(ctx, 'GET', `/api/v1/processes/${proc.pid}`);
+    await requireOk(resp, `get_process(${proc.pid})`);
     const info: ProcessInfo = await resp.json();
     if (info.status !== 'running') return info;
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 2, POLL_MAX_MS);
   }
   // Kill on timeout
-  await proxyRequest(ctx, 'DELETE', `/api/v1/processes/${pid}`);
-  throw new Error(`Tensorlake process ${pid} timed out`);
+  await proxyRequest(ctx, 'DELETE', `/api/v1/processes/${proc.pid}`);
+  throw new Error(`Tensorlake process ${proc.pid} timed out`);
 }
 
 async function getOutput(
@@ -307,6 +318,17 @@ async function getOutput(
   if (!resp.ok) return '';
   const data: OutputResponse = await resp.json();
   return (data.lines || []).join('\n');
+}
+
+/** Fetch stdout and stderr in a single request via the combined /output endpoint. */
+async function getCombinedOutput(
+  ctx: TensorlakeSandboxContext,
+  pid: number
+): Promise<{ stdout: string; stderr: string }> {
+  const resp = await proxyRequest(ctx, 'GET', `/api/v1/processes/${pid}/output`);
+  if (!resp.ok) return { stdout: '', stderr: '' };
+  const data: OutputResponse = await resp.json();
+  return { stdout: (data.lines || []).join('\n'), stderr: '' };
 }
 
 // ---------------------------------------------------------------------------
@@ -430,7 +452,7 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
 
         try {
           const proc = await startProcess(ctx, command, args);
-          const info = await pollProcess(ctx, proc.pid);
+          const info = await waitForProcess(ctx, proc);
           const [stdout, stderr] = await Promise.all([
             getOutput(ctx, proc.pid, 'stdout'),
             getOutput(ctx, proc.pid, 'stderr'),
@@ -504,11 +526,8 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
             };
           }
 
-          const info = await pollProcess(ctx, proc.pid);
-          const [stdout, stderr] = await Promise.all([
-            getOutput(ctx, proc.pid, 'stdout'),
-            getOutput(ctx, proc.pid, 'stderr'),
-          ]);
+          const info = await waitForProcess(ctx, proc);
+          const { stdout, stderr } = await getCombinedOutput(ctx, proc.pid);
 
           return {
             stdout,
@@ -595,7 +614,7 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
 
         mkdir: async (ctx: TensorlakeSandboxContext, path: string): Promise<void> => {
           const proc = await startProcess(ctx, 'mkdir', ['-p', path]);
-          const info = await pollProcess(ctx, proc.pid);
+          const info = await waitForProcess(ctx, proc);
           if (info.exit_code !== 0) {
             const stderr = await getOutput(ctx, proc.pid, 'stderr');
             throw new Error(`Failed to create directory ${path}: ${stderr}`);
