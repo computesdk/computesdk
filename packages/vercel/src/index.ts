@@ -174,9 +174,15 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
               params.ports = ports;
             }
 
-            // Pass runtime if specified (Vercel supports runtime selection)
+            // Pass runtime if specified (Vercel supports runtime selection).
+            // Vercel only accepts specific versioned runtimes (node24, node22, python3.13),
+            // so translate ComputeSDK's generic names to Vercel's expected format.
             if (optRuntime) {
-              params.runtime = optRuntime;
+              const vercelRuntime =
+                optRuntime === 'node' ? 'node24' :
+                optRuntime === 'python' ? 'python3.13' :
+                optRuntime;
+              params.runtime = vercelRuntime;
             }
 
             // Support both ComputeSDK format (snapshotId/templateId at top level) and 
