@@ -496,40 +496,40 @@ async function runPrimeCommand(
   let lastError: unknown;
 
   while (Date.now() < deadline) {
-    const current = await getPrimeSandbox(
-      {
-        apiKey: sandbox.apiKey,
-        baseUrl: sandbox.baseUrl,
-        timeoutMs: sandbox.timeoutMs,
-      },
-      sandbox.id,
-      sandbox.runtime
-    );
-
-    sandbox.status = current.status;
-    sandbox.errorType = current.errorType;
-    sandbox.error_type = current.error_type;
-    sandbox.errorMessage = current.errorMessage;
-    sandbox.error_message = current.error_message;
-
-    if (PRIME_FAILED_STATUSES.has(current.status || '')) {
-      throw new Error(formatPrimeError(current));
+    try {
+      const remainingMs = Math.max(1_000, deadline - Date.now());
+      return await execPrimeCommand(sandbox, command, {
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: remainingMs,
+      });
+    } catch (error) {
+      lastError = error;
     }
 
-    if ((current.status || '') === 'RUNNING') {
-      try {
-        const remainingMs = Math.max(1_000, deadline - Date.now());
-        return await execPrimeCommand(current, command, {
-          cwd: options.cwd,
-          env: options.env,
-          timeoutMs: remainingMs,
-        });
-      } catch (error) {
-        lastError = error;
+    if (attempt < 5 || attempt % 4 === 0) {
+      const current = await getPrimeSandbox(
+        {
+          apiKey: sandbox.apiKey,
+          baseUrl: sandbox.baseUrl,
+          timeoutMs: sandbox.timeoutMs,
+        },
+        sandbox.id,
+        sandbox.runtime
+      );
+
+      sandbox.status = current.status;
+      sandbox.errorType = current.errorType;
+      sandbox.error_type = current.error_type;
+      sandbox.errorMessage = current.errorMessage;
+      sandbox.error_message = current.error_message;
+
+      if (PRIME_FAILED_STATUSES.has(current.status || '')) {
+        throw new Error(formatPrimeError(current));
       }
     }
 
-    await sleep(attempt < 5 ? 1_000 : 2_000);
+    await sleep(attempt < 10 ? 100 : 250);
     attempt += 1;
   }
 
