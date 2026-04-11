@@ -257,6 +257,7 @@ npm install @computesdk/modal      # Modal provider
 npm install @computesdk/railway    # Railway provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/prime      # Prime Intellect Sandboxes provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
 ```
 
@@ -275,6 +276,7 @@ See individual provider READMEs for details:
 - **[@computesdk/railway](./packages/railway)** - Full-stack deployments
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
+- **[@computesdk/prime](./packages/prime)** - Prime Intellect Docker sandboxes with gateway command execution
 - **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
 
 ## Building Custom Providers
