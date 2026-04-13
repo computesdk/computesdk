@@ -22,7 +22,7 @@ import type {
 const PROVIDER = 'docker' as const;
 const LABEL_KEY = 'com.computesdk.sandbox';
 const LABEL_RUNTIME = 'com.computesdk.runtime';
-const KEEPALIVE_CMD = ['/bin/sh', '-c', 'while :; do sleep 3600; done'];
+const KEEPALIVE_CMD = ['/bin/sh', '-c', 'exec sleep infinity'];
 
 function pick<T>(val: T | undefined, fallback: T): T {
   return typeof val === 'undefined' ? fallback : val;
@@ -300,8 +300,8 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         const docker = new Docker((config || defaultDockerConfig).connection as any);
         try {
           const c = docker.getContainer(sandboxId);
-          try { await c.stop({ t: 5 } as any); } catch { /* stopped */ }
-          await c.remove({ force: true });
+          try { await c.kill(); } catch { /* already stopped */ }
+          try { await c.remove(); } catch { /* already removed */ }
         } catch {
           // ok if already gone
         }
@@ -352,10 +352,20 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
       runCommand: async (
         handle: DockerSandboxHandle,
         command: string,
-        args: string[] = []
+        options?: RunCommandOptions
       ): Promise<CommandResult> => {
         const start = Date.now();
-        const shell = args.length ? `${command} ${args.join(' ')}` : command;
+
+        let shell = command;
+        if (options?.cwd) {
+          shell = `cd ${JSON.stringify(options.cwd)} && ${shell}`;
+        }
+        if (options?.env) {
+          const prefix = Object.entries(options.env)
+            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+            .join(' ');
+          shell = `${prefix} ${shell}`;
+        }
 
         const { stdout, stderr, exitCode } = await runExec(handle, shell);
 
