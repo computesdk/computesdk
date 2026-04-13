@@ -357,14 +357,14 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         const start = Date.now();
 
         let shell = command;
+        if (options?.env) {
+          const exports = Object.entries(options.env)
+            .map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
+            .join('; ');
+          shell = `${exports}; ${shell}`;
+        }
         if (options?.cwd) {
           shell = `cd ${JSON.stringify(options.cwd)} && ${shell}`;
-        }
-        if (options?.env) {
-          const prefix = Object.entries(options.env)
-            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-            .join(' ');
-          shell = `${prefix} ${shell}`;
         }
 
         const { stdout, stderr, exitCode } = await runExec(handle, shell);
