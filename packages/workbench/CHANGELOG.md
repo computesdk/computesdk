@@ -4,6 +4,13 @@
 
 ### Patch Changes
 
+- Updated dependencies [aba08d4]
+  - @computesdk/vercel@1.7.22
+
+## 21.0.2
+
+### Patch Changes
+
 - Updated dependencies [80ce13f]
   - @computesdk/vercel@1.7.22
 

@@ -1,5 +1,14 @@
 # @computesdk/example-basic
 
+## 0.4.72
+
+### Patch Changes
+
+- Updated dependencies [9c9521f]
+- Updated dependencies [aba08d4]
+  - @computesdk/docker@1.2.41
+  - @computesdk/vercel@1.7.22
+
 ## 0.4.71
 
 ### Patch Changes
