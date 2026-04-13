@@ -1,17 +1,18 @@
 {
-  "name": "@computesdk/vercel",
-  "version": "1.7.21",
-  "description": "Vercel Sandbox provider for ComputeSDK - serverless code execution for Python and Node.js on Vercel's edge network",
+  "name": "@computesdk/kernel",
+  "version": "0.1.0",
+  "description": "Kernel browser provider for ComputeSDK - cloud browser sessions powered by Kernel",
   "author": "Garrison",
   "license": "MIT",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [
@@ -19,33 +20,31 @@
   ],
   "scripts": {
     "build": "tsup",
+    "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
   "dependencies": {
+    "@onkernel/sdk": "^0.5.0",
     "@computesdk/provider": "workspace:*",
-    "@vercel/sandbox": "^1.9.3",
-    "computesdk": "workspace:*",
-    "ms": "^2.1.3"
+    "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",
-    "vercel",
-    "sandbox",
-    "code-execution",
-    "nodejs",
-    "python",
-    "cloud",
-    "compute",
-    "provider",
-    "serverless"
+    "kernel",
+    "browser",
+    "headless",
+    "playwright",
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/vercel"
+    "directory": "packages/kernel"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {
@@ -53,7 +52,6 @@
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
-    "@types/ms": "^0.7.34",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
