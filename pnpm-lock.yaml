@@ -127,6 +127,9 @@ importers:
 
   packages/avm:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -161,6 +164,9 @@ importers:
       '@aws-sdk/client-ecs':
         specifier: ^3.943.0
         version: 3.943.0
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -195,6 +201,9 @@ importers:
       '@aws-sdk/client-lambda':
         specifier: ^3.948.0
         version: 3.948.0
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -933,6 +942,9 @@ importers:
 
   packages/lambda:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk

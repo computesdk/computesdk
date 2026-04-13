@@ -30,6 +30,7 @@
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.948.0",
     "computesdk": "workspace:*",
+    "@computesdk/provider": "workspace:*",
     "jszip": "^3.10.1"
   },
   "keywords": [
