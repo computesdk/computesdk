@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-ecs": "^3.943.0",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "@computesdk/provider": "workspace:*"
   },
   "keywords": [
     "computesdk",

@@ -267,6 +267,7 @@ export async function runInstaller(options: InstallOptions = {}): Promise<void> 
           p.log.info('Creating workspace...');
           
           // Ensure auth is configured
+          const { resolveApiKey } = await import('./auth.js');
           const apiKey = await resolveApiKey();
           if (!apiKey) {
             p.log.error('ComputeSDK API key is required. Please run setup first.');

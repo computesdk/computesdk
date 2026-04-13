@@ -29,7 +29,8 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "@computesdk/provider": "workspace:*"
   },
   "keywords": [
     "computesdk",
