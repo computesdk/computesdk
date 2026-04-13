@@ -613,6 +613,9 @@ importers:
 
   packages/docker:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
