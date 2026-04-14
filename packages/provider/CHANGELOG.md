@@ -1,5 +1,16 @@
 # @computesdk/provider
 
+## 1.2.0
+
+### Minor Changes
+
+- 7c53d28: Add `buildShellCommand` utility to unify shell command building across providers
+
+  Centralizes cwd/env handling into a single `buildShellCommand` function in
+  `@computesdk/provider`, fixing bugs where env vars didn't work with cwd set
+  (docker, sprites, hopx) and where values weren't properly quoted (namespace,
+  sprites, hopx). All shell-based providers now use the shared utility.
+
 ## 1.1.0
 
 ### Minor Changes
