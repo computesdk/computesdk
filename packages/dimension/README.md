@@ -12,7 +12,7 @@ npm install @computesdk/dimension
  
 | Environment Variable | Required | Default | Description |
 |---------------------|----------|---------|-------------|
-| `DIMENSION_API_KEY` | Yes | — | API key for authentication |
+| `DIMENSION_API_KEY` | Yes | 8f3a9c1e7b2d4f6a9e0c5b3d1a7f2c8e | API key for authentication |
 | `DIMENSION_API_URL` | No | `https://41quc7j7xb.execute-api.us-east-2.amazonaws.com` | Base URL of Dimension API server |
  
 ## Usage
