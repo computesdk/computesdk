@@ -14,7 +14,7 @@ import type {
   CreateBrowserExtensionOptions,
   BrowserProfile,
   BrowserExtension,
-  BrowserLog,
+
   BrowserRecording,
 } from '@computesdk/provider';
 
@@ -252,19 +252,17 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
     logs: {
       list: async (config, sessionId) => {
         const client = createClient(config);
-        const stream = await client.browsers.logs.stream(sessionId, {
-          source: 'supervisor',
-          follow: false,
+        const response = await (client.browsers as any).fs.readFile(sessionId, {
+          path: '/var/log/supervisord/chromium',
         });
-        const logs: BrowserLog[] = [];
-        for await (const event of stream) {
-          logs.push({
-            timestamp: new Date(event.timestamp),
-            level: 'info',
-            message: event.message ?? '',
-          });
-        }
-        return logs;
+        const text = await response.text();
+        const retrievedAt = new Date();
+        const lines = text.split('\n').filter((line: string) => line.trim()).slice(-1000);
+        return lines.map((line: string) => ({
+          timestamp: retrievedAt,
+          level: 'info' as const,
+          message: line,
+        }));
       },
     },
   },

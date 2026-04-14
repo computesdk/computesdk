@@ -1,6 +1,6 @@
 import Docker from 'dockerode';
 import { PassThrough } from 'stream';
-import { defineProvider, buildShellCommand } from '@computesdk/provider';
+import { defineProvider } from '@computesdk/provider';
 import type {
   Runtime,
   CodeResult,
@@ -356,9 +356,7 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
       ): Promise<CommandResult> => {
         const start = Date.now();
 
-        const shell = buildShellCommand(command, options);
-
-        const { stdout, stderr, exitCode } = await runExec(handle, shell);
+        const { stdout, stderr, exitCode } = await runExec(handle, command);
 
         return {
           stdout,

@@ -6,7 +6,7 @@
  */
 
 import * as fs from 'fs/promises';
-import { defineProvider, buildShellCommand } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 
 /**
@@ -312,7 +312,20 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
         try {
           // Build the full command with options
-          let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
+          let fullCommand = command;
+
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}=${escapeShellArg(v)}`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd ${escapeShellArg(options.cwd)} && ${fullCommand}`;
+          }
 
           // Handle background execution
           if (options?.background) {
