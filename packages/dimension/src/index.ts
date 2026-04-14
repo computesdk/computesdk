@@ -1,11 +1,6 @@
 /**
  * @computesdk/dimension — ComputeSDK provider for Dimension Runtime.
  *
- * Dimension Runtime is a deterministic execution platform with:
- * - Sub-7ms cold-start (6.6ms median)
- * - Syscall-level hypervisor (seccomp USER_NOTIF, 0 ALLOW)
- * - Bit-exact reproducibility from seed
- * - Structural multi-tenant isolation
  *
  * Configuration:
  * DIMENSION_API_URL — Base URL of Dimension API server (default: https://41quc7j7xb.execute-api.us-east-2.amazonaws.com)
