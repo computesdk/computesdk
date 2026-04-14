@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { calculateBackoff } from '../utils';
+import { calculateBackoff, escapeShellArg, buildShellCommand } from '../utils';
 
 describe('calculateBackoff', () => {
   it('should calculate exponential backoff for attempt 0', () => {
@@ -66,5 +66,79 @@ describe('calculateBackoff', () => {
 
     expect(delay1).toBe(delay0 * 2);
     expect(delay2).toBe(delay1 * 2);
+  });
+});
+
+describe('escapeShellArg', () => {
+  it('should escape backslashes', () => {
+    expect(escapeShellArg('a\\b')).toBe('a\\\\b');
+  });
+
+  it('should escape double quotes', () => {
+    expect(escapeShellArg('a"b')).toBe('a\\"b');
+  });
+
+  it('should escape dollar signs', () => {
+    expect(escapeShellArg('$VAR')).toBe('\\$VAR');
+  });
+
+  it('should escape backticks', () => {
+    expect(escapeShellArg('a`b`c')).toBe('a\\`b\\`c');
+  });
+});
+
+describe('buildShellCommand', () => {
+  it('should return command unchanged when no options', () => {
+    expect(buildShellCommand('echo hello')).toBe('echo hello');
+  });
+
+  it('should wrap cwd with cd', () => {
+    expect(buildShellCommand('ls', { cwd: '/tmp' })).toBe('cd "/tmp" && ls');
+  });
+
+  it('should escape special chars in cwd', () => {
+    expect(buildShellCommand('ls', { cwd: '/path with $VAR' })).toBe('cd "/path with \\$VAR" && ls');
+  });
+
+  it('should export env vars', () => {
+    expect(buildShellCommand('npm run build', { env: { NODE_ENV: 'production' } }))
+      .toBe('export NODE_ENV="production" && npm run build');
+  });
+
+  it('should export multiple env vars with &&', () => {
+    const result = buildShellCommand('cmd', { env: { A: '1', B: '2' } });
+    expect(result).toBe('export A="1" && export B="2" && cmd');
+  });
+
+  it('should apply cd before env', () => {
+    const result = buildShellCommand('cmd', { cwd: '/dir', env: { KEY: 'val' } });
+    expect(result).toBe('cd "/dir" && export KEY="val" && cmd');
+  });
+
+  it('should escape env values', () => {
+    expect(buildShellCommand('cmd', { env: { FOO: '$BAR' } }))
+      .toBe('export FOO="\\$BAR" && cmd');
+  });
+
+  it('should throw on invalid env key', () => {
+    expect(() => buildShellCommand('cmd', { env: { 'FOO; rm -rf /': 'bad' } }))
+      .toThrow('Invalid environment variable name');
+    expect(() => buildShellCommand('cmd', { env: { '1INVALID': 'bad' } }))
+      .toThrow('Invalid environment variable name');
+  });
+
+  it('should accept valid env keys', () => {
+    expect(() => buildShellCommand('cmd', { env: { MY_VAR: 'ok', _private: 'ok', A1: 'ok' } }))
+      .not.toThrow();
+  });
+
+  it('should use custom escape function', () => {
+    const noOp = (s: string) => s;
+    const result = buildShellCommand('cmd', { env: { KEY: 'raw' } }, noOp);
+    expect(result).toBe('export KEY="raw" && cmd');
+  });
+
+  it('should handle empty env object', () => {
+    expect(buildShellCommand('cmd', { env: {} })).toBe('cmd');
   });
 });

@@ -336,8 +336,8 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
       runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
-           // Build command with options
-           let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
+          // Build command with options
+          let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
           
           // Handle background execution
           if (options?.background) {

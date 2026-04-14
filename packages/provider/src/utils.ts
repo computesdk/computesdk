@@ -64,20 +64,24 @@ export function escapeShellArg(arg: string): string {
 /**
  * Build a shell command string with optional cwd and env support
  *
- * Produces a properly ordered and escaped shell command:
- *   cd "/dir" && export KEY="val"; <command>
+ * Produces a properly ordered and escaped shell command where all parts
+ * are chained with && so a failure in cd or export stops execution:
+ *   cd "/dir" && export KEY="val" && <command>
  *
  * @param command - The shell command to run
  * @param options - Optional cwd and env
  * @param escapeFn - Optional custom escape function (defaults to escapeShellArg)
  * @returns Escaped shell command string
+ * @throws Error if env keys contain invalid characters (must match ^[A-Za-z_][A-Za-z0-9_]*$)
  *
  * @example
  * ```typescript
  * buildShellCommand('npm run build', { cwd: '/my app', env: { NODE_ENV: 'production' } })
- * // Result: cd "/my\ app" && export NODE_ENV="production"; npm run build
+ * // Result: cd "/my\ app" && export NODE_ENV="production" && npm run build
  * ```
  */
+const SAFE_ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export function buildShellCommand(
   command: string,
   options?: { cwd?: string; env?: Record<string, string> },
@@ -87,9 +91,14 @@ export function buildShellCommand(
 
   if (options?.env && Object.keys(options.env).length > 0) {
     const exports = Object.entries(options.env)
-      .map(([k, v]) => `export ${k}="${escapeFn(v)}"`)
-      .join('; ');
-    shell = `${exports}; ${shell}`;
+      .map(([k, v]) => {
+        if (!SAFE_ENV_KEY.test(k)) {
+          throw new Error(`Invalid environment variable name: ${k}`);
+        }
+        return `export ${k}="${escapeFn(v)}"`;
+      })
+      .join(' && ');
+    shell = `${exports} && ${shell}`;
   }
 
   if (options?.cwd) {
