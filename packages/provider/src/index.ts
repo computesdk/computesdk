@@ -46,7 +46,7 @@ export type {
 } from './browser-factory';
 
 // Export utilities
-export { calculateBackoff, escapeShellArg } from './utils';
+export { calculateBackoff, escapeShellArg, buildShellCommand } from './utils';
 
 // Export all types
 export type * from './types';

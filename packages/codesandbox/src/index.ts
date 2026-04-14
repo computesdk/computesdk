@@ -6,7 +6,7 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, buildShellCommand } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -248,20 +248,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           const client = await sandbox.connect();
 
           // Build command with options
-          let fullCommand = command;
-
-          // Handle environment variables
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-
-          // Handle working directory
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
+          let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
 
           // Handle background execution
           if (options?.background) {

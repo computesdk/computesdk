@@ -6,7 +6,7 @@
  */
 
 import { Box } from '@upstash/box';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, buildShellCommand, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -240,20 +240,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
 
         try {
           // Build command with options
-          let fullCommand = command;
-
-          // Handle environment variables
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-
-          // Handle working directory
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
+          let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
 
           // Handle background execution
           if (options?.background) {

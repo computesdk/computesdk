@@ -4,7 +4,7 @@
  * Cloud sandbox provider using the factory pattern.
  */
 
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, buildShellCommand } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -299,24 +299,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         // successful commands (e.g., warnings) appear in stdout, and stdout from
         // failed commands is attributed to stderr.
         const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
-        let shellCmd = command;
-
-        if (options?.cwd) {
-          shellCmd = `cd ${escapeShellArg(options.cwd)} && ${shellCmd}`;
-        }
-
-        if (options?.env) {
-          const safeKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
-          const envPrefix = Object.entries(options.env)
-            .map(([k, v]) => {
-              if (!safeKeyPattern.test(k)) {
-                throw new Error(`Invalid environment variable name: ${k}`);
-              }
-              return `${k}=${escapeShellArg(v)}`;
-            })
-            .join(' ');
-          shellCmd = `${envPrefix} ${shellCmd}`;
-        }
+        let shellCmd = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
 
         shellCmd = `${shellCmd} 2>&1; echo "${delimiter}$?"`;
 

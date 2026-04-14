@@ -14,7 +14,7 @@
  */
 
 import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, buildShellCommand } from '@computesdk/provider';
 import type {
   CodeResult,
   CommandResult,
@@ -332,18 +332,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
-          let fullCommand = command;
-
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]: [string, string]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
+          let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
 
           if (options?.background) {
             fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
