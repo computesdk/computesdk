@@ -12,7 +12,7 @@
  */
 
 import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, buildShellCommand } from '@computesdk/provider';
 import type {
   CodeResult,
   CommandResult,
@@ -336,21 +336,8 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
       runCommand: async (sandbox: HopxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
-          // Build command with options
-          let fullCommand = command;
-          
-          // Handle environment variables
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${v.replace(/"/g, '\\"')}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          
-          // Handle working directory
-          if (options?.cwd) {
-            fullCommand = `cd "${options.cwd.replace(/"/g, '\\"')}" && ${fullCommand}`;
-          }
+           // Build command with options
+           let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
           
           // Handle background execution
           if (options?.background) {
