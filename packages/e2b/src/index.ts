@@ -6,7 +6,7 @@
  */
 
 import { Sandbox as E2BSandbox } from 'e2b';
-import { defineProvider, buildShellCommand } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -252,7 +252,20 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
         try {
           // Build command with options (E2B doesn't support these natively, so we wrap with shell)
-          let fullCommand = buildShellCommand(command, { cwd: options?.cwd, env: options?.env });
+          let fullCommand = command;
+          
+          // Handle environment variables
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          
+          // Handle working directory
+          if (options?.cwd) {
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          }
           
           // Handle background execution
           if (options?.background) {
