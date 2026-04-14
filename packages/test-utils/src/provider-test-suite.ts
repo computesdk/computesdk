@@ -39,7 +39,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
     const supportedRuntimes = provider.getSupportedRuntimes();
     
     // Helper function to create and cleanup sandboxes for each runtime
-    const createRuntimeSandbox = async (runtime: 'node' | 'python') => {
+    const createRuntimeSandbox = async (runtime: Runtime) => {
       if (skipIntegration) {
         return createMockSandbox(config);
       } else {

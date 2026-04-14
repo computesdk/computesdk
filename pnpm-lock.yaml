@@ -127,6 +127,9 @@ importers:
 
   packages/avm:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -161,6 +164,9 @@ importers:
       '@aws-sdk/client-ecs':
         specifier: ^3.943.0
         version: 3.943.0
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -195,6 +201,9 @@ importers:
       '@aws-sdk/client-lambda':
         specifier: ^3.948.0
         version: 3.948.0
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -900,8 +909,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@onkernel/sdk':
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.49.0
+        version: 0.49.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -933,6 +942,9 @@ importers:
 
   packages/lambda:
     dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -1323,6 +1335,9 @@ importers:
         specifier: ^17.2.1
         version: 17.2.1
     devDependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3173,8 +3188,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@onkernel/sdk@0.5.0':
-    resolution: {integrity: sha512-n7gwc7rU0GY/XcDnEV0piHPd76bHTSfuTjQW4qFKUWQji0UK9YUVKDFklqAWbyGlXPUezWCfxh79ELv2cFYOBA==}
+  '@onkernel/sdk@0.49.0':
+    resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
   '@opentelemetry/api-logs@0.207.0':
     resolution: {integrity: sha512-lAb0jQRVyleQQGiuuvCOTDVspc14nx6XJjP4FspJ1sNARo3Regq4ZZbrc3rN4b1TYSuUCvgH+UXUPug4SLOqEQ==}
@@ -10445,7 +10460,7 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@onkernel/sdk@0.5.0': {}
+  '@onkernel/sdk@0.49.0': {}
 
   '@opentelemetry/api-logs@0.207.0':
     dependencies:

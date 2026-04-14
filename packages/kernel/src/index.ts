@@ -26,8 +26,6 @@ import type { BrowserCreateResponse } from '@onkernel/sdk/resources/browsers';
 export interface KernelConfig {
   /** Kernel API key — falls back to KERNEL_API_KEY env var */
   apiKey?: string;
-  /** Invocation ID for the Kernel action context */
-  invocationId?: string;
 }
 
 /**
@@ -43,7 +41,7 @@ function resolveConfig(config: KernelConfig) {
     );
   }
 
-  return { apiKey, invocationId: config.invocationId };
+  return { apiKey };
 }
 
 /**
@@ -54,41 +52,11 @@ function createClient(config: KernelConfig): Kernel {
   return new Kernel({ apiKey });
 }
 
-const KERNEL_API_BASE = 'https://api.onkernel.com';
-
-/**
- * Make a direct API call to Kernel for endpoints not yet in the SDK
- */
-async function kernelFetch(config: KernelConfig, path: string, options: RequestInit = {}) {
-  const { apiKey } = resolveConfig(config);
-  const response = await fetch(`${KERNEL_API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Kernel API ${options.method ?? 'GET'} ${path} failed (${response.status}): ${body}`);
-  }
-  if (response.status === 204) return null;
-  return response.json();
-}
-
 /**
  * Map ComputeSDK session options to Kernel create browser params.
- *
- * The SDK types currently only require invocation_id, but the API
- * accepts additional fields (stealth, viewport, etc.) so we pass
- * them through via a type assertion.
  */
-function mapSessionOptions(config: KernelConfig, options?: CreateBrowserSessionOptions) {
-  const { invocationId } = resolveConfig(config);
+function mapSessionOptions(options?: CreateBrowserSessionOptions) {
   const params: Record<string, any> = {};
-
-  if (invocationId) params.invocation_id = invocationId;
 
   if (!options) return params;
 
@@ -153,7 +121,7 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
     session: {
       create: async (config, options) => {
         const client = createClient(config);
-        const params = mapSessionOptions(config, options);
+        const params = mapSessionOptions(options);
         const browser = await client.browsers.create(params as any);
         return normalizeSession(browser);
       },
@@ -174,12 +142,15 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
 
       list: async (config) => {
         const client = createClient(config);
-        const browsers = await (client.browsers as any).list();
-        return (browsers as any[]).map((browser: any) => ({
-          session: browser as BrowserCreateResponse,
-          sessionId: browser.session_id,
-          connectUrl: browser.cdp_ws_url,
-        }));
+        const sessions: { session: BrowserCreateResponse; sessionId: string; connectUrl: string }[] = [];
+        for await (const browser of client.browsers.list()) {
+          sessions.push({
+            session: browser as BrowserCreateResponse,
+            sessionId: browser.session_id,
+            connectUrl: browser.cdp_ws_url,
+          });
+        }
+        return sessions;
       },
 
       destroy: async (config, sessionId) => {
@@ -197,12 +168,10 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
     // ─── Profiles ─────────────────────────────────────────────────────
     profile: {
       create: async (config, options) => {
-        const params: Record<string, any> = {};
+        const client = createClient(config);
+        const params: { name?: string } = {};
         if (options?.name) params.name = options.name;
-        const result = await kernelFetch(config, '/profiles', {
-          method: 'POST',
-          body: JSON.stringify(params),
-        });
+        const result = await client.profiles.create(params);
         return {
           profileId: result.id,
           name: result.name ?? options?.name,
@@ -212,11 +181,12 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
       },
 
       get: async (config, profileId) => {
+        const client = createClient(config);
         try {
-          const result = await kernelFetch(config, `/profiles/${profileId}`);
+          const result = await client.profiles.retrieve(profileId);
           return {
             profileId: result.id,
-            name: result.name,
+            name: result.name ?? undefined,
             createdAt: result.created_at ? new Date(result.created_at) : undefined,
           } satisfies BrowserProfile;
         } catch {
@@ -225,39 +195,36 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
       },
 
       list: async (config) => {
-        const results = await kernelFetch(config, '/profiles');
-        return (results as any[]).map((result) => ({
-          profileId: result.id,
-          name: result.name,
-          createdAt: result.created_at ? new Date(result.created_at) : undefined,
-        } satisfies BrowserProfile));
+        const client = createClient(config);
+        const profiles: BrowserProfile[] = [];
+        for await (const result of client.profiles.list()) {
+          profiles.push({
+            profileId: result.id,
+            name: result.name ?? undefined,
+            createdAt: result.created_at ? new Date(result.created_at) : undefined,
+          } satisfies BrowserProfile);
+        }
+        return profiles;
       },
 
       delete: async (config, profileId) => {
-        await kernelFetch(config, `/profiles/${profileId}`, { method: 'DELETE' });
+        const client = createClient(config);
+        await client.profiles.delete(profileId);
       },
     },
 
     // ─── Extensions ───────────────────────────────────────────────────
     extension: {
       create: async (config, options) => {
-        const { apiKey } = resolveConfig(config);
+        const client = createClient(config);
         const blob = typeof options.file === 'string'
           ? new Blob([options.file])
           : new Blob([new Uint8Array(options.file).buffer as ArrayBuffer]);
-        const formData = new FormData();
-        formData.append('file', new File([blob], options.name ?? 'extension.zip'));
-        if (options.name) formData.append('name', options.name);
-        const response = await fetch(`${KERNEL_API_BASE}/extensions`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${apiKey}` },
-          body: formData,
+        const file = new File([blob], options.name ?? 'extension.zip');
+        const result = await client.extensions.upload({
+          file,
+          name: options.name,
         });
-        if (!response.ok) {
-          const body = await response.text().catch(() => '');
-          throw new Error(`Failed to upload Kernel extension (${response.status}): ${body}`);
-        }
-        const result = await response.json();
         return {
           extensionId: result.id,
           name: result.name ?? options.name,
@@ -265,72 +232,39 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
       },
 
       get: async (config, extensionId) => {
-        try {
-          const result = await kernelFetch(config, `/extensions/${extensionId}`);
-          return {
-            extensionId: result.id,
-            name: result.name,
-          } satisfies BrowserExtension;
-        } catch {
-          return null;
-        }
+        const client = createClient(config);
+        const extensions = await client.extensions.list();
+        const result = extensions.find((ext) => ext.id === extensionId);
+        if (!result) return null;
+        return {
+          extensionId: result.id,
+          name: result.name ?? undefined,
+        } satisfies BrowserExtension;
       },
 
       delete: async (config, extensionId) => {
-        await kernelFetch(config, `/extensions/${extensionId}`, { method: 'DELETE' });
+        const client = createClient(config);
+        await client.extensions.delete(extensionId);
       },
     },
 
     // ─── Logs ─────────────────────────────────────────────────────────
     logs: {
       list: async (config, sessionId) => {
-        const { apiKey } = resolveConfig(config);
-        const url = `${KERNEL_API_BASE}/browsers/${sessionId}/logs/stream?source=supervisor&follow=false`;
-        const response = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'text/event-stream' },
+        const client = createClient(config);
+        const stream = await client.browsers.logs.stream(sessionId, {
+          source: 'supervisor',
+          follow: false,
         });
-        if (!response.ok) {
-          const body = await response.text().catch(() => '');
-          throw new Error(`Failed to fetch Kernel logs (${response.status}): ${body}`);
-        }
-        const text = await response.text();
         const logs: BrowserLog[] = [];
-        for (const block of text.split(/\r?\n\r?\n/)) {
-          const lines = block.split(/\r?\n/).filter((l) => l.startsWith('data:'));
-          if (!lines.length) continue;
-          const data = lines.map((l) => l.slice(5).trim()).join('');
-          try {
-            const event = JSON.parse(data);
-            logs.push({
-              timestamp: new Date(event.timestamp),
-              level: 'info',
-              message: event.message ?? '',
-            });
-          } catch {
-            // skip malformed events
-          }
+        for await (const event of stream) {
+          logs.push({
+            timestamp: new Date(event.timestamp),
+            level: 'info',
+            message: event.message ?? '',
+          });
         }
         return logs;
-      },
-    },
-
-    // ─── Recordings (Replays) ─────────────────────────────────────────
-    recording: {
-      get: async (config, sessionId) => {
-        try {
-          const result = await kernelFetch(config, `/browsers/${sessionId}/replays`, {
-            method: 'POST',
-            body: JSON.stringify({}),
-          });
-          return {
-            recordingId: result.replay_id,
-            sessionId,
-            format: 'mp4',
-            url: result.replay_view_url,
-          } satisfies BrowserRecording;
-        } catch {
-          return null;
-        }
       },
     },
   },
