@@ -8,7 +8,7 @@
  * - Structural multi-tenant isolation
  *
  * Configuration:
- * DIMENSION_API_URL — Base URL of Dimension API server (default: http://localhost:4100)
+ * DIMENSION_API_URL — Base URL of Dimension API server (default: https://41quc7j7xb.execute-api.us-east-2.amazonaws.com)
  * DIMENSION_API_KEY — API key for authentication
  */
 
@@ -48,7 +48,7 @@ class DimensionClient {
         this.baseUrl = (
                 config.apiUrl ||
                 process.env.DIMENSION_API_URL ||
-                "http://localhost:4100"
+                "https://41quc7j7xb.execute-api.us-east-2.amazonaws.com"
               ).replace(/\/$/, "");
         this.apiKey = config.apiKey || process.env.DIMENSION_API_KEY || "";
         if (!this.apiKey) {
