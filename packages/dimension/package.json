@@ -1,0 +1,33 @@
+{
+    "name": "@computesdk/dimension",
+    "version": "0.1.0",
+    "description": "ComputeSDK provider for Dimension Runtime — deterministic execution platform with sub-7ms cold-start",
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+          ".": {
+                  "import": "./src/index.ts"
+          }
+    },
+    "keywords": [
+          "computesdk",
+          "sandbox",
+          "dimension",
+          "deterministic",
+          "runtime",
+          "cold-start"
+    ],
+    "peerDependencies": {
+          "@computesdk/provider": ">=0.1.0"
+    },
+    "devDependencies": {
+          "typescript": "^5.0.0"
+    },
+    "license": "MIT",
+    "repository": {
+          "type": "git",
+          "url": "https://github.com/computesdk/computesdk",
+          "directory": "packages/dimension"
+    }
+}
