@@ -15,15 +15,27 @@ import type {
   SandboxInfo,
   Runtime,
   CreateSandboxOptions,
+  FileEntry,
   RunCommandOptions,
 } from 'computesdk';
 
-const REGION_URLS: Record<string, string> = {
-  'aws-us-east-1': 'https://control.green.us-east-1.aws.prod.archil.com',
-  'aws-eu-west-1': 'https://control.green.eu-west-1.aws.prod.archil.com',
-  'aws-us-west-2': 'https://control.green.us-west-2.aws.prod.archil.com',
-  'gcp-us-central1': 'https://control.blue.us-central1.gcp.prod.archil.com',
+// Per-cloud color overrides. Default is "green" for any cloud not listed here.
+const CLOUD_COLORS: Record<string, string> = {
+  gcp: 'blue',
 };
+
+function regionToBaseUrl(region: string): string {
+  const dash = region.indexOf('-');
+  if (dash <= 0 || dash === region.length - 1) {
+    throw new Error(
+      `Invalid Archil region "${region}". Expected "{cloud}-{suffix}", e.g. "aws-us-east-1".`,
+    );
+  }
+  const cloud = region.slice(0, dash);
+  const suffix = region.slice(dash + 1);
+  const color = CLOUD_COLORS[cloud] ?? 'green';
+  return `https://control.${color}.${suffix}.${cloud}.prod.archil.com`;
+}
 
 export interface ArchilConfig {
   /** Archil API key. Falls back to ARCHIL_API_KEY env var. */
@@ -89,16 +101,10 @@ function resolveConfig(config: ArchilConfig): ResolvedConfig {
         'Missing region for Archil.\n\n' +
           'Pass it: archil({ region: "..." })\n' +
           'Or set ARCHIL_REGION in your environment.\n' +
-          `Valid regions: ${Object.keys(REGION_URLS).join(', ')}`,
+          'Examples: "aws-us-east-1", "aws-eu-west-1", "gcp-us-central1".',
       );
     }
-    const known = REGION_URLS[region];
-    if (!known) {
-      throw new Error(
-        `Unknown Archil region "${region}". Valid regions: ${Object.keys(REGION_URLS).join(', ')}`,
-      );
-    }
-    baseUrl = known;
+    baseUrl = regionToBaseUrl(region);
   }
 
   return { apiKey, baseUrl };
@@ -311,8 +317,79 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         options: { port: number; protocol?: string },
       ): Promise<string> => {
         throw new Error(
-          `Archil exec does not expose network ports. Cannot build URL for port ${options.port}.`,
+          `Archil exec runs each command in a fresh ephemeral container that exits when the command returns, ` +
+            `so there is no long-lived process to expose port ${options.port} on. ` +
+            `getUrl is not supported.`,
         );
+      },
+
+      filesystem: {
+        readFile: async (sandbox, path, runCommand) => {
+          const result = await runCommand(sandbox, `cat ${shellEscape(path)}`);
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to read ${path}: ${result.stderr}`);
+          }
+          return result.stdout;
+        },
+
+        writeFile: async (sandbox, path, content, runCommand) => {
+          const parent = path.substring(0, path.lastIndexOf('/'));
+          if (parent) {
+            await runCommand(sandbox, `mkdir -p ${shellEscape(parent)}`);
+          }
+          // base64-pipe to avoid heredoc/quoting hazards on arbitrary content.
+          const encoded = Buffer.from(content, 'utf8').toString('base64');
+          const result = await runCommand(
+            sandbox,
+            `printf %s ${shellEscape(encoded)} | base64 -d > ${shellEscape(path)}`,
+          );
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to write ${path}: ${result.stderr}`);
+          }
+        },
+
+        mkdir: async (sandbox, path, runCommand) => {
+          const result = await runCommand(sandbox, `mkdir -p ${shellEscape(path)}`);
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
+          }
+        },
+
+        readdir: async (sandbox, path, runCommand) => {
+          // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
+          const result = await runCommand(
+            sandbox,
+            `find ${shellEscape(path)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
+          );
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
+          }
+          const entries: FileEntry[] = [];
+          for (const line of result.stdout.split('\n')) {
+            if (!line) continue;
+            const [typeChar, sizeStr, mtimeStr, ...nameParts] = line.split('\t');
+            const name = nameParts.join('\t');
+            entries.push({
+              name,
+              type: typeChar === 'd' ? 'directory' : 'file',
+              size: parseInt(sizeStr, 10) || 0,
+              modified: new Date(parseFloat(mtimeStr) * 1000),
+            });
+          }
+          return entries;
+        },
+
+        exists: async (sandbox, path, runCommand) => {
+          const result = await runCommand(sandbox, `test -e ${shellEscape(path)}`);
+          return result.exitCode === 0;
+        },
+
+        remove: async (sandbox, path, runCommand) => {
+          const result = await runCommand(sandbox, `rm -rf ${shellEscape(path)}`);
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to remove ${path}: ${result.stderr}`);
+          }
+        },
       },
 
       getInstance: (sandbox: ArchilSandbox): ArchilSandbox => sandbox,
