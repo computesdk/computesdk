@@ -268,19 +268,10 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       runCode: async (
         sandbox: ArchilSandbox,
         code: string,
-        runtime?: Runtime,
+        runtime: Runtime = 'node',
       ): Promise<CodeResult> => {
-        const effectiveRuntime: Runtime =
-          runtime ||
-          (code.includes('print(') ||
-          code.includes('import ') ||
-          code.includes('def ') ||
-          code.includes('raise ')
-            ? 'python'
-            : 'node');
-
-        const interpreter = effectiveRuntime === 'python' ? 'python3' : 'node';
-        const flag = effectiveRuntime === 'python' ? '-c' : '-e';
+        const interpreter = runtime === 'python' ? 'python3' : 'node';
+        const flag = runtime === 'python' ? '-c' : '-e';
         const command = `${interpreter} ${flag} ${shellEscape(code)}`;
 
         const result = await execOnDisk(sandbox, command);
@@ -291,7 +282,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         return {
           output,
           exitCode: result.exitCode,
-          language: effectiveRuntime,
+          language: runtime,
         };
       },
 
