@@ -268,8 +268,16 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       runCode: async (
         sandbox: ArchilSandbox,
         code: string,
-        runtime: Runtime = 'node',
+        runtime?: Runtime,
       ): Promise<CodeResult> => {
+        if (!runtime) {
+          throw new Error(
+            'Archil runCode requires an explicit runtime. Pass runtime: "node" or runtime: "python".',
+          );
+        }
+        if (runtime !== 'node' && runtime !== 'python') {
+          throw new Error(`Archil runCode does not support runtime "${runtime}". Use "node" or "python".`);
+        }
         const interpreter = runtime === 'python' ? 'python3' : 'node';
         const flag = runtime === 'python' ? '-c' : '-e';
         const command = `${interpreter} ${flag} ${shellEscape(code)}`;
