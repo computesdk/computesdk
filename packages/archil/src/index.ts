@@ -19,9 +19,9 @@ import type {
   RunCommandOptions,
 } from 'computesdk';
 
-// Per-cloud color overrides. Default is "green" for any cloud not listed here.
-const CLOUD_COLORS: Record<string, string> = {
-  gcp: 'blue',
+// Per-region color overrides. Default is "green" for any region not listed here.
+const REGION_COLORS: Record<string, string> = {
+  'gcp-us-central1': 'blue',
 };
 
 function regionToBaseUrl(region: string): string {
@@ -33,7 +33,7 @@ function regionToBaseUrl(region: string): string {
   }
   const cloud = region.slice(0, dash);
   const suffix = region.slice(dash + 1);
-  const color = CLOUD_COLORS[cloud] ?? 'green';
+  const color = REGION_COLORS[region] ?? 'green';
   return `https://control.${color}.${suffix}.${cloud}.prod.archil.com`;
 }
 
