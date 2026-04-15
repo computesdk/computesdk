@@ -53,12 +53,15 @@ console.log(result.stdout);
 | `runCommand`  | ✅        | Calls `Disk.exec()` (HTTP, blocks until command completes). |
 | `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`.                    |
 | `getInfo`     | ✅        |                                                             |
-| `getUrl`      | ❌        | Archil exec does not expose network ports.                  |
-| `filesystem`  | ❌        | Use shell commands (`cat`, `ls`, etc.) via `runCommand`.    |
+| `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose. |
+| `filesystem`  | ✅        | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.). |
 
 ## Limitations
 
 - Each `exec` call provisions a fresh container — there is no persistent state
   between calls beyond what is written to the mounted disk.
 - Responses are truncated to ~5 MB by the Archil control plane.
-- `getUrl` and the `filesystem` interface are not implemented.
+- `getUrl` is not supported — each exec runs in a fresh ephemeral container,
+  so there is no long-lived process to expose a port on.
+- Filesystem operations are implemented as shell commands, so each call costs
+  one HTTP round trip.
