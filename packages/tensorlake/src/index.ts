@@ -72,11 +72,23 @@ function apiUrl(config: TensorlakeConfig): string {
 }
 
 function proxyUrl(config: TensorlakeConfig): string {
-  return (
+  const explicit =
     config.proxyUrl ||
     (typeof process !== 'undefined' && process.env?.TENSORLAKE_SANDBOX_PROXY_URL) ||
-    DEFAULT_PROXY_URL
-  );
+    '';
+  if (explicit) return explicit;
+
+  // Derive proxy domain from the API URL so non-default environments (e.g. .dev)
+  // automatically use the matching proxy domain instead of always falling back to .ai.
+  const api = apiUrl(config);
+  try {
+    const url = new URL(api);
+    // api.tensorlake.{tld} → sandbox.tensorlake.{tld}
+    url.hostname = url.hostname.replace(/^api\./, 'sandbox.');
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return DEFAULT_PROXY_URL;
+  }
 }
 
 function sandboxProxyBaseUrl(ctx: TensorlakeSandboxContext): string {
@@ -88,19 +100,20 @@ function sandboxProxyBaseUrl(ctx: TensorlakeSandboxContext): string {
 
   try {
     const url = new URL(rawUrl);
-    if (url.hostname === 'sandbox.tensorlake.ai') {
-      url.hostname = `${ctx.sandboxId}.sandbox.tensorlake.ai`;
-      return url.toString().replace(/\/$/, '');
+    // Prepend sandboxId subdomain if not already present, regardless of TLD.
+    // e.g. sandbox.tensorlake.ai  → {id}.sandbox.tensorlake.ai
+    //      sandbox.tensorlake.dev → {id}.sandbox.tensorlake.dev
+    if (!url.hostname.startsWith(`${ctx.sandboxId}.`)) {
+      url.hostname = `${ctx.sandboxId}.${url.hostname}`;
     }
-    if (url.hostname === `${ctx.sandboxId}.sandbox.tensorlake.ai`) {
-      return url.toString().replace(/\/$/, '');
-    }
+    return url.toString().replace(/\/$/, '');
   } catch {
-    // invalid URL, proceed to fallback below
+    // invalid URL, fall back using derived proxy domain
+    const derived = proxyUrl(ctx.config).replace(/\/$/, '');
+    return `${derived.startsWith('http') ? derived : `https://${derived}`}`.replace(
+      /^(https?:\/\/)/, `$1${ctx.sandboxId}.`
+    );
   }
-
-  // fallback to per-sandbox URL
-  return `https://${ctx.sandboxId}.sandbox.tensorlake.ai`;
 }
 
 /** Make a request to the management API */
@@ -114,8 +127,10 @@ async function managementRequest(
   const url = `${base}${path}`;
   const headers: Record<string, string> = {
     Authorization: `Bearer ${getApiKey(config)}`,
-    'Content-Type': 'application/json',
   };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
   const resp = await fetch(url, {
     method,
     headers,
