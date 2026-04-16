@@ -78,9 +78,9 @@ describe('archil getById semantics', () => {
 });
 
 describe('archil create semantics', () => {
-  it('requires disk id in metadata', async () => {
+  it('requires top-level disk id', async () => {
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
-    await expect(provider.sandbox.create()).rejects.toThrow(/requires an existing disk id/i);
+    await expect(provider.sandbox.create()).rejects.toThrow(/requires an existing disk id on the top-level options/i);
   });
 
   it('resolves existing disk id without creating a new disk', async () => {
@@ -111,7 +111,7 @@ describe('archil create semantics', () => {
     global.fetch = fetchMock as typeof fetch;
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
-    const created = await provider.sandbox.create({ metadata: { diskId: 'disk_abc123' } });
+    const created = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     expect(created.sandboxId).toBe('disk_abc123');
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -128,13 +128,14 @@ runProviderTestSuite({
       region: process.env.ARCHIL_REGION,
     });
 
-    // The generic provider test suite always calls create() without metadata.
+    // The generic provider test suite always calls create() without provider-
+    // specific options.
     // Archil create() requires an explicit disk id, so inject ARCHIL_DISK_ID.
     const originalCreate = provider.sandbox.create.bind(provider.sandbox);
     const configuredDiskId = process.env.ARCHIL_DISK_ID;
 
     provider.sandbox.create = async (options?: any) => {
-      const requested = options?.metadata?.diskId as string | undefined;
+      const requested = options?.diskId as string | undefined;
       if (requested) {
         return originalCreate(options);
       }
@@ -145,10 +146,7 @@ runProviderTestSuite({
 
       return originalCreate({
         ...options,
-        metadata: {
-          ...(options?.metadata || {}),
-          diskId: configuredDiskId,
-        },
+        diskId: configuredDiskId,
       });
     };
 

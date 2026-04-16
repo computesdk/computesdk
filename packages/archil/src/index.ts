@@ -80,6 +80,10 @@ interface ArchilSandbox {
   createdAt: Date;
 }
 
+interface ArchilCreateOptions extends CreateSandboxOptions {
+  diskId?: string;
+}
+
 function resolveConfig(config: ArchilConfig): ResolvedConfig {
   const apiKey = config.apiKey ?? process.env.ARCHIL_API_KEY;
   const region = config.region ?? process.env.ARCHIL_REGION;
@@ -145,14 +149,14 @@ async function callApi<T>(
   return payload.data as T;
 }
 
-function resolveCreateDiskId(options?: CreateSandboxOptions): string {
-  const diskId = options?.metadata?.diskId as string | undefined;
+function resolveCreateDiskId(options?: ArchilCreateOptions): string {
+  const diskId = options?.diskId;
 
   if (!diskId) {
     throw new Error(
-      'Archil create() requires an existing disk id in metadata.\n\n' +
+      'Archil create() requires an existing disk id on the top-level options.\n\n' +
         'Example:\n' +
-        '  provider.sandbox.create({ metadata: { diskId: "disk_abc123" } })',
+        '  provider.sandbox.create({ diskId: "disk_abc123" })',
     );
   }
 
@@ -199,7 +203,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
   name: 'archil',
   methods: {
     sandbox: {
-      create: async (config: ArchilConfig, options?: CreateSandboxOptions) => {
+      create: async (config: ArchilConfig, options?: ArchilCreateOptions) => {
         const resolved = resolveConfig(config);
         const diskId = resolveCreateDiskId(options);
         const disk = await callApi<DiskResponse>(

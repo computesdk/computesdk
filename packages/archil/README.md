@@ -33,7 +33,7 @@ const provider = archil();
 
 // Attach to an existing disk by id.
 const { sandbox } = await provider.sandbox.create({
-  metadata: { diskId: 'disk_abc123' },
+  diskId: 'disk_abc123',
 });
 
 const result = await provider.sandbox.runCommand(sandbox, 'echo hello > /mnt/note && cat /mnt/note');
@@ -45,13 +45,13 @@ const byId = await provider.sandbox.getById(sandbox.sandboxId);
 await provider.sandbox.destroy(sandbox.sandboxId);
 ```
 
-`create()` requires `metadata.diskId` as the target disk id.
+`create()` requires top-level `diskId` as the target disk id.
 
 ## Supported operations
 
 | Method        | Supported | Notes                                                       |
 | ------------- | --------- | ----------------------------------------------------------- |
-| `create`      | ✅        | Resolves an existing disk from `metadata.diskId`.           |
+| `create`      | ✅        | Resolves an existing disk from top-level `diskId`.          |
 | `getById`     | ✅        | Requires the disk id.                                        |
 | `list`        | ✅        | Lists all disks visible to the API key.                     |
 | `destroy`     | no-op     | Disk lifecycle is managed by Archil.                        |
