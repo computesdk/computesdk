@@ -1,9 +1,9 @@
 ---
-"computesdk": major
-"@computesdk/provider": major
-"@computesdk/railway": major
-"@computesdk/render": major
-"@computesdk/workbench": major
+"computesdk": minor
+"@computesdk/provider": minor
+"@computesdk/railway": minor
+"@computesdk/render": minor
+"@computesdk/workbench": minor
 ---
 
 Remove hosted control-plane assumptions from `computesdk` and move to direct provider mode.
