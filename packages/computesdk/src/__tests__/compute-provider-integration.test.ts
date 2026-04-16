@@ -107,7 +107,11 @@ describeIntegration('compute provider integration', () => {
       const fetched = await sdk.sandbox.getById(sandbox.sandboxId);
       expect(fetched?.sandboxId).toBe(sandbox.sandboxId);
 
-      await sdk.sandbox.extendTimeout(sandbox.sandboxId, { duration: 120000 });
+      // Not all direct providers support timeout extension.
+      const supportsExtendTimeout = typeof (provider as any)?.sandbox?.extendTimeout === 'function';
+      if (supportsExtendTimeout) {
+        await sdk.sandbox.extendTimeout(sandbox.sandboxId, { duration: 120000 });
+      }
     } finally {
       await sdk.sandbox.destroy(sandbox.sandboxId);
     }
