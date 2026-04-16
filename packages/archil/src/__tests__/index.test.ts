@@ -23,6 +23,10 @@ runProviderTestSuite({
     apiKey: process.env.ARCHIL_API_KEY,
     region: process.env.ARCHIL_REGION,
   }),
-  supportsFilesystem: true,
+  // Archil filesystem mount points vary by account/runtime and are not yet
+  // stable enough for generic provider-test-suite path assumptions.
+  // Keep command/runtime integration coverage on, and add dedicated filesystem
+  // integration once mount-path behavior is standardized.
+  supportsFilesystem: false,
   skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
 });

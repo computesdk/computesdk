@@ -166,12 +166,14 @@ function shellEscape(value: string): string {
 function wrapCommand(command: string, options?: RunCommandOptions): string {
   let wrapped = command;
 
-  if (options?.env && Object.keys(options.env).length > 0) {
-    const envPrefix = Object.entries(options.env)
-      .map(([k, v]) => `${k}=${shellEscape(v)}`)
-      .join(' ');
-    wrapped = `${envPrefix} ${wrapped}`;
+  const envEntries = Object.entries(options?.env ?? {});
+  if (!envEntries.some(([key]) => key === 'HOME')) {
+    envEntries.unshift(['HOME', process.env.HOME || '/tmp']);
   }
+  const envPrefix = envEntries
+    .map(([k, v]) => `${k}=${shellEscape(String(v))}`)
+    .join(' ');
+  wrapped = `${envPrefix} ${wrapped}`;
 
   if (options?.cwd) {
     wrapped = `cd ${shellEscape(options.cwd)} && ${wrapped}`;
@@ -311,6 +313,16 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const stdout = result.stdout ?? '';
         const stderr = result.stderr ?? '';
         const output = stderr ? `${stdout}${stdout && stderr ? '\n' : ''}${stderr}` : stdout;
+
+        if (result.exitCode !== 0) {
+          const syntaxErrorPattern =
+            runtime === 'python'
+              ? /\bSyntaxError\b|invalid syntax/i
+              : /\bSyntaxError\b|Unexpected token|Unexpected identifier/i;
+          if (syntaxErrorPattern.test(output)) {
+            throw new Error(output || `${runtime} syntax error`);
+          }
+        }
 
         return {
           output,
