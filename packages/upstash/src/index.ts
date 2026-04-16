@@ -62,13 +62,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
         try {
           let box: Box;
 
-          if (options?.sandboxId) {
-            // Reconnect to existing box via Box.get()
-            box = await Box.get(options.sandboxId, {
-              apiKey,
-              timeout,
-            });
-          } else if (options?.snapshotId) {
+          if (options?.snapshotId) {
             // Restore from snapshot via Box.fromSnapshot()
             box = await Box.fromSnapshot(options.snapshotId, {
               apiKey,
