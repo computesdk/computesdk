@@ -3,6 +3,16 @@ import { runProviderTestSuite } from '@computesdk/test-utils';
 import * as indexExports from '../index';
 import { archil } from '../index';
 
+const originalFetch = global.fetch;
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  global.fetch = originalFetch;
+});
+
 describe('archil export shape', () => {
   it('is resolvable via camelCase conversion of the hyphenated provider name', () => {
     // Workbench resolves provider names by camelCase conversion. 'archil' is
@@ -18,16 +28,6 @@ describe('archil export shape', () => {
 });
 
 describe('archil getById semantics', () => {
-  const originalFetch = global.fetch;
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
   it('resolves an existing disk by id', async () => {
     const fetchMock = vi.fn(async () =>
       new Response(
