@@ -24,6 +24,9 @@ runProviderTestSuite({
     region: process.env.ARCHIL_REGION,
   }),
   supportsFilesystem: true,
-  filesystemBasePath: '/mnt',
+  // Archil exec runs in short-lived containers; filesystem persistence is via
+  // the mounted disk's working directory. Use a relative path to ensure tests
+  // write/read from persistent disk-backed storage across exec calls.
+  filesystemBasePath: 'tmp',
   skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
 });
