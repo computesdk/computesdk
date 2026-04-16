@@ -24,5 +24,6 @@ runProviderTestSuite({
     region: process.env.ARCHIL_REGION,
   }),
   supportsFilesystem: true,
+  filesystemBasePath: '/mnt',
   skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
 });
