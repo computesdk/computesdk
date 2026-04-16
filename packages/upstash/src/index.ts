@@ -5,7 +5,7 @@
  * Supports code execution, shell commands, filesystem, snapshots, and preview URLs.
  */
 
-import { Box } from '@upstash/box';
+import { Box, EphemeralBox } from '@upstash/box';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -20,6 +20,8 @@ export interface UpstashConfig {
   runtime?: Runtime;
   /** Execution timeout in milliseconds (default: 600000) */
   timeout?: number;
+  /** Create ephemeral boxes instead of full boxes (default: false, uses full Box) */
+  ephemeral?: boolean;
 }
 
 /**
@@ -74,7 +76,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
               timeout,
               env: options?.envs,
             });
-          } else {
+          } else if ((options?.ephemeral ?? config.ephemeral ?? false) === false) {
             // Destructure known ComputeSDK fields, collect the rest for passthrough
             const {
               runtime: _runtime,
@@ -89,10 +91,11 @@ export const upstash = defineProvider<Box, UpstashConfig>({
               directory: _directory,
               overlays: _overlays,
               servers: _servers,
+              ephemeral: _ephemeral,
               ...providerOptions
             } = options || {};
 
-            // Create new box
+            // Create new full box
             box = await Box.create({
               apiKey,
               runtime: (_runtime ?? config.runtime ?? 'node') as any,
@@ -100,6 +103,15 @@ export const upstash = defineProvider<Box, UpstashConfig>({
               env: envs,
               ...providerOptions,
             });
+          } else {
+            // create lightweight ephemeral box (exec + files only, instant ready)
+            const ephemeralBox = await EphemeralBox.create({
+              apiKey,
+              runtime: (options?.runtime ?? config.runtime ?? 'node') as any,
+              timeout,
+              ttl: options?.ttl,
+            });
+            box = ephemeralBox as unknown as Box;
           }
 
           return {
@@ -298,8 +310,8 @@ export const upstash = defineProvider<Box, UpstashConfig>({
         // Map Upstash statuses to universal set: 'running' | 'stopped' | 'error'
         const universalStatus: SandboxInfo['status'] =
           (status === 'creating' || status === 'idle' || status === 'running') ? 'running' :
-          status === 'error' ? 'error' :
-          'stopped'; // paused, deleted, or any unknown state
+            status === 'error' ? 'error' :
+              'stopped'; // paused, deleted, or any unknown state
 
         return {
           id: sandbox.id,
