@@ -92,6 +92,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
               overlays: _overlays,
               servers: _servers,
               ephemeral: _ephemeral,
+              ttl: _ttl,
               ...providerOptions
             } = options || {};
 
@@ -328,6 +329,12 @@ export const upstash = defineProvider<Box, UpstashConfig>({
       },
 
       getUrl: async (sandbox: Box, options: { port: number; protocol?: string }): Promise<string> => {
+        if (typeof (sandbox as any).getPreviewUrl !== 'function') {
+          throw new Error(
+            'Preview URLs are not supported on ephemeral boxes. Use ephemeral: false to create a full box with preview support.'
+          );
+        }
+
         try {
           // getPreviewUrl() creates a publicly accessible URL for a port
           // Returns: { url, port, token?, username?, password? }
