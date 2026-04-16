@@ -7,7 +7,7 @@
 import { SandboxInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -174,98 +174,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			},
 
 			// Instance operations (map to individual Sandbox methods)
-			runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
-				const startTime = Date.now();
-
-				try {
-					// Determine runtime: 
-					// 1. Use explicitly passed runtime if provided
-					// 2. Check sandbox's actual runtime based on its image
-					// 3. Fall back to auto-detection from code content
-					let effectiveRuntime = runtime;
-
-					if (!effectiveRuntime) {
-						// Check sandbox's image to determine its runtime
-						const sandboxImage = sandbox.spec?.runtime?.image || '';
-						if (sandboxImage.includes('py')) {
-							effectiveRuntime = 'python';
-						} else if (sandboxImage.includes('ts') || sandboxImage.includes('node') || sandboxImage.includes('base')) {
-							// prod-base, prod-ts-app are both Node/TypeScript environments
-							effectiveRuntime = 'node';
-						} else {
-							// Fall back to auto-detection with improved patterns for unknown images
-							effectiveRuntime = (
-								// Strong Python indicators
-								code.includes('print(') ||
-									code.includes('import ') ||
-									code.includes('from ') ||
-									code.includes('def ') ||
-									code.includes('class ') ||
-									code.includes('raise ') ||
-									code.includes('except ') ||
-									code.includes('elif ') ||
-									code.includes('lambda ') ||
-									code.includes('True') ||
-									code.includes('False') ||
-									code.includes('None') ||
-									code.includes('sys.') ||
-									code.includes('json.') ||
-									code.includes('__') ||
-									code.includes('f"') ||
-									code.includes("f'") ||
-									code.includes('"""') ||
-									code.includes("'''")
-									? 'python'
-									// Default to Node.js for all other cases (including ambiguous)
-									: 'node'
-							);
-						}
-					}
-
-					// Execute code using Blaxel's process execution
-					// Escape the code properly for shell execution
-					const escapedCode = code.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-
-					const command = effectiveRuntime === 'python'
-						? `python3 -c "${escapedCode}"`
-						: `node -e "${escapedCode}"`;
-
-					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, command);
-
-					// Check for syntax errors and throw them
-					if (exitCode !== 0 && stderr) {
-						// Check for common syntax error patterns
-						if (stderr.includes('SyntaxError') ||
-							stderr.includes('invalid syntax') ||
-							stderr.includes('Unexpected token') ||
-							stderr.includes('Unexpected identifier')) {
-							throw new Error(`Syntax error: ${stderr.trim()}`);
-						}
-					}
-
-					// Combine stdout and stderr into output
-					const output = stderr ? `${stdout}\n${stderr}`.trim() : stdout;
-
-					return {
-						output,
-						exitCode,
-						language: effectiveRuntime
-					};
-				} catch (error) {
-					// Re-throw syntax errors
-					if (error instanceof Error && error.message.includes('Syntax error')) {
-						throw error;
-					}
-
-					// For runtime errors, return a result instead of throwing
-					return {
-						output: error instanceof Error ? error.message : String(error),
-						exitCode: 1,
-						language: runtime || 'node'
-					};
-				}
-			},
-
 		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
 			const startTime = Date.now();
 
@@ -614,4 +522,3 @@ async function executeWithStreaming(
 
 // Export the Blaxel SandboxInstance type for explicit typing
 export type { SandboxInstance as BlaxelSandbox } from '@blaxel/core';
-
