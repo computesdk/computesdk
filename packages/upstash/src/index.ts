@@ -74,13 +74,26 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
           let box: UpstashSandboxInstance;
 
           if (options?.snapshotId) {
-            // Restore from snapshot via Box.fromSnapshot()
-            box = await Box.fromSnapshot(options.snapshotId, {
-              apiKey,
-              runtime: (options?.runtime ?? config.runtime ?? 'node') as any,
-              timeout,
-              env: options?.envs,
-            });
+            const runtime = (options?.runtime ?? config.runtime ?? 'node') as any;
+
+            if (options?.ephemeral === true) {
+              // Restore lightweight ephemeral box from snapshot
+              box = await EphemeralBox.fromSnapshot(options.snapshotId, {
+                apiKey,
+                runtime,
+                timeout,
+                ttl: options?.ttl,
+                env: options?.envs,
+              });
+            } else {
+              // Restore full box from snapshot
+              box = await Box.fromSnapshot(options.snapshotId, {
+                apiKey,
+                runtime,
+                timeout,
+                env: options?.envs,
+              });
+            }
           } else if (options?.ephemeral !== true) {
             // Destructure known ComputeSDK fields, collect the rest for passthrough
             const {
