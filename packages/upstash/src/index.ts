@@ -10,9 +10,9 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-type PreviewCapableSandbox = {
-  getPreviewUrl: (port: number) => Promise<{ url: string }>;
-};
+type UpstashSandbox = Pick<Box, 'id' | 'cwd' | 'exec' | 'files' | 'getStatus'>;
+
+type PreviewCapableSandbox = UpstashSandbox & Pick<Box, 'getPreviewUrl'>;
 
 function supportsPreviewUrls(sandbox: unknown): sandbox is PreviewCapableSandbox {
   return (
@@ -33,8 +33,6 @@ export interface UpstashConfig {
   runtime?: Runtime;
   /** Execution timeout in milliseconds (default: 600000) */
   timeout?: number;
-  /** Create ephemeral boxes instead of full boxes (default: false, uses full Box) */
-  ephemeral?: boolean;
 }
 
 /**
@@ -42,7 +40,7 @@ export interface UpstashConfig {
  * Upstash requires all file paths to be under /workspace/home.
  * Absolute paths like "/tmp/foo" get remapped to "/workspace/home/tmp/foo".
  */
-function resolvePath(sandbox: Box, path: string): string {
+function resolvePath(sandbox: UpstashSandbox, path: string): string {
   const root = sandbox.cwd;
   if (path.startsWith(root)) {
     return path;
@@ -56,7 +54,7 @@ function resolvePath(sandbox: Box, path: string): string {
 /**
  * Create an Upstash Box provider instance using the factory pattern
  */
-export const upstash = defineProvider<Box, UpstashConfig>({
+export const upstash = defineProvider<UpstashSandbox, UpstashConfig>({
   name: 'upstash',
   methods: {
     sandbox: {
@@ -73,7 +71,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
         const timeout = options?.timeout ?? config.timeout ?? 600000;
 
         try {
-          let box: Box;
+          let box: UpstashSandbox;
 
           if (options?.snapshotId) {
             // Restore from snapshot via Box.fromSnapshot()
@@ -83,7 +81,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
               timeout,
               env: options?.envs,
             });
-          } else if ((options?.ephemeral ?? config.ephemeral ?? false) === false) {
+          } else if (options?.ephemeral !== true) {
             // Destructure known ComputeSDK fields, collect the rest for passthrough
             const {
               runtime: _runtime,
@@ -119,7 +117,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
               timeout,
               ttl: options?.ttl,
             });
-            box = ephemeralBox as unknown as Box;
+            box = ephemeralBox;
           }
 
           return {
@@ -186,7 +184,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
       },
 
       // Instance operations
-      runCode: async (sandbox: Box, code: string, runtime?: Runtime): Promise<CodeResult> => {
+      runCode: async (sandbox: UpstashSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
         try {
           // Auto-detect runtime if not specified
           const effectiveRuntime = runtime || (
@@ -255,7 +253,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
         }
       },
 
-      runCommand: async (sandbox: Box, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+      runCommand: async (sandbox: UpstashSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
@@ -310,7 +308,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
         }
       },
 
-      getInfo: async (sandbox: Box): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: UpstashSandbox): Promise<SandboxInfo> => {
         // getStatus() returns { status: string } where status is one of:
         // "creating" | "idle" | "running" | "paused" | "error" | "deleted"
         const { status } = await sandbox.getStatus();
@@ -335,7 +333,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
         };
       },
 
-      getUrl: async (sandbox: Box, options: { port: number; protocol?: string }): Promise<string> => {
+      getUrl: async (sandbox: UpstashSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         if (!supportsPreviewUrls(sandbox)) {
           throw new Error(
             'Preview URLs are not supported on ephemeral boxes. Use ephemeral: false to create a full box with preview support.'
@@ -357,19 +355,19 @@ export const upstash = defineProvider<Box, UpstashConfig>({
       // Filesystem methods - Upstash Box has full filesystem support
       // All paths must be under /workspace/home — resolvePath() remaps absolute paths.
       filesystem: {
-        readFile: async (sandbox: Box, path: string): Promise<string> => {
+        readFile: async (sandbox: UpstashSandbox, path: string): Promise<string> => {
           return await sandbox.files.read(resolvePath(sandbox, path));
         },
 
-        writeFile: async (sandbox: Box, path: string, content: string): Promise<void> => {
+        writeFile: async (sandbox: UpstashSandbox, path: string, content: string): Promise<void> => {
           await sandbox.files.write({ path: resolvePath(sandbox, path), content });
         },
 
-        mkdir: async (sandbox: Box, path: string): Promise<void> => {
+        mkdir: async (sandbox: UpstashSandbox, path: string): Promise<void> => {
           await sandbox.exec.command(`mkdir -p "${escapeShellArg(resolvePath(sandbox, path))}"`);
         },
 
-        readdir: async (sandbox: Box, path: string): Promise<FileEntry[]> => {
+        readdir: async (sandbox: UpstashSandbox, path: string): Promise<FileEntry[]> => {
           const entries = await sandbox.files.list(resolvePath(sandbox, path));
 
           return entries.map((entry: any) => ({
@@ -380,7 +378,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
           }));
         },
 
-        exists: async (sandbox: Box, path: string): Promise<boolean> => {
+        exists: async (sandbox: UpstashSandbox, path: string): Promise<boolean> => {
           try {
             const run = await sandbox.exec.command(`test -e "${escapeShellArg(resolvePath(sandbox, path))}" && echo "exists" || echo "not_found"`);
             return (run.result || '').trim() === 'exists';
@@ -389,13 +387,13 @@ export const upstash = defineProvider<Box, UpstashConfig>({
           }
         },
 
-        remove: async (sandbox: Box, path: string): Promise<void> => {
+        remove: async (sandbox: UpstashSandbox, path: string): Promise<void> => {
           await sandbox.exec.command(`rm -rf "${escapeShellArg(resolvePath(sandbox, path))}"`);
         },
       },
 
       // Provider-specific typed getInstance method
-      getInstance: (sandbox: Box): Box => {
+      getInstance: (sandbox: UpstashSandbox): UpstashSandbox => {
         return sandbox;
       },
     },
