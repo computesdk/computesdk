@@ -1,6 +1,9 @@
 # computesdk
 
-The universal SDK for running code in remote sandboxes. Zero-config auto-detection with support for E2B, Modal, Railway, Daytona, Vercel, and more.
+The universal SDK for running code in remote sandboxes.
+
+> Gateway/control-plane transport has been removed from `computesdk`.
+> Configure `compute` with `provider` or `providers`, or use provider packages directly.
 
 ## Installation
 
@@ -10,18 +13,18 @@ npm install computesdk
 
 ## Quick Start
 
-### Zero-Config Mode (Recommended)
-
-Set your provider credentials as environment variables and ComputeSDK automatically detects and configures everything:
-
-```bash
-export E2B_API_KEY=your_e2b_api_key
-```
+### Direct Provider Mode (Recommended)
 
 ```typescript
 import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
 
-// Auto-detects E2B from environment
+compute.setConfig({
+  provider: e2b({
+    apiKey: process.env.E2B_API_KEY,
+  }),
+});
+
 const sandbox = await compute.sandbox.create();
 
 // Execute code
@@ -34,25 +37,53 @@ await sandbox.destroy();
 
 ### Explicit Configuration
 
-For more control, use `setConfig()` to explicitly configure the provider:
+For more control, configure `compute` with an explicit provider:
 
 ```typescript
 import { compute } from 'computesdk';
+import { modal } from '@computesdk/modal';
 
 compute.setConfig({
-  provider: 'your-provider',
-  apiKey: process.env.COMPUTESDK_API_KEY,
-  'your-provider': {
-    apiKey: process.env.YOUR_PROVIDER_API_KEY
-  }
+  provider: modal({
+    tokenId: process.env.MODAL_TOKEN_ID,
+    tokenSecret: process.env.MODAL_TOKEN_SECRET,
+  }),
 });
 
 const sandbox = await compute.sandbox.create();
 ```
 
+### Multi-Provider Configuration
+
+Configure multiple providers for resilience and routing:
+
+```typescript
+import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
+import { modal } from '@computesdk/modal';
+
+compute.setConfig({
+  providers: [
+    e2b({ apiKey: process.env.E2B_API_KEY }),
+    modal({
+      tokenId: process.env.MODAL_TOKEN_ID,
+      tokenSecret: process.env.MODAL_TOKEN_SECRET,
+    }),
+  ],
+  providerStrategy: 'round-robin', // or 'priority'
+  fallbackOnError: true,
+});
+
+// Uses configured strategy
+const sandbox = await compute.sandbox.create();
+
+// Force a specific provider for one call
+const modalSandbox = await compute.sandbox.create({ provider: 'modal' });
+```
+
 ## Supported Providers
 
-ComputeSDK automatically detects providers based on environment variables:
+Use provider packages directly to create provider instances:
 
 | Provider | Environment Variables | Use Cases |
 |----------|----------------------|-----------|
@@ -65,16 +96,13 @@ ComputeSDK automatically detects providers based on environment variables:
 | **Cloudflare** | `CLOUDFLARE_API_TOKEN` | Edge computing |
 | **CodeSandbox** | `CODESANDBOX_TOKEN` | Collaborative development |
 
-### Provider Detection Order
+Example imports:
 
-When using zero-config mode, ComputeSDK detects providers in this order:
-
-**E2B → Railway → Daytona → Modal → Runloop → Vercel → Cloudflare → CodeSandbox**
-
-You can force a specific provider:
-
-```bash
-export COMPUTESDK_PROVIDER=modal
+```typescript
+import { e2b } from '@computesdk/e2b';
+import { modal } from '@computesdk/modal';
+import { vercel } from '@computesdk/vercel';
+import { daytona } from '@computesdk/daytona';
 ```
 
 ## API Reference
@@ -83,70 +111,50 @@ export COMPUTESDK_PROVIDER=modal
 
 #### `compute.setConfig(config)`
 
-Configure the gateway with explicit provider settings.
+Configure `compute` with `provider` or `providers`.
 
 ```typescript
 compute.setConfig({
-  provider: 'your-provider',
-  apiKey: process.env.COMPUTESDK_API_KEY,
-  'your-provider': {
-    apiKey: process.env.YOUR_PROVIDER_API_KEY
-  }
+  provider: e2b({
+    apiKey: process.env.E2B_API_KEY,
+  }),
 });
 ```
 
-**Provider-specific configs:**
+`compute(...)` callable mode is also supported:
 
 ```typescript
-// E2B
-compute.setConfig({
-  provider: 'e2b',
-  apiKey: process.env.COMPUTESDK_API_KEY,
-  e2b: { 
-    apiKey: 'e2b_xxx',
-    templateId: 'optional_template' 
-  }
+const scopedCompute = compute({
+  provider: vercel({
+    token: process.env.VERCEL_TOKEN,
+    teamId: process.env.VERCEL_TEAM_ID,
+    projectId: process.env.VERCEL_PROJECT_ID,
+  }),
 });
 
-// Modal
-compute.setConfig({
-  provider: 'modal',
-  apiKey: process.env.COMPUTESDK_API_KEY,
-  modal: { 
-    tokenId: 'ak-xxx',
-    tokenSecret: 'as-xxx'
-  }
-});
+const sandbox = await scopedCompute.sandbox.create();
+```
 
-// Railway
-compute.setConfig({
-  provider: 'railway',
-  apiKey: process.env.COMPUTESDK_API_KEY,
-  railway: { 
-    apiToken: 'your_token',
-    projectId: 'project_id',
-    environmentId: 'env_id'
-  }
-});
+Multi-provider config shape:
 
-// Daytona
+```typescript
 compute.setConfig({
-  provider: 'daytona',
-  apiKey: process.env.COMPUTESDK_API_KEY,
-  daytona: { apiKey: 'your_api_key' }
-});
-
-// Vercel
-compute.setConfig({
-  provider: 'vercel',
-  apiKey: process.env.COMPUTESDK_API_KEY,
-  vercel: { 
-    token: 'your_token',
-    teamId: 'team_xxx',
-    projectId: 'prj_xxx'
-  }
+  providers: [e2b({...}), modal({...})],
+  providerStrategy: 'priority', // default: 'priority'
+  fallbackOnError: true,        // default: true
 });
 ```
+
+You can also combine both `provider` and `providers`:
+
+```typescript
+compute.setConfig({
+  provider: e2b({...}),         // primary provider (first choice)
+  providers: [modal({...})],    // fallback/secondary providers
+});
+```
+
+When both are present, `provider` is treated as the primary provider and is placed first.
 
 ### Sandbox Management
 
@@ -630,11 +638,12 @@ console.log('Complete output:', output);
 
 ```typescript
 import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
+import { modal } from '@computesdk/modal';
 
 // Use E2B for data science
 compute.setConfig({
-  provider: 'e2b',
-  e2b: { apiKey: process.env.E2B_API_KEY }
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
 const e2bSandbox = await compute.sandbox.create();
@@ -643,11 +652,10 @@ await e2bSandbox.destroy();
 
 // Switch to Modal for GPU workloads
 compute.setConfig({
-  provider: 'modal',
-  modal: { 
+  provider: modal({
     tokenId: process.env.MODAL_TOKEN_ID,
-    tokenSecret: process.env.MODAL_TOKEN_SECRET
-  }
+    tokenSecret: process.env.MODAL_TOKEN_SECRET,
+  }),
 });
 
 const modalSandbox = await compute.sandbox.create();
@@ -665,15 +673,15 @@ try {
   console.error('Execution failed:', error.message);
   
   // Check for specific error types
-  if (error.message.includes('No provider detected')) {
-    console.error('Set provider credentials in environment variables');
+  if (error.message.includes('No provider instance configured')) {
+    console.error('Configure compute.setConfig({ provider: e2b({...}) }) first');
   }
 }
 ```
 
-## Direct Mode (Advanced)
+## Provider Packages (Advanced)
 
-For advanced use cases where you want to bypass the gateway and use provider SDKs directly, see individual provider packages:
+For advanced use cases where you want to use provider SDKs directly, see individual provider packages:
 
 - **[@computesdk/e2b](../e2b)** - E2B provider
 - **[@computesdk/modal](../modal)** - Modal provider

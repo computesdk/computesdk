@@ -1,7 +1,7 @@
 /**
  * Client Types
  *
- * Types specific to the gateway Sandbox client implementation.
+ * Types specific to the Sandbox client implementation.
  * Core universal types are imported from ../types/universal-sandbox
  */
 
@@ -17,7 +17,7 @@ import type {
   CreateSandboxOptions as UniversalCreateSandboxOptions,
 } from '../types/universal-sandbox';
 
-// Re-export universal types for backward compatibility
+// Re-export universal types
 export type {
   CodeResult,
   CommandResult,
@@ -35,7 +35,7 @@ export type {
 export type SandboxStatus = 'running' | 'stopped' | 'error';
 
 /**
- * Provider-agnostic sandbox info (alias for SandboxInfo for backward compatibility)
+ * Provider-agnostic sandbox info
  */
 export interface ProviderSandboxInfo {
   /** Unique identifier for the sandbox */
