@@ -109,12 +109,10 @@ describeIntegration('compute provider integration', () => {
       timeout: 120000,
       ...(testProvider === 'archil'
         ? {
-            metadata: {
-              diskId: requireEnv('ARCHIL_DISK_ID'),
-            },
+            diskId: requireEnv('ARCHIL_DISK_ID'),
           }
         : {}),
-    });
+    } as any);
 
     try {
       const result = await sandbox.runCode('print("computesdk-integration-ok")', 'python');
