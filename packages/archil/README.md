@@ -2,10 +2,10 @@
 
 [Archil](https://archil.com) provider for [ComputeSDK](https://www.computesdk.com).
 
-`create` provisions a new Archil disk (no mounts — archil-managed storage)
-and `runCommand` executes shell commands in a managed container with that
-disk attached via the control-plane `exec` endpoint. `destroy` deletes the
-disk. `getById` accepts either a disk id or a disk name.
+`create` resolves a handle to an existing Archil disk id, and `runCommand`
+executes shell commands in a managed container with that disk attached via the
+control-plane `exec` endpoint. `destroy` is a no-op because disk lifecycle is
+managed by Archil. `getById` requires a disk id.
 
 ## Install
 
@@ -31,29 +31,30 @@ import { archil } from '@computesdk/archil';
 
 const provider = archil();
 
-// Create a fresh disk. Pass a name to control it; omit for auto-generated.
-const { sandbox } = await provider.sandbox.create({ name: 'my-workspace' });
+// Attach to an existing disk by id.
+const { sandbox } = await provider.sandbox.create({
+  metadata: { diskId: 'disk_abc123' },
+});
 
 const result = await provider.sandbox.runCommand(sandbox, 'echo hello > /mnt/note && cat /mnt/note');
 console.log(result.stdout); // "hello"
 
-// Look up later by name or by id:
-const byName = await provider.sandbox.getById('my-workspace');
+// Look up later by disk id:
 const byId = await provider.sandbox.getById(sandbox.sandboxId);
 
 await provider.sandbox.destroy(sandbox.sandboxId);
 ```
 
-Disk names must match `^[a-zA-Z0-9_-]+$` and be 1–100 characters.
+`create()` requires `metadata.diskId` as the target disk id.
 
 ## Supported operations
 
 | Method        | Supported | Notes                                                       |
 | ------------- | --------- | ----------------------------------------------------------- |
-| `create`      | ✅        | Creates a new disk with archil-managed storage (no mounts). |
-| `getById`     | ✅        | Accepts either the disk id or the disk name.                |
+| `create`      | ✅        | Resolves an existing disk from `metadata.diskId`.           |
+| `getById`     | ✅        | Requires the disk id.                                        |
 | `list`        | ✅        | Lists all disks visible to the API key.                     |
-| `destroy`     | ✅        | Deletes the disk.                                           |
+| `destroy`     | no-op     | Disk lifecycle is managed by Archil.                        |
 | `runCommand`  | ✅        | Calls Archil's HTTP `exec` endpoint and waits for completion. |
 | `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`. Requires explicit `runtime`. |
 | `getInfo`     | ✅        |                                                             |
