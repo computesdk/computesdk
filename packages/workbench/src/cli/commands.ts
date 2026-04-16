@@ -140,42 +140,30 @@ export async function getComputeInstance(state: WorkbenchState): Promise<any> {
   }
   
   let compute;
-  
+  // Hyphenated provider names export under a camelCase identifier (e.g. 'just-bash' -> 'justBash')
+  const exportName = providerName.replace(/-([a-z])/g, (_: string, c: string) => c.toUpperCase());
+  const providerModule = await loadProvider(providerName as ProviderName);
+  const providerFactory = providerModule[exportName] ?? providerModule[providerName];
+
+  if (!providerFactory) {
+    throw new Error(`Provider ${providerName} does not export a factory function`);
+  }
+
+  const config = getProviderConfig(providerName as ProviderName);
+  const providerInstance = providerFactory(config);
+
   if (useDirect) {
     // Direct mode: load the provider package directly
-    const providerModule = await loadProvider(providerName as ProviderName);
-    // Hyphenated provider names export under a camelCase identifier (e.g. 'just-bash' -> 'justBash');
-    // single-word providers (e2b, modal, etc.) match directly.
-    const exportName = providerName.replace(/-([a-z])/g, (_: string, c: string) => c.toUpperCase());
-    const providerFactory = providerModule[exportName] ?? providerModule[providerName];
-    
-    if (!providerFactory) {
-      throw new Error(`Provider ${providerName} does not export a factory function`);
-    }
-    
-    // Get config from environment
-    const config = getProviderConfig(providerName as ProviderName);
-    
     // Create compute instance with this provider
     compute = createCompute({
-      defaultProvider: providerFactory(config),
+      defaultProvider: providerInstance,
     });
   } else {
-    // Gateway mode: use the callable compute() with explicit provider configuration.
-    // This ensures the workbench's selected provider is used, not auto-detected from env.
-    const { compute: gatewayCompute } = await import('computesdk');
-
-    // Build explicit config with the selected provider
-    const providerConfig = getProviderConfig(providerName as ProviderName);
-    const gatewayConfig = getProviderConfig('gateway');
-
-    // Use the callable form to create a compute instance with explicit provider
-    compute = gatewayCompute({
-      provider: providerName as any,
-      computesdkApiKey: gatewayConfig.apiKey,
-      requestTimeoutMs: 60000,
-      // Spread provider-specific config
-      [providerName]: providerConfig,
+    // Workbench "gateway" mode now routes through computesdk with a direct provider instance.
+    // This preserves the mode UX while using the OSS direct-provider transport.
+    const { compute: directCompute } = await import('computesdk');
+    compute = directCompute({
+      provider: providerInstance,
     });
   }
   
