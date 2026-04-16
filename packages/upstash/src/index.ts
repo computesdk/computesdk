@@ -10,6 +10,19 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
+type PreviewCapableSandbox = {
+  getPreviewUrl: (port: number) => Promise<{ url: string }>;
+};
+
+function supportsPreviewUrls(sandbox: unknown): sandbox is PreviewCapableSandbox {
+  return (
+    typeof sandbox === 'object' &&
+    sandbox !== null &&
+    'getPreviewUrl' in sandbox &&
+    typeof (sandbox as { getPreviewUrl?: unknown }).getPreviewUrl === 'function'
+  );
+}
+
 /**
  * Upstash-specific configuration options
  */
@@ -323,7 +336,7 @@ export const upstash = defineProvider<Box, UpstashConfig>({
       },
 
       getUrl: async (sandbox: Box, options: { port: number; protocol?: string }): Promise<string> => {
-        if (typeof (sandbox as any).getPreviewUrl !== 'function') {
+        if (!supportsPreviewUrls(sandbox)) {
           throw new Error(
             'Preview URLs are not supported on ephemeral boxes. Use ephemeral: false to create a full box with preview support.'
           );
