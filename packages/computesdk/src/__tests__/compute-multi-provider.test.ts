@@ -283,4 +283,29 @@ describe('compute multi-provider', () => {
 
     await expect(sdk.sandbox.create({ provider: 'modal' })).rejects.toThrow(/is not configured/);
   });
+
+  it('creates snapshots using snapshot-capable providers without mutating round-robin create order', async () => {
+    const e2bCreate = vi.fn(async () => makeSandbox('e2b-sbx', 'e2b'));
+    const e2b = makeProvider('e2b', { create: e2bCreate });
+
+    const modalSnapshotCreate = vi.fn(async () => ({
+      id: 'modal-snap',
+      provider: 'modal',
+      createdAt: new Date().toISOString(),
+    }));
+    const modal = makeProvider('modal', {}, { create: modalSnapshotCreate });
+
+    const sdk = compute({
+      providers: [e2b, modal],
+      providerStrategy: 'round-robin',
+    });
+
+    const snapshot = await sdk.snapshot.create('unknown-sandbox-id');
+    expect(snapshot.id).toBe('modal-snap');
+    expect(modalSnapshotCreate).toHaveBeenCalledWith('unknown-sandbox-id', {});
+
+    const sandbox = await sdk.sandbox.create();
+    expect(sandbox.provider).toBe('e2b');
+    expect(e2bCreate).toHaveBeenCalledTimes(1);
+  });
 });

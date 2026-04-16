@@ -39,10 +39,10 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
   const workspaceRoot = getWorkspaceRoot();
   const modulePaths: Record<SupportedProvider, string> = {
     // Load built workspace packages directly from dist after the CI build step.
-    e2b: resolve(workspaceRoot, 'packages/e2b/dist/index.js'),
-    vercel: resolve(workspaceRoot, 'packages/vercel/dist/index.js'),
-    daytona: resolve(workspaceRoot, 'packages/daytona/dist/index.js'),
-    modal: resolve(workspaceRoot, 'packages/modal/dist/index.js'),
+    e2b: resolve(workspaceRoot, 'packages/e2b/dist/index.mjs'),
+    vercel: resolve(workspaceRoot, 'packages/vercel/dist/index.mjs'),
+    daytona: resolve(workspaceRoot, 'packages/daytona/dist/index.mjs'),
+    modal: resolve(workspaceRoot, 'packages/modal/dist/index.mjs'),
   };
 
   const factoryMap: Record<SupportedProvider, string> = {

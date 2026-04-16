@@ -34,13 +34,19 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   daytona: [['DAYTONA_API_KEY']],
   modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
   runloop: [['RUNLOOP_API_KEY']],
-  vercel: [['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID']],
-  cloudflare: [['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']],
+  vercel: [
+    ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
+    ['VERCEL_OIDC_TOKEN'],
+  ],
+  cloudflare: [
+    ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
+    ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
+  ],
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
   'just-bash': [[]],
   codesandbox: [['CSB_API_KEY']],
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
-  namespace: [['NSC_TOKEN']],
+  namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
@@ -65,14 +71,14 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
     projectId: 'VERCEL_PROJECT_ID',
   },
   cloudflare: {
-    apiToken: 'CLOUDFLARE_API_TOKEN',
-    accountId: 'CLOUDFLARE_ACCOUNT_ID',
+    sandboxUrl: 'CLOUDFLARE_SANDBOX_URL',
+    sandboxSecret: 'CLOUDFLARE_SANDBOX_SECRET',
   },
   beam: { token: 'BEAM_TOKEN', workspaceId: 'BEAM_WORKSPACE_ID' },
   'just-bash': {},
   codesandbox: { apiKey: 'CSB_API_KEY' },
   blaxel: { apiKey: 'BL_API_KEY', workspace: 'BL_WORKSPACE' },
-  namespace: { token: 'NSC_TOKEN' },
+  namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
   hopx: { apiKey: 'HOPX_API_KEY' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
@@ -80,20 +86,6 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   'secure-exec': {},
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
 };
-
-function isProviderAuthComplete(provider: SharedProviderName): boolean {
-  const options = SHARED_PROVIDER_AUTH[provider] || [];
-  return options.some((option) => option.every((envVar) => !!process.env?.[envVar]));
-}
-
-function getMissingEnvVars(provider: SharedProviderName): string[] {
-  const options = SHARED_PROVIDER_AUTH[provider] || [];
-  for (const option of options) {
-    const missing = option.filter((envVar) => !process.env?.[envVar]);
-    if (missing.length === 0) return [];
-  }
-  return options[0] ? [...options[0].filter((envVar) => !process.env?.[envVar])] : [];
-}
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
   const map = PROVIDER_ENV_MAP[provider] || {};

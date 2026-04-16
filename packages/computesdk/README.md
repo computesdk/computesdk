@@ -89,12 +89,12 @@ Use provider packages directly to create provider instances:
 |----------|----------------------|-----------|
 | **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference, Python workloads |
-| **Railway** | `RAILWAY_TOKEN` | Full-stack deployments, persistent storage |
+| **Railway** | `RAILWAY_API_KEY`, `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID` | Full-stack deployments, persistent storage |
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces, custom environments |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
 | **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions, web apps |
-| **Cloudflare** | `CLOUDFLARE_API_TOKEN` | Edge computing |
-| **CodeSandbox** | `CODESANDBOX_TOKEN` | Collaborative development |
+| **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_SECRET` | Edge computing |
+| **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
 
 Example imports:
 

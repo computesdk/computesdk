@@ -220,6 +220,21 @@ class ComputeManager {
     return [known, ...providers.filter((p) => p !== known)];
   }
 
+  private getSnapshotCreateCandidates(sandboxId: string, preferredProviderName?: string): DirectProvider[] {
+    if (preferredProviderName) {
+      return [this.getProviderByName(preferredProviderName)];
+    }
+
+    const known = this.sandboxProviders.get(sandboxId);
+    const providers = this.getProviders().filter((p) => !!p.snapshot);
+
+    if (known && known.snapshot) {
+      return [known, ...providers.filter((p) => p !== known)];
+    }
+
+    return providers;
+  }
+
   private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
     const { provider: _providerName, ...providerOptions } = options || {};
@@ -396,22 +411,31 @@ class ComputeManager {
     create: async (sandboxId: string, options?: CreateSnapshotOptions): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
       const preferredProviderName = options?.provider;
       const { provider: _providerName, ...providerOptions } = options || {};
-      const knownProvider = this.sandboxProviders.get(sandboxId);
-      const provider = preferredProviderName
-        ? this.getProviderByName(preferredProviderName)
-        : knownProvider || this.getCreateCandidates()[0];
+      const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
+      const errors: string[] = [];
 
-      if (!provider.snapshot) {
-        throw new Error(`Provider "${provider.name || 'unknown'}" does not support snapshots.`);
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.snapshot) {
+          errors.push(`${getProviderLabel(provider, index)}: snapshots not supported`);
+          continue;
+        }
+
+        try {
+          const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
+          this.snapshotProviders.set(snapshot.id, provider);
+          return {
+            ...snapshot,
+            createdAt: new Date(snapshot.createdAt),
+          };
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
       }
 
-      const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
-      this.snapshotProviders.set(snapshot.id, provider);
-
-      return {
-        ...snapshot,
-        createdAt: new Date(snapshot.createdAt),
-      };
+      throw new Error(
+        `Failed to create snapshot for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
     },
 
     list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
