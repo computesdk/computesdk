@@ -20,8 +20,8 @@ import { compute } from 'computesdk';
 // just-bash is always available - no credentials needed
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('echo "Hello from just-bash!"');
-console.log(result.output); // "Hello from just-bash!"
+const result = await sandbox.runCommand('echo "Hello from just-bash!"');
+console.log(result.stdout); // "Hello from just-bash!"
 
 await sandbox.destroy();
 ```
@@ -163,12 +163,12 @@ Custom commands receive a context object (`ctx`) with access to:
 
 ```typescript
 // Execute bash scripts
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
   for i in 1 2 3; do
     echo "Number: $i"
   done
 `);
-console.log(result.output);
+console.log(result.stdout);
 // Number: 1
 // Number: 2
 // Number: 3
@@ -177,7 +177,7 @@ console.log(result.output);
 const compute = justBash({ python: true });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
@@ -351,7 +351,7 @@ import { justBash } from '@computesdk/just-bash';
 const compute = justBash({});
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 #!/bin/bash
 count=0
 for f in /proc/self/status /etc/hostname; do
@@ -362,7 +362,7 @@ done
 echo "Found $count system files"
 `);
 
-console.log(result.output);
+console.log(result.stdout);
 
 await sandbox.destroy();
 ```
@@ -371,7 +371,7 @@ await sandbox.destroy();
 
 - **No Network Access** - `getUrl()` is not supported; `curl` requires explicit `network` config
 - **No Real Processes** - Commands are interpreted in TypeScript, not executed as real OS processes
-- **No Node.js Runtime** - `runCode` with `node` runtime executes as bash, not actual Node.js
+- **No Native Node.js Runtime** - use shell commands; this provider is bash-first and does not run a real Node.js VM
 - **In-Memory by Default** - Files don't persist unless you use `OverlayFs`, `ReadWriteFs`, or `MountableFs`
 - **Python via Pyodide** - Python support requires `python: true` and uses pyodide (WebAssembly-based)
 

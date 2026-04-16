@@ -4,7 +4,7 @@
  * The canonical interface for all ComputeSDK sandboxes.
  * 
  * Core methods (required):
- * - runCode, runCommand, getInfo, getUrl, destroy, filesystem
+ * - runCommand, getInfo, getUrl, destroy, filesystem
  * 
  * Advanced features (optional):
  * - terminal, server, watcher, auth, env, etc.
@@ -19,7 +19,7 @@
  * 
  * @example Minimal implementation
  * ```typescript
- * class MinimalSandbox implements Pick<Sandbox, 'sandboxId' | 'provider' | 'runCode' | 'runCommand' | 'getInfo' | 'getUrl' | 'destroy' | 'filesystem'> {
+ * class MinimalSandbox implements Pick<Sandbox, 'sandboxId' | 'provider' | 'runCommand' | 'getInfo' | 'getUrl' | 'destroy' | 'filesystem'> {
  *   // Just implement core methods
  * }
  * ```
@@ -136,7 +136,6 @@ export interface SandboxFileSystem {
  * Providers can extend this with additional properties specific to their implementation
  */
 export interface CreateSandboxOptions {
-  runtime?: Runtime;
   timeout?: number;
   templateId?: string;
   metadata?: Record<string, any>;
@@ -213,9 +212,6 @@ export interface Sandbox {
   
   /** Provider name (e2b, railway, modal, etc.) */
   readonly provider: string;
-  
-  /** Execute code in the sandbox */
-  runCode(code: string, runtime?: Runtime): Promise<CodeResult>;
   
   /** 
    * Execute shell command

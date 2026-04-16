@@ -33,7 +33,7 @@ import { compute } from 'computesdk';
 const sandbox = await compute.sandbox.create();
 
 // Execute Python code with GPU acceleration
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import torch
 import numpy as np
 
@@ -70,7 +70,7 @@ const compute = modal({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import torch
 print(f"PyTorch version: {torch.__version__}")
 `);
@@ -126,7 +126,7 @@ const compute = createCompute({
 const sandbox = await compute.sandbox.create({});
 
 // Start a web server in the sandbox
-await sandbox.runCode(`
+await sandbox.runCommand(`
 const http = require('http');
 
 const PORT = 3000;
@@ -213,7 +213,7 @@ This provider is **production ready** with real Modal API integration:
 
 ```typescript
 // Execute Python code with real Modal Sandbox.exec()
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import torch
 import numpy as np
 
@@ -233,7 +233,7 @@ console.log(result.stderr); // Real errors if any
 console.log(result.exitCode); // Real exit code
 
 // Auto-detection (defaults to Python for Modal)
-const result = await sandbox.runCode('print("Hello from real Modal sandbox!")');
+const result = await sandbox.runCommand('python -c "print(\"Hello from real Modal sandbox!\")"');
 ```
 
 ### Command Execution
@@ -319,7 +319,7 @@ await compute.sandbox.destroy(provider, 'app-id');
 
 ```typescript
 // Modal automatically handles GPU allocation
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import torch
 print(f"CUDA available: {torch.cuda.is_available()}")
 
@@ -335,9 +335,9 @@ model = model.to(device)
 // Modal automatically scales based on demand
 // No configuration needed - just execute code
 const results = await Promise.all([
-  sandbox.runCode(task1),
-  sandbox.runCode(task2),
-  sandbox.runCode(task3)
+  sandbox.runCommand(task1),
+  sandbox.runCommand(task2),
+  sandbox.runCommand(task3)
 ]);
 ```
 
@@ -364,7 +364,7 @@ try {
   });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid python code');
+  const result = await sandbox.runCommand('invalid python code');
 } catch (error) {
   if (error.message.includes('Missing Modal API credentials')) {
     console.error('Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables');
@@ -444,7 +444,7 @@ print("Model saved!")
 await sandbox.filesystem.writeFile('/ml-project/train.py', trainScript);
 
 // Run training
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import subprocess
 result = subprocess.run(['python', '/ml-project/train.py'], 
                        capture_output=True, text=True)
@@ -475,7 +475,7 @@ const compute = modal({
 const sandbox = await compute.sandbox.create();
 
 // GPU inference example
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import torch
 import torch.nn as nn
 import time
@@ -547,7 +547,7 @@ const results = await Promise.all(
   tasks.map(async (taskFile) => {
     const sandbox = await compute.sandbox.create();
     
-    return await sandbox.runCode(`
+    return await sandbox.runCommand(`
 import json
 import numpy as np
 

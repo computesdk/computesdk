@@ -30,7 +30,7 @@ import { compute } from 'computesdk';
 const sandbox = await compute.sandbox.create();
 
 // Execute JavaScript/Node.js code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 const message = "Hello from CodeSandbox!";
 console.log(message);
 
@@ -47,7 +47,7 @@ console.log(result.stdout);
 // }
 
 // Execute Python code
-const pythonResult = await sandbox.runCode(`
+const pythonResult = await sandbox.runCommand(`
 import json
 data = {"framework": "CodeSandbox", "language": "Python"}
 print(json.dumps(data, indent=2))
@@ -80,7 +80,7 @@ const compute = codesandbox({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('console.log("Hello from CodeSandbox!");');
+const result = await sandbox.runCommand('node -e "console.log(\"Hello from CodeSandbox!\")"');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -126,14 +126,14 @@ interface CodesandboxConfig {
 
 ```typescript
 // Execute Node.js code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 const fs = require('fs');
 const data = { timestamp: Date.now() };
 console.log('Processing data:', JSON.stringify(data));
 `);
 
 // Execute Python code  
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import datetime
 import json
 
@@ -142,7 +142,7 @@ print('Processing data:', json.dumps(data))
 `, 'python');
 
 // Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
+const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
 ```
 
 ### Command Execution

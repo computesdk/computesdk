@@ -151,7 +151,7 @@ const provider = awsLambda({
 
 ### ❌ Not Yet Implemented
 
-- `runCode()` - Execute code in the Lambda function
+- `runCommand()` - Execute code in the Lambda function
 - `runCommand()` - Run shell commands
 - `getInfo()` - Get detailed function information
 - `getUrl()` - Get function URL (if configured)
