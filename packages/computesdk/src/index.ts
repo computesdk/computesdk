@@ -6,11 +6,14 @@
  * Using ComputeSDK (Recommended):
  *   import { compute } from 'computesdk';
  *   
- *   Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)
- *   Or explicit: compute.setConfig({ 
- *     provider: 'e2b', 
- *     computesdkApiKey: '...', 
- *     e2b: { apiKey: '...' } 
+ *   Direct provider mode:
+ *   import { e2b } from '@computesdk/e2b';
+ *   import { modal } from '@computesdk/modal';
+ *   compute.setConfig({
+ *     providers: [
+ *       e2b({ apiKey: process.env.E2B_API_KEY }),
+ *       modal({ tokenId: process.env.MODAL_TOKEN_ID, tokenSecret: process.env.MODAL_TOKEN_SECRET }),
+ *     ]
  *   })
  *
  * Using Providers Directly (Advanced):
@@ -28,7 +31,7 @@
 // These are the canonical type definitions that all providers should use
 //
 // Note: The interface is renamed from "Sandbox" to "SandboxInterface" on export
-// to avoid collision with the gateway Sandbox class below. Use "SandboxInterface"
+// to avoid collision with the Sandbox class below. Use "SandboxInterface"
 // when writing provider-agnostic code that accepts any sandbox implementation.
 export type {
   Sandbox as SandboxInterface,
@@ -44,18 +47,18 @@ export type {
 } from './types/universal-sandbox';
 
 // ============================================================================
-// Sandbox Client - Gateway Implementation
+// Sandbox Client
 // ============================================================================
 
-// Export gateway Sandbox class (implements the SandboxInterface above)
+// Export Sandbox class (implements the SandboxInterface above)
 //
 // Usage guide:
-// - import { Sandbox } from 'computesdk'           → Gateway Sandbox class (for runtime use)
+// - import { Sandbox } from 'computesdk'           → Sandbox client class (for runtime use)
 // - import type { SandboxInterface } from 'computesdk'  → Universal interface (for type annotations)
 //
-// Use the class when working with gateway sandboxes specifically.
-// Use the interface when writing functions that accept any sandbox (gateway, e2b, modal, etc.)
-export { Sandbox, Sandbox as GatewaySandbox } from './client';
+// Use the class when working with daemon-backed sandbox endpoints directly.
+// Use the interface when writing functions that accept any sandbox implementation.
+export { Sandbox } from './client';
 
 // Export client-specific types
 export type { SandboxStatus, ProviderSandboxInfo } from './client/types';
@@ -78,50 +81,10 @@ export {
 export type { WebSocketConstructor } from './client';
 
 // ============================================================================
-// Compute API - Gateway HTTP Implementation
+// Compute API - Direct Provider Implementation
 // ============================================================================
 
 // Export compute singleton/callable - the main API
 // Works as both: compute.sandbox.create() and compute({...}).sandbox.create()
 export { compute } from './compute';
 export type { CallableCompute, ExplicitComputeConfig } from './compute';
-
-// ============================================================================
-// Provider Configuration & Detection
-// ============================================================================
-
-// Export auto-detection utilities
-export {
-  isGatewayModeEnabled,
-  detectProvider,
-  getProviderHeaders,
-  autoConfigureCompute
-} from './auto-detect';
-
-// Export provider configuration utilities
-export {
-  TRIBUTARY_URL,
-  PROVIDER_PRIORITY,
-  PROVIDER_ENV_VARS,
-} from './constants';
-
-export {
-  PROVIDER_AUTH,
-  PROVIDER_NAMES,
-  PROVIDER_HEADERS,
-  PROVIDER_ENV_MAP,
-  PROVIDER_DASHBOARD_URLS,
-  type ProviderName,
-  isValidProvider,
-  buildProviderHeaders,
-  getProviderConfigFromEnv,
-  isProviderAuthComplete,
-  getMissingEnvVars,
-} from './provider-config';
-
-// ============================================================================
-// Note: Provider Framework
-// ============================================================================
-
-// For building custom providers, use @computesdk/provider
-// import { defineProvider } from '@computesdk/provider';

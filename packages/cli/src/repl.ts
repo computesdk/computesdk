@@ -10,13 +10,13 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import pc from 'picocolors';
-import { compute, type Sandbox } from 'computesdk';
+import { compute, type SandboxInterface } from 'computesdk';
 import { startPTY } from './pty.js';
 
 type SessionResult = 'exit' | 'shell';
 
 interface ReplContext {
-  sandboxes: Map<string, Sandbox>;
+  sandboxes: Map<string, SandboxInterface>;
   activeSandboxId: string;
 }
 
@@ -29,7 +29,7 @@ interface ReplContext {
  *
  * Returns all sandboxes that are still alive so the caller can clean them up.
  */
-export async function startREPL(sandbox: Sandbox, provider: string): Promise<void> {
+export async function startREPL(sandbox: SandboxInterface, provider: string): Promise<void> {
   // Mark provider as used - reserved for future provider-specific REPL behavior
   void provider;
   const ctx: ReplContext = {
@@ -139,7 +139,7 @@ function runSession(ctx: ReplContext): Promise<SessionResult> {
 /**
  * Execute a shell command in the sandbox
  */
-async function executeCommand(sandbox: Sandbox, command: string): Promise<void> {
+async function executeCommand(sandbox: SandboxInterface, command: string): Promise<void> {
   const result = await sandbox.runCommand(command);
 
   // Print stdout

@@ -10,11 +10,11 @@
  * - terminal, server, watcher, auth, env, etc.
  * 
  * Providers can implement as much or as little as makes sense for their platform.
- * The gateway Sandbox class implements the full specification.
+ * The Sandbox client class implements the full specification.
  * 
  * **Note on naming:** This interface is named "Sandbox" in this file for clarity,
  * but is exported as "SandboxInterface" from the main computesdk package to avoid
- * collision with the gateway Sandbox class. The rename happens at export time in
+ * collision with the Sandbox client class. The rename happens at export time in
  * src/index.ts. Providers using @computesdk/provider will only see "SandboxInterface".
  * 
  * @example Minimal implementation
@@ -211,7 +211,7 @@ export interface Sandbox {
   /** Unique identifier for the sandbox */
   readonly sandboxId: string;
   
-  /** Provider name (e2b, railway, modal, gateway, etc.) */
+  /** Provider name (e2b, railway, modal, etc.) */
   readonly provider: string;
   
   /** Execute code in the sandbox */
@@ -243,67 +243,67 @@ export interface Sandbox {
   
   /**
    * Terminal management (interactive PTY and exec modes)
-   * Available in: gateway, e2b (potentially)
+   * Available in: sandbox client, e2b (potentially)
    */
   readonly terminal?: any; // Terminal type from client
   
   /**
    * Code and command execution namespace
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly run?: any; // Run type from client
   
   /**
    * Managed server operations
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly server?: any; // Server type from client
   
   /**
    * File watcher with real-time change events
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly watcher?: any; // Watcher type from client
   
   /**
    * Session token management
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly sessionToken?: any; // SessionToken type from client
   
   /**
    * Magic link authentication
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly magicLink?: any; // MagicLink type from client
   
   /**
    * Signal service for port/error events
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly signal?: any; // Signal type from client
   
   /**
    * File operations namespace
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly file?: any; // File type from client
   
   /**
    * Environment variable management
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly env?: any; // Env type from client
   
   /**
    * Authentication operations
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly auth?: any; // Auth type from client
   
   /**
    * Child sandbox management
-   * Available in: gateway
+   * Available in: sandbox client
    */
   readonly child?: any; // Child type from client
 }

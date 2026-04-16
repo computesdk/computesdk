@@ -22,7 +22,7 @@ import pc from 'picocolors';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { compute, type Sandbox } from 'computesdk';
+import { compute, type SandboxInterface } from 'computesdk';
 import { getProviderStatus } from './providers.js';
 import { startPTY } from './pty.js';
 import { clearStoredCredentials } from './auth.js';
@@ -725,7 +725,7 @@ program
     const provider = await resolveProvider(opts.provider);
     configureCompute(provider);
 
-    let sandbox: Sandbox;
+    let sandbox: SandboxInterface;
     try {
       sandbox = await compute.sandbox.create(
         buildCreateOptions(opts),

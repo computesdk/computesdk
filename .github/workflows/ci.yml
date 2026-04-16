@@ -159,7 +159,7 @@ jobs:
            echo "Skipping Modal integration tests - missing required secrets"
          fi
 
-  sdk-integration-tests:
+  computesdk-integration-tests:
     runs-on: namespace-profile-default
     needs: test
     if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
@@ -189,12 +189,11 @@ jobs:
     - name: Build packages
       run: pnpm build
         
-    - name: Run Provider Compatibility Tests (${{ matrix.provider }})
+    - name: Run ComputeSDK Integration Test (${{ matrix.provider }})
       env:
+        COMPUTESDK_INTEGRATION: "1"
         TEST_PROVIDER: ${{ matrix.provider }}
-        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
         E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
-        E2B_TEMPLATE_ID: ${{ secrets.E2B_TEMPLATE_ID }}
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -202,5 +201,36 @@ jobs:
         MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       run: |
-        echo "Running provider compatibility tests for $TEST_PROVIDER..."
-        pnpm --filter computesdk test provider-compatibility
+        case "$TEST_PROVIDER" in
+          e2b)
+            if [ -z "$E2B_API_KEY" ]; then
+              echo "Skipping computesdk integration for e2b - missing E2B_API_KEY"
+              exit 0
+            fi
+            ;;
+          vercel)
+            if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_TEAM_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+              echo "Skipping computesdk integration for vercel - missing Vercel credentials"
+              exit 0
+            fi
+            ;;
+          daytona)
+            if [ -z "$DAYTONA_API_KEY" ]; then
+              echo "Skipping computesdk integration for daytona - missing DAYTONA_API_KEY"
+              exit 0
+            fi
+            ;;
+          modal)
+            if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
+              echo "Skipping computesdk integration for modal - missing Modal credentials"
+              exit 0
+            fi
+            ;;
+          *)
+            echo "Unsupported provider in matrix: $TEST_PROVIDER"
+            exit 1
+            ;;
+        esac
+
+        echo "Running computesdk integration test for $TEST_PROVIDER..."
+        pnpm --filter computesdk test compute-provider-integration

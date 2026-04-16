@@ -149,13 +149,13 @@ export type WebSocketConstructor = new (url: string) => WebSocket;
  * Configuration options for creating a Sandbox
  */
 export interface SandboxConfig {
-  /** API endpoint URL (e.g., https://sandbox-123.sandbox.computesdk.com). Optional in browser - can be auto-detected from URL query param or localStorage */
+  /** API endpoint URL (e.g., https://sandbox-123.sandbox.computesdk.com). Optional in browser - can be detected from URL query param or localStorage */
   sandboxUrl?: string;
   /** Sandbox ID */
   sandboxId: string;
-  /** Provider name (e.g., 'e2b', 'gateway') */
+  /** Provider name (e.g., 'e2b', 'modal') */
   provider: string;
-  /** Access token or session token for authentication. Optional in browser - can be auto-detected from URL query param or localStorage */
+  /** Access token or session token for authentication. Optional in browser - can be detected from URL query param or localStorage */
   token?: string;
   /** Optional headers to include with all requests */
   headers?: Record<string, string>;
@@ -169,7 +169,7 @@ export interface SandboxConfig {
   metadata?: Record<string, unknown>;
   /** 
    * Handler called when destroy() is invoked. 
-   * If provided, this is called to destroy the sandbox (e.g., via gateway API).
+   * If provided, this is called to destroy the sandbox through an external API.
    * If not provided, destroy() only disconnects the WebSocket.
    * @internal
    */
@@ -779,7 +779,7 @@ export interface BatchWriteResponse {
 // ============================================================================
 
 /**
- * Sandbox - Full-featured gateway sandbox implementation
+ * Sandbox - Full-featured sandbox client implementation
  *
  * Provides complete feature set including:
  * - Interactive terminals (PTY and exec modes)
@@ -2496,7 +2496,7 @@ export class Sandbox {
       // Non-streaming mode
       if (options?.timeout && !options?.background) {
         // For timeout support on foreground commands, run as background + wait
-        // This uses the X-Request-Timeout header for proper edge gateway timeout
+        // This uses the X-Request-Timeout header for upstream timeout control
         return this.run.command(command, {
           ...options,
           background: true,
@@ -2649,26 +2649,18 @@ export class Sandbox {
     const subdomain = parts[0]; // Extract "sandbox-123" or "abc"
     const baseDomain = parts.slice(1).join('.'); // Extract "sandbox.computesdk.com"
 
-    // ComputeSDK has two domains:
-    // - sandbox.computesdk.com: Management/control plane
-    // - preview.computesdk.com: Preview URLs for services
-    // When getting a URL for a port, we need the preview domain
-    const previewDomain = baseDomain.replace('sandbox.computesdk.com', 'preview.computesdk.com');
-
-    // ComputeSDK URL pattern: ${subdomain}-${port}.${previewDomain}
-    // Examples:
-    //   - https://sandbox-123.sandbox.computesdk.com → https://sandbox-123-3000.preview.computesdk.com
-    return `${protocol}://${subdomain}-${options.port}.${previewDomain}`;
+    // ComputeSDK URL pattern: ${subdomain}-${port}.${baseDomain}
+    return `${protocol}://${subdomain}-${options.port}.${baseDomain}`;
   }
 
   /**
    * Get provider instance
-   * Note: Not available when using Sandbox directly - only available through gateway provider
+   * Note: Not available on direct Sandbox client instances
    */
   getProvider(): never {
     throw new Error(
       'getProvider() is not available on Sandbox. ' +
-      'This method is only available when using provider sandboxes through the gateway.'
+      'This method is only available on provider SDK sandbox wrappers.'
     );
   }
 
@@ -2683,14 +2675,14 @@ export class Sandbox {
   /**
    * Destroy the sandbox (Sandbox interface method)
    * 
-   * If a destroyHandler was provided (e.g., from gateway), calls it to destroy
+   * If a destroyHandler was provided, calls it to destroy
    * the sandbox on the backend. Otherwise, only disconnects the WebSocket.
    */
   async destroy(): Promise<void> {
     // Disconnect WebSocket first
     await this.disconnect();
     
-    // Call destroy handler if provided (e.g., gateway DELETE endpoint)
+    // Call destroy handler if provided by caller
     if (this.config.destroyHandler) {
       await this.config.destroyHandler();
     }

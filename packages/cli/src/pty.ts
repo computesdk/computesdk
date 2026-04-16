@@ -5,7 +5,7 @@
  * Disconnect naturally with 'exit' or Ctrl+D (like SSH).
  */
 
-import type { Sandbox } from 'computesdk';
+import type { SandboxInterface } from 'computesdk';
 
 export interface PTYOptions {
   /** Optional initial command to run before interactive shell (e.g., 'cd /path') */
@@ -16,7 +16,7 @@ export interface PTYOptions {
  * Start PTY mode - interactive shell session
  * Uses /bin/bash for full shell features (history, completion, etc.)
  */
-export async function startPTY(sandbox: Sandbox, options: PTYOptions = {}): Promise<void> {
+export async function startPTY(sandbox: SandboxInterface, options: PTYOptions = {}): Promise<void> {
   // Use bash explicitly for interactive features (history, tab completion, etc.)
   const terminal = await sandbox.terminal.create({ pty: true, shell: '/bin/bash' });
 

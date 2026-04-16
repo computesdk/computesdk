@@ -1,54 +1,28 @@
 /**
- * Render Provider - Compute Factory
+ * Render package placeholder.
  *
- * Provides a first-class Render provider experience by routing all operations
- * through the ComputeSDK gateway. The gateway handles infrastructure provisioning
- * via @computesdk/gateway and installs the daemon for full sandbox capabilities.
+ * Render support previously depended on the hosted control-plane transport,
+ * which has been removed from computesdk.
  */
-
-import { defineCompute, type ComputeConfig } from '@computesdk/provider';
 
 /**
- * Render provider configuration
+ * Render configuration (kept for compile-time compatibility of callers).
  */
-export interface RenderConfig extends ComputeConfig {
-  /** Render API key - if not provided, will fallback to RENDER_API_KEY environment variable */
+export interface RenderConfig {
+  /** Render API key */
   apiKey?: string;
-  /** Render Owner ID - if not provided, will fallback to RENDER_OWNER_ID environment variable */
+  /** Render owner ID */
   ownerId?: string;
 }
 
 /**
- * Render compute factory - creates configured compute instances
+ * Render provider entrypoint.
  *
- * Render is an infrastructure provider that becomes a full sandbox provider
- * via the ComputeSDK gateway. The gateway provisions Render services with the
- * daemon pre-installed, enabling full sandbox capabilities.
- *
- * @example
- * ```typescript
- * import { render } from '@computesdk/render';
- *
- * const compute = render({
- *   apiKey: 'render_xxx',
- *   ownerId: 'owner_xxx'
- * });
- *
- * // Full compute API available (routes through gateway)
- * const sandbox = await compute.sandbox.create();
- *
- * // Execute code
- * const result = await sandbox.runCode('console.log("Hello from Render!")');
- * console.log(result.stdout);
- *
- * // Filesystem operations
- * await sandbox.filesystem.writeFile('/tmp/test.txt', 'Hello!');
- * const content = await sandbox.filesystem.readFile('/tmp/test.txt');
- *
- * // Cleanup
- * await sandbox.destroy();
- * ```
+ * This package no longer provides a direct provider implementation.
  */
-export const render = defineCompute<RenderConfig>({
-  provider: 'render'
-});
+export function render(_config: RenderConfig): never {
+  throw new Error(
+    '@computesdk/render is no longer supported after control-plane removal. ' +
+      'Use a direct provider package (for example @computesdk/e2b, @computesdk/modal, @computesdk/vercel, or @computesdk/daytona) with computesdk provider/providers config.'
+  );
+}

@@ -1,20 +1,101 @@
 /**
  * Provider detection and management for workbench
- *
- * Uses shared provider config from computesdk as single source of truth
  */
 
 import type { ProviderStatus } from './types.js';
 import { c } from './output.js';
-import {
-  PROVIDER_AUTH as SHARED_PROVIDER_AUTH,
-  PROVIDER_NAMES as SHARED_PROVIDER_NAMES,
-  PROVIDER_ENV_MAP,
-  type ProviderName as SharedProviderName,
-  isProviderAuthComplete,
-  getMissingEnvVars,
-  getProviderConfigFromEnv,
-} from 'computesdk';
+
+const SHARED_PROVIDER_NAMES = [
+  'e2b',
+  'railway',
+  'daytona',
+  'modal',
+  'runloop',
+  'vercel',
+  'cloudflare',
+  'beam',
+  'just-bash',
+  'codesandbox',
+  'blaxel',
+  'namespace',
+  'hopx',
+  'sprites',
+  'agentuity',
+  'freestyle',
+  'secure-exec',
+  'upstash',
+] as const;
+
+type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
+
+const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string[])[]> = {
+  e2b: [['E2B_API_KEY']],
+  railway: [['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID']],
+  daytona: [['DAYTONA_API_KEY']],
+  modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
+  runloop: [['RUNLOOP_API_KEY']],
+  vercel: [
+    ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
+    ['VERCEL_OIDC_TOKEN'],
+  ],
+  cloudflare: [
+    ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
+    ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
+  ],
+  beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
+  'just-bash': [[]],
+  codesandbox: [['CSB_API_KEY']],
+  blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
+  namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
+  hopx: [['HOPX_API_KEY']],
+  sprites: [['SPRITES_TOKEN']],
+  agentuity: [['AGENTUITY_SDK_KEY']],
+  freestyle: [['FREESTYLE_API_KEY']],
+  'secure-exec': [[]],
+  upstash: [['UPSTASH_BOX_API_KEY']],
+};
+
+const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
+  e2b: { apiKey: 'E2B_API_KEY' },
+  railway: {
+    apiKey: 'RAILWAY_API_KEY',
+    projectId: 'RAILWAY_PROJECT_ID',
+    environmentId: 'RAILWAY_ENVIRONMENT_ID',
+  },
+  daytona: { apiKey: 'DAYTONA_API_KEY' },
+  modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
+  runloop: { apiKey: 'RUNLOOP_API_KEY' },
+  vercel: {
+    token: 'VERCEL_TOKEN',
+    teamId: 'VERCEL_TEAM_ID',
+    projectId: 'VERCEL_PROJECT_ID',
+  },
+  cloudflare: {
+    sandboxUrl: 'CLOUDFLARE_SANDBOX_URL',
+    sandboxSecret: 'CLOUDFLARE_SANDBOX_SECRET',
+  },
+  beam: { token: 'BEAM_TOKEN', workspaceId: 'BEAM_WORKSPACE_ID' },
+  'just-bash': {},
+  codesandbox: { apiKey: 'CSB_API_KEY' },
+  blaxel: { apiKey: 'BL_API_KEY', workspace: 'BL_WORKSPACE' },
+  namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
+  hopx: { apiKey: 'HOPX_API_KEY' },
+  sprites: { token: 'SPRITES_TOKEN' },
+  agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
+  freestyle: { apiKey: 'FREESTYLE_API_KEY' },
+  'secure-exec': {},
+  upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
+};
+
+function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
+  const map = PROVIDER_ENV_MAP[provider] || {};
+  const config: Record<string, string> = {};
+  for (const [configKey, envVar] of Object.entries(map)) {
+    const value = process.env?.[envVar];
+    if (value) config[configKey] = value;
+  }
+  return config;
+}
 
 /**
  * Workbench-specific provider names (includes gateway)
@@ -251,6 +332,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'daytona':
         return await import('@computesdk/daytona');
       case 'modal':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/modal');
       case 'runloop':
         return await import('@computesdk/runloop');
@@ -268,6 +350,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'blaxel':
         return await import('@computesdk/blaxel');
       case 'namespace':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/namespace');
       case 'hopx':
         return await import('@computesdk/hopx');
