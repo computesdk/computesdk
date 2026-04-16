@@ -1,12 +1,5 @@
 # @computesdk/cli
 
-## 0.1.2
-
-### Patch Changes
-
-- Updated dependencies [6a79b9b]
-  - computesdk@3.0.0
-
 ## 0.1.1
 
 ### Patch Changes

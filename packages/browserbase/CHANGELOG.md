@@ -1,13 +1,5 @@
 # @computesdk/browserbase
 
-## 0.3.2
-
-### Patch Changes
-
-- Updated dependencies [6a79b9b]
-  - computesdk@3.0.0
-  - @computesdk/provider@2.0.0
-
 ## 0.3.1
 
 ### Patch Changes
