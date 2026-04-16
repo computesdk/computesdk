@@ -1,5 +1,13 @@
 # @computesdk/beam
 
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+
 ## 0.1.7
 
 ### Patch Changes

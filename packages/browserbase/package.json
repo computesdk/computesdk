@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/browserbase",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Browserbase browser provider for ComputeSDK - cloud browser sessions with stealth mode, proxies, and session replay",
   "author": "Garrison",
   "license": "MIT",
