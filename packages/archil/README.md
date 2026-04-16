@@ -21,13 +21,14 @@ additional Archil SDK is required.
 | Option    | Env var            | Required | Description                                |
 | --------- | ------------------ | -------- | ------------------------------------------ |
 | `apiKey`  | `ARCHIL_API_KEY`   | yes      | Archil control-plane API key               |
-| `region`  | `ARCHIL_REGION`    | yes      | Archil region (e.g. `us-east-1`)           |
-| `diskId`  | —                  | yes¹     | Default disk ID to exec against            |
+| `region`  | `ARCHIL_REGION`    | yes²     | Archil region (e.g. `aws-us-east-1`)       |
+| `diskId`  | `ARCHIL_DISK_ID`   | no¹      | Default disk ID to exec against            |
 | `baseUrl` | —                  | no       | Override control-plane URL (for testing)   |
 
-¹ A `diskId` must be supplied either at construction or per call via
-`provider.sandbox.create({ sandboxId: '<diskId>' })` /
-`provider.sandbox.getById('<diskId>')`.
+¹ If no disk ID is provided, `create()` auto-selects a disk only when exactly
+one disk is available. If multiple disks exist, set `diskId` explicitly.
+
+² If `baseUrl` is provided, `region` is optional.
 
 ## Usage
 
@@ -38,8 +39,16 @@ const provider = archil({ diskId: 'disk_abc123' });
 
 const { sandbox } = await provider.sandbox.create();
 
-const result = await provider.sandbox.runCommand(sandbox, 'ls -la /mnt');
+const result = await sandbox.runCommand('ls -la /mnt');
 console.log(result.stdout);
+```
+
+Override disk per `create()` call:
+
+```ts
+const { sandbox } = await provider.sandbox.create({
+  metadata: { diskId: 'disk_override123' },
+});
 ```
 
 ## Supported operations
@@ -49,8 +58,8 @@ console.log(result.stdout);
 | `create`      | ✅        | Resolves an existing disk; does not create one.             |
 | `getById`     | ✅        |                                                             |
 | `list`        | ✅        | Lists all disks visible to the API key.                     |
-| `destroy`     | no-op     | Disks have an independent lifecycle. Use the Archil SDK.    |
-| `runCommand`  | ✅        | Calls `Disk.exec()` (HTTP, blocks until command completes). |
+| `destroy`     | no-op     | Disks have an independent lifecycle managed in Archil.      |
+| `runCommand`  | ✅        | Calls Archil's HTTP `exec` endpoint and waits for completion. |
 | `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`.                    |
 | `getInfo`     | ✅        |                                                             |
 | `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose. |

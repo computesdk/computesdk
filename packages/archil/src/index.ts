@@ -17,7 +17,7 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
-} from 'computesdk';
+} from '@computesdk/provider';
 
 // Per-region color overrides. Default is "green" for any region not listed here.
 const REGION_COLORS: Record<string, string> = {
@@ -42,7 +42,7 @@ export interface ArchilConfig {
   apiKey?: string;
   /** Archil region (e.g. "aws-us-east-1"). Falls back to ARCHIL_REGION env var. */
   region?: string;
-  /** Default disk ID to exec against. Can be overridden via sandboxId on create. */
+  /** Default disk ID to exec against. Falls back to ARCHIL_DISK_ID env var. */
   diskId?: string;
   /** Override the control-plane base URL (useful for testing). */
   baseUrl?: string;
@@ -81,6 +81,12 @@ interface ArchilSandbox {
   resolved: ResolvedConfig;
   createdAt: Date;
 }
+
+type ShellRunCommand = (
+  sandbox: ArchilSandbox,
+  command: string,
+  options?: RunCommandOptions,
+) => Promise<CommandResult>;
 
 function resolveConfig(config: ArchilConfig): ResolvedConfig {
   const apiKey = config.apiKey ?? process.env.ARCHIL_API_KEY;
@@ -147,16 +153,41 @@ async function callApi<T>(
   return payload.data as T;
 }
 
-function resolveDiskId(config: ArchilConfig, requested?: string): string {
-  const diskId = requested ?? config.diskId;
-  if (!diskId) {
-    throw new Error(
-      'Missing diskId for Archil.\n\n' +
-        'Pass a default at construction: archil({ diskId: "..." })\n' +
-        'Or pass one per call: provider.sandbox.create({ sandboxId: "<diskId>" })',
+async function resolveDisk(
+  config: ArchilConfig,
+  resolved: ResolvedConfig,
+  requestedDiskId?: string,
+): Promise<DiskResponse> {
+  const diskId = requestedDiskId ?? config.diskId ?? process.env.ARCHIL_DISK_ID;
+  if (diskId) {
+    return callApi<DiskResponse>(
+      resolved,
+      'GET',
+      `/api/disks/${encodeURIComponent(diskId)}`,
     );
   }
-  return diskId;
+
+  const disks = await callApi<DiskResponse[]>(resolved, 'GET', '/api/disks');
+  if (disks.length === 0) {
+    throw new Error(
+      'No Archil disks found for this account/region.\n\n' +
+        'Create a disk first or set ARCHIL_DISK_ID/archil({ diskId: "..." }).',
+    );
+  }
+
+  if (disks.length === 1) {
+    return disks[0];
+  }
+
+  const sample = disks
+    .slice(0, 5)
+    .map((disk) => `${disk.id}${disk.name ? ` (${disk.name})` : ''}`)
+    .join(', ');
+
+  throw new Error(
+    `Multiple Archil disks found (${disks.length}). Specify one explicitly with ARCHIL_DISK_ID or archil({ diskId: "..." }).\n` +
+      `Examples: ${sample}`,
+  );
 }
 
 function shellEscape(value: string): string {
@@ -168,7 +199,7 @@ function wrapCommand(command: string, options?: RunCommandOptions): string {
 
   if (options?.env && Object.keys(options.env).length > 0) {
     const envPrefix = Object.entries(options.env)
-      .map(([k, v]) => `${k}=${shellEscape(v)}`)
+      .map(([k, v]) => `${k}=${shellEscape(String(v))}`)
       .join(' ');
     wrapped = `${envPrefix} ${wrapped}`;
   }
@@ -199,11 +230,10 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     sandbox: {
       create: async (config: ArchilConfig, options?: CreateSandboxOptions) => {
         const resolved = resolveConfig(config);
-        const diskId = resolveDiskId(config, (options?.sandboxId as string | undefined));
-        const disk = await callApi<DiskResponse>(
+        const disk = await resolveDisk(
+          config,
           resolved,
-          'GET',
-          `/api/disks/${encodeURIComponent(diskId)}`,
+          options?.metadata?.diskId as string | undefined,
         );
         return {
           sandbox: { disk, resolved, createdAt: new Date() },
@@ -326,7 +356,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       },
 
       filesystem: {
-        readFile: async (sandbox, path, runCommand) => {
+        readFile: async (sandbox: ArchilSandbox, path: string, runCommand: ShellRunCommand) => {
           const result = await runCommand(sandbox, `cat ${shellEscape(path)}`);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to read ${path}: ${result.stderr}`);
@@ -334,7 +364,12 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
           return result.stdout;
         },
 
-        writeFile: async (sandbox, path, content, runCommand) => {
+        writeFile: async (
+          sandbox: ArchilSandbox,
+          path: string,
+          content: string,
+          runCommand: ShellRunCommand,
+        ) => {
           const parent = path.substring(0, path.lastIndexOf('/'));
           if (parent) {
             await runCommand(sandbox, `mkdir -p ${shellEscape(parent)}`);
@@ -350,14 +385,14 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
           }
         },
 
-        mkdir: async (sandbox, path, runCommand) => {
+        mkdir: async (sandbox: ArchilSandbox, path: string, runCommand: ShellRunCommand) => {
           const result = await runCommand(sandbox, `mkdir -p ${shellEscape(path)}`);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
           }
         },
 
-        readdir: async (sandbox, path, runCommand) => {
+        readdir: async (sandbox: ArchilSandbox, path: string, runCommand: ShellRunCommand) => {
           // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
           const result = await runCommand(
             sandbox,
@@ -381,12 +416,12 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
           return entries;
         },
 
-        exists: async (sandbox, path, runCommand) => {
+        exists: async (sandbox: ArchilSandbox, path: string, runCommand: ShellRunCommand) => {
           const result = await runCommand(sandbox, `test -e ${shellEscape(path)}`);
           return result.exitCode === 0;
         },
 
-        remove: async (sandbox, path, runCommand) => {
+        remove: async (sandbox: ArchilSandbox, path: string, runCommand: ShellRunCommand) => {
           const result = await runCommand(sandbox, `rm -rf ${shellEscape(path)}`);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);

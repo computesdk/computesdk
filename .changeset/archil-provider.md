@@ -3,5 +3,5 @@
 ---
 
 Add `@computesdk/archil` provider, which executes commands against an Archil
-disk via the `@archildata/client` SDK. Archil is exec-only — there is no
-sandbox lifecycle to manage.
+disk via Archil's control-plane HTTP `exec` API. Archil is exec-only — there is
+no sandbox lifecycle to manage.

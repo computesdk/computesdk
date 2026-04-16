@@ -21,6 +21,7 @@ const SHARED_PROVIDER_NAMES = [
   'hopx',
   'sprites',
   'agentuity',
+  'archil',
   'freestyle',
   'secure-exec',
   'upstash',
@@ -50,6 +51,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   hopx: [['HOPX_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
+  archil: [['ARCHIL_API_KEY', 'ARCHIL_REGION']],
   freestyle: [['FREESTYLE_API_KEY']],
   'secure-exec': [[]],
   upstash: [['UPSTASH_BOX_API_KEY']],
@@ -82,6 +84,11 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   hopx: { apiKey: 'HOPX_API_KEY' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
+  archil: {
+    apiKey: 'ARCHIL_API_KEY',
+    region: 'ARCHIL_REGION',
+    diskId: 'ARCHIL_DISK_ID',
+  },
   freestyle: { apiKey: 'FREESTYLE_API_KEY' },
   'secure-exec': {},
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
@@ -348,6 +355,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'codesandbox':
         return await import('@computesdk/codesandbox');
       case 'blaxel':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/blaxel');
       case 'namespace':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
@@ -357,7 +365,11 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'sprites':
         return await import('@computesdk/sprites');
       case 'agentuity':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/agentuity');
+      case 'archil':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/archil');
       case 'freestyle':
         return await import('@computesdk/freestyle');
       case 'secure-exec':
