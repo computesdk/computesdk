@@ -16,6 +16,7 @@ import {
 } from 'secure-exec';
 import type { VirtualFileSystem, CommandExecutor } from 'secure-exec';
 import { spawn } from 'node:child_process';
+import { nanoid } from 'nanoid';
 import { defineProvider } from '@computesdk/provider';
 
 import type {
@@ -131,7 +132,7 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
 
         await fs.mkdir('/workspace');
 
-        const sandboxId = options?.sandboxId || `secureexec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        const sandboxId = `secureexec_${nanoid(10)}`;
 
         return {
           sandbox: { runtime, fs, sandboxId },

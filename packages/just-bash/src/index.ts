@@ -15,6 +15,7 @@
 
 import { Bash } from 'just-bash';
 import type { BashExecResult, BashOptions } from 'just-bash';
+import { nanoid } from 'nanoid';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CodeResult,
@@ -81,13 +82,7 @@ const _provider = defineProvider<JustBashSandbox, JustBashConfig>({
        * Create a new just-bash sandbox
        */
       create: async (config: JustBashConfig, options?: CreateSandboxOptions) => {
-        const sandboxId = options?.sandboxId || `just-bash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-        // Check if reconnecting to existing sandbox
-        if (options?.sandboxId && activeSandboxes.has(options.sandboxId)) {
-          const existing = activeSandboxes.get(options.sandboxId)!;
-          return { sandbox: existing, sandboxId: existing.id };
-        }
+        const sandboxId = `just-bash-${nanoid(10)}`;
 
         const bash = new Bash({
           files: config.files,

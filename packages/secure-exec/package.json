@@ -30,7 +30,8 @@
   "dependencies": {
     "secure-exec": "^0.1.1-rc.3",
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "nanoid": "^5.1.6"
   },
   "keywords": [
     "computesdk",

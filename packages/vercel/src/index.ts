@@ -136,31 +136,24 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         try {
           let sandbox: VercelSandbox;
 
-          if (options?.sandboxId) {
-            // Vercel doesn't support reconnecting to existing sandboxes
-            // Each sandbox is ephemeral and must be created fresh
-            throw new Error(
-              `Vercel provider does not support reconnecting to existing sandboxes. Vercel sandboxes are ephemeral and must be created fresh each time.`
-            );
-          } else {
-            // Destructure known ComputeSDK fields, collect the rest for passthrough
-            const {
-              runtime: optRuntime,
-              timeout: _timeout,
-              envs: _envs, // Vercel SDK does not support envs at sandbox creation time
-              name: _name,
-              metadata: _metadata,
-              templateId,
-              snapshotId: optSnapshotId,
-              sandboxId: _sandboxId,
-              namespace: _namespace,
-              directory: _directory,
-              overlays: _overlays,
-              servers: _servers,
-              ports: optPorts,
-              source: optSource,
-              ...providerOptions
-            } = options || {};
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            runtime: optRuntime,
+            timeout: _timeout,
+            envs: _envs, // Vercel SDK does not support envs at sandbox creation time
+            name: _name,
+            metadata: _metadata,
+            templateId,
+            snapshotId: optSnapshotId,
+            sandboxId: _sandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            overlays: _overlays,
+            servers: _servers,
+            ports: optPorts,
+            source: optSource,
+            ...providerOptions
+          } = options || {};
 
             // Construct base params, spreading provider-specific options
             const params: any = {
@@ -207,8 +200,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
               params.projectId = creds.projectId;
             }
 
-            sandbox = await VercelSandbox.create(params);
-          }
+          sandbox = await VercelSandbox.create(params);
 
           return {
             sandbox,
