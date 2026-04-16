@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { compute, type DirectProvider } from '../compute';
 
 type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal';
@@ -6,6 +9,23 @@ type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal';
 const runIntegration = process.env.COMPUTESDK_INTEGRATION === '1';
 const testProvider = process.env.TEST_PROVIDER as SupportedProvider | undefined;
 const describeIntegration = runIntegration ? describe : describe.skip;
+
+function getWorkspaceRoot(): string {
+  const cwd = process.cwd();
+  const candidates = [
+    cwd,
+    resolve(cwd, '..'),
+    resolve(cwd, '..', '..'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(resolve(candidate, 'pnpm-workspace.yaml'))) {
+      return candidate;
+    }
+  }
+
+  return cwd;
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -16,11 +36,13 @@ function requireEnv(name: string): string {
 }
 
 async function loadProviderFactory(provider: SupportedProvider): Promise<(config: Record<string, string>) => DirectProvider> {
-  const moduleMap: Record<SupportedProvider, string> = {
-    e2b: '@computesdk/e2b',
-    vercel: '@computesdk/vercel',
-    daytona: '@computesdk/daytona',
-    modal: '@computesdk/modal',
+  const workspaceRoot = getWorkspaceRoot();
+  const modulePaths: Record<SupportedProvider, string> = {
+    // Load built workspace packages directly from dist after the CI build step.
+    e2b: resolve(workspaceRoot, 'packages/e2b/dist/index.js'),
+    vercel: resolve(workspaceRoot, 'packages/vercel/dist/index.js'),
+    daytona: resolve(workspaceRoot, 'packages/daytona/dist/index.js'),
+    modal: resolve(workspaceRoot, 'packages/modal/dist/index.js'),
   };
 
   const factoryMap: Record<SupportedProvider, string> = {
@@ -30,10 +52,11 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
     modal: 'modal',
   };
 
-  const mod = await import(moduleMap[provider]);
+  const moduleUrl = pathToFileURL(modulePaths[provider]).href;
+  const mod = await import(moduleUrl);
   const factory = (mod as Record<string, unknown>)[factoryMap[provider]];
   if (typeof factory !== 'function') {
-    throw new Error(`Provider factory "${factoryMap[provider]}" not found in ${moduleMap[provider]}`);
+    throw new Error(`Provider factory "${factoryMap[provider]}" not found for ${provider}`);
   }
 
   return factory as (config: Record<string, string>) => DirectProvider;
