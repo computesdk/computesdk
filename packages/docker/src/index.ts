@@ -155,27 +155,6 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
 
         const docker = new Docker(cfg.connection as any);
 
-        // Reattach?
-        if (options?.sandboxId) {
-          try {
-            const container = docker.getContainer(options.sandboxId);
-            const info = await container.inspect();
-            return {
-              sandbox: <DockerSandboxHandle>{
-                docker,
-                container,
-                containerId: options.sandboxId,
-                image: info.Config?.Image ?? cfg.image.name,
-                createdAt: new Date(info.Created || Date.now()),
-              },
-              sandboxId: options.sandboxId,
-            };
-          } catch (err) {
-            // Failed to reattach to existing container; will create a new one.
-            console.warn(`Could not reattach to Docker container with ID ${options.sandboxId}:`, err);
-          }
-        }
-
         // Choose image based on runtime if needed
         const chosenImage = pickImageForRuntime(effectiveRuntime, cfg.image);
         await ensureImage(docker, chosenImage);
@@ -467,4 +446,3 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
     },
   },
 });
-

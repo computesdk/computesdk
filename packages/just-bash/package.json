@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "computesdk": "workspace:*",
-    "@computesdk/provider": "workspace:*"
+    "@computesdk/provider": "workspace:*",
+    "nanoid": "^5.1.6"
   },
   "peerDependencies": {
     "just-bash": ">=2.0.0"

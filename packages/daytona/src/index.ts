@@ -50,27 +50,22 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           let session: DaytonaSandbox;
           let sandboxId: string;
 
-          if (options?.sandboxId) {
-            // Reconnect to existing Daytona sandbox
-            session = await daytona.get(options.sandboxId);
-            sandboxId = options.sandboxId;
-          } else {
-            // Destructure known ComputeSDK fields, collect the rest for passthrough
-            const {
-              runtime: _runtime,
-              timeout: _timeout,
-              envs,
-              name,
-              metadata,
-              templateId,
-              snapshotId,
-              sandboxId: _sandboxId,
-              namespace: _namespace,
-              directory: _directory,
-              overlays: _overlays,
-              servers: _servers,
-              ...providerOptions
-            } = options || {};
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            runtime: _runtime,
+            timeout: _timeout,
+            envs,
+            name,
+            metadata,
+            templateId,
+            snapshotId,
+            sandboxId: _sandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            overlays: _overlays,
+            servers: _servers,
+            ...providerOptions
+          } = options || {};
 
             // Build create params from options
             // Daytona SDK uses envVars (not envs), labels (not metadata)
@@ -108,9 +103,8 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
               ? { timeout: Math.ceil(timeout / 1000) }
               : undefined;
 
-            session = await daytona.create(createParams as any, createOptions);
-            sandboxId = session.id;
-          }
+          session = await daytona.create(createParams as any, createOptions);
+          sandboxId = session.id;
 
           return {
             sandbox: session,

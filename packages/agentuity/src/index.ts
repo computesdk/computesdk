@@ -287,18 +287,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                 const baseURL = resolveBaseURL(config);
                 const handle = { apiKey, baseURL };
 
-                if (options?.sandboxId) {
-                    // Reconnect to an existing sandbox — just verify it is reachable.
-                    const res = await agentuityFetch(handle, 'GET', `/sandbox/status/${options.sandboxId}`);
-                    if (!res.ok) {
-                        throw new Error(
-                            `Agentuity: sandbox ${options.sandboxId} not found or inaccessible (${res.status})`,
-                        );
-                    }
-                    const existing: AgentuityHandle = { sandboxId: options.sandboxId, apiKey, baseURL };
-                    return { sandbox: existing, sandboxId: options.sandboxId };
-                }
-
                 const runtime = toAgentuityRuntime(
                     (options as any)?.runtime ?? config.runtime,
                 );
