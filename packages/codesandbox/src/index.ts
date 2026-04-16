@@ -8,7 +8,11 @@ import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+
+type HibernateCapableSandbox = CodesandboxSandbox & {
+  hibernate: () => Promise<void>;
+};
 
 /**
  * Codesandbox-specific configuration options
@@ -318,8 +322,8 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           const sandbox = await sdk.sandboxes.resume(sandboxId);
 
           // Hibernate creates a checkpoint/snapshot of the sandbox
-          // Cast to any to avoid type issues with SDK version
-          await (sandbox as any).hibernate();
+          const hibernateSandbox = sandbox as HibernateCapableSandbox;
+          await hibernateSandbox.hibernate();
 
           // The hibernated sandbox becomes a snapshot we can fork
           return {
