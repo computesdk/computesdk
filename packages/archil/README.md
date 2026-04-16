@@ -54,7 +54,7 @@ Disk names must match `^[a-zA-Z0-9_-]+$` and be 1–100 characters.
 | `getById`     | ✅        | Accepts either the disk id or the disk name.                |
 | `list`        | ✅        | Lists all disks visible to the API key.                     |
 | `destroy`     | ✅        | Deletes the disk.                                           |
-| `runCommand`  | ✅        | Calls `Disk.exec()` (HTTP, blocks until command completes). |
+| `runCommand`  | ✅        | Calls Archil's HTTP `exec` endpoint and waits for completion. |
 | `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`. Requires explicit `runtime`. |
 | `getInfo`     | ✅        |                                                             |
 | `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose. |
