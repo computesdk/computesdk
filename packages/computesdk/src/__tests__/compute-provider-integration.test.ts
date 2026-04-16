@@ -108,9 +108,14 @@ describeIntegration('compute provider integration', () => {
       expect(fetched?.sandboxId).toBe(sandbox.sandboxId);
 
       // Not all direct providers support timeout extension.
-      const supportsExtendTimeout = typeof (provider as any)?.sandbox?.extendTimeout === 'function';
-      if (supportsExtendTimeout) {
+      // Some provider wrappers expose the method but throw a "not supported" error.
+      try {
         await sdk.sandbox.extendTimeout(sandbox.sandboxId, { duration: 120000 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('does not support extendTimeout')) {
+          throw error;
+        }
       }
     } finally {
       await sdk.sandbox.destroy(sandbox.sandboxId);
