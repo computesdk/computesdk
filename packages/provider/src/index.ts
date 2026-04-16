@@ -22,12 +22,6 @@ export type {
   DaemonConfig
 } from './infra-factory';
 
-export { defineCompute } from './compute-factory';
-export type {
-  ComputeFactoryConfig,
-  ComputeConfig
-} from './compute-factory';
-
 // Export direct mode compute API
 export { createCompute } from './compute';
 export type { CreateComputeConfig, ComputeAPI } from './compute';
