@@ -79,7 +79,7 @@ jobs:
 
     strategy:
       matrix:
-        provider: [e2b, vercel, daytona, modal]
+        provider: [e2b, vercel, daytona, modal, archil]
       fail-fast: false
     
     steps:
@@ -159,6 +159,19 @@ jobs:
            echo "Skipping Modal integration tests - missing required secrets"
          fi
 
+    - name: Run Archil Integration Tests
+      if: matrix.provider == 'archil'
+      env:
+        ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
+        ARCHIL_REGION: ${{ secrets.ARCHIL_REGION }}
+      run: |
+         if [ -n "$ARCHIL_API_KEY" ] && [ -n "$ARCHIL_REGION" ]; then
+           echo "Running Archil integration tests with real API..."
+           pnpm --filter @computesdk/archil test
+         else
+           echo "Skipping Archil integration tests - missing required secrets"
+         fi
+
   computesdk-integration-tests:
     runs-on: namespace-profile-default
     needs: test
@@ -166,7 +179,7 @@ jobs:
 
     strategy:
       matrix:
-        provider: [e2b, vercel, daytona, modal]
+        provider: [e2b, vercel, daytona, modal, archil]
       fail-fast: false
 
     steps:
@@ -200,6 +213,8 @@ jobs:
         DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
         MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
+        ARCHIL_REGION: ${{ secrets.ARCHIL_REGION }}
       run: |
         case "$TEST_PROVIDER" in
           e2b)
@@ -223,6 +238,12 @@ jobs:
           modal)
             if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
               echo "Skipping computesdk integration for modal - missing Modal credentials"
+              exit 0
+            fi
+            ;;
+          archil)
+            if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ]; then
+              echo "Skipping computesdk integration for archil - missing Archil credentials"
               exit 0
             fi
             ;;

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { compute, type DirectProvider } from '../compute';
 
-type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal';
+type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal' | 'archil';
 
 const runIntegration = process.env.COMPUTESDK_INTEGRATION === '1';
 const testProvider = process.env.TEST_PROVIDER as SupportedProvider | undefined;
@@ -43,6 +43,7 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
     vercel: resolve(workspaceRoot, 'packages/vercel/dist/index.mjs'),
     daytona: resolve(workspaceRoot, 'packages/daytona/dist/index.mjs'),
     modal: resolve(workspaceRoot, 'packages/modal/dist/index.mjs'),
+    archil: resolve(workspaceRoot, 'packages/archil/dist/index.mjs'),
   };
 
   const factoryMap: Record<SupportedProvider, string> = {
@@ -50,6 +51,7 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
     vercel: 'vercel',
     daytona: 'daytona',
     modal: 'modal',
+    archil: 'archil',
   };
 
   const moduleUrl = pathToFileURL(modulePaths[provider]).href;
@@ -82,6 +84,11 @@ function getProviderConfig(provider: SupportedProvider): Record<string, string> 
       return {
         tokenId: requireEnv('MODAL_TOKEN_ID'),
         tokenSecret: requireEnv('MODAL_TOKEN_SECRET'),
+      };
+    case 'archil':
+      return {
+        apiKey: requireEnv('ARCHIL_API_KEY'),
+        region: requireEnv('ARCHIL_REGION'),
       };
     default:
       throw new Error(`Unsupported TEST_PROVIDER: ${String(provider)}`);
