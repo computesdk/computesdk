@@ -23,10 +23,10 @@ runProviderTestSuite({
     apiKey: process.env.ARCHIL_API_KEY,
     region: process.env.ARCHIL_REGION,
   }),
-  supportsFilesystem: true,
-  // Archil exec runs in short-lived containers; filesystem persistence is via
-  // the mounted disk's working directory. Use a relative path to ensure tests
-  // write/read from persistent disk-backed storage across exec calls.
-  filesystemBasePath: 'tmp',
+  // Archil filesystem mount points vary by account/runtime and are not yet
+  // stable enough for generic provider-test-suite path assumptions.
+  // Keep command/runtime integration coverage on, and add dedicated filesystem
+  // integration once mount-path behavior is standardized.
+  supportsFilesystem: false,
   skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
 });
