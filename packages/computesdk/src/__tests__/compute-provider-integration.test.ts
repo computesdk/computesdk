@@ -105,7 +105,16 @@ describeIntegration('compute provider integration', () => {
     const provider = providerFactory(getProviderConfig(testProvider));
 
     const sdk = compute({ provider });
-    const sandbox = await sdk.sandbox.create({ timeout: 120000 });
+    const sandbox = await sdk.sandbox.create({
+      timeout: 120000,
+      ...(testProvider === 'archil'
+        ? {
+            metadata: {
+              diskId: requireEnv('ARCHIL_DISK_ID'),
+            },
+          }
+        : {}),
+    });
 
     try {
       const result = await sandbox.runCode('print("computesdk-integration-ok")', 'python');

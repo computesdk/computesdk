@@ -164,12 +164,13 @@ jobs:
       env:
         ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
         ARCHIL_REGION: ${{ secrets.ARCHIL_REGION }}
+        ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID }}
       run: |
-         if [ -n "$ARCHIL_API_KEY" ] && [ -n "$ARCHIL_REGION" ]; then
+         if [ -n "$ARCHIL_API_KEY" ] && [ -n "$ARCHIL_REGION" ] && [ -n "$ARCHIL_DISK_ID" ]; then
            echo "Running Archil integration tests with real API..."
            pnpm --filter @computesdk/archil test
          else
-           echo "Skipping Archil integration tests - missing required secrets"
+           echo "Skipping Archil integration tests - missing required secrets (ARCHIL_API_KEY, ARCHIL_REGION, ARCHIL_DISK_ID)"
          fi
 
   computesdk-integration-tests:
@@ -215,6 +216,7 @@ jobs:
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
         ARCHIL_REGION: ${{ secrets.ARCHIL_REGION }}
+        ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID }}
       run: |
         case "$TEST_PROVIDER" in
           e2b)
@@ -242,8 +244,8 @@ jobs:
             fi
             ;;
           archil)
-            if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ]; then
-              echo "Skipping computesdk integration for archil - missing Archil credentials"
+            if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ] || [ -z "$ARCHIL_DISK_ID" ]; then
+              echo "Skipping computesdk integration for archil - missing Archil credentials (ARCHIL_API_KEY, ARCHIL_REGION, ARCHIL_DISK_ID)"
               exit 0
             fi
             ;;
