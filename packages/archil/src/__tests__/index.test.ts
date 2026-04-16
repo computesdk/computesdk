@@ -129,11 +129,9 @@ runProviderTestSuite({
     });
 
     // The generic provider test suite always calls create() without metadata.
-    // Archil create() requires an explicit disk id, so for integration tests we
-    // resolve one here (prefer ARCHIL_DISK_ID, else first visible disk) and
-    // inject it into create() calls made by the shared suite.
+    // Archil create() requires an explicit disk id, so inject ARCHIL_DISK_ID.
     const originalCreate = provider.sandbox.create.bind(provider.sandbox);
-    let resolvedDiskId: string | undefined = process.env.ARCHIL_DISK_ID;
+    const configuredDiskId = process.env.ARCHIL_DISK_ID;
 
     provider.sandbox.create = async (options?: any) => {
       const requested = options?.metadata?.diskId as string | undefined;
@@ -141,22 +139,15 @@ runProviderTestSuite({
         return originalCreate(options);
       }
 
-      if (!resolvedDiskId) {
-        const disks = await provider.sandbox.list();
-        if (disks.length === 0) {
-          throw new Error(
-            'Archil integration tests require at least one existing disk. ' +
-              'Set ARCHIL_DISK_ID or create a disk in the Archil account.'
-          );
-        }
-        resolvedDiskId = disks[0].sandboxId;
+      if (!configuredDiskId) {
+        throw new Error('Archil integration tests require ARCHIL_DISK_ID.');
       }
 
       return originalCreate({
         ...options,
         metadata: {
           ...(options?.metadata || {}),
-          diskId: resolvedDiskId,
+          diskId: configuredDiskId,
         },
       });
     };
@@ -168,5 +159,6 @@ runProviderTestSuite({
   // Keep command/runtime integration coverage on, and add dedicated filesystem
   // integration once mount-path behavior is standardized.
   supportsFilesystem: false,
-  skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
+  skipIntegration:
+    !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION || !process.env.ARCHIL_DISK_ID,
 });
