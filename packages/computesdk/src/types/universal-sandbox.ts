@@ -146,7 +146,7 @@ export interface CreateSandboxOptions {
   directory?: string;
   overlays?: SandboxOverlayConfig[];
   servers?: SandboxServerConfig[];
-  // Allow provider-specific properties (e.g., sandboxId, domain for E2B)
+  // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
 }
 

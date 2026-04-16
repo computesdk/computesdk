@@ -154,12 +154,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             `Missing Beam workspace ID. Provide 'workspaceId' in config or set BEAM_WORKSPACE_ID environment variable.`
           );
         }
-        try {
-          if (options?.sandboxId) {
-            const instance = await Sandbox.connect(options.sandboxId);
-            return { sandbox: instance, sandboxId: instance.containerId };
-          }
 
+        try {
           // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
             runtime: optRuntime,

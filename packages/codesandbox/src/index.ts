@@ -48,11 +48,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           let sandbox: CodesandboxSandbox;
           let sandboxId: string;
 
-          if (options?.sandboxId) {
-            // Resume existing CodeSandbox using sdk.sandboxes.resume()
-            sandbox = await sdk.sandboxes.resume(options.sandboxId);
-            sandboxId = options.sandboxId;
-          } else if (options?.snapshotId) {
+          if (options?.snapshotId) {
             // Resume from snapshot - in CodeSandbox, snapshots are hibernated sandboxes
             sandbox = await sdk.sandboxes.resume(options.snapshotId);
             sandboxId = options.snapshotId;

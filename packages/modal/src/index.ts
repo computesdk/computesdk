@@ -99,13 +99,8 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           let sandbox: any;
           let sandboxId: string;
 
-          if (options?.sandboxId) {
-            // Reconnect to existing Modal sandbox
-            sandbox = await Sandbox.fromId(options.sandboxId);
-            sandboxId = options.sandboxId;
-          } else {
-            // Create new Modal sandbox
-            const app = await App.lookup('computesdk-modal', { createIfMissing: true });
+          // Create new Modal sandbox
+          const app = await App.lookup('computesdk-modal', { createIfMissing: true });
 
             // Destructure known ComputeSDK fields, collect the rest for passthrough
             const {
@@ -171,9 +166,8 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
               sandboxOptions.name = name;
             }
             
-            sandbox = await app.createSandbox(image, sandboxOptions);
-            sandboxId = sandbox.sandboxId;
-          }
+          sandbox = await app.createSandbox(image, sandboxOptions);
+          sandboxId = sandbox.sandboxId;
 
           const modalSandbox: ModalSandbox = {
             sandbox,

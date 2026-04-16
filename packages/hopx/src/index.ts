@@ -77,27 +77,22 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           let sandbox: HopxSandbox;
           let sandboxId: string;
 
-          if (options?.sandboxId) {
-            // Reconnect to existing HopX sandbox using Sandbox.connect()
-            sandbox = await HopxSandbox.connect(options.sandboxId, apiKey, config.baseURL);
-            sandboxId = options.sandboxId;
-          } else {
-            // Destructure known ComputeSDK fields, collect the rest for passthrough
-            const {
-              runtime: _runtime,
-              timeout: _timeout,
-              envs,
-              name,
-              metadata: _metadata,
-              templateId,
-              snapshotId,
-              sandboxId: _sandboxId,
-              namespace: _namespace,
-              directory: _directory,
-              overlays: _overlays,
-              servers: _servers,
-              ...providerOptions
-            } = options || {};
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            runtime: _runtime,
+            timeout: _timeout,
+            envs,
+            name,
+            metadata: _metadata,
+            templateId,
+            snapshotId,
+            sandboxId: _sandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            overlays: _overlays,
+            servers: _servers,
+            ...providerOptions
+          } = options || {};
 
             // Create new HopX sandbox using Sandbox.create()
             const createOptions: any = {
@@ -124,9 +119,8 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
               createOptions.name = name;
             }
 
-            sandbox = await HopxSandbox.create(createOptions);
-            sandboxId = sandbox.sandboxId;
-          }
+          sandbox = await HopxSandbox.create(createOptions);
+          sandboxId = sandbox.sandboxId;
 
           return {
             sandbox,
@@ -519,4 +513,3 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
 
 // Export HopX sandbox type for explicit typing
 export type { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
-
