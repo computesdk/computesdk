@@ -42,8 +42,6 @@ export interface ArchilConfig {
   apiKey?: string;
   /** Archil region (e.g. "aws-us-east-1"). Falls back to ARCHIL_REGION env var. */
   region?: string;
-  /** Default disk ID to exec against. Can be overridden via sandboxId on create. */
-  diskId?: string;
   /** Override the control-plane base URL (useful for testing). */
   baseUrl?: string;
 }
@@ -116,7 +114,7 @@ function authHeader(apiKey: string): string {
 
 async function callApi<T>(
   resolved: ResolvedConfig,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -147,16 +145,18 @@ async function callApi<T>(
   return payload.data as T;
 }
 
-function resolveDiskId(config: ArchilConfig, requested?: string): string {
-  const diskId = requested ?? config.diskId;
-  if (!diskId) {
-    throw new Error(
-      'Missing diskId for Archil.\n\n' +
-        'Pass a default at construction: archil({ diskId: "..." })\n' +
-        'Or pass one per call: provider.sandbox.create({ sandboxId: "<diskId>" })',
-    );
-  }
-  return diskId;
+// Archil disk names must match /^[a-zA-Z0-9_-]+$/ and be 1–100 chars.
+function generateDiskName(): string {
+  const random = Math.random().toString(36).slice(2, 10);
+  return `computesdk-${Date.now()}-${random}`;
+}
+
+async function lookupDiskByName(
+  resolved: ResolvedConfig,
+  name: string,
+): Promise<DiskResponse | null> {
+  const disks = await callApi<DiskResponse[]>(resolved, 'GET', '/api/disks');
+  return disks.find((d) => d.name === name) ?? null;
 }
 
 function shellEscape(value: string): string {
@@ -199,11 +199,17 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     sandbox: {
       create: async (config: ArchilConfig, options?: CreateSandboxOptions) => {
         const resolved = resolveConfig(config);
-        const diskId = resolveDiskId(config, (options?.sandboxId as string | undefined));
+        const name = ((options?.name as string | undefined) ?? generateDiskName()).trim();
+        const created = await callApi<{ diskId: string }>(
+          resolved,
+          'POST',
+          '/api/disks',
+          { name },
+        );
         const disk = await callApi<DiskResponse>(
           resolved,
           'GET',
-          `/api/disks/${encodeURIComponent(diskId)}`,
+          `/api/disks/${encodeURIComponent(created.diskId)}`,
         );
         return {
           sandbox: { disk, resolved, createdAt: new Date() },
@@ -213,12 +219,23 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       getById: async (config: ArchilConfig, sandboxId: string) => {
         const resolved = resolveConfig(config);
+        // Try as disk id first; fall back to name lookup via list.
         try {
           const disk = await callApi<DiskResponse>(
             resolved,
             'GET',
             `/api/disks/${encodeURIComponent(sandboxId)}`,
           );
+          return {
+            sandbox: { disk, resolved, createdAt: new Date() },
+            sandboxId: disk.id,
+          };
+        } catch {
+          // not an id — try name
+        }
+        try {
+          const disk = await lookupDiskByName(resolved, sandboxId);
+          if (!disk) return null;
           return {
             sandbox: { disk, resolved, createdAt: new Date() },
             sandboxId: disk.id,
@@ -237,8 +254,13 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         }));
       },
 
-      destroy: async (_config: ArchilConfig, _sandboxId: string) => {
-        // No-op: Archil disks have a lifetime independent of compute exec calls.
+      destroy: async (config: ArchilConfig, sandboxId: string) => {
+        const resolved = resolveConfig(config);
+        await callApi<null>(
+          resolved,
+          'DELETE',
+          `/api/disks/${encodeURIComponent(sandboxId)}`,
+        );
       },
 
       runCommand: async (

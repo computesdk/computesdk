@@ -12,7 +12,7 @@ describe('archil export shape', () => {
   });
 
   it('uses the correct provider name', () => {
-    const provider = archil({ apiKey: 'test', region: 'aws-us-east-1', diskId: 'disk_xyz' });
+    const provider = archil({ apiKey: 'test', region: 'aws-us-east-1' });
     expect(provider.name).toBe('archil');
   });
 });
@@ -22,9 +22,7 @@ runProviderTestSuite({
   provider: archil({
     apiKey: process.env.ARCHIL_API_KEY,
     region: process.env.ARCHIL_REGION,
-    diskId: process.env.ARCHIL_DISK_ID,
   }),
   supportsFilesystem: true,
-  skipIntegration:
-    !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION || !process.env.ARCHIL_DISK_ID,
+  skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
 });

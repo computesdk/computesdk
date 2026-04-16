@@ -2,10 +2,10 @@
 
 [Archil](https://archil.com) provider for [ComputeSDK](https://www.computesdk.com).
 
-Archil exposes an HTTP `exec` endpoint that runs a shell command in a managed
-container with the configured Archil disk mounted, then returns `stdout`,
-`stderr`, and `exitCode`. There is no sandbox lifecycle to manage — `create`
-just resolves a handle to an existing disk.
+`create` provisions a new Archil disk (no mounts — archil-managed storage)
+and `runCommand` executes shell commands in a managed container with that
+disk attached via the control-plane `exec` endpoint. `destroy` deletes the
+disk. `getById` accepts either a disk id or a disk name.
 
 ## Install
 
@@ -21,47 +21,51 @@ additional Archil SDK is required.
 | Option    | Env var            | Required | Description                                |
 | --------- | ------------------ | -------- | ------------------------------------------ |
 | `apiKey`  | `ARCHIL_API_KEY`   | yes      | Archil control-plane API key               |
-| `region`  | `ARCHIL_REGION`    | yes      | Archil region (e.g. `us-east-1`)           |
-| `diskId`  | —                  | yes¹     | Default disk ID to exec against            |
+| `region`  | `ARCHIL_REGION`    | yes      | Archil region (e.g. `aws-us-east-1`)       |
 | `baseUrl` | —                  | no       | Override control-plane URL (for testing)   |
-
-¹ A `diskId` must be supplied either at construction or per call via
-`provider.sandbox.create({ sandboxId: '<diskId>' })` /
-`provider.sandbox.getById('<diskId>')`.
 
 ## Usage
 
 ```ts
 import { archil } from '@computesdk/archil';
 
-const provider = archil({ diskId: 'disk_abc123' });
+const provider = archil();
 
-const { sandbox } = await provider.sandbox.create();
+// Create a fresh disk. Pass a name to control it; omit for auto-generated.
+const { sandbox } = await provider.sandbox.create({ name: 'my-workspace' });
 
-const result = await provider.sandbox.runCommand(sandbox, 'ls -la /mnt');
-console.log(result.stdout);
+const result = await provider.sandbox.runCommand(sandbox, 'echo hello > /mnt/note && cat /mnt/note');
+console.log(result.stdout); // "hello"
+
+// Look up later by name or by id:
+const byName = await provider.sandbox.getById('my-workspace');
+const byId = await provider.sandbox.getById(sandbox.sandboxId);
+
+await provider.sandbox.destroy(sandbox.sandboxId);
 ```
+
+Disk names must match `^[a-zA-Z0-9_-]+$` and be 1–100 characters.
 
 ## Supported operations
 
 | Method        | Supported | Notes                                                       |
 | ------------- | --------- | ----------------------------------------------------------- |
-| `create`      | ✅        | Resolves an existing disk; does not create one.             |
-| `getById`     | ✅        |                                                             |
+| `create`      | ✅        | Creates a new disk with archil-managed storage (no mounts). |
+| `getById`     | ✅        | Accepts either the disk id or the disk name.                |
 | `list`        | ✅        | Lists all disks visible to the API key.                     |
-| `destroy`     | no-op     | Disks have an independent lifecycle. Use the Archil SDK.    |
+| `destroy`     | ✅        | Deletes the disk.                                           |
 | `runCommand`  | ✅        | Calls `Disk.exec()` (HTTP, blocks until command completes). |
-| `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`.                    |
+| `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`. Requires explicit `runtime`. |
 | `getInfo`     | ✅        |                                                             |
 | `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose. |
 | `filesystem`  | ✅        | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.). |
 
 ## Limitations
 
-- Each `exec` call provisions a fresh container — there is no persistent state
-  between calls beyond what is written to the mounted disk.
+- Each `exec` call provisions a fresh container — there is no persistent
+  state between calls beyond what is written to the disk.
 - Responses are truncated to ~5 MB by the Archil control plane.
 - `getUrl` is not supported — each exec runs in a fresh ephemeral container,
   so there is no long-lived process to expose a port on.
-- Filesystem operations are implemented as shell commands, so each call costs
-  one HTTP round trip.
+- Filesystem operations are implemented as shell commands, so each call
+  costs one HTTP round trip.
