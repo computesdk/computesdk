@@ -1,8 +1,8 @@
 # computesdk
 
-## 3.0.0
+## 2.6.0
 
-### Major Changes
+### Minor Changes
 
 - 6a79b9b: Remove hosted control-plane assumptions from `computesdk` and move to direct provider mode.
 

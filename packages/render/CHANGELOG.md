@@ -1,8 +1,8 @@
 # @computesdk/render
 
-## 2.0.0
+## 1.3.0
 
-### Major Changes
+### Minor Changes
 
 - 6a79b9b: Remove hosted control-plane assumptions from `computesdk` and move to direct provider mode.
 
@@ -45,8 +45,8 @@
 ### Patch Changes
 
 - Updated dependencies [6a79b9b]
-  - computesdk@3.0.0
-  - @computesdk/provider@2.0.0
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
 
 ## 1.2.22
 

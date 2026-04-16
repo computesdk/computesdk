@@ -1,8 +1,8 @@
 # @computesdk/workbench
 
-## 22.0.0
+## 21.1.0
 
-### Major Changes
+### Minor Changes
 
 - 6a79b9b: Remove hosted control-plane assumptions from `computesdk` and move to direct provider mode.
 
@@ -45,9 +45,9 @@
 ### Patch Changes
 
 - Updated dependencies [6a79b9b]
-  - computesdk@3.0.0
-  - @computesdk/provider@2.0.0
-  - @computesdk/railway@2.0.0
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+  - @computesdk/railway@1.2.0
   - @computesdk/agentuity@0.0.5
   - @computesdk/beam@0.1.8
   - @computesdk/blaxel@1.6.9
