@@ -6,11 +6,12 @@ Blaxel provider for ComputeSDK
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/blaxel
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your Blaxel credentials to a `.env` file:
 
+```bash
 BL_API_KEY=your_blaxel_api_key
 BL_WORKSPACE=your_blaxel_workspace
 ```
@@ -19,18 +20,22 @@ BL_WORKSPACE=your_blaxel_workspace
 ## Usage
 
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { blaxel } from '@computesdk/blaxel';
+
+const compute = blaxel({
+  apiKey: process.env.BL_API_KEY,
+  workspace: process.env.BL_WORKSPACE,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Blaxel!")');
-console.log(result.stdout); // "Hello from Blaxel!"
+console.log(result.output); // "Hello from Blaxel!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 
@@ -49,25 +54,6 @@ interface BlaxelConfig {
   /** Default memory allocation in MB (default: 4096) */
   memory?: number;
 }
-```
-
-## Explicit Provider Configuration
-
-If you prefer to set the provider explicitly, you can do so as follows:
-
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'blaxel',
-   blaxel: {
-     apiKey: process.env.BL_API_KEY,
-     workspace: process.env.BL_WORKSPACE
-   }
-});
-
-const sandbox = await compute.sandbox.create();
 ```
 
 ## Runtime Detection

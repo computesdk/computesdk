@@ -5,11 +5,12 @@ Vercel provider for ComputeSDK - Execute code in globally distributed serverless
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/vercel
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your Vercel credentials to a `.env` file:
 
+```bash
 VERCEL_TOKEN=your_vercel_token
 VERCEL_TEAM_ID=your_vercel_team_id
 VERCEL_PROJECT_ID=your_vercel_project_id
@@ -18,18 +19,23 @@ VERCEL_PROJECT_ID=your_vercel_project_id
 ## Usage
 
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { vercel } from '@computesdk/vercel';
+
+const compute = vercel({
+  token: process.env.VERCEL_TOKEN,
+  teamId: process.env.VERCEL_TEAM_ID,
+  projectId: process.env.VERCEL_PROJECT_ID,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from Vercel!")');
-console.log(result.stdout); // "Hello from Vercel!"
+console.log(result.output); // "Hello from Vercel!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 
@@ -48,24 +54,6 @@ interface VercelConfig {
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
-```
-
-## Explicit Provider Configuration
-If you prefer to set the provider explicitly, you can do so as follows:
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'vercel',
-   vercel: {
-     token: process.env.VERCEL_TOKEN,
-     teamId: process.env.VERCEL_TEAM_ID,
-     projectId: process.env.VERCEL_PROJECT_ID
-   }
-});
-
-const sandbox = await compute.sandbox.create();
 ```
 
 

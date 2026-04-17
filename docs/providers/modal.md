@@ -6,36 +6,36 @@ Modal provider for ComputeSDK - Execute code with GPU support for machine learni
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/modal
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your Modal credentials to a `.env` file:
 
-MODAL_TOKEN_ID=your_modal_token_id_here
-MODAL_TOKEN_SECRET=your_modal_token_secret_here
+```bash
+MODAL_TOKEN_ID=your_modal_token_id
+MODAL_TOKEN_SECRET=your_modal_token_secret
 ```
 
 
 ## Usage
 
-### With ComputeSDK
-
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { modal } from '@computesdk/modal';
+
+const compute = modal({
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Get instance
-const instance = sandbox.getInstance();
-
 // Execute code
 const result = await sandbox.runCode('print("Hello from Modal!")');
-console.log(result.stdout); // "Hello from Modal!"
+console.log(result.output); // "Hello from Modal!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ### Configuration Options
@@ -57,20 +57,4 @@ interface ModalConfig {
 }
 ```
 
-## Explicit Provider Configuration
-If you prefer to set the provider explicitly, you can do so as follows:
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'modal',
-   modal: {
-     tokenId: process.env.MODAL_TOKEN_ID,
-     tokenSecret: process.env.MODAL_TOKEN_SECRET
-   }
-});
-
-const sandbox = await compute.sandbox.create();
-```
 Ports are exposed with unencrypted tunnels by default for maximum compatibility.
