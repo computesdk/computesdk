@@ -1,36 +1,38 @@
-# Codesandbox
+# CodeSandbox
 
-Codesandbox provider for ComputeSDK - Execute code in Codesandbox development environments.
+CodeSandbox provider for ComputeSDK - Execute code in CodeSandbox development environments.
 
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/codesandbox
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your CodeSandbox credentials to a `.env` file:
 
+```bash
 CSB_API_KEY=your_codesandbox_api_key
 ```
 
 
 ## Usage
 
-### With ComputeSDK
-
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { codesandbox } from '@computesdk/codesandbox';
+
+const compute = codesandbox({
+  apiKey: process.env.CSB_API_KEY,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
 // Execute code
-const result = await sandbox.runCode('print("Hello from Codesandbox!")');
-console.log(result.stdout); // "Hello from Codesandbox!"
+const result = await sandbox.runCode('print("Hello from CodeSandbox!")');
+console.log(result.output); // "Hello from CodeSandbox!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ### Configuration Options
@@ -44,23 +46,6 @@ interface CodesandboxConfig {
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
-```
-
-
-## Explicit Provider Configuration
-If you prefer to set the provider explicitly, you can do so as follows:
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'codesandbox',
-   codesandbox: {
-     apiKey: process.env.CSB_API_KEY
-   }
-});
-
-const sandbox = await compute.sandbox.create();
 ```
 
 ## Runtime Detection
