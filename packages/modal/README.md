@@ -547,7 +547,7 @@ const results = await Promise.all(
   tasks.map(async (taskFile) => {
     const sandbox = await compute.sandbox.create();
     
-    return await sandbox.runCommand(`python - <<'PY'
+    const result = await sandbox.runCommand(`python - <<'PY'
 import json
 import numpy as np
 
@@ -576,7 +576,7 @@ PY`);
 
 results.forEach(result => {
   const taskResult = JSON.parse(result.stdout);
-  console.log(`Task ${taskResult.task}: mean=${taskResult.mean:.2f}`);
+  console.log(`Task ${taskResult.task}: mean=${taskResult.mean.toFixed(2)}`);
 });
 ```
 
