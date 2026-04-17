@@ -28,6 +28,7 @@ When you install a provider package like `@computesdk/e2b`, you get a factory fu
 | `@computesdk/modal` | Modal |
 | `@computesdk/namespace` | Namespace |
 | `@computesdk/runloop` | Runloop |
+| `@computesdk/tensorlake` | Tensorlake |
 | `@computesdk/upstash` | Upstash |
 | `@computesdk/vercel` | Vercel |
 
