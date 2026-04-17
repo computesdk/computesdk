@@ -151,7 +151,6 @@ const provider = awsLambda({
 
 ### ❌ Not Yet Implemented
 
-- `runCommand()` - Execute code in the Lambda function
 - `runCommand()` - Run shell commands
 - `getInfo()` - Get detailed function information
 - `getUrl()` - Get function URL (if configured)
@@ -199,4 +198,3 @@ This provider uses the official AWS SDK for JavaScript v3 (`@aws-sdk/client-lamb
 - Support for AWS credential chain (IAM roles, profiles, etc.)
 - Type-safe API calls
 - Automatic retries and error handling
-

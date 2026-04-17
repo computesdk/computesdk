@@ -33,7 +33,7 @@ import { compute } from 'computesdk';
 const sandbox = await compute.sandbox.create();
 
 // Execute Python code with GPU acceleration
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import torch
 import numpy as np
 
@@ -50,7 +50,7 @@ if torch.cuda.is_available():
 y = torch.matmul(x, x.T)
 print(f"Result shape: {y.shape}")
 print(f"Mean: {y.mean().item():.4f}")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -70,10 +70,10 @@ const compute = modal({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import torch
 print(f"PyTorch version: {torch.__version__}")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -126,7 +126,7 @@ const compute = createCompute({
 const sandbox = await compute.sandbox.create({});
 
 // Start a web server in the sandbox
-await sandbox.runCommand(`
+await sandbox.runCommand(`node - <<'JS'
 const http = require('http');
 
 const PORT = 3000;
@@ -140,7 +140,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(\`Server running on port \${PORT}\`);
 });
-`, 'node');
+JS`);
 
 // Get the public URL for the exposed port
 const url = await sandbox.getUrl({ port: 3000 });
@@ -213,7 +213,7 @@ This provider is **production ready** with real Modal API integration:
 
 ```typescript
 // Execute Python code with real Modal Sandbox.exec()
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import torch
 import numpy as np
 
@@ -226,7 +226,7 @@ if torch.cuda.is_available():
 x = torch.randn(1000, 1000).cuda() if torch.cuda.is_available() else torch.randn(1000, 1000)
 y = torch.matmul(x, x.T)
 print(f"Result shape: {y.shape}")
-`, 'python');
+PY`);
 
 console.log(result.stdout); // Real output from Modal sandbox
 console.log(result.stderr); // Real errors if any
@@ -319,14 +319,14 @@ await compute.sandbox.destroy(provider, 'app-id');
 
 ```typescript
 // Modal automatically handles GPU allocation
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import torch
 print(f"CUDA available: {torch.cuda.is_available()}")
 
 # Use GPU if available
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = model.to(device)
-`);
+PY`);
 ```
 
 ### Serverless Scaling
@@ -444,14 +444,14 @@ print("Model saved!")
 await sandbox.filesystem.writeFile('/ml-project/train.py', trainScript);
 
 // Run training
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import subprocess
 result = subprocess.run(['python', '/ml-project/train.py'], 
                        capture_output=True, text=True)
 print(result.stdout)
 if result.stderr:
     print("Errors:", result.stderr)
-`);
+PY`);
 
 console.log(result.stdout);
 
@@ -475,7 +475,7 @@ const compute = modal({
 const sandbox = await compute.sandbox.create();
 
 // GPU inference example
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import torch
 import torch.nn as nn
 import time
@@ -520,7 +520,7 @@ inference_time = time.time() - start_time
 print(f"Inference completed in {inference_time:.4f} seconds")
 print(f"Output shape: {outputs.shape}")
 print(f"Device: {outputs.device}")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -547,7 +547,7 @@ const results = await Promise.all(
   tasks.map(async (taskFile) => {
     const sandbox = await compute.sandbox.create();
     
-    return await sandbox.runCommand(`
+    return await sandbox.runCommand(`python - <<'PY'
 import json
 import numpy as np
 
@@ -567,7 +567,7 @@ results = {
 }
 
 print(json.dumps(results))
-`);
+PY`);
     
     await sandbox.destroy();
     return result;

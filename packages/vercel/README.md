@@ -75,7 +75,7 @@ const compute = vercel({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCommand('console.log("Hello from Vercel!");');
+const result = await sandbox.runCommand('node -e "console.log(\"Hello from Vercel!\")"');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -129,17 +129,17 @@ interface VercelConfig {
 
 ```typescript
 // Execute Node.js code
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
-`, 'node');
+JS`);
 
 // Execute Python code  
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
-`, 'python');
+PY`);
 
 // Auto-detection (based on code patterns)
 const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
@@ -249,7 +249,7 @@ import { vercel } from '@computesdk/vercel';
 const compute = vercel({ runtime: 'node' });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const http = require('http');
 const url = require('url');
 
@@ -272,7 +272,7 @@ const path = '/api/users';
 const response = routes[path] ? routes[path]() : { error: 'Not found' };
 
 console.log('Response:', JSON.stringify(response, null, 2));
-`);
+JS`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -286,7 +286,7 @@ import { vercel } from '@computesdk/vercel';
 const compute = vercel({ runtime: 'python' });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 import statistics
 from collections import Counter
@@ -317,7 +317,7 @@ print(f"Average Revenue per Product: ${avg_revenue:.2f}")
 print("\\nRevenue by Product:")
 for product, revenue in sorted(product_sales.items(), key=lambda x: x[1], reverse=True):
     print(f"  {product}: ${revenue}")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -366,7 +366,7 @@ await sandbox.filesystem.writeFile(
 );
 
 // Process data
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 import csv
 from collections import defaultdict
@@ -416,7 +416,7 @@ print(f"Generated {len(results)} department statistics")
 # Print summary
 for result in results:
     print(f"{result['department']}: {result['employee_count']} employees, avg salary ${result['average_salary']}")
-`);
+PY`);
 
 console.log('Execution Output:', result.stdout);
 
@@ -450,7 +450,7 @@ const installResult = await sandbox.runCommand('npm', ['install', 'lodash']);
 console.log('Install result:', installResult.stdout);
 
 // Use lodash in code
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const _ = require('lodash');
 
 const data = [
@@ -470,7 +470,7 @@ console.log('Average age:', avgAge);
 // Find oldest person
 const oldest = _.maxBy(data, 'age');
 console.log('Oldest person:', oldest.name);
-`);
+JS`);
 
 console.log(result.stdout);
 await sandbox.destroy();

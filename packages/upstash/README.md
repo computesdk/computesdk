@@ -26,10 +26,10 @@ const compute = upstash({ apiKey: process.env.UPSTASH_BOX_API_KEY });
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 print(pd.__version__)
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -71,17 +71,17 @@ interface UpstashConfig {
 
 ```typescript
 // Execute Python code
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
-`, 'python');
+PY`);
 
 // Execute Node.js code
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
-`, 'node');
+JS`);
 
 // Auto-detection (based on code patterns)
 const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
@@ -231,7 +231,7 @@ Charlie,35,Chicago`;
 await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
 
 // Process data with Python
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -250,7 +250,7 @@ plt.bar(df['name'], df['age'])
 plt.title('Age by Person')
 plt.savefig('/analysis/output/age_chart.png')
 print("\\nChart saved!")
-`);
+PY`);
 
 console.log(result.stdout);
 
