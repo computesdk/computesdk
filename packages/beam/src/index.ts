@@ -264,61 +264,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
        *
        * Auto-detects runtime (Python vs Node.js) and executes via sandbox.exec().
        */
-      runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const effectiveRuntime = runtime || (
-          code.includes('print(') ||
-          code.includes('import ') ||
-          code.includes('def ') ||
-          code.includes('sys.') ||
-          code.includes('json.') ||
-          code.includes('__') ||
-          code.includes('f"') ||
-          code.includes("f'") ||
-          code.includes('raise ')
-            ? 'python'
-            : 'node'
-        );
-
-        try {
-          const command = effectiveRuntime === 'python'
-            ? ['python3', '-c', code]
-            : ['node', '-e', code];
-
-          const proc = await sandbox.exec(command);
-          await proc.wait();
-          const [stdoutStr, stderrStr] = await Promise.all([
-            proc.stdout.read(),
-            proc.stderr.read(),
-          ]);
-
-          const output = stderrStr
-            ? `${stdoutStr}${stdoutStr && stderrStr ? '\n' : ''}${stderrStr}`
-            : stdoutStr;
-
-          const combinedOutput = `${stdoutStr || ''} ${stderrStr || ''}`;
-
-          if (proc.exitCode !== 0 && isParserFailure(combinedOutput, effectiveRuntime)) {
-            throw new Error(`Syntax error: ${(stderrStr || stdoutStr || '').trim()}`);
-          }
-
-          if (proc.exitCode !== 0 && !stdoutStr && !stderrStr) {
-            throw new Error(`Code execution failed with exit code ${proc.exitCode}`);
-          }
-
-          return {
-            output,
-            exitCode: proc.exitCode,
-            language: effectiveRuntime,
-          };
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `Beam execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
 
       /**
        * Execute a shell command in the sandbox

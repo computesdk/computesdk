@@ -51,34 +51,28 @@ const compute = cloudflare({
 const sandbox = await compute.sandbox.create();
 
 // Execute Python code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import sys
 print(f"Python version: {sys.version}")
 print("Hello from Cloudflare!")
-`);
+PY`);
 
-console.log(result.output);
+console.log(result.stdout);
 await sandbox.destroy();
 ```
 
 ## Usage
 
-### Run Code
+### Run Commands
 
-The provider automatically detects the runtime based on code content:
+Use normal shell commands inside the sandbox:
 
 ```typescript
-// Detected as Python
-await sandbox.runCode('print("Hello Python")');
-
-// Detected as Node.js
-await sandbox.runCode('console.log("Hello Node.js")');
-
-// Explicitly specify runtime
-await sandbox.runCode('print("Hello")', 'python');
+await sandbox.runCommand('python -c "print(\"Hello Python\")"');
+await sandbox.runCommand('node -e "console.log(\"Hello Node.js\")"');
 ```
 
-### Run Commands
+### List Files
 
 ```typescript
 const result = await sandbox.runCommand('ls -la /app');
@@ -109,12 +103,12 @@ await sandbox.filesystem.remove('/app/temp.txt');
 
 ```typescript
 // Start a web server in the sandbox
-await sandbox.runCode(`
+await sandbox.runCommand(`python - <<'PY'
 import http.server, socketserver
 PORT = 3000
 with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as httpd:
     httpd.serve_forever()
-`);
+PY`);
 
 // Get the public URL
 const url = await sandbox.getUrl({ port: 3000 });
@@ -181,7 +175,7 @@ This requires configuring the Sandbox Durable Object binding in your `wrangler.t
 
 ```typescript
 try {
-  const result = await sandbox.runCode('invalid python syntax');
+  const result = await sandbox.runCommand('invalid python syntax');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
     console.log('Code has syntax errors');

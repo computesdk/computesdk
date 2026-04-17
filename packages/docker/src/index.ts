@@ -286,48 +286,6 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         }
       },
 
-      runCode: async (handle: DockerSandboxHandle, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const start = Date.now();
-
-        // Resolve runtime: param → label → error
-        let rt: Runtime | undefined = runtime;
-        if (!rt) {
-          const info = await handle.container.inspect();
-          rt = (info.Config?.Labels?.[LABEL_RUNTIME] as Runtime) || undefined;
-        }
-        if (rt !== 'python' && rt !== 'node') {
-          throw new Error(`Docker runtime must be 'python' or 'node'. Pass runtime in config or as a parameter.`);
-        }
-
-        // Write to file, then execute. This is robust on Alpine/Debian.
-        const tmpFile = rt === 'python' ? '/tmp/compute_code.py' : '/tmp/compute_code.js';
-        const b64 = Buffer.from(code, 'utf8').toString('base64');
-        const makeAndRun =
-          `printf '%s' "${b64}" | base64 -d > ${tmpFile} && ` +
-          (rt === 'python' ? `python3 ${tmpFile}` : `node ${tmpFile}`);
-
-        const { stdout, stderr, exitCode } = await runExec(handle, makeAndRun);
-
-        if (exitCode !== 0 && stderr) {
-          // Throw ONLY on syntax errors (SDK contract)
-          const isSyntax =
-            stderr.includes('SyntaxError') ||
-            stderr.includes('invalid syntax') ||
-            stderr.includes('Unexpected token') ||
-            stderr.includes('Unexpected identifier');
-          if (isSyntax) {
-            const last = stderr.trim().split('\n').slice(-1)[0] || 'Syntax error';
-            throw new Error(`Syntax error: ${last}`);
-          }
-        }
-
-        return {
-          output: stdout + stderr,
-          exitCode,
-          language: rt,
-        };
-      },
-
       runCommand: async (
         handle: DockerSandboxHandle,
         command: string,

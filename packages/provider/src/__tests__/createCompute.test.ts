@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createCompute } from '../compute.js'
-import type { CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
+import type { CommandResult, SandboxInfo } from '../types/index.js'
 import type { Runtime } from 'computesdk'
 
 const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
@@ -20,11 +20,6 @@ function createMockProvider(name: string) {
       create: vi.fn().mockResolvedValue({
         sandboxId: 'test-123',
         provider: name,
-        runCode: vi.fn().mockResolvedValue({
-          output: 'Hello World',
-          exitCode: 0,
-          language: 'python'
-        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'Command output',
           stderr: '',
@@ -115,7 +110,6 @@ describe('createCompute function', () => {
     expect(sandbox.sandboxId).toBe('test-123')
 
     // Test other operations exist
-    expect(typeof sandbox.runCode).toBe('function')
     expect(typeof sandbox.runCommand).toBe('function')
     expect(typeof sandbox.getInfo).toBe('function')
     expect(typeof sandbox.getUrl).toBe('function')

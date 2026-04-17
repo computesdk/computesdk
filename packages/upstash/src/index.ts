@@ -197,74 +197,6 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       },
 
       // Instance operations
-      runCode: async (sandbox: UpstashSandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        try {
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || (
-            code.includes('print(') ||
-              code.includes('import ') ||
-              code.includes('def ') ||
-              code.includes('sys.') ||
-              code.includes('json.') ||
-              code.includes('__') ||
-              code.includes('f"') ||
-              code.includes("f'") ||
-              code.includes('raise ')
-              ? 'python'
-              : 'node'
-          );
-
-          // Map ComputeSDK runtime to Upstash CodeLanguage: "js" | "ts" | "python"
-          const lang = effectiveRuntime === 'python' ? 'python' as const : 'js' as const;
-
-          // exec.code() returns a Run<string> with .result, .exitCode, .status
-          const run = await sandbox.exec.code({ code, lang });
-
-          const output = run.result || '';
-          const exitCode = run.exitCode ?? 0;
-
-          // Check for syntax errors and throw them
-          if (exitCode !== 0 && output) {
-            if (output.includes('SyntaxError') ||
-              output.includes('invalid syntax') ||
-              output.includes('Unexpected token') ||
-              output.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${output.trim()}`);
-            }
-          }
-
-          return {
-            output,
-            exitCode,
-            language: effectiveRuntime,
-          };
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-
-          // Handle Upstash Run failures (status === "failed")
-          if (error instanceof Error && error.message === 'exit status 1') {
-            const result = (error as any)?.result;
-            if (result) {
-              const stderr = typeof result === 'string' ? result : result.output || '';
-              if (stderr.includes('SyntaxError')) {
-                const syntaxErrorLine = stderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
-                throw new Error(`Syntax error: ${syntaxErrorLine}`);
-              }
-              return {
-                output: stderr || 'Error: Runtime error occurred during execution',
-                exitCode: 1,
-                language: runtime || 'node',
-              };
-            }
-          }
-
-          throw new Error(
-            `Upstash code execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
 
       runCommand: async (sandbox: UpstashSandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
@@ -276,7 +208,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
           // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }

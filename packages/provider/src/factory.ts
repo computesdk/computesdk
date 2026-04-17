@@ -18,7 +18,6 @@ import type {
   ProviderSnapshotManager,
   ProviderSandbox,
   SandboxInfo,
-  CodeResult,
   CommandResult,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
@@ -47,7 +46,6 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   extendTimeout?: (config: TConfig, sandboxId: string, options?: ExtendTimeoutOptions) => Promise<void>;
 
   // Instance operations
-  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<CodeResult>;
   runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
@@ -179,8 +177,6 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
-  private defaultRuntime?: Runtime;
-
   constructor(
     private sandbox: TSandbox,
     sandboxId: string,
@@ -188,12 +184,10 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     private methods: SandboxMethods<TSandbox>,
     private config: any,
     private destroyMethod: (config: any, sandboxId: string) => Promise<void>,
-    private providerInstance: Provider,
-    defaultRuntime?: Runtime
+    private providerInstance: Provider
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
-    this.defaultRuntime = defaultRuntime;
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
@@ -210,10 +204,6 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     }
     // Fallback to returning the sandbox directly
     return this.sandbox;
-  }
-
-  async runCode(code: string, runtime?: Runtime): Promise<CodeResult> {
-    return await this.methods.runCode(this.sandbox, code, runtime ?? this.defaultRuntime, this.config);
   }
 
   async runCommand(
@@ -255,9 +245,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   ) {}
 
   async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
-    // Default to 'node' runtime if not specified for consistency across providers
-    const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
-    const result = await this.methods.create(this.config, optionsWithDefaults);
+    const result = await this.methods.create(this.config, options);
 
     return new GeneratedSandbox<TSandbox>(
       result.sandbox,
@@ -266,8 +254,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance,
-      options?.runtime
+      this.providerInstance
     );
   }
 

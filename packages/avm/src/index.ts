@@ -234,9 +234,6 @@ export const avm = defineProvider<AVMSandbox, AVMConfig>({
       },
 
       // Instance operations (minimal stubs - not implemented yet)
-      runCode: async (_sandbox: AVMSandbox, _code: string, _runtime?: Runtime) => {
-        throw new Error('AVM runCode method not implemented yet');
-      },
 
       runCommand: async (_sandbox: AVMSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('AVM runCommand method not implemented yet');

@@ -30,13 +30,13 @@ import { compute } from 'computesdk';
 const sandbox = await compute.sandbox.create();
 
 // Execute JavaScript/Node.js code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const message = "Hello from CodeSandbox!";
 console.log(message);
 
 const data = { users: 3, tasks: 15 };
 console.log(JSON.stringify(data, null, 2));
-`);
+JS`);
 
 console.log(result.stdout);
 // Output:
@@ -47,12 +47,12 @@ console.log(result.stdout);
 // }
 
 // Execute Python code
-const pythonResult = await sandbox.runCode(`
+const pythonResult = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"framework": "CodeSandbox", "language": "Python"}
 print(json.dumps(data, indent=2))
 print(f"Running in: {data['framework']}")
-`, 'python');
+PY`);
 
 console.log(pythonResult.stdout);
 // Output:
@@ -80,7 +80,7 @@ const compute = codesandbox({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('console.log("Hello from CodeSandbox!");');
+const result = await sandbox.runCommand('node -e "console.log(\"Hello from CodeSandbox!\")"');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -126,23 +126,23 @@ interface CodesandboxConfig {
 
 ```typescript
 // Execute Node.js code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const fs = require('fs');
 const data = { timestamp: Date.now() };
 console.log('Processing data:', JSON.stringify(data));
-`);
+JS`);
 
 // Execute Python code  
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import datetime
 import json
 
 data = {'timestamp': datetime.datetime.now().isoformat()}
 print('Processing data:', json.dumps(data))
-`, 'python');
+PY`);
 
 // Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
+const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
 ```
 
 ### Command Execution

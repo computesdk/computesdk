@@ -76,24 +76,6 @@ export const myProvider = defineProvider<any, MyProviderConfig>({
         );
       },
       
-      runCode: async (sandbox, code, runtime) => {
-        // Execute code in the sandbox
-        const response = await fetch(
-          `https://api.example.com/sandboxes/${sandbox.id}/execute`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ code, runtime })
-          }
-        );
-        
-        const result = await response.json();
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode
-        };
-      },
-      
       runCommand: async (sandbox, command, args) => {
         // Run shell command
         const response = await fetch(
@@ -209,21 +191,6 @@ destroy: async (config, sandboxId) => {
 
 These methods operate on individual sandbox instances:
 
-##### `runCode(sandbox, code, runtime?, config?)`
-
-Execute code in the sandbox.
-
-```typescript
-runCode: async (sandbox, code, runtime) => {
-  const result = await yourApi.executeCode(sandbox.id, code);
-  return {
-    stdout: result.output,
-    stderr: result.errors,
-    exitCode: result.code
-  };
-}
-```
-
 ##### `runCommand(sandbox, command, args?, options?)`
 
 Run a shell command.
@@ -232,7 +199,7 @@ Run a shell command.
 runCommand: async (sandbox, command, args) => {
   const result = await yourApi.runCommand(sandbox.id, command, args);
   return {
-    stdout: result.output,
+    stdout: result.stdout,
     stderr: result.errors,
     exitCode: result.code
   };
@@ -426,14 +393,6 @@ export const minimal = defineProvider<any, MinimalConfig>({
         // Clean up sandbox
       },
       
-      runCode: async (sandbox, code, runtime) => {
-        return {
-          stdout: `Executed: ${code}`,
-          stderr: '',
-          exitCode: 0
-        };
-      },
-      
       runCommand: async (sandbox, command, args) => {
         return {
           stdout: `Ran: ${command} ${args?.join(' ')}`,
@@ -510,9 +469,9 @@ create: async (config, options) => {
 ### 2. Provide Helpful Error Messages
 
 ```typescript
-runCode: async (sandbox, code, runtime) => {
+runCommand: async (sandbox, command, args) => {
   try {
-    return await yourApi.execute(sandbox.id, code);
+    return await yourApi.runCommand(sandbox.id, command, args);
   } catch (error) {
     if (error.code === 'QUOTA_EXCEEDED') {
       throw new Error(
@@ -574,7 +533,7 @@ describe('MyProvider', () => {
     const compute = myProvider({ apiKey: process.env.MY_PROVIDER_API_KEY! });
     const sandbox = await compute.sandbox.create();
     
-    const result = await sandbox.runCode('print("Hello")', 'python');
+    const result = await sandbox.runCommand('python -c "print(\"Hello\")"');
     expect(result.stdout).toContain('Hello');
     expect(result.exitCode).toBe(0);
     
