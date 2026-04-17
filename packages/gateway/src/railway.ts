@@ -65,6 +65,16 @@ const GRAPHQL_QUERIES = {
   DELETE_SERVICE: `mutation ServiceDelete($id: String!) { serviceDelete(id: $id) }`
 };
 
+/**
+ * ComputeSDK Sandbox template configuration from Railway
+ * Template code: "sandbox"
+ * Queried via: query template($code: String!) { template(code: $code) { id serializedConfig } }
+ */
+const COMPUTESDK_TEMPLATE = {
+  templateId: 'b6293629-5a34-496b-860f-4d4ab4251e0d',
+  serviceId: '41cf086b-2117-4dd7-bd65-7fd12a1fd551',
+};
+
 const handleGraphQLErrors = (data: any) => {
   if (data.errors) {
     throw new Error(`Railway GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
@@ -130,7 +140,8 @@ export const railway = defineInfraProvider<RailwayInstance, RailwayConfig>({
           variables: {
             input: {
               projectId,
-              environmentId,
+              templateId: COMPUTESDK_TEMPLATE.templateId,
+              templateServiceId: COMPUTESDK_TEMPLATE.serviceId,
               source: {
                 image: options?.image ?? 'computesdk/compute:latest',
               },
