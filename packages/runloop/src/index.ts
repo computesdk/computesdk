@@ -336,11 +336,8 @@ export const runloop = defineProvider<
         const client = sandbox.client;
 
         try {
-          const tunnel = await client.api.devboxes.createTunnel(devbox.id, {
-            port: options.port,
-          });
-
-          return tunnel.url;
+          const tunnel = await client.api.devboxes.enableTunnel(devbox.id);
+          return `https://${options.port}-${tunnel.tunnel_key}.tunnel.runloop.ai`;
         } catch (error) {
           throw new Error(
             `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)
