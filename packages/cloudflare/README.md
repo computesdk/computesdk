@@ -51,11 +51,11 @@ const compute = cloudflare({
 const sandbox = await compute.sandbox.create();
 
 // Execute Python code
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import sys
 print(f"Python version: {sys.version}")
 print("Hello from Cloudflare!")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -103,12 +103,12 @@ await sandbox.filesystem.remove('/app/temp.txt');
 
 ```typescript
 // Start a web server in the sandbox
-await sandbox.runCommand(`
+await sandbox.runCommand(`python - <<'PY'
 import http.server, socketserver
 PORT = 3000
 with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as httpd:
     httpd.serve_forever()
-`);
+PY`);
 
 // Get the public URL
 const url = await sandbox.getUrl({ port: 3000 });
