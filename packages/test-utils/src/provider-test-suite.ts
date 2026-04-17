@@ -23,6 +23,8 @@ export interface ProviderTestConfig {
   skipIntegration?: boolean;
   /** Ports to expose when creating sandboxes (needed for getUrl tests on some providers) */
   ports?: number[];
+  /** Whether this provider should run getUrl coverage tests */
+  supportsGetUrl?: boolean;
   /** Base path for filesystem tests (default: '/tmp') */
   filesystemBasePath?: string;
 }
@@ -32,7 +34,16 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function defineProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false, ports, filesystemBasePath = '/tmp' } = config;
+  const {
+    provider,
+    name,
+    supportsFilesystem = false,
+    timeout = 60000,
+    skipIntegration = false,
+    ports,
+    supportsGetUrl = true,
+    filesystemBasePath = '/tmp',
+  } = config;
 
   return () => {
     // Get supported runtimes dynamically from provider
@@ -115,10 +126,11 @@ export function defineProviderTests(config: ProviderTestConfig) {
           expect(info.status).toBeDefined();
         });
 
-        // getUrl tests only run if ports are configured (some providers require upfront port config)
-        if (ports && ports.length > 0) {
+        if (supportsGetUrl) {
+          const primaryPort = (ports && ports.length > 0) ? ports[0] : 3000;
+
           it('should get sandbox URL for a port', async () => {
-            const url = await sandbox.getUrl({ port: ports[0] });
+            const url = await sandbox.getUrl({ port: primaryPort });
             
             expect(url).toBeDefined();
             expect(typeof url).toBe('string');
@@ -127,7 +139,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
             expect(url).toMatch(/^(https?|wss?):\/\/.+/);
           });
 
-          if (ports.length > 1) {
+          if (ports && ports.length > 1) {
             it('should get sandbox URL with custom protocol', async () => {
               const url = await sandbox.getUrl({ port: ports[1], protocol: 'wss' });
               
