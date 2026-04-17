@@ -330,7 +330,7 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
   return {
     sandboxId: 'mock-sandbox-123',
     provider: providerName,
-    getInstance: <T = any>(): T => ({} as T), // Mock native instance getter
+    getInstance: () => ({} as unknown), // Mock native instance getter
 
     runCommand: async (command: string, options?: RunCommandOptions): Promise<CommandResult> => {
       if (command.includes('echo "Hello from command"')) {

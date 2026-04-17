@@ -5,6 +5,11 @@ import type { Runtime } from 'computesdk'
 
 const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
 
+type MockSandboxInstance = {
+  setTimeout: ReturnType<typeof vi.fn>
+  specialMethod: ReturnType<typeof vi.fn>
+}
+
 // Mock E2B-like provider
 function createMockProvider(name: string) {
   const mockSandbox = {
@@ -82,8 +87,8 @@ describe('createCompute function', () => {
 
     // Should be properly typed and return the provider-specific instance
     // Note: In real usage with defineProvider<E2BSandbox>, getInstance() returns E2BSandbox
-    // Here we cast to any since the mock doesn't preserve generic types
-    const instance = sandbox.getInstance() as any
+    // Here we narrow to the mock shape used in this test.
+    const instance = sandbox.getInstance() as MockSandboxInstance
 
     expect(instance).toBeTruthy()
     expect(typeof instance.setTimeout).toBe('function')

@@ -454,7 +454,7 @@ export const runloop = defineProvider<
       },
 
       // Provider-specific typed getInstance method
-      getInstance: (sandbox): RunloopSandbox => {
+      getInstance: (sandbox: RunloopSandbox): RunloopSandbox => {
         return sandbox;
       },
     },
