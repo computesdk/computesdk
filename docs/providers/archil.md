@@ -2,43 +2,47 @@
 
 Archil provider for ComputeSDK
 
-Archil is exec-only — each command runs in an Archil-managed container with a configured disk mounted. `create` resolves a handle to an existing Archil disk id; disk lifecycle is managed by Archil itself.
-
 
 ## Installation & Setup
 
 ```bash
-npm install computesdk @computesdk/archil
+npm install @computesdk/archil
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your Archil credentials to a `.env` file:
 
+```bash
 ARCHIL_API_KEY=your_archil_api_key
 ARCHIL_REGION=aws-us-east-1
-ARCHIL_DISK_ID=your_archil_disc_id
+ARCHIL_DISK_ID=your_archil_disk_id
 ```
 
 
 ## Usage
 
-```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+Archil is exec-only — `create()` resolves a handle to an existing Archil disk id. Each command runs in an Archil-managed container with that disk attached.
 
-// Attach to an existing Archil disk by id
-const sandbox = await compute.sandbox.create({
-  diskId: 'disk_abc123',
+```typescript
+import { archil } from '@computesdk/archil';
+
+const compute = archil({
+  apiKey: process.env.ARCHIL_API_KEY,
+  region: process.env.ARCHIL_REGION,
 });
 
-// Execute a shell command against the mounted disk
+// Attach to an existing Archil disk by id
+const diskId = process.env.ARCHIL_DISK_ID;
+if (!diskId) throw new Error('ARCHIL_DISK_ID is not set');
+
+const sandbox = await compute.sandbox.create({ diskId });
+
+// Run a shell command against the mounted disk
 const result = await sandbox.runCommand('echo hello > /mnt/note && cat /mnt/note');
 console.log(result.stdout); // "hello"
 
 // destroy() is a no-op — disk lifecycle is managed by Archil
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
-
-`create()` requires a top-level `diskId` pointing at an existing Archil disk.
 
 
 ### Configuration Options
@@ -54,40 +58,25 @@ interface ArchilConfig {
 }
 ```
 
-## Explicit Provider Configuration
-
-If you prefer to set the provider explicitly, you can do so as follows:
-
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'archil',
-   archil: {
-     apiKey: process.env.ARCHIL_API_KEY,
-     region: process.env.ARCHIL_REGION,
-   }
-});
-
-const sandbox = await compute.sandbox.create({ diskId: 'disk_abc123' });
-```
-
 ## Runtime Selection
 
 Archil does not auto-detect runtimes — `runCode` requires an explicit runtime:
 
 ```typescript
-await sandbox.runCode('print("hello from python")', 'python');
-await sandbox.runCode('console.log("hello from node")', 'node');
+// Python
+await sandbox.runCode('print("Hello from Archil!")', 'python');
+
+// Node.js
+await sandbox.runCode('console.log("Hello from Archil!")', 'node');
 ```
 
-Supported runtimes:
-- **`node`** — wraps code in `node -e`
-- **`python`** — wraps code in `python3 -c`
+**Supported runtimes:**
+- `node` — wraps code in `node -e`
+- `python` — wraps code in `python3 -c`
 
+Passing any other runtime (or omitting it) throws.
 
-## Supported Operations
+### Supported Operations
 
 | Method        | Supported | Notes                                                                 |
 | ------------- | --------- | --------------------------------------------------------------------- |
@@ -101,10 +90,9 @@ Supported runtimes:
 | `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose.    |
 | `filesystem`  | ✅        | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.).        |
 
+### Limitations
 
-## Limitations
-
-- Each `exec` call provisions a fresh container — there is no persistent state between calls beyond what is written to the disk.
+- Each `exec` call provisions a fresh container — no persistent state between calls beyond what is written to the disk.
 - Responses are truncated to ~5 MB by the Archil control plane.
 - `getUrl` is not supported — each exec runs in a fresh ephemeral container, so there is no long-lived process to expose a port on.
 - Filesystem operations are implemented as shell commands, so each call costs one HTTP round trip.
