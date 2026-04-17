@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 22.0.0
+
+### Patch Changes
+
+- Updated dependencies [8466e41]
+  - @computesdk/upstash@0.3.0
+
 ## 21.1.0
 
 ### Minor Changes
