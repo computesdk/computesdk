@@ -209,16 +209,11 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         }
 
         try {
-          console.log(`Running command in Tensorlake sandbox ${ctx.sandboxId}: ${command}`);
-          /*const result = await ctx.sandbox.run('sh', {
-            args: ['-c', command],
-            ...(options?.env && Object.keys(options.env).length > 0 && { env: options.env }),
-            ...(options?.cwd && { workingDir: options.cwd }),
-          });*/
-          const result = await ctx.sandbox.run('echo', {
-            args: ['hello'],
-            ...(options?.env && Object.keys(options.env).length > 0 && { env: options.env }),
-            ...(options?.cwd && { workingDir: options.cwd }),
+          const [executable, ...commandArgs] = command.split(' ');
+          const result = await ctx.sandbox.run(executable, {
+              args: commandArgs,
+              ...(options?.env && Object.keys(options.env).length > 0 && { env: options.env }),
+              ...(options?.cwd && { workingDir: options.cwd }),
           });
           return {
             stdout: result.stdout,
