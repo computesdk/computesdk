@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "paths": {
+      "@computesdk/provider": ["../provider/dist/index.d.ts"],
+      "@computesdk/test-utils": ["../test-utils/dist/index.d.ts"],
+      "computesdk": ["../computesdk/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
