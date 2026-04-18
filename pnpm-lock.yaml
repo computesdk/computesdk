@@ -654,6 +654,16 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/dimension:
+    dependencies:
+      '@computesdk/provider':
+        specifier: '>=0.1.0'
+        version: 1.3.0
+    devDependencies:
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+
   packages/docker:
     dependencies:
       '@computesdk/provider':
@@ -2288,6 +2298,12 @@ packages:
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
     engines: {node: '>=0.1.90'}
+
+  '@computesdk/cmd@0.4.1':
+    resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
+
+  '@computesdk/provider@1.3.0':
+    resolution: {integrity: sha512-AjX49IqniLCDv8IUtOVU3O+nkdbLcJS8lESiB5FNI4fbGm+POdKqgWeQ55J1DTIEhjWCLsqVzvqfCXPReCuSiA==}
 
   '@connectrpc/connect-web@2.0.0-rc.3':
     resolution: {integrity: sha512-w88P8Lsn5CCsA7MFRl2e6oLY4J/5toiNtJns/YJrlyQaWOy3RO8pDgkz+iIkG98RPMhj2thuBvsd3Cn4DKKCkw==}
@@ -4977,6 +4993,9 @@ packages:
   compressjs@1.0.3:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
+
+  computesdk@2.6.0:
+    resolution: {integrity: sha512-XM4O9YdoAOm/mmTG+H4gKbivdlfzuFeR7Iax6B2vhQ5I9T29wnvnN4U09TzKaiJ+WkdTYfKVv+yo7jcv1Mcsuw==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -9803,6 +9822,13 @@ snapshots:
   '@colors/colors@1.5.0':
     optional: true
 
+  '@computesdk/cmd@0.4.1': {}
+
+  '@computesdk/provider@1.3.0':
+    dependencies:
+      '@computesdk/cmd': 0.4.1
+      computesdk: 2.6.0
+
   '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.7.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.7.0))':
     dependencies:
       '@bufbuild/protobuf': 2.7.0
@@ -12850,6 +12876,10 @@ snapshots:
     dependencies:
       amdefine: 1.0.1
       commander: 2.8.1
+
+  computesdk@2.6.0:
+    dependencies:
+      '@computesdk/cmd': 0.4.1
 
   concat-map@0.0.1: {}
 
