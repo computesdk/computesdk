@@ -20,7 +20,7 @@ Each provider exposes only infrastructure methods:
 - `getById()` - Get resource by ID
 - `list()` - List resources
 
-These methods do NOT include sandbox operations like `runCode()` or `filesystem` access. The gateway server adds those capabilities by installing the ComputeSDK daemon.
+These methods do NOT include sandbox operations like `runCommand()` or `filesystem` access. The gateway server adds those capabilities by installing the ComputeSDK daemon.
 
 ## Usage (Gateway Server Only)
 
@@ -57,7 +57,7 @@ const compute = railway({
 
 // Full sandbox API available (routes through gateway)
 const sandbox = await compute.sandbox.create();
-await sandbox.runCode('console.log("hello")');
+await sandbox.runCommand('node -e "console.log(\"hello\")"');
 ```
 
 ## Architecture

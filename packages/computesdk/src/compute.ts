@@ -102,6 +102,13 @@ function getProviderLabel(provider: DirectProvider, index: number): string {
   return provider.name || `provider-${index + 1}`;
 }
 
+function getSandboxId(sandbox: SandboxInterface): string | undefined {
+  if ('sandboxId' in sandbox && typeof sandbox.sandboxId === 'string') {
+    return sandbox.sandboxId;
+  }
+  return undefined;
+}
+
 function getProviderErrorDetail(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -182,7 +189,7 @@ class ComputeManager {
   }
 
   private registerSandboxProvider(sandbox: SandboxInterface, provider: DirectProvider): void {
-    const sandboxId = (sandbox as any)?.sandboxId as string | undefined;
+    const sandboxId = getSandboxId(sandbox);
     if (sandboxId) {
       this.sandboxProviders.set(sandboxId, provider);
     }

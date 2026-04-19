@@ -21,7 +21,7 @@ import { compute } from 'computesdk';
 const sandbox = await compute.sandbox.create();
 
 // Execute code
-const result = await sandbox.runCode('print("Hello from Daytona!")');
+const result = await sandbox.runCommand('python -c "print(\"Hello from Daytona!\")"');
 console.log(result.stdout); // "Hello from Daytona!"
 
 await sandbox.destroy();
@@ -40,7 +40,7 @@ const compute = daytona({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('print("Hello from Daytona!")');
+const result = await sandbox.runCommand('python -c "print(\"Hello from Daytona!\")"');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -81,20 +81,20 @@ interface DaytonaConfig {
 
 ```typescript
 // Execute Python code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
 `, 'python');
 
 // Execute Node.js code  
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
 `, 'node');
 
 // Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
+const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
 ```
 
 ### Command Execution
@@ -170,7 +170,7 @@ try {
   const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
     console.error('Code has syntax errors');
@@ -192,7 +192,7 @@ import { daytona } from '@computesdk/daytona';
 const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import json
 
 # Process data
@@ -226,7 +226,7 @@ await sandbox.filesystem.writeFile('/workspace/data.json',
 );
 
 // Process file
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import json
 
 with open('/workspace/data.json', 'r') as f:

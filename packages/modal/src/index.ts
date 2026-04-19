@@ -10,7 +10,7 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 // Import Modal SDK
 import { App, Sandbox, initializeClient } from 'modal';
@@ -33,11 +33,48 @@ export interface ModalConfig {
   ports?: number[];
 }
 
+type ModalExecPipe = {
+  readText: () => Promise<string>;
+};
+
+type ModalExecProcess = {
+  stdout: ModalExecPipe;
+  stderr: ModalExecPipe;
+  wait: () => Promise<number>;
+};
+
+type ModalFileHandle = {
+  read?: () => Promise<string | Uint8Array>;
+  write?: (content: Uint8Array) => Promise<void>;
+  close?: () => Promise<void>;
+};
+
+type ModalTunnel = { url: string };
+
+type ModalNativeSandbox = {
+  sandboxId: string;
+  exec: (args: string[], options?: Record<string, unknown>) => Promise<ModalExecProcess>;
+  poll: () => Promise<number | null>;
+  tunnels: () => Promise<Record<number, ModalTunnel>>;
+  open: (path: string) => Promise<ModalFileHandle>;
+  terminate?: () => Promise<void>;
+};
+
+type ModalSnapshotImage = { objectId?: string };
+
+type ModalSnapshotCapableSandbox = ModalNativeSandbox & {
+  snapshotFilesystem: () => Promise<ModalSnapshotImage>;
+};
+
+type ModalSandboxStatics = typeof Sandbox & {
+  fromSnapshot?: (snapshotId: string) => Promise<unknown>;
+};
+
 /**
  * Modal sandbox interface - wraps Modal's Sandbox class
  */
 interface ModalSandbox {
-  sandbox: any; // Modal Sandbox instance (using any due to alpha SDK)
+  sandbox: ModalNativeSandbox;
   sandboxId: string;
 }
 
@@ -96,7 +133,7 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           // Initialize Modal client with credentials
           initializeClient({ tokenId, tokenSecret });
 
-          let sandbox: any;
+          let sandbox: ModalNativeSandbox;
           let sandboxId: string;
 
           // Create new Modal sandbox
@@ -120,13 +157,19 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
               ...providerOptions
             } = options || {};
             
-            let image;
+            const createSandbox = app.createSandbox.bind(app);
+            type ModalImageArg = Parameters<typeof createSandbox>[0];
+            let image: ModalImageArg;
             // Modal supports snapshotId and templateId (both map to image)
             const sourceId = snapshotId || templateId;
             if (sourceId) {
               // Create from snapshot/template
               try {
-                const snapshot = await (Sandbox as any).fromSnapshot(sourceId);
+                const snapshotFactory = Sandbox as ModalSandboxStatics;
+                if (typeof snapshotFactory.fromSnapshot !== 'function') {
+                  throw new Error('Modal SDK does not expose fromSnapshot in this version');
+                }
+                const snapshot = await snapshotFactory.fromSnapshot(sourceId) as ModalImageArg;
                 image = snapshot;
               } catch (e) {
                 // Fallback: try to treat it as a registry image
@@ -139,7 +182,7 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
             
             // Configure sandbox options
             // Modal SDK uses: env, timeoutMs, name, workdir, unencryptedPorts, gpu, cpu, etc.
-            const sandboxOptions: any = {
+            const sandboxOptions: Record<string, unknown> = {
               ...providerOptions, // Spread provider-specific options (e.g., gpu, cpu, memoryMiB, workdir, secrets, volumes)
             };
             
@@ -239,76 +282,6 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (modalSandbox: ModalSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const startTime = Date.now();
-
-        try {
-          // Auto-detect runtime from code if not specified
-          const detectedRuntime = runtime || detectRuntime(code);
-
-          // Create appropriate sandbox and command for the runtime
-          let executionSandbox = modalSandbox.sandbox;
-          let command: string[];
-          let shouldCleanupSandbox = false;
-
-          if (detectedRuntime === 'node') {
-            // Use existing Node.js sandbox (now the default)
-            command = ['node', '-e', code];
-          } else {
-            // For Python execution, create a Python sandbox dynamically
-            const app = await App.lookup('computesdk-modal', { createIfMissing: true });
-            const pythonImage = await app.imageFromRegistry('python:3.13-slim');
-            executionSandbox = await app.createSandbox(pythonImage);
-            command = ['python3', '-c', code];
-            shouldCleanupSandbox = true; // Clean up temporary Python sandbox
-          }
-
-          const process = await executionSandbox.exec(command, {
-            stdout: 'pipe',
-            stderr: 'pipe'
-          });
-
-          // Use working stream reading pattern from debug
-          const [stdout, stderr] = await Promise.all([
-            process.stdout.readText(),
-            process.stderr.readText()
-          ]);
-
-          const exitCode = await process.wait();
-
-          // Clean up temporary Python sandbox if created
-          if (shouldCleanupSandbox && executionSandbox !== modalSandbox.sandbox) {
-            try {
-              await executionSandbox.terminate();
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          }
-
-          // Check for syntax errors in stderr
-          if (exitCode !== 0 && stderr && (
-            stderr.includes('SyntaxError') ||
-            stderr.includes('invalid syntax')
-          )) {
-            throw new Error(`Syntax error: ${stderr.trim()}`);
-          }
-
-          return {
-            output: (stdout || '') + (stderr || ''),
-            exitCode: exitCode || 0,
-            language: detectedRuntime,
-          };
-        } catch (error) {
-          // Handle syntax errors and runtime errors
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error; // Re-throw syntax errors
-          }
-
-          throw new Error(
-            `Modal execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
 
       runCommand: async (modalSandbox: ModalSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
@@ -320,7 +293,7 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
@@ -473,7 +446,7 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
             
             // Write content to the file
             if (file && typeof file.write === 'function') {
-              await file.write(content);
+              await file.write(new TextEncoder().encode(content));
             }
             
             // Close the file if it has a close method
@@ -623,13 +596,13 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           
           const sandbox = await Sandbox.fromId(sandboxId);
           
-          // Cast to any to access the new method if types aren't updated yet
-          const image = await (sandbox as any).snapshotFilesystem();
+          const snapshotSandbox = sandbox as unknown as ModalSnapshotCapableSandbox;
+          const image = await snapshotSandbox.snapshotFilesystem();
           
           // Return the image object. The user can use this image to create new sandboxes.
           // We wrap it in a structure that looks like a snapshot
           return {
-            id: (image as any).objectId || `img-${Date.now()}`, // Best effort ID
+            id: image.objectId || `img-${Date.now()}`, // Best effort ID
             image: image,
             provider: 'modal',
             createdAt: new Date()

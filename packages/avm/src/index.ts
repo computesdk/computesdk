@@ -6,7 +6,7 @@
  */
 
 import { defineProvider } from '@computesdk/provider';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * AVM sandbox interface matching the API response structure
@@ -24,6 +24,8 @@ interface AVMSandbox {
     volume_name: string;
   }>;
 }
+
+type AVMSandboxListItem = Pick<AVMSandbox, 'id' | 'name' | 'created_at' | 'cpu' | 'memory' | 'status' | 'volumes'>;
 
 /**
  * AVM-specific configuration options
@@ -171,7 +173,7 @@ export const avm = defineProvider<AVMSandbox, AVMConfig>({
           // Return the logs data wrapped in the expected format
           // Note: This returns logs, not sandbox metadata
           return {
-            sandbox: responseData as any,
+            sandbox: responseData as unknown as AVMSandbox,
             sandboxId: sandboxId
           };
         } catch (error) {
@@ -195,7 +197,7 @@ export const avm = defineProvider<AVMSandbox, AVMConfig>({
           const items = responseData?.data || [];
           
           // Transform each sandbox into the expected format
-          const sandboxes = items.map((sandbox: any) => {
+          const sandboxes = items.map((sandbox: AVMSandboxListItem) => {
             const avmSandbox: AVMSandbox = {
               id: sandbox.id,
               name: sandbox.name,
@@ -234,9 +236,6 @@ export const avm = defineProvider<AVMSandbox, AVMConfig>({
       },
 
       // Instance operations (minimal stubs - not implemented yet)
-      runCode: async (_sandbox: AVMSandbox, _code: string, _runtime?: Runtime) => {
-        throw new Error('AVM runCode method not implemented yet');
-      },
 
       runCommand: async (_sandbox: AVMSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('AVM runCommand method not implemented yet');

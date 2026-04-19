@@ -8,7 +8,11 @@ import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+
+type HibernateCapableSandbox = CodesandboxSandbox & {
+  hibernate: () => Promise<void>;
+};
 
 /**
  * Codesandbox-specific configuration options
@@ -172,69 +176,6 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
       },
 
       // Instance operations (sandbox.*)
-      runCode: async (sandbox: CodesandboxSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const startTime = Date.now();
-
-        try {
-          // Connect to the sandbox client using sandbox.connect()
-          const client = await sandbox.connect();
-
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || (
-            // Strong Python indicators
-            code.includes('print(') ||
-              code.includes('import ') ||
-              code.includes('def ') ||
-              code.includes('sys.') ||
-              code.includes('json.') ||
-              code.includes('__') ||
-              code.includes('f"') ||
-              code.includes("f'") ||
-              code.includes('raise ')
-              ? 'python'
-              // Default to Node.js for all other cases (including ambiguous)
-              : 'node'
-          );
-
-          // Use base64 encoding for reliability and consistency
-          const encoded = Buffer.from(code).toString('base64');
-          let command: string;
-
-          if (effectiveRuntime === 'python') {
-            // Execute Python code using client.commands.run()
-            command = `echo "${encoded}" | base64 -d | python3`;
-          } else {
-            // Execute Node.js code using client.commands.run()
-            command = `echo "${encoded}" | base64 -d | node`;
-          }
-
-          // Execute the command using CodeSandbox client.commands.run()
-          // This returns the full output as a string
-          const output = await client.commands.run(command);
-
-          // Check for syntax errors in the output and throw them (similar to other providers)
-          if (output.includes('SyntaxError') ||
-            output.includes('invalid syntax') ||
-            output.includes('Unexpected token') ||
-            output.includes('Unexpected identifier')) {
-            throw new Error(`Syntax error: ${output.trim()}`);
-          }
-
-          return {
-            output: output,
-            exitCode: 0,
-            language: effectiveRuntime
-          };
-        } catch (error) {
-          // Re-throw syntax errors
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `CodeSandbox execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
 
       runCommand: async (sandbox: CodesandboxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
@@ -381,8 +322,8 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           const sandbox = await sdk.sandboxes.resume(sandboxId);
 
           // Hibernate creates a checkpoint/snapshot of the sandbox
-          // Cast to any to avoid type issues with SDK version
-          await (sandbox as any).hibernate();
+          const hibernateSandbox = sandbox as HibernateCapableSandbox;
+          await hibernateSandbox.hibernate();
 
           // The hibernated sandbox becomes a snapshot we can fork
           return {

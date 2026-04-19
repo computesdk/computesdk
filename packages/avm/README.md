@@ -161,7 +161,7 @@ interface AVMSandbox {
 ## Not Yet Implemented
 
 The following methods are planned for future releases:
-- `runCode()` - Execute code in the sandbox
+- `runCommand()` - Execute code in the sandbox
 - `runCommand()` - Run shell commands
 - `getInfo()` - Get sandbox metadata
 - `getUrl()` - Get sandbox URL for web access

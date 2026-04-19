@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, ProviderSandbox, CodeResult, CommandResult, FileEntry, RunCommandOptions, Runtime, SandboxInfo } from '@computesdk/provider';
+import type { Provider, ProviderSandbox, CommandResult, FileEntry, RunCommandOptions, Runtime, SandboxInfo } from '@computesdk/provider';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -23,6 +23,8 @@ export interface ProviderTestConfig {
   skipIntegration?: boolean;
   /** Ports to expose when creating sandboxes (needed for getUrl tests on some providers) */
   ports?: number[];
+  /** Whether this provider should run getUrl coverage tests */
+  supportsGetUrl?: boolean;
   /** Base path for filesystem tests (default: '/tmp') */
   filesystemBasePath?: string;
 }
@@ -32,19 +34,28 @@ export interface ProviderTestConfig {
  * This returns functions that can be called within describe blocks
  */
 export function defineProviderTests(config: ProviderTestConfig) {
-  const { provider, name, supportsFilesystem = false, timeout = 60000, skipIntegration = false, ports, filesystemBasePath = '/tmp' } = config;
+  const {
+    provider,
+    name,
+    supportsFilesystem = false,
+    timeout = 60000,
+    skipIntegration = false,
+    ports,
+    supportsGetUrl = true,
+    filesystemBasePath = '/tmp',
+  } = config;
 
   return () => {
     // Get supported runtimes dynamically from provider
     const supportedRuntimes = provider.getSupportedRuntimes();
     
     // Helper function to create and cleanup sandboxes for each runtime
-    const createRuntimeSandbox = async (runtime: Runtime) => {
+    const createRuntimeSandbox = async () => {
       if (skipIntegration) {
         return createMockSandbox(config);
       } else {
         // Only pass ports if explicitly configured (some providers don't support it)
-        const createOptions: any = { runtime };
+        const createOptions: any = {};
         if (ports && ports.length > 0) {
           createOptions.ports = ports;
         }
@@ -75,7 +86,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
         let sandbox: ProviderSandbox;
 
         beforeEach(async () => {
-          sandbox = await createRuntimeSandbox(runtime);
+          sandbox = await createRuntimeSandbox();
         }, 90000);
 
         afterEach(async () => {
@@ -88,79 +99,6 @@ export function defineProviderTests(config: ProviderTestConfig) {
           expect(typeof sandbox.sandboxId).toBe('string');
           expect(sandbox.provider).toBe(name.toLowerCase());
         });
-
-        if (runtime === 'node') {
-          it('should execute simple Node.js code', async () => {
-            const result = await sandbox.runCode('console.log("Hello, World!")');
-
-            expect(result).toBeDefined();
-            expect(result.output).toContain('Hello, World!');
-            expect(result.exitCode).toBe(0);
-            expect(result.language).toBeDefined();
-          }, timeout);
-
-          it('should handle Node.js code execution errors gracefully', async () => {
-            const result = await sandbox.runCode('throw new Error("Test error")');
-
-            expect(result).toBeDefined();
-            expect(result.exitCode).not.toBe(0);
-            expect(result.output).toContain('Error');
-          }, timeout);
-
-          it('should handle invalid Node.js code gracefully', async () => {
-            await expect(async () => {
-              await sandbox.runCode('invalid syntax here!!!');
-            }).rejects.toThrow();
-          });
-        }
-
-        if (runtime === 'python') {
-          it('should execute Python code', async () => {
-            const pythonCode = `
-import sys
-print(f"Python version: {sys.version}")
-print("Hello from Python!")
-            `.trim();
-
-            const result = await sandbox.runCode(pythonCode);
-
-            expect(result).toBeDefined();
-            expect(result.output).toContain('Python version:');
-            expect(result.output).toContain('Hello from Python!');
-            expect(result.exitCode).toBe(0);
-          }, timeout);
-
-          it('should handle Python imports', async () => {
-            const pythonCode = `
-import json
-import datetime
-
-data = {"message": "Hello", "timestamp": str(datetime.datetime.now())}
-print(json.dumps(data, indent=2))
-            `.trim();
-
-            const result = await sandbox.runCode(pythonCode);
-
-            expect(result).toBeDefined();
-            expect(result.output).toContain('"message": "Hello"');
-            expect(result.output).toContain('"timestamp"');
-            expect(result.exitCode).toBe(0);
-          }, timeout);
-
-          it('should handle Python execution errors gracefully', async () => {
-            const result = await sandbox.runCode('raise Exception("Python test error")');
-
-            expect(result).toBeDefined();
-            expect(result.exitCode).not.toBe(0);
-            expect(result.output).toContain('Exception');
-          }, timeout);
-
-          it('should handle invalid Python code gracefully', async () => {
-            await expect(async () => {
-              await sandbox.runCode('invalid python syntax here!!!');
-            }).rejects.toThrow();
-          });
-        }
 
         // Common tests for all runtimes
         it('should execute shell commands', async () => {
@@ -188,10 +126,11 @@ print(json.dumps(data, indent=2))
           expect(info.status).toBeDefined();
         });
 
-        // getUrl tests only run if ports are configured (some providers require upfront port config)
-        if (ports && ports.length > 0) {
+        if (supportsGetUrl) {
+          const primaryPort = (ports && ports.length > 0) ? ports[0] : 3000;
+
           it('should get sandbox URL for a port', async () => {
-            const url = await sandbox.getUrl({ port: ports[0] });
+            const url = await sandbox.getUrl({ port: primaryPort });
             
             expect(url).toBeDefined();
             expect(typeof url).toBe('string');
@@ -200,7 +139,7 @@ print(json.dumps(data, indent=2))
             expect(url).toMatch(/^(https?|wss?):\/\/.+/);
           });
 
-          if (ports.length > 1) {
+          if (ports && ports.length > 1) {
             it('should get sandbox URL with custom protocol', async () => {
               const url = await sandbox.getUrl({ port: ports[1], protocol: 'wss' });
               
@@ -403,66 +342,7 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
   return {
     sandboxId: 'mock-sandbox-123',
     provider: providerName,
-    getInstance: <T = any>(): T => ({} as T), // Mock native instance getter
-    
-    runCode: async (code: string, _runtime?: string): Promise<CodeResult> => {
-      // Simulate realistic code execution
-      if (code.includes('console.log("Hello, World!")')) {
-        return {
-          output: 'Hello, World!\n',
-          exitCode: 0,
-          language: 'node'
-        };
-      }
-
-      if (code.includes('throw new Error("Test error")')) {
-        return {
-          output: 'Error: Test error\n    at <anonymous>:1:7\n',
-          exitCode: 1,
-          language: 'node'
-        };
-      }
-
-      if (code.includes('invalid syntax here!!!')) {
-        throw new Error('SyntaxError: Unexpected token');
-      }
-
-      // Python-specific responses
-      if (code.includes('Python version:') && code.includes('Hello from Python!')) {
-        return {
-          output: 'Python version: 3.9.2 (default, Feb 28 2021, 17:03:44)\nHello from Python!\n',
-          exitCode: 0,
-          language: 'python'
-        };
-      }
-
-      if (code.includes('json.dumps') && code.includes('datetime')) {
-        return {
-          output: '{\n  "message": "Hello",\n  "timestamp": "2023-01-01 12:00:00"\n}\n',
-          exitCode: 0,
-          language: 'python'
-        };
-      }
-
-      if (code.includes('raise Exception("Python test error")')) {
-        return {
-          output: 'Traceback (most recent call last):\n  File "<stdin>", line 1, in <module>\nException: Python test error\n',
-          exitCode: 1,
-          language: 'python'
-        };
-      }
-
-      if (code.includes('invalid python syntax here!!!')) {
-        throw new Error('SyntaxError: invalid syntax');
-      }
-
-      // Default successful execution
-      return {
-        output: `Mock output for: ${code}`,
-        exitCode: 0,
-        language: 'node'
-      };
-    },
+    getInstance: () => ({} as unknown), // Mock native instance getter
 
     runCommand: async (command: string, options?: RunCommandOptions): Promise<CommandResult> => {
       if (command.includes('echo "Hello from command"')) {

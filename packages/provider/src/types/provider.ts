@@ -11,7 +11,7 @@ import type { Runtime, CreateSandboxOptions, SandboxFileSystem, SandboxInterface
  * 
  * Extends the universal Sandbox interface with provider-specific methods
  */
-export interface ProviderSandbox<TSandbox = any> extends SandboxInterface {
+export interface ProviderSandbox<TSandbox = any> extends Omit<SandboxInterface, 'runCode'> {
   /** Get the provider that created this sandbox */
   getProvider(): Provider<TSandbox>;
   /** Get the native provider sandbox instance */
@@ -459,4 +459,3 @@ export interface StorageProvider {
   /** List objects in bucket */
   list(bucket: string, options?: ListOptions): Promise<ListResult>;
 }
-

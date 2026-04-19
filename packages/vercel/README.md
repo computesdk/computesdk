@@ -47,12 +47,12 @@ import { compute } from 'computesdk';
 // Auto-detects Vercel from VERCEL_OIDC_TOKEN or VERCEL_TOKEN environment variables
 const sandbox = await compute.sandbox.create();
 
-// Execute Node.js code
-const result = await sandbox.runCode('console.log("Hello from Vercel!");');
+// Execute Node.js command
+const result = await sandbox.runCommand('node -e "console.log(\"Hello from Vercel!\")"');
 console.log(result.stdout); // "Hello from Vercel!"
 
-// Execute Python code
-const pythonResult = await sandbox.runCode('print("Hello from Python!")', 'python');
+// Execute Python command
+const pythonResult = await sandbox.runCommand('python -c "print(\"Hello from Python!\")"');
 console.log(pythonResult.stdout); // "Hello from Python!"
 
 await sandbox.destroy();
@@ -75,7 +75,7 @@ const compute = vercel({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('console.log("Hello from Vercel!");');
+const result = await sandbox.runCommand('console.log("Hello from Vercel!");');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -129,20 +129,20 @@ interface VercelConfig {
 
 ```typescript
 // Execute Node.js code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
 `, 'node');
 
 // Execute Python code  
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
 `, 'python');
 
 // Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
+const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
 ```
 
 ### Command Execution
@@ -225,7 +225,7 @@ try {
   });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Missing Vercel authentication')) {
     console.error('Set VERCEL_OIDC_TOKEN or VERCEL_TOKEN environment variables');
@@ -249,7 +249,7 @@ import { vercel } from '@computesdk/vercel';
 const compute = vercel({ runtime: 'node' });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 const http = require('http');
 const url = require('url');
 
@@ -286,7 +286,7 @@ import { vercel } from '@computesdk/vercel';
 const compute = vercel({ runtime: 'python' });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import json
 import statistics
 from collections import Counter
@@ -366,7 +366,7 @@ await sandbox.filesystem.writeFile(
 );
 
 // Process data
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 import json
 import csv
 from collections import defaultdict
@@ -450,7 +450,7 @@ const installResult = await sandbox.runCommand('npm', ['install', 'lodash']);
 console.log('Install result:', installResult.stdout);
 
 // Use lodash in code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`
 const _ = require('lodash');
 
 const data = [
