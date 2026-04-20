@@ -31,99 +31,106 @@ ComputeSDK provides a consistent TypeScript interface for executing code in remo
 ## Quick Start
 
 ```bash
-npm install computesdk
+npm install computesdk @computesdk/e2b
 ```
 
-Set your provider credentials:
-
-```bash
-export E2B_API_KEY=your_api_key
-```
-
-Use the SDK:
+Configure a provider and use the SDK:
 
 ```typescript
 import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
 
-// Auto-detects E2B from environment
+compute.setConfig({
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
+});
+
 const sandbox = await compute.sandbox.create();
 
 const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.stdout); // "Hello World!"
+console.log(result.output); // "Hello World!"
 
 await sandbox.destroy();
 ```
 
-That's it! No provider configuration needed.
-
 ## Features
 
-- ⚡ **Zero-config mode** - Auto-detect provider from environment variables
 - 🔄 **Multi-provider support** - E2B, Modal, Railway, Daytona, Vercel, and more
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Command execution** - Run shell commands in sandboxes
+- 🧵 **Terminals** - Interactive (PTY) and exec-mode command tracking
 - 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
 - 🔧 **Extensible** - Easy to add custom providers via [@computesdk/provider](./packages/provider)
 
 ## Supported Providers
 
-ComputeSDK automatically detects providers based on environment variables:
+Install provider packages and pass instances into `compute.setConfig`:
 
-| Provider | Environment Variables |
-|----------|----------------------|
-| **E2B** | `E2B_API_KEY` |
-| **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` |
-| **Railway** | `RAILWAY_TOKEN` |
-| **Daytona** | `DAYTONA_API_KEY` |
-| **HopX** | `HOPX_API_KEY` |
-| **Runloop** | `RUNLOOP_API_KEY` |
-| **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` |
-| **Cloudflare** | `CLOUDFLARE_API_TOKEN` |
-| **CodeSandbox** | `CODESANDBOX_TOKEN` |
-| **just-bash** | *(none - always available)* |
-
-Detection order: **E2B → Railway → Daytona → Modal → Runloop → Vercel → Cloudflare → CodeSandbox → just-bash**
+| Provider | Environment Variables | Use Cases |
+|----------|----------------------|-----------|
+| **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
+| **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
+| **Railway** | `RAILWAY_API_KEY`, `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID` | Full-stack deployments |
+| **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
+| **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
+| **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions |
+| **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_SECRET` | Edge computing |
+| **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
 
 ## Configuration
 
-### Zero-Config Mode (Recommended)
+### Direct Provider Mode
 
-Just set environment variables and ComputeSDK auto-detects everything:
-
-```bash
-export E2B_API_KEY=your_api_key
-```
+Pass a provider instance directly to `setConfig()`:
 
 ```typescript
 import { compute } from 'computesdk';
-
-const sandbox = await compute.sandbox.create();
-```
-
-### Explicit Configuration
-
-For more control, use `setConfig()`:
-
-```typescript
-import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
 
 compute.setConfig({
-  computesdkApiKey: 'your_computesdk_api_key',
-  provider: 'e2b',
-  e2b: { apiKey: 'your_api_key' }
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
 const sandbox = await compute.sandbox.create();
 ```
 
-Switch providers at runtime:
+### Multi-Provider Configuration
+
+Configure multiple providers for resilience and routing:
 
 ```typescript
+import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
+import { modal } from '@computesdk/modal';
+
+compute.setConfig({
+  providers: [
+    e2b({ apiKey: process.env.E2B_API_KEY }),
+    modal({
+      tokenId: process.env.MODAL_TOKEN_ID,
+      tokenSecret: process.env.MODAL_TOKEN_SECRET,
+    }),
+  ],
+  providerStrategy: 'priority', // or 'round-robin'
+  fallbackOnError: true,
+});
+
+// Uses configured strategy
+const sandbox = await compute.sandbox.create();
+
+// Force a specific provider for one call
+const modalSandbox = await compute.sandbox.create({ provider: 'modal' });
+```
+
+### Switching Providers at Runtime
+
+```typescript
+import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
+import { modal } from '@computesdk/modal';
+
 // Use E2B for data science
 compute.setConfig({
-  computesdkApiKey: 'your_computesdk_api_key',
-  provider: 'e2b',
-  e2b: { apiKey: process.env.E2B_API_KEY }
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
 const e2bSandbox = await compute.sandbox.create();
@@ -132,12 +139,10 @@ await e2bSandbox.destroy();
 
 // Switch to Modal for GPU workloads
 compute.setConfig({
-  computesdkApiKey: 'your_computesdk_api_key',
-  provider: 'modal',
-  modal: { 
+  provider: modal({
     tokenId: process.env.MODAL_TOKEN_ID,
-    tokenSecret: process.env.MODAL_TOKEN_SECRET
-  }
+    tokenSecret: process.env.MODAL_TOKEN_SECRET,
+  }),
 });
 
 const modalSandbox = await compute.sandbox.create();
@@ -175,12 +180,13 @@ await sandbox.destroy();
 ```typescript
 // Execute code
 const result = await sandbox.runCode('print("Hello")', 'python');
-console.log(result.stdout);
-console.log(result.stderr);
+console.log(result.output);
 console.log(result.exitCode);
 
 // Run shell commands
-const result = await sandbox.runCommand('npm', ['install', 'express']);
+const cmd = await sandbox.runCommand('npm install express');
+console.log(cmd.stdout);
+console.log(cmd.exitCode);
 ```
 
 ### Filesystem Operations
@@ -249,7 +255,7 @@ await sandbox.destroy();
 
 ## Provider Packages
 
-For direct SDK usage without the gateway, install individual provider packages:
+Install the provider packages you need and pass their instances into `compute.setConfig`:
 
 ```bash
 npm install @computesdk/e2b        # E2B provider
@@ -260,13 +266,13 @@ npm install @computesdk/vercel     # Vercel provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
 ```
 
-Direct mode usage:
+You can also use a provider's callable form directly, bypassing `compute.setConfig`:
 
 ```typescript
 import { e2b } from '@computesdk/e2b';
 
-const compute = e2b({ apiKey: 'your_api_key' });
-const sandbox = await compute.sandbox.create();
+const e2bCompute = e2b({ apiKey: process.env.E2B_API_KEY });
+const sandbox = await e2bCompute.sandbox.create();
 ```
 
 See individual provider READMEs for details:
