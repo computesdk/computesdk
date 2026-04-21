@@ -119,6 +119,47 @@ await gpuSandbox.destroy();
 
 The sandbox API is identical across providers, so you can write helper functions that work with any provider's sandboxes interchangeably.
 
+### Multi-Provider in a Single Config
+
+If you'd rather configure several providers together — for resilience, routing, or load balancing — install the `computesdk` core package alongside the providers you want:
+
+```bash
+npm install computesdk @computesdk/e2b @computesdk/modal
+```
+
+Register multiple providers with `compute.setConfig` and choose a strategy:
+
+```typescript
+import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
+import { modal } from '@computesdk/modal';
+
+compute.setConfig({
+  providers: [
+    e2b({ apiKey: process.env.E2B_API_KEY }),
+    modal({
+      tokenId: process.env.MODAL_TOKEN_ID,
+      tokenSecret: process.env.MODAL_TOKEN_SECRET,
+    }),
+  ],
+  providerStrategy: 'priority', // 'priority' (default) or 'round-robin'
+  fallbackOnError: true,        // try the next provider if one fails
+});
+
+// Uses the configured strategy
+const sandbox = await compute.sandbox.create();
+
+// Override per call to target a specific provider by name
+const gpuSandbox = await compute.sandbox.create({ provider: 'modal' });
+```
+
+**Strategies**
+
+- `priority` — always try providers in order; combine with `fallbackOnError: true` to cascade on failure
+- `round-robin` — distribute new sandboxes evenly across providers
+
+Operations like `destroy` and snapshots automatically route to the provider that owns each sandbox, so you don't need to track affinity yourself.
+
 ## Next Steps
 
 Ready to get started? Check out our [installation guide](/docs/getting-started/installation) or dive into the [quick start](/docs/getting-started/quick-start) to begin building with ComputeSDK.
