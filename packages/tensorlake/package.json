@@ -30,17 +30,17 @@
   "dependencies": {
     "@computesdk/provider": "^1.3.0",
     "computesdk": "^2.6.0",
-    "tensorlake": "^0.4.47"
+    "tensorlake": "^0.4.48"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
-    "@types/node": "^20.0.0",
-    "@vitest/coverage-v8": "^1.0.0",
-    "eslint": "^8.37.0",
-    "rimraf": "^5.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "@types/node": "^20.19.39",
+    "@vitest/coverage-v8": "^1.6.1",
+    "eslint": "^8.57.1",
+    "rimraf": "^5.0.10",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^1.6.1"
   },
   "keywords": [
     "computesdk",
