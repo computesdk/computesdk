@@ -91,7 +91,7 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
 
         // Declaw `timeout` is seconds; ComputeSDK passes ms.
         const ttMs = requestedTimeoutMs ?? config.timeout ?? 300_000;
-        const timeoutSec = Math.max(1, Math.round(ttMs / 1000));
+        const timeoutSec = Math.max(1, Math.ceil(ttMs / 1000));
 
         // Declaw default template alias `base` carries a minimal Linux rootfs;
         // `node` includes Node.js 20 for ComputeSDK's `node -v` health check.
