@@ -8,7 +8,24 @@
 import { Sandbox as E2BSandbox } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+
+type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
+type E2BFileEntry = {
+  name: string;
+  isDir?: boolean;
+  isDirectory?: boolean;
+  size?: number;
+  lastModified?: string | number | Date;
+};
+type E2BSnapshotResult = string | { id?: string; templateId?: string };
+type SnapshotCapableE2BSandbox = E2BSandbox & {
+  createSnapshot: (options?: { name?: string }) => Promise<E2BSnapshotResult>;
+};
+type E2BSandboxStatics = typeof E2BSandbox & {
+  listTemplates?: (options: { apiKey?: string }) => Promise<unknown[]>;
+  deleteTemplate?: (snapshotId: string, options: { apiKey?: string }) => Promise<unknown>;
+};
 
 /**
  * E2B-specific configuration options
@@ -146,10 +163,14 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           });
           // Get first page of results using nextItems
           const items = await paginator.nextItems();
-          return items.map((sandbox: any) => ({
-            sandbox,
-            sandboxId: sandbox.id
-          }));
+          return items.map((sandbox) => {
+            const listedSandbox = sandbox as unknown as E2BSandbox & { id?: string; sandboxId?: string };
+            const sandboxId = listedSandbox.id || listedSandbox.sandboxId || 'e2b-unknown';
+            return {
+              sandbox: listedSandbox,
+              sandboxId,
+            };
+          });
         } catch (error) {
           // Return empty array if listing fails
           return [];
@@ -182,7 +203,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
@@ -208,7 +229,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         } catch (error) {
           // E2B throws errors for non-zero exit codes
           // Extract the actual result from the error if available
-          const result = (error as any)?.result;
+          const result = (error as { result?: E2BExecutionResult })?.result;
           if (result) {
             return {
               stdout: result.stdout || '',
@@ -272,7 +293,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         readdir: async (sandbox: E2BSandbox, path: string): Promise<FileEntry[]> => {
           const entries = await sandbox.files.list(path);
 
-          return entries.map((entry: any) => ({
+          return entries.map((entry: E2BFileEntry) => ({
             name: entry.name,
             type: (entry.isDir || entry.isDirectory) ? 'directory' as const : 'file' as const,
             size: entry.size || 0,
@@ -308,7 +329,8 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           // It typically returns a template ID that can be used to spawn new sandboxes
           // We cast to any to avoid type issues if the installed SDK version is slightly older
           // but the feature is available on the API
-          const snapshotResult = await (sandbox as any).createSnapshot({
+          const snapshotSandbox = sandbox as SnapshotCapableE2BSandbox;
+          const snapshotResult = await snapshotSandbox.createSnapshot({
             name: options?.name
           });
 
@@ -334,8 +356,9 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         try {
           // Attempt to list templates/snapshots via SDK static method if available
           // or return empty if not supported in this SDK version
-          if (typeof (E2BSandbox as any).listTemplates === 'function') {
-            return await (E2BSandbox as any).listTemplates({ apiKey: config.apiKey || process.env.E2B_API_KEY });
+          const e2bStatic = E2BSandbox as E2BSandboxStatics;
+          if (typeof e2bStatic.listTemplates === 'function') {
+            return await e2bStatic.listTemplates({ apiKey: config.apiKey || process.env.E2B_API_KEY });
           }
           return [];
         } catch (error) {
@@ -346,8 +369,9 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
       delete: async (config: E2BConfig, snapshotId: string) => {
         try {
           // Attempt to delete template/snapshot
-          if (typeof (E2BSandbox as any).deleteTemplate === 'function') {
-            await (E2BSandbox as any).deleteTemplate(snapshotId, { apiKey: config.apiKey || process.env.E2B_API_KEY });
+          const e2bStatic = E2BSandbox as E2BSandboxStatics;
+          if (typeof e2bStatic.deleteTemplate === 'function') {
+            await e2bStatic.deleteTemplate(snapshotId, { apiKey: config.apiKey || process.env.E2B_API_KEY });
           }
         } catch (error) {
           // Ignore
@@ -364,8 +388,9 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
       list: async (config: E2BConfig) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
         try {
-           if (typeof (E2BSandbox as any).listTemplates === 'function') {
-            return await (E2BSandbox as any).listTemplates({ apiKey });
+          const e2bStatic = E2BSandbox as E2BSandboxStatics;
+          if (typeof e2bStatic.listTemplates === 'function') {
+            return await e2bStatic.listTemplates({ apiKey });
           }
           return [];
         } catch (error) {
@@ -374,10 +399,11 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
       },
 
       delete: async (config: E2BConfig, templateId: string) => {
-         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
-         try {
-          if (typeof (E2BSandbox as any).deleteTemplate === 'function') {
-            await (E2BSandbox as any).deleteTemplate(templateId, { apiKey });
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        try {
+          const e2bStatic = E2BSandbox as E2BSandboxStatics;
+          if (typeof e2bStatic.deleteTemplate === 'function') {
+            await e2bStatic.deleteTemplate(templateId, { apiKey });
           }
         } catch (error) {
           // Ignore

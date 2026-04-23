@@ -277,7 +277,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]: [string, string]) => `${k}="${escapeShellArg(v)}"`)
+              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
@@ -320,24 +320,28 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
         // Derive runtime from sandbox instance if available; otherwise default to 'python'
         let runtime: Runtime = 'python';
-        const anySandbox = sandbox as any;
+        const runtimeHint = sandbox as SandboxInstance & {
+          runtime?: unknown;
+          image?: unknown;
+          imageName?: unknown;
+        };
 
-        if (typeof anySandbox.runtime === 'string') {
-          const lower = anySandbox.runtime.toLowerCase();
+        if (typeof runtimeHint.runtime === 'string') {
+          const lower = runtimeHint.runtime.toLowerCase();
           if (lower.includes('node')) {
             runtime = 'node';
           } else if (lower.includes('python')) {
             runtime = 'python';
           }
-        } else if (typeof anySandbox.image === 'string') {
-          const imageStr = anySandbox.image.toLowerCase();
+        } else if (typeof runtimeHint.image === 'string') {
+          const imageStr = runtimeHint.image.toLowerCase();
           if (imageStr.includes('node')) {
             runtime = 'node';
           } else if (imageStr.includes('python')) {
             runtime = 'python';
           }
-        } else if (typeof anySandbox.imageName === 'string') {
-          const imageNameStr = anySandbox.imageName.toLowerCase();
+        } else if (typeof runtimeHint.imageName === 'string') {
+          const imageNameStr = runtimeHint.imageName.toLowerCase();
           if (imageNameStr.includes('node')) {
             runtime = 'node';
           } else if (imageNameStr.includes('python')) {

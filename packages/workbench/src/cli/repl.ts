@@ -29,6 +29,25 @@ interface ExtendedREPLServer extends repl.REPLServer {
 import * as path from 'path';
 import * as os from 'os';
 
+type SandboxWithInstance = {
+  getInstance?: () => unknown;
+};
+
+function getSandboxMetadata(sandbox: SandboxWithInstance): Record<string, unknown> {
+  const instance = sandbox.getInstance?.();
+  if (typeof instance !== 'object' || instance === null || !('config' in instance)) {
+    return {};
+  }
+  const config = (instance as { config?: unknown }).config;
+  if (typeof config !== 'object' || config === null || !('metadata' in config)) {
+    return {};
+  }
+  const metadata = (config as { metadata?: unknown }).metadata;
+  return typeof metadata === 'object' && metadata !== null
+    ? (metadata as Record<string, unknown>)
+    : {};
+}
+
 /**
  * Create and configure REPL server
  */
@@ -282,7 +301,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
       return {
         sandboxId: sandbox.sandboxId,
         provider: sandbox.provider,
-        metadata: sandbox.getInstance?.()?.config?.metadata || {}
+        metadata: getSandboxMetadata(sandbox)
       };
     }
 
@@ -297,7 +316,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     return {
       sandboxId: sandbox.sandboxId,
       provider: sandbox.provider,
-      metadata: sandbox.getInstance?.()?.config?.metadata || {}
+      metadata: getSandboxMetadata(sandbox)
     };
   };
   
@@ -323,7 +342,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
         provider: sandbox.provider,
         name: options.name,
         namespace: options.namespace || 'default',
-        metadata: sandbox.getInstance().config.metadata || {}
+        metadata: getSandboxMetadata(sandbox)
       };
     }
     
@@ -340,7 +359,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
       provider: sandbox.provider,
       name: options.name,
       namespace: options.namespace || 'default',
-      metadata: sandbox.getInstance().config.metadata || {}
+      metadata: getSandboxMetadata(sandbox)
     };
   };
   
@@ -371,7 +390,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
         provider: sandbox.provider,
         name: options.name,
         namespace: options.namespace || 'default',
-        metadata: sandbox.getInstance().config.metadata || {}
+        metadata: getSandboxMetadata(sandbox)
       };
     }
     
@@ -384,7 +403,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
       provider: sandbox.provider,
       name: options.name,
       namespace: options.namespace || 'default',
-      metadata: sandbox.getInstance().config.metadata || {}
+      metadata: getSandboxMetadata(sandbox)
     };
   };
   
