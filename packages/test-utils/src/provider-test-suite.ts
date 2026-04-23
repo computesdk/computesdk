@@ -342,7 +342,6 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
   return {
     sandboxId: 'mock-sandbox-123',
     provider: providerName,
-<<<<<<< HEAD
     getInstance: <T = unknown>(): T => ({} as T), // Mock native instance getter
 
     runCommand: async (command: string, options?: RunCommandOptions): Promise<CommandResult> => {
