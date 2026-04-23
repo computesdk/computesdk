@@ -654,6 +654,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/declaw:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@declaw/sdk':
+        specifier: ^1.1.1
+        version: 1.1.1
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.5
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.0(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/docker:
     dependencies:
       '@computesdk/provider':
@@ -1528,6 +1565,9 @@ importers:
       '@computesdk/daytona':
         specifier: workspace:*
         version: link:../daytona
+      '@computesdk/declaw':
+        specifier: workspace:*
+        version: link:../declaw
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../e2b
@@ -2340,6 +2380,10 @@ packages:
 
   '@daytonaio/toolbox-api-client@0.143.0':
     resolution: {integrity: sha512-E6+yHPnFygNqRIctoDheISHCpzQkHydAU7fiBfsA5pnElfB/yLTOXQlnZfP8gfvOmUkRNU8QCXKzaualRTlI7w==}
+
+  '@declaw/sdk@1.1.1':
+    resolution: {integrity: sha512-+wJNqZHZQlgoq9vJrOQuzzOKSsrnLvKWupMoC5j4gT1da6YWb8pUGemdVu0aXMTk0DbGdRdS9oURinqLKh18yw==}
+    engines: {node: '>=18.0.0'}
 
   '@emnapi/runtime@1.4.5':
     resolution: {integrity: sha512-++LApOtY0pEEz1zrd9vy1/zXVaVJJ/EbAF3u0fXIzPJEDtnITsBGbbK0EkM72amhl/R5b+5xx0Y/QhcVOpuulg==}
@@ -9883,6 +9927,10 @@ snapshots:
       axios: 1.13.5
     transitivePeerDependencies:
       - debug
+
+  '@declaw/sdk@1.1.1':
+    dependencies:
+      eventsource-parser: 3.0.6
 
   '@emnapi/runtime@1.4.5':
     dependencies:

@@ -1,48 +1,48 @@
-# Daytona
+# Runloop
 
-Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
+Runloop provider for ComputeSDK
+
 
 ## Installation & Setup
 
 ```bash
-npm install @computesdk/daytona
+npm install @computesdk/runloop
 ```
 
-Add your Daytona credentials to a `.env` file:
+Add your Runloop credentials to a `.env` file:
 
 ```bash
-DAYTONA_API_KEY=your_daytona_api_key
+RUNLOOP_API_KEY=your_runloop_api_key
 ```
 
 
 ## Usage
 
 ```typescript
-import { daytona } from '@computesdk/daytona';
+import { runloop } from '@computesdk/runloop';
 
-const compute = daytona({
-  apiKey: process.env.DAYTONA_API_KEY,
+const compute = runloop({
+  apiKey: process.env.RUNLOOP_API_KEY,
 });
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
 // Execute code
-const result = await sandbox.runCode('print("Hello from Daytona!")');
-console.log(result.output); // "Hello from Daytona!"
+const result = await sandbox.runCode('print("Hello from Runloop!")');
+console.log(result.output); // "Hello from Runloop!"
 
 // Clean up
 await sandbox.destroy();
 ```
 
+
 ### Configuration Options
 
 ```typescript
-interface DaytonaConfig {
-  /** Daytona API key - if not provided, will use DAYTONA_API_KEY env var */
+interface RunloopConfig {
+  /** Runloop API key - if not provided, will use RUNLOOP_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
