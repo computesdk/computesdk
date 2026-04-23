@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/upstash",
-  "version": "0.3.0",
-  "description": "Upstash Box provider for ComputeSDK - cloud sandboxes with code execution, filesystem access, and AI agent support",
-  "author": "Garrison",
+  "name": "@computesdk/declaw",
+  "version": "0.2.0",
+  "description": "Declaw provider for ComputeSDK - secure sandboxes with PII scanning, prompt-injection defense, and network egress filtering",
+  "author": "Declaw <hello@declaw.ai>",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -28,28 +28,28 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@upstash/box": "^0.1.28",
+    "@declaw/sdk": "^1.1.1",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",
-    "upstash",
-    "box",
+    "declaw",
     "sandbox",
-    "code-execution",
-    "python",
-    "javascript",
-    "cloud",
+    "security",
+    "pii",
+    "prompt-injection",
+    "guardrails",
     "compute",
-    "provider"
+    "provider",
+    "firecracker"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/upstash"
+    "directory": "packages/declaw"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://declaw.ai",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

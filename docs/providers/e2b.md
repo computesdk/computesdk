@@ -6,11 +6,12 @@ E2B provider for ComputeSDK
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/e2b
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your E2B credentials to a `.env` file:
 
+```bash
 E2B_API_KEY=your_e2b_api_key
 ```
 
@@ -18,18 +19,21 @@ E2B_API_KEY=your_e2b_api_key
 ## Usage
 
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { e2b } from '@computesdk/e2b';
+
+const compute = e2b({
+  apiKey: process.env.E2B_API_KEY,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
 // Execute code
 const result = await sandbox.runCode('print("Hello from E2B!")');
-console.log(result.stdout); // "Hello from E2B!"
+console.log(result.output); // "Hello from E2B!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 
@@ -44,22 +48,6 @@ interface E2BConfig {
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
-```
-
-## Explicit Provider Configuration
-If you prefer to set the provider explicitly, you can do so as follows:
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'e2b',
-   e2b: {
-     apiKey: process.env.E2B_API_KEY
-   }
-});
-
-const sandbox = await compute.sandbox.create();
 ```
 
 ## Runtime Detection

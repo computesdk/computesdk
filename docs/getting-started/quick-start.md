@@ -2,34 +2,29 @@
 
 Welcome to ComputeSDK! This guide will get you up and running with secure, isolated code execution across multiple cloud providers using a unified TypeScript interface.
 
-
-<br />
-
-## Get an API Key
-
-1) Visit https://console.computesdk.com/register to create an account and get your ComputeSDK API key.
-2) Next create a .env file in the root of your project and add your API key (this is where you will store your API keys for each of your providers):
-
-```bash
-COMPUTESDK_API_KEY=your_api_key_here
-
-# Add your provider API key (e.g., E2B, Modal, Railway, etc.)
-E2B_API_KEY=your_e2b_api_key_here
-```
-
 ## Installation
 
+Install the provider package for the platform you want to use. This guide uses E2B as an example, but the sandbox API is the same across all providers.
+
 ```bash
-npm install computesdk
+npm install @computesdk/e2b
+```
+
+Then add your provider credentials to a `.env` file:
+
+```bash
+E2B_API_KEY=your_e2b_api_key
 ```
 
 ## Basic Usage
 
-A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Railway, Modal, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCode()` executes code and returns the output, and `destroy()` tears down the sandbox to free resources.
+A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Modal, Vercel, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCode()` executes code and returns the output, and `destroy()` tears down the sandbox to free resources.
 
 ```typescript
-import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
 
+// Create a compute instance for your provider
+const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
@@ -89,7 +84,7 @@ try {
   const sandbox = await compute.sandbox.create();
   const result = await sandbox.runCode('invalid code');
 } catch (error) {
-  console.error('Execution failed:', error.message);
+  console.error('Failed:', error.message);
 }
 ```
 
@@ -106,9 +101,7 @@ try {
   sandbox = await compute.sandbox.create();
   await sandbox.runCode('print("Hello")');
 } finally {
-  if (sandbox) {
-    await sandbox.destroy();
-  }
+  await sandbox?.destroy();
 }
 ```
 
@@ -156,28 +149,3 @@ console.log(result.stderr);      // Warnings or errors
 console.log(result.exitCode);    // 0
 console.log(result.durationMs);  // 2341
 ```
-
-## Named Sandboxes
-
-Named sandboxes let you create persistent, reusable sandbox instances. If a sandbox with the same name already exists, `findOrCreate()` returns the existing one instead of creating a duplicate.
-
-```typescript
-// Find or create a sandbox by name
-const sandbox = await compute.sandbox.findOrCreate({
-  name: 'my-project',
-  namespace: 'user-123',  // Optional: isolate by user, team, etc.
-});
-
-// The same call later returns the same sandbox
-const sameSandbox = await compute.sandbox.findOrCreate({
-  name: 'my-project',
-  namespace: 'user-123',
-});
-```
-
-## What's Next?
-
-- **[Overlays](/docs/features/overlays)** - Bootstrap sandboxes from templates instantly
-- **[Servers](/docs/features/servers)** - Run managed dev servers with health checks
-- **[Client-Side Access](/docs/features/client-access)** - Delegate sandbox access to browser clients
-- **[Named Sandboxes](/docs/features/named-sandboxes)** - Persistent, reusable sandbox patterns
