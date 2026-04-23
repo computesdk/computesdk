@@ -55,8 +55,7 @@ await provider.sandbox.destroy(sandbox.sandboxId);
 | `getById`     | ✅        | Requires the disk id.                                        |
 | `list`        | ✅        | Lists all disks visible to the API key.                     |
 | `destroy`     | no-op     | Disk lifecycle is managed by Archil.                        |
-| `runCommand`  | ✅        | Calls Archil's HTTP `exec` endpoint and waits for completion. |
-| `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`. Requires explicit `runtime`. |
+| `runCommand`  | ✅        | Executes shell commands through Archil's HTTP `exec` endpoint. |
 | `getInfo`     | ✅        |                                                             |
 | `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose. |
 | `filesystem`  | ✅        | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.). |

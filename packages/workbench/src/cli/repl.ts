@@ -251,15 +251,6 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     return sandboxReady.ready();
   };
   
-  // Expose runCode directly
-  replServer.context.runCode = async (code: string, runtime?: 'node' | 'python') => {
-    const sandbox = state.currentSandbox;
-    if (!sandbox) {
-      throw new Error('No active sandbox. Run a command to auto-create one.');
-    }
-    return sandbox.runCode(code, runtime);
-  };
-  
   // Expose runCommand directly with full options support (background, cwd, env)
   replServer.context.runCommand = async (
     command: string,
@@ -775,7 +766,6 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
     '.exit': [],
     // Sandbox methods
     'getUrl': [],
-    'runCode': [],
     'sandboxInfo': [],
     'getInstance': [],
     // Filesystem is an object, so it gets dot notation autocomplete automatically

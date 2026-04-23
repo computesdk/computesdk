@@ -219,46 +219,6 @@ export const freestyle = defineProvider<FreestyleSandboxHandle, FreestyleConfig>
 
       // ── Instance operations ───────────────────────────────────────────────
 
-      runCode: async (handle, code, runtime) => {
-        const effectiveRuntime = detectRuntime(code, runtime, handle.config.runtime);
-
-        try {
-          const res =
-            effectiveRuntime === "python"
-              ? await handle.vm.python.runCode({ code })
-              : await handle.vm.js.runCode({ code });
-
-          const stdout = (res as any).stdout ?? "";
-          const stderr = (res as any).stderr ?? "";
-          const statusCode = (res as any).statusCode ?? 0;
-
-          if (
-            statusCode !== 0 &&
-            stderr &&
-            (stderr.includes("SyntaxError") ||
-              stderr.includes("invalid syntax") ||
-              stderr.includes("Unexpected token") ||
-              stderr.includes("Unexpected identifier"))
-          ) {
-            throw new Error(`Syntax error: ${stderr.trim()}`);
-          }
-
-          const output = stderr
-            ? `${stdout}${stdout && stderr ? "\n" : ""}${stderr}`
-            : stdout;
-
-          return { output, exitCode: statusCode, language: effectiveRuntime };
-        } catch (err) {
-          if (err instanceof Error && err.message.includes("Syntax error"))
-            throw err;
-          return {
-            output: err instanceof Error ? err.message : String(err),
-            exitCode: 1,
-            language: effectiveRuntime,
-          };
-        }
-      },
-
       runCommand: async (handle, command, options) => {
         const startTime = Date.now();
         let fullCommand = command;

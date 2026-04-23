@@ -29,10 +29,10 @@ import { compute } from 'computesdk';
 // Auto-detects E2B from E2B_API_KEY environment variable
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 print(pd.__version__)
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -49,7 +49,7 @@ const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 import numpy as np
 
@@ -57,7 +57,7 @@ data = {'A': [1, 2, 3], 'B': [4, 5, 6]}
 df = pd.DataFrame(data)
 print(df)
 print(f"Sum: {df.sum().sum()}")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -99,20 +99,20 @@ interface E2BConfig {
 
 ```typescript
 // Execute Python code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
-`, 'python');
+PY`);
 
 // Execute Node.js code  
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
-`, 'node');
+JS`);
 
 // Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
+const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
 ```
 
 ### Command Execution
@@ -212,7 +212,7 @@ try {
   const compute = e2b({ apiKey: process.env.E2B_API_KEY });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Missing E2B API key')) {
     console.error('Set E2B_API_KEY environment variable');
@@ -250,7 +250,7 @@ Charlie,35,Chicago`;
 await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
 
 // Process data with Python
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -284,7 +284,7 @@ with open('/analysis/output/results.json', 'w') as f:
     json.dump(results, f, indent=2)
 
 print("Results saved!")
-`);
+PY`);
 
 console.log(result.stdout);
 
@@ -347,7 +347,7 @@ await sandbox.filesystem.mkdir('/ml-project/data');
 await sandbox.filesystem.mkdir('/ml-project/models');
 
 // Generate and process data
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -410,7 +410,7 @@ with open('/ml-project/results.json', 'w') as f:
     json.dump(results, f, indent=2)
 
 print("Results saved!")
-`);
+PY`);
 
 console.log(result.stdout);
 

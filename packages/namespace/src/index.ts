@@ -381,9 +381,6 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       // Not supported - throw as no-op
-      runCode: async (_sandbox: NamespaceSandbox, _code: string, _runtime?: Runtime, _config?: NamespaceConfig): Promise<CodeResult> => {
-        throw new Error('Namespace provider does not support runCode. Use runCommand instead.');
-      },
 
       getInfo: async (sandbox: NamespaceSandbox): Promise<SandboxInfo> => {
         return {

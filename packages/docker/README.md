@@ -45,7 +45,7 @@ import { compute } from 'computesdk';
 // Auto-detects Docker (requires Docker daemon running)
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`print("Hello from Python")`, 'python');
+const result = await sandbox.runCommand('python -c "print(\"Hello from Python\")"');
 console.log(result.stdout.trim()); // Hello from Python
 
 await sandbox.destroy();
@@ -65,7 +65,7 @@ const compute = docker({
 
 // Create a sandbox and run Python
 const sandbox = await compute.sandbox.create();
-const result = await sandbox.runCode(`print("Hello from Python")`, 'python');
+const result = await sandbox.runCommand('python -c "print(\"Hello from Python\")"');
 console.log(result.stdout.trim()); // Hello from Python
 
 await sandbox.destroy();
@@ -85,9 +85,9 @@ const compute = docker({
   },
 });
 
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
+const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`console.log("Hello, World!")`, 'node');
+const result = await sandbox.runCommand('node -e "console.log(\"Hello, World!\")"');
 console.log(result.stdout.trim()); // Hello, World!
 
 const cmd = await sandbox.runCommand('sh', ['-lc', 'echo Hello from command']);
@@ -189,7 +189,7 @@ Type: `DockerConfig`
 ### Code Execution
 
 ```ts
-sandbox.runCode(code: string, runtime?: 'python' | 'node'): Promise<ExecutionResult>
+sandbox.runCommand(code: string, runtime?: 'python' | 'node'): Promise<ExecutionResult>
 ```
 
 * If `runtime` omitted, the sandbox’s runtime (set at creation) is used.
@@ -239,10 +239,10 @@ await sandbox.destroy();
 
 There’s **no auto-detection**. Resolution is:
 
-1. `runCode(_, runtime)` argument, else
-2. runtime label set at `sandbox.create()` (from `options.runtime` or provider `config.runtime`)
+1. provider `config.runtime`, else
+2. fallback default in provider config
 
-If neither yields `'python' | 'node'`, `runCode` throws.
+Use `runCommand('python -c "..."')` or `runCommand('node -e "..."')` when you need language-specific execution.
 
 ---
 

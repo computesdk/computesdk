@@ -409,10 +409,6 @@ export const fly = defineProvider<FlyMachine, FlyConfig>({
         }
       },
 
-      runCode: async (_sandbox: FlyMachine, _code: string, _runtime?: Runtime) => {
-        throw new Error('Fly.io runCode method not implemented yet');
-      },
-
       runCommand: async (_sandbox: FlyMachine, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Fly.io runCommand method not implemented yet');
       },

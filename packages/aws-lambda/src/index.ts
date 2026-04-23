@@ -279,9 +279,6 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
       },
 
       // Instance operations (minimal stubs - not implemented yet)
-      runCode: async (_sandbox: LambdaSandbox, _code: string, _runtime?: Runtime) => {
-        throw new Error('AWS Lambda runCode method not implemented yet');
-      },
 
       runCommand: async (_sandbox: LambdaSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('AWS Lambda runCommand method not implemented yet');

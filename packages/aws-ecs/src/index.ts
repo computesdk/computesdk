@@ -325,9 +325,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
       },
 
       // Instance operations (minimal stubs - not implemented yet)
-      runCode: async (_sandbox: FargateSandbox, _code: string, _runtime?: Runtime) => {
-        throw new Error('Fargate runCode method not implemented yet');
-      },
 
       runCommand: async (_sandbox: FargateSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Fargate runCommand method not implemented yet');
