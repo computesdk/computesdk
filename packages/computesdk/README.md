@@ -179,9 +179,11 @@ const sandbox = await compute.sandbox.create({
 - `metadata?: Record<string, any>` - Custom metadata
 - `envs?: Record<string, string>` - Environment variables
 - `namespace?: string` - Namespace for organizing sandboxes
-- `name?: string` - Name for the sandbox (enables findOrCreate)
+- `name?: string` - Human-readable name for the sandbox
 - `overlays?: SetupOverlayConfig[]` - Template overlays to apply
 - `servers?: ServerStartOptions[]` - Servers to start automatically
+
+> **Note:** Not every provider honors every option. Support for fields like `name`, `metadata`, `envs`, `overlays`, and `servers` depends on the underlying provider SDK — some pass them through, some map them to a different field, and some ignore them silently. Check your provider package's README for the exact set of options it respects.
 
 #### `compute.sandbox.getById(sandboxId)`
 
@@ -189,28 +191,6 @@ Get an existing sandbox by ID.
 
 ```typescript
 const sandbox = await compute.sandbox.getById('sandbox-id');
-```
-
-#### `compute.sandbox.findOrCreate(options)`
-
-Find an existing sandbox by namespace and name, or create a new one.
-
-```typescript
-const sandbox = await compute.sandbox.findOrCreate({
-  namespace: 'my-org',
-  name: 'my-project',
-});
-```
-
-#### `compute.sandbox.find(options)`
-
-Find an existing sandbox by namespace and name (returns null if not found).
-
-```typescript
-const sandbox = await compute.sandbox.find({
-  namespace: 'my-org',
-  name: 'my-project',
-});
 ```
 
 ### Sandbox Operations

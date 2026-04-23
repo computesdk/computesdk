@@ -201,7 +201,7 @@ Note: When you exit the workbench after connecting to an external sandbox, it wi
 
 ## Creating and Switching Sandboxes
 
-When you create a sandbox using `create()`, `findOrCreate()`, or `find()`, it automatically becomes your current active sandbox. All subsequent commands will run on this sandbox.
+When you create a sandbox using `create()`, it automatically becomes your current active sandbox. All subsequent commands will run on this sandbox.
 
 ```javascript
 > create({ namespace: "h" })

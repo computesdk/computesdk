@@ -253,11 +253,9 @@ ${c.bold('Running Commands:')}
   ${c.dim('Named Sandboxes (gateway mode only):')}
     ${c.cyan('create()')}                          ${c.dim('// Create & switch to new sandbox')}
     ${c.cyan('create({ namespace: "h" })')}        ${c.dim('// Create with namespace & switch')}
-    ${c.cyan('findOrCreate({ name: "my-app" })')} ${c.dim('// Find or create & switch')}
-    ${c.cyan('find({ name: "my-app" })')}          ${c.dim('// Find existing & switch')}
-    
+
     ${c.dim('Note: Prompts before switching if you already have an active sandbox')}
-  
+
   ${c.dim('Child Sandboxes (gateway mode only):')}
     ${c.cyan('child.create()')}            ${c.dim('// Create child sandbox')}
     ${c.cyan('child.list()')}              ${c.dim('// List all children')}

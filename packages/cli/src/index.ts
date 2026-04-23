@@ -204,7 +204,7 @@ sandboxCmd
   .description('Create a new sandbox')
   .option('-p, --provider <provider>', 'provider to use')
   .option('--timeout <duration>', 'sandbox timeout (e.g. 5m, 1h)')
-  .option('--name <name>', 'sandbox name for findOrCreate')
+  .option('--name <name>', 'sandbox name')
   .option('--connect', 'start interactive shell after creation')
   .option('--silent', 'only output the sandbox ID')
   .action(async (opts) => {

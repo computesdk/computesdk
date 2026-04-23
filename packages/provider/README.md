@@ -308,37 +308,6 @@ methods: {
 
 **Note:** If you don't implement `filesystem`, the sandbox will still work but filesystem operations will throw helpful "not supported" errors.
 
-### Optional Named Sandbox Methods
-
-Support named sandboxes (useful for gateway providers):
-
-```typescript
-methods: {
-  sandbox: {
-    // ... required methods
-    
-    findOrCreate: async (config, options) => {
-      // Find sandbox by name or create it
-      const existing = await findByName(config, options.name);
-      if (existing) return existing;
-      
-      return await create(config, options);
-    },
-    
-    find: async (config, options) => {
-      // Find sandbox by name
-      const sandbox = await findByName(config, options.name);
-      return sandbox ? { sandbox, sandboxId: sandbox.id } : null;
-    },
-    
-    extendTimeout: async (config, sandboxId, options) => {
-      // Extend sandbox timeout
-      await yourApi.extendTimeout(sandboxId, options.duration);
-    }
-  }
-}
-```
-
 ## Type Definitions
 
 ### Core Types
