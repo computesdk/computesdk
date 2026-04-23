@@ -67,8 +67,7 @@ drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
 
 ### Workbench Commands
 
-- `provider <name>` - Switch provider via gateway (e.g., `provider e2b`)
-- `provider direct <name>` - Switch to direct provider connection (e.g., `provider direct e2b`)
+- `provider <name>` - Switch provider (e.g., `provider e2b`)
 - `providers` - List all providers with status
 - `restart` - Restart current sandbox
 - `destroy` - Destroy current sandbox
@@ -78,13 +77,7 @@ drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
 - `help` - Show this help
 - `exit` - Exit workbench
 
-**Provider Modes:**
-- **Gateway mode (default)**: Routes through ComputeSDK API, zero-config setup
-  - Example: `provider e2b` uses E2B via gateway
-  - Requires: `COMPUTESDK_API_KEY` + provider credentials
-- **Direct mode**: Connects directly to provider, requires provider packages
-  - Example: `provider direct e2b` connects directly to E2B
-  - Requires: Provider package installed (`@computesdk/e2b`) + provider credentials
+Each provider requires its package installed (e.g. `@computesdk/e2b`) and its credentials configured.
 
 ### Running Commands
 
@@ -127,39 +120,21 @@ wget('https://file.com/download.zip')
 
 ## Provider Switching
 
-### Gateway Mode (Default - Zero Config)
-
-Switch between providers via the gateway:
+Switch between providers:
 
 ```
 workbench> provider e2b
-✅ Switched to e2b (via gateway)
+✅ Switched to e2b
 
 workbench> npm.install('express')
-⏳ Creating sandbox with e2b (via gateway)...
+⏳ Creating sandbox with e2b...
 ✅ Sandbox ready (1.2s)
 Running: npm install express
 ✅ Completed (3.2s)
 
 workbench> provider railway
 Destroy current sandbox? (y/N): y
-✅ Switched to railway (via gateway)
-```
-
-### Direct Mode (Advanced)
-
-Connect directly to providers (requires provider packages):
-
-```
-workbench> provider direct e2b
-✅ Switched to e2b (direct)
-
-workbench> pwd()
-⏳ Creating sandbox with e2b (direct)...
-✅ Sandbox ready (2.5s)
-Running: pwd
-/home
-✅ Completed (0.1s)
+✅ Switched to railway
 ```
 
 ## Connect to Existing Sandboxes

@@ -27,35 +27,19 @@ export async function startWorkbench(): Promise<void> {
   }
   const detectedProvider = autoDetectProvider();
   
-  // Determine mode based on what's available
-  // Priority: local > gateway > direct
+  // Pick initial provider
+  // Priority: local > first configured backend > detected
   if (localDaemonRunning) {
-    // Local daemon is running - default to it
     state.currentProvider = 'local';
-    state.useDirectMode = false;
     state.verbose = true; // Enable verbose for local debugging
     process.env.COMPUTESDK_DEBUG = '1'; // Enable SDK debug logging
   } else {
-    const hasGateway = state.availableProviders.includes('gateway');
     const backendProviders = state.availableProviders.filter(p => p !== 'gateway' && p !== 'local');
-    
-    if (hasGateway && backendProviders.length > 0) {
-      // Gateway is available - use it with first backend provider
-      state.currentProvider = backendProviders[0] || 'e2b';
-      state.useDirectMode = false; // Use gateway mode
-    } else if (backendProviders.length > 0) {
-      // No gateway, but we have direct providers - use direct mode
-      state.currentProvider = backendProviders[0];
-      state.useDirectMode = true; // Use direct mode
-    } else {
-      // No providers at all
-      state.currentProvider = detectedProvider;
-      state.useDirectMode = false;
-    }
+    state.currentProvider = backendProviders[0] ?? detectedProvider;
   }
-  
+
   // Show welcome banner
-  showWelcome(state.availableProviders, state.currentProvider, state.useDirectMode, localDaemonRunning);
+  showWelcome(state.availableProviders, state.currentProvider, localDaemonRunning);
   
   // Create REPL
   const replServer = createREPL(state);

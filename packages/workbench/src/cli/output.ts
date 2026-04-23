@@ -40,34 +40,25 @@ export const c = {
 /**
  * Display welcome banner
  */
-export function showWelcome(availableProviders: string[], currentProvider: string | null, useDirectMode: boolean, localDaemonRunning = false) {
+export function showWelcome(availableProviders: string[], currentProvider: string | null, localDaemonRunning = false) {
   console.log(c.bold(c.cyan('\n╔═══════════════════════════════════════════════════════╗')));
   console.log(c.bold(c.cyan('║   ComputeSDK Workbench                               ║')));
   console.log(c.bold(c.cyan('╚═══════════════════════════════════════════════════════╝\n')));
   console.log(c.dim('Prompt shows connection status: > (disconnected) or provider:sandbox> (connected)\n'));
-  
+
   // Show local daemon status prominently if available
   if (localDaemonRunning) {
     console.log(c.green('Local daemon detected - auto-connecting...\n'));
   }
-  
+
   if (availableProviders.length > 0) {
     // Filter out 'gateway' from the list since it's not a real backend provider
     const backendProviders = availableProviders.filter(p => p !== 'gateway');
     console.log(`Providers available: ${backendProviders.join(', ')}`);
-    
+
     if (currentProvider) {
-      if (currentProvider === 'local') {
-        console.log(`Current provider: ${c.green('local')} (local daemon)\n`);
-      } else if (useDirectMode) {
-        console.log(`Current provider: ${c.green(currentProvider)} (direct mode)\n`);
-      } else {
-        // Gateway mode - show which backend will be used
-        const backendProvider = currentProvider === 'gateway' 
-          ? (backendProviders[0] || 'auto')
-          : currentProvider;
-        console.log(`Current provider: ${c.green(backendProvider)} (via gateway)\n`);
-      }
+      const suffix = currentProvider === 'local' ? ' (local daemon)' : '';
+      console.log(`Current provider: ${c.green(currentProvider)}${suffix}\n`);
     } else {
       console.log(`\n${c.dim('Tip: Use "provider <name>" to select a provider')}\n`);
     }
@@ -102,11 +93,7 @@ export function showInfo(state: WorkbenchState) {
   }
   
   console.log(`  Provider: ${c.green(state.currentProvider || 'unknown')}`);
-  
-  // Show connection mode (gateway or direct)
-  const modeLabel = state.useDirectMode ? 'direct 🔗' : 'gateway 🌐';
-  console.log(`  Mode: ${c.blue(modeLabel)}`);
-  
+
   console.log(`  Created: ${state.sandboxCreatedAt?.toLocaleString() || 'unknown'}`);
   console.log(`  Uptime: ${formatUptime(state)}`);
   console.log('');
@@ -189,21 +176,9 @@ export function showHelp() {
 ${c.bold('ComputeSDK Workbench Commands')}
 
 ${c.bold('Provider Management:')}
-  ${c.cyan('provider <name>')}              Switch to provider via gateway (default)
+  ${c.cyan('provider <name>')}              Switch to provider
                                 ${c.dim('Example: provider e2b')}
-  ${c.cyan('provider direct <name>')}       Connect directly to provider
-                                ${c.dim('Example: provider direct e2b')}
   ${c.cyan('providers')}                    List all providers with status
-  ${c.cyan('mode <gateway|direct>')}        Toggle default mode for next sandbox
-
-${c.bold('Provider Modes:')}
-  ${c.bold('Gateway (default)')}: Routes through ComputeSDK API, zero-config
-    • Requires: COMPUTESDK_API_KEY + provider credentials
-    • Usage: ${c.cyan('provider e2b')}
-  
-  ${c.bold('Direct')}: Connects directly to provider, requires packages
-    • Requires: Provider package installed + credentials
-    • Usage: ${c.cyan('provider direct e2b')}
 
 ${c.bold('Sandbox Management:')}
   ${c.cyan('restart')}                      Restart current sandbox
@@ -250,13 +225,13 @@ ${c.bold('Running Commands:')}
     ${c.cyan('filesystem.exists("/path")')}
     ${c.cyan('filesystem.remove("/file")')}
   
-  ${c.dim('Named Sandboxes (gateway mode only):')}
+  ${c.dim('Named Sandboxes:')}
     ${c.cyan('create()')}                          ${c.dim('// Create & switch to new sandbox')}
     ${c.cyan('create({ namespace: "h" })')}        ${c.dim('// Create with namespace & switch')}
 
     ${c.dim('Note: Prompts before switching if you already have an active sandbox')}
 
-  ${c.dim('Child Sandboxes (gateway mode only):')}
+  ${c.dim('Child Sandboxes:')}
     ${c.cyan('child.create()')}            ${c.dim('// Create child sandbox')}
     ${c.cyan('child.list()')}              ${c.dim('// List all children')}
     ${c.cyan('child.retrieve("sandbox-id")')} ${c.dim('// Get child info')}
