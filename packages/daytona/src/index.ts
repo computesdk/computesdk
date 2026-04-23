@@ -62,8 +62,6 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ...providerOptions
           } = options || {};
 

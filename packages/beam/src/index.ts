@@ -168,8 +168,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ...providerOptions
           } = options || {};
 

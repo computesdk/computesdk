@@ -89,8 +89,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ...providerOptions
           } = options || {};
 

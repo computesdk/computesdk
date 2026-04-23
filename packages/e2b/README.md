@@ -19,33 +19,15 @@ export E2B_API_KEY=e2b_your_api_key_here
 
 ## Quick Start
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
+Configure `compute` with the E2B provider and create a sandbox:
 
 ```typescript
 import { compute } from 'computesdk';
-
-// Auto-detects E2B from E2B_API_KEY environment variable
-const sandbox = await compute.sandbox.create();
-
-const result = await sandbox.runCode(`
-import pandas as pd
-print(pd.__version__)
-`);
-
-console.log(result.stdout);
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
-```typescript
 import { e2b } from '@computesdk/e2b';
 
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
+compute.setConfig({
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
+});
 
 const sandbox = await compute.sandbox.create();
 
@@ -61,6 +43,15 @@ print(f"Sum: {df.sum().sum()}")
 
 console.log(result.stdout);
 await sandbox.destroy();
+```
+
+Alternatively, call the provider factory directly when you only need one provider:
+
+```typescript
+import { e2b } from '@computesdk/e2b';
+
+const sdk = e2b({ apiKey: process.env.E2B_API_KEY });
+const sandbox = await sdk.sandbox.create();
 ```
 
 ## Configuration
@@ -148,36 +139,6 @@ const exists = await sandbox.filesystem.exists('/tmp/hello.py');
 
 // Remove file or directory
 await sandbox.filesystem.remove('/tmp/hello.py');
-```
-
-### Terminal Operations
-
-```typescript
-// Create terminal
-const terminal = await sandbox.terminal.create({
-  command: 'bash',
-  cols: 80,
-  rows: 24,
-  onData: (data: Uint8Array) => {
-    const output = new TextDecoder().decode(data);
-    console.log('Terminal output:', output);
-  }
-});
-
-// Write to terminal
-await terminal.write('echo "Hello Terminal!"\n');
-
-// Resize terminal
-await terminal.resize(120, 30);
-
-// Kill terminal
-await terminal.kill();
-
-// List all terminals
-const terminals = await sandbox.terminal.list();
-
-// Get terminal by ID
-const existingTerminal = await sandbox.terminal.getById('terminal-id');
 ```
 
 ### Sandbox Management
@@ -296,40 +257,6 @@ console.log('Analysis results:', JSON.parse(results));
 const chartExists = await sandbox.filesystem.exists('/analysis/output/age_chart.png');
 console.log('Chart created:', chartExists);
 
-await sandbox.destroy();
-```
-
-### Interactive Terminal Session
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await compute.sandbox.create();
-
-// Create interactive Python terminal
-const terminal = await sandbox.terminal.create({
-  command: 'python3',
-  cols: 80,
-  rows: 24,
-  onData: (data: Uint8Array) => {
-    const output = new TextDecoder().decode(data);
-    process.stdout.write(output); // Forward to console
-  }
-});
-
-// Send Python commands
-await terminal.write('import numpy as np\n');
-await terminal.write('import pandas as pd\n');
-await terminal.write('print("Libraries loaded!")\n');
-await terminal.write('data = np.array([1, 2, 3, 4, 5])\n');
-await terminal.write('print(f"Mean: {data.mean()}")\n');
-await terminal.write('exit()\n');
-
-// Wait for commands to execute
-await new Promise(resolve => setTimeout(resolve, 2000));
-
-await terminal.kill();
 await sandbox.destroy();
 ```
 

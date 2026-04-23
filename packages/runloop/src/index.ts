@@ -19,8 +19,6 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   Runtime,
-  SandboxStatus,
-  Sandbox,
 } from "computesdk";
 
 // Define Runloop-specific types
@@ -128,8 +126,6 @@ export const runloop = defineProvider<
             sandboxId: optSandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ...providerOptions
           } = options || {};
 
@@ -389,7 +385,7 @@ export const runloop = defineProvider<
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
           runtime: "node" as Runtime, // Runloop supports multiple runtimes, defaulting to node
-          status: devbox.status as SandboxStatus,
+          status: devbox.status as 'running' | 'stopped' | 'error',
           createdAt: new Date(devbox.create_time_ms || Date.now()),
           timeout: devbox.launch_parameters.keep_alive_time_seconds || 300000,
           metadata: {

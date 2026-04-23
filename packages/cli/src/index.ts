@@ -9,7 +9,7 @@
  *   compute --repo owner/repo --branch fix-auth
  *   compute workspace                    # manage existing workspaces
  *   compute exec <id> <cmd...>           # run command in sandbox
- *   compute connect <id>                 # interactive shell
+ *   compute connect <id>                 # open REPL against sandbox
  *   compute destroy <id...>              # destroy sandboxes
  *   compute run -- <cmd...>              # create + exec + optional destroy
  *   compute providers                    # list configured providers
@@ -24,7 +24,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { compute, type SandboxInterface } from 'computesdk';
 import { getProviderStatus } from './providers.js';
-import { startPTY } from './pty.js';
+import { startREPL } from './repl.js';
 import { clearStoredCredentials } from './auth.js';
 import { ensureAuth, resolveProvider, configureCompute } from './setup.js';
 import {
@@ -205,7 +205,7 @@ sandboxCmd
   .option('-p, --provider <provider>', 'provider to use')
   .option('--timeout <duration>', 'sandbox timeout (e.g. 5m, 1h)')
   .option('--name <name>', 'sandbox name')
-  .option('--connect', 'start interactive shell after creation')
+  .option('--connect', 'drop into the REPL after creation')
   .option('--silent', 'only output the sandbox ID')
   .action(async (opts) => {
     if (!opts.silent) {
@@ -237,11 +237,7 @@ sandboxCmd
         });
 
         if (opts.connect) {
-          console.log(pc.gray('  Entering shell... (.exit or Ctrl+D to return)'));
-          console.log();
-          // Clear screen for clean PTY session
-          process.stdout.write('\x1b[2J\x1b[H\x1b[3J');
-          await startPTY(sandbox);
+          await startREPL(sandbox, provider);
         }
       } catch (error) {
         spinner.stop(pc.red('Failed to create sandbox'));
@@ -267,10 +263,7 @@ sandboxCmd
         });
 
         if (opts.connect) {
-          console.log();
-          // Clear screen for clean PTY session
-          process.stdout.write('\x1b[2J\x1b[H\x1b[3J');
-          await startPTY(sandbox);
+          await startREPL(sandbox, provider);
         }
       } catch (error) {
         process.stderr.write((error as Error).message + '\n');
@@ -373,7 +366,7 @@ sandboxCmd
 
 sandboxCmd
   .command('connect')
-  .description('Connect to a sandbox via PTY (same as compute connect)')
+  .description('Connect to a sandbox (opens REPL; same as compute connect)')
   .aliases(['ssh', 'shell'])
   .argument('[sandbox_id]', 'sandbox ID (optional - will show picker if not provided)')
   .option('-p, --provider <provider>', 'provider to use')
@@ -432,11 +425,8 @@ sandboxCmd
     }
 
     spinner.stop('');
-    
-    // Clear screen for clean PTY session (like SSH)
-    process.stdout.write('\x1b[2J\x1b[H\x1b[3J');
-    
-    await startPTY(sandbox);
+
+    await startREPL(sandbox, provider);
   });
 
 sandboxCmd
@@ -475,7 +465,7 @@ sandboxCmd
 
 program
   .command('connect')
-  .description('Connect to a sandbox via PTY')
+  .description('Connect to a sandbox (opens REPL)')
   .aliases(['ssh', 'shell'])  // Keep aliases but document connect as primary
   .argument('[sandbox_id]', 'sandbox ID (optional - will show picker if not provided)')
   .option('-p, --provider <provider>', 'provider to use')
@@ -534,11 +524,8 @@ program
     }
 
     spinner.stop('');
-    
-    // Clear screen for clean PTY session (like SSH)
-    process.stdout.write('\x1b[2J\x1b[H\x1b[3J');
-    
-    await startPTY(sandbox);
+
+    await startREPL(sandbox, provider);
   });
 
 // ─── Workspace Commands ─────────────────────────────────────────────────────

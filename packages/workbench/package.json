@@ -53,8 +53,7 @@
     "@computesdk/cmd": "workspace:*",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "dotenv": "^16.4.5",
-    "ws": "^8.18.0"
+    "dotenv": "^16.4.5"
   },
   "peerDependencies": {
     "@computesdk/blaxel": "workspace:*",

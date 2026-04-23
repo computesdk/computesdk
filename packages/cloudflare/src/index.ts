@@ -254,8 +254,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           sandboxId: optSandboxId,
           namespace: _namespace,
           directory: _directory,
-          overlays: _overlays,
-          servers: _servers,
           ports: _ports,
           ...rest
         } = options || {};

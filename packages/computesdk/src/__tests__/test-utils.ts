@@ -6,7 +6,7 @@
 
 import { vi } from 'vitest'
 import type { FileEntry, Runtime, CodeResult, CommandResult } from '../types/index.js'
-import type { ProviderSandboxInfo } from '../types/index.js'
+import type { SandboxInfo } from '../types/index.js'
 
 // Note: Provider and ProviderSandbox are defined in @computesdk/provider (mother package)
 // For testing the grandmother package (computesdk), we create minimal mock interfaces
@@ -27,7 +27,7 @@ interface ProviderSandbox {
   getInstance(): unknown
   runCode(code: string): Promise<CodeResult>
   runCommand(command: string, args?: string[]): Promise<CommandResult>
-  getInfo(): Promise<ProviderSandboxInfo>
+  getInfo(): Promise<SandboxInfo>
   getUrl(options: { port: number; protocol?: string }): Promise<string>
   getProvider(): Provider
   destroy(): Promise<void>
@@ -74,7 +74,7 @@ export class MockSandbox implements ProviderSandbox {
     }
   }
 
-  async getInfo(): Promise<ProviderSandboxInfo> {
+  async getInfo(): Promise<SandboxInfo> {
     return {
       id: this.sandboxId,
       provider: this.provider,

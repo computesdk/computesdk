@@ -107,8 +107,6 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               sandboxId: _sandboxId,
               namespace: _namespace,
               directory: _directory,
-              overlays: _overlays,
-              servers: _servers,
               ephemeral: _ephemeral,
               ttl: _ttl,
               ...providerOptions

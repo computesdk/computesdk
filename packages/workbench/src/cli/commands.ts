@@ -326,27 +326,14 @@ function isStaleConnectionError(error: unknown): boolean {
 /**
  * Switch to a different provider
  *
- * Examples:
+ * Example:
  *   provider e2b          → switch to e2b
- *   provider local        → connect to local daemon
- *   provider local list   → list local sandboxes
  */
-export async function switchProvider(state: WorkbenchState, name: string, subcommand?: string): Promise<void> {
-  // Handle "provider local" specially
-  if (name === 'local') {
-    if (subcommand === 'list') {
-      await listLocalSandboxes();
-      return;
-    }
-    // Connect to local daemon (subcommand is optional subdomain)
-    await connectToLocal(state, subcommand);
-    return;
-  }
-
+export async function switchProvider(state: WorkbenchState, name: string): Promise<void> {
   // Validate provider
   if (!isValidProvider(name)) {
     logError(`Unknown provider: ${name}`);
-    console.log(`Available providers: ${PROVIDER_NAMES.filter(p => p !== 'gateway').join(', ')}, local`);
+    console.log(`Available providers: ${PROVIDER_NAMES.filter(p => p !== 'gateway').join(', ')}`);
     return;
   }
 
@@ -376,23 +363,20 @@ export async function switchProvider(state: WorkbenchState, name: string, subcom
 }
 
 /**
- * Create a provider command handler
- * Supports: provider <name>, provider local [list|<subdomain>]
+ * Create a provider command handler. Supports: provider <name>
  */
 export function defineProviderCommand(state: WorkbenchState) {
-  return async function provider(name?: string, subcommand?: string) {
+  return async function provider(name?: string) {
     if (!name) {
-      // Show current provider
       if (state.currentProvider) {
-        const suffix = state.currentProvider === 'local' ? ' (local daemon)' : '';
-        console.log(`\nCurrent provider: ${c.green(state.currentProvider)}${suffix}\n`);
+        console.log(`\nCurrent provider: ${c.green(state.currentProvider)}\n`);
       } else {
         console.log(c.yellow('\nNo provider selected\n'));
       }
       return;
     }
 
-    await switchProvider(state, name, subcommand);
+    await switchProvider(state, name);
   };
 }
 
@@ -431,272 +415,6 @@ export function showVerbose(state: WorkbenchState): void {
 }
 
 /**
- * Connect to an existing sandbox via URL
- * Useful for connecting to a locally running sandbox or a sandbox created elsewhere
- */
-export async function connectToSandbox(state: WorkbenchState, sandboxUrl: string, token?: string): Promise<void> {
-  // Validate URL format
-  if (!sandboxUrl) {
-    logError('Usage: connect <sandbox_url> [token]');
-    console.log('Example: connect https://sandbox-123.localhost:8080');
-    console.log('Example: connect https://sandbox-123.localhost:8080 your_access_token');
-    return;
-  }
-  
-  // Clean up URL (remove trailing slash)
-  const cleanUrl = sandboxUrl.replace(/\/$/, '');
-  
-  // Disconnect from current sandbox if exists
-  if (hasSandbox(state)) {
-    const shouldDisconnect = await confirm('Disconnect from current sandbox?', false, state);
-    if (!shouldDisconnect) {
-      logWarning('Keeping current sandbox. Connection cancelled.');
-      return;
-    }
-    // Just clear the reference, don't destroy since we don't own this sandbox
-    clearSandbox(state);
-  }
-  
-  const spinner = new Spinner(`Connecting to ${cleanUrl}...`).start();
-  const startTime = Date.now();
-  
-  try {
-    // Import Sandbox class from computesdk package (client is now merged into computesdk)
-    const { Sandbox } = await import('computesdk');
-    
-    // Dynamically import WebSocket for Node.js environment
-    let WebSocket: any;
-    try {
-      // @ts-expect-error - ws is an optional peer dependency that may not have type declarations
-      const wsModule = await import('ws');
-      WebSocket = wsModule.default;
-    } catch {
-      logError('Failed to import "ws" module. Please install it: pnpm add ws');
-      throw new Error('Missing "ws" dependency');
-    }
-    
-    // Create a Sandbox instance directly with optional token
-    // WebSocket type comes from 'ws' module which may differ from browser WebSocket
-    const sandbox = new Sandbox({
-      sandboxUrl: cleanUrl,
-      sandboxId: '', // Will be populated when we get info
-      provider: 'connected', // Mark as directly connected
-      token: token, // Optional access token
-      WebSocket: WebSocket as typeof globalThis.WebSocket,
-    });
-
-    // Test the connection by getting sandbox info
-    const info = await sandbox.getInfo();
-    const duration = Date.now() - startTime;
-
-    // Update state with the connected sandbox
-    // Sandbox from @computesdk/client is the same class re-exported by computesdk
-    setSandbox(state, sandbox, 'connected');
-    
-    spinner.succeed(`Connected to sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
-    console.log(c.dim(`Provider: ${info.provider || 'unknown'}`));
-    console.log(c.dim(`Sandbox ID: ${info.id || 'unknown'}`));
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    spinner.fail(`Failed to connect ${c.dim(`(${formatDuration(duration)})`)}`);
-    
-    if (error instanceof Error) {
-      logError(`Error: ${error.message}`);
-      if (error.stack) {
-        console.log(c.dim(error.stack));
-      }
-    }
-    
-    throw error;
-  }
-}
-
-/**
- * Local daemon config structure (from ~/.compute/config.json)
- */
-interface LocalConfig {
-  access_token: string;
-  main_subdomain: string;
-  auth_enabled: boolean;
-  sandboxes: Array<{
-    subdomain: string;
-    directory: string;
-    is_main: boolean;
-    created_at: string;
-  }>;
-}
-
-/**
- * Read local daemon config from ~/.compute/config.json
- */
-async function readLocalConfig(): Promise<LocalConfig | null> {
-  const os = await import('os');
-  const fs = await import('fs/promises');
-  const path = await import('path');
-  
-  const configPath = path.join(os.homedir(), '.compute', 'config.json');
-  
-  try {
-    const content = await fs.readFile(configPath, 'utf-8');
-    return JSON.parse(content) as LocalConfig;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if local daemon is running
- */
-export async function isLocalDaemonRunning(): Promise<boolean> {
-  const os = await import('os');
-  const fs = await import('fs/promises');
-  const path = await import('path');
-  
-  const pidPath = path.join(os.homedir(), '.compute', 'compute.pid');
-  
-  try {
-    const pidContent = await fs.readFile(pidPath, 'utf-8');
-    const pid = parseInt(pidContent.trim(), 10);
-    
-    // Check if process is running
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * List local sandboxes
- */
-export async function listLocalSandboxes(): Promise<void> {
-  const config = await readLocalConfig();
-  
-  if (!config) {
-    logError('No local daemon config found at ~/.compute/config.json');
-    console.log(c.dim('Run "compute start" to start the local daemon'));
-    return;
-  }
-  
-  const isRunning = await isLocalDaemonRunning();
-  
-  console.log('');
-  console.log(c.bold('Local Daemon Status:'), isRunning ? c.green('Running') : c.red('Stopped'));
-  console.log('');
-  
-  if (!config.sandboxes || config.sandboxes.length === 0) {
-    console.log(c.dim('No sandboxes found'));
-    return;
-  }
-  
-  console.log(c.bold('Sandboxes:'));
-  for (const sandbox of config.sandboxes) {
-    const isMain = sandbox.subdomain === config.main_subdomain;
-    const mainLabel = isMain ? c.green(' (main)') : '';
-    console.log(`  ${c.cyan(sandbox.subdomain)}${mainLabel}`);
-    console.log(c.dim(`    https://${sandbox.subdomain}.sandbox.computesdk.com`));
-  }
-  console.log('');
-  console.log(c.dim(`Connect with: local ${config.main_subdomain}`));
-  console.log('');
-}
-
-/**
- * Connect to a local daemon sandbox
- */
-export async function connectToLocal(state: WorkbenchState, subdomain?: string): Promise<void> {
-  const config = await readLocalConfig();
-  
-  if (!config) {
-    logError('No local daemon config found at ~/.compute/config.json');
-    console.log(c.dim('Run "compute start" to start the local daemon'));
-    return;
-  }
-  
-  const isRunning = await isLocalDaemonRunning();
-  if (!isRunning) {
-    logError('Local daemon is not running');
-    console.log(c.dim('Run "compute start" to start the local daemon'));
-    return;
-  }
-  
-  // Use provided subdomain or default to main
-  const targetSubdomain = subdomain || config.main_subdomain;
-  
-  // Verify sandbox exists
-  const sandbox = config.sandboxes.find(s => s.subdomain === targetSubdomain);
-  if (!sandbox) {
-    logError(`Sandbox "${targetSubdomain}" not found`);
-    console.log(c.dim('Run "local list" to see available sandboxes'));
-    return;
-  }
-  
-  const sandboxUrl = `https://${targetSubdomain}.sandbox.computesdk.com`;
-  const token = config.access_token;
-  
-  // Disconnect from current sandbox if exists
-  if (hasSandbox(state)) {
-    const shouldDisconnect = await confirm('Disconnect from current sandbox?', false, state);
-    if (!shouldDisconnect) {
-      logWarning('Keeping current sandbox. Connection cancelled.');
-      return;
-    }
-    clearSandbox(state);
-  }
-  
-  const spinner = new Spinner(`Connecting to local sandbox ${targetSubdomain}...`).start();
-  const startTime = Date.now();
-  
-  try {
-    const { Sandbox } = await import('computesdk');
-    
-    // Dynamically import WebSocket for Node.js environment
-    let WebSocket: any;
-    try {
-      // @ts-expect-error - ws is an optional peer dependency
-      const wsModule = await import('ws');
-      WebSocket = wsModule.default;
-    } catch {
-      spinner.fail('Failed to import "ws" module');
-      logError('Please install ws: pnpm add ws');
-      throw new Error('Missing "ws" dependency');
-    }
-    
-    const sandboxInstance = new Sandbox({
-      sandboxUrl,
-      sandboxId: targetSubdomain,
-      provider: 'local',
-      token,
-      WebSocket: WebSocket as typeof globalThis.WebSocket,
-    });
-    
-    // Test the connection
-    const info = await sandboxInstance.getInfo();
-    const duration = Date.now() - startTime;
-    
-    setSandbox(state, sandboxInstance, 'local');
-    
-    // Enable verbose mode for local provider (useful for debugging)
-    state.verbose = true;
-    process.env.COMPUTESDK_DEBUG = '1';
-    
-    spinner.succeed(`Connected to local sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
-    console.log(c.dim(`Sandbox: ${targetSubdomain}`));
-    console.log(c.dim(`URL: ${sandboxUrl}`));
-    console.log(c.dim(`Verbose mode: enabled (for debugging)`));
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    spinner.fail(`Failed to connect ${c.dim(`(${formatDuration(duration)})`)}`);
-    
-    if (error instanceof Error) {
-      logError(`Error: ${error.message}`);
-    }
-    
-    throw error;
-  }
-}
-
-/**
  * Cleanup on exit
  */
 export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Promise<void> {
@@ -710,13 +428,7 @@ export async function cleanupOnExit(state: WorkbenchState, replServer?: any): Pr
   }
   
   console.log(''); // New line
-  
-  // Don't offer to destroy if we're just connected to an external sandbox
-  if (state.currentProvider === 'connected') {
-    logWarning('Disconnecting from external sandbox (not destroying).');
-    return;
-  }
-  
+
   const shouldDestroy = await confirm('Destroy active sandbox?', false, state);
   
   if (shouldDestroy) {

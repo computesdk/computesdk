@@ -1,13 +1,10 @@
 /**
  * Compute API - Direct Provider Implementation
  *
- * Gateway/control-plane transport has been removed from this package.
- * `compute` now delegates to one or more configured provider instances directly.
+ * `compute` delegates to one or more configured provider instances directly.
  */
 
 import type { Sandbox as SandboxInterface } from './types/universal-sandbox';
-import type { SetupOverlayConfig } from './setup';
-import type { ServerStartOptions } from './client';
 
 export interface CreateSandboxOptions {
   timeout?: number;
@@ -17,8 +14,6 @@ export interface CreateSandboxOptions {
   name?: string;
   namespace?: string;
   directory?: string;
-  overlays?: SetupOverlayConfig[];
-  servers?: ServerStartOptions[];
   image?: string;
   snapshotId?: string;
   /** Optional provider name override (must match provider.name) */

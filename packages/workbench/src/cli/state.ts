@@ -4,11 +4,10 @@
  * Tracks current sandbox and provider state in-memory (no persistence)
  */
 
-import type { Sandbox } from 'computesdk';
 import type { ProviderSandbox } from '@computesdk/provider';
 import type { REPLServer } from 'repl';
 
-type WorkbenchSandbox = Sandbox | ProviderSandbox;
+type WorkbenchSandbox = ProviderSandbox;
 
 /**
  * Workbench session state

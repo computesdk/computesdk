@@ -148,8 +148,6 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ports: optPorts,
             source: optSource,
             ...providerOptions

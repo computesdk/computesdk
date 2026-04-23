@@ -1,35 +1,8 @@
 /**
  * Universal Sandbox Interface
- * 
- * The canonical interface for all ComputeSDK sandboxes.
- * 
- * Core methods (required):
- * - runCode, runCommand, getInfo, getUrl, destroy, filesystem
- * 
- * Advanced features (optional):
- * - terminal, server, watcher, auth, env, etc.
- * 
- * Providers can implement as much or as little as makes sense for their platform.
- * The Sandbox client class implements the full specification.
- * 
- * **Note on naming:** This interface is named "Sandbox" in this file for clarity,
- * but is exported as "SandboxInterface" from the main computesdk package to avoid
- * collision with the Sandbox client class. The rename happens at export time in
- * src/index.ts. Providers using @computesdk/provider will only see "SandboxInterface".
- * 
- * @example Minimal implementation
- * ```typescript
- * class MinimalSandbox implements Pick<Sandbox, 'sandboxId' | 'provider' | 'runCode' | 'runCommand' | 'getInfo' | 'getUrl' | 'destroy' | 'filesystem'> {
- *   // Just implement core methods
- * }
- * ```
- * 
- * @example Full implementation
- * ```typescript
- * class FullSandbox implements Sandbox {
- *   // Implement everything - core + advanced features
- * }
- * ```
+ *
+ * The canonical interface for all ComputeSDK sandboxes. Providers using
+ * @computesdk/provider implement this shape (re-exported as SandboxInterface).
  */
 
 /**
@@ -144,53 +117,8 @@ export interface CreateSandboxOptions {
   name?: string;
   namespace?: string;
   directory?: string;
-  overlays?: SandboxOverlayConfig[];
-  servers?: SandboxServerConfig[];
   // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
-}
-
-export interface SandboxOverlayConfig {
-  source: string;
-  target: string;
-  ignore?: string[];
-  strategy?: 'copy' | 'smart';
-}
-
-export type SandboxRestartPolicy = 'never' | 'on-failure' | 'always';
-
-/**
- * Health check configuration for servers
- */
-export interface SandboxHealthCheckConfig {
-  /** Path to poll for health checks (default: "/") */
-  path?: string;
-  /** Interval between health checks in milliseconds (default: 2000) */
-  interval_ms?: number;
-  /** Timeout for each health check request in milliseconds (default: 1500) */
-  timeout_ms?: number;
-  /** Delay before starting health checks after port detection in milliseconds (default: 5000) */
-  delay_ms?: number;
-}
-
-export interface SandboxServerConfig {
-  slug: string;
-  start: string;
-  install?: string;
-  path?: string;
-  port?: number;
-  strict_port?: boolean;
-  autostart?: boolean;
-  env_file?: string;
-  environment?: Record<string, string>;
-  restart_policy?: SandboxRestartPolicy;
-  max_restarts?: number;
-  restart_delay_ms?: number;
-  stop_timeout_ms?: number;
-  depends_on?: string[];
-  overlay?: SandboxOverlayConfig;
-  overlays?: SandboxOverlayConfig[];
-  health_check?: SandboxHealthCheckConfig;
 }
 
 /**
@@ -236,74 +164,4 @@ export interface Sandbox {
   
   /** File system operations */
   readonly filesystem: SandboxFileSystem;
-  
-  // ============================================================================
-  // Advanced Features (Optional - Providers implement if supported)
-  // ============================================================================
-  
-  /**
-   * Terminal management (interactive PTY and exec modes)
-   * Available in: sandbox client, e2b (potentially)
-   */
-  readonly terminal?: any; // Terminal type from client
-  
-  /**
-   * Code and command execution namespace
-   * Available in: sandbox client
-   */
-  readonly run?: any; // Run type from client
-  
-  /**
-   * Managed server operations
-   * Available in: sandbox client
-   */
-  readonly server?: any; // Server type from client
-  
-  /**
-   * File watcher with real-time change events
-   * Available in: sandbox client
-   */
-  readonly watcher?: any; // Watcher type from client
-  
-  /**
-   * Session token management
-   * Available in: sandbox client
-   */
-  readonly sessionToken?: any; // SessionToken type from client
-  
-  /**
-   * Magic link authentication
-   * Available in: sandbox client
-   */
-  readonly magicLink?: any; // MagicLink type from client
-  
-  /**
-   * Signal service for port/error events
-   * Available in: sandbox client
-   */
-  readonly signal?: any; // Signal type from client
-  
-  /**
-   * File operations namespace
-   * Available in: sandbox client
-   */
-  readonly file?: any; // File type from client
-  
-  /**
-   * Environment variable management
-   * Available in: sandbox client
-   */
-  readonly env?: any; // Env type from client
-  
-  /**
-   * Authentication operations
-   * Available in: sandbox client
-   */
-  readonly auth?: any; // Auth type from client
-  
-  /**
-   * Child sandbox management
-   * Available in: sandbox client
-   */
-  readonly child?: any; // Child type from client
 }

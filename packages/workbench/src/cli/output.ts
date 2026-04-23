@@ -40,25 +40,18 @@ export const c = {
 /**
  * Display welcome banner
  */
-export function showWelcome(availableProviders: string[], currentProvider: string | null, localDaemonRunning = false) {
+export function showWelcome(availableProviders: string[], currentProvider: string | null) {
   console.log(c.bold(c.cyan('\n╔═══════════════════════════════════════════════════════╗')));
   console.log(c.bold(c.cyan('║   ComputeSDK Workbench                               ║')));
   console.log(c.bold(c.cyan('╚═══════════════════════════════════════════════════════╝\n')));
   console.log(c.dim('Prompt shows connection status: > (disconnected) or provider:sandbox> (connected)\n'));
 
-  // Show local daemon status prominently if available
-  if (localDaemonRunning) {
-    console.log(c.green('Local daemon detected - auto-connecting...\n'));
-  }
-
   if (availableProviders.length > 0) {
-    // Filter out 'gateway' from the list since it's not a real backend provider
     const backendProviders = availableProviders.filter(p => p !== 'gateway');
     console.log(`Providers available: ${backendProviders.join(', ')}`);
 
     if (currentProvider) {
-      const suffix = currentProvider === 'local' ? ' (local daemon)' : '';
-      console.log(`Current provider: ${c.green(currentProvider)}${suffix}\n`);
+      console.log(`Current provider: ${c.green(currentProvider)}\n`);
     } else {
       console.log(`\n${c.dim('Tip: Use "provider <name>" to select a provider')}\n`);
     }
@@ -184,13 +177,6 @@ ${c.bold('Sandbox Management:')}
   ${c.cyan('restart')}                      Restart current sandbox
   ${c.cyan('destroy')}                      Destroy current sandbox
   ${c.cyan('info')}                         Show sandbox info (provider, uptime)
-  ${c.cyan('connect <url> [token]')}        Connect to sandbox via URL
-
-${c.bold('Local Daemon:')}
-  ${c.cyan('provider local')}               Connect to local daemon's main sandbox
-  ${c.cyan('provider local list')}          List local sandboxes
-  ${c.cyan('provider local <subdomain>')}   Connect to specific local sandbox
-                                ${c.dim('Example: provider local separate-snail-qkktux')}
 
 ${c.bold('Environment:')}
   ${c.cyan('env')}                          Show environment/credentials status
@@ -225,51 +211,14 @@ ${c.bold('Running Commands:')}
     ${c.cyan('filesystem.exists("/path")')}
     ${c.cyan('filesystem.remove("/file")')}
   
-  ${c.dim('Named Sandboxes:')}
-    ${c.cyan('create()')}                          ${c.dim('// Create & switch to new sandbox')}
-    ${c.cyan('create({ namespace: "h" })')}        ${c.dim('// Create with namespace & switch')}
-
-    ${c.dim('Note: Prompts before switching if you already have an active sandbox')}
-
-  ${c.dim('Child Sandboxes:')}
-    ${c.cyan('child.create()')}            ${c.dim('// Create child sandbox')}
-    ${c.cyan('child.list()')}              ${c.dim('// List all children')}
-    ${c.cyan('child.retrieve("sandbox-id")')} ${c.dim('// Get child info')}
-    ${c.cyan('child.destroy("sandbox-id")')} ${c.dim('// Delete child')}
-  
   ${c.dim('Sandbox Methods:')}
     ${c.cyan('getUrl({ port: 3000 })')}   ${c.dim('// Get public URL')}
     ${c.cyan('runCode("console.log(\'hi\')", "node")')}
     ${c.cyan('sandboxInfo()')}            ${c.dim('// Get sandbox details')}
     ${c.cyan('ready()')}                  ${c.dim('// Get readiness status')}
     ${c.cyan('getInstance()')}            ${c.dim('// Get native instance')}
-  
-  ${c.dim('Terminal (PTY & Exec):')}
-    ${c.cyan('terminal.create({ pty: true })')}   ${c.dim('// Create PTY terminal')}
-    ${c.cyan('terminal.create({ pty: false })')}  ${c.dim('// Create exec terminal')}
-    ${c.cyan('terminal.list()')}                  ${c.dim('// List all terminals')}
-    ${c.cyan('terminal.retrieve(id)')}            ${c.dim('// Get terminal by ID')}
-    ${c.cyan('terminal.destroy(id)')}             ${c.dim('// Close terminal by ID')}
-    
-    ${c.dim('PTY Terminal:')}
-      ${c.cyan('term = terminal.create({ pty: true })')}
-      ${c.cyan('term.on("output", (data) => console.log(data))')}
-      ${c.cyan('term.write("echo hello\\n")')}
-      ${c.cyan('term.destroy()')}
-    
-    ${c.dim('Exec Terminal:')}
-      ${c.cyan('exec = terminal.create({ pty: false })')}
-      ${c.cyan('cmd = exec.command.run("ls -la")')}
-      ${c.cyan('cmd.stdout')}  ${c.dim('// view output')}
-  
+
   ${c.dim('Note: No need to use "await" - promises are auto-awaited!')}
-  
-  ${c.dim('Compute CLI:')}
-    ${c.cyan('compute.isSetup()')}      ${c.dim('// Check if daemon is running')}
-    ${c.cyan('compute.setup()')}        ${c.dim('// Install + start daemon')}
-    ${c.cyan('compute.install()')}      ${c.dim('// Install compute CLI')}
-    ${c.cyan('compute.start()')}        ${c.dim('// Start daemon')}
-    ${c.cyan('compute.health()')}       ${c.dim('// Check daemon health')}
 
 ${c.bold('Shell Commands:')}
   Use ${c.cyan('$')} prefix to run any shell command directly:

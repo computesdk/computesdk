@@ -114,8 +114,6 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
               sandboxId: _sandboxId,
               namespace: _namespace,
               directory: _directory,
-              overlays: _overlays,
-              servers: _servers,
               ports: optPorts,
               ...providerOptions
             } = options || {};
