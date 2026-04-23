@@ -114,17 +114,17 @@ The provider automatically selects images based on runtime:
 
 ```typescript
 // Execute Python code
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
-`, 'python');
+PY`);
 
 // Execute Node.js code  
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
-`, 'node');
+JS`);
 
 // Auto-detection (based on code patterns)
 const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
@@ -410,7 +410,7 @@ const compute = blaxel({
 });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 
 # Process data
@@ -422,7 +422,7 @@ result = {
 }
 
 print(json.dumps(result))
-`);
+PY`);
 
 const output = JSON.parse(result.stdout);
 console.log(output); // { sum: 15, average: 3, max: 5 }
@@ -447,7 +447,7 @@ await sandbox.filesystem.writeFile('/tmp/data.json',
 );
 
 // Process file
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 
 with open('/tmp/data.json', 'r') as f:
@@ -461,7 +461,7 @@ print(f"Found {user_count} users")
 result = {"user_count": user_count, "processed": True}
 with open('/tmp/result.json', 'w') as f:
     json.dump(result, f)
-`);
+PY`);
 
 // Read result
 const resultData = await sandbox.filesystem.readFile('/tmp/result.json');
@@ -485,7 +485,7 @@ const sandbox = await compute.sandbox.create();
 await sandbox.runCommand('pip', ['install', 'requests', 'beautifulsoup4']);
 
 // Scrape website
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -505,7 +505,7 @@ result = {
 }
 
 print(json.dumps(result))
-`);
+PY`);
 
 console.log(JSON.parse(result.stdout));
 

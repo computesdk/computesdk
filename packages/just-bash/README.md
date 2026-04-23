@@ -177,11 +177,11 @@ console.log(result.stdout);
 const compute = justBash({ python: true });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCommand(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
-`, 'python');
+PY`);
 ```
 
 ### Command Execution
