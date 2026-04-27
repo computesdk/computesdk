@@ -154,58 +154,6 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
         // through the instance. Runtime GC handles cleanup otherwise.
       },
 
-      runCode: async (
-        instance: SecureExecInstance,
-        code: string,
-        runtime?: Runtime,
-      ): Promise<CodeResult> => {
-        const effectiveRuntime = runtime || 'node';
-        const { stdout, stderr, onStdio } = captureStdio();
-
-        try {
-          if (effectiveRuntime === 'node') {
-            const result = await instance.runtime.exec(code, { onStdio });
-
-            return {
-              output: [...stdout, ...stderr].join('\n'),
-              exitCode: result.code,
-              language: 'node',
-            };
-          }
-
-          // Non-JS runtimes: write to VFS, spawn interpreter inside the isolate
-          const interpreter = effectiveRuntime === 'python' ? 'python3' : effectiveRuntime;
-          const tmpPath = `/tmp/_exec_${Date.now()}.py`;
-
-          await instance.fs.writeFile(tmpPath, code);
-
-          const result = await instance.runtime.exec(
-            `
-            const { spawnSync } = require('child_process');
-            const r = spawnSync(
-              ${JSON.stringify(interpreter)},
-              [${JSON.stringify(tmpPath)}],
-              { encoding: 'utf8', env: process.env }
-            );
-            if (r.stdout) process.stdout.write(r.stdout);
-            if (r.stderr) process.stderr.write(r.stderr);
-            process.exit(r.status ?? 1);
-            `,
-            { onStdio },
-          );
-
-          return {
-            output: [...stdout, ...stderr].join('\n'),
-            exitCode: result.code,
-            language: effectiveRuntime,
-          };
-        } catch (error) {
-          throw new Error(
-            `secure-exec execution failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      },
-
       runCommand: async (
         instance: SecureExecInstance,
         command: string,

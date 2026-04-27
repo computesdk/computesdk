@@ -213,7 +213,7 @@ ${c.bold('Running Commands:')}
   
   ${c.dim('Sandbox Methods:')}
     ${c.cyan('getUrl({ port: 3000 })')}   ${c.dim('// Get public URL')}
-    ${c.cyan('runCode("console.log(\'hi\')", "node")')}
+    ${c.cyan('runCommand("echo hi")')}   ${c.dim('// Execute command')}
     ${c.cyan('sandboxInfo()')}            ${c.dim('// Get sandbox details')}
     ${c.cyan('ready()')}                  ${c.dim('// Get readiness status')}
     ${c.cyan('getInstance()')}            ${c.dim('// Get native instance')}

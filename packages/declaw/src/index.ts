@@ -12,7 +12,6 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type {
   Runtime,
-  CodeResult,
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
@@ -178,54 +177,6 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
           await sandbox.kill();
         } catch {
           // Idempotent: sandbox may already be gone.
-        }
-      },
-
-      // Instance operations
-      runCode: async (
-        sandbox: DeclawSandbox,
-        code: string,
-        runtime?: Runtime,
-      ): Promise<CodeResult> => {
-        const effectiveRuntime: Runtime =
-          runtime ||
-          (code.includes('print(') ||
-          code.includes('import ') ||
-          code.includes('def ') ||
-          code.includes('sys.') ||
-          code.includes('json.')
-            ? 'python'
-            : 'node');
-
-        const encoded = Buffer.from(code).toString('base64');
-        const shell =
-          effectiveRuntime === 'python'
-            ? `echo "${encoded}" | base64 -d | python3`
-            : `echo "${encoded}" | base64 -d | node`;
-
-        try {
-          const result = await sandbox.commands.run(shell);
-
-          if (result.exitCode !== 0 && result.stderr) {
-            if (
-              result.stderr.includes('SyntaxError') ||
-              result.stderr.includes('invalid syntax') ||
-              result.stderr.includes('Unexpected token')
-            ) {
-              throw new Error(`Syntax error: ${result.stderr.trim()}`);
-            }
-          }
-          const output = result.stderr
-            ? `${result.stdout}${result.stdout && result.stderr ? '\n' : ''}${result.stderr}`
-            : result.stdout;
-          return { output, exitCode: result.exitCode, language: effectiveRuntime };
-        } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `Declaw execution failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
         }
       },
 

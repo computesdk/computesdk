@@ -390,26 +390,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
       // ─── Instance operations ─────────────────────────────────────────
 
-      runCode: async (cfSandbox: CloudflareSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const detectedRuntime = runtime || detectRuntime(code);
-        const language = runtimeToLanguage(detectedRuntime);
-
-        // Remote mode
-        if (cfSandbox.remote) {
-          const execution = await workerRequestWithInit(cfSandbox, '/v1/sandbox/runCode', { code, language });
-          return processExecution(execution, detectedRuntime);
-        }
-
-        // Direct mode
-        try {
-          const execution = await cfSandbox.sandbox.runCode(code, { language });
-          return processExecution(execution, detectedRuntime);
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('Syntax error')) throw error;
-          throw new Error(`Cloudflare execution failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      },
-
       runCommand: async (cfSandbox: CloudflareSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 

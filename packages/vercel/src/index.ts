@@ -287,53 +287,6 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: VercelSandbox, code: string, runtime?: Runtime, config?: VercelConfig): Promise<CodeResult> => {
-        const startTime = Date.now();
-
-        // Auto-detect runtime if not specified
-        const effectiveRuntime = runtime || config?.runtime || (
-          // Strong Python indicators
-          code.includes('print(') ||
-            code.includes('import ') ||
-            code.includes('def ') ||
-            code.includes('sys.') ||
-            code.includes('json.') ||
-            code.includes('__') ||
-            code.includes('f"') ||
-            code.includes("f'") ||
-            code.includes('raise ')
-            ? 'python'
-            // Default to Node.js for all other cases (including ambiguous)
-            : 'node'
-        );
-
-        // Use base64 encoding for both runtimes for reliability and consistency
-        const encoded = Buffer.from(code).toString('base64');
-        const commandString = effectiveRuntime === 'python'
-          ? `echo "${encoded}" | base64 -d | python3`
-          : `echo "${encoded}" | base64 -d | node`;
-
-        const result = await sandbox.runCommand('sh', ['-c', commandString]);
-        // Call stdout/stderr sequentially to avoid "Multiple consumers for logs" warning
-        const stdout = await result.stdout();
-        const stderr = await result.stderr();
-
-        // Check for syntax errors and throw them
-        if (result.exitCode !== 0 && stderr) {
-          if (stderr.includes('SyntaxError') ||
-            stderr.includes('invalid syntax') ||
-            stderr.includes('Unexpected token') ||
-            stderr.includes('Unexpected identifier')) {
-            throw new Error(`Syntax error: ${stderr.trim()}`);
-          }
-        }
-
-        return {
-          output: stdout + stderr,
-          exitCode: result.exitCode,
-          language: effectiveRuntime,
-        };
-      },
 
       runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();

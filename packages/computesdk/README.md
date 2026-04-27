@@ -28,8 +28,8 @@ compute.setConfig({
 const sandbox = await compute.sandbox.create();
 
 // Execute code
-const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.output); // "Hello World!"
+const result = await sandbox.runCommand('python -c "print(\"Hello World!\")"');
+console.log(result.stdout); // "Hello World!"
 
 // Clean up
 await sandbox.destroy();
@@ -195,16 +195,6 @@ const sandbox = await compute.sandbox.getById('sandbox-id');
 
 ### Sandbox Operations
 
-#### `sandbox.runCode(code, language?)`
-
-Execute code in the sandbox.
-
-```typescript
-const result = await sandbox.runCode('print("Hello")', 'python');
-console.log(result.output); // "Hello"
-console.log(result.exitCode);
-```
-
 #### `sandbox.runCommand(command, options?)`
 
 Run a shell command.
@@ -324,13 +314,9 @@ const installResult = await sandbox.runCommand('npm install', { cwd: '/app' });
 console.log('Install:', installResult.stdout);
 
 // Run the app
-const runResult = await sandbox.runCode(`
-const { spawn } = require('child_process');
-const proc = spawn('node', ['src/index.js'], { cwd: '/app' });
-proc.stdout.on('data', (data) => console.log(data.toString()));
-`);
+const runResult = await sandbox.runCommand('node src/index.js', { cwd: '/app' });
 
-console.log(runResult.output);
+console.log(runResult.stdout);
 
 await sandbox.destroy();
 ```
@@ -348,7 +334,7 @@ compute.setConfig({
 });
 
 const e2bSandbox = await compute.sandbox.create();
-await e2bSandbox.runCode('import pandas as pd; print(pd.__version__)');
+await e2bSandbox.runCommand('python -c "import pandas as pd; print(pd.__version__)"');
 await e2bSandbox.destroy();
 
 // Switch to Modal for GPU workloads
@@ -360,7 +346,7 @@ compute.setConfig({
 });
 
 const modalSandbox = await compute.sandbox.create();
-await modalSandbox.runCode('import torch; print(torch.cuda.is_available())');
+await modalSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
 await modalSandbox.destroy();
 ```
 
@@ -369,7 +355,7 @@ await modalSandbox.destroy();
 ```typescript
 try {
   const sandbox = await compute.sandbox.create();
-  const result = await sandbox.runCode('invalid python code');
+  const result = await sandbox.runCommand('invalid python code');
 } catch (error) {
   console.error('Execution failed:', error.message);
   

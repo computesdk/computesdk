@@ -109,7 +109,6 @@ export interface SandboxFileSystem {
  * Providers can extend this with additional properties specific to their implementation
  */
 export interface CreateSandboxOptions {
-  runtime?: Runtime;
   timeout?: number;
   templateId?: string;
   metadata?: Record<string, any>;
@@ -141,9 +140,6 @@ export interface Sandbox {
   
   /** Provider name (e2b, railway, modal, etc.) */
   readonly provider: string;
-  
-  /** Execute code in the sandbox */
-  runCode(code: string, runtime?: Runtime): Promise<CodeResult>;
   
   /** 
    * Execute shell command

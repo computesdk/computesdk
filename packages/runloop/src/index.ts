@@ -8,7 +8,6 @@
 import { RunloopSDK, type Runloop } from "@runloop/api-client";
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
   CreateSnapshotOptions,
@@ -24,6 +23,13 @@ import type {
 // Define Runloop-specific types
 type RunloopSnapshot = Runloop.DevboxSnapshotView;
 type RunloopTemplate = Runloop.BlueprintView;
+type RunloopSandbox = Runloop.DevboxView & { client: RunloopSDK };
+
+type CommandRunner = (
+  sandbox: RunloopSandbox,
+  command: string,
+  options?: RunCommandOptions
+) => Promise<CommandResult>;
 
 /**
  * Runloop-specific configuration options
@@ -85,7 +91,7 @@ export interface CreateBlueprintTemplateOptions {
  * Create a Runloop provider instance using the factory pattern
  */
 export const runloop = defineProvider<
-  Runloop.DevboxView,         // TSandbox
+  RunloopSandbox,             // TSandbox
   RunloopConfig,              // TConfig
   RunloopTemplate,            // TTemplate 
   RunloopSnapshot             // TSnapshot
@@ -161,7 +167,7 @@ export const runloop = defineProvider<
           );
 
           // Create a RunloopSandbox object that contains both devbox and client
-          const runloopSandbox = {
+          const runloopSandbox: RunloopSandbox = {
             ...dbx,  // Spread all DevboxView properties
             client: client  // Add client for method access
           };
@@ -187,9 +193,13 @@ export const runloop = defineProvider<
           });
 
           const devbox = await client.api.devboxes.retrieve(sandboxId);
+          const runloopSandbox: RunloopSandbox = {
+            ...devbox,
+            client,
+          };
 
           return {
-            sandbox: devbox,
+            sandbox: runloopSandbox,
             sandboxId,
           };
         } catch (error) {
@@ -210,7 +220,10 @@ export const runloop = defineProvider<
           const devboxes = response.devboxes || [];
 
           return devboxes.map((devbox) => ({
-            sandbox: devbox,
+            sandbox: {
+              ...devbox,
+              client,
+            } as RunloopSandbox,
             sandboxId: devbox.id,
           }));
         } catch (error) {
@@ -235,94 +248,9 @@ export const runloop = defineProvider<
       },
 
       // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const startTime = Date.now();
-        const devbox = sandbox;
-        const client = sandbox.client;
-
-        // Auto-detect runtime if not specified
-        const effectiveRuntime: Runtime = runtime || (
-          // Strong Python indicators
-          code.includes('print(') ||
-            code.includes('import ') ||
-            code.includes('def ') ||
-            code.includes('sys.') ||
-            code.includes('json.') ||
-            code.includes('__') ||
-            code.includes('f"') ||
-            code.includes("f'") ||
-            code.includes('raise ')
-            ? 'python'
-            // Default to Node.js for all other cases (including ambiguous)
-            : 'node'
-        ) as Runtime;
-
-        try {
-
-          // Use base64 encoding for both runtimes for reliability and consistency
-          const encoded = Buffer.from(code).toString('base64');
-
-          let command;
-          if (effectiveRuntime === 'python') {
-            command = `echo "${encoded}" | base64 -d | python3`;
-          } else {
-            command = `echo "${encoded}" | base64 -d | node`;
-          }
-
-          // Execute code using Runloop's executeAsync
-          const executionResult =
-            await client.api.devboxes.executeAndAwaitCompletion(devbox.id, {
-              command: command,
-            });
-
-          // Check for syntax errors and throw them (similar to Vercel behavior)
-          if (executionResult.exit_status !== 0 && executionResult.stderr) {
-            // Check for common syntax error patterns
-            if (executionResult.stderr.includes('SyntaxError') ||
-              executionResult.stderr.includes('invalid syntax') ||
-              executionResult.stderr.includes('Unexpected token') ||
-              executionResult.stderr.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${executionResult.stderr.trim()}`);
-            }
-          }
-
-          return {
-            output: (executionResult.stdout || "") + (executionResult.stderr || ""),
-            exitCode: executionResult.exit_status || 0,
-            language: effectiveRuntime,
-          };
-        } catch (error) {
-          // Handle Runloop execution errors
-          if (error instanceof Error && error.message === 'exit status 1') {
-            const actualStderr = (error as any)?.result?.stderr || '';
-            const isSyntaxError = actualStderr.includes('SyntaxError');
-
-            if (isSyntaxError) {
-              // For syntax errors, throw
-              const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
-              throw new Error(`Syntax error: ${syntaxErrorLine}`);
-            } else {
-              // For runtime errors, return a result instead of throwing
-              return {
-                output: actualStderr || 'Error: Runtime error occurred during execution',
-                exitCode: 1,
-                language: effectiveRuntime,
-              };
-            }
-          }
-
-          // Re-throw syntax errors
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
 
       runCommand: async (
-        sandbox: any,
+        sandbox: RunloopSandbox,
         command: string,
         options?: RunCommandOptions
       ): Promise<CommandResult> => {
@@ -337,7 +265,7 @@ export const runloop = defineProvider<
           // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
@@ -397,18 +325,15 @@ export const runloop = defineProvider<
       },
 
       getUrl: async (
-        sandbox: any,
+        sandbox: RunloopSandbox,
         options: { port: number }
       ): Promise<string> => {
         const devbox = sandbox;
         const client = sandbox.client;
 
         try {
-          const tunnel = await client.api.devboxes.createTunnel(devbox.id, {
-            port: options.port,
-          });
-
-          return tunnel.url;
+          const tunnel = await client.api.devboxes.enableTunnel(devbox.id);
+          return `https://${options.port}-${tunnel.tunnel_key}.tunnel.runloop.ai`;
         } catch (error) {
           throw new Error(
             `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)
@@ -419,7 +344,7 @@ export const runloop = defineProvider<
 
       // Optional filesystem methods - using Runloop's file operations
       filesystem: {
-        readFile: async (sandbox: any, path: string, runCommand: any): Promise<string> => {
+        readFile: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
           try {
             const result = await runCommand(sandbox, `cat "${path}"`);
             if (result.exitCode !== 0) {
@@ -435,10 +360,10 @@ export const runloop = defineProvider<
         },
 
         writeFile: async (
-          sandbox: any,
+          sandbox: RunloopSandbox,
           path: string,
           content: string,
-          runCommand: any
+          runCommand: CommandRunner
         ): Promise<void> => {
           try {
             // Use command-based approach for file writing since API writeFileContents may have issues
@@ -457,9 +382,9 @@ export const runloop = defineProvider<
         },
 
         mkdir: async (
-          sandbox: any,
+          sandbox: RunloopSandbox,
           path: string,
-          runCommand: any
+          runCommand: CommandRunner
         ): Promise<void> => {
           const result = await runCommand(sandbox, `mkdir -p "${path}"`);
           if (result.exitCode !== 0) {
@@ -470,9 +395,9 @@ export const runloop = defineProvider<
         },
 
         readdir: async (
-          sandbox: any,
+          sandbox: RunloopSandbox,
           path: string,
-          runCommand: any
+          runCommand: CommandRunner
         ): Promise<FileEntry[]> => {
           const result = await runCommand(sandbox, `ls -la "${path}"`);
 
@@ -501,18 +426,18 @@ export const runloop = defineProvider<
         },
 
         exists: async (
-          sandbox: any,
+          sandbox: RunloopSandbox,
           path: string,
-          runCommand: any
+          runCommand: CommandRunner
         ): Promise<boolean> => {
           const result = await runCommand(sandbox, `test -e "${path}"`);
           return result.exitCode === 0;
         },
 
         remove: async (
-          sandbox: any,
+          sandbox: RunloopSandbox,
           path: string,
-          runCommand: any
+          runCommand: CommandRunner
         ): Promise<void> => {
           const result = await runCommand(sandbox, `rm -rf "${path}"`);
           if (result.exitCode !== 0) {
@@ -522,7 +447,7 @@ export const runloop = defineProvider<
       },
 
       // Provider-specific typed getInstance method
-      getInstance: (sandbox): Runloop.DevboxView => {
+      getInstance: (sandbox: RunloopSandbox): RunloopSandbox => {
         return sandbox;
       },
     },

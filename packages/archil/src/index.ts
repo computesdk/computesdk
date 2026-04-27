@@ -271,48 +271,6 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         }
       },
 
-      runCode: async (
-        sandbox: ArchilSandbox,
-        code: string,
-        runtime?: Runtime,
-        _config?: ArchilConfig,
-      ): Promise<CodeResult> => {
-        if (!runtime) {
-          throw new Error(
-            'Archil runCode requires an explicit runtime. Pass runtime: "node" or runtime: "python".',
-          );
-        }
-        if (runtime !== 'node' && runtime !== 'python') {
-          throw new Error(
-            `Archil runCode does not support runtime "${runtime}". Supported runtimes: "node", "python".`,
-          );
-        }
-        const interpreter = runtime === 'python' ? 'python3' : 'node';
-        const flag = runtime === 'python' ? '-c' : '-e';
-        const command = `${interpreter} ${flag} ${shellEscape(code)}`;
-
-        const result = await execOnDisk(sandbox, command);
-        const stdout = result.stdout ?? '';
-        const stderr = result.stderr ?? '';
-        const output = stderr ? `${stdout}${stdout && stderr ? '\n' : ''}${stderr}` : stdout;
-
-        if (result.exitCode !== 0) {
-          const syntaxErrorPattern =
-            runtime === 'python'
-              ? /\bSyntaxError\b|invalid syntax/i
-              : /\bSyntaxError\b|Unexpected token|Unexpected identifier/i;
-          if (syntaxErrorPattern.test(output)) {
-            throw new Error(output || `${runtime} syntax error`);
-          }
-        }
-
-        return {
-          output,
-          exitCode: result.exitCode,
-          language: runtime,
-        };
-      },
-
       getInfo: async (sandbox: ArchilSandbox): Promise<SandboxInfo> => {
         return {
           id: sandbox.disk.id,

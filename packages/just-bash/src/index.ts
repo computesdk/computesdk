@@ -140,48 +140,6 @@ const _provider = defineProvider<JustBashSandbox, JustBashConfig>({
        * For Python: executes via the built-in python3 command (pyodide)
        * For Node/JS: wraps code in a bash script that evaluates it
        */
-      runCode: async (sandbox: JustBashSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const effectiveRuntime = runtime || (
-          code.includes('print(') ||
-          code.includes('import ') ||
-          code.includes('def ') ||
-          code.includes('sys.') ||
-          code.includes('json.') ||
-          code.includes('__') ||
-          code.includes('f"') ||
-          code.includes("f'") ||
-          code.includes('raise ')
-            ? 'python'
-            : 'node'
-        );
-
-        let result: BashExecResult;
-
-        if (effectiveRuntime === 'python') {
-          // Use python3 command (requires python: true in config)
-          // Write code to a temp file and execute it to avoid quoting issues
-          const tempFile = `/tmp/_computesdk_run_${Date.now()}.py`;
-          await sandbox.bash.writeFile(tempFile, code);
-          result = await sandbox.bash.exec(`python3 ${tempFile}`);
-        } else {
-          // For node/JS, execute as bash script
-          // just-bash doesn't have a real Node.js runtime,
-          // so we execute the code as a bash script
-          const tempFile = `/tmp/_computesdk_run_${Date.now()}.sh`;
-          await sandbox.bash.writeFile(tempFile, code);
-          result = await sandbox.bash.exec(`bash ${tempFile}`);
-        }
-
-        const output = result.stderr
-          ? `${result.stdout}${result.stdout && result.stderr ? '\n' : ''}${result.stderr}`
-          : result.stdout;
-
-        return {
-          output,
-          exitCode: result.exitCode,
-          language: effectiveRuntime,
-        };
-      },
 
       /**
        * Execute a shell command in the sandbox
