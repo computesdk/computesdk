@@ -35,9 +35,6 @@ function makeProvider(
       getById: handlers.getById || (async () => null),
       destroy: handlers.destroy || (async () => {}),
       list: handlers.list,
-      find: handlers.find,
-      findOrCreate: handlers.findOrCreate,
-      extendTimeout: handlers.extendTimeout,
     },
     snapshot: snapshotHandlers
       ? {
@@ -175,18 +172,6 @@ describe('compute multi-provider', () => {
     expect(secondCreate).not.toHaveBeenCalled();
   });
 
-  it('falls through when first provider does not support findOrCreate', async () => {
-    const first = makeProvider('e2b');
-    const second = makeProvider('modal', {
-      findOrCreate: async () => makeSandbox('modal-foc', 'modal'),
-    });
-
-    const sdk = compute({ providers: [first, second] });
-    const sandbox = await sdk.sandbox.findOrCreate({ name: 'my-sandbox' });
-
-    expect(sandbox.provider).toBe('modal');
-  });
-
   it('uses sandbox provider affinity for destroy', async () => {
     const firstDestroy = vi.fn(async () => {});
     const secondDestroy = vi.fn(async () => {});
@@ -209,30 +194,6 @@ describe('compute multi-provider', () => {
 
     expect(secondDestroy).toHaveBeenCalledWith('modal-affinity');
     expect(firstDestroy).not.toHaveBeenCalled();
-  });
-
-  it('uses sandbox provider affinity for extendTimeout', async () => {
-    const firstExtend = vi.fn(async () => {});
-    const secondExtend = vi.fn(async () => {});
-
-    const first = makeProvider('e2b', {
-      create: async () => {
-        throw new Error('e2b unavailable');
-      },
-      extendTimeout: firstExtend,
-    });
-
-    const second = makeProvider('modal', {
-      create: async () => makeSandbox('modal-timeout', 'modal'),
-      extendTimeout: secondExtend,
-    });
-
-    const sdk = compute({ providers: [first, second] });
-    const sandbox = await sdk.sandbox.create();
-    await sdk.sandbox.extendTimeout(sandbox.sandboxId, { duration: 30000 });
-
-    expect(secondExtend).toHaveBeenCalledWith('modal-timeout', { duration: 30000 });
-    expect(firstExtend).not.toHaveBeenCalled();
   });
 
   it('routes snapshot create and delete to sandbox-affine provider', async () => {

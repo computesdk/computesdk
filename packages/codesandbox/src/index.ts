@@ -69,8 +69,6 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
               sandboxId: _sandboxId,
               namespace: _namespace,
               directory: _directory,
-              overlays: _overlays,
-              servers: _servers,
               ...providerOptions
             } = options || {};
 

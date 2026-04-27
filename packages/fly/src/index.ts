@@ -174,8 +174,6 @@ export const fly = defineProvider<FlyMachine, FlyConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ...providerOptions
           } = options || {};
 

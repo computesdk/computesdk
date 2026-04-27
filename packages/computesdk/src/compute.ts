@@ -1,44 +1,17 @@
 /**
  * Compute API - Direct Provider Implementation
  *
- * Gateway/control-plane transport has been removed from this package.
- * `compute` now delegates to one or more configured provider instances directly.
+ * `compute` delegates to one or more configured provider instances directly.
  */
 
-import type { Sandbox as SandboxInterface } from './types/universal-sandbox';
-import type { SetupOverlayConfig } from './setup';
-import type { ServerStartOptions } from './client';
+import type {
+  Sandbox as SandboxInterface,
+  CreateSandboxOptions as UniversalCreateSandboxOptions,
+} from './types/universal-sandbox';
 
-export interface CreateSandboxOptions {
-  timeout?: number;
-  templateId?: string;
-  metadata?: Record<string, any>;
-  envs?: Record<string, string>;
-  name?: string;
-  namespace?: string;
-  directory?: string;
-  overlays?: SetupOverlayConfig[];
-  servers?: ServerStartOptions[];
-  image?: string;
-  snapshotId?: string;
+export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
   /** Optional provider name override (must match provider.name) */
   provider?: string;
-}
-
-export interface FindOrCreateSandboxOptions extends CreateSandboxOptions {
-  name: string;
-  namespace?: string;
-}
-
-export interface FindSandboxOptions {
-  name: string;
-  namespace?: string;
-  /** Optional provider name override (must match provider.name) */
-  provider?: string;
-}
-
-export interface ExtendTimeoutOptions {
-  duration?: number;
 }
 
 export interface CreateSnapshotOptions {
@@ -53,9 +26,6 @@ interface ProviderSandboxManager {
   getById(sandboxId: string): Promise<SandboxInterface | null>;
   list?(): Promise<SandboxInterface[]>;
   destroy(sandboxId: string): Promise<void>;
-  findOrCreate?(options: FindOrCreateSandboxOptions): Promise<SandboxInterface>;
-  find?(options: FindSandboxOptions): Promise<SandboxInterface | null>;
-  extendTimeout?(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
 }
 
 interface ProviderSnapshotManager {
@@ -82,7 +52,7 @@ export interface ExplicitComputeConfig {
   providers?: DirectProvider[];
   /** Provider selection strategy when no explicit provider is passed */
   providerStrategy?: 'priority' | 'round-robin';
-  /** Retry the next provider when create/find-or-create fails */
+  /** Retry the next provider when create fails */
   fallbackOnError?: boolean;
 }
 
@@ -268,37 +238,6 @@ class ComputeManager {
     );
   }
 
-  private async findOrCreateWithFallback(options: FindOrCreateSandboxOptions): Promise<SandboxInterface> {
-    const preferredProviderName = options.provider;
-    const { provider: _providerName, ...providerOptions } = options;
-    const candidates = this.getCreateCandidates(preferredProviderName);
-    const canFallback = this.fallbackOnError && !preferredProviderName;
-    const errors: string[] = [];
-
-    for (const [index, provider] of candidates.entries()) {
-      try {
-        if (!provider.sandbox.findOrCreate) {
-          errors.push(`${getProviderLabel(provider, index)}: findOrCreate() not supported`);
-          continue;
-        }
-
-        const sandbox = await provider.sandbox.findOrCreate(providerOptions);
-        this.registerSandboxProvider(sandbox, provider);
-        return sandbox;
-      } catch (error) {
-        errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
-        if (!canFallback) {
-          throw error;
-        }
-      }
-    }
-
-    throw new Error(
-      `Failed to findOrCreate sandbox across ${candidates.length} provider(s).\n` +
-      errors.map((error) => `- ${error}`).join('\n')
-    );
-  }
-
   setConfig(config: ExplicitComputeConfig): void {
     this.providers = resolveProviders(config);
     this.providerStrategy = config.providerStrategy ?? 'priority';
@@ -360,55 +299,6 @@ class ComputeManager {
 
       throw new Error(
         `Failed to destroy sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
-    },
-
-    findOrCreate: async (options: FindOrCreateSandboxOptions): Promise<SandboxInterface> => {
-      return this.findOrCreateWithFallback(options);
-    },
-
-    find: async (options: FindSandboxOptions): Promise<SandboxInterface | null> => {
-      const preferredProviderName = options.provider;
-      const { provider: _providerName, ...providerOptions } = options;
-      const candidates = this.getCreateCandidates(preferredProviderName);
-
-      for (const provider of candidates) {
-        if (!provider.sandbox.find) {
-          continue;
-        }
-
-        const sandbox = await provider.sandbox.find(providerOptions);
-        if (sandbox) {
-          this.registerSandboxProvider(sandbox, provider);
-          return sandbox;
-        }
-      }
-
-      return null;
-    },
-
-    extendTimeout: async (sandboxId: string, options?: ExtendTimeoutOptions): Promise<void> => {
-      const candidates = this.getByIdCandidates(sandboxId);
-      const errors: string[] = [];
-
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.sandbox.extendTimeout) {
-          errors.push(`${getProviderLabel(provider, index)}: extendTimeout() not supported`);
-          continue;
-        }
-
-        try {
-          await provider.sandbox.extendTimeout(sandboxId, options);
-          this.sandboxProviders.set(sandboxId, provider);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
-        }
-      }
-
-      throw new Error(
-        `Failed to extend timeout for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
         errors.map((error) => `- ${error}`).join('\n')
       );
     },

@@ -10,7 +10,7 @@
 import * as repl from 'repl';
 import * as cmd from '@computesdk/cmd';
 import type { WorkbenchState } from './state.js';
-import { runCommand, defineProviderCommand, restartSandbox, destroySandbox, toggleMode, showMode, toggleVerbose, showVerbose, connectToSandbox } from './commands.js';
+import { runCommand, defineProviderCommand, restartSandbox, destroySandbox, toggleVerbose, showVerbose } from './commands.js';
 import { showHelp, showInfo } from './output.js';
 import { showProviders, showEnv, PROVIDER_NAMES } from './providers.js';
 import { isCommand } from './types.js';
@@ -190,16 +190,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
   // Provider management
   replServer.context.provider = defineProviderCommand(state);
   replServer.context.providers = () => showProviders();
-  
-  // Mode management
-  replServer.context.mode = async (modeName?: 'gateway' | 'direct') => {
-    if (!modeName) {
-      showMode(state);
-    } else {
-      await toggleMode(state, modeName);
-    }
-  };
-  
+
   // Sandbox operations
   replServer.context.restart = async () => {
     await restartSandbox(state);
@@ -208,11 +199,7 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
   replServer.context.destroy = async () => {
     await destroySandbox(state);
   };
-  
-  replServer.context.connect = async (url: string, token?: string) => {
-    await connectToSandbox(state, url, token);
-  };
-  
+
   replServer.context.info = () => showInfo(state);
   
   // Output control
@@ -320,93 +307,6 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     };
   };
   
-  replServer.context.findOrCreate = async (options: { name: string; namespace?: string; timeout?: number; runtime?: string }) => {
-    if (state.useDirectMode) {
-      throw new Error('Named sandboxes (findOrCreate) are only available in gateway mode. Use "mode gateway" to switch.');
-    }
-    
-    // Lazy-load dependencies
-    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
-    const { setSandbox } = await import('./state.js');
-    const { logSuccess } = await import('./output.js');
-    
-    // Prompt if switching
-    const shouldSwitch = await confirmSandboxSwitch(state);
-    
-    if (!shouldSwitch) {
-      const compute = await getComputeInstance(state);
-      const sandbox = await compute.sandbox.findOrCreate(options);
-      
-      return {
-        sandboxId: sandbox.sandboxId,
-        provider: sandbox.provider,
-        name: options.name,
-        namespace: options.namespace || 'default',
-        metadata: getSandboxMetadata(sandbox)
-      };
-    }
-    
-    // Find or create sandbox
-    const compute = await getComputeInstance(state);
-    const sandbox = await compute.sandbox.findOrCreate(options);
-    
-    // Set as current after successful operation
-    setSandbox(state, sandbox, sandbox.provider);
-    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
-    
-    return {
-      sandboxId: sandbox.sandboxId,
-      provider: sandbox.provider,
-      name: options.name,
-      namespace: options.namespace || 'default',
-      metadata: getSandboxMetadata(sandbox)
-    };
-  };
-  
-  replServer.context.find = async (options: { name: string; namespace?: string }) => {
-    if (state.useDirectMode) {
-      throw new Error('Named sandboxes (find) are only available in gateway mode. Use "mode gateway" to switch.');
-    }
-    
-    // Lazy-load dependencies
-    const { getComputeInstance, confirmSandboxSwitch } = await import('./commands.js');
-    const { setSandbox } = await import('./state.js');
-    const { logSuccess } = await import('./output.js');
-    
-    // Find sandbox first (may return null)
-    const compute = await getComputeInstance(state);
-    const sandbox = await compute.sandbox.find(options);
-    
-    if (!sandbox) {
-      return null; // Not found, nothing to switch to
-    }
-    
-    // Prompt if switching
-    const shouldSwitch = await confirmSandboxSwitch(state);
-    
-    if (!shouldSwitch) {
-      return {
-        sandboxId: sandbox.sandboxId,
-        provider: sandbox.provider,
-        name: options.name,
-        namespace: options.namespace || 'default',
-        metadata: getSandboxMetadata(sandbox)
-      };
-    }
-    
-    // Set as current
-    setSandbox(state, sandbox, sandbox.provider);
-    logSuccess(`Switched to sandbox ${sandbox.sandboxId}`);
-    
-    return {
-      sandboxId: sandbox.sandboxId,
-      provider: sandbox.provider,
-      name: options.name,
-      namespace: options.namespace || 'default',
-      metadata: getSandboxMetadata(sandbox)
-    };
-  };
-  
   // Expose filesystem namespace
   replServer.context.filesystem = {
     get readFile() {
@@ -465,172 +365,6 @@ function injectWorkbenchCommands(replServer: repl.REPLServer, state: WorkbenchSt
     }
   };
   
-  // Expose child namespace for child sandbox operations (gateway mode only)
-  replServer.context.child = {
-    get create() {
-      return async () => {
-        if (state.useDirectMode) {
-          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
-        }
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        const instance = sandbox.getInstance();
-        return instance.child.create();
-      };
-    },
-    get list() {
-      return async () => {
-        if (state.useDirectMode) {
-          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
-        }
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        const instance = sandbox.getInstance();
-        return instance.child.list();
-      };
-    },
-    get retrieve() {
-      return async (subdomain: string) => {
-        if (state.useDirectMode) {
-          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
-        }
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        const instance = sandbox.getInstance();
-        return instance.child.retrieve(subdomain);
-      };
-    },
-    get destroy() {
-      return async (subdomain: string, options?: { deleteFiles?: boolean }) => {
-        if (state.useDirectMode) {
-          throw new Error('Child sandboxes are only available in gateway mode. Use "mode gateway" to switch.');
-        }
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        const instance = sandbox.getInstance();
-        return instance.child.destroy(subdomain, options);
-      };
-    }
-  };
-  
-  // Expose server namespace for managed server operations
-  replServer.context.server = {
-    get start() {
-      return async (options: { slug: string; command: string; path?: string; env_file?: string; environment?: Record<string, string>; restart_policy?: 'never' | 'on-failure' | 'always'; max_restarts?: number; restart_delay_ms?: number; stop_timeout_ms?: number }) => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.server.start(options);
-      };
-    },
-    get list() {
-      return async () => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.server.list();
-      };
-    },
-    get retrieve() {
-      return async (slug: string) => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.server.retrieve(slug);
-      };
-    },
-    get stop() {
-      return async (slug: string) => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.server.stop(slug);
-      };
-    },
-    get restart() {
-      return async (slug: string) => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.server.restart(slug);
-      };
-    }
-  };
-
-  // Expose terminal namespace for PTY and exec terminal operations
-  replServer.context.terminal = {
-    get create() {
-      return async (options?: { shell?: string; encoding?: 'raw' | 'base64'; pty?: boolean }) => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        const term = await sandbox.terminal.create(options);
-        
-        // In verbose mode, enable WebSocket debug logging and auto-log terminal events
-        if (state.verbose) {
-          // Enable WebSocket debug mode
-          if (term._ws) {
-            term._ws.config.debug = true;
-          }
-          
-          // Auto-register event handlers that log output
-          term.on('output', (data: string) => {
-            console.log('[terminal:output]', JSON.stringify(data));
-          });
-          term.on('error', (error: string) => {
-            console.log('[terminal:error]', error);
-          });
-          term.on('destroyed', () => {
-            console.log('[terminal:destroyed]');
-          });
-        }
-        
-        return term;
-      };
-    },
-    get list() {
-      return async () => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.terminal.list();
-      };
-    },
-    get retrieve() {
-      return async (id: string) => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.terminal.retrieve(id);
-      };
-    },
-    get destroy() {
-      return async (id: string) => {
-        const sandbox = state.currentSandbox;
-        if (!sandbox) {
-          throw new Error('No active sandbox. Run a command to auto-create one.');
-        }
-        return sandbox.terminal.destroy(id);
-      };
-    }
-  };
-  
   // Expose getInstance for advanced users
   replServer.context.getInstance = () => {
     const sandbox = state.currentSandbox;
@@ -648,54 +382,19 @@ function setupSmartEvaluator(replServer: repl.REPLServer, state: WorkbenchState)
   const originalEval = replServer.eval;
   
   // Track workbench command names for auto-calling
-  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'mode', 'verbose', 'sandboxInfo', 'connect']);
-  
+  const workbenchCommands = new Set(['help', 'providers', 'info', 'env', 'restart', 'destroy', 'verbose', 'sandboxInfo']);
+
   (replServer as ExtendedREPLServer).eval = function (cmd: string, context: object, filename: string, callback: (err: Error | null, result: any) => void) {
     const trimmedCmd = cmd.trim();
-    
-    // Special handling for "provider local" variants
-    // Supports: "provider local", "provider local list", "provider local <subdomain>"
-    const providerLocalMatch = trimmedCmd.match(/^provider\s+local(?:\s+(\S+))?$/);
-    if (providerLocalMatch) {
-      const arg = providerLocalMatch[1];
-      const providerCmd = arg 
-        ? `await provider('local', '${arg}')`
-        : `await provider('local')`;
-      originalEval.call(this, providerCmd, context, filename, callback);
-      return;
-    }
-    
-    // Special handling for "provider <mode> <name>" syntax (without parentheses)
-    // Supports: "provider e2b", "provider direct e2b", "provider gateway e2b"
-    const providerMatch = trimmedCmd.match(/^provider(?:\s+(direct|gateway))?\s+([\w-]+)$/);
+
+    // Special handling for "provider <name>" syntax (without parentheses)
+    const providerMatch = trimmedCmd.match(/^provider\s+([\w-]+)$/);
     if (providerMatch) {
-      const mode = providerMatch[1] || null; // 'direct', 'gateway', or null
-      const providerName = providerMatch[2];
-      const providerCmd = mode 
-        ? `await provider('${mode}', '${providerName}')`
-        : `await provider('${providerName}')`;
-      originalEval.call(this, providerCmd, context, filename, callback);
+      const providerName = providerMatch[1];
+      originalEval.call(this, `await provider('${providerName}')`, context, filename, callback);
       return;
     }
-    
-    // Also handle just "provider direct" or "provider gateway" alone  
-    const providerOnlyMatch = trimmedCmd.match(/^provider\s+(direct|gateway)$/);
-    if (providerOnlyMatch) {
-      const mode = providerOnlyMatch[1];
-      const providerCmd = `await provider('${mode}')`;
-      originalEval.call(this, providerCmd, context, filename, callback);
-      return;
-    }
-    
-    // Special handling for "mode <gateway|direct>" syntax
-    const modeMatch = trimmedCmd.match(/^mode\s+(gateway|direct)$/);
-    if (modeMatch) {
-      const modeName = modeMatch[1];
-      const modeCmd = `await mode('${modeName}')`;
-      originalEval.call(this, modeCmd, context, filename, callback);
-      return;
-    }
-    
+
     // Special handling for $command syntax (direct shell command execution)
     const dollarMatch = trimmedCmd.match(/^\$(.+)$/);
     if (dollarMatch) {
@@ -771,12 +470,10 @@ function setupAutocomplete(replServer: repl.REPLServer, state: WorkbenchState) {
   
   // Workbench commands with their argument suggestions
   const workbenchCommands = {
-    'provider': [...PROVIDER_NAMES, 'local'], // Include 'local' as a provider option
-    'mode': ['gateway', 'direct'],
+    'provider': [...PROVIDER_NAMES],
     'providers': [],
     'restart': [],
     'destroy': [],
-    'connect': [], // Connect takes a URL argument
     'info': [],
     'env': [],
     'help': [],

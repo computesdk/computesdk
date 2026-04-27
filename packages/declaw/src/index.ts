@@ -83,8 +83,6 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
           templateId,
           namespace: _namespace,
           directory: _directory,
-          overlays: _overlays,
-          servers: _servers,
           ...providerOptions
         } = options || {};
 

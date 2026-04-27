@@ -86,8 +86,6 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ...providerOptions
           } = options || {};
 

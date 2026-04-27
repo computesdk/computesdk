@@ -4,12 +4,10 @@
  * Tracks current sandbox and provider state in-memory (no persistence)
  */
 
-import type { Sandbox } from 'computesdk';
 import type { ProviderSandbox } from '@computesdk/provider';
 import type { REPLServer } from 'repl';
 
-/** Sandbox can be either client Sandbox (gateway mode) or ProviderSandbox (direct mode) */
-type WorkbenchSandbox = Sandbox | ProviderSandbox;
+type WorkbenchSandbox = ProviderSandbox;
 
 /**
  * Workbench session state
@@ -26,10 +24,7 @@ export interface WorkbenchState {
   
   /** List of providers detected from environment */
   availableProviders: string[];
-  
-  /** Whether to use direct mode (true) or gateway mode (false, default) */
-  useDirectMode: boolean;
-  
+
   /** Show verbose command output (full result object) */
   verbose: boolean;
   
@@ -49,7 +44,6 @@ export function createState(): WorkbenchState {
     currentSandbox: null,
     sandboxCreatedAt: null,
     availableProviders: [],
-    useDirectMode: false,  // Default to gateway mode
     verbose: false,  // Enabled automatically for local provider
     compute: null,
   };

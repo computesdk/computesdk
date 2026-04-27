@@ -70,8 +70,6 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
             sandboxId: optSandboxId,
             namespace: _namespace,
             directory: _directory,
-            overlays: _overlays,
-            servers: _servers,
             ...providerOptions
           } = options || {};
 
