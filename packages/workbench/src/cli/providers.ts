@@ -100,24 +100,11 @@ function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, 
   return config;
 }
 
-/**
- * Workbench-specific provider names (includes gateway)
- */
-export const PROVIDER_NAMES = [
-  'gateway',
-  ...SHARED_PROVIDER_NAMES,
-] as const;
+export const PROVIDER_NAMES = SHARED_PROVIDER_NAMES;
 
 export type ProviderName = typeof PROVIDER_NAMES[number];
 
-/**
- * Auth requirements for each provider
- * Extends shared config with gateway-specific auth
- */
-export const PROVIDER_AUTH: Record<ProviderName, readonly (readonly string[])[]> = {
-  gateway: [['COMPUTESDK_API_KEY']],
-  ...SHARED_PROVIDER_AUTH,
-};
+export const PROVIDER_AUTH: Record<ProviderName, readonly (readonly string[])[]> = SHARED_PROVIDER_AUTH;
 
 /**
  * Get detailed status for a specific provider
@@ -256,16 +243,11 @@ export function showEnv() {
 /**
  * Auto-detect best provider to use
  */
-export function autoDetectProvider(forceGatewayMode = false): string | null {
+export function autoDetectProvider(): string | null {
   // Check for explicit override
   const explicit = process.env.COMPUTESDK_PROVIDER?.toLowerCase();
   if (explicit && isValidProvider(explicit) && isProviderReady(explicit)) {
     return explicit;
-  }
-
-  // If forcing gateway mode, only return gateway if available
-  if (forceGatewayMode) {
-    return isProviderReady('gateway') ? 'gateway' : null;
   }
 
   // Auto-detect based on priority order
@@ -325,9 +307,6 @@ export function getProviderSetupHelp(provider: string): string {
 export async function loadProvider(providerName: ProviderName): Promise<any> {
   try {
     switch (providerName) {
-      case 'gateway':
-        // Gateway is built into computesdk package
-        return await import('computesdk');
       case 'e2b':
         return await import('@computesdk/e2b');
       case 'railway':
@@ -373,9 +352,6 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         throw new Error(`Unknown provider: ${providerName}`);
     }
   } catch (error) {
-    if (providerName === 'gateway') {
-      throw new Error(`Failed to load gateway provider from computesdk package.`);
-    }
     throw new Error(
       `Failed to load provider ${providerName}. ` +
       `Make sure to install it: npm install @computesdk/${providerName}`
@@ -385,16 +361,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
 
 /**
  * Create provider config from environment variables
- * Uses shared PROVIDER_ENV_MAP from computesdk
  */
 export function getProviderConfig(providerName: ProviderName): Record<string, string> {
-  // Handle gateway separately (not in shared config)
-  if (providerName === 'gateway') {
-    const config: Record<string, string> = {};
-    if (process.env.COMPUTESDK_API_KEY) config.apiKey = process.env.COMPUTESDK_API_KEY;
-    return config;
-  }
-
-  // Use shared utility for other providers
-  return getProviderConfigFromEnv(providerName as SharedProviderName);
+  return getProviderConfigFromEnv(providerName);
 }

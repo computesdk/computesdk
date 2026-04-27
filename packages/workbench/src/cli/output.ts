@@ -47,8 +47,7 @@ export function showWelcome(availableProviders: string[], currentProvider: strin
   console.log(c.dim('Prompt shows connection status: > (disconnected) or provider:sandbox> (connected)\n'));
 
   if (availableProviders.length > 0) {
-    const backendProviders = availableProviders.filter(p => p !== 'gateway');
-    console.log(`Providers available: ${backendProviders.join(', ')}`);
+    console.log(`Providers available: ${availableProviders.join(', ')}`);
 
     if (currentProvider) {
       console.log(`Current provider: ${c.green(currentProvider)}\n`);

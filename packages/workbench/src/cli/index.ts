@@ -7,7 +7,7 @@
 import { createState } from './state.js';
 import { createREPL } from './repl.js';
 import { showWelcome } from './output.js';
-import { getAvailableProviders, autoDetectProvider } from './providers.js';
+import { getAvailableProviders } from './providers.js';
 import { cleanupOnExit } from './commands.js';
 
 /**
@@ -17,10 +17,7 @@ export async function startWorkbench(): Promise<void> {
   const state = createState();
 
   state.availableProviders = getAvailableProviders();
-  const detectedProvider = autoDetectProvider();
-
-  const backendProviders = state.availableProviders.filter(p => p !== 'gateway');
-  state.currentProvider = backendProviders[0] ?? detectedProvider;
+  state.currentProvider = state.availableProviders[0] ?? null;
 
   showWelcome(state.availableProviders, state.currentProvider);
 

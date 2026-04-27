@@ -131,7 +131,7 @@ export async function getComputeInstance(state: WorkbenchState): Promise<any> {
     return state.compute;
   }
 
-  const providerName = state.currentProvider || autoDetectProvider(false);
+  const providerName = state.currentProvider || autoDetectProvider();
 
   if (!providerName) {
     throw new Error('No provider configured.');
@@ -163,7 +163,7 @@ export async function getComputeInstance(state: WorkbenchState): Promise<any> {
  * Create a new sandbox using the configured direct provider
  */
 export async function createSandbox(state: WorkbenchState): Promise<void> {
-  const providerName = state.currentProvider || autoDetectProvider(false);
+  const providerName = state.currentProvider || autoDetectProvider();
 
   if (!providerName) {
     logError('No provider configured. Run "env" to see setup instructions.');
@@ -333,7 +333,7 @@ export async function switchProvider(state: WorkbenchState, name: string): Promi
   // Validate provider
   if (!isValidProvider(name)) {
     logError(`Unknown provider: ${name}`);
-    console.log(`Available providers: ${PROVIDER_NAMES.filter(p => p !== 'gateway').join(', ')}`);
+    console.log(`Available providers: ${PROVIDER_NAMES.join(', ')}`);
     return;
   }
 

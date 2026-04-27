@@ -180,10 +180,8 @@ const sandbox = await compute.sandbox.create({
 - `envs?: Record<string, string>` - Environment variables
 - `namespace?: string` - Namespace for organizing sandboxes
 - `name?: string` - Human-readable name for the sandbox
-- `overlays?: SetupOverlayConfig[]` - Template overlays to apply
-- `servers?: ServerStartOptions[]` - Servers to start automatically
 
-> **Note:** Not every provider honors every option. Support for fields like `name`, `metadata`, `envs`, `overlays`, and `servers` depends on the underlying provider SDK — some pass them through, some map them to a different field, and some ignore them silently. Check your provider package's README for the exact set of options it respects.
+> **Note:** Not every provider honors every option. Support for fields like `name`, `metadata`, and `envs` depends on the underlying provider SDK — some pass them through, some map them to a different field, and some ignore them silently. Check your provider package's README for the exact set of options it respects.
 
 #### `compute.sandbox.getById(sandboxId)`
 

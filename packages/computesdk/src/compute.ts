@@ -4,18 +4,12 @@
  * `compute` delegates to one or more configured provider instances directly.
  */
 
-import type { Sandbox as SandboxInterface } from './types/universal-sandbox';
+import type {
+  Sandbox as SandboxInterface,
+  CreateSandboxOptions as UniversalCreateSandboxOptions,
+} from './types/universal-sandbox';
 
-export interface CreateSandboxOptions {
-  timeout?: number;
-  templateId?: string;
-  metadata?: Record<string, any>;
-  envs?: Record<string, string>;
-  name?: string;
-  namespace?: string;
-  directory?: string;
-  image?: string;
-  snapshotId?: string;
+export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
   /** Optional provider name override (must match provider.name) */
   provider?: string;
 }
