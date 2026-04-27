@@ -1,5 +1,13 @@
 # @computesdk/agentuity
 
+## 0.0.6
+
+### Patch Changes
+
+- Updated dependencies [371f667]
+  - computesdk@3.0.0
+  - @computesdk/provider@1.4.0
+
 ## 0.0.5
 
 ### Patch Changes

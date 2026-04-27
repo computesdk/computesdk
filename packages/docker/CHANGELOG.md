@@ -1,5 +1,13 @@
 # @computesdk/docker
 
+## 1.2.44
+
+### Patch Changes
+
+- Updated dependencies [371f667]
+  - computesdk@3.0.0
+  - @computesdk/provider@1.4.0
+
 ## 1.2.43
 
 ### Patch Changes
