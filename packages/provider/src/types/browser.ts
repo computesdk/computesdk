@@ -14,8 +14,15 @@
 export interface BrowserSession {
   /** Unique session identifier */
   sessionId: string;
-  /** CDP or WebSocket connection URL */
-  connectUrl: string;
+  /**
+   * CDP or WebSocket connection URL.
+   *
+   * Always set for sessions returned by `create()` and `getById()`. May be
+   * absent for entries returned by `list()` when the underlying provider's
+   * list endpoint omits the connect URL — in that case, call
+   * `provider.getConnectUrl(sessionId)` to obtain a connectable URL.
+   */
+  connectUrl?: string;
   /** Current session status */
   status: 'created' | 'running' | 'completed' | 'failed' | 'timed_out';
   /** Session creation timestamp */
