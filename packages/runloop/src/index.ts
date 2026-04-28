@@ -17,7 +17,6 @@ import type {
 import type {
   CreateSandboxOptions,
   FileEntry,
-  Runtime,
 } from "computesdk";
 
 // Define Runloop-specific types
@@ -91,17 +90,15 @@ export interface CreateBlueprintTemplateOptions {
  * Create a Runloop provider instance using the factory pattern
  */
 export const runloop = defineProvider<
-  RunloopSandbox,             // TSandbox
-  RunloopConfig,              // TConfig
-  RunloopTemplate,            // TTemplate 
-  RunloopSnapshot             // TSnapshot
+  RunloopSandbox,
+  RunloopConfig,
+  RunloopTemplate,
+  RunloopSnapshot
 >({
   name: "runloop",
   methods: {
     sandbox: {
-      // Collection operations (map to compute.sandbox.*)
       create: async (config: RunloopConfig, options?: CreateSandboxOptions) => {
-        // Validate API key
         const apiKey =
           config.apiKey ||
           (typeof process !== "undefined" && process.env?.RUNLOOP_API_KEY) ||
@@ -120,9 +117,7 @@ export const runloop = defineProvider<
             bearerToken: apiKey,
           });
 
-          // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
-            runtime: _runtime,
             timeout: optTimeout,
             envs,
             name,
@@ -135,8 +130,6 @@ export const runloop = defineProvider<
             ...providerOptions
           } = options || {};
 
-          // Convert ms to seconds for Runloop's keep_alive_time_seconds
-          // options.timeout takes precedence over config.timeout
           const effectiveTimeout = optTimeout ?? timeout;
           const keepAliveSeconds = effectiveTimeout
             ? Math.ceil(effectiveTimeout / 1000)
@@ -149,12 +142,10 @@ export const runloop = defineProvider<
             name: name || optSandboxId,
             metadata,
             environment_variables: envs,
-            ...providerOptions, // Spread provider-specific options (e.g., blueprint params, resource_size)
+            ...providerOptions,
           };
 
-          // Use blueprint if specified
           if (templateId) {
-            // Check template prefix to determine parameter type
             if (templateId.startsWith("bpt_")) {
               devboxParams.blueprint_id = templateId;
             } else if (templateId.startsWith("snp_")) {
@@ -166,10 +157,9 @@ export const runloop = defineProvider<
             devboxParams,
           );
 
-          // Create a RunloopSandbox object that contains both devbox and client
           const runloopSandbox: RunloopSandbox = {
-            ...dbx,  // Spread all DevboxView properties
-            client: client  // Add client for method access
+            ...dbx,
+            client: client
           };
 
           return {
@@ -178,8 +168,7 @@ export const runloop = defineProvider<
           };
         } catch (error) {
           throw new Error(
-            `Failed to create Runloop devbox: ${error instanceof Error ? error.message : String(error)
-            }`
+            `Failed to create Runloop devbox: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       },
@@ -188,22 +177,13 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
+          const client = new RunloopSDK({ bearerToken: apiKey });
           const devbox = await client.api.devboxes.retrieve(sandboxId);
-          const runloopSandbox: RunloopSandbox = {
-            ...devbox,
-            client,
-          };
-
           return {
-            sandbox: runloopSandbox,
+            sandbox: { ...devbox, client } as RunloopSandbox,
             sandboxId,
           };
-        } catch (error) {
-          // Devbox doesn't exist or can't be accessed
+        } catch {
           return null;
         }
       },
@@ -212,22 +192,15 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
+          const client = new RunloopSDK({ bearerToken: apiKey });
           const response = await client.api.devboxes.list();
           const devboxes = response.devboxes || [];
 
           return devboxes.map((devbox) => ({
-            sandbox: {
-              ...devbox,
-              client,
-            } as RunloopSandbox,
+            sandbox: { ...devbox, client } as RunloopSandbox,
             sandboxId: devbox.id,
           }));
-        } catch (error) {
-          // Return empty array if listing fails
+        } catch {
           return [];
         }
       },
@@ -236,18 +209,12 @@ export const runloop = defineProvider<
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
 
         try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
+          const client = new RunloopSDK({ bearerToken: apiKey });
           await client.api.devboxes.shutdown(sandboxId);
-        } catch (error) {
+        } catch {
           // Devbox might already be destroyed or doesn't exist
-          // This is acceptable for destroy operations
         }
       },
-
-      // Instance operations (map to individual Sandbox methods)
 
       runCommand: async (
         sandbox: RunloopSandbox,
@@ -259,10 +226,8 @@ export const runloop = defineProvider<
         const client = sandbox.client;
 
         try {
-          // Build the full command with options
           let fullCommand = command;
 
-          // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
               .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
@@ -270,12 +235,10 @@ export const runloop = defineProvider<
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
 
-          // Handle working directory
           if (options?.cwd) {
             fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
 
-          // Handle background execution
           if (options?.background) {
             fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           }
@@ -292,16 +255,11 @@ export const runloop = defineProvider<
             durationMs: Date.now() - startTime,
           };
         } catch (error) {
-          // Re-throw syntax errors
-          if (
-            error instanceof Error &&
-            error.message.includes("Syntax error")
-          ) {
+          if (error instanceof Error && error.message.includes("Syntax error")) {
             throw error;
           }
           throw new Error(
-            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)
-            }`
+            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       },
@@ -312,13 +270,13 @@ export const runloop = defineProvider<
         return {
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
-          runtime: "node" as Runtime, // Runloop supports multiple runtimes, defaulting to node
           status: devbox.status as 'running' | 'stopped' | 'error',
           createdAt: new Date(devbox.create_time_ms || Date.now()),
           timeout: devbox.launch_parameters.keep_alive_time_seconds || 300000,
           metadata: {
             runloopDevboxId: devbox.id,
             templateId: devbox.blueprint_id || devbox.snapshot_id,
+            runtime: 'node',
             ...devbox.metadata,
           },
         };
@@ -336,27 +294,18 @@ export const runloop = defineProvider<
           return `https://${options.port}-${tunnel.tunnel_key}.tunnel.runloop.ai`;
         } catch (error) {
           throw new Error(
-            `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)
-            }`
+            `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       },
 
-      // Optional filesystem methods - using Runloop's file operations
       filesystem: {
         readFile: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
-          try {
-            const result = await runCommand(sandbox, `cat "${path}"`);
-            if (result.exitCode !== 0) {
-              throw new Error(`File not found or unreadable: ${result.stderr}`);
-            }
-            return result.stdout;
-          } catch (error) {
-            throw new Error(
-              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)
-              }`
-            );
+          const result = await runCommand(sandbox, `cat "${path}"`);
+          if (result.exitCode !== 0) {
+            throw new Error(`File not found or unreadable: ${result.stderr}`);
           }
+          return result.stdout;
         },
 
         writeFile: async (
@@ -365,19 +314,10 @@ export const runloop = defineProvider<
           content: string,
           runCommand: CommandRunner
         ): Promise<void> => {
-          try {
-            // Use command-based approach for file writing since API writeFileContents may have issues
-            const encoded = Buffer.from(content).toString('base64');
-            const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
-
-            if (result.exitCode !== 0) {
-              throw new Error(`Command failed: ${result.stderr}`);
-            }
-          } catch (error) {
-            throw new Error(
-              `Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)
-              }`
-            );
+          const encoded = Buffer.from(content).toString('base64');
+          const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to write file ${path}: ${result.stderr}`);
           }
         },
 
@@ -388,9 +328,7 @@ export const runloop = defineProvider<
         ): Promise<void> => {
           const result = await runCommand(sandbox, `mkdir -p "${path}"`);
           if (result.exitCode !== 0) {
-            throw new Error(
-              `Failed to create directory ${path}: ${result.stderr}`
-            );
+            throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
           }
         },
 
@@ -402,9 +340,7 @@ export const runloop = defineProvider<
           const result = await runCommand(sandbox, `ls -la "${path}"`);
 
           if (result.exitCode !== 0) {
-            throw new Error(
-              `Failed to list directory ${path}: ${result.stderr}`
-            );
+            throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
           }
 
           const lines = (result.stdout || "")
@@ -446,95 +382,41 @@ export const runloop = defineProvider<
         },
       },
 
-      // Provider-specific typed getInstance method
-      getInstance: (sandbox: RunloopSandbox): RunloopSandbox => {
-        return sandbox;
-      },
+      getInstance: (sandbox: RunloopSandbox): RunloopSandbox => sandbox,
     },
 
-    // Template management methods using the new factory pattern
     template: {
       create: async (
         config: RunloopConfig,
         options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams
       ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+        if (!apiKey) throw new Error("Missing Runloop API key for blueprint template creation");
 
-        if (!apiKey) {
-          throw new Error(
-            "Missing Runloop API key for blueprint template creation"
-          );
-        }
-
-        try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
-          const blueprint = await client.api.blueprints.create(options);
-          return blueprint;
-        } catch (error) {
-          throw new Error(
-            `Failed to create blueprint template: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = new RunloopSDK({ bearerToken: apiKey });
+        return client.api.blueprints.create(options);
       },
 
       list: async (config: RunloopConfig, options?: { limit?: number }) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+        if (!apiKey) throw new Error("Missing Runloop API key for listing blueprint templates");
 
-        if (!apiKey) {
-          throw new Error(
-            "Missing Runloop API key for listing blueprint templates"
-          );
-        }
-
-        try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
-          const listParams: any = {};
-          if (options?.limit) {
-            listParams.limit = options.limit;
-          }
-
-          const response = await client.api.blueprints.list(listParams);
-          return response.blueprints || [];
-        } catch (error) {
-          throw new Error(
-            `Failed to list blueprint templates: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = new RunloopSDK({ bearerToken: apiKey });
+        const listParams: any = {};
+        if (options?.limit) listParams.limit = options.limit;
+        const response = await client.api.blueprints.list(listParams);
+        return response.blueprints || [];
       },
 
       delete: async (config: RunloopConfig, blueprintId: string) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+        if (!apiKey) throw new Error("Missing Runloop API key for blueprint template deletion");
 
-        if (!apiKey) {
-          throw new Error(
-            "Missing Runloop API key for blueprint template deletion"
-          );
-        }
-
-        try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
-          await client.api.blueprints.delete(blueprintId);
-        } catch (error) {
-          throw new Error(
-            `Failed to delete blueprint template ${blueprintId}: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = new RunloopSDK({ bearerToken: apiKey });
+        await client.api.blueprints.delete(blueprintId);
       },
     },
 
-    // Snapshot management methods using the new factory pattern
     snapshot: {
       create: async (
         config: RunloopConfig,
@@ -542,35 +424,13 @@ export const runloop = defineProvider<
         options?: CreateSnapshotOptions
       ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+        if (!apiKey) throw new Error("Missing Runloop API key for snapshot creation");
 
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for snapshot creation");
-        }
-
-        try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
-          const snapshotParams: any = {};
-          if (options?.name) {
-            snapshotParams.name = options.name;
-          }
-          if (options?.metadata) {
-            snapshotParams.metadata = options.metadata;
-          }
-
-          const snapshot = await client.api.devboxes.snapshotDisk(
-            sandboxId,
-            snapshotParams
-          );
-          return snapshot;
-        } catch (error) {
-          throw new Error(
-            `Failed to create snapshot for sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = new RunloopSDK({ bearerToken: apiKey });
+        const snapshotParams: any = {};
+        if (options?.name) snapshotParams.name = options.name;
+        if (options?.metadata) snapshotParams.metadata = options.metadata;
+        return client.api.devboxes.snapshotDisk(sandboxId, snapshotParams);
       },
 
       list: async (
@@ -578,50 +438,21 @@ export const runloop = defineProvider<
         options?: ListSnapshotsOptions
       ) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+        if (!apiKey) throw new Error("Missing Runloop API key for listing snapshots");
 
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for listing snapshots");
-        }
-
-        try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
-          const listParams: any = {};
-          if (options?.limit) {
-            listParams.limit = options.limit;
-          }
-
-          const response = await client.api.devboxes.listDiskSnapshots(listParams);
-          return response.snapshots || [];
-        } catch (error) {
-          throw new Error(
-            `Failed to list snapshots: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = new RunloopSDK({ bearerToken: apiKey });
+        const listParams: any = {};
+        if (options?.limit) listParams.limit = options.limit;
+        const response = await client.api.devboxes.listDiskSnapshots(listParams);
+        return response.snapshots || [];
       },
 
       delete: async (config: RunloopConfig, snapshotId: string) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+        if (!apiKey) throw new Error("Missing Runloop API key for snapshot deletion");
 
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for snapshot deletion");
-        }
-
-        try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
-
-          await client.api.devboxes.deleteDiskSnapshot(snapshotId);
-        } catch (error) {
-          throw new Error(
-            `Failed to delete snapshot ${snapshotId}: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = new RunloopSDK({ bearerToken: apiKey });
+        await client.api.devboxes.deleteDiskSnapshot(snapshotId);
       },
     },
   },
