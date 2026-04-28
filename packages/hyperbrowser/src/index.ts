@@ -211,12 +211,12 @@ export const hyperbrowser = defineBrowserProvider<HyperbrowserSession, Hyperbrow
       list: async (config) => {
         const client = createClient(config);
         const response = await client.sessions.list();
-        // The list response returns a lean Session shape without wsEndpoint;
-        // callers needing the connect URL should use getConnectUrl(sessionId).
+        // Hyperbrowser's list endpoint returns a lean Session shape without
+        // wsEndpoint. We omit connectUrl on list entries — callers that need
+        // a connectable URL should use provider.getConnectUrl(sessionId).
         return response.sessions.map((s) => ({
           session: s as HyperbrowserSession,
           sessionId: s.id,
-          connectUrl: '',
           status: mapStatus(s.status),
         }));
       },
