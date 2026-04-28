@@ -14,10 +14,8 @@
 import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
 import { defineProvider } from '@computesdk/provider';
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
-  Runtime,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions
@@ -29,8 +27,6 @@ import type {
 export interface HopxConfig {
   /** HopX API key - if not provided, will fallback to HOPX_API_KEY environment variable */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Template name for sandbox creation (e.g., 'code-interpreter') */
@@ -79,7 +75,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
 
           // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
-            runtime: _runtime,
             timeout: _timeout,
             envs,
             name,
@@ -223,13 +218,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
       },
 
       /**
-       * Execute code in the sandbox
-       * 
-       * Uses sandbox.runCode() with auto-detected runtime.
-       * Maps ComputeSDK runtime ('node'/'python') to HopX language ('javascript'/'python').
-       */
-
-      /**
        * Execute a shell command in the sandbox
        * 
        * Uses sandbox.commands.run() to execute shell commands.
@@ -302,7 +290,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           return {
             id: sandbox.sandboxId,
             provider: 'hopx',
-            runtime: 'python', // HopX default runtime
             status: (info.status as 'running' | 'stopped' | 'error') || 'running',
             createdAt: info.createdAt ? new Date(info.createdAt) : new Date(),
             timeout: info.timeoutSeconds ? info.timeoutSeconds * 1000 : 300000,
@@ -318,7 +305,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           return {
             id: sandbox.sandboxId,
             provider: 'hopx',
-            runtime: 'python',
             status: 'running',
             createdAt: new Date(),
             timeout: 300000,

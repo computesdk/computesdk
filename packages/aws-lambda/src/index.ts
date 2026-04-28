@@ -3,7 +3,7 @@
  */
 
 import { defineProvider } from '@computesdk/provider';
-import type { Runtime, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 import {
   LambdaClient,
   CreateFunctionCommand,
@@ -89,21 +89,6 @@ const generateFunctionName = (prefix: string): string => {
 };
 
 /**
- * Map ComputeSDK runtime to AWS Lambda runtime
- */
-const mapRuntimeToAWS = (runtime?: Runtime): AWSRuntime => {
-  // Default to Node.js 20.x if not specified
-  if (!runtime || runtime === 'node') {
-    return 'nodejs20.x' as AWSRuntime;
-  }
-  if (runtime === 'python') {
-    return 'python3.12' as AWSRuntime;
-  }
-  // Add more mappings as needed
-  throw new Error(`Unsupported runtime: ${runtime}. Supported runtimes: node, python`);
-};
-
-/**
  * Create a ZIP file containing Lambda handler code using JSZip
  */
 const createLambdaZip = async (): Promise<Buffer> => {
@@ -142,7 +127,7 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
 
         try {
           const functionName = generateFunctionName(functionNamePrefix);
-          const runtime = mapRuntimeToAWS(options?.runtime);
+          const runtime = 'nodejs20.x' as AWSRuntime;
           const zipBuffer = await createLambdaZip();
 
           const command = new CreateFunctionCommand({
