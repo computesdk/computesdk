@@ -6,7 +6,7 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Sprites sandbox instance returned from the API
@@ -25,8 +25,8 @@ export interface SpritesConfig {
   apiKey?: string;
   /** Base URL for the Sprites API */
   baseUrl?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'python', 'node') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
@@ -46,7 +46,6 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
   name: 'sprites',
   methods: {
     sandbox: {
-      // Collection operations (map to compute.sandbox.*)
       create: async (config: SpritesConfig, options?: CreateSandboxOptions) => {
         const token = config.apiKey || (typeof process !== 'undefined' && process.env?.SPRITES_TOKEN) || '';
         const baseUrl = config.baseUrl || 'https://api.sprites.dev/v1';
@@ -58,9 +57,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         }
 
         try {
-          // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
-            runtime: _runtime,
             timeout: _timeout,
             envs,
             name,
@@ -76,15 +73,13 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           const body: Record<string, any> = {
             name: name || optSandboxId || `sprite-${Date.now()}`,
             url_settings: { auth: 'public' },
-            ...providerOptions, // Spread provider-specific options
+            ...providerOptions,
           };
 
-          // Remap envs to env_vars
           if (envs && Object.keys(envs).length > 0) {
             body.env_vars = envs;
           }
 
-          // Pass metadata
           if (metadata && typeof metadata === 'object') {
             body.metadata = metadata;
           }
@@ -104,15 +99,10 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           }
 
           const data = await res.json() as SpritesSandbox;
-
-          // Attach token and baseUrl so instance methods can use them
           data._token = token;
           data._baseUrl = baseUrl;
 
-          return {
-            sandbox: data,
-            sandboxId: data.name,
-          };
+          return { sandbox: data, sandboxId: data.name };
         } catch (error) {
           if (error instanceof Error && error.message.includes('Sprites API error')) {
             throw error;
@@ -130,26 +120,17 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         try {
           const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(sandboxId)}`, {
             method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
 
-          if (!res.ok) {
-            return null;
-          }
+          if (!res.ok) return null;
 
           const data = await res.json() as SpritesSandbox;
           data._token = token;
           data._baseUrl = baseUrl;
 
-          return {
-            sandbox: data,
-            sandboxId: data.name,
-          };
-        } catch (error) {
-          return null;
-        }
+          return { sandbox: data, sandboxId: data.name };
+        } catch { return null; }
       },
 
       list: async (config: SpritesConfig) => {
@@ -159,27 +140,18 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         try {
           const res = await fetch(`${baseUrl}/sprites`, {
             method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
 
-          if (!res.ok) {
-            return [];
-          }
+          if (!res.ok) return [];
 
           const data = await res.json() as SpritesSandbox[];
           return data.map((sprite: SpritesSandbox) => {
             sprite._token = token;
             sprite._baseUrl = baseUrl;
-            return {
-              sandbox: sprite,
-              sandboxId: sprite.name,
-            };
+            return { sandbox: sprite, sandboxId: sprite.name };
           });
-        } catch (error) {
-          return [];
-        }
+        } catch { return []; }
       },
 
       destroy: async (config: SpritesConfig, sandboxId: string) => {
@@ -189,16 +161,10 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         try {
           await fetch(`${baseUrl}/sprites/${encodeURIComponent(sandboxId)}`, {
             method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
-        } catch (error) {
-          // Sprite might already be destroyed or doesn't exist
-        }
+        } catch { /* already destroyed or doesn't exist */ }
       },
-
-      // Instance operations (map to individual Sandbox methods)
 
       runCommand: async (sandbox: SpritesSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const token = sandbox._token;
@@ -206,11 +172,6 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         const name = sandbox.name;
         const startTime = Date.now();
 
-        // Limitation: The Sprites exec API returns a single response body, so
-        // stdout and stderr are merged via 2>&1. The combined output is assigned
-        // to stdout or stderr based on exit code. This means stderr writes from
-        // successful commands (e.g., warnings) appear in stdout, and stdout from
-        // failed commands is attributed to stderr.
         const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
         let shellCmd = command;
 
@@ -250,15 +211,9 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           const raw = await res.text();
 
           if (!res.ok) {
-            return {
-              stdout: '',
-              stderr: raw,
-              exitCode: 1,
-              durationMs: Date.now() - startTime,
-            };
+            return { stdout: '', stderr: raw, exitCode: 1, durationMs: Date.now() - startTime };
           }
 
-          // Parse exit code from delimiter
           const delimIdx = raw.lastIndexOf(delimiter);
           let output: string;
           let exitCode: number;
@@ -295,21 +250,16 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         try {
           const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(name)}`, {
             method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
 
-          if (!res.ok) {
-            throw new Error(`Sprites API error (${res.status})`);
-          }
+          if (!res.ok) throw new Error(`Sprites API error (${res.status})`);
 
           const data = await res.json() as Record<string, any>;
 
           return {
             id: data.id || name,
             provider: 'sprites',
-            runtime: 'python',
             status: data.status === 'running' ? 'running' : data.status === 'warm' ? 'running' : 'stopped',
             createdAt: new Date(data.created_at),
             timeout: 300000,
@@ -330,31 +280,22 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       },
 
       getUrl: async (sandbox: SpritesSandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        // Note: options.port is accepted for interface compatibility but not used.
-        // Sprites exposes a single public URL per sprite and does not support
-        // port-based routing. The API's /proxy endpoint uses WebSocket-based TCP
-        // tunneling, not HTTP port mapping like E2B or Modal.
         if (sandbox.url) {
           const protocol = options.protocol || 'https';
           const baseHost = sandbox.url.replace(/^https?:\/\//, '');
           return `${protocol}://${baseHost}`;
         }
 
-        // Fallback: fetch fresh sprite data to get the url
         const token = sandbox._token;
         const baseUrl = sandbox._baseUrl;
         const name = sandbox.name;
 
         const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(name)}`, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { 'Authorization': `Bearer ${token}` },
         });
 
-        if (!res.ok) {
-          throw new Error(`Failed to get Sprites URL: API error (${res.status})`);
-        }
+        if (!res.ok) throw new Error(`Failed to get Sprites URL: API error (${res.status})`);
 
         const data = await res.json() as Record<string, any>;
         const protocol = options.protocol || 'https';
@@ -362,7 +303,6 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         return `${protocol}://${host}`;
       },
 
-      // Optional filesystem methods
       filesystem: {
         readFile: async (sandbox: SpritesSandbox, filePath: string): Promise<string> => {
           const token = sandbox._token;
@@ -375,16 +315,11 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
 
           const res = await fetch(url.toString(), {
             method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
 
-          if (!res.ok) {
-            throw new Error(`Failed to read file: API error (${res.status})`);
-          }
-
-          return await res.text();
+          if (!res.ok) throw new Error(`Failed to read file: API error (${res.status})`);
+          return res.text();
         },
 
         writeFile: async (sandbox: SpritesSandbox, filePath: string, content: string): Promise<void> => {
@@ -406,9 +341,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
             body: content,
           });
 
-          if (!res.ok) {
-            throw new Error(`Failed to write file: API error (${res.status})`);
-          }
+          if (!res.ok) throw new Error(`Failed to write file: API error (${res.status})`);
         },
 
         mkdir: async (sandbox: SpritesSandbox, dirPath: string): Promise<void> => {
@@ -416,8 +349,6 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           const baseUrl = sandbox._baseUrl;
           const name = sandbox.name;
 
-          // Use writeFile with mkdir=true to create a placeholder, ensuring the directory exists
-          // Alternatively, write an empty .keep file in the directory
           const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/write`);
           url.searchParams.set('path', `${dirPath}/.keep`);
           url.searchParams.set('workingDir', '/');
@@ -432,9 +363,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
             body: '',
           });
 
-          if (!res.ok) {
-            throw new Error(`Failed to create directory: API error (${res.status})`);
-          }
+          if (!res.ok) throw new Error(`Failed to create directory: API error (${res.status})`);
         },
 
         readdir: async (sandbox: SpritesSandbox, dirPath: string): Promise<FileEntry[]> => {
@@ -448,14 +377,10 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
 
           const res = await fetch(url.toString(), {
             method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
 
-          if (!res.ok) {
-            throw new Error(`Failed to list directory: API error (${res.status})`);
-          }
+          if (!res.ok) throw new Error(`Failed to list directory: API error (${res.status})`);
 
           const data = await res.json() as { entries: any[]; count: number };
           return (data.entries || []).map((entry: any) => ({
@@ -471,7 +396,6 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           const baseUrl = sandbox._baseUrl;
           const name = sandbox.name;
 
-          // Try reading as a file first
           const fileUrl = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/read`);
           fileUrl.searchParams.set('path', filePath);
           fileUrl.searchParams.set('workingDir', '/');
@@ -483,7 +407,6 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
 
           if (fileRes.ok) return true;
 
-          // If file read fails, try listing as a directory
           const dirUrl = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/fs/list`);
           dirUrl.searchParams.set('path', filePath);
           dirUrl.searchParams.set('workingDir', '/');
@@ -507,20 +430,14 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
 
           const res = await fetch(url.toString(), {
             method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
 
-          if (!res.ok) {
-            throw new Error(`Failed to delete file: API error (${res.status})`);
-          }
+          if (!res.ok) throw new Error(`Failed to delete file: API error (${res.status})`);
         }
       },
 
-      getInstance: (sandbox: SpritesSandbox): SpritesSandbox => {
-        return sandbox;
-      },
+      getInstance: (sandbox: SpritesSandbox): SpritesSandbox => sandbox,
     }
   }
 });
