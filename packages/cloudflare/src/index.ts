@@ -17,9 +17,6 @@ import { defineProvider } from '@computesdk/provider';
 
 /**
  * Lazy-load @cloudflare/sandbox to avoid importing it in Node.js environments.
- * The SDK only works inside the Cloudflare Workers runtime (its transitive dep
- * @cloudflare/containers uses extensionless ESM imports that break in Node).
- * Remote mode never needs this import.
  */
 let _getSandboxFn: ((binding: any, id: string, options?: any) => any) | null = null;
 async function getSandbox(binding: any, id: string, options?: any): Promise<any> {
@@ -30,7 +27,7 @@ async function getSandbox(binding: any, id: string, options?: any): Promise<any>
   return _getSandboxFn(binding, id, options);
 }
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -46,8 +43,8 @@ export interface CloudflareConfig {
   sandboxBinding?: any;
 
   // Shared options
-  /** Default runtime environment */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'python', 'node') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Environment variables to pass to sandbox */
@@ -80,7 +77,7 @@ function isRemote(config: CloudflareConfig): boolean {
   return !!(config.sandboxUrl && config.sandboxSecret);
 }
 
-function detectRuntime(code: string): Runtime {
+function detectRuntime(code: string): string {
   if (code.includes('print(') ||
     code.includes('import ') ||
     code.includes('def ') ||
@@ -103,7 +100,7 @@ function detectRuntime(code: string): Runtime {
   return 'python';
 }
 
-function runtimeToLanguage(runtime: Runtime): 'python' | 'javascript' | 'typescript' {
+function runtimeToLanguage(runtime: string): 'python' | 'javascript' | 'typescript' {
   switch (runtime) {
     case 'python': return 'python';
     case 'node': return 'javascript';
@@ -179,7 +176,7 @@ function shellEscape(s: string): string {
 /**
  * Process code execution results into a CodeResult (shared by remote and direct modes)
  */
-function processExecution(execution: any, detectedRuntime: Runtime): CodeResult {
+function processExecution(execution: any, detectedRuntime: string): CodeResult {
   const stdoutParts: string[] = [];
   const stderrParts: string[] = [];
 
@@ -244,7 +241,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
       create: async (config: CloudflareConfig, options?: CreateSandboxOptions) => {
         // Destructure known ComputeSDK fields, collect the rest for passthrough
         const {
-          runtime: _runtime,
           timeout: optTimeout,
           envs,
           name: _name,
@@ -254,7 +250,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           sandboxId: optSandboxId,
           namespace: _namespace,
           directory: _directory,
-          ports: _ports,
           ...rest
         } = options || {};
 
@@ -464,7 +459,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           return {
             id: cfSandbox.sandboxId,
             provider: 'cloudflare',
-            runtime: 'python',
             status: 'running',
             createdAt: new Date(),
             timeout: 300000,
@@ -477,7 +471,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           return {
             id: cfSandbox.sandboxId,
             provider: 'cloudflare',
-            runtime: 'python',
             status: 'error',
             createdAt: new Date(),
             timeout: 300000,
@@ -538,7 +531,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         },
 
         readdir: async (cfSandbox: CloudflareSandbox, path: string): Promise<FileEntry[]> => {
-          // Both modes use ls -la since there's no native readdir
           let result: any;
           if (cfSandbox.remote) {
             result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exec', {
@@ -576,3 +568,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
     }
   }
 });
+
+// Keep these exported for potential future use
+export { detectRuntime, runtimeToLanguage };

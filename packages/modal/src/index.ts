@@ -3,14 +3,11 @@
  * 
  * Full-featured provider with serverless sandbox execution using the factory pattern.
  * Leverages Modal's JavaScript SDK for real sandbox management.
- * 
- * Note: Modal's JavaScript SDK is in alpha. This implementation provides a working
- * foundation but may need updates as the Modal API evolves.
  */
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 // Import Modal SDK
 import { App, Sandbox, initializeClient } from 'modal';
@@ -23,8 +20,8 @@ export interface ModalConfig {
   tokenId?: string;
   /** Modal API token secret - if not provided, will fallback to MODAL_TOKEN_SECRET environment variable */
   tokenSecret?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Modal environment (sandbox or main) */
@@ -81,7 +78,7 @@ interface ModalSandbox {
 /**
  * Detect runtime from code content
  */
-function detectRuntime(code: string): Runtime {
+function detectRuntime(code: string): string {
   // Strong Node.js indicators
   if (code.includes('console.log') || 
       code.includes('process.') ||
@@ -89,7 +86,7 @@ function detectRuntime(code: string): Runtime {
       code.includes('module.exports') ||
       code.includes('__dirname') ||
       code.includes('__filename') ||
-      code.includes('throw new Error') ||  // JavaScript error throwing
+      code.includes('throw new Error') ||
       code.includes('new Error(')) {
     return 'node';
   }
@@ -106,7 +103,6 @@ function detectRuntime(code: string): Runtime {
     return 'python';
   }
 
-  // Default to Node.js for Modal (now using Node.js base image)
   return 'node';
 }
 
@@ -141,7 +137,6 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
 
             // Destructure known ComputeSDK fields, collect the rest for passthrough
             const {
-              runtime: _runtime,
               timeout: optTimeout,
               envs,
               name,
@@ -151,9 +146,10 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
               sandboxId: _sandboxId,
               namespace: _namespace,
               directory: _directory,
-              ports: optPorts,
               ...providerOptions
             } = options || {};
+
+            const optPorts = (options as any)?.ports as number[] | undefined;
             
             const createSandbox = app.createSandbox.bind(app);
             type ModalImageArg = Parameters<typeof createSandbox>[0];
@@ -179,13 +175,11 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
             }
             
             // Configure sandbox options
-            // Modal SDK uses: env, timeoutMs, name, workdir, unencryptedPorts, gpu, cpu, etc.
             const sandboxOptions: Record<string, unknown> = {
-              ...providerOptions, // Spread provider-specific options (e.g., gpu, cpu, memoryMiB, workdir, secrets, volumes)
+              ...providerOptions,
             };
             
-            // Configure ports if provided (using unencrypted ports by default)
-            // options.ports takes precedence over config.ports
+            // Configure ports if provided
             const ports = optPorts ?? config.ports;
             if (ports && ports.length > 0) {
               sandboxOptions.unencryptedPorts = ports;
@@ -275,7 +269,6 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           }
         } catch (error) {
           // Sandbox might already be terminated or doesn't exist
-          // This is acceptable for destroy operations
         }
       },
 
@@ -285,10 +278,8 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
         const startTime = Date.now();
 
         try {
-          // Build command with options
           let fullCommand = command;
           
-          // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
               .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
@@ -296,23 +287,19 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
           
-          // Handle working directory
           if (options?.cwd) {
             fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
           
-          // Handle background execution
           if (options?.background) {
             fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           }
           
-          // Execute using shell to handle complex commands
           const process = await modalSandbox.sandbox.exec(['sh', '-c', fullCommand], {
             stdout: 'pipe',
             stderr: 'pipe'
           });
 
-          // Use working stream reading pattern from debug
           const [stdout, stderr] = await Promise.all([
             process.stdout.readText(),
             process.stderr.readText()
@@ -337,36 +324,32 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
       },
 
       getInfo: async (modalSandbox: ModalSandbox): Promise<SandboxInfo> => {
-        // Get actual sandbox status using Modal's poll method
         let status: 'running' | 'stopped' | 'error' = 'running';
         try {
           const pollResult = await modalSandbox.sandbox.poll();
           if (pollResult !== null) {
-            // Sandbox has finished
             status = pollResult === 0 ? 'stopped' : 'error';
           }
         } catch (error) {
-          // If polling fails, assume running
           status = 'running';
         }
 
         return {
           id: modalSandbox.sandboxId,
           provider: 'modal',
-          runtime: 'node', // Modal default (now using Node.js)
           status,
           createdAt: new Date(),
           timeout: 300000,
           metadata: {
             modalSandboxId: modalSandbox.sandboxId,
-            realModalImplementation: true
+            realModalImplementation: true,
+            runtime: 'node',
           }
         };
       },
 
       getUrl: async (modalSandbox: ModalSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
-          // Use Modal's built-in tunnels method to get tunnel information
           const tunnels = await modalSandbox.sandbox.tunnels();
           const tunnel = tunnels[options.port];
           
@@ -376,7 +359,6 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           
           let url = tunnel.url;
           
-          // If a specific protocol is requested, replace the URL's protocol
           if (options.protocol) {
             const urlObj = new URL(url);
             urlObj.protocol = options.protocol + ':';
@@ -395,24 +377,20 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
       filesystem: {
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
           try {
-            // Use Modal's file open API to read files
             const file = await modalSandbox.sandbox.open(path);
             
-            // Read the entire file content
             let content = '';
             if (file && typeof file.read === 'function') {
               const data = await file.read();
               content = typeof data === 'string' ? data : new TextDecoder().decode(data);
             }
             
-            // Close the file if it has a close method
             if (file && typeof file.close === 'function') {
               await file.close();
             }
             
             return content;
           } catch (error) {
-            // Fallback to using cat command with working stream pattern
             try {
               const process = await modalSandbox.sandbox.exec(['cat', path], {
                 stdout: 'pipe',
@@ -430,7 +408,7 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
                 throw new Error(`cat failed: ${stderr}`);
               }
 
-              return content.trim(); // Remove extra newlines
+              return content.trim();
             } catch (fallbackError) {
               throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
             }
@@ -439,20 +417,16 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
 
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
           try {
-            // Use Modal's file open API to write files
             const file = await modalSandbox.sandbox.open(path);
             
-            // Write content to the file
             if (file && typeof file.write === 'function') {
               await file.write(new TextEncoder().encode(content));
             }
             
-            // Close the file if it has a close method
             if (file && typeof file.close === 'function') {
               await file.close();
             }
           } catch (error) {
-            // Fallback to using shell command with proper escaping
             try {
               const process = await modalSandbox.sandbox.exec(['sh', '-c', `printf '%s' "${content.replace(/"/g, '\\"')}" > "${path}"`], {
                 stdout: 'pipe',
@@ -499,7 +473,6 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
 
         readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
           try {
-            // Use simple -l flag for BusyBox compatibility (Alpine/node:20-alpine uses BusyBox ls)
             const process = await modalSandbox.sandbox.exec(['ls', '-la', path], {
               stdout: 'pipe',
               stderr: 'pipe'
@@ -516,7 +489,7 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
               throw new Error(`ls failed: ${stderr}`);
             }
 
-            const lines = output.split('\n').slice(1); // Skip header
+            const lines = output.split('\n').slice(1);
 
             return lines
               .filter((line: string) => line.trim())
@@ -587,20 +560,13 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
 
         try {
           initializeClient({ tokenId, tokenSecret });
-          // We need to reconnect to the sandbox to snapshot it
-          // Note: sandbox.snapshotFilesystem() is an instance method on the Sandbox object
-          // But we only have the ID here.
-          // We need to re-instantiate the sandbox object from the ID.
-          
           const sandbox = await Sandbox.fromId(sandboxId);
           
           const snapshotSandbox = sandbox as unknown as ModalSnapshotCapableSandbox;
           const image = await snapshotSandbox.snapshotFilesystem();
           
-          // Return the image object. The user can use this image to create new sandboxes.
-          // We wrap it in a structure that looks like a snapshot
           return {
-            id: image.objectId || `img-${Date.now()}`, // Best effort ID
+            id: image.objectId || `img-${Date.now()}`,
             image: image,
             provider: 'modal',
             createdAt: new Date()
@@ -611,13 +577,14 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
       },
 
       list: async (_config: ModalConfig) => {
-        // Modal doesn't have a simple "list snapshots" API yet that maps 1:1
         return [];
       },
 
-      delete: async (_config: ModalConfig, snapshotId: string) => {
+      delete: async (_config: ModalConfig, _snapshotId: string) => {
         // No-op for now
       }
     }
   }
 });
+
+export { detectRuntime };
