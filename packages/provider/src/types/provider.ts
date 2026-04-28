@@ -4,7 +4,7 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { Runtime, CreateSandboxOptions, SandboxInterface } from 'computesdk';
+import type { CreateSandboxOptions, SandboxInterface } from 'computesdk';
 
 /**
  * Provider Sandbox - what provider implementations return
@@ -123,9 +123,6 @@ export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
 
   /** Optional snapshot management operations */
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
-
-  /** Get the list of supported runtime environments */
-  getSupportedRuntimes(): Runtime[];
 
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;
