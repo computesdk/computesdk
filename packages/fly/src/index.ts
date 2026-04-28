@@ -9,7 +9,7 @@
 
 import { defineProvider } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Fly.io sandbox interface
@@ -164,7 +164,6 @@ export const fly = defineProvider<FlyMachine, FlyConfig>({
 
           // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
-            runtime: optRuntime,
             timeout: optTimeout,
             envs,
             name,
@@ -176,6 +175,8 @@ export const fly = defineProvider<FlyMachine, FlyConfig>({
             directory: _directory,
             ...providerOptions
           } = options || {};
+
+          const optRuntime = (options as any)?.runtime as string | undefined;
 
           // 2. Determine the image based on runtime
           const image = optRuntime 
@@ -411,11 +412,11 @@ export const fly = defineProvider<FlyMachine, FlyConfig>({
         throw new Error('Fly.io runCommand method not implemented yet');
       },
 
-      getInfo: async (sandbox: FlyMachine) => {
+      getInfo: async (_sandbox: FlyMachine): Promise<SandboxInfo> => {
         throw new Error('Fly.io getInfo method not implemented yet');
       },
 
-      getUrl: async (sandbox: FlyMachine, options: { port: number; protocol?: string }) => {
+      getUrl: async (_sandbox: FlyMachine, _options: { port: number; protocol?: string }) => {
         throw new Error('Fly.io getUrl method not implemented yet');
       },
     },

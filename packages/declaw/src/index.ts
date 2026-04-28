@@ -11,7 +11,6 @@ import { Sandbox as DeclawSandbox } from '@declaw/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type {
-  Runtime,
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
@@ -27,8 +26,8 @@ export interface DeclawConfig {
   apiKey?: string;
   /** API domain, e.g. `api.declaw.ai`. Falls back to `DECLAW_DOMAIN` env var. */
   domain?: string;
-  /** Default runtime environment. */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'node', 'python'). */
+  runtime?: string;
   /** Default create-time timeout in milliseconds. */
   timeout?: number;
 }
@@ -75,7 +74,6 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         // Declaw-specific options (security policies, network policies, etc.)
         // without accidentally shadowing them.
         const {
-          runtime: _runtime,
           timeout: requestedTimeoutMs,
           envs,
           name: _name,
@@ -233,7 +231,6 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         return {
           id,
           provider: 'declaw',
-          runtime: 'node',
           status: 'running',
           createdAt: new Date(),
           timeout: 300_000,

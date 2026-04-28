@@ -16,10 +16,8 @@
 import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
-  Runtime,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
@@ -106,9 +104,9 @@ function isPythonParserFailure(output: string): boolean {
 }
 
 /**
- * Detect parser/compile failures that should throw instead of returning CodeResult.
+ * Detect parser/compile failures that should throw instead of returning a result.
  */
-function isParserFailure(output: string, runtime: Runtime): boolean {
+function isParserFailure(output: string, runtime: string): boolean {
   if (!output.trim()) return false;
 
   if (runtime === 'node') {
@@ -158,7 +156,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         try {
           // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
-            runtime: optRuntime,
             timeout: optTimeout,
             envs,
             name,
@@ -170,6 +167,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             directory: _directory,
             ...providerOptions
           } = options || {};
+
+          const optRuntime = (options as any)?.runtime as string | undefined;
 
           const sandboxConfig: any = {
             name: name || `computesdk-${Date.now()}`,
@@ -258,12 +257,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       /**
-       * Execute code in the sandbox
-       *
-       * Auto-detects runtime (Python vs Node.js) and executes via sandbox.exec().
-       */
-
-      /**
        * Execute a shell command in the sandbox
        *
        * Uses sandbox.exec() with shell command string.
@@ -316,8 +309,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
        * Get sandbox information
        */
       getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
-        // Derive runtime from sandbox instance if available; otherwise default to 'python'
-        let runtime: Runtime = 'python';
+        // Derive runtime from sandbox instance if available
+        let runtime = 'python';
         const runtimeHint = sandbox as SandboxInstance & {
           runtime?: unknown;
           image?: unknown;
@@ -326,36 +319,27 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
         if (typeof runtimeHint.runtime === 'string') {
           const lower = runtimeHint.runtime.toLowerCase();
-          if (lower.includes('node')) {
-            runtime = 'node';
-          } else if (lower.includes('python')) {
-            runtime = 'python';
-          }
+          if (lower.includes('node')) runtime = 'node';
+          else if (lower.includes('python')) runtime = 'python';
         } else if (typeof runtimeHint.image === 'string') {
           const imageStr = runtimeHint.image.toLowerCase();
-          if (imageStr.includes('node')) {
-            runtime = 'node';
-          } else if (imageStr.includes('python')) {
-            runtime = 'python';
-          }
+          if (imageStr.includes('node')) runtime = 'node';
+          else if (imageStr.includes('python')) runtime = 'python';
         } else if (typeof runtimeHint.imageName === 'string') {
           const imageNameStr = runtimeHint.imageName.toLowerCase();
-          if (imageNameStr.includes('node')) {
-            runtime = 'node';
-          } else if (imageNameStr.includes('python')) {
-            runtime = 'python';
-          }
+          if (imageNameStr.includes('node')) runtime = 'node';
+          else if (imageNameStr.includes('python')) runtime = 'python';
         }
 
         return {
           id: sandbox.containerId,
           provider: 'beam',
-          runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
           metadata: {
             containerId: sandbox.containerId,
+            runtime,
           },
         };
       },
@@ -377,10 +361,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
       /**
        * Filesystem operations
-       *
-       * Most operations use shell commands via runCommand since Beam's file API
-       * is local-path oriented (uploadFile/downloadFile require local filesystem paths).
-       * readdir uses the native listFiles API since it returns structured data.
        */
       filesystem: {
         readFile: async (sandbox: SandboxInstance, path: string, runCommand: RunCommandFn): Promise<string> => {
@@ -438,6 +418,9 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
     },
   },
 });
+
+// Keep isParserFailure available for potential future use
+export { isParserFailure };
 
 // Export Beam sandbox type for explicit typing
 export type { SandboxInstance as BeamSandboxInstance } from '@beamcloud/beam-js';

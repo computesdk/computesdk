@@ -8,7 +8,7 @@
 import { Sandbox as E2BSandbox } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 type E2BFileEntry = {
@@ -33,8 +33,8 @@ type E2BSandboxStatics = typeof E2BSandbox & {
 export interface E2BConfig {
   /** E2B API key - if not provided, will fallback to E2B_API_KEY environment variable */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
@@ -76,7 +76,6 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
           // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
-            runtime: _runtime,
             timeout: _timeout,
             envs,
             name: _name,
@@ -251,7 +250,6 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         return {
           id: sandbox.sandboxId || 'e2b-unknown',
           provider: 'e2b',
-          runtime: 'python', // E2B default
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
