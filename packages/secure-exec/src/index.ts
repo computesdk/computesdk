@@ -20,16 +20,12 @@ import { nanoid } from 'nanoid';
 import { defineProvider } from '@computesdk/provider';
 
 import type {
-  Runtime,
-  CodeResult,
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
 } from '@computesdk/provider';
-
-// ─── Config ───────────────────────────────────────────────────────────────────
 
 export interface SecureExecConfig {
   /** Memory cap for the V8 isolate in MB. Default: 128 */
@@ -40,15 +36,11 @@ export interface SecureExecConfig {
   allowedCommands?: string[];
 }
 
-// ─── Native "sandbox" type ────────────────────────────────────────────────────
-
 export interface SecureExecInstance {
   runtime: NodeRuntime;
   fs: VirtualFileSystem;
   sandboxId: string;
 }
-
-// ─── CommandExecutor ──────────────────────────────────────────────────────────
 
 function buildCommandExecutor(allowedCommands?: string[]): CommandExecutor {
   return {
@@ -56,16 +48,13 @@ function buildCommandExecutor(allowedCommands?: string[]): CommandExecutor {
       if (allowedCommands && !allowedCommands.includes(command)) {
         throw new Error(`Command not in allowlist: ${command}`);
       }
-
       const child = spawn(command, args, {
         cwd: options.cwd === '/root' ? process.cwd() : options.cwd,
         env: { ...process.env, ...(options.env ?? {}) } as Record<string, string>,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-
       child.stdout.on('data', (chunk: Buffer) => options.onStdout?.(new Uint8Array(chunk)));
       child.stderr.on('data', (chunk: Buffer) => options.onStderr?.(new Uint8Array(chunk)));
-
       return {
         writeStdin: (data) => { child.stdin.write(data); },
         closeStdin: () => { child.stdin.end(); },
@@ -79,8 +68,6 @@ function buildCommandExecutor(allowedCommands?: string[]): CommandExecutor {
   };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function captureStdio() {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -91,16 +78,12 @@ function captureStdio() {
   return { stdout, stderr, onStdio };
 }
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
 export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
   name: 'secure-exec',
-
   methods: {
     sandbox: {
       create: async (config: SecureExecConfig, options?: CreateSandboxOptions) => {
         const fs = createInMemoryFileSystem();
-
         let v8Runtime;
         try {
           v8Runtime = await createNodeV8Runtime();
@@ -111,48 +94,25 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
             `Original error: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
-
         const runtime = new NodeRuntime({
           systemDriver: createNodeDriver({
             filesystem: fs,
             commandExecutor: buildCommandExecutor(config.allowedCommands),
-            permissions: {
-              ...allowAllFs,
-              ...allowAllChildProcess,
-            },
-            processConfig: {
-              cwd: '/workspace',
-              env: options?.envs ?? {},
-            },
+            permissions: { ...allowAllFs, ...allowAllChildProcess },
+            processConfig: { cwd: '/workspace', env: options?.envs ?? {} },
           }),
           runtimeDriverFactory: createNodeRuntimeDriverFactory({ v8Runtime }),
           memoryLimit: config.memoryLimitMb ?? 128,
           cpuTimeLimitMs: config.cpuTimeLimitMs ?? 30_000,
         });
-
         await fs.mkdir('/workspace');
-
         const sandboxId = `secureexec_${nanoid(10)}`;
-
-        return {
-          sandbox: { runtime, fs, sandboxId },
-          sandboxId,
-        };
+        return { sandbox: { runtime, fs, sandboxId }, sandboxId };
       },
 
-      getById: async (_config: SecureExecConfig, _sandboxId: string) => {
-        return null;
-      },
-
-      list: async (_config: SecureExecConfig) => {
-        return [];
-      },
-
-      destroy: async (_config: SecureExecConfig, _sandboxId: string) => {
-        // Static destroy has no handle to the runtime instance.
-        // Users should call sandbox.destroy() which the framework routes
-        // through the instance. Runtime GC handles cleanup otherwise.
-      },
+      getById: async (_config: SecureExecConfig, _sandboxId: string) => null,
+      list: async (_config: SecureExecConfig) => [],
+      destroy: async (_config: SecureExecConfig, _sandboxId: string) => {},
 
       runCommand: async (
         instance: SecureExecInstance,
@@ -161,24 +121,15 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
       ): Promise<CommandResult> => {
         const startTime = Date.now();
         const { stdout, stderr, onStdio } = captureStdio();
-
         let fullCommand = command;
-
         if (options?.env && Object.keys(options.env).length > 0) {
           const envPrefix = Object.entries(options.env)
             .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
             .join(' ');
           fullCommand = `${envPrefix} ${fullCommand}`;
         }
-
-        if (options?.cwd) {
-          fullCommand = `cd ${JSON.stringify(options.cwd)} && ${fullCommand}`;
-        }
-
-        if (options?.background) {
-          fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-        }
-
+        if (options?.cwd) fullCommand = `cd ${JSON.stringify(options.cwd)} && ${fullCommand}`;
+        if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
         try {
           const result = await instance.runtime.exec(
             `
@@ -190,75 +141,36 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
             `,
             { onStdio },
           );
-
-          return {
-            stdout: stdout.join('\n'),
-            stderr: stderr.join('\n'),
-            exitCode: result.code,
-            durationMs: Date.now() - startTime,
-          };
+          return { stdout: stdout.join('\n'), stderr: stderr.join('\n'), exitCode: result.code, durationMs: Date.now() - startTime };
         } catch (error) {
-          return {
-            stdout: '',
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
-            durationMs: Date.now() - startTime,
-          };
+          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },
 
-      getInfo: async (instance: SecureExecInstance): Promise<SandboxInfo> => {
-        return {
-          id: instance.sandboxId,
-          provider: 'secure-exec',
-          runtime: 'node',
-          status: 'running',
-          createdAt: new Date(),
-          timeout: 0,
-          metadata: { local: true },
-        };
-      },
+      getInfo: async (instance: SecureExecInstance): Promise<SandboxInfo> => ({
+        id: instance.sandboxId,
+        provider: 'secure-exec',
+        status: 'running',
+        createdAt: new Date(),
+        timeout: 0,
+        metadata: { local: true },
+      }),
 
       getUrl: async (
         _instance: SecureExecInstance,
         _options: { port: number; protocol?: string },
       ): Promise<string> => {
-        throw new Error(
-          'getUrl is not supported by secure-exec provider. Sandboxes do not expose network endpoints.',
-        );
+        throw new Error('getUrl is not supported by secure-exec provider.');
       },
 
       filesystem: {
-        readFile: async (
-          { fs }: SecureExecInstance,
-          path: string,
-          _runCommand: unknown,
-        ): Promise<string> => {
-          return fs.readTextFile(path);
-        },
-
-        writeFile: async (
-          { fs }: SecureExecInstance,
-          path: string,
-          content: string,
-          _runCommand: unknown,
-        ): Promise<void> => {
-          await fs.writeFile(path, content);
-        },
-
-        mkdir: async (
-          { fs }: SecureExecInstance,
-          path: string,
-          _runCommand: unknown,
-        ): Promise<void> => {
-          await fs.mkdir(path);
-        },
-
-        readdir: async (
-          { fs }: SecureExecInstance,
-          path: string,
-          _runCommand: unknown,
-        ): Promise<FileEntry[]> => {
+        readFile: async ({ fs }: SecureExecInstance, path: string, _runCommand: unknown): Promise<string> =>
+          fs.readTextFile(path),
+        writeFile: async ({ fs }: SecureExecInstance, path: string, content: string, _runCommand: unknown): Promise<void> =>
+          fs.writeFile(path, content),
+        mkdir: async ({ fs }: SecureExecInstance, path: string, _runCommand: unknown): Promise<void> =>
+          fs.mkdir(path),
+        readdir: async ({ fs }: SecureExecInstance, path: string, _runCommand: unknown): Promise<FileEntry[]> => {
           const entries = await fs.readDirWithTypes(path);
           return entries.map((entry) => ({
             name: entry.name,
@@ -269,31 +181,14 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
             lastModified: new Date(),
           }));
         },
-
-        exists: async (
-          { fs }: SecureExecInstance,
-          path: string,
-          _runCommand: unknown,
-        ): Promise<boolean> => {
-          return fs.exists(path);
-        },
-
-        remove: async (
-          { fs }: SecureExecInstance,
-          path: string,
-          _runCommand: unknown,
-        ): Promise<void> => {
-          try {
-            await fs.removeFile(path);
-          } catch {
-            await fs.removeDir(path);
-          }
+        exists: async ({ fs }: SecureExecInstance, path: string, _runCommand: unknown): Promise<boolean> =>
+          fs.exists(path),
+        remove: async ({ fs }: SecureExecInstance, path: string, _runCommand: unknown): Promise<void> => {
+          try { await fs.removeFile(path); } catch { await fs.removeDir(path); }
         },
       },
 
-      getInstance: (instance: SecureExecInstance): SecureExecInstance => {
-        return instance;
-      },
+      getInstance: (instance: SecureExecInstance): SecureExecInstance => instance,
     },
   },
 });

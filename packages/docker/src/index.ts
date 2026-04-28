@@ -2,8 +2,6 @@ import Docker from 'dockerode';
 import { PassThrough } from 'stream';
 import { defineProvider } from '@computesdk/provider';
 import type {
-  Runtime,
-  CodeResult,
   CommandResult,
   RunCommandOptions,
   CreateSandboxOptions,
@@ -31,10 +29,8 @@ function pick<T>(val: T | undefined, fallback: T): T {
 async function ensureImage(docker: Docker, image: DockerImage): Promise<void> {
   const policy = image.pullPolicy ?? 'ifNotPresent';
   if (policy === 'never') return;
-
   const images = await docker.listImages();
   const hasImage = images.some(img => (img.RepoTags || []).includes(image.name));
-
   if (policy === 'always' || (policy === 'ifNotPresent' && !hasImage)) {
     await new Promise<void>((resolve, reject) => {
       const cb = (err: any, stream?: NodeJS.ReadableStream) => {
@@ -54,7 +50,6 @@ async function waitUntilRunning(container: Docker.Container, timeoutMs = 4000) {
     const s = await container.inspect();
     if (s.State?.Running) return;
   } catch { /* ignore */ }
-
   while (Date.now() - start < timeoutMs) {
     const s = await container.inspect();
     if (s.State?.Running) return;
@@ -69,19 +64,15 @@ async function runExec(
   attachTTY = false
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   await waitUntilRunning(handle.container);
-
   const exec = await handle.container.exec({
     Cmd: ['/bin/sh', '-c', shellCommand],
     AttachStdout: true,
     AttachStderr: true,
     Tty: attachTTY,
   });
-
   const stream = (await exec.start({ hijack: true, stdin: false })) as NodeJS.ReadableStream;
-
   let stdout = '';
   let stderr = '';
-
   await new Promise<void>((resolve, reject) => {
     if (attachTTY) {
       stream.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
@@ -97,10 +88,8 @@ async function runExec(
     stream.on('end', resolve);
     stream.on('error', reject);
   });
-
   const inspect = await exec.inspect();
-  const exitCode = inspect.ExitCode ?? 0;
-  return { stdout, stderr, exitCode };
+  return { stdout, stderr, exitCode: inspect.ExitCode ?? 0 };
 }
 
 function toHostBindings(ports?: PortBindings) {
@@ -109,10 +98,7 @@ function toHostBindings(ports?: PortBindings) {
   const bindings: Record<string, Array<{ HostPort?: string; HostIp?: string }>> = {};
   for (const key of Object.keys(ports)) {
     exposed[key] = {};
-    bindings[key] = (ports as any)[key].map((p: any) => ({
-      HostPort: p.hostPort ? String(p.hostPort) : undefined,
-      HostIp: p.hostIP,
-    }));
+    bindings[key] = (ports as any)[key].map((p: any) => ({ HostPort: p.hostPort ? String(p.hostPort) : undefined, HostIp: p.hostIP }));
   }
   return { ExposedPorts: exposed, PortBindings: bindings };
 }
@@ -120,16 +106,12 @@ function toHostBindings(ports?: PortBindings) {
 function dockerHostNameFromEnv(): string {
   const hostEnv = process.env.DOCKER_HOST;
   if (hostEnv?.startsWith('tcp://')) {
-    try {
-      const u = new URL(hostEnv);
-      return u.hostname || 'localhost';
-    } catch { /* noop */ }
+    try { return new URL(hostEnv).hostname || 'localhost'; } catch { /* noop */ }
   }
   return 'localhost';
 }
 
-function pickImageForRuntime(runtime: Runtime, configured?: DockerImage): DockerImage {
-  // If user supplied an image that already matches, use it. Otherwise pick a sensible default.
+function pickImageForRuntime(runtime: string, configured?: DockerImage): DockerImage {
   if (configured?.name) {
     if (runtime === 'python' && /python|conda|pypy/i.test(configured.name)) return configured;
     if (runtime === 'node' && /node/i.test(configured.name)) return configured;
@@ -147,30 +129,23 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
     sandbox: {
       create: async (config: DockerConfig, options?: CreateSandboxOptions) => {
         const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
-        const effectiveRuntime: Runtime = (options?.runtime ?? cfg.runtime ?? 'python') as Runtime;
+        const effectiveRuntime: string = ((options as any)?.runtime ?? cfg.runtime ?? 'python') as string;
 
         if (effectiveRuntime !== 'python' && effectiveRuntime !== 'node') {
           throw new Error(`Docker provider supports only 'python' or 'node'. Received: ${String(effectiveRuntime)}`);
         }
 
         const docker = new Docker(cfg.connection as any);
-
-        // Choose image based on runtime if needed
         const chosenImage = pickImageForRuntime(effectiveRuntime, cfg.image);
         await ensureImage(docker, chosenImage);
 
-        // Merge environment variables: config.container.env < options.envs
         const mergedEnv = { ...cfg.container?.env, ...options?.envs };
-
-        // Build container create options
         const hb = toHostBindings(cfg.container?.ports);
         const createOptions = {
           Image: chosenImage.name,
           Tty: pick(cfg.container?.tty, false),
           OpenStdin: pick(cfg.container?.openStdin, false),
           Labels: {
-            // User metadata is spread first with a namespaced prefix so it
-            // cannot overwrite the reserved discovery/runtime labels below.
             ...(options?.metadata ? Object.fromEntries(
               Object.entries(options.metadata).map(([k, v]) => [`com.computesdk.meta.${k}`, typeof v === 'string' ? v : JSON.stringify(v)])
             ) : {}),
@@ -181,9 +156,9 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
           Env: Object.keys(mergedEnv).length > 0
             ? Object.entries(mergedEnv).map(([k, v]) => `${k}=${v}`)
             : undefined,
-          Cmd: KEEPALIVE_CMD, // keep container alive
+          Cmd: KEEPALIVE_CMD,
           HostConfig: {
-            AutoRemove: cfg.container?.autoRemove ?? false, // keep around for exec/FS ops
+            AutoRemove: cfg.container?.autoRemove ?? false,
             Binds: cfg.container?.binds,
             NetworkMode: cfg.container?.networkMode,
             Privileged: cfg.container?.privileged,
@@ -193,24 +168,12 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
               ? { Type: cfg.container.logDriver, Config: cfg.container.logOpts || {} }
               : undefined,
             Resources: cfg.container?.resources,
-            DeviceRequests: cfg.container?.gpus
-              ? [
-                {
-                  Driver: 'nvidia',
-                  Count:
-                    cfg.container.gpus === 'all'
-                      ? -1
-                      : typeof cfg.container.gpus === 'number'
-                        ? cfg.container.gpus
-                        : 1,
-                  DeviceIDs:
-                    typeof cfg.container.gpus === 'string' && cfg.container.gpus !== 'all'
-                      ? [String(cfg.container.gpus)]
-                      : undefined,
-                  Capabilities: [['gpu']],
-                },
-              ]
-              : undefined,
+            DeviceRequests: cfg.container?.gpus ? [{
+              Driver: 'nvidia',
+              Count: cfg.container.gpus === 'all' ? -1 : typeof cfg.container.gpus === 'number' ? cfg.container.gpus : 1,
+              DeviceIDs: typeof cfg.container.gpus === 'string' && cfg.container.gpus !== 'all' ? [String(cfg.container.gpus)] : undefined,
+              Capabilities: [['gpu']],
+            }] : undefined,
             ...(hb ? { PortBindings: hb.PortBindings } : {}),
           },
           ...(hb ? { ExposedPorts: hb.ExposedPorts } : {}),
@@ -220,16 +183,12 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         const container = await docker.createContainer(createOptions);
         await container.start(cfg.startOptions || {});
         await waitUntilRunning(container);
-
         const inspect = await container.inspect();
         const handle: DockerSandboxHandle = {
-          docker,
-          container,
-          containerId: inspect.Id,
+          docker, container, containerId: inspect.Id,
           image: inspect.Config?.Image ?? chosenImage.name,
           createdAt: new Date(inspect.Created || Date.now()),
         };
-
         return { sandbox: handle, sandboxId: handle.containerId };
       },
 
@@ -238,41 +197,19 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         try {
           const container = docker.getContainer(sandboxId);
           const info = await container.inspect();
-          return {
-            sandbox: <DockerSandboxHandle>{
-              docker,
-              container,
-              containerId: sandboxId,
-              image: info.Config?.Image ?? '',
-              createdAt: new Date(info.Created || Date.now()),
-            },
-            sandboxId,
-          };
-        } catch {
-          return null;
-        }
+          return { sandbox: { docker, container, containerId: sandboxId, image: info.Config?.Image ?? '', createdAt: new Date(info.Created || Date.now()) } as DockerSandboxHandle, sandboxId };
+        } catch { return null; }
       },
 
       list: async (config: DockerConfig) => {
         const docker = new Docker((config || defaultDockerConfig).connection as any);
         try {
-          const items = await docker.listContainers({
-            all: true,
-            filters: { label: [LABEL_KEY] } as any,
-          });
+          const items = await docker.listContainers({ all: true, filters: { label: [LABEL_KEY] } as any });
           return items.map(ci => ({
-            sandbox: <DockerSandboxHandle>{
-              docker,
-              container: docker.getContainer(ci.Id),
-              containerId: ci.Id,
-              image: ci.Image,
-              createdAt: new Date((ci as any).Created * 1000),
-            },
+            sandbox: { docker, container: docker.getContainer(ci.Id), containerId: ci.Id, image: ci.Image, createdAt: new Date((ci as any).Created * 1000) } as DockerSandboxHandle,
             sandboxId: ci.Id,
           }));
-        } catch {
-          return [];
-        }
+        } catch { return []; }
       },
 
       destroy: async (config: DockerConfig, sandboxId: string) => {
@@ -281,26 +218,13 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
           const c = docker.getContainer(sandboxId);
           try { await c.stop({ t: 5 } as any); } catch { /* stopped */ }
           await c.remove({ force: true });
-        } catch {
-          // ok if already gone
-        }
+        } catch { /* ok if already gone */ }
       },
 
-      runCommand: async (
-        handle: DockerSandboxHandle,
-        command: string,
-        options?: RunCommandOptions
-      ): Promise<CommandResult> => {
+      runCommand: async (handle: DockerSandboxHandle, command: string, _options?: RunCommandOptions): Promise<CommandResult> => {
         const start = Date.now();
-
         const { stdout, stderr, exitCode } = await runExec(handle, command);
-
-        return {
-          stdout,
-          stderr,
-          exitCode,
-          durationMs: Date.now() - start,
-        };
+        return { stdout, stderr, exitCode, durationMs: Date.now() - start };
       },
 
       getInfo: async (handle: DockerSandboxHandle): Promise<SandboxInfo> => {
@@ -309,13 +233,13 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         return {
           id: handle.containerId,
           provider: PROVIDER,
-          runtime: (info.Config?.Labels?.[LABEL_RUNTIME] as Runtime) || 'python',
           status: state.Running ? 'running' : 'stopped',
           createdAt: new Date(info.Created || handle.createdAt),
           timeout: 300000,
           metadata: {
             image: info.Config?.Image,
             name: info.Name,
+            runtime: info.Config?.Labels?.[LABEL_RUNTIME],
           },
         };
       },
@@ -324,22 +248,16 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         const info = await handle.container.inspect();
         const protocol = options.protocol || 'http';
         const portKeyTcp = `${options.port}/tcp`;
-
         const ports = info.NetworkSettings?.Ports || {};
         const bindings = ports[portKeyTcp] || ports[`${options.port}/udp`] || [];
-
         let host = dockerHostNameFromEnv();
         let hostPort = String(options.port);
-
         if (Array.isArray(bindings) && bindings.length > 0) {
           hostPort = bindings[0].HostPort || hostPort;
         } else {
-          const ip =
-            info.NetworkSettings?.IPAddress ||
-            Object.values(info.NetworkSettings?.Networks || {})[0]?.IPAddress;
+          const ip = info.NetworkSettings?.IPAddress || Object.values(info.NetworkSettings?.Networks || {})[0]?.IPAddress;
           if (ip) host = ip;
         }
-
         return `${protocol}://${host}:${hostPort}`;
       },
 
@@ -350,26 +268,19 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
           if (exitCode !== 0) throw new Error(stderr || `File not found: ${path}`);
           return Buffer.from(stdout, 'base64').toString('utf8');
         },
-
         writeFile: async (handle: DockerSandboxHandle, path: string, content: string): Promise<void> => {
           const b64 = Buffer.from(content, 'utf8').toString('base64');
           const cmd = `mkdir -p $(dirname ${JSON.stringify(path)}) && echo "${b64}" | base64 -d > ${JSON.stringify(path)}`;
           const { exitCode, stderr } = await runExec(handle, cmd);
           if (exitCode !== 0) throw new Error(stderr || `Failed to write: ${path}`);
         },
-
         mkdir: async (handle: DockerSandboxHandle, path: string): Promise<void> => {
           const { exitCode, stderr } = await runExec(handle, `mkdir -p ${JSON.stringify(path)}`);
           if (exitCode !== 0) throw new Error(stderr || `Failed to mkdir: ${path}`);
         },
-
         readdir: async (handle: DockerSandboxHandle, path: string): Promise<FileEntry[]> => {
-          const { stdout, exitCode, stderr } = await runExec(
-            handle,
-            `if [ -d ${JSON.stringify(path)} ]; then ls -la ${JSON.stringify(path)}; else exit 1; fi`
-          );
+          const { stdout, exitCode, stderr } = await runExec(handle, `if [ -d ${JSON.stringify(path)} ]; then ls -la ${JSON.stringify(path)}; else exit 1; fi`);
           if (exitCode !== 0) throw new Error(stderr || `Not a directory: ${path}`);
-
           const lines = stdout.split('\n').slice(1);
           const entries: FileEntry[] = [];
           for (const line of lines) {
@@ -377,23 +288,14 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
             if (parts.length < 9) continue;
             const name = parts.slice(8).join(' ');
             if (name === '.' || name === '..') continue;
-            const isDir = parts[0].startsWith('d');
-            const size = Number(parts[4]) || 0;
-            entries.push({
-              name,
-              type: isDir ? 'directory' as const : 'file' as const,
-              size,
-              modified: new Date(),
-            });
+            entries.push({ name, type: parts[0].startsWith('d') ? 'directory' as const : 'file' as const, size: Number(parts[4]) || 0, modified: new Date() });
           }
           return entries;
         },
-
         exists: async (handle: DockerSandboxHandle, path: string): Promise<boolean> => {
           const { exitCode } = await runExec(handle, `test -e ${JSON.stringify(path)}`);
           return exitCode === 0;
         },
-
         remove: async (handle: DockerSandboxHandle, path: string): Promise<void> => {
           const { exitCode, stderr } = await runExec(handle, `rm -rf ${JSON.stringify(path)}`);
           if (exitCode !== 0) throw new Error(stderr || `Failed to remove: ${path}`);

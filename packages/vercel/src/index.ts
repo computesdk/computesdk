@@ -1,8 +1,5 @@
 /**
  * Vercel Provider - Factory-based Implementation
- * 
- * Demonstrates the new defineProvider() factory pattern with ~50 lines
- * instead of the original ~350 lines of boilerplate.
  */
 
 import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
@@ -11,485 +8,240 @@ import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
 
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
-
-/**
- * Vercel sandbox provider configuration
- */
 export interface VercelConfig {
-  /** Vercel API token */
   token?: string;
-  /** Vercel team ID */
   teamId?: string;
-  /** Vercel project ID */
   projectId?: string;
-  /** Runtime environment for code execution */
-  runtime?: Runtime;
-  /** Execution timeout in milliseconds */
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   timeout?: number;
-  /** Ports to expose */
   ports?: number[];
 }
 
-/**
- * Resolved Vercel credentials with the authentication method to use
- */
 interface ResolvedCredentials {
-  /** Whether to use OIDC authentication (no explicit credentials needed) */
   useOidc: boolean;
-  /** Token for traditional auth (only used if useOidc is false) */
   token: string;
-  /** Team ID for traditional auth (only used if useOidc is false) */
   teamId: string;
-  /** Project ID for traditional auth (only used if useOidc is false) */
   projectId: string;
 }
 
-/**
- * Resolve Vercel credentials with proper precedence:
- * 1. Config values (from setConfig) always win
- * 2. Environment variables are used as fallback
- * 3. OIDC is only used when no config credentials are provided
- */
 function resolveCredentials(config: VercelConfig): ResolvedCredentials {
-  // Get values from config first, then fall back to environment
   const token = config.token || (typeof process !== 'undefined' && process.env?.VERCEL_TOKEN) || '';
   const teamId = config.teamId || (typeof process !== 'undefined' && process.env?.VERCEL_TEAM_ID) || '';
   const projectId = config.projectId || (typeof process !== 'undefined' && process.env?.VERCEL_PROJECT_ID) || '';
-  
-  // Check if config explicitly provided credentials (config takes precedence)
   const hasConfigCredentials = !!(config.token || config.teamId || config.projectId);
-  
-  // Only use OIDC if:
-  // 1. No config credentials were provided, AND
-  // 2. OIDC token is available in environment
   const oidcToken = typeof process !== 'undefined' && process.env?.VERCEL_OIDC_TOKEN;
   const useOidc = !hasConfigCredentials && !!oidcToken;
-  
   return { useOidc, token, teamId, projectId };
 }
 
-/**
- * Validate that we have sufficient credentials to authenticate
- */
 function validateCredentials(creds: ResolvedCredentials): void {
-  if (creds.useOidc) {
-    // OIDC auth - no additional validation needed
-    return;
-  }
-  
-  // Traditional auth - need all three
+  if (creds.useOidc) return;
   if (!creds.token) {
     throw new Error(
       `Missing Vercel authentication. Either:\n` +
       `1. Use OIDC token: Run 'vercel env pull' to get VERCEL_OIDC_TOKEN, or\n` +
-      `2. Use traditional method: Provide 'token' in config or set VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
+      `2. Use traditional method: Provide 'token' in config or set VERCEL_TOKEN environment variable.`
     );
   }
-  if (!creds.teamId) {
-    throw new Error(
-      `Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID environment variable.`
-    );
-  }
-  if (!creds.projectId) {
-    throw new Error(
-      `Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID environment variable.`
-    );
-  }
+  if (!creds.teamId) throw new Error(`Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID.`);
+  if (!creds.projectId) throw new Error(`Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID.`);
 }
 
-/**
- * Get a writable stream that collects UTF-8 string data and buffers it
- * in memory, returning the full concatenated string when done.
- */
 function getUtf8Sink() {
   const chunks: string[] = [];
   const sink = new Writable({
     write(chunk, _enc, cb) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") :
-        String(chunk));
+      chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk));
       cb();
     },
   });
   return { sink, value: () => chunks.join("") };
 }
 
-
-
-/**
- * Create a Vercel provider instance using the factory pattern
- */
 export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSnapshot>({
   name: 'vercel',
   methods: {
     sandbox: {
-      // Collection operations (map to compute.sandbox.*)
       create: async (config: VercelConfig, options?: CreateSandboxOptions) => {
-        // Resolve credentials with proper precedence (config wins over env)
         const creds = resolveCredentials(config);
         validateCredentials(creds);
-
-        // options.timeout takes precedence over config.timeout
         const timeout = options?.timeout ?? config.timeout ?? 300000;
-
         try {
-          let sandbox: VercelSandbox;
-
-          // Destructure known ComputeSDK fields, collect the rest for passthrough
           const {
-            runtime: optRuntime,
-            timeout: _timeout,
-            envs: _envs, // Vercel SDK does not support envs at sandbox creation time
-            name: _name,
-            metadata: _metadata,
-            templateId,
-            snapshotId: optSnapshotId,
-            sandboxId: _sandboxId,
-            namespace: _namespace,
-            directory: _directory,
-            ports: optPorts,
-            source: optSource,
+            timeout: _timeout, envs: _envs, name: _name, metadata: _metadata,
+            templateId, snapshotId: optSnapshotId, sandboxId: _sandboxId,
+            namespace: _namespace, directory: _directory,
             ...providerOptions
           } = options || {};
+          const optRuntime = (options as any)?.runtime;
+          const optPorts = (options as any)?.ports;
+          const optSource = (options as any)?.source;
 
-            // Construct base params, spreading provider-specific options
-            const params: any = {
-              timeout,
-              ...providerOptions, // Spread provider-specific options (e.g., resources, networkPolicy, signal)
-            };
-            
-            // Only add ports if explicitly configured (options.ports takes precedence)
-            const ports = optPorts ?? config.ports;
-            if (ports && ports.length > 0) {
-              params.ports = ports;
-            }
+          const params: any = { timeout, ...providerOptions };
+          const ports = optPorts ?? config.ports;
+          if (ports && ports.length > 0) params.ports = ports;
 
-            // Pass runtime if specified (Vercel supports runtime selection).
-            // Vercel only accepts specific versioned runtimes (node24, node22, python3.13),
-            // so translate ComputeSDK's generic names to Vercel's expected format.
-            if (optRuntime) {
-              const vercelRuntime =
-                optRuntime === 'node' ? 'node24' :
-                optRuntime === 'python' ? 'python3.13' :
-                optRuntime;
-              params.runtime = vercelRuntime;
-            }
+          if (optRuntime) {
+            params.runtime =
+              optRuntime === 'node' ? 'node24' :
+              optRuntime === 'python' ? 'python3.13' :
+              optRuntime;
+          }
 
-            // Support both ComputeSDK format (snapshotId/templateId at top level) and 
-            // Vercel SDK format (source.snapshotId nested)
-            const snapshotId = optSnapshotId || templateId ||
-              (optSource?.type === 'snapshot' && optSource?.snapshotId);
-            
-            if (snapshotId) {
-              params.source = {
-                type: 'snapshot',
-                snapshotId
-              };
-            } else if (optSource) {
-              // Pass through source as-is (e.g., git or tarball sources)
-              params.source = optSource;
-            }
+          const snapshotId = optSnapshotId || templateId ||
+            (optSource?.type === 'snapshot' && optSource?.snapshotId);
+          if (snapshotId) {
+            params.source = { type: 'snapshot', snapshotId };
+          } else if (optSource) {
+            params.source = optSource;
+          }
 
-            // Add auth params if not using OIDC
-            if (!creds.useOidc) {
-              params.token = creds.token;
-              params.teamId = creds.teamId;
-              params.projectId = creds.projectId;
-            }
+          if (!creds.useOidc) {
+            params.token = creds.token;
+            params.teamId = creds.teamId;
+            params.projectId = creds.projectId;
+          }
 
-          sandbox = await VercelSandbox.create(params);
-
-          return {
-            sandbox,
-            sandboxId: sandbox.sandboxId
-          };
+          const sandbox = await VercelSandbox.create(params);
+          return { sandbox, sandboxId: sandbox.sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('token')) {
-              throw new Error(
-                `Vercel authentication failed. Please check your VERCEL_TOKEN environment variable. Get your token from https://vercel.com/account/tokens`
-              );
+              throw new Error(`Vercel authentication failed. Please check your VERCEL_TOKEN environment variable.`);
             }
             if (error.message.includes('team') || error.message.includes('project')) {
-              throw new Error(
-                `Vercel team/project configuration failed. Please check your VERCEL_TEAM_ID and VERCEL_PROJECT_ID environment variables.`
-              );
+              throw new Error(`Vercel team/project configuration failed. Check VERCEL_TEAM_ID and VERCEL_PROJECT_ID.`);
             }
           }
-          throw new Error(
-            `Failed to create Vercel sandbox: ${error instanceof Error ? error.message : String(error)}`
-          );
+          throw new Error(`Failed to create Vercel sandbox: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
 
       getById: async (config: VercelConfig, sandboxId: string) => {
-        // Resolve credentials with proper precedence (config wins over env)
         const creds = resolveCredentials(config);
-
         try {
-          let sandbox: VercelSandbox;
-
-          if (creds.useOidc) {
-            // Use OIDC token method
-            sandbox = await VercelSandbox.get({ sandboxId });
-          } else {
-            // Use traditional method
-            sandbox = await VercelSandbox.get({
-              sandboxId,
-              token: creds.token,
-              teamId: creds.teamId,
-              projectId: creds.projectId,
-            });
-          }
-
-          return {
-            sandbox,
-            sandboxId
-          };
-        } catch (error) {
-          // Sandbox doesn't exist or can't be accessed
-          return null;
-        }
+          const sandbox = creds.useOidc
+            ? await VercelSandbox.get({ sandboxId })
+            : await VercelSandbox.get({ sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
+          return { sandbox, sandboxId };
+        } catch { return null; }
       },
 
       list: async (_config: VercelConfig) => {
-        throw new Error(
-          `Vercel provider does not support listing sandboxes. Vercel sandboxes are ephemeral and designed for single-use execution.`
-        );
+        throw new Error(`Vercel provider does not support listing sandboxes.`);
       },
 
       destroy: async (config: VercelConfig, sandboxId: string) => {
-        // Resolve credentials with proper precedence (config wins over env)
         const creds = resolveCredentials(config);
-
         try {
-          let sandbox: VercelSandbox;
-
-          if (creds.useOidc) {
-            // Use OIDC token method
-            sandbox = await VercelSandbox.get({ sandboxId });
-          } else {
-            // Use traditional method
-            sandbox = await VercelSandbox.get({
-              sandboxId,
-              token: creds.token,
-              teamId: creds.teamId,
-              projectId: creds.projectId,
-            });
-          }
-
+          const sandbox = creds.useOidc
+            ? await VercelSandbox.get({ sandboxId })
+            : await VercelSandbox.get({ sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
           await sandbox.stop();
-        } catch (error) {
-          // Sandbox might already be destroyed or doesn't exist
-          // This is acceptable for destroy operations
-        }
+        } catch { /* already destroyed or doesn't exist */ }
       },
-
-      // Instance operations (map to individual Sandbox methods)
 
       runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
-
         try {
-          // Build command with options
           let fullCommand = command;
-          
-          // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
+            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(v)}"`).join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
-
-          // If running in the background, don't capture stdout/stderr
           const stdout = options?.background ? undefined : getUtf8Sink();
           const stderr = options?.background ? undefined : getUtf8Sink();
-
           const result = await sandbox.runCommand({
-            cmd: 'sh',
-            args: ['-c', fullCommand],
-            cwd: options?.cwd,
-            detached: options?.background,
-            stdout: stdout?.sink,
-            stderr: stderr?.sink,
+            cmd: 'sh', args: ['-c', fullCommand],
+            cwd: options?.cwd, detached: options?.background,
+            stdout: stdout?.sink, stderr: stderr?.sink,
           });
-
-          return {
-            stdout: stdout?.value() ?? '',
-            stderr: stderr?.value() ?? '',
-            exitCode: result.exitCode ?? 0,
-            durationMs: Date.now() - startTime,
-          };
+          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
         } catch (error) {
-          return {
-            stdout: '',
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
-            durationMs: Date.now() - startTime,
-          };
+          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },
 
-      getInfo: async (sandbox: VercelSandbox): Promise<SandboxInfo> => {
-        return {
-          id: 'vercel-unknown',
-          provider: 'vercel',
-          runtime: 'node', // Vercel default
-          status: 'running',
-          createdAt: new Date(),
-          timeout: 300000,
-          metadata: {
-            vercelSandboxId: 'vercel-unknown'
-          }
-        };
-      },
+      getInfo: async (_sandbox: VercelSandbox): Promise<SandboxInfo> => ({
+        id: 'vercel-unknown',
+        provider: 'vercel',
+        status: 'running',
+        createdAt: new Date(),
+        timeout: 300000,
+        metadata: { vercelSandboxId: 'vercel-unknown' }
+      }),
 
       getUrl: async (sandbox: VercelSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
-          // Use Vercel's built-in domain method to get the real domain
           let url = sandbox.domain(options.port);
-          
-          // If a specific protocol is requested, replace the URL's protocol
           if (options.protocol) {
             const urlObj = new URL(url);
             urlObj.protocol = options.protocol + ':';
             url = urlObj.toString();
           }
-          
           return url;
         } catch (error) {
-          throw new Error(
-            `Failed to get Vercel domain for port ${options.port}: ${error instanceof Error ? error.message : String(error)}. Ensure the port has an associated route.`
-          );
+          throw new Error(`Failed to get Vercel domain for port ${options.port}: ${error instanceof Error ? error.message : String(error)}.`);
         }
       },
 
       filesystem: {
         readFile: async (sandbox: VercelSandbox, path: string): Promise<string> => {
           const stream = await sandbox.readFile({ path });
-          if (!stream) {
-            throw new Error(`File not found: ${path}`);
-          }
+          if (!stream) throw new Error(`File not found: ${path}`);
           const chunks: Buffer[] = [];
-          for await (const chunk of stream) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          }
+          for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
           return Buffer.concat(chunks).toString('utf-8');
         },
-
         writeFile: async (sandbox: VercelSandbox, path: string, content: string): Promise<void> => {
           await sandbox.writeFiles([{ path, content: Buffer.from(content) }]);
         },
-
-        mkdir: async (sandbox: VercelSandbox, path: string): Promise<void> => {
-          await sandbox.mkDir(path);
-        },
-
+        mkdir: async (sandbox: VercelSandbox, path: string): Promise<void> => { await sandbox.mkDir(path); },
         readdir: async (_sandbox: VercelSandbox, _path: string): Promise<FileEntry[]> => {
-          throw new Error('Vercel sandbox does not support readdir. Use runCommand to list directory contents.');
+          throw new Error('Vercel sandbox does not support readdir.');
         },
-
         exists: async (_sandbox: VercelSandbox, _path: string): Promise<boolean> => {
-          throw new Error('Vercel sandbox does not support exists. Use runCommand to check file existence.');
+          throw new Error('Vercel sandbox does not support exists.');
         },
-
         remove: async (_sandbox: VercelSandbox, _path: string): Promise<void> => {
-          throw new Error('Vercel sandbox does not support remove. Use runCommand to delete files.');
+          throw new Error('Vercel sandbox does not support remove.');
         }
       },
 
-      // Provider-specific typed getInstance method
-      getInstance: (sandbox: VercelSandbox): VercelSandbox => {
-        return sandbox;
-      },
-
+      getInstance: (sandbox: VercelSandbox): VercelSandbox => sandbox,
     },
 
     snapshot: {
       create: async (config: VercelConfig, sandboxId: string) => {
-        // Resolve credentials with proper precedence (config wins over env)
         const creds = resolveCredentials(config);
-
-        let sandbox: VercelSandbox;
-
-        if (creds.useOidc) {
-          // Use OIDC token method
-          sandbox = await VercelSandbox.get({ sandboxId });
-        } else {
-          // Use traditional method
-          sandbox = await VercelSandbox.get({
-            sandboxId,
-            token: creds.token,
-            teamId: creds.teamId,
-            projectId: creds.projectId,
-          });
-        }
-
+        const sandbox = creds.useOidc
+          ? await VercelSandbox.get({ sandboxId })
+          : await VercelSandbox.get({ sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         return await sandbox.snapshot();
       },
-
-      list: async (_config: VercelConfig) => {
-        throw new Error(
-          `Vercel provider does not support listing snapshots.`
-        );
-      },
-
+      list: async (_config: VercelConfig) => { throw new Error(`Vercel provider does not support listing snapshots.`); },
       delete: async (config: VercelConfig, snapshotId: string) => {
-        // Resolve credentials with proper precedence (config wins over env)
         const creds = resolveCredentials(config);
-
-        let snapshot: VercelSnapshot;
-
-        if (creds.useOidc) {
-          // Use OIDC token method
-          snapshot = await VercelSnapshot.get({ snapshotId });
-        } else {
-          // Use traditional method
-          snapshot = await VercelSnapshot.get({
-            snapshotId,
-            token: creds.token,
-            teamId: creds.teamId,
-            projectId: creds.projectId,
-          });
-        }
-
+        const snapshot = creds.useOidc
+          ? await VercelSnapshot.get({ snapshotId })
+          : await VercelSnapshot.get({ snapshotId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         await snapshot.delete();
       }
     },
 
-    // Vercel doesn't have a separate "template" concept - snapshots serve as templates
     template: {
       create: async (_config: VercelConfig, _options: { name: string }) => {
-        throw new Error(
-          `Vercel does not support creating templates directly. Use snapshot.create() to create a snapshot from a running sandbox.`
-        );
+        throw new Error(`Vercel does not support creating templates directly. Use snapshot.create() instead.`);
       },
-
-      list: async (_config: VercelConfig) => {
-        throw new Error(
-          `Vercel provider does not support listing templates.`
-        );
-      },
-
+      list: async (_config: VercelConfig) => { throw new Error(`Vercel provider does not support listing templates.`); },
       delete: async (config: VercelConfig, templateId: string) => {
-        // Reuse snapshot.delete since Vercel doesn't have separate templates
         const creds = resolveCredentials(config);
-
-        let snapshot: VercelSnapshot;
-
-        if (creds.useOidc) {
-          snapshot = await VercelSnapshot.get({ snapshotId: templateId });
-        } else {
-          snapshot = await VercelSnapshot.get({
-            snapshotId: templateId,
-            token: creds.token,
-            teamId: creds.teamId,
-            projectId: creds.projectId,
-          });
-        }
-
+        const snapshot = creds.useOidc
+          ? await VercelSnapshot.get({ snapshotId: templateId })
+          : await VercelSnapshot.get({ snapshotId: templateId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         await snapshot.delete();
       }
     }

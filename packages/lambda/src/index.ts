@@ -1,41 +1,9 @@
 /**
  * Lambda Provider - Factory-based Implementation
- * 
- * Curl Command to start instance with Node:Alpine
- * curl --request POST \
-  --url 'https://cloud.lambda.ai/api/v1/instance-operations/launch' \
-  --header 'Authorization: Bearer LAMBDA_API_KEY' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "region_name": LAMBDA_REGION_NAME,
-    "instance_type_name": LAMBDA_INSTANCE_TYPE_NAME,
-    "ssh_key_names": ["LAMBDA_SSH_KEY_NAME"],
-    "name": "node-alpine-instance",
-    "user_data": "#!/bin/bash\napt-get update\napt-get install -y docker.io\nsystemctl start docker\nsystemctl enable docker\ndocker pull node:alpine\ndocker run -d --name node-app node:alpine tail -f /dev/null"
-  }'
-  *
-  * Curl Command to list instances
-  * curl --request GET \
-  --url 'https://cloud.lambda.ai/api/v1/instances' \
-  --header 'Authorization: Bearer LAMBDA_API_KEY'
-  *
-  * Curl Command to getById()
-  * curl --request GET \
-  --url 'https://cloud.lambda.ai/api/v1/instances/<INSTANCE-ID>' \
-  --header 'Authorization: Bearer LAMBDA_API_KEY'
-  *
-  * Curl Command to Destroy Instance (terminate)
-  * curl --request POST \
-  --url 'https://cloud.lambda.ai/api/v1/instance-operations/terminate' \
-  --header 'Authorization: Bearer LAMBDA_API_KEY' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "instance_ids": ["<YOUR-INSTANCE-ID>"]
-  }'
  */
 
 import { defineProvider } from '@computesdk/provider';
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Lambda sandbox interface
@@ -101,7 +69,6 @@ const handleLambdaAPIError = (response: Response, data?: any) => {
   if (!response.ok) {
     let errorMessage;
     if (data?.error) {
-      // Handle Lambda API error format: { "error": { "code": "...", "message": "...", "suggestion": "..." } }
       if (typeof data.error === 'object' && data.error.message) {
         errorMessage = `${data.error.message}${data.error.suggestion ? ` ${data.error.suggestion}` : ''} (${data.error.code || 'unknown'})`;
       } else {
@@ -113,7 +80,6 @@ const handleLambdaAPIError = (response: Response, data?: any) => {
     throw new Error(`Lambda API error: ${errorMessage}`);
   }
 };
-
 
 export const fetchLambda = async (
   apiKey: string,
@@ -135,14 +101,9 @@ export const fetchLambda = async (
   });
 
   const data = await response.json();
-
-  // Handle Lambda API errors
   handleLambdaAPIError(response, data);
-
   return data;
 };
-
-
 
 /**
  * Create a Lambda provider instance using the factory pattern
@@ -151,12 +112,12 @@ export const lambda = defineProvider<LambdaSandbox, LambdaConfig>({
   name: 'lambda',
   methods: {
     sandbox: {
-      // Collection operations (compute.sandbox.*)
       create: async (config: LambdaConfig, options?: CreateSandboxOptions) => {
         const { apiKey, regionName, instanceTypeName, sshKeyName } = getAndValidateCredentials(config);
 
         try {
-          const dockerImage = options?.runtime === 'node' ? 'node:alpine' : 'python:alpine';
+          const runtime = (options as any)?.runtime;
+          const dockerImage = runtime === 'python' ? 'python:alpine' : 'node:alpine';
           const userData = `#!/bin/bash
 apt-get update
 apt-get install -y docker.io
@@ -169,7 +130,7 @@ docker run -d --name compute-app ${dockerImage} tail -f /dev/null`;
             region_name: regionName,
             instance_type_name: instanceTypeName,
             ssh_key_names: [sshKeyName],
-            name: `compute-${options?.runtime || 'node'}-instance`,
+            name: `compute-${runtime || 'node'}-instance`,
             user_data: userData
           };
 
@@ -178,29 +139,17 @@ docker run -d --name compute-app ${dockerImage} tail -f /dev/null`;
             body: launchBody
           });
           
-          // Lambda API returns instance_ids as an array
           const instanceIds = responseData?.data?.instance_ids;
           if (!instanceIds || !Array.isArray(instanceIds) || instanceIds.length === 0) {
             throw new Error(`No instance IDs returned from Lambda API. Full response: ${JSON.stringify(responseData)}`);
           }
 
-          // Take the first instance ID (should only be one for single instance creation)
           const instanceId = instanceIds[0];
+          const lambdaSandbox: LambdaSandbox = { instanceId, regionName, instanceTypeName };
 
-          const lambdaSandbox: LambdaSandbox = {
-            instanceId,
-            regionName,
-            instanceTypeName,
-          };
-
-          return {
-            sandbox: lambdaSandbox,
-            sandboxId: instanceId
-          };
+          return { sandbox: lambdaSandbox, sandboxId: instanceId };
         } catch (error) {
-          throw new Error(
-            `Failed to create Lambda sandbox: ${error instanceof Error ? error.message : String(error)}`
-          );
+          throw new Error(`Failed to create Lambda sandbox: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
 
@@ -209,35 +158,16 @@ docker run -d --name compute-app ${dockerImage} tail -f /dev/null`;
 
         try {
           const responseData = await fetchLambda(apiKey, LAMBDA_API_ENDPOINTS.GET_INSTANCE(sandboxId));
-          
-          // Lambda API returns the instance directly in data (single instance, not array)
           const instance = responseData?.data;
-          if (!instance) {
-            return null;
-          }
-          
-          if (!instance.id) {
-            throw new Error('Instance data is missing ID from Lambda response');
-          }
+          if (!instance || !instance.id) return null;
 
-          const lambdaSandbox: LambdaSandbox = {
-            instanceId: instance.id,
-            regionName,
-            instanceTypeName,
-          };
-
-          return {
-            sandbox: lambdaSandbox,
-            sandboxId: instance.id
-          };
+          const lambdaSandbox: LambdaSandbox = { instanceId: instance.id, regionName, instanceTypeName };
+          return { sandbox: lambdaSandbox, sandboxId: instance.id };
         } catch (error) {
-          // Return null for 404s (instance not found)
           if (error instanceof Error && (error.message.includes('404') || error.message.includes('Not Found'))) {
             return null;
           }
-          throw new Error(
-            `Failed to get Lambda sandbox: ${error instanceof Error ? error.message : String(error)}`
-          );
+          throw new Error(`Failed to get Lambda sandbox: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
       
@@ -246,55 +176,32 @@ docker run -d --name compute-app ${dockerImage} tail -f /dev/null`;
 
         try {
           const responseData = await fetchLambda(apiKey, LAMBDA_API_ENDPOINTS.LIST_INSTANCES);
-          
-          // Lambda API returns instances directly in data array
           const instances = responseData?.data || [];
-          
+
           if (!Array.isArray(instances)) {
             throw new Error(`Expected instances array, got: ${typeof instances}`);
           }
-          
-          // Transform each instance into the expected format
-          const sandboxes = instances.map((instance: any) => {
-            const lambdaSandbox: LambdaSandbox = {
-              instanceId: instance.id,
-              regionName,
-              instanceTypeName,
-            };
 
-            return {
-              sandbox: lambdaSandbox,
-              sandboxId: instance.id
-            };
-          });
-
-          return sandboxes;
+          return instances.map((instance: any) => ({
+            sandbox: { instanceId: instance.id, regionName, instanceTypeName } as LambdaSandbox,
+            sandboxId: instance.id
+          }));
         } catch (error) {
-          throw new Error(
-            `Failed to list Lambda sandboxes: ${error instanceof Error ? error.message : String(error)}`
-          );
+          throw new Error(`Failed to list Lambda sandboxes: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
 
       destroy: async (config: LambdaConfig, sandboxId: string) => {
         const { apiKey } = getAndValidateCredentials(config);
-
         try {
-          const terminateBody = {
-            instance_ids: [sandboxId]
-          };
-
           await fetchLambda(apiKey, LAMBDA_API_ENDPOINTS.TERMINATE_INSTANCES, {
             method: 'POST',
-            body: terminateBody
+            body: { instance_ids: [sandboxId] }
           });
         } catch (error) {
-          // For destroy operations, we typically don't throw if the instance is already gone
           console.warn(`Lambda destroy warning: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
-
-      // Instance operations (minimal stubs - not implemented yet)
 
       runCommand: async (_sandbox: LambdaSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Lambda runCommand method not implemented yet');
@@ -307,7 +214,6 @@ docker run -d --name compute-app ${dockerImage} tail -f /dev/null`;
       getUrl: async (_sandbox: LambdaSandbox, _options: { port: number; protocol?: string }) => {
         throw new Error('Lambda getUrl method not implemented yet');
       },
-
     },
   },
 });
