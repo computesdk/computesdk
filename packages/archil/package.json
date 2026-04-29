@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/archil",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Archil provider for ComputeSDK - exec commands against an Archil disk",
   "author": "ComputeSDK",
   "license": "MIT",

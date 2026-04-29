@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/just-bash",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "description": "just-bash provider for ComputeSDK - local sandboxed bash execution with virtual filesystem",
   "author": "ComputeSDK",
   "license": "MIT",

@@ -1,5 +1,12 @@
 # @computesdk/cli
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+
 ## 1.0.0
 
 ### Major Changes

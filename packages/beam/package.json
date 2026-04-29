@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/beam",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Beam provider for ComputeSDK - containerized sandbox environments with process management and filesystem access",
   "author": "ComputeSDK",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/declaw",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Declaw provider for ComputeSDK - secure sandboxes with PII scanning, prompt-injection defense, and network egress filtering",
   "author": "Declaw <hello@declaw.ai>",
   "license": "MIT",
