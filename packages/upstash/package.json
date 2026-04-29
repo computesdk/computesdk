@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/upstash",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Upstash Box provider for ComputeSDK - cloud sandboxes with code execution, filesystem access, and AI agent support",
   "author": "Garrison",
   "license": "MIT",

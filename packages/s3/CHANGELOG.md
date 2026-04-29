@@ -1,5 +1,12 @@
 # @computesdk/s3
 
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - @computesdk/provider@2.0.0
+
 ## 1.1.4
 
 ### Patch Changes
