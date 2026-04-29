@@ -6,29 +6,16 @@
  */
 
 import { compute } from 'computesdk';
-import { config } from 'dotenv';
+import { modal } from '@computesdk/modal';
 import { PYTHON_SNIPPETS, NODEJS_SNIPPETS } from './constants/code-snippets';
-config(); // Load environment variables from .env file
 
 async function main() {
-  if (!process.env.MODAL_TOKEN_ID || !process.env.MODAL_TOKEN_SECRET) {
-    console.error('Please set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables');
-    console.error('Run: modal token new');
-    process.exit(1);
-  }
-
   try {
-    // Gateway mode: configure compute to use Modal provider
     compute.setConfig({
-      provider: 'modal',
-      apiKey: process.env.COMPUTESDK_API_KEY || 'local',
-      modal: { 
-        tokenId: process.env.MODAL_TOKEN_ID,
-        tokenSecret: process.env.MODAL_TOKEN_SECRET 
-      }
+      provider: modal()
     });
 
-    // Create sandbox - auto-detects Python runtime
+    // Create a Python sandbox
     console.log('Creating Modal sandbox for Python...');
     const sandbox = await compute.sandbox.create();
 
@@ -36,9 +23,10 @@ async function main() {
 
     // Execute Python code
     console.log('\n--- Python Execution ---');
-    const pythonResult = await sandbox.runCode(PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
+    await sandbox.filesystem.writeFile('/tmp/hello.py', PYTHON_SNIPPETS.HELLO_WORLD + '\n\n' + PYTHON_SNIPPETS.FIBONACCI);
+    const pythonResult = await sandbox.runCommand('python3 /tmp/hello.py');
 
-    console.log('Python Output:', pythonResult.output);
+    console.log('Python Output:', pythonResult.stdout);
     console.log('Exit code:', pythonResult.exitCode);
 
     // Filesystem operations
@@ -47,7 +35,7 @@ async function main() {
     // Write and execute a Python script
     await sandbox.filesystem.writeFile('/tmp/script.py', PYTHON_SNIPPETS.FILE_PROCESSOR);
 
-    const scriptResult = await sandbox.runCommand('python', ['/tmp/script.py']);
+    const scriptResult = await sandbox.runCommand('python3 /tmp/script.py');
     console.log('Script output:', scriptResult.stdout);
 
     // Create directory and list files
@@ -57,13 +45,14 @@ async function main() {
 
     // Node.js execution
     console.log('\n--- Node.js Execution ---');
-    
+
     // Create a second sandbox for Node.js
     const nodeSandbox = await compute.sandbox.create();
     console.log('Created Node.js sandbox:', nodeSandbox.sandboxId);
-    
-    const nodeResult = await nodeSandbox.runCode(NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING, 'node');
-    console.log('Node.js Output:', nodeResult.output);
+
+    await nodeSandbox.filesystem.writeFile('/tmp/script.js', NODEJS_SNIPPETS.HELLO_WORLD + '\n\n' + NODEJS_SNIPPETS.TEAM_PROCESSING);
+    const nodeResult = await nodeSandbox.runCommand('node /tmp/script.js');
+    console.log('Node.js Output:', nodeResult.stdout);
 
     // Clean up
     await sandbox.destroy();
