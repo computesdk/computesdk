@@ -174,7 +174,7 @@ export const browseruse = defineBrowserProvider<BrowserUseSession, BrowserUseCon
         if (!session.cdpUrl) {
           throw new Error(
             `Browser Use returned session ${session.id} without a cdpUrl. ` +
-            `The session may not be ready yet — try fetching it again with session.getById().`
+            `The session may not be ready yet — try fetching it again with provider.session.getById('${session.id}').`
           );
         }
         return {
@@ -239,7 +239,11 @@ export const browseruse = defineBrowserProvider<BrowserUseSession, BrowserUseCon
           // userId can be passed via metadata.userId
           userId: typeof options?.metadata?.userId === 'string' ? options.metadata.userId : undefined,
         });
-        return mapProfile(result);
+        const mapped = mapProfile(result);
+        if (options?.metadata) {
+          mapped.metadata = { ...options.metadata, ...mapped.metadata };
+        }
+        return mapped;
       },
 
       get: async (config, profileId) => {
