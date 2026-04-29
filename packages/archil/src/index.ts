@@ -10,10 +10,8 @@
 
 import { defineProvider } from '@computesdk/provider';
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
-  Runtime,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
@@ -275,7 +273,6 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         return {
           id: sandbox.disk.id,
           provider: 'archil',
-          runtime: 'node',
           status: sandbox.disk.status === 'ready' ? 'running' : 'stopped',
           createdAt: new Date(sandbox.disk.createdAt),
           timeout: 0,

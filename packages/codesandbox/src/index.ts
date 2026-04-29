@@ -1,168 +1,88 @@
 /**
  * Codesandbox Provider - Factory-based Implementation
- * 
- * Full-featured provider with filesystem support using the factory pattern.
  */
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-type HibernateCapableSandbox = CodesandboxSandbox & {
-  hibernate: () => Promise<void>;
-};
+type HibernateCapableSandbox = CodesandboxSandbox & { hibernate: () => Promise<void>; };
 
-/**
- * Codesandbox-specific configuration options
- */
 export interface CodesandboxConfig {
   /** CodeSandbox API key - if not provided, will fallback to CSB_API_KEY environment variable */
   apiKey?: string;
   /** Template to use for new sandboxes */
   templateId?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
 
-/**
- * Create a Codesandbox provider instance using the factory pattern
- */
 export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
   name: 'codesandbox',
   methods: {
     sandbox: {
-      // Collection operations (compute.sandbox.*)
       create: async (config: CodesandboxConfig, options?: CreateSandboxOptions) => {
-        // Validate API key
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
-
         if (!apiKey) {
-          throw new Error(
-            `Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable. Get your API key from https://codesandbox.io/t/api`
-          );
+          throw new Error(`Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`);
         }
-
         const sdk = new CodeSandbox(apiKey);
-
         try {
           let sandbox: CodesandboxSandbox;
           let sandboxId: string;
-
           if (options?.snapshotId) {
-            // Resume from snapshot - in CodeSandbox, snapshots are hibernated sandboxes
             sandbox = await sdk.sandboxes.resume(options.snapshotId);
             sandboxId = options.snapshotId;
           } else {
-            // Destructure known ComputeSDK fields, collect the rest for passthrough
             const {
-              runtime: _runtime,
-              timeout: _timeout,
-              envs,
-              name: _name,
-              metadata: _metadata,
-              templateId: optTemplateId,
-              snapshotId: _snapshotId,
-              sandboxId: _sandboxId,
-              namespace: _namespace,
-              directory: _directory,
-              ...providerOptions
+              timeout: _timeout, envs, name: _name, metadata: _metadata,
+              templateId: optTemplateId, snapshotId: _snapshotId, sandboxId: _sandboxId,
+              namespace: _namespace, directory: _directory, ...providerOptions
             } = options || {};
-
-            // Create new CodeSandbox using sdk.sandboxes.create()
-            const createOptions: any = {
-              ...providerOptions, // Spread provider-specific options
-            };
-
-            // options.templateId takes precedence over config.templateId
+            const createOptions: any = { ...providerOptions };
             const templateId = optTemplateId || config.templateId;
-            if (templateId) {
-              createOptions.id = templateId;
-            }
-
-            // Remap envs to envVars
-            if (envs && Object.keys(envs).length > 0) {
-              createOptions.envVars = envs;
-            }
-
+            if (templateId) createOptions.id = templateId;
+            if (envs && Object.keys(envs).length > 0) createOptions.envVars = envs;
             sandbox = await sdk.sandboxes.create(createOptions);
             sandboxId = sandbox.id;
           }
-
-          return {
-            sandbox,
-            sandboxId
-          };
+          return { sandbox, sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('API key')) {
-              throw new Error(
-                `CodeSandbox authentication failed. Please check your CSB_API_KEY environment variable. Get your API key from https://codesandbox.io/t/api`
-              );
+              throw new Error(`CodeSandbox authentication failed. Please check your CSB_API_KEY environment variable.`);
             }
             if (error.message.includes('quota') || error.message.includes('limit')) {
-              throw new Error(
-                `CodeSandbox quota exceeded. Please check your usage at https://codesandbox.io/dashboard`
-              );
+              throw new Error(`CodeSandbox quota exceeded. Please check your usage at https://codesandbox.io/dashboard`);
             }
           }
-          throw new Error(
-            `Failed to create CodeSandbox sandbox: ${error instanceof Error ? error.message : String(error)}`
-          );
+          throw new Error(`Failed to create CodeSandbox sandbox: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
 
       getById: async (config: CodesandboxConfig, sandboxId: string) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
-
-        if (!apiKey) {
-          throw new Error(
-            `Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`
-          );
-        }
-
+        if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
         const sdk = new CodeSandbox(apiKey);
-
         try {
-          // Resume existing sandbox using sdk.sandboxes.resume()
           const sandbox = await sdk.sandboxes.resume(sandboxId);
-
-          return {
-            sandbox,
-            sandboxId
-          };
-        } catch (error) {
-          // Sandbox doesn't exist or can't be accessed
-          return null;
-        }
+          return { sandbox, sandboxId };
+        } catch { return null; }
       },
 
       list: async (_config: CodesandboxConfig) => {
-        throw new Error(
-          `CodeSandbox provider does not support listing sandboxes. CodeSandbox SDK does not provide a native list API. Consider using the CodeSandbox dashboard or implement your own tracking system.`
-        );
+        throw new Error(`CodeSandbox provider does not support listing sandboxes.`);
       },
 
       destroy: async (config: CodesandboxConfig, sandboxId: string) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
-
-        if (!apiKey) {
-          throw new Error(
-            `Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`
-          );
-        }
-
+        if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
         const sdk = new CodeSandbox(apiKey);
-
-        try {
-          await sdk.sandboxes.shutdown(sandboxId);
-        } catch {
-          // Ignore — may already be stopped
-        }
-
+        try { await sdk.sandboxes.shutdown(sandboxId); } catch { /* ignore */ }
         try {
           await sdk.sandboxes.delete(sandboxId);
         } catch (error) {
@@ -173,103 +93,54 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         }
       },
 
-      // Instance operations (sandbox.*)
-
       runCommand: async (sandbox: CodesandboxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
-
         try {
-          // Connect to the sandbox client using sandbox.connect()
           const client = await sandbox.connect();
-
-          // Build command with options
           let fullCommand = command;
-
-          // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
+            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(v)}"`).join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
-
-          // Handle working directory
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
-
-          // Handle background execution
-          if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          }
-
-          // Execute command using CodeSandbox client.commands.run()
+          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           const output = await client.commands.run(fullCommand);
-
-          return {
-            stdout: output,
-            stderr: '',
-            exitCode: 0,
-            durationMs: Date.now() - startTime
-          };
+          return { stdout: output, stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
         } catch (error) {
-          return {
-            stdout: '',
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
-            durationMs: Date.now() - startTime
-          };
+          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },
 
-      getInfo: async (sandbox: CodesandboxSandbox): Promise<SandboxInfo> => {
-        return {
-          id: sandbox.id,
-          provider: 'codesandbox',
-          runtime: 'node', // CodeSandbox default
-          status: 'running',
-          createdAt: new Date(),
-          timeout: 300000,
-          metadata: {
-            cluster: sandbox.cluster,
-            bootupType: sandbox.bootupType,
-            isUpToDate: sandbox.isUpToDate
-          }
-        };
-      },
+      getInfo: async (sandbox: CodesandboxSandbox): Promise<SandboxInfo> => ({
+        id: sandbox.id,
+        provider: 'codesandbox',
+        status: 'running',
+        createdAt: new Date(),
+        timeout: 300000,
+        metadata: { cluster: sandbox.cluster, bootupType: sandbox.bootupType, isUpToDate: sandbox.isUpToDate }
+      }),
 
       getUrl: async (sandbox: CodesandboxSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         const protocol = options.protocol || 'https';
-        // CodeSandbox provides URLs in the format: https://{sandbox-id}.{cluster}.csb.app:{port}
-        // Use the actual CodeSandbox URL format
         return `${protocol}://${sandbox.id}.${sandbox.cluster}.csb.app:${options.port}`;
       },
 
-      // Filesystem operations using CodeSandbox client.fs API
       filesystem: {
         readFile: async (sandbox: CodesandboxSandbox, path: string): Promise<string> => {
-          // Connect to the sandbox client and use client.fs.readTextFile()
           const client = await sandbox.connect();
-          return await client.fs.readTextFile(path);
+          return client.fs.readTextFile(path);
         },
-
         writeFile: async (sandbox: CodesandboxSandbox, path: string, content: string): Promise<void> => {
-          // Connect to the sandbox client and use client.fs.writeTextFile()
           const client = await sandbox.connect();
           await client.fs.writeTextFile(path, content);
         },
-
         mkdir: async (sandbox: CodesandboxSandbox, path: string): Promise<void> => {
-          // CodeSandbox doesn't have a direct mkdir API, use commands to create directory
           const client = await sandbox.connect();
           await client.commands.run(`mkdir -p "${path}"`);
         },
-
         readdir: async (sandbox: CodesandboxSandbox, path: string): Promise<FileEntry[]> => {
-          // Connect to the sandbox client and use client.fs.readdir()
           const client = await sandbox.connect();
           const entries = await client.fs.readdir(path);
-
           return entries.map((entry: any) => ({
             name: entry.name,
             type: entry.isDirectory ? 'directory' as const : 'file' as const,
@@ -277,114 +148,47 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             modified: entry.lastModified ? new Date(entry.lastModified) : new Date()
           }));
         },
-
         exists: async (sandbox: CodesandboxSandbox, path: string): Promise<boolean> => {
-          // CodeSandbox doesn't have a direct exists API, use ls command to check
           const client = await sandbox.connect();
-          try {
-            await client.commands.run(`ls "${path}"`);
-            return true;
-          } catch {
-            return false;
-          }
+          try { await client.commands.run(`ls "${path}"`); return true; } catch { return false; }
         },
-
         remove: async (sandbox: CodesandboxSandbox, path: string): Promise<void> => {
-          // Connect to the sandbox client and use client.fs.remove()
           const client = await sandbox.connect();
           await client.fs.remove(path);
         }
       },
 
-      // Provider-specific typed getInstance method
-      getInstance: (sandbox: CodesandboxSandbox): CodesandboxSandbox => {
-        return sandbox;
-      },
-
+      getInstance: (sandbox: CodesandboxSandbox): CodesandboxSandbox => sandbox,
     },
 
     snapshot: {
       create: async (config: CodesandboxConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
-
-        if (!apiKey) {
-          throw new Error(
-            `Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`
-          );
-        }
-
+        if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
         const sdk = new CodeSandbox(apiKey);
-
         try {
-          // Resume the sandbox first, then hibernate to create a snapshot
           const sandbox = await sdk.sandboxes.resume(sandboxId);
-
-          // Hibernate creates a checkpoint/snapshot of the sandbox
-          const hibernateSandbox = sandbox as HibernateCapableSandbox;
-          await hibernateSandbox.hibernate();
-
-          // The hibernated sandbox becomes a snapshot we can fork
-          return {
-            id: sandbox.id,
-            provider: 'codesandbox',
-            createdAt: new Date(),
-            metadata: {
-              name: options?.name,
-              bootupType: sandbox.bootupType
-            }
-          };
+          await (sandbox as HibernateCapableSandbox).hibernate();
+          return { id: sandbox.id, provider: 'codesandbox', createdAt: new Date(), metadata: { name: options?.name, bootupType: sandbox.bootupType } };
         } catch (error) {
-          throw new Error(
-            `Failed to create CodeSandbox snapshot: ${error instanceof Error ? error.message : String(error)}`
-          );
+          throw new Error(`Failed to create CodeSandbox snapshot: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
-
-      list: async (_config: CodesandboxConfig) => {
-        throw new Error(
-          `CodeSandbox provider does not support listing snapshots. Use the dashboard to manage snapshots.`
-        );
-      },
-
+      list: async (_config: CodesandboxConfig) => { throw new Error(`CodeSandbox provider does not support listing snapshots.`); },
       delete: async (config: CodesandboxConfig, snapshotId: string) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
-
-        if (!apiKey) {
-          throw new Error(
-            `Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`
-          );
-        }
-
+        if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
         const sdk = new CodeSandbox(apiKey);
-
-        try {
-          // Shutdown the snapshot (hibernated sandbox)
-          await sdk.sandboxes.shutdown(snapshotId);
-        } catch (error) {
-          // Ignore if not found
-        }
+        try { await sdk.sandboxes.shutdown(snapshotId); } catch { /* ignore */ }
       }
     },
 
-    // Templates in CodeSandbox are handled via templateId on create
     template: {
       create: async (_config: CodesandboxConfig, _options: { name: string }) => {
-        throw new Error(
-          `CodeSandbox templates must be created via the CodeSandbox dashboard or CLI. Use templateId in sandbox.create() to specify a template.`
-        );
+        throw new Error(`CodeSandbox templates must be created via the dashboard.`);
       },
-
-      list: async (_config: CodesandboxConfig) => {
-        throw new Error(
-          `CodeSandbox provider does not support listing templates via API. Use the dashboard to manage templates.`
-        );
-      },
-
-      delete: async (_config: CodesandboxConfig, _templateId: string) => {
-        throw new Error(
-          `CodeSandbox templates must be deleted via the CodeSandbox dashboard or CLI.`
-        );
-      }
+      list: async (_config: CodesandboxConfig) => { throw new Error(`CodeSandbox provider does not support listing templates via API.`); },
+      delete: async (_config: CodesandboxConfig, _templateId: string) => { throw new Error(`CodeSandbox templates must be deleted via the dashboard.`); }
     }
   }
 });

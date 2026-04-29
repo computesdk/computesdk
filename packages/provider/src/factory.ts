@@ -7,7 +7,6 @@
 
 // Import all types from local types
 import type {
-  Runtime,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
@@ -354,12 +353,6 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
     if (providerConfig.methods.snapshot) {
       this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
     }
-  }
-
-  getSupportedRuntimes(): Runtime[] {
-    // For now, all providers support both node and python
-    // In the future, this could be configurable per provider
-    return ['node', 'python'];
   }
 }
 

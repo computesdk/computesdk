@@ -38,7 +38,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
 				// Destructure known ComputeSDK fields, collect the rest for passthrough
 				const {
-					runtime: optRuntime,
 					timeout: optTimeout,
 					envs,
 					name: _name,
@@ -50,6 +49,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					directory: _directory,
 					...providerOptions
 				} = options || {};
+
+				const optRuntime = (options as any)?.runtime as string | undefined;
 
 				// Determine the image to use
 				let image = config.image || 'blaxel/base-image:latest';  // Default to prod-base
@@ -167,7 +168,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					await SandboxInstance.delete(sandboxId);
 				} catch (error) {
 					// Sandbox might already be destroyed or doesn't exist
-					// This is acceptable for destroy operations
 				}
 			},
 
@@ -216,14 +216,15 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		},
 
 			getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
+				const runtime = sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node';
 				return {
 					id: sandbox.metadata?.name || 'blaxel-unknown',
 					provider: 'blaxel',
-					runtime: sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node',
 					status: convertSandboxStatus(sandbox.status),
 					createdAt: sandbox.metadata?.createdAt ? new Date(sandbox.metadata.createdAt) : new Date(),
 					timeout: parseTTLToMilliseconds(sandbox.spec?.runtime?.ttl),
 					metadata: {
+						runtime,
 						...sandbox.metadata?.labels
 					}
 				};
@@ -346,13 +347,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				exists: async (sandbox: SandboxInstance, path: string): Promise<boolean> => {
 					try {
 						await sandbox.fs.read(path);
-						return true;  // It's a file and exists
+						return true;
 					} catch {
 						try {
 							await sandbox.fs.ls(path);
-							return true;  // It's a directory and exists
+							return true;
 						} catch {
-							return false;  // Path doesn't exist
+							return false;
 						}
 					}
 				},
@@ -370,20 +371,15 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 		snapshot: {
 			create: async (config: BlaxelConfig, sandboxId: string, options?: { name?: string }) => {
-				// Blaxel automatically snapshots on scale-down, but we can trigger a manual snapshot
-				// by stopping the sandbox which saves its state
 				try {
 					initializeBlaxel(config);
 					
-					// Get the sandbox to access its snapshot
 					const sandbox = await SandboxInstance.get(sandboxId);
 					
 					if (!sandbox) {
 						throw new Error(`Sandbox ${sandboxId} not found`);
 					}
 
-					// Return the current state as a snapshot
-					// Blaxel's auto-snapshot on scale-down is the primary mechanism
 					return {
 						id: sandboxId,
 						provider: 'blaxel',
@@ -401,8 +397,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			},
 
 			list: async (config: BlaxelConfig) => {
-				// Blaxel doesn't have a separate snapshot listing API
-				// List sandboxes as they contain the snapshot state
 				initializeBlaxel(config);
 				const sandboxList = await SandboxInstance.list();
 				return sandboxList.map(sandbox => ({
@@ -417,7 +411,6 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			},
 
 			delete: async (config: BlaxelConfig, snapshotId: string) => {
-				// Deleting a snapshot in Blaxel is just deleting the sandbox
 				try {
 					initializeBlaxel(config);
 					await SandboxInstance.delete(snapshotId);
@@ -452,29 +445,20 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 /**
  * Parse TTL value from Blaxel's format to milliseconds
- * Supports formats like "30m", "24h", "7d" or plain numbers (seconds)
  */
 function parseTTLToMilliseconds(ttl: string | number | undefined): number {
-	if (!ttl) return 300000; // Default to 5 minutes
-
-	// If it's already a number, treat it as seconds and convert to milliseconds
-	if (typeof ttl === 'number') {
-		return ttl * 1000;
-	}
-
-	// Parse string formats like "30m", "24h", "7d"
+	if (!ttl) return 300000;
+	if (typeof ttl === 'number') return ttl * 1000;
 	const match = ttl.match(/^(\d+)([smhd])?$/);
-	if (!match) return 300000; // Default if format is invalid
-
+	if (!match) return 300000;
 	const value = parseInt(match[1], 10);
-	const unit = match[2] || 's'; // Default to seconds if no unit
-
+	const unit = match[2] || 's';
 	switch (unit) {
-		case 's': return value * 1000;           // seconds to ms
-		case 'm': return value * 60 * 1000;      // minutes to ms
-		case 'h': return value * 60 * 60 * 1000; // hours to ms
-		case 'd': return value * 24 * 60 * 60 * 1000; // days to ms
-		default: return 300000; // Default fallback
+		case 's': return value * 1000;
+		case 'm': return value * 60 * 1000;
+		case 'h': return value * 60 * 60 * 1000;
+		case 'd': return value * 24 * 60 * 60 * 1000;
+		default: return 300000;
 	}
 }
 
@@ -498,18 +482,15 @@ function convertSandboxStatus(status: string | undefined): 'running' | 'stopped'
 
 /**
  * Execute a command in the sandbox and capture stdout/stderr
- * Handles the common pattern of executing, streaming logs, and waiting for completion
  */
 async function executeWithStreaming(
 	sandbox: SandboxInstance,
 	command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-	// Execute the command
 	const processResult = await sandbox.process.exec({
 		command,
 		waitForCompletion: true,
 	});
-	// Handle union type - ProcessResponseWithLog has stdout/stderr
 	const result = processResult as { stdout?: string; stderr?: string; exitCode?: number };
 	return {
 		stdout: result.stdout || '',

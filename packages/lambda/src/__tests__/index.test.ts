@@ -28,7 +28,6 @@ describe('Lambda Provider', () => {
       });
 
       expect(provider.name).toBe('lambda');
-      expect(typeof provider.getSupportedRuntimes).toBe('function');
     });
   });
 
@@ -92,11 +91,10 @@ describe('Lambda Provider', () => {
 
   describe('Error handling', () => {
     it('should handle configuration errors gracefully', () => {
-      expect(() => lambda({})).not.toThrow(); // Provider creation should not throw
+      expect(() => lambda({})).not.toThrow();
       
       const provider = lambda({});
       
-      // The error should be thrown when attempting to use the provider methods
       expect(async () => {
         await provider.sandbox.create();
       }).rejects.toThrow();

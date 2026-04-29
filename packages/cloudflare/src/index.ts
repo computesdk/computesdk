@@ -15,12 +15,6 @@
 
 import { defineProvider } from '@computesdk/provider';
 
-/**
- * Lazy-load @cloudflare/sandbox to avoid importing it in Node.js environments.
- * The SDK only works inside the Cloudflare Workers runtime (its transitive dep
- * @cloudflare/containers uses extensionless ESM imports that break in Node).
- * Remote mode never needs this import.
- */
 let _getSandboxFn: ((binding: any, id: string, options?: any) => any) | null = null;
 async function getSandbox(binding: any, id: string, options?: any): Promise<any> {
   if (!_getSandboxFn) {
@@ -30,96 +24,39 @@ async function getSandbox(binding: any, id: string, options?: any): Promise<any>
   return _getSandboxFn(binding, id, options);
 }
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
-
-// ─── Config ──────────────────────────────────────────────────────────────────
+import type { CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 export interface CloudflareConfig {
-  // Remote mode (from anywhere — talks to deployed gateway Worker)
-  /** URL of the deployed gateway Worker (e.g. https://computesdk-sandbox.user.workers.dev) */
   sandboxUrl?: string;
-  /** Shared secret for authenticating with the gateway Worker */
   sandboxSecret?: string;
-
-  // Direct mode (inside a Cloudflare Worker — uses DO binding)
-  /** Cloudflare Sandbox Durable Object binding from Workers environment */
   sandboxBinding?: any;
-
-  // Shared options
-  /** Default runtime environment */
-  runtime?: Runtime;
-  /** Execution timeout in milliseconds */
   timeout?: number;
-  /** Environment variables to pass to sandbox */
   envVars?: Record<string, string>;
-  /** Options passed to getSandbox() for lifecycle control (direct mode only) */
   sandboxOptions?: {
     sleepAfter?: string | number;
     keepAlive?: boolean;
   };
 }
 
-// ─── Internal types ──────────────────────────────────────────────────────────
-
 interface CloudflareSandbox {
   sandboxId: string;
   exposedPorts: Map<number, string>;
-  // Remote mode fields
   remote: boolean;
   sandboxUrl?: string;
   sandboxSecret?: string;
   pendingEnvVars?: Record<string, string>;
   remoteInitialized?: boolean;
-  // Direct mode fields
-  sandbox?: any; // The @cloudflare/sandbox instance
+  sandbox?: any;
 }
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function isRemote(config: CloudflareConfig): boolean {
   return !!(config.sandboxUrl && config.sandboxSecret);
-}
-
-function detectRuntime(code: string): Runtime {
-  if (code.includes('print(') ||
-    code.includes('import ') ||
-    code.includes('def ') ||
-    code.includes('sys.') ||
-    code.includes('json.') ||
-    code.includes('__') ||
-    code.includes('f"') ||
-    code.includes("f'") ||
-    code.includes('raise ')) {
-    return 'python';
-  }
-  if (code.includes('console.log') ||
-    code.includes('process.') ||
-    code.includes('require(') ||
-    code.includes('module.exports') ||
-    code.includes('__dirname') ||
-    code.includes('__filename')) {
-    return 'node';
-  }
-  return 'python';
-}
-
-function runtimeToLanguage(runtime: Runtime): 'python' | 'javascript' | 'typescript' {
-  switch (runtime) {
-    case 'python': return 'python';
-    case 'node': return 'javascript';
-    case 'bun': return 'javascript';
-    case 'deno': return 'typescript';
-    default: return 'python';
-  }
 }
 
 function createSandboxId(): string {
   return `cf-sandbox-${crypto.randomUUID()}`;
 }
 
-/**
- * Make an authenticated request to the remote gateway Worker
- */
 async function workerRequest(
   cfSandbox: CloudflareSandbox,
   path: string,
@@ -142,10 +79,7 @@ async function workerRequest(
     throw new Error(`Worker request failed: ${res.status} - ${text.slice(0, 200)}`);
   }
 
-  if (!res.ok) {
-    throw new Error(data.error || `Worker request failed: ${res.status}`);
-  }
-
+  if (!res.ok) throw new Error(data.error || `Worker request failed: ${res.status}`);
   return data;
 }
 
@@ -169,17 +103,11 @@ async function workerRequestWithInit(
   return data;
 }
 
-/**
- * Escape a string for safe use inside double-quoted shell arguments.
- */
 function shellEscape(s: string): string {
   return s.replace(/["$`\\!]/g, '\\$&');
 }
 
-/**
- * Process code execution results into a CodeResult (shared by remote and direct modes)
- */
-function processExecution(execution: any, detectedRuntime: Runtime): CodeResult {
+function processExecution(execution: any, detectedRuntime: string): CodeResult {
   const stdoutParts: string[] = [];
   const stderrParts: string[] = [];
 
@@ -210,9 +138,6 @@ function processExecution(execution: any, detectedRuntime: Runtime): CodeResult 
   };
 }
 
-/**
- * Parse ls -la output into FileEntry objects (used by both modes for readdir)
- */
 function parseLsOutput(stdout: string): FileEntry[] {
   const lines = stdout.split('\n').filter((line: string) => line.trim() && !line.startsWith('total'));
 
@@ -233,18 +158,12 @@ function parseLsOutput(stdout: string): FileEntry[] {
   });
 }
 
-// ─── Provider ────────────────────────────────────────────────────────────────
-
 export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
   name: 'cloudflare',
   methods: {
     sandbox: {
-      // ─── Collection operations ───────────────────────────────────────
-
       create: async (config: CloudflareConfig, options?: CreateSandboxOptions) => {
-        // Destructure known ComputeSDK fields, collect the rest for passthrough
         const {
-          runtime: _runtime,
           timeout: optTimeout,
           envs,
           name: _name,
@@ -254,17 +173,14 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           sandboxId: optSandboxId,
           namespace: _namespace,
           directory: _directory,
-          ports: _ports,
           ...rest
         } = options || {};
 
         const sandboxId = optSandboxId || createSandboxId();
         const envVars = { ...config.envVars, ...envs };
-        // options.timeout takes precedence over config.timeout
         const timeout = optTimeout ?? config.timeout;
         const sleepAfter = timeout ? `${Math.ceil(timeout / 1000)}s` : undefined;
 
-        // Remote mode
         if (isRemote(config)) {
           return {
             sandbox: {
@@ -280,7 +196,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           };
         }
 
-        // Direct mode
         if (!config.sandboxBinding) {
           throw new Error(
             'Missing Cloudflare config. Either:\n' +
@@ -292,22 +207,13 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
         try {
           const sandboxOpts = { ...config.sandboxOptions };
-          if (sleepAfter) {
-            sandboxOpts.sleepAfter = sleepAfter;
-          }
+          if (sleepAfter) sandboxOpts.sleepAfter = sleepAfter;
           const sandbox = await getSandbox(config.sandboxBinding, sandboxId, sandboxOpts);
 
-          if (Object.keys(envVars).length > 0) {
-            await sandbox.setEnvVars(envVars);
-          }
+          if (Object.keys(envVars).length > 0) await sandbox.setEnvVars(envVars);
 
           return {
-            sandbox: {
-              sandbox,
-              sandboxId,
-              remote: false,
-              exposedPorts: new Map(),
-            },
+            sandbox: { sandbox, sandboxId, remote: false, exposedPorts: new Map() },
             sandboxId
           };
         } catch (error) {
@@ -327,38 +233,24 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
       },
 
       getById: async (config: CloudflareConfig, sandboxId: string) => {
-        // Remote mode
         if (isRemote(config)) {
           try {
             const cfSandbox: CloudflareSandbox = {
-              sandboxId,
-              remote: true,
-              sandboxUrl: config.sandboxUrl,
-              sandboxSecret: config.sandboxSecret,
-              remoteInitialized: true,
-              exposedPorts: new Map(),
+              sandboxId, remote: true, sandboxUrl: config.sandboxUrl,
+              sandboxSecret: config.sandboxSecret, remoteInitialized: true, exposedPorts: new Map(),
             };
-            // Verify sandbox is alive
             await workerRequest(cfSandbox, '/v1/sandbox/exec', { command: 'true' });
             return { sandbox: cfSandbox, sandboxId };
-          } catch {
-            return null;
-          }
+          } catch { return null; }
         }
 
-        // Direct mode
         if (!config.sandboxBinding) return null;
 
         try {
           const sandbox = await getSandbox(config.sandboxBinding, sandboxId, config.sandboxOptions);
           await sandbox.exec('true');
-          return {
-            sandbox: { sandbox, sandboxId, remote: false, exposedPorts: new Map() },
-            sandboxId
-          };
-        } catch {
-          return null;
-        }
+          return { sandbox: { sandbox, sandboxId, remote: false, exposedPorts: new Map() }, sandboxId };
+        } catch { return null; }
       },
 
       list: async (_config: CloudflareConfig) => {
@@ -378,124 +270,63 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
             );
             return;
           }
-
           if (config.sandboxBinding) {
             const sandbox = await getSandbox(config.sandboxBinding, sandboxId);
             await sandbox.destroy();
           }
-        } catch {
-          // Sandbox might already be destroyed
-        }
+        } catch { /* Sandbox might already be destroyed */ }
       },
-
-      // ─── Instance operations ─────────────────────────────────────────
 
       runCommand: async (cfSandbox: CloudflareSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
-        // Remote mode
         if (cfSandbox.remote) {
           try {
             let fullCommand = command;
-            if (options?.background) {
-              fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-            }
-
+            if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
             const result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exec', {
-              command: fullCommand,
-              cwd: options?.cwd,
-              env: options?.env,
-              timeout: options?.timeout,
+              command: fullCommand, cwd: options?.cwd, env: options?.env, timeout: options?.timeout,
             });
-
-            return {
-              stdout: result.stdout || '',
-              stderr: result.stderr || '',
-              exitCode: result.exitCode,
-              durationMs: Date.now() - startTime
-            };
+            return { stdout: result.stdout || '', stderr: result.stderr || '', exitCode: result.exitCode, durationMs: Date.now() - startTime };
           } catch (error) {
-            return {
-              stdout: '',
-              stderr: error instanceof Error ? error.message : String(error),
-              exitCode: 127,
-              durationMs: Date.now() - startTime
-            };
+            return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
           }
         }
 
-        // Direct mode
         try {
           let fullCommand = command;
-          if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          }
-
+          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           const execResult = await cfSandbox.sandbox.exec(fullCommand, {
-            cwd: options?.cwd,
-            env: options?.env,
-            timeout: options?.timeout,
+            cwd: options?.cwd, env: options?.env, timeout: options?.timeout,
           });
-
-          return {
-            stdout: execResult.stdout || '',
-            stderr: execResult.stderr || '',
-            exitCode: execResult.exitCode,
-            durationMs: Date.now() - startTime
-          };
+          return { stdout: execResult.stdout || '', stderr: execResult.stderr || '', exitCode: execResult.exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
-          return {
-            stdout: '',
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
-            durationMs: Date.now() - startTime
-          };
+          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },
 
       getInfo: async (cfSandbox: CloudflareSandbox): Promise<SandboxInfo> => {
         try {
-          if (cfSandbox.remote) {
-            await workerRequestWithInit(cfSandbox, '/v1/sandbox/info');
-          } else {
-            await cfSandbox.sandbox.exec('true');
-          }
+          if (cfSandbox.remote) await workerRequestWithInit(cfSandbox, '/v1/sandbox/info');
+          else await cfSandbox.sandbox.exec('true');
 
           return {
-            id: cfSandbox.sandboxId,
-            provider: 'cloudflare',
-            runtime: 'python',
-            status: 'running',
-            createdAt: new Date(),
-            timeout: 300000,
-            metadata: {
-              cloudflareSandboxId: cfSandbox.sandboxId,
-              mode: cfSandbox.remote ? 'remote' : 'direct',
-            }
+            id: cfSandbox.sandboxId, provider: 'cloudflare', status: 'running',
+            createdAt: new Date(), timeout: 300000,
+            metadata: { cloudflareSandboxId: cfSandbox.sandboxId, mode: cfSandbox.remote ? 'remote' : 'direct' }
           };
         } catch (error) {
           return {
-            id: cfSandbox.sandboxId,
-            provider: 'cloudflare',
-            runtime: 'python',
-            status: 'error',
-            createdAt: new Date(),
-            timeout: 300000,
-            metadata: {
-              cloudflareSandboxId: cfSandbox.sandboxId,
-              mode: cfSandbox.remote ? 'remote' : 'direct',
-              error: error instanceof Error ? error.message : String(error)
-            }
+            id: cfSandbox.sandboxId, provider: 'cloudflare', status: 'error',
+            createdAt: new Date(), timeout: 300000,
+            metadata: { cloudflareSandboxId: cfSandbox.sandboxId, mode: cfSandbox.remote ? 'remote' : 'direct', error: error instanceof Error ? error.message : String(error) }
           };
         }
       },
 
       getUrl: async (cfSandbox: CloudflareSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         const { port, protocol = 'https' } = options;
-
-        if (cfSandbox.exposedPorts.has(port)) {
-          return cfSandbox.exposedPorts.get(port)!;
-        }
+        if (cfSandbox.exposedPorts.has(port)) return cfSandbox.exposedPorts.get(port)!;
 
         let preview: any;
         if (cfSandbox.remote) {
@@ -509,8 +340,6 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         return url;
       },
 
-      // ─── Filesystem ────────────────────────────────────────────────
-
       filesystem: {
         readFile: async (cfSandbox: CloudflareSandbox, path: string): Promise<string> => {
           if (cfSandbox.remote) {
@@ -520,42 +349,24 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           const file = await cfSandbox.sandbox.readFile(path);
           return file.content || '';
         },
-
         writeFile: async (cfSandbox: CloudflareSandbox, path: string, content: string): Promise<void> => {
-          if (cfSandbox.remote) {
-            await workerRequestWithInit(cfSandbox, '/v1/sandbox/writeFile', { path, content });
-            return;
-          }
+          if (cfSandbox.remote) { await workerRequestWithInit(cfSandbox, '/v1/sandbox/writeFile', { path, content }); return; }
           await cfSandbox.sandbox.writeFile(path, content);
         },
-
         mkdir: async (cfSandbox: CloudflareSandbox, path: string): Promise<void> => {
-          if (cfSandbox.remote) {
-            await workerRequestWithInit(cfSandbox, '/v1/sandbox/mkdir', { path });
-            return;
-          }
+          if (cfSandbox.remote) { await workerRequestWithInit(cfSandbox, '/v1/sandbox/mkdir', { path }); return; }
           await cfSandbox.sandbox.mkdir(path, { recursive: true });
         },
-
         readdir: async (cfSandbox: CloudflareSandbox, path: string): Promise<FileEntry[]> => {
-          // Both modes use ls -la since there's no native readdir
           let result: any;
           if (cfSandbox.remote) {
-            result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exec', {
-              command: `ls -la "${shellEscape(path)}"`,
-              cwd: '/',
-            });
+            result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exec', { command: `ls -la "${shellEscape(path)}"`, cwd: '/' });
           } else {
             result = await cfSandbox.sandbox.exec(`ls -la "${shellEscape(path)}"`, { cwd: '/' });
           }
-
-          if (result.exitCode !== 0) {
-            throw new Error(`Directory listing failed: ${result.stderr}`);
-          }
-
+          if (result.exitCode !== 0) throw new Error(`Directory listing failed: ${result.stderr}`);
           return parseLsOutput(result.stdout);
         },
-
         exists: async (cfSandbox: CloudflareSandbox, path: string): Promise<boolean> => {
           if (cfSandbox.remote) {
             const result = await workerRequestWithInit(cfSandbox, '/v1/sandbox/exists', { path });
@@ -564,12 +375,8 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           const result = await cfSandbox.sandbox.exists(path);
           return result.exists;
         },
-
         remove: async (cfSandbox: CloudflareSandbox, path: string): Promise<void> => {
-          if (cfSandbox.remote) {
-            await workerRequestWithInit(cfSandbox, '/v1/sandbox/deleteFile', { path });
-            return;
-          }
+          if (cfSandbox.remote) { await workerRequestWithInit(cfSandbox, '/v1/sandbox/deleteFile', { path }); return; }
           await cfSandbox.sandbox.deleteFile(path);
         }
       }

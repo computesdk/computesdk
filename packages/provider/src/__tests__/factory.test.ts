@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineProvider } from '../factory.js'
-import type { Runtime, CommandResult, SandboxInfo } from '../types/index.js'
+import type { CommandResult, SandboxInfo } from '../types/index.js'
 
 describe('Factory', () => {
   describe('defineProvider', () => {
@@ -25,7 +25,6 @@ describe('Factory', () => {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: 'mock',
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
@@ -74,7 +73,6 @@ describe('Factory', () => {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: 'mock',
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000
@@ -131,7 +129,6 @@ describe('Factory', () => {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-456',
           provider: 'mock',
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000

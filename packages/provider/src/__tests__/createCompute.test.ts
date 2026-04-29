@@ -1,9 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createCompute } from '../compute.js'
 import type { CommandResult, SandboxInfo } from '../types/index.js'
-import type { Runtime } from 'computesdk'
-
-const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
 
 type MockSandboxInstance = {
   setTimeout: ReturnType<typeof vi.fn>
@@ -20,7 +17,6 @@ function createMockProvider(name: string) {
 
   return {
     name,
-    getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
     sandbox: {
       create: vi.fn().mockResolvedValue({
         sandboxId: 'test-123',
@@ -34,7 +30,6 @@ function createMockProvider(name: string) {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: name,
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
@@ -85,16 +80,12 @@ describe('createCompute function', () => {
 
     const sandbox = await compute.sandbox.create()
 
-    // Should be properly typed and return the provider-specific instance
-    // Note: In real usage with defineProvider<E2BSandbox>, getInstance() returns E2BSandbox
-    // Here we narrow to the mock shape used in this test.
     const instance = sandbox.getInstance() as MockSandboxInstance
 
     expect(instance).toBeTruthy()
     expect(typeof instance.setTimeout).toBe('function')
     expect(typeof instance.specialMethod).toBe('function')
 
-    // Should be able to call provider-specific methods
     instance.setTimeout(5000)
     expect(instance.setTimeout).toHaveBeenCalledWith(5000)
 
@@ -149,7 +140,6 @@ describe('createCompute function', () => {
       defaultProvider: mockProvider1
     })
 
-    // setConfig should return a new typed compute instance
     const compute2 = compute1.setConfig({
       defaultProvider: mockProvider2
     })

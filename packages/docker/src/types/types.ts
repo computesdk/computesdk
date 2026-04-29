@@ -13,7 +13,6 @@ import type {
 } from 'dockerode';
 
 import type {
-  Runtime,
   FileEntry,
   RunCommandOptions,
   CreateSandboxOptions,
@@ -62,7 +61,7 @@ export interface ResourceLimits {
   pidsLimit?: number;
 }
 
-/** Declarative container defaults that we’ll translate into dockerode create options */
+/** Declarative container defaults that we'll translate into dockerode create options */
 export interface ContainerDefaults {
   user?: string;
   workdir?: string;
@@ -84,7 +83,8 @@ export interface ContainerDefaults {
 /** Provider-level configuration for Docker */
 export interface DockerConfig {
   connection?: DockerConnection;
-  runtime?: Runtime; // 'python' | 'node'
+  /** Default image runtime identifier, e.g. 'python' or 'node' */
+  runtime?: string;
   timeout?: number;
   image: DockerImage;
   container?: ContainerDefaults;

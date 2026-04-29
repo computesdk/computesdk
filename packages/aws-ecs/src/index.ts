@@ -3,7 +3,7 @@
  */
 
 import { defineProvider } from '@computesdk/provider';
-import type { Runtime, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 import {
   ECSClient,
   RunTaskCommand,
@@ -65,8 +65,6 @@ export const getAndValidateCredentials = (config: FargateConfig) => {
     throw new Error('Missing security groups. Provide at least one security group in config.');
   }
 
-  // Build credentials object only if explicitly provided
-  // Otherwise, let the SDK use the default credential chain
   const credentials = config.accessKeyId && config.secretAccessKey
     ? {
         accessKeyId: config.accessKeyId,
@@ -100,22 +98,10 @@ const createECSClient = (config: FargateConfig): ECSClient => {
 
 /**
  * Extract task ID from task ARN
- * ARN format: arn:aws:ecs:region:account:task/cluster-name/task-id
  */
 const extractTaskId = (taskArn: string): string => {
   const parts = taskArn.split('/');
   return parts[parts.length - 1];
-};
-
-/**
- * Normalize task identifier to full ARN if needed
- */
-const normalizeTaskArn = (taskId: string, cluster: string, region: string, accountId?: string): string => {
-  if (taskId.startsWith('arn:aws:ecs:')) {
-    return taskId;
-  }
-  // If we don't have account ID, just return the task ID and let AWS resolve it
-  return taskId;
 };
 
 /**
@@ -125,7 +111,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
   name: 'fargate',
   methods: {
     sandbox: {
-      // Collection operations (compute.sandbox.*)
       create: async (config: FargateConfig, options?: CreateSandboxOptions) => {
         const {
           cluster,
@@ -139,13 +124,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
         const client = createECSClient(config);
 
         try {
-          // Note: For AWS ECS Fargate, the image is specified in the task definition,
-          // not as a runtime override. The task definition should be pre-configured
-          // with the appropriate image for the desired runtime.
-          // 
-          // The options?.runtime parameter is acknowledged but the actual runtime
-          // environment is determined by the pre-configured task definition.
-          
           const command = new RunTaskCommand({
             cluster,
             taskDefinition,
@@ -157,15 +135,11 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
                 assignPublicIp: assignPublicIp ? 'ENABLED' : 'DISABLED',
               },
             },
-            // Container overrides for ECS are limited to environment variables, 
-            // memory, CPU, and command - not the image itself
             ...(containerName && {
               overrides: {
                 containerOverrides: [
                   {
                     name: containerName,
-                    // Additional container overrides can be added here if needed
-                    // such as environment variables, memory, CPU, etc.
                   },
                 ],
               },
@@ -235,7 +209,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
             sandboxId: task.taskArn,
           };
         } catch (error) {
-          // Handle task not found
           if (error instanceof Error && 
               (error.message.includes('MISSING') || error.message.includes('not found'))) {
             return null;
@@ -251,7 +224,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
         const client = createECSClient(config);
 
         try {
-          // Step 1: List task ARNs
           const listCommand = new ListTasksCommand({
             cluster,
             desiredStatus: 'RUNNING',
@@ -264,7 +236,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
             return [];
           }
 
-          // Step 2: Describe tasks to get full details
           const describeCommand = new DescribeTasksCommand({
             cluster,
             tasks: taskArns,
@@ -273,23 +244,16 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
           const describeResponse = await client.send(describeCommand);
           const tasks = describeResponse.tasks || [];
 
-          // Transform each task into the expected format
-          const sandboxes = tasks
+          return tasks
             .filter(task => task.taskArn)
-            .map(task => {
-              const fargateSandbox: FargateSandbox = {
+            .map(task => ({
+              sandbox: {
                 taskArn: task.taskArn!,
                 clusterArn: task.clusterArn || cluster,
                 taskId: extractTaskId(task.taskArn!),
-              };
-
-              return {
-                sandbox: fargateSandbox,
-                sandboxId: task.taskArn!,
-              };
-            });
-
-          return sandboxes;
+              } as FargateSandbox,
+              sandboxId: task.taskArn!,
+            }));
         } catch (error) {
           throw new Error(
             `Failed to list Fargate sandboxes: ${error instanceof Error ? error.message : String(error)}`
@@ -310,7 +274,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
 
           await client.send(command);
         } catch (error) {
-          // For destroy operations, don't throw if task is already stopped/gone
           if (error instanceof Error && 
               (error.message.includes('MISSING') || 
                error.message.includes('not found') ||
@@ -323,8 +286,6 @@ export const fargate = defineProvider<FargateSandbox, FargateConfig>({
           );
         }
       },
-
-      // Instance operations (minimal stubs - not implemented yet)
 
       runCommand: async (_sandbox: FargateSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('Fargate runCommand method not implemented yet');

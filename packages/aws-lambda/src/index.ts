@@ -3,7 +3,7 @@
  */
 
 import { defineProvider } from '@computesdk/provider';
-import type { Runtime, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { RunCommandOptions } from '@computesdk/provider';
 import {
   LambdaClient,
   CreateFunctionCommand,
@@ -50,62 +50,24 @@ export const getAndValidateCredentials = (config: LambdaConfig) => {
     );
   }
 
-  // Build credentials object only if both accessKeyId and secretAccessKey are provided
-  // Otherwise, let the SDK use the default credential chain
   const credentials = accessKeyId && secretAccessKey
-    ? {
-        accessKeyId,
-        secretAccessKey,
-      }
+    ? { accessKeyId, secretAccessKey }
     : undefined;
 
-  return {
-    region,
-    roleArn,
-    functionNamePrefix,
-    credentials,
-  };
+  return { region, roleArn, functionNamePrefix, credentials };
 };
 
-/**
- * Create a Lambda client instance
- */
 const createLambdaClient = (config: LambdaConfig): LambdaClient => {
   const { region, credentials } = getAndValidateCredentials(config);
-  
-  return new LambdaClient({
-    region,
-    ...(credentials && { credentials }),
-  });
+  return new LambdaClient({ region, ...(credentials && { credentials }) });
 };
 
-/**
- * Generate a unique function name
- */
 const generateFunctionName = (prefix: string): string => {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 8);
   return `${prefix}-${timestamp}-${random}`;
 };
 
-/**
- * Map ComputeSDK runtime to AWS Lambda runtime
- */
-const mapRuntimeToAWS = (runtime?: Runtime): AWSRuntime => {
-  // Default to Node.js 20.x if not specified
-  if (!runtime || runtime === 'node') {
-    return 'nodejs20.x' as AWSRuntime;
-  }
-  if (runtime === 'python') {
-    return 'python3.12' as AWSRuntime;
-  }
-  // Add more mappings as needed
-  throw new Error(`Unsupported runtime: ${runtime}. Supported runtimes: node, python`);
-};
-
-/**
- * Create a ZIP file containing Lambda handler code using JSZip
- */
 const createLambdaZip = async (): Promise<Buffer> => {
   const handlerCode = `exports.handler = async (event) => {
     return {
@@ -128,21 +90,17 @@ const createLambdaZip = async (): Promise<Buffer> => {
   });
 };
 
-/**
- * Create an AWS Lambda provider instance using the factory pattern
- */
 export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
   name: 'aws-lambda',
   methods: {
     sandbox: {
-      // Collection operations (compute.sandbox.*)
-      create: async (config: LambdaConfig, options?: CreateSandboxOptions) => {
+      create: async (config: LambdaConfig, _options?: unknown) => {
         const { roleArn, functionNamePrefix } = getAndValidateCredentials(config);
         const client = createLambdaClient(config);
 
         try {
           const functionName = generateFunctionName(functionNamePrefix);
-          const runtime = mapRuntimeToAWS(options?.runtime);
+          const runtime = 'nodejs20.x' as AWSRuntime;
           const zipBuffer = await createLambdaZip();
 
           const command = new CreateFunctionCommand({
@@ -150,9 +108,7 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
             Runtime: runtime,
             Role: roleArn,
             Handler: 'index.handler',
-            Code: {
-              ZipFile: zipBuffer,
-            },
+            Code: { ZipFile: zipBuffer },
             Timeout: 30,
             MemorySize: 128,
           });
@@ -169,10 +125,7 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
             runtime: response.Runtime || runtime,
           };
 
-          return {
-            sandbox: lambdaSandbox,
-            sandboxId: response.FunctionName,
-          };
+          return { sandbox: lambdaSandbox, sandboxId: response.FunctionName };
         } catch (error) {
           throw new Error(
             `Failed to create Lambda function: ${error instanceof Error ? error.message : String(error)}`
@@ -184,21 +137,13 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
         const client = createLambdaClient(config);
 
         try {
-          const command = new GetFunctionCommand({
-            FunctionName: sandboxId,
-          });
-
+          const command = new GetFunctionCommand({ FunctionName: sandboxId });
           const response = await client.send(command);
 
-          if (!response.Configuration) {
-            return null;
-          }
+          if (!response.Configuration) return null;
 
           const funcConfig = response.Configuration;
-
-          if (!funcConfig.FunctionName || !funcConfig.FunctionArn) {
-            return null;
-          }
+          if (!funcConfig.FunctionName || !funcConfig.FunctionArn) return null;
 
           const lambdaSandbox: LambdaSandbox = {
             functionName: funcConfig.FunctionName,
@@ -206,14 +151,9 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
             runtime: funcConfig.Runtime || 'unknown',
           };
 
-          return {
-            sandbox: lambdaSandbox,
-            sandboxId: funcConfig.FunctionName,
-          };
+          return { sandbox: lambdaSandbox, sandboxId: funcConfig.FunctionName };
         } catch (error) {
-          if (error instanceof ResourceNotFoundException) {
-            return null;
-          }
+          if (error instanceof ResourceNotFoundException) return null;
           throw new Error(
             `Failed to get Lambda function: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -225,9 +165,7 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
 
         try {
           const command = new ListFunctionsCommand({});
-
           const response = await client.send(command);
-
           const functions = response.Functions || [];
 
           function hasFunctionNameAndArn(
@@ -236,22 +174,14 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
             return !!(func.FunctionName && func.FunctionArn);
           }
 
-          const sandboxes = functions
-            .filter(hasFunctionNameAndArn)
-            .map(func => {
-              const lambdaSandbox: LambdaSandbox = {
-                functionName: func.FunctionName,
-                functionArn: func.FunctionArn,
-                runtime: func.Runtime || 'unknown',
-              };
-
-              return {
-                sandbox: lambdaSandbox,
-                sandboxId: func.FunctionName,
-              };
-            });
-
-          return sandboxes;
+          return functions.filter(hasFunctionNameAndArn).map(func => ({
+            sandbox: {
+              functionName: func.FunctionName,
+              functionArn: func.FunctionArn,
+              runtime: func.Runtime || 'unknown',
+            } as LambdaSandbox,
+            sandboxId: func.FunctionName,
+          }));
         } catch (error) {
           throw new Error(
             `Failed to list Lambda functions: ${error instanceof Error ? error.message : String(error)}`
@@ -263,13 +193,8 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
         const client = createLambdaClient(config);
 
         try {
-          const command = new DeleteFunctionCommand({
-            FunctionName: sandboxId,
-          });
-
-          await client.send(command);
+          await client.send(new DeleteFunctionCommand({ FunctionName: sandboxId }));
         } catch (error) {
-          // For destroy operations, we typically don't throw if the function is already gone
           if (error instanceof ResourceNotFoundException) {
             console.warn(`Lambda function ${sandboxId} not found - may already be deleted`);
           } else {
@@ -277,8 +202,6 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
           }
         }
       },
-
-      // Instance operations (minimal stubs - not implemented yet)
 
       runCommand: async (_sandbox: LambdaSandbox, _command: string, _options?: RunCommandOptions) => {
         throw new Error('AWS Lambda runCommand method not implemented yet');
@@ -291,7 +214,6 @@ export const awsLambda = defineProvider<LambdaSandbox, LambdaConfig>({
       getUrl: async (_sandbox: LambdaSandbox, _options: { port: number; protocol?: string }) => {
         throw new Error('AWS Lambda getUrl method not implemented yet');
       },
-
     },
   },
 });
