@@ -22,7 +22,6 @@
 // so provider-agnostic code has a canonical type name to reference.
 export type {
   Sandbox as SandboxInterface,
-  Runtime,
   CodeResult,
   CommandResult,
   SandboxInfo,

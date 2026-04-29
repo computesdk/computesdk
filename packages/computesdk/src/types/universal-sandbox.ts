@@ -6,11 +6,6 @@
  */
 
 /**
- * Supported runtime environments
- */
-export type Runtime = 'node' | 'python' | 'deno' | 'bun';
-
-/**
  * Code execution result
  */
 export interface CodeResult {
@@ -37,8 +32,6 @@ export interface SandboxInfo {
   id: string;
   /** Provider hosting the sandbox */
   provider: string;
-  /** Runtime environment in the sandbox */
-  runtime: Runtime;
   /** Current status of the sandbox */
   status: 'running' | 'stopped' | 'error';
   /** When the sandbox was created */

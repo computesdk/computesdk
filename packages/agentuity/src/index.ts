@@ -16,10 +16,8 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
-    CodeResult,
     CommandResult,
     SandboxInfo,
-    Runtime,
     CreateSandboxOptions,
     FileEntry,
     RunCommandOptions,
@@ -133,19 +131,9 @@ function toBase64(content: string): string {
 }
 
 /**
- * Decode base64 to string — works in both Node/Bun and browser environments.
+ * Map a provider runtime string to an Agentuity runtime string.
  */
-function fromBase64(b64: string): string {
-    if (typeof Buffer !== 'undefined') {
-        return Buffer.from(b64, 'base64').toString('utf-8');
-    }
-    return decodeURIComponent(escape(atob(b64)));
-}
-
-/**
- * Map a ComputeSDK Runtime to an Agentuity runtime string.
- */
-function toAgentuityRuntime(runtime?: Runtime | string): string {
+function toAgentuityRuntime(runtime?: string): string {
     if (!runtime) return 'bun:1';
     switch (runtime) {
         // Agentuity's JS runtime is bun — map node requests to bun
@@ -154,48 +142,8 @@ function toAgentuityRuntime(runtime?: Runtime | string): string {
         case 'bun': return 'bun:1';
         default:
             // Pass-through for explicit strings like "python:3.11", "bun:1", etc.
-            return runtime as string;
+            return runtime;
     }
-}
-
-function fromAgentuityRuntime(name?: string): Runtime {
-    if (!name) return 'node';
-    if (name.startsWith('bun')) return 'node';
-    if (name.startsWith('python')) return 'python';
-    if (name.startsWith('node')) return 'node';
-    if (name.startsWith('deno')) return 'deno';
-    return 'node';
-}
-
-/**
- * Build a small script that wraps user code for a specific language,
- * writes it to a temp file, and executes it.
- * Returns { command, filename } for the execute payload.
- */
-function buildCodeCommand(
-    code: string,
-    runtime: Runtime | string,
-): { exec: string[]; filename: string } {
-    const effectiveRuntime = runtime || autoDetectRuntime(code);
-    if (effectiveRuntime === 'python') {
-        return { exec: ['python3', '/tmp/_compute_run.py'], filename: '/tmp/_compute_run.py' };
-    }
-    // Default: bun (fastest) or node
-    return { exec: ['bun', 'run', '/tmp/_compute_run.js'], filename: '/tmp/_compute_run.js' };
-}
-
-function autoDetectRuntime(code: string): Runtime {
-    const looksLikePython =
-        code.includes('print(') ||
-        code.includes('import ') ||
-        code.includes('def ') ||
-        code.includes('sys.') ||
-        code.includes('json.') ||
-        code.includes('__') ||
-        code.includes("f'") ||
-        code.includes('f"') ||
-        code.includes('raise ');
-    return looksLikePython ? 'python' : 'node';
 }
 
 /**
@@ -398,15 +346,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
             // ── Execution ─────────────────────────────────────────────────────
 
             /**
-             * Run code in the sandbox.
-             *
-             * Writes the code as a temp file via the execute `files` payload,
-             * then runs it with the appropriate interpreter.
-             *
-             * POST /sandbox/{sandboxId}/execute
-             */
-
-            /**
              * Run a shell command in the sandbox.
              *
              * POST /sandbox/{sandboxId}/execute  (using ["sh", "-c", command])
@@ -500,7 +439,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                     return {
                         id: sandbox.sandboxId,
                         provider: 'agentuity',
-                        runtime: 'node',
                         status: 'running',
                         createdAt: new Date(),
                         timeout: 300_000,
@@ -533,7 +471,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                 return {
                     id: data.sandboxId,
                     provider: 'agentuity',
-                    runtime: fromAgentuityRuntime(data.runtime?.name),
                     status: statusMap[data.status] ?? 'running',
                     createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
                     timeout: 300_000,
@@ -543,15 +480,13 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                         url: data.url,
                         networkPort: data.networkPort,
                         idleTimeout: data.timeout?.idle,
+                        runtime: data.runtime?.name,
                     },
                 };
             },
 
             /**
              * Get the public URL for a service running on a given port.
-             *
-             * Agentuity exposes a `url` field on the sandbox when a `networkPort` is
-             * configured.  We fetch fresh sandbox details to get it.
              */
             getUrl: async (
                 sandbox: AgentuityHandle,
@@ -576,12 +511,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
             // ── File System ───────────────────────────────────────────────────
 
             filesystem: {
-                /**
-                 * Read a file from the sandbox.
-                 *
-                 * GET /fs/{sandboxId}?path=<path>
-                 * Returns raw bytes (streamed); we read as text.
-                 */
                 readFile: async (sandbox: AgentuityHandle, path: string, _runCommand: RunCommandFn): Promise<string> => {
                     const encodedPath = encodeURIComponent(path);
                     const res = await agentuityFetch(
@@ -599,12 +528,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                     return res.text();
                 },
 
-                /**
-                 * Write content to a file in the sandbox.
-                 *
-                 * POST /fs/{sandboxId}
-                 * Content must be base64-encoded.
-                 */
                 writeFile: async (
                     sandbox: AgentuityHandle,
                     path: string,
@@ -626,11 +549,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                     }
                 },
 
-                /**
-                 * Create a directory (with parents) in the sandbox.
-                 *
-                 * POST /fs/mkdir/{sandboxId}
-                 */
                 mkdir: async (sandbox: AgentuityHandle, path: string, _runCommand: RunCommandFn): Promise<void> => {
                     const res = await agentuityFetch(
                         sandbox,
@@ -647,11 +565,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                     }
                 },
 
-                /**
-                 * List directory contents.
-                 *
-                 * GET /fs/list/{sandboxId}?path=<path>
-                 */
                 readdir: async (
                     sandbox: AgentuityHandle,
                     path: string,
@@ -693,16 +606,11 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                     });
                 },
 
-                /**
-                 * Check whether a path exists by attempting to list it (directory)
-                 * or read its metadata via the execute endpoint.
-                 */
                 exists: async (
                     sandbox: AgentuityHandle,
                     path: string,
                     _runCommand: RunCommandFn,
                 ): Promise<boolean> => {
-                    // Use a quick shell test — cheaper than a full file read
                     const result = await (async () => {
                         const body = { command: ['sh', '-c', `test -e "${escapeShellArg(path)}" && echo yes || echo no`], timeout: '10s' };
                         const res = await agentuityFetch(
@@ -724,11 +632,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                     return result;
                 },
 
-                /**
-                 * Remove a file from the sandbox.
-                 *
-                 * POST /fs/rm/{sandboxId}
-                 */
                 remove: async (sandbox: AgentuityHandle, path: string, _runCommand: RunCommandFn): Promise<void> => {
                     const res = await agentuityFetch(
                         sandbox,
@@ -746,11 +649,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                 },
             },
 
-            // ── Native handle ─────────────────────────────────────────────────
-
-            /**
-             * Return the raw handle for direct Agentuity API access.
-             */
             getInstance: (sandbox: AgentuityHandle): AgentuityHandle => sandbox,
         },
     },
@@ -758,11 +656,6 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
 
 // ─── Bonus: lightweight snapshot / checkpoint helpers ─────────────────────────
 
-/**
- * Create a filesystem snapshot from a running sandbox.
- *
- * POST /sandbox/{sandboxId}/snapshot
- */
 export async function createSnapshot(
     sandbox: AgentuityHandle,
     options?: { name?: string; tag?: string; description?: string; public?: boolean },
@@ -780,21 +673,11 @@ export async function createSnapshot(
     return unwrapResponse<{ snapshotId: string }>(await res.json());
 }
 
-/**
- * Pause a sandbox and create a memory checkpoint.
- *
- * POST /sandbox/{sandboxId}/pause
- */
 export async function pauseSandbox(sandbox: AgentuityHandle): Promise<void> {
     const res = await agentuityFetch(sandbox, 'POST', `/sandbox/${sandbox.sandboxId}/pause`);
     if (!res.ok) throw new Error(`Agentuity: failed to pause sandbox (${res.status})`);
 }
 
-/**
- * Resume a paused sandbox.
- *
- * POST /sandbox/{sandboxId}/resume
- */
 export async function resumeSandbox(sandbox: AgentuityHandle): Promise<void> {
     const res = await agentuityFetch(sandbox, 'POST', `/sandbox/${sandbox.sandboxId}/resume`);
     if (!res.ok) throw new Error(`Agentuity: failed to resume sandbox (${res.status})`);

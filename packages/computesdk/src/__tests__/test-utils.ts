@@ -5,14 +5,13 @@
  */
 
 import { vi } from 'vitest'
-import type { FileEntry, Runtime, CodeResult, CommandResult } from '../types/index.js'
+import type { FileEntry, CodeResult, CommandResult } from '../types/index.js'
 import type { SandboxInfo } from '../types/index.js'
 
 // Note: Provider and ProviderSandbox are defined in @computesdk/provider (mother package)
 // For testing the grandmother package (computesdk), we create minimal mock interfaces
 interface Provider {
   readonly name: string
-  getSupportedRuntimes(): Runtime[]
   readonly sandbox: {
     create(options?: any): Promise<ProviderSandbox>
     getById(sandboxId: string): Promise<ProviderSandbox | null>
@@ -40,9 +39,6 @@ interface ProviderSandbox {
     remove(path: string): Promise<void>
   }
 }
-
-/** Standard mock runtime support for testing */
-export const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
 
 /**
  * Mock sandbox implementation for testing
@@ -78,7 +74,6 @@ export class MockSandbox implements ProviderSandbox {
     return {
       id: this.sandboxId,
       provider: this.provider,
-      runtime: 'node',
       status: 'running',
       createdAt: new Date(),
       timeout: 30000
@@ -102,13 +97,13 @@ export class MockSandbox implements ProviderSandbox {
     async readFile(path: string): Promise<string> {
       return `Mock file content from ${path}`
     },
-    async writeFile(path: string, content: string): Promise<void> {
+    async writeFile(_path: string, _content: string): Promise<void> {
       // Mock implementation
     },
-    async mkdir(path: string): Promise<void> {
+    async mkdir(_path: string): Promise<void> {
       // Mock implementation
     },
-    async readdir(path: string): Promise<FileEntry[]> {
+    async readdir(_path: string): Promise<FileEntry[]> {
       return [
         {
           name: 'test.txt',
@@ -118,15 +113,13 @@ export class MockSandbox implements ProviderSandbox {
         }
       ]
     },
-    async exists(path: string): Promise<boolean> {
+    async exists(_path: string): Promise<boolean> {
       return true
     },
-    async remove(path: string): Promise<void> {
+    async remove(_path: string): Promise<void> {
       // Mock implementation
     }
   }
-
-
 }
 
 /**
@@ -135,17 +128,13 @@ export class MockSandbox implements ProviderSandbox {
 export class MockProvider implements Provider {
   readonly name = 'mock'
 
-  getSupportedRuntimes(): Runtime[] {
-    return MOCK_SUPPORTED_RUNTIMES
-  }
-
   readonly sandbox = {
-    create: async (options?: any): Promise<ProviderSandbox> => {
+    create: async (_options?: any): Promise<ProviderSandbox> => {
       const sandbox = new MockSandbox()
       ;(sandbox as any)._mockProvider = this
       return sandbox
     },
-    getById: async (sandboxId: string): Promise<ProviderSandbox | null> => {
+    getById: async (_sandboxId: string): Promise<ProviderSandbox | null> => {
       const sandbox = new MockSandbox()
       ;(sandbox as any)._mockProvider = this
       return sandbox
@@ -155,7 +144,7 @@ export class MockProvider implements Provider {
       ;(sandbox as any)._mockProvider = this
       return [sandbox]
     },
-    destroy: async (sandboxId: string): Promise<void> => {
+    destroy: async (_sandboxId: string): Promise<void> => {
       // Mock destroy
     }
   }
@@ -168,7 +157,6 @@ export function createMockProvider(overrides?: Partial<Provider>): Provider {
   const mockProvider = new MockProvider()
   return {
     ...mockProvider,
-    getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
     ...overrides
   }
 }

@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, ProviderSandbox, CommandResult, FileEntry, RunCommandOptions, Runtime, SandboxInfo } from '@computesdk/provider';
+import type { Provider, ProviderSandbox, CommandResult, FileEntry, RunCommandOptions, SandboxInfo } from '@computesdk/provider';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -46,278 +46,182 @@ export function defineProviderTests(config: ProviderTestConfig) {
   } = config;
 
   return () => {
-    // Get supported runtimes dynamically from provider
-    const supportedRuntimes = provider.getSupportedRuntimes();
-    
-    // Helper function to create and cleanup sandboxes for each runtime
-    const createRuntimeSandbox = async () => {
+    let sandbox: ProviderSandbox;
+
+    const createSandbox = async () => {
       if (skipIntegration) {
         return createMockSandbox(config);
-      } else {
-        // Only pass ports if explicitly configured (some providers don't support it)
-        const createOptions: any = {};
-        if (ports && ports.length > 0) {
-          createOptions.ports = ports;
-        }
-        return await provider.sandbox.create(createOptions);
       }
+      const createOptions: any = {};
+      if (ports && ports.length > 0) {
+        createOptions.ports = ports;
+      }
+      return await provider.sandbox.create(createOptions);
     };
 
-    const cleanupSandbox = async (sandbox: ProviderSandbox) => {
-      if (sandbox && !skipIntegration) {
+    const cleanupSandbox = async (sb: ProviderSandbox) => {
+      if (sb && !skipIntegration) {
         try {
           await Promise.race([
-            sandbox.destroy(),
-            new Promise((_, reject) => 
+            sb.destroy(),
+            new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Destroy timeout')), 10000)
             )
           ]);
-        } catch (error) {
+        } catch {
           // Ignore cleanup errors (including timeouts)
         }
       }
     };
 
-    // Test each supported runtime dynamically
-    supportedRuntimes.forEach((runtime: Runtime) => {
-      const runtimeName = runtime.charAt(0).toUpperCase() + runtime.slice(1);
-      
-      describe(`${runtimeName} Runtime`, () => {
-        let sandbox: ProviderSandbox;
+    beforeEach(async () => {
+      sandbox = await createSandbox();
+    }, 90000);
 
-        beforeEach(async () => {
-          sandbox = await createRuntimeSandbox();
-        }, 90000);
+    afterEach(async () => {
+      await cleanupSandbox(sandbox);
+    }, 30000);
 
-        afterEach(async () => {
-          await cleanupSandbox(sandbox);
-        }, 30000);
-
-        it(`should create a ${runtimeName} sandbox with valid ID`, () => {
-          expect(sandbox).toBeDefined();
-          expect(sandbox.sandboxId).toBeDefined();
-          expect(typeof sandbox.sandboxId).toBe('string');
-          expect(sandbox.provider).toBe(name.toLowerCase());
-        });
-
-        // Common tests for all runtimes
-        it('should execute shell commands', async () => {
-          const result = await sandbox.runCommand('echo "Hello from command"');
-
-          expect(result).toBeDefined();
-          expect(result.stdout).toContain('Hello from command');
-          expect(result.exitCode).toBe(0);
-        }, timeout);
-
-        it('should execute background commands', async () => {
-          const result = await sandbox.runCommand('sleep 1', { background: true });
-
-          expect(result).toBeDefined();
-          // Background commands should still return quickly with exit code 0
-          expect(result.exitCode).toBe(0);
-        }, timeout);
-
-        it('should get sandbox info', async () => {
-          const info = await sandbox.getInfo();
-          
-          expect(info).toBeDefined();
-          expect(info.id).toBeDefined();
-          expect(info.provider).toBe(name.toLowerCase());
-          expect(info.status).toBeDefined();
-        });
-
-        if (supportsGetUrl) {
-          const primaryPort = (ports && ports.length > 0) ? ports[0] : 3000;
-
-          it('should get sandbox URL for a port', async () => {
-            const url = await sandbox.getUrl({ port: primaryPort });
-            
-            expect(url).toBeDefined();
-            expect(typeof url).toBe('string');
-            expect(url.length).toBeGreaterThan(0);
-            // URL should contain the port number or be a valid URL format
-            expect(url).toMatch(/^(https?|wss?):\/\/.+/);
-          });
-
-          if (ports && ports.length > 1) {
-            it('should get sandbox URL with custom protocol', async () => {
-              const url = await sandbox.getUrl({ port: ports[1], protocol: 'wss' });
-              
-              expect(url).toBeDefined();
-              expect(typeof url).toBe('string');
-              // Should respect the protocol if the provider supports it
-              // Some providers may ignore protocol and always return https
-              expect(url).toMatch(/^(https?|wss?):\/\/.+/);
-            });
-          }
-        }
-
-        it('should handle invalid commands gracefully', async () => {
-          const result = await sandbox.runCommand('nonexistent-command-12345');
-          expect(result.exitCode).not.toBe(0);
-        });
-
-        // Filesystem tests (only for first runtime to avoid duplication)
-        if (supportsFilesystem && runtime === supportedRuntimes[0]) {
-          describe('Filesystem Operations', () => {
-            const testFilePath = `${filesystemBasePath}/test-file.txt`;
-            const testDirPath = `${filesystemBasePath}/test-dir`;
-            const testContent = 'Hello, ComputeSDK filesystem!';
-
-            it('should write and read files', async () => {
-              await sandbox.filesystem.writeFile(testFilePath, testContent);
-              const content = await sandbox.filesystem.readFile(testFilePath);
-
-              expect(content).toBe(testContent);
-            }, timeout);
-
-            it('should check file existence', async () => {
-              await sandbox.filesystem.writeFile(testFilePath, testContent);
-              const exists = await sandbox.filesystem.exists(testFilePath);
-
-              expect(exists).toBe(true);
-            }, timeout);
-
-            it('should create directories', async () => {
-              await sandbox.filesystem.mkdir(testDirPath);
-              const exists = await sandbox.filesystem.exists(testDirPath);
-
-              expect(exists).toBe(true);
-            }, timeout);
-
-            it('should list directory contents', async () => {
-              await sandbox.filesystem.mkdir(testDirPath);
-              await sandbox.filesystem.writeFile(`${testDirPath}/file1.txt`, 'content1');
-              await sandbox.filesystem.writeFile(`${testDirPath}/file2.txt`, 'content2');
-
-              const entries = await sandbox.filesystem.readdir(testDirPath);
-
-              expect(entries).toBeDefined();
-              expect(Array.isArray(entries)).toBe(true);
-              expect(entries.length).toBeGreaterThanOrEqual(2);
-
-              const fileNames = entries.map((entry: FileEntry) => entry.name);
-              expect(fileNames).toContain('file1.txt');
-              expect(fileNames).toContain('file2.txt');
-            }, timeout);
-
-            it('should remove files and directories', async () => {
-              await sandbox.filesystem.writeFile(testFilePath, testContent);
-              await sandbox.filesystem.remove(testFilePath);
-
-              const exists = await sandbox.filesystem.exists(testFilePath);
-              expect(exists).toBe(false);
-            }, timeout);
-
-            it('should handle file not found errors', async () => {
-              await expect(async () => {
-                await sandbox.filesystem.readFile('/nonexistent/file.txt');
-              }).rejects.toThrow();
-            });
-          });
-        }
-
-        // Shell command argument quoting tests (only for first runtime to avoid duplication)
-        if (runtime === supportedRuntimes[0]) {
-          describe('Shell Command Argument Quoting', () => {
-            it('should properly quote arguments with spaces', async () => {
-              const result = await sandbox.runCommand('sh -c \'echo "hello world"\'');
-
-              expect(result.exitCode).toBe(0);
-              expect(result.stdout.trim()).toBe('hello world');
-            }, timeout);
-
-            it('should properly quote arguments with special characters', async () => {
-              const result = await sandbox.runCommand('sh -c \'echo "$HOME"\'');
-
-              expect(result.exitCode).toBe(0);
-              // Should output something (either literal "$HOME" or actual home path)
-              expect(result.stdout.trim()).toBeTruthy();
-            }, timeout);
-
-            it('should handle complex shell commands with pipes', async () => {
-              const result = await sandbox.runCommand('sh -c \'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt\'');
-
-              expect(result.exitCode).toBe(0);
-              expect(result.stdout.trim()).toBe('test content');
-            }, timeout);
-          });
-        }
-      });
+    it('should create a sandbox with valid ID', () => {
+      expect(sandbox).toBeDefined();
+      expect(sandbox.sandboxId).toBeDefined();
+      expect(typeof sandbox.sandboxId).toBe('string');
+      expect(sandbox.provider).toBe(name.toLowerCase());
     });
 
-    // Enhanced Sandbox Installation Tests (only if COMPUTESDK_API_KEY or COMPUTESDK_ACCESS_TOKEN is set)
-    // const hasComputeCredentials = typeof process !== 'undefined' &&
-    //   (process.env?.COMPUTESDK_API_KEY || process.env?.COMPUTESDK_ACCESS_TOKEN);
+    it('should execute shell commands', async () => {
+      const result = await sandbox.runCommand('echo "Hello from command"');
 
-    // if (hasComputeCredentials && !skipIntegration) {
-    //   describe('Enhanced Sandbox (ComputeSDK Integration)', () => {
-    //     it('should verify basic sandbox functionality before compute installation', async () => {
-    //       // Create a basic sandbox to verify environment is working
-    //       const sandbox = await provider.sandbox.create();
+      expect(result).toBeDefined();
+      expect(result.stdout).toContain('Hello from command');
+      expect(result.exitCode).toBe(0);
+    }, timeout);
 
-    //       try {
-    //         // Sanity check: verify basic shell commands work (use sh which should be everywhere)
-    //         const shCheck = await sandbox.runCommand('which', ['sh']);
-    //         expect(shCheck.exitCode).toBe(0);
+    it('should execute background commands', async () => {
+      const result = await sandbox.runCommand('sleep 1', { background: true });
 
-    //         // Verify we can run commands
-    //         const echoTest = await sandbox.runCommand('echo', ['test']);
-    //         expect(echoTest.exitCode).toBe(0);
-    //         expect(echoTest.stdout.trim()).toBe('test');
-    //       } finally {
-    //         await sandbox.destroy();
-    //       }
-    //     }, 30000);
+      expect(result).toBeDefined();
+      expect(result.exitCode).toBe(0);
+    }, timeout);
 
-    //     it('should create enhanced sandbox with compute CLI installed', async () => {
-    //       // Dynamically import compute to avoid circular dependencies
-    //       const { createCompute } = await import('computesdk');
+    it('should get sandbox info', async () => {
+      const info = await sandbox.getInfo();
 
-    //       const compute = createCompute({
-    //         defaultProvider: provider,
-    //         apiKey: process.env.COMPUTESDK_API_KEY!
-    //       });
+      expect(info).toBeDefined();
+      expect(info.id).toBeDefined();
+      expect(info.provider).toBe(name.toLowerCase());
+      expect(info.status).toBeDefined();
+    });
 
-    //       const sandbox = await compute.sandbox.create();
+    if (supportsGetUrl) {
+      const primaryPort = (ports && ports.length > 0) ? ports[0] : 3000;
 
-    //       try {
-    //         // Verify compute binary was installed by SDK
-    //         const verifyResult = await sandbox.runCommand('which', ['compute']);
-    //         expect(verifyResult.exitCode).toBe(0);
-    //         expect(verifyResult.stdout.trim()).toContain('compute');
+      it('should get sandbox URL for a port', async () => {
+        const url = await sandbox.getUrl({ port: primaryPort });
 
-    //         // Verify enhanced sandbox features are available (these are from ComputeClient)
-    //         expect(typeof (sandbox as any).createTerminal).toBe('function');
-    //         expect(typeof (sandbox as any).createWatcher).toBe('function');
-    //       } finally {
-    //         await sandbox.destroy();
-    //       }
-    //     }, 60000); // Longer timeout for installation
+        expect(url).toBeDefined();
+        expect(typeof url).toBe('string');
+        expect(url.length).toBeGreaterThan(0);
+        expect(url).toMatch(/^(https?|wss?):\/\/.+/);
+      });
 
-    //     it('should start compute daemon and respond to health checks', async () => {
-    //       // Dynamically import compute to avoid circular dependencies
-    //       const { createCompute } = await import('computesdk');
+      if (ports && ports.length > 1) {
+        it('should get sandbox URL with custom protocol', async () => {
+          const url = await sandbox.getUrl({ port: ports[1], protocol: 'wss' });
 
-    //       const compute = createCompute({
-    //         defaultProvider: provider,
-    //         apiKey: process.env.COMPUTESDK_API_KEY!
-    //       });
+          expect(url).toBeDefined();
+          expect(typeof url).toBe('string');
+          expect(url).toMatch(/^(https?|wss?):\/\/.+/);
+        });
+      }
+    }
 
-    //       const sandbox = await compute.sandbox.create();
+    it('should handle invalid commands gracefully', async () => {
+      const result = await sandbox.runCommand('nonexistent-command-12345');
+      expect(result.exitCode).not.toBe(0);
+    });
 
-    //       try {
-    //         // SDK should have installed and started the daemon
-    //         // Verify daemon is responding via curl (port 18080 for Vercel compatibility)
-    //         const healthResult = await sandbox.runCommand('curl', ['-s', 'http://localhost:18080/health']);
-    //         expect(healthResult.exitCode).toBe(0);
-    //         expect(healthResult.stdout).toContain('ok');
-    //       } finally {
-    //         await sandbox.destroy();
-    //       }
-    //     }, 90000); // Even longer timeout for full installation + startup
-    //   });
-    // }
+    if (supportsFilesystem) {
+      describe('Filesystem Operations', () => {
+        const testFilePath = `${filesystemBasePath}/test-file.txt`;
+        const testDirPath = `${filesystemBasePath}/test-dir`;
+        const testContent = 'Hello, ComputeSDK filesystem!';
+
+        it('should write and read files', async () => {
+          await sandbox.filesystem.writeFile(testFilePath, testContent);
+          const content = await sandbox.filesystem.readFile(testFilePath);
+
+          expect(content).toBe(testContent);
+        }, timeout);
+
+        it('should check file existence', async () => {
+          await sandbox.filesystem.writeFile(testFilePath, testContent);
+          const exists = await sandbox.filesystem.exists(testFilePath);
+
+          expect(exists).toBe(true);
+        }, timeout);
+
+        it('should create directories', async () => {
+          await sandbox.filesystem.mkdir(testDirPath);
+          const exists = await sandbox.filesystem.exists(testDirPath);
+
+          expect(exists).toBe(true);
+        }, timeout);
+
+        it('should list directory contents', async () => {
+          await sandbox.filesystem.mkdir(testDirPath);
+          await sandbox.filesystem.writeFile(`${testDirPath}/file1.txt`, 'content1');
+          await sandbox.filesystem.writeFile(`${testDirPath}/file2.txt`, 'content2');
+
+          const entries = await sandbox.filesystem.readdir(testDirPath);
+
+          expect(entries).toBeDefined();
+          expect(Array.isArray(entries)).toBe(true);
+          expect(entries.length).toBeGreaterThanOrEqual(2);
+
+          const fileNames = entries.map((entry: FileEntry) => entry.name);
+          expect(fileNames).toContain('file1.txt');
+          expect(fileNames).toContain('file2.txt');
+        }, timeout);
+
+        it('should remove files and directories', async () => {
+          await sandbox.filesystem.writeFile(testFilePath, testContent);
+          await sandbox.filesystem.remove(testFilePath);
+
+          const exists = await sandbox.filesystem.exists(testFilePath);
+          expect(exists).toBe(false);
+        }, timeout);
+
+        it('should handle file not found errors', async () => {
+          await expect(async () => {
+            await sandbox.filesystem.readFile('/nonexistent/file.txt');
+          }).rejects.toThrow();
+        });
+      });
+    }
+
+    describe('Shell Command Argument Quoting', () => {
+      it('should properly quote arguments with spaces', async () => {
+        const result = await sandbox.runCommand('sh -c \'echo "hello world"\'');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.trim()).toBe('hello world');
+      }, timeout);
+
+      it('should properly quote arguments with special characters', async () => {
+        const result = await sandbox.runCommand('sh -c \'echo "$HOME"\'');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.trim()).toBeTruthy();
+      }, timeout);
+
+      it('should handle complex shell commands with pipes', async () => {
+        const result = await sandbox.runCommand('sh -c \'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt\'');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.trim()).toBe('test content');
+      }, timeout);
+    });
   };
 }
 
@@ -334,85 +238,42 @@ export function runProviderTestSuite(config: ProviderTestConfig) {
  */
 function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
   const providerName = config.name.toLowerCase();
-  
+
   // Mock state to simulate realistic behavior
   const mockFiles = new Map<string, string>();
   const mockDirs = new Set<string>();
-  
+
   return {
     sandboxId: 'mock-sandbox-123',
     provider: providerName,
-    getInstance: <T = unknown>(): T => ({} as T), // Mock native instance getter
+    getInstance: <T = unknown>(): T => ({} as T),
 
     runCommand: async (command: string, options?: RunCommandOptions): Promise<CommandResult> => {
       if (command.includes('echo "Hello from command"')) {
-        return {
-          stdout: 'Hello from command\n',
-          stderr: '',
-          exitCode: 0,
-          durationMs: 10
-        };
+        return { stdout: 'Hello from command\n', stderr: '', exitCode: 0, durationMs: 10 };
       }
-
       if (command === 'nonexistent-command-12345') {
-        return {
-          stdout: '',
-          stderr: `bash: ${command}: command not found\n`,
-          exitCode: 127,
-          durationMs: 5
-        };
+        return { stdout: '', stderr: `bash: ${command}: command not found\n`, exitCode: 127, durationMs: 5 };
       }
-
       if (command.includes('sleep 1') && options?.background) {
-        return {
-          stdout: '',
-          stderr: '',
-          exitCode: 0,
-          durationMs: 1
-        };
+        return { stdout: '', stderr: '', exitCode: 0, durationMs: 1 };
       }
-
-      // Shell command quoting tests
       if (command === 'sh -c \'echo "hello world"\'') {
-        return {
-          stdout: 'hello world\n',
-          stderr: '',
-          exitCode: 0,
-          durationMs: 10
-        };
+        return { stdout: 'hello world\n', stderr: '', exitCode: 0, durationMs: 10 };
       }
-
       if (command === 'sh -c \'echo "$HOME"\'') {
-        return {
-          stdout: '/home/user\n',
-          stderr: '',
-          exitCode: 0,
-          durationMs: 10
-        };
+        return { stdout: '/home/user\n', stderr: '', exitCode: 0, durationMs: 10 };
       }
-
       if (command === 'sh -c \'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt\'') {
         mockFiles.set('/tmp/test-quoting.txt', 'test content');
-        return {
-          stdout: 'test content\n',
-          stderr: '',
-          exitCode: 0,
-          durationMs: 20
-        };
+        return { stdout: 'test content\n', stderr: '', exitCode: 0, durationMs: 20 };
       }
-
-      return {
-        stdout: `Mock command output: ${command}`,
-        stderr: '',
-        exitCode: 0,
-        durationMs: 50
-      };
+      return { stdout: `Mock command output: ${command}`, stderr: '', exitCode: 0, durationMs: 50 };
     },
-    
+
     getInfo: async (): Promise<SandboxInfo> => ({
       id: 'mock-sandbox-123',
       provider: providerName,
-      runtime: 'node',
       status: 'running',
       createdAt: new Date('2024-01-01T00:00:00Z'),
       timeout: 300000,
@@ -423,83 +284,43 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
       const { port, protocol = 'https' } = options;
       return `${protocol}://mock-sandbox-123-${port}.example.com`;
     },
-    
-    destroy: async (): Promise<void> => {
-      // Mock implementation
-    },
-    
+
+    destroy: async (): Promise<void> => {},
+
     filesystem: {
       readFile: async (path: string): Promise<string> => {
-        if (mockFiles.has(path)) {
-          return mockFiles.get(path)!;
-        }
+        if (mockFiles.has(path)) return mockFiles.get(path)!;
         throw new Error(`ENOENT: no such file or directory, open '${path}'`);
       },
-      
-      writeFile: async (path: string, content: string): Promise<void> => {
-        mockFiles.set(path, content);
-      },
-      
-      mkdir: async (path: string): Promise<void> => {
-        mockDirs.add(path);
-      },
-      
+      writeFile: async (path: string, content: string): Promise<void> => { mockFiles.set(path, content); },
+      mkdir: async (path: string): Promise<void> => { mockDirs.add(path); },
       readdir: async (path: string): Promise<FileEntry[]> => {
         const entries: FileEntry[] = [];
-        
-        // Add files in this directory
         for (const [filePath, content] of mockFiles.entries()) {
           if (filePath.startsWith(path + '/') && !filePath.substring(path.length + 1).includes('/')) {
-            const fileName = filePath.substring(path.length + 1);
-            entries.push({
-              name: fileName,
-              type: 'file',
-              size: content.length,
-              modified: new Date('2024-01-01T00:00:00Z')
-            });
+            entries.push({ name: filePath.substring(path.length + 1), type: 'file', size: content.length, modified: new Date('2024-01-01T00:00:00Z') });
           }
         }
-        
-        // Add subdirectories
         for (const dirPath of mockDirs) {
           if (dirPath.startsWith(path + '/') && !dirPath.substring(path.length + 1).includes('/')) {
-            const dirName = dirPath.substring(path.length + 1);
-            entries.push({
-              name: dirName,
-              type: 'directory',
-              size: 0,
-              modified: new Date('2024-01-01T00:00:00Z')
-            });
+            entries.push({ name: dirPath.substring(path.length + 1), type: 'directory', size: 0, modified: new Date('2024-01-01T00:00:00Z') });
           }
         }
-        
         return entries;
       },
-      
-      exists: async (path: string): Promise<boolean> => {
-        return mockFiles.has(path) || mockDirs.has(path);
-      },
-      
-      remove: async (path: string): Promise<void> => {
-        mockFiles.delete(path);
-        mockDirs.delete(path);
-      }
+      exists: async (path: string): Promise<boolean> => mockFiles.has(path) || mockDirs.has(path),
+      remove: async (path: string): Promise<void> => { mockFiles.delete(path); mockDirs.delete(path); }
     },
-    
-    getProvider: (): Provider => {
-      // Return a mock provider for testing
-      return {
-        name: providerName,
-        getSupportedRuntimes: () => ['node', 'python'],
-        sandbox: {
-          create: async () => { throw new Error('Not implemented in mock'); },
-          getById: async () => { throw new Error('Not implemented in mock'); },
-          list: async () => { throw new Error('Not implemented in mock'); },
-          destroy: async () => { throw new Error('Not implemented in mock'); }
-        }
-      } as Provider;
-    }
 
+    getProvider: (): Provider => ({
+      name: providerName,
+      sandbox: {
+        create: async () => { throw new Error('Not implemented in mock'); },
+        getById: async () => { throw new Error('Not implemented in mock'); },
+        list: async () => { throw new Error('Not implemented in mock'); },
+        destroy: async () => { throw new Error('Not implemented in mock'); }
+      }
+    } as Provider)
   };
 }
 
