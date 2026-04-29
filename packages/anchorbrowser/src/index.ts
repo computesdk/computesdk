@@ -9,7 +9,9 @@ import Anchorbrowser from 'anchorbrowser';
 import type {
   SessionCreateParams,
   SessionCreateResponse,
+  SessionRetrieveResponse,
 } from 'anchorbrowser/resources/sessions/sessions';
+import type { AllStatusResponse } from 'anchorbrowser/resources/sessions/all';
 import { defineBrowserProvider } from '@computesdk/provider';
 
 import type {
@@ -36,11 +38,16 @@ export interface AnchorBrowserConfig {
 }
 
 /**
- * The native Anchor session object returned by their SDK.
- * The retrieve endpoint returns a richer shape than create — we keep both
- * fields available on the union so consumers can read whichever they need.
+ * The native Anchor session object returned by their SDK. Anchor's three
+ * session endpoints return slightly different shapes — create returns `id`
+ * plus connection details, retrieve returns `session_id` plus rich metadata,
+ * and list returns lean items keyed by `session_id`. The union surfaces all
+ * three so callers can narrow on the field they need.
  */
-export type AnchorBrowserSession = NonNullable<SessionCreateResponse['data']>;
+export type AnchorBrowserSession =
+  | NonNullable<SessionCreateResponse['data']>
+  | NonNullable<SessionRetrieveResponse['data']>
+  | NonNullable<NonNullable<AllStatusResponse['data']>['items']>[number];
 
 /**
  * Resolve config values from explicit config or environment variables
@@ -73,12 +80,18 @@ function createClient(config: AnchorBrowserConfig): Anchorbrowser {
  * Mirrors the `getCdpUrl` helper in the upstream SDK (lib/browser):
  *   https://api.anchorbrowser.io  →  wss://connect.anchorbrowser.io
  *   ?apiKey={apiKey}&sessionId={sessionId}
+ *
+ * apiKey/sessionId are interpolated raw to match upstream — Anchor's
+ * gateway has not been verified to URL-decode these params, and we
+ * deliberately don't diverge from the SDK we mirror.
  */
 function buildCdpUrl(baseURL: string, sessionId: string, apiKey: string): string {
-  const wsBase = baseURL
-    .replace('https://', 'wss://')
-    .replace('http://', 'ws://')
-    .replace('api.', 'connect.');
+  const url = new URL(baseURL);
+  url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+  if (url.hostname.startsWith('api.')) {
+    url.hostname = `connect.${url.hostname.slice(4)}`;
+  }
+  const wsBase = url.toString().replace(/\/$/, '');
   return `${wsBase}?apiKey=${apiKey}&sessionId=${sessionId}`;
 }
 
@@ -178,6 +191,15 @@ function mapStatus(status: string | undefined): BrowserSession['status'] {
 /**
  * Create an Anchor Browser provider instance
  *
+ * SECURITY NOTE: Anchor's CDP endpoint authenticates via an `apiKey` query
+ * parameter on the WebSocket URL. As a result, every `connectUrl` returned
+ * by this provider (from `session.create()` and `session.getById()`, and
+ * `provider.getConnectUrl()`) embeds the account-wide Anchor Browser API
+ * key. Treat `connectUrl` as a secret: do not log, persist, or forward it
+ * to systems that retain URLs (access logs, error trackers, tracing).
+ * `session.list()` deliberately omits `connectUrl` to avoid amplifying this
+ * leak surface — call `provider.getConnectUrl(id)` on demand instead.
+ *
  * @example
  * ```ts
  * import { anchorbrowser } from '@computesdk/anchorbrowser';
@@ -187,9 +209,8 @@ function mapStatus(status: string | undefined): BrowserSession['status'] {
  *
  * // Create a stealth browser session
  * const session = await ab.session.create({ stealth: true, proxies: true });
- * console.log(session.connectUrl); // CDP websocket URL
  *
- * // Connect with Playwright
+ * // Connect with Playwright (do not log session.connectUrl — it contains the API key)
  * const browser = await chromium.connectOverCDP(session.connectUrl);
  * const page = browser.contexts()[0].pages()[0];
  * await page.goto('https://example.com');
@@ -227,8 +248,7 @@ export const anchorbrowser = defineBrowserProvider<AnchorBrowserSession, AnchorB
           const data = response.data;
           if (!data?.session_id) return null;
           return {
-            // Normalize onto the create-shape so callers can rely on `id`.
-            session: { ...data, id: data.session_id } as AnchorBrowserSession,
+            session: data,
             sessionId: data.session_id,
             connectUrl: buildCdpUrl(baseURL, data.session_id, apiKey),
             status: mapStatus(data.status),
@@ -245,7 +265,7 @@ export const anchorbrowser = defineBrowserProvider<AnchorBrowserSession, AnchorB
         // Anchor's list endpoint returns lean items without a CDP URL.
         // Callers that need a connectable URL should use provider.getConnectUrl(sessionId).
         return items.map((item) => ({
-          session: { id: item.session_id } as AnchorBrowserSession,
+          session: item,
           sessionId: item.session_id,
           status: mapStatus(item.status),
         }));
