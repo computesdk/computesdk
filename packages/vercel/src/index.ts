@@ -14,8 +14,6 @@ export interface VercelConfig {
   token?: string;
   teamId?: string;
   projectId?: string;
-  /** Default runtime environment (e.g. 'node', 'python') */
-  runtime?: string;
   timeout?: number;
   ports?: number[];
 }
