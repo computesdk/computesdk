@@ -72,8 +72,8 @@ function applyProxy(params: SessionCreateParams, proxy: ProxyConfig) {
     // Steel uses a separate proxyUrl field for custom proxies; this overrides
     // useProxy and disables Steel-provided proxies in favor of the user's.
     const url = new URL(proxy.server);
-    if (proxy.username) url.username = encodeURIComponent(proxy.username);
-    if (proxy.password) url.password = encodeURIComponent(proxy.password);
+    if (proxy.username) url.username = proxy.username;
+    if (proxy.password) url.password = proxy.password;
     params.proxyUrl = url.toString();
     return;
   }
@@ -92,11 +92,43 @@ function applyProxy(params: SessionCreateParams, proxy: ProxyConfig) {
   params.useProxy = true;
 }
 
+const warnedUnsupported = new Set<string>();
+function warnOnce(field: string, reason: string) {
+  if (warnedUnsupported.has(field)) return;
+  warnedUnsupported.add(field);
+  console.warn(`[@computesdk/steel] '${field}' is ignored: ${reason}`);
+}
+
 /**
- * Map ComputeSDK session options to Steel create-session params
+ * Map ComputeSDK session options to Steel create-session params.
+ *
+ * The following CreateBrowserSessionOptions fields are intentionally not
+ * forwarded because Steel's API has no equivalent knob:
+ * - `recording`: Steel always records sessions; fetch via the recording manager.
+ * - `logging`:   Steel always captures console logs; fetch via the logs manager.
+ * - `keepAlive`: Steel sessions run until `timeout` elapses or are released
+ *                explicitly; there is no separate keep-alive flag. Use a long
+ *                `timeout` to approximate the behavior.
+ * - `userMetadata`: Steel does not support arbitrary user metadata on sessions.
+ *
+ * If a caller passes a non-default value for any of these, we warn once per
+ * field so the silent drop is at least visible in logs.
  */
 function mapSessionOptions(options?: CreateBrowserSessionOptions): SessionCreateParams {
   if (!options) return {};
+
+  if (options.keepAlive === true) {
+    warnOnce('keepAlive', 'Steel has no keep-alive flag; use a long `timeout` instead.');
+  }
+  if (options.recording === false) {
+    warnOnce('recording', 'Steel always records sessions and cannot be disabled per session.');
+  }
+  if (options.logging === false) {
+    warnOnce('logging', 'Steel always captures console logs and cannot be disabled per session.');
+  }
+  if (options.userMetadata && Object.keys(options.userMetadata).length > 0) {
+    warnOnce('userMetadata', 'Steel does not support user metadata on sessions.');
+  }
 
   const params: SessionCreateParams = {};
 
@@ -150,16 +182,10 @@ function mapStatus(status: string | undefined): BrowserSession['status'] {
  * just this session.
  */
 function buildConnectUrl(websocketUrl: string, apiKey: string, sessionId: string): string {
-  const hasQuery = websocketUrl.includes('?');
-  const sep = hasQuery ? '&' : '?';
-  let url = websocketUrl;
-  if (!websocketUrl.includes('apiKey=')) {
-    url = `${url}${sep}apiKey=${encodeURIComponent(apiKey)}`;
-  }
-  if (!url.includes('sessionId=')) {
-    url = `${url}&sessionId=${encodeURIComponent(sessionId)}`;
-  }
-  return url;
+  const url = new URL(websocketUrl);
+  if (!url.searchParams.has('apiKey')) url.searchParams.set('apiKey', apiKey);
+  if (!url.searchParams.has('sessionId')) url.searchParams.set('sessionId', sessionId);
+  return url.toString();
 }
 
 /**
@@ -259,7 +285,7 @@ export const steel = defineBrowserProvider<NativeSteelSession, SteelConfig>({
       create: async (config, options) => {
         const client = createClient(config);
         const buf = typeof options.file === 'string'
-          ? Buffer.from(options.file)
+          ? Buffer.from(options.file, 'utf-8')
           : Buffer.from(options.file);
         const file = await toFile(buf, options.name ?? 'extension.zip');
         const result = await client.extensions.upload({ file });
