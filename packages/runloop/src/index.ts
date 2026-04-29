@@ -266,13 +266,15 @@ export const runloop = defineProvider<
 
       getInfo: async (sandbox): Promise<SandboxInfo> => {
         const devbox = sandbox;
+        const keepAliveSecs = devbox.launch_parameters.keep_alive_time_seconds;
 
         return {
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
           status: devbox.status as 'running' | 'stopped' | 'error',
           createdAt: new Date(devbox.create_time_ms || Date.now()),
-          timeout: devbox.launch_parameters.keep_alive_time_seconds || 300000,
+          // keep_alive_time_seconds is in seconds; SandboxInfo.timeout is in milliseconds
+          timeout: keepAliveSecs ? keepAliveSecs * 1000 : 300000,
           metadata: {
             runloopDevboxId: devbox.id,
             templateId: devbox.blueprint_id || devbox.snapshot_id,
@@ -302,46 +304,24 @@ export const runloop = defineProvider<
       filesystem: {
         readFile: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
           const result = await runCommand(sandbox, `cat "${path}"`);
-          if (result.exitCode !== 0) {
-            throw new Error(`File not found or unreadable: ${result.stderr}`);
-          }
+          if (result.exitCode !== 0) throw new Error(`File not found or unreadable: ${result.stderr}`);
           return result.stdout;
         },
 
-        writeFile: async (
-          sandbox: RunloopSandbox,
-          path: string,
-          content: string,
-          runCommand: CommandRunner
-        ): Promise<void> => {
+        writeFile: async (sandbox: RunloopSandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
           const encoded = Buffer.from(content).toString('base64');
           const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to write file ${path}: ${result.stderr}`);
-          }
+          if (result.exitCode !== 0) throw new Error(`Failed to write file ${path}: ${result.stderr}`);
         },
 
-        mkdir: async (
-          sandbox: RunloopSandbox,
-          path: string,
-          runCommand: CommandRunner
-        ): Promise<void> => {
+        mkdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
           const result = await runCommand(sandbox, `mkdir -p "${path}"`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
-          }
+          if (result.exitCode !== 0) throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
         },
 
-        readdir: async (
-          sandbox: RunloopSandbox,
-          path: string,
-          runCommand: CommandRunner
-        ): Promise<FileEntry[]> => {
+        readdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
           const result = await runCommand(sandbox, `ls -la "${path}"`);
-
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
-          }
+          if (result.exitCode !== 0) throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
 
           const lines = (result.stdout || "")
             .split("\n")
@@ -351,7 +331,6 @@ export const runloop = defineProvider<
             const parts = line.trim().split(/\s+/);
             const name = parts[parts.length - 1];
             const isDirectory = line.startsWith("d");
-
             return {
               name,
               type: isDirectory ? 'directory' as const : 'file' as const,
@@ -361,24 +340,14 @@ export const runloop = defineProvider<
           });
         },
 
-        exists: async (
-          sandbox: RunloopSandbox,
-          path: string,
-          runCommand: CommandRunner
-        ): Promise<boolean> => {
+        exists: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
           const result = await runCommand(sandbox, `test -e "${path}"`);
           return result.exitCode === 0;
         },
 
-        remove: async (
-          sandbox: RunloopSandbox,
-          path: string,
-          runCommand: CommandRunner
-        ): Promise<void> => {
+        remove: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
           const result = await runCommand(sandbox, `rm -rf "${path}"`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to remove ${path}: ${result.stderr}`);
-          }
+          if (result.exitCode !== 0) throw new Error(`Failed to remove ${path}: ${result.stderr}`);
         },
       },
 
@@ -386,13 +355,9 @@ export const runloop = defineProvider<
     },
 
     template: {
-      create: async (
-        config: RunloopConfig,
-        options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams
-      ) => {
+      create: async (config: RunloopConfig, options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
         if (!apiKey) throw new Error("Missing Runloop API key for blueprint template creation");
-
         const client = new RunloopSDK({ bearerToken: apiKey });
         return client.api.blueprints.create(options);
       },
@@ -400,7 +365,6 @@ export const runloop = defineProvider<
       list: async (config: RunloopConfig, options?: { limit?: number }) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
         if (!apiKey) throw new Error("Missing Runloop API key for listing blueprint templates");
-
         const client = new RunloopSDK({ bearerToken: apiKey });
         const listParams: any = {};
         if (options?.limit) listParams.limit = options.limit;
@@ -411,21 +375,15 @@ export const runloop = defineProvider<
       delete: async (config: RunloopConfig, blueprintId: string) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
         if (!apiKey) throw new Error("Missing Runloop API key for blueprint template deletion");
-
         const client = new RunloopSDK({ bearerToken: apiKey });
         await client.api.blueprints.delete(blueprintId);
       },
     },
 
     snapshot: {
-      create: async (
-        config: RunloopConfig,
-        sandboxId: string,
-        options?: CreateSnapshotOptions
-      ) => {
+      create: async (config: RunloopConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
         if (!apiKey) throw new Error("Missing Runloop API key for snapshot creation");
-
         const client = new RunloopSDK({ bearerToken: apiKey });
         const snapshotParams: any = {};
         if (options?.name) snapshotParams.name = options.name;
@@ -433,13 +391,9 @@ export const runloop = defineProvider<
         return client.api.devboxes.snapshotDisk(sandboxId, snapshotParams);
       },
 
-      list: async (
-        config: RunloopConfig,
-        options?: ListSnapshotsOptions
-      ) => {
+      list: async (config: RunloopConfig, options?: ListSnapshotsOptions) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
         if (!apiKey) throw new Error("Missing Runloop API key for listing snapshots");
-
         const client = new RunloopSDK({ bearerToken: apiKey });
         const listParams: any = {};
         if (options?.limit) listParams.limit = options.limit;
@@ -450,7 +404,6 @@ export const runloop = defineProvider<
       delete: async (config: RunloopConfig, snapshotId: string) => {
         const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
         if (!apiKey) throw new Error("Missing Runloop API key for snapshot deletion");
-
         const client = new RunloopSDK({ bearerToken: apiKey });
         await client.api.devboxes.deleteDiskSnapshot(snapshotId);
       },
