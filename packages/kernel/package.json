@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/kernel",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Kernel browser provider for ComputeSDK - cloud browser sessions powered by Kernel",
   "author": "Garrison",
   "license": "MIT",
