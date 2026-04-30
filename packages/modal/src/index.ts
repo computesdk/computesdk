@@ -180,10 +180,13 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
           try {
             const file = await modalSandbox.sandbox.open(path);
-            const data = await file.read();
-            const content = new TextDecoder().decode(data);
-            await file.close();
-            return content;
+            try {
+              const data = await file.read();
+              const content = new TextDecoder().decode(data);
+              return content;
+            } finally {
+              await file.close();
+            }
           } catch (error) {
             try {
               const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
