@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/agentuity",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Agentuity provider for ComputeSDK - isolated cloud sandboxes with native filesystem, snapshot/checkpoint support, and flexible runtimes",
   "author": "Garrison",
   "license": "MIT",

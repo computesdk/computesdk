@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/browseruse",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Browser Use Cloud browser provider for ComputeSDK - cloud browser sessions with stealth mode, residential proxies, profiles, and session recording",
   "author": "Garrison",
   "license": "MIT",

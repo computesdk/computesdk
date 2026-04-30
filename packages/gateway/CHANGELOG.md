@@ -1,5 +1,12 @@
 # @computesdk/gateway
 
+## 0.3.24
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - @computesdk/provider@2.0.0
+
 ## 0.3.23
 
 ### Patch Changes

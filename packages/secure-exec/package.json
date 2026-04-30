@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/secure-exec",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Secure execution provider for ComputeSDK - isolated sandbox environments using secure-exec",
   "author": "ComputeSDK",
   "license": "MIT",
