@@ -6,7 +6,15 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-import { App, Sandbox, initializeClient } from 'modal';
+import { ModalClient } from 'modal';
+import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
+
+type ModalNativeSandbox = Sandbox;
+
+
+const DEFAULT_IMAGE = 'node:20';
+const DEFAULT_APP_NAME = 'computesdk-modal';
+
 
 export interface ModalConfig {
   tokenId?: string;
@@ -14,50 +22,33 @@ export interface ModalConfig {
   timeout?: number;
   environment?: string;
   ports?: number[];
+  appName?: string;
 }
 
-type ModalExecPipe = { readText: () => Promise<string>; };
-type ModalExecProcess = { stdout: ModalExecPipe; stderr: ModalExecPipe; wait: () => Promise<number>; };
-type ModalFileHandle = { read?: () => Promise<string | Uint8Array>; write?: (content: Uint8Array) => Promise<void>; close?: () => Promise<void>; };
-type ModalTunnel = { url: string };
-type ModalNativeSandbox = {
-  sandboxId: string;
-  exec: (args: string[], options?: Record<string, unknown>) => Promise<ModalExecProcess>;
-  poll: () => Promise<number | null>;
-  tunnels: () => Promise<Record<number, ModalTunnel>>;
-  open: (path: string) => Promise<ModalFileHandle>;
-  terminate?: () => Promise<void>;
-};
-type ModalSnapshotImage = { objectId?: string };
-type ModalSnapshotCapableSandbox = ModalNativeSandbox & { snapshotFilesystem: () => Promise<ModalSnapshotImage>; };
-type ModalSandboxStatics = typeof Sandbox & { fromSnapshot?: (snapshotId: string) => Promise<unknown>; };
+/**
+ * extends ModalConfig with resources initialised once at
+ * factory time so they don't need to be recreated on every sandbox operation.
+ */
+interface ModalInternalConfig extends ModalConfig {
+  _client: ModalClient;
+  _appPromise: Promise<App>;
+}
+
 
 interface ModalSandbox {
   sandbox: ModalNativeSandbox;
   sandboxId: string;
 }
 
-export const modal = defineProvider<ModalSandbox, ModalConfig>({
+const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
   name: 'modal',
   methods: {
     sandbox: {
-      create: async (config: ModalConfig, options?: CreateSandboxOptions) => {
-        const tokenId = config.tokenId || (typeof process !== 'undefined' && process.env?.MODAL_TOKEN_ID) || '';
-        const tokenSecret = config.tokenSecret || (typeof process !== 'undefined' && process.env?.MODAL_TOKEN_SECRET) || '';
-
-        if (!tokenId || !tokenSecret) {
-          throw new Error(
-            `Missing Modal API credentials. Provide 'tokenId' and 'tokenSecret' in config or set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables. Get your credentials from https://modal.com/`
-          );
-        }
-
+      create: async (config: ModalInternalConfig, options?: CreateSandboxOptions) => {
         try {
-          initializeClient({ tokenId, tokenSecret });
+          const client = config._client;
 
-          let sandbox: ModalNativeSandbox;
-          let sandboxId: string;
-
-          const app = await App.lookup('computesdk-modal', { createIfMissing: true });
+          const app = await config._appPromise;
 
           const {
             timeout: optTimeout,
@@ -69,46 +60,43 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
+            ports: optPorts,
             ...providerOptions
           } = options || {};
 
-          const optPorts = (options as any)?.ports as number[] | undefined;
-          
-          const createSandbox = app.createSandbox.bind(app);
-          type ModalImageArg = Parameters<typeof createSandbox>[0];
-          let image: ModalImageArg;
+          let image: Image;
           const sourceId = snapshotId || templateId;
           if (sourceId) {
             try {
-              const snapshotFactory = Sandbox as ModalSandboxStatics;
-              if (typeof snapshotFactory.fromSnapshot !== 'function') {
-                throw new Error('Modal SDK does not expose fromSnapshot in this version');
-              }
-              const snapshot = await snapshotFactory.fromSnapshot(sourceId) as ModalImageArg;
-              image = snapshot;
-            } catch (e) {
-              image = await app.imageFromRegistry(sourceId); 
+              image = await client.images.fromId(sourceId);
+            } catch {
+              image = client.images.fromRegistry(sourceId);
             }
           } else {
-            image = await app.imageFromRegistry('node:20');
+            image = client.images.fromRegistry(DEFAULT_IMAGE);
           }
-          
-          const sandboxOptions: Record<string, unknown> = { ...providerOptions };
+
+          const sandboxOptions: SandboxCreateParams = {
+            ...(providerOptions as Partial<SandboxCreateParams>),
+          };
+
           const ports = optPorts ?? config.ports;
           if (ports && ports.length > 0) sandboxOptions.unencryptedPorts = ports;
+
           const timeout = optTimeout ?? config.timeout;
           if (timeout) sandboxOptions.timeoutMs = timeout;
+
           if (envs && Object.keys(envs).length > 0) sandboxOptions.env = envs;
           if (name) sandboxOptions.name = name;
-          
-          sandbox = await app.createSandbox(image, sandboxOptions);
-          sandboxId = sandbox.sandboxId;
+
+          const sandbox = await client.sandboxes.create(app, image, sandboxOptions);
+          const sandboxId = sandbox.sandboxId;
 
           return { sandbox: { sandbox, sandboxId }, sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('credentials')) {
-              throw new Error(`Modal authentication failed. Please check your MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables.`);
+              throw new Error(`Modal authentication failed. Please provide tokenId and tokenSecret via config or set the MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables.`);
             }
             if (error.message.includes('quota') || error.message.includes('limit')) {
               throw new Error(`Modal quota exceeded. Please check your usage at https://modal.com/`);
@@ -118,12 +106,10 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
         }
       },
 
-      getById: async (config: ModalConfig, sandboxId: string) => {
-        const tokenId = config.tokenId || process.env.MODAL_TOKEN_ID!;
-        const tokenSecret = config.tokenSecret || process.env.MODAL_TOKEN_SECRET!;
+      getById: async (config: ModalInternalConfig, sandboxId: string) => {
         try {
-          initializeClient({ tokenId, tokenSecret });
-          const sandbox = await Sandbox.fromId(sandboxId);
+          const client = config._client;
+          const sandbox = await client.sandboxes.fromId(sandboxId);
           return { sandbox: { sandbox, sandboxId }, sandboxId };
         } catch { return null; }
       },
@@ -132,9 +118,10 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
         throw new Error(`Modal provider does not support listing sandboxes.`);
       },
 
-      destroy: async (_config: ModalConfig, sandboxId: string) => {
+      destroy: async (config: ModalInternalConfig, sandboxId: string) => {
         try {
-          const sandbox = await Sandbox.fromId(sandboxId);
+          const client = config._client;
+          const sandbox = await client.sandboxes.fromId(sandboxId);
           if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate();
         } catch { /* already terminated */ }
       },
@@ -193,13 +180,13 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
           try {
             const file = await modalSandbox.sandbox.open(path);
-            let content = '';
-            if (file && typeof file.read === 'function') {
+            try {
               const data = await file.read();
-              content = typeof data === 'string' ? data : new TextDecoder().decode(data);
+              const content = new TextDecoder().decode(data);
+              return content;
+            } finally {
+              await file.close();
             }
-            if (file && typeof file.close === 'function') await file.close();
-            return content;
           } catch (error) {
             try {
               const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
@@ -213,19 +200,11 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
           }
         },
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
+          const file = await modalSandbox.sandbox.open(path, 'w');
           try {
-            const file = await modalSandbox.sandbox.open(path);
-            if (file && typeof file.write === 'function') await file.write(new TextEncoder().encode(content));
-            if (file && typeof file.close === 'function') await file.close();
-          } catch (error) {
-            try {
-              const process = await modalSandbox.sandbox.exec(['sh', '-c', `printf '%s' "${content.replace(/"/g, '\\"')}" > "${path}"`], { stdout: 'pipe', stderr: 'pipe' });
-              const [, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-              const exitCode = await process.wait();
-              if (exitCode !== 0) throw new Error(`write failed: ${stderr}`);
-            } catch {
-              throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            await file.write(new TextEncoder().encode(content));
+          } finally {
+            await file.close();
           }
         },
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
@@ -265,15 +244,12 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
     },
 
     snapshot: {
-      create: async (config: ModalConfig, sandboxId: string) => {
-        const tokenId = config.tokenId || process.env.MODAL_TOKEN_ID!;
-        const tokenSecret = config.tokenSecret || process.env.MODAL_TOKEN_SECRET!;
+      create: async (config: ModalInternalConfig, sandboxId: string) => {
         try {
-          initializeClient({ tokenId, tokenSecret });
-          const sandbox = await Sandbox.fromId(sandboxId);
-          const snapshotSandbox = sandbox as unknown as ModalSnapshotCapableSandbox;
-          const image = await snapshotSandbox.snapshotFilesystem();
-          return { id: image.objectId || `img-${Date.now()}`, image, provider: 'modal', createdAt: new Date() };
+          const client = config._client;
+          const sandbox = await client.sandboxes.fromId(sandboxId);
+          const image = await sandbox.snapshotFilesystem();
+          return { id: image.imageId, image, provider: 'modal', createdAt: new Date() };
         } catch (error) {
           throw new Error(`Failed to create Modal snapshot: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -283,3 +259,19 @@ export const modal = defineProvider<ModalSandbox, ModalConfig>({
     }
   }
 });
+
+/**
+ * Create a Modal provider instance.
+ */
+export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
+  const appName = config.appName ?? DEFAULT_APP_NAME;
+  const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
+  const appPromise = client.apps.fromName(appName, { createIfMissing: true });
+
+  return _modal({
+    ...config,
+    appName,
+    _client: client,
+    _appPromise: appPromise,
+  });
+}
