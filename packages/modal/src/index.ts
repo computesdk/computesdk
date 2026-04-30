@@ -96,7 +96,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('credentials')) {
-              throw new Error(`Modal authentication failed. Please check your MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables.`);
+              throw new Error(`Modal authentication failed. Please provide tokenId and tokenSecret via config or set the MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables.`);
             }
             if (error.message.includes('quota') || error.message.includes('limit')) {
               throw new Error(`Modal quota exceeded. Please check your usage at https://modal.com/`);
