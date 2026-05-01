@@ -232,41 +232,44 @@ getUrl: async (sandbox, options) => {
 
 ### Optional Filesystem Methods
 
-Add filesystem support by implementing the `filesystem` methods:
+Add filesystem support by implementing the `filesystem` methods. Import `escapeShellArg` from `@computesdk/provider` and always interpolate it inside double quotes — the helper escapes `\`, `"`, `$`, and backticks but not spaces or shell metacharacters like `;` and `|`, so unquoted usage will break on paths with spaces and is unsafe for user-controlled input.
 
 ```typescript
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+// ...
+
 methods: {
   sandbox: {
     // ... required methods
     
     filesystem: {
       readFile: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'cat', [path]);
+        const result = await runCommand(sandbox, `cat "${escapeShellArg(path)}"`);
         return result.stdout;
       },
       
       writeFile: async (sandbox, path, content, runCommand) => {
-        const escaped = content.replace(/'/g, "'\\''");
-        await runCommand(sandbox, 'sh', ['-c', `cat > '${path}' << 'EOF'\n${content}\nEOF`]);
+        await runCommand(sandbox, `cat > "${escapeShellArg(path)}" << 'EOF'\n${content}\nEOF`);
       },
       
       mkdir: async (sandbox, path, runCommand) => {
-        await runCommand(sandbox, 'mkdir', ['-p', path]);
+        await runCommand(sandbox, `mkdir -p "${escapeShellArg(path)}"`);
       },
       
       readdir: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'ls', ['-la', path]);
+        const result = await runCommand(sandbox, `ls -la "${escapeShellArg(path)}"`);
         // Parse ls output and return FileEntry[]
         return parseFileList(result.stdout);
       },
       
       exists: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'test', ['-e', path]);
+        const result = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`);
         return result.exitCode === 0;
       },
       
       remove: async (sandbox, path, runCommand) => {
-        await runCommand(sandbox, 'rm', ['-rf', path]);
+        await runCommand(sandbox, `rm -rf "${escapeShellArg(path)}"`);
       }
     }
   }
@@ -311,7 +314,7 @@ import type {
 Providers can operate in different modes:
 
 - **`direct`** - Provider has native sandbox capabilities (e.g., E2B, Modal)
-- **`gateway`** - Provider only has infrastructure (e.g., Railway) - routes through gateway
+- **`gateway`** - Provider only has infrastructure - routes through gateway
 
 Set the default mode in your provider config:
 
@@ -515,9 +518,9 @@ describe('MyProvider', () => {
 
 See these provider implementations for reference:
 
-- **[@computesdk/e2b](../e2b)** - Full-featured provider with filesystem and terminals
+- **[@computesdk/e2b](../e2b)** - Full-featured provider with filesystem operations
 - **[@computesdk/modal](../modal)** - GPU-accelerated Python provider
-- **[@computesdk/railway](../railway)** - Infrastructure provider using gateway mode
+- **[@computesdk/daytona](../daytona)** - Workspace-based development sandboxes
 
 ## Related Packages
 

@@ -6,7 +6,7 @@ Declaw runs Firecracker microVMs with a built-in security stack: PII
 scanning, prompt-injection defense, TLS-intercepting egress proxy, and
 per-sandbox network policies.
 
-## Install
+## Installation
 
 ```bash
 npm install @computesdk/declaw

@@ -6,15 +6,18 @@ Install the provider package for the platform you want to use:
 
 ```bash
 # Pick one (or more) providers
+npm install @computesdk/archil
 npm install @computesdk/blaxel
 npm install @computesdk/cloudflare
 npm install @computesdk/codesandbox
 npm install @computesdk/daytona
+npm install @computesdk/declaw
 npm install @computesdk/e2b
 npm install @computesdk/hopx
 npm install @computesdk/modal
 npm install @computesdk/namespace
 npm install @computesdk/runloop
+npm install @computesdk/upstash
 npm install @computesdk/vercel
 ```
 
@@ -23,6 +26,13 @@ You only need to install the providers your project uses.
 ## Provider Credentials
 
 Each provider requires its own API credentials. Add them to a `.env` file in the root of your project or export them in your shell:
+
+### Archil
+```bash
+ARCHIL_API_KEY=your_archil_api_key
+ARCHIL_REGION=aws-us-east-1
+ARCHIL_DISK_ID=your_archil_disk_id
+```
 
 ### Blaxel
 ```bash
@@ -47,6 +57,11 @@ CSB_API_KEY=your_codesandbox_api_key
 
 ```bash
 DAYTONA_API_KEY=your_daytona_api_key
+```
+
+### Declaw
+```bash
+DECLAW_API_KEY=your_declaw_api_key
 ```
 
 ### E2B
@@ -78,6 +93,11 @@ NSC_TOKEN=your_namespace_nsc_token
 RUNLOOP_API_KEY=your_runloop_api_key
 ```
 
+### Upstash
+```bash
+UPSTASH_BOX_API_KEY=your_upstash_box_api_key
+```
+
 ### Vercel
 
 ```bash
@@ -98,8 +118,8 @@ import { e2b } from '@computesdk/e2b';
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('print("Hello from ComputeSDK!")');
-console.log(result.output); // "Hello from ComputeSDK!"
+const result = await sandbox.runCommand('echo "Hello from ComputeSDK!"');
+console.log(result.stdout); // "Hello from ComputeSDK!"
 
 await sandbox.destroy();
 ```

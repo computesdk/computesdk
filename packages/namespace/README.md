@@ -18,28 +18,6 @@ NSC_TOKEN=your_namespace_token
 
 ## Usage
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects Namespace from NSC_TOKEN environment variable
-const sandbox = await compute.sandbox.create();
-console.log(`Created sandbox: ${sandbox.id}`);
-
-// List all sandboxes
-const sandboxes = await compute.sandbox.list();
-
-// Destroy the sandbox
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { namespace } from '@computesdk/namespace';
 
@@ -48,8 +26,8 @@ const compute = namespace({
 });
 
 // Create a sandbox
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
-console.log(`Created sandbox: ${sandbox.id}`);
+const sandbox = await compute.sandbox.create();
+console.log(`Created sandbox: ${sandbox.sandboxId}`);
 
 // List all sandboxes
 const sandboxes = await compute.sandbox.list();

@@ -6,7 +6,7 @@ Interactive REPL for testing ComputeSDK sandbox operations with instant feedback
 
 - 🚀 **Zero ceremony** - Just run commands, no sandbox ID management
 - ✨ **Tab autocomplete** - All 100+ `@computesdk/cmd` functions autocomplete
-- 🔄 **Provider switching** - Seamlessly switch between e2b, railway, daytona, etc.
+- 🔄 **Provider switching** - Seamlessly switch between e2b, daytona, modal, etc.
 - ⚡ **Smart evaluation** - Type `npm.install('express')` and it just runs
 - 📊 **Real-time feedback** - See timing, output, and errors instantly
 
@@ -17,8 +17,6 @@ npm install -D @computesdk/workbench
 
 # Install at least one provider
 npm install @computesdk/e2b
-# or
-npm install @computesdk/railway
 # or any other provider
 ```
 
@@ -30,10 +28,8 @@ npm install @computesdk/railway
 # E2B Provider
 E2B_API_KEY=e2b_your_api_key_here
 
-# Railway Provider  
-RAILWAY_API_KEY=your_railway_api_key
-RAILWAY_PROJECT_ID=your_project_id
-RAILWAY_ENVIRONMENT_ID=your_environment_id
+# Daytona Provider
+DAYTONA_API_KEY=your_daytona_api_key
 ```
 
 2. **Start workbench**:
@@ -131,9 +127,9 @@ workbench> npm.install('express')
 Running: npm install express
 ✅ Completed (3.2s)
 
-workbench> provider railway
+workbench> provider daytona
 Destroy current sandbox? (y/N): y
-✅ Switched to railway
+✅ Switched to daytona
 ```
 
 ## Creating and Switching Sandboxes
@@ -175,7 +171,7 @@ add  branch  checkout  clone  commit  diff  fetch
 init  log  pull  push  reset  stash  status
 
 workbench> provider <TAB>
-e2b  railway  daytona  modal  runloop  vercel
+e2b  daytona  modal  runloop  vercel
 ```
 
 ## Supported Providers
@@ -183,7 +179,6 @@ e2b  railway  daytona  modal  runloop  vercel
 Install any combination of:
 
 - `@computesdk/e2b` - E2B sandboxes
-- `@computesdk/railway` - Railway environments
 - `@computesdk/daytona` - Daytona workspaces
 - `@computesdk/modal` - Modal containers
 - `@computesdk/runloop` - Runloop instances
@@ -199,11 +194,6 @@ Set provider credentials in `.env`:
 ```bash
 # E2B
 E2B_API_KEY=e2b_xxx
-
-# Railway
-RAILWAY_API_KEY=xxx
-RAILWAY_PROJECT_ID=xxx
-RAILWAY_ENVIRONMENT_ID=xxx
 
 # Daytona
 DAYTONA_API_KEY=xxx

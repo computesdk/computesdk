@@ -17,15 +17,18 @@ When you install a provider package like `@computesdk/e2b`, you get a factory fu
 
 | Package | Provider |
 |---------|----------|
+| `@computesdk/archil` | Archil |
 | `@computesdk/blaxel` | Blaxel |
 | `@computesdk/cloudflare` | Cloudflare |
 | `@computesdk/codesandbox` | CodeSandbox |
 | `@computesdk/daytona` | Daytona |
+| `@computesdk/declaw` | Declaw |
 | `@computesdk/e2b` | E2B |
 | `@computesdk/hopx` | HopX |
 | `@computesdk/modal` | Modal |
 | `@computesdk/namespace` | Namespace |
 | `@computesdk/runloop` | Runloop |
+| `@computesdk/upstash` | Upstash |
 | `@computesdk/vercel` | Vercel |
 
 ## Why ComputeSDK?
@@ -49,10 +52,7 @@ When you install a provider package like `@computesdk/e2b`, you get a factory fu
 **Multi-provider support** - 10+ providers available as individual packages  
 **Filesystem operations** - Read, write, create directories  
 **Command execution** - Run shell commands directly  
-**Type-safe** - Full TypeScript support with comprehensive error handling  
-**Overlays** - Bootstrap sandboxes from templates instantly  
-**Managed servers** - Run dev servers with health checks and auto-restart  
-**Client-side access** - Delegate sandbox access to browser clients securely
+**Type-safe** - Full TypeScript support with comprehensive error handling
 
 ## Quick Example
 
@@ -68,7 +68,7 @@ Set the provider's credentials:
 export E2B_API_KEY=your_e2b_api_key
 ```
 
-Create a sandbox and run code:
+Create a sandbox and run a command:
 
 ```typescript
 import { e2b } from '@computesdk/e2b';
@@ -79,9 +79,9 @@ const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.output); // "Hello World!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello World!"');
+console.log(result.stdout); // "Hello World!"
 
 // Clean up
 await sandbox.destroy();
@@ -106,18 +106,59 @@ const modalCompute = modal({
   tokenSecret: process.env.MODAL_TOKEN_SECRET,
 });
 
-// Use one provider for lightweight code execution
+// Use one provider for lightweight tasks
 const lightSandbox = await e2bCompute.sandbox.create();
-await lightSandbox.runCode('print("Quick task")');
+await lightSandbox.runCommand('echo "Quick task"');
 await lightSandbox.destroy();
 
 // Use another provider for GPU-intensive workloads
 const gpuSandbox = await modalCompute.sandbox.create();
-await gpuSandbox.runCode('import torch; print(torch.cuda.is_available())');
+await gpuSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
 await gpuSandbox.destroy();
 ```
 
 The sandbox API is identical across providers, so you can write helper functions that work with any provider's sandboxes interchangeably.
+
+### Multi-Provider in a Single Config
+
+If you'd rather configure several providers together — for resilience, routing, or load balancing — install the `computesdk` core package alongside the providers you want:
+
+```bash
+npm install computesdk @computesdk/e2b @computesdk/modal
+```
+
+Register multiple providers with `compute.setConfig` and choose a strategy:
+
+```typescript
+import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
+import { modal } from '@computesdk/modal';
+
+compute.setConfig({
+  providers: [
+    e2b({ apiKey: process.env.E2B_API_KEY }),
+    modal({
+      tokenId: process.env.MODAL_TOKEN_ID,
+      tokenSecret: process.env.MODAL_TOKEN_SECRET,
+    }),
+  ],
+  providerStrategy: 'priority', // 'priority' (default) or 'round-robin'
+  fallbackOnError: true,        // try the next provider if one fails
+});
+
+// Uses the configured strategy
+const sandbox = await compute.sandbox.create();
+
+// Override per call to target a specific provider by name
+const gpuSandbox = await compute.sandbox.create({ provider: 'modal' });
+```
+
+**Strategies**
+
+- `priority` — always try providers in order; combine with `fallbackOnError: true` to cascade on failure
+- `round-robin` — distribute new sandboxes evenly across providers
+
+Operations like `destroy` and snapshots automatically route to the provider that owns each sandbox, so you don't need to track affinity yourself.
 
 ## Next Steps
 

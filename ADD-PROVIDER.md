@@ -157,10 +157,8 @@ Use `defineProvider` from `@computesdk/provider` to define your provider. It tak
 import { defineProvider } from '@computesdk/provider';
 import type { ProviderConfig } from '@computesdk/provider';
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
-  Runtime,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
@@ -200,15 +198,6 @@ export const myProvider = defineProvider<any, MyProviderConfig>({
       },
 
       // --- Instance operations ---
-
-      runCode: async (sandbox, code, runtime) => {
-        const result = await myAPI.execute(sandbox.id, code, runtime);
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        };
-      },
 
       runCommand: async (sandbox, command, args) => {
         const result = await myAPI.runCommand(sandbox.id, command, args);
@@ -254,7 +243,6 @@ If your provider can't support these, define them but throw a clear error:
 | Method | Signature | Description |
 |---|---|---|
 | `list` | `(config) => Promise<Array<{ sandbox, sandboxId }>>` | List all sandboxes |
-| `runCode` | `(sandbox, code, runtime?, config?) => Promise<CodeResult>` | Execute code (Python/Node.js) |
 | `getUrl` | `(sandbox, { port, protocol? }) => Promise<string>` | Get URL for a port |
 
 ```typescript
@@ -266,12 +254,6 @@ list: async () => {
 ### Key return types
 
 ```typescript
-interface CodeResult {
-  stdout?: string;
-  stderr?: string;
-  exitCode: number;
-}
-
 interface CommandResult {
   stdout: string;
   stderr: string;
@@ -409,7 +391,7 @@ if (!config.apiKey) {
 
 **Handle errors gracefully.** Catch provider-specific errors and convert them to user-friendly messages.
 
-**Use `escapeShellArg`** from `@computesdk/provider` when interpolating user input into shell commands to prevent injection.
+**Use `escapeShellArg`** from `@computesdk/provider` when interpolating user input into shell commands, and always wrap it in double quotes (e.g. `` `cat "${escapeShellArg(path)}"` ``). The helper escapes `\`, `"`, `$`, and backticks but not spaces or metacharacters like `;` and `|`, so unquoted usage breaks on paths with spaces and is unsafe for user-controlled input.
 
 **Support env var fallbacks.** Accept config via constructor params and fall back to environment variables:
 

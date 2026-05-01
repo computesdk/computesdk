@@ -49,8 +49,8 @@ export UPSTASH_BOX_API_KEY=your_api_key_here
 interface UpstashConfig {
   /** Upstash Box API key - if not provided, will use UPSTASH_BOX_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: 'python' | 'node';
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds (default: 600000) */
   timeout?: number;
 }
@@ -58,36 +58,28 @@ interface UpstashConfig {
 
 ## Features
 
-- **Code Execution** - Python and Node.js runtime support
-- **Command Execution** - Run shell commands in sandbox
+- **Command Execution** - Run shell commands in sandbox (Python/Node.js available)
 - **Filesystem Operations** - Full file system access
 - **Preview URLs** - Get publicly accessible URLs for running services
 - **Snapshots** - Save and restore sandbox state
-- **Auto Runtime Detection** - Automatically detects Python vs Node.js
 
 ## API Reference
 
-### Code Execution
+### Command Execution
 
 ```typescript
-// Execute Python code
+// Run Python code via heredoc
 const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
 PY`);
 
-// Execute Node.js code
+// Run Node.js code via heredoc
 const result = await sandbox.runCommand(`node - <<'JS'
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
 JS`);
-
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
-```
-
-### Command Execution
 
 ```typescript
 // List files
@@ -174,18 +166,6 @@ const sandboxes = await compute.sandbox.list();
 // Destroy sandbox
 await sandbox.destroy();
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print(` statements
-- `import` statements
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, `raise`, etc.)
-
-**Default:** Node.js for all other cases
 
 ## Error Handling
 

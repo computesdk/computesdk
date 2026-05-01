@@ -35,26 +35,6 @@ Common environment variables (used by Docker/dockerode):
 
 ## Usage
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```ts
-import { compute } from 'computesdk';
-
-// Auto-detects Docker (requires Docker daemon running)
-const sandbox = await compute.sandbox.create();
-
-const result = await sandbox.runCommand('python -c "print(\"Hello from Python\")"');
-console.log(result.stdout.trim()); // Hello from Python
-
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```ts
 import { docker } from '@computesdk/docker';
 
@@ -90,7 +70,7 @@ const sandbox = await compute.sandbox.create();
 const result = await sandbox.runCommand('node -e "console.log(\"Hello, World!\")"');
 console.log(result.stdout.trim()); // Hello, World!
 
-const cmd = await sandbox.runCommand('sh', ['-lc', 'echo Hello from command']);
+const cmd = await sandbox.runCommand('echo Hello from command');
 console.log(cmd.stdout.trim()); // Hello from command
 
 await sandbox.destroy();
@@ -186,24 +166,15 @@ Type: `DockerConfig`
 
 ## API Reference
 
-### Code Execution
-
-```ts
-sandbox.runCommand(code: string, runtime?: 'python' | 'node'): Promise<ExecutionResult>
-```
-
-* If `runtime` omitted, the sandbox’s runtime (set at creation) is used.
-* Returns `{ stdout, stderr, exitCode, executionTime, sandboxId, provider }`
-* Syntax errors are **thrown** as `Error("Syntax error: …")`.
-
 ### Command Execution
 
 ```ts
-sandbox.runCommand(command: string, args?: string[], options?: { background?: boolean }): Promise<ExecutionResult>
+sandbox.runCommand(command: string, options?: RunCommandOptions): Promise<CommandResult>
 ```
 
 * Runs via `/bin/sh -c "…"` with stdout/stderr capture.
-* Background returns `{ isBackground: true, pid?: number }`.
+* Returns `{ stdout, stderr, exitCode, durationMs }`.
+* Options: `{ cwd?, env?, timeout?, background? }`.
 
 ### Filesystem Operations
 
@@ -220,14 +191,14 @@ sandbox.filesystem.remove(path)
 
 ### Terminal Operations
 
-Interactive terminals aren’t exposed. Use `runCommand('sh', ['-lc', '…'])` for non-interactive sessions.
+Interactive terminals aren’t exposed. Use `runCommand('…')` for non-interactive sessions.
 
 ### Sandbox Management
 
 ```ts
-const sandbox = await compute.sandbox.create({ runtime?: 'python' | 'node' });
+const sandbox = await compute.sandbox.create();
 
-await sandbox.getInfo(); // { id, provider, runtime, status, createdAt, timeout, metadata }
+await sandbox.getInfo(); // { id, provider, status, createdAt, timeout, metadata }
 await sandbox.getUrl({ port, protocol?: 'http' | 'https' });
 sandbox.getInstance(); // { docker: Docker, container: Container, ... }
 await sandbox.destroy();
@@ -235,46 +206,15 @@ await sandbox.destroy();
 
 ---
 
-## Runtime Detection
-
-There’s **no auto-detection**. Resolution is:
-
-1. provider `config.runtime`, else
-2. fallback default in provider config
-
-Use `runCommand('python -c "..."')` or `runCommand('node -e "..."')` when you need language-specific execution.
-
----
-
 ## Error Handling
 
-* **Syntax errors** → **thrown** (`Error("Syntax error: …")`)
-* **Runtime/command errors** → returned as non-zero `exitCode` with `stderr`
+* **Command errors** → returned as non-zero `exitCode` with `stderr`
 * **Docker errors** (pull/start/exec) → **thrown**
 
 ```ts
-const res = await sb.runCommand('sh', ['-lc', 'bad-command']);
+const res = await sb.runCommand('bad-command');
 if (res.exitCode !== 0) {
   console.error('stderr:', res.stderr);
-}
-```
-
----
-
-## Web Framework Integration
-
-```ts
-import { handleComputeRequest } from 'computesdk';
-import { docker } from '@computesdk/docker';
-
-const compute = docker({
-  runtime: 'node',
-  image: { name: 'node:20-alpine' },
-});
-
-export async function POST(req: Request) {
-  const body = await req.json(); // ComputeRequest
-  return handleComputeRequest(body, compute);
 }
 ```
 
@@ -285,31 +225,31 @@ export async function POST(req: Request) {
 ### Data Science Workflow (Python)
 
 ```ts
-const sandbox = await compute.sandbox.create({ runtime: 'python' });
-await sandbox.runCommand('sh', ['-lc', 'python3 -m pip install --no-cache-dir pandas']);
+const sandbox = await compute.sandbox.create();
+await sandbox.runCommand('python3 -m pip install --no-cache-dir pandas');
 await sandbox.filesystem.writeFile('/workspace/app.py', `
 import pandas as pd
 print("rows:", len(pd.DataFrame({"x":[1,2,3]})))
 `);
-const run = await sandbox.runCommand('sh', ['-lc', 'python3 /workspace/app.py']);
+const run = await sandbox.runCommand('python3 /workspace/app.py');
 console.log(run.stdout.trim()); // rows: 3
 await sandbox.destroy();
 ```
 
-### Interactive-like Loop
+### Stateful Loop
 
 ```ts
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
-await sandbox.runCommand('sh', ['-lc', 'echo boot > /tmp/state']);
-await sandbox.runCommand('sh', ['-lc', 'cat /tmp/state']); // 'boot'
+const sandbox = await compute.sandbox.create();
+await sandbox.runCommand('echo boot > /tmp/state');
+const res = await sandbox.runCommand('cat /tmp/state'); // 'boot'
 await sandbox.destroy();
 ```
 
-### Machine Learning Pipeline (Python + Ports)
+### Background Process + Ports
 
 ```ts
-const sandbox = await compute.sandbox.create({ runtime: 'python' });
-const bg = await sandbox.runCommand('sh', ['-lc', 'python3 -m http.server 8080'], { background: true });
+const sandbox = await compute.sandbox.create();
+await sandbox.runCommand('python3 -m http.server 8080', { background: true });
 const url = await sandbox.getUrl({ port: 8080 });
 console.log('Serving at', url);
 await sandbox.destroy();

@@ -30,9 +30,9 @@ const compute = modal({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Modal!")');
-console.log(result.output); // "Hello from Modal!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Modal!"');
+console.log(result.stdout); // "Hello from Modal!"
 
 // Clean up
 await sandbox.destroy();
@@ -46,8 +46,6 @@ interface ModalConfig {
   tokenId?: string;
   /** Modal token secret - if not provided, will use MODAL_TOKEN_SECRET env var */
   tokenSecret?: string;
-  /** Runtime to use */
-  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Modal environment (sandbox or main) */
