@@ -18,7 +18,7 @@ E2B_API_KEY=your_e2b_api_key
 
 ## Basic Usage
 
-A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Modal, Vercel, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCode()` executes code and returns the output, and `destroy()` tears down the sandbox to free resources.
+A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Modal, Vercel, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCommand()` executes shell commands and returns the result, and `destroy()` tears down the sandbox to free resources.
 
 ```typescript
 import { e2b } from '@computesdk/e2b';
@@ -29,9 +29,9 @@ const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.output); // "Hello World!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello World!"');
+console.log(result.stdout); // "Hello World!"
 
 // Clean up
 await sandbox.destroy();
@@ -82,7 +82,7 @@ ComputeSDK methods throw exceptions for API/network failures. For command execut
 ```typescript
 try {
   const sandbox = await compute.sandbox.create();
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('some-command');
 } catch (error) {
   console.error('Failed:', error.message);
 }
@@ -99,7 +99,7 @@ Always destroy sandboxes when done to avoid resource leaks and unnecessary costs
 let sandbox;
 try {
   sandbox = await compute.sandbox.create();
-  await sandbox.runCode('print("Hello")');
+  await sandbox.runCommand('echo "Hello"');
 } finally {
   await sandbox?.destroy();
 }
@@ -119,20 +119,6 @@ if (result.exitCode !== 0) {
 ```
 
 ## Understanding Results
-
-### Code Execution Results
-
-When you call `runCode()`, you receive:
-- `output`: Combined stdout/stderr from your code
-- `exitCode`: `0` for success, non-zero for errors  
-- `language`: Detected or specified language (`'python'`, `'node'`, etc.)
-
-```typescript
-const result = await sandbox.runCode('print("Hello")');
-console.log(result.output);    // "Hello\n"
-console.log(result.exitCode);  // 0
-console.log(result.language);  // "python"
-```
 
 ### Command Execution Results
 

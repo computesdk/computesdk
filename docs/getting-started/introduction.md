@@ -17,15 +17,18 @@ When you install a provider package like `@computesdk/e2b`, you get a factory fu
 
 | Package | Provider |
 |---------|----------|
+| `@computesdk/archil` | Archil |
 | `@computesdk/blaxel` | Blaxel |
 | `@computesdk/cloudflare` | Cloudflare |
 | `@computesdk/codesandbox` | CodeSandbox |
 | `@computesdk/daytona` | Daytona |
+| `@computesdk/declaw` | Declaw |
 | `@computesdk/e2b` | E2B |
 | `@computesdk/hopx` | HopX |
 | `@computesdk/modal` | Modal |
 | `@computesdk/namespace` | Namespace |
 | `@computesdk/runloop` | Runloop |
+| `@computesdk/upstash` | Upstash |
 | `@computesdk/vercel` | Vercel |
 
 ## Why ComputeSDK?
@@ -49,10 +52,7 @@ When you install a provider package like `@computesdk/e2b`, you get a factory fu
 **Multi-provider support** - 10+ providers available as individual packages  
 **Filesystem operations** - Read, write, create directories  
 **Command execution** - Run shell commands directly  
-**Type-safe** - Full TypeScript support with comprehensive error handling  
-**Overlays** - Bootstrap sandboxes from templates instantly  
-**Managed servers** - Run dev servers with health checks and auto-restart  
-**Client-side access** - Delegate sandbox access to browser clients securely
+**Type-safe** - Full TypeScript support with comprehensive error handling
 
 ## Quick Example
 
@@ -68,7 +68,7 @@ Set the provider's credentials:
 export E2B_API_KEY=your_e2b_api_key
 ```
 
-Create a sandbox and run code:
+Create a sandbox and run a command:
 
 ```typescript
 import { e2b } from '@computesdk/e2b';
@@ -79,9 +79,9 @@ const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.output); // "Hello World!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello World!"');
+console.log(result.stdout); // "Hello World!"
 
 // Clean up
 await sandbox.destroy();
@@ -106,14 +106,14 @@ const modalCompute = modal({
   tokenSecret: process.env.MODAL_TOKEN_SECRET,
 });
 
-// Use one provider for lightweight code execution
+// Use one provider for lightweight tasks
 const lightSandbox = await e2bCompute.sandbox.create();
-await lightSandbox.runCode('print("Quick task")');
+await lightSandbox.runCommand('echo "Quick task"');
 await lightSandbox.destroy();
 
 // Use another provider for GPU-intensive workloads
 const gpuSandbox = await modalCompute.sandbox.create();
-await gpuSandbox.runCode('import torch; print(torch.cuda.is_available())');
+await gpuSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
 await gpuSandbox.destroy();
 ```
 

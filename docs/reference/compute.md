@@ -51,8 +51,8 @@ import { e2b } from '@computesdk/e2b';
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 const sandbox = await compute.sandbox.create();
-const result = await sandbox.runCode('print("Hello!")');
-console.log(result.output);
+const result = await sandbox.runCommand('echo "Hello!"');
+console.log(result.stdout);
 await sandbox.destroy();
 ```
 
@@ -80,7 +80,7 @@ compute.setConfig({
 });
 
 const sandbox = await compute.sandbox.create();
-await sandbox.runCode('print("Hello!")');
+await sandbox.runCommand('echo "Hello!"');
 await sandbox.destroy();
 ```
 
@@ -324,7 +324,7 @@ The full sandbox API is documented in [compute.sandbox](./compute.sandbox.md). S
 | `list()` | List active sandboxes (aggregated across providers in multi-provider mode) |
 | `destroy(sandboxId)` | Tear down a sandbox |
 
-All of these accept a `provider` override where applicable. See [Sandbox](./Sandbox.md) for the instance methods (`runCode`, `runCommand`, `filesystem.*`).
+All of these accept a `provider` override where applicable. See [Sandbox](./Sandbox.md) for the instance methods (`runCommand`, `filesystem.*`).
 
 > **Reserved methods.** The TypeScript surface also declares `compute.sandbox.find`, `compute.sandbox.findOrCreate`, and `compute.sandbox.extendTimeout`. These are reserved for a future gateway / named-sandbox mode and are not implemented by the currently shipped provider packages — calling them today throws `Provider 'X' does not support …`. Don't rely on them in direct-mode code.
 

@@ -28,9 +28,9 @@ const compute = upstash({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Upstash!")');
-console.log(result.output); // "Hello from Upstash!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Upstash!"');
+console.log(result.stdout); // "Hello from Upstash!"
 
 // Clean up
 await sandbox.destroy();
@@ -63,21 +63,9 @@ const sandbox = await compute.sandbox.create({ ephemeral: true });
 interface UpstashConfig {
   /** Upstash Box API key - if not provided, will use UPSTASH_BOX_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds (default: 600000) */
   timeout?: number;
 }
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases

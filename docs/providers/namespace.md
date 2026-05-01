@@ -76,6 +76,6 @@ interface NamespaceConfig {
 
 ## Next Steps
 
-- Learn about [sandbox lifecycle management](/docs/reference/computesandbox)
+- Learn about [sandbox lifecycle management](/docs/reference/compute.sandbox)
 - Explore [Sandbox methods](/docs/reference/sandbox)
 - View the [@computesdk/namespace package](https://github.com/computesdk/computesdk/blob/main/packages/namespace/README.md)

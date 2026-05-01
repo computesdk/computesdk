@@ -28,9 +28,9 @@ const compute = e2b({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from E2B!")');
-console.log(result.output); // "Hello from E2B!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from E2B!"');
+console.log(result.stdout); // "Hello from E2B!"
 
 // Clean up
 await sandbox.destroy();
@@ -43,21 +43,7 @@ await sandbox.destroy();
 interface E2BConfig {
   /** E2B API key - if not provided, will use E2B_API_KEY env var */
   apiKey?: string;
-  /** Environment template to use */
-  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases

@@ -30,9 +30,9 @@ const compute = vercel({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Vercel!")');
-console.log(result.output); // "Hello from Vercel!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Vercel!"');
+console.log(result.stdout); // "Hello from Vercel!"
 
 // Clean up
 await sandbox.destroy();
@@ -49,22 +49,7 @@ interface VercelConfig {
   teamId?: string;
   /** Project ID */
   projectId?: string;
-  /** Runtime environment */
-  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
 ```
-
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
