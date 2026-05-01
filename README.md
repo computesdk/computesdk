@@ -46,15 +46,15 @@ compute.setConfig({
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.output); // "Hello World!"
+const result = await sandbox.runCommand('python -c "print(\'Hello World!\')"');
+console.log(result.stdout); // "Hello World!"
 
 await sandbox.destroy();
 ```
 
 ## Features
 
-- 🔄 **Multi-provider support** - E2B, Modal, Railway, Daytona, Vercel, and more
+- 🔄 **Multi-provider support** - E2B, Modal, Daytona, Vercel, and more
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Command execution** - Run shell commands in sandboxes
 - 🧵 **Terminals** - Interactive (PTY) and exec-mode command tracking
@@ -69,7 +69,6 @@ Install provider packages and pass instances into `compute.setConfig`:
 |----------|----------------------|-----------|
 | **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
-| **Railway** | `RAILWAY_API_KEY`, `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID` | Full-stack deployments |
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
 | **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions |
@@ -134,7 +133,7 @@ compute.setConfig({
 });
 
 const e2bSandbox = await compute.sandbox.create();
-await e2bSandbox.runCode('import pandas as pd');
+await e2bSandbox.runCommand('python -c "import pandas as pd"');
 await e2bSandbox.destroy();
 
 // Switch to Modal for GPU workloads
@@ -146,7 +145,7 @@ compute.setConfig({
 });
 
 const modalSandbox = await compute.sandbox.create();
-await modalSandbox.runCode('import torch; print(torch.cuda.is_available())');
+await modalSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
 await modalSandbox.destroy();
 ```
 
@@ -175,12 +174,12 @@ const sandboxes = await compute.sandbox.list();
 await sandbox.destroy();
 ```
 
-### Code Execution
+### Command Execution
 
 ```typescript
-// Execute code
-const result = await sandbox.runCode('print("Hello")', 'python');
-console.log(result.output);
+// Execute Python code
+const result = await sandbox.runCommand('python -c "print(\'Hello\')"');
+console.log(result.stdout);
 console.log(result.exitCode);
 
 // Run shell commands
@@ -229,21 +228,21 @@ Bob,30,San Francisco`;
 
 await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
 
-// Process data
-const result = await sandbox.runCode(`
+// Write the analysis script
+await sandbox.filesystem.writeFile('/analysis/analyze.py', `
+import json
 import pandas as pd
 
 df = pd.read_csv('/analysis/data/people.csv')
 print(f"Average age: {df['age'].mean()}")
 
-# Save results
 results = {'average_age': df['age'].mean()}
-
-import json
 with open('/analysis/results.json', 'w') as f:
     json.dump(results, f)
 `);
 
+// Run it
+const result = await sandbox.runCommand('python /analysis/analyze.py');
 console.log(result.stdout);
 
 // Read results
@@ -260,7 +259,6 @@ Install the provider packages you need and pass their instances into `compute.se
 ```bash
 npm install @computesdk/e2b        # E2B provider
 npm install @computesdk/modal      # Modal provider
-npm install @computesdk/railway    # Railway provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
@@ -278,7 +276,6 @@ const sandbox = await e2bCompute.sandbox.create();
 See individual provider READMEs for details:
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
-- **[@computesdk/railway](./packages/railway)** - Full-stack deployments
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
 - **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
