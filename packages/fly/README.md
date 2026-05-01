@@ -20,41 +20,19 @@ FLY_REGION=your_preferred_region # optional, defaults to 'iad'
 
 ## Usage
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects Fly.io from FLY_API_TOKEN environment variable
-const sandbox = await compute.sandbox.create();
-console.log(`Created machine: ${sandbox.id}`);
-
-// List all machines
-const machines = await compute.sandbox.list();
-
-// Destroy the machine
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { fly } from '@computesdk/fly';
 
 const compute = fly({
   apiToken: 'your_api_token', // optional, uses FLY_API_TOKEN env var
   appName: 'my-app',          // optional, defaults to 'computesdk'
-  org: 'my-org',             // optional, defaults to 'personal'
-  region: 'iad'              // optional, defaults to 'iad'
+  org: 'my-org',              // optional, defaults to 'personal'
+  region: 'iad'               // optional, defaults to 'iad'
 });
 
 // Create a machine (not an app)
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
-console.log(`Created machine: ${sandbox.id}`);
+const sandbox = await compute.sandbox.create();
+console.log(`Created machine: ${sandbox.sandboxId}`);
 
 // List all machines in the app
 const machines = await compute.sandbox.list();

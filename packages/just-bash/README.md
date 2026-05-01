@@ -10,26 +10,6 @@ npm install @computesdk/just-bash
 
 ## Quick Start
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// just-bash is always available - no credentials needed
-const sandbox = await compute.sandbox.create();
-
-const result = await sandbox.runCommand('echo "Hello from just-bash!"');
-console.log(result.stdout); // "Hello from just-bash!"
-
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { justBash } from '@computesdk/just-bash';
 

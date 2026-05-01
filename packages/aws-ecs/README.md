@@ -27,28 +27,6 @@ AWS_SECURITY_GROUPS=sg-xxx
 
 ## Usage
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects AWS ECS from AWS credentials and environment variables
-const sandbox = await compute.sandbox.create();
-console.log(`Created sandbox: ${sandbox.id}`);
-
-// List all running sandboxes
-const sandboxes = await compute.sandbox.list();
-
-// Destroy the sandbox
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { fargate } from '@computesdk/aws';
 
@@ -61,8 +39,8 @@ const compute = fargate({
 });
 
 // Create a sandbox (ECS task)
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
-console.log(`Created sandbox: ${sandbox.id}`);
+const sandbox = await compute.sandbox.create();
+console.log(`Created sandbox: ${sandbox.sandboxId}`);
 
 // List all running sandboxes
 const sandboxes = await compute.sandbox.list();

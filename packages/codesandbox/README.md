@@ -19,60 +19,10 @@ export CSB_API_KEY=your_api_key_here
 
 ## Quick Start
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects CodeSandbox from CSB_API_KEY environment variable
-const sandbox = await compute.sandbox.create();
-
-// Execute JavaScript/Node.js code
-const result = await sandbox.runCommand(`node - <<'JS'
-const message = "Hello from CodeSandbox!";
-console.log(message);
-
-const data = { users: 3, tasks: 15 };
-console.log(JSON.stringify(data, null, 2));
-JS`);
-
-console.log(result.stdout);
-// Output:
-// Hello from CodeSandbox!
-// {
-//   "users": 3,
-//   "tasks": 15
-// }
-
-// Execute Python code
-const pythonResult = await sandbox.runCommand(`python - <<'PY'
-import json
-data = {"framework": "CodeSandbox", "language": "Python"}
-print(json.dumps(data, indent=2))
-print(f"Running in: {data['framework']}")
-PY`);
-
-console.log(pythonResult.stdout);
-// Output:
-// {
-//   "framework": "CodeSandbox",
-//   "language": "Python"
-// }
-// Running in: CodeSandbox
-
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { codesandbox } from '@computesdk/codesandbox';
 
-const compute = codesandbox({ 
+const compute = codesandbox({
   apiKey: process.env.CSB_API_KEY,
   templateId: 'universal', // Optional: specify template
   timeout: 600000 // 10 minutes
@@ -102,8 +52,8 @@ interface CodesandboxConfig {
   apiKey?: string;
   /** Template to use for new sandboxes (defaults to universal template) */
   templateId?: string;
-  /** Default runtime environment */
-  runtime?: 'python' | 'node';
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
@@ -111,28 +61,26 @@ interface CodesandboxConfig {
 
 ## Features
 
-- ✅ **Code Execution** - Python and Node.js runtime support
 - ✅ **Command Execution** - Run shell commands in sandbox
 - ✅ **Filesystem Operations** - Full file system access via CodeSandbox API
 - ✅ **Template Support** - Create sandboxes from custom templates
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 - ✅ **Development Environment** - Full development setup with package managers
 - ✅ **Persistence** - Files persist across hibernation/resume cycles
 - ✅ **Snapshot/Resume** - Fast sandbox restoration from snapshots
 
 ## API Reference
 
-### Code Execution
+### Command Execution
 
 ```typescript
-// Execute Node.js code
+// Run Node.js code via heredoc
 const result = await sandbox.runCommand(`node - <<'JS'
 const fs = require('fs');
 const data = { timestamp: Date.now() };
 console.log('Processing data:', JSON.stringify(data));
 JS`);
 
-// Execute Python code  
+// Run Python code via heredoc
 const result = await sandbox.runCommand(`python - <<'PY'
 import datetime
 import json
@@ -141,24 +89,17 @@ data = {'timestamp': datetime.datetime.now().isoformat()}
 print('Processing data:', json.dumps(data))
 PY`);
 
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
-```
-
-### Command Execution
-
-```typescript
 // List files
-const result = await sandbox.runCommand('ls', ['-la']);
+const result = await sandbox.runCommand('ls -la');
 
 // Install Node.js packages
-const result = await sandbox.runCommand('npm', ['install', 'lodash']);
+const result = await sandbox.runCommand('npm install lodash');
 
 // Install Python packages
-const result = await sandbox.runCommand('pip', ['install', 'requests']);
+const result = await sandbox.runCommand('pip install requests');
 
 // Run development server
-const result = await sandbox.runCommand('npm', ['run', 'dev']);
+const result = await sandbox.runCommand('npm run dev');
 ```
 
 ### Filesystem Operations
@@ -202,10 +143,10 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // Resume existing sandbox
-const existing = await compute.sandbox.getById(provider, 'sandbox-id');
+const existing = await compute.sandbox.getById('sandbox-id');
 
 // Hibernate sandbox (saves state)
-await compute.sandbox.destroy(provider, 'sandbox-id'); // Actually hibernates
+await compute.sandbox.destroy('sandbox-id'); // Actually hibernates
 
 // Note: CodeSandbox doesn't support listing all sandboxes
 // Each sandbox is managed individually

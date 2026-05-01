@@ -241,32 +241,31 @@ methods: {
     
     filesystem: {
       readFile: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'cat', [path]);
+        const result = await runCommand(sandbox, `cat ${escapeShellArg(path)}`);
         return result.stdout;
       },
       
       writeFile: async (sandbox, path, content, runCommand) => {
-        const escaped = content.replace(/'/g, "'\\''");
-        await runCommand(sandbox, 'sh', ['-c', `cat > '${path}' << 'EOF'\n${content}\nEOF`]);
+        await runCommand(sandbox, `cat > ${escapeShellArg(path)} << 'EOF'\n${content}\nEOF`);
       },
       
       mkdir: async (sandbox, path, runCommand) => {
-        await runCommand(sandbox, 'mkdir', ['-p', path]);
+        await runCommand(sandbox, `mkdir -p ${escapeShellArg(path)}`);
       },
       
       readdir: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'ls', ['-la', path]);
+        const result = await runCommand(sandbox, `ls -la ${escapeShellArg(path)}`);
         // Parse ls output and return FileEntry[]
         return parseFileList(result.stdout);
       },
       
       exists: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'test', ['-e', path]);
+        const result = await runCommand(sandbox, `test -e ${escapeShellArg(path)}`);
         return result.exitCode === 0;
       },
       
       remove: async (sandbox, path, runCommand) => {
-        await runCommand(sandbox, 'rm', ['-rf', path]);
+        await runCommand(sandbox, `rm -rf ${escapeShellArg(path)}`);
       }
     }
   }

@@ -148,8 +148,6 @@ interface CloudflareConfig {
   sandboxSecret?: string;
   /** Durable Object binding (direct mode only — see below) */
   sandboxBinding?: any;
-  /** Default runtime: 'python' | 'node' | 'bun' | 'deno' */
-  runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Environment variables to pass to sandbox */

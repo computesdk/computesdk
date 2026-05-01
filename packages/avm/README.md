@@ -20,29 +20,6 @@ You can get your API key from [AVM Sandbox Platform](https://avm.codes/).
 
 ## Usage
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects AVM from AVM_API_KEY environment variable
-const sandbox = await compute.sandbox.create();
-console.log(`Created sandbox: ${sandbox.id}`);
-
-// List all sandboxes
-const sandboxes = await compute.sandbox.list();
-console.log(`Found ${sandboxes.length} sandboxes`);
-
-// Destroy the sandbox
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { avm } from '@computesdk/avm';
 

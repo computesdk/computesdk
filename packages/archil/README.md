@@ -7,7 +7,7 @@ executes shell commands in a managed container with that disk attached via the
 control-plane `exec` endpoint. `destroy` is a no-op because disk lifecycle is
 managed by Archil. `getById` requires a disk id.
 
-## Install
+## Installation
 
 ```bash
 npm install @computesdk/archil

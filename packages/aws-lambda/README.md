@@ -33,29 +33,6 @@ Example IAM role ARN: `arn:aws:iam::123456789012:role/lambda-execution-role`
 
 ## Usage
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects AWS Lambda from AWS credentials and AWS_LAMBDA_ROLE_ARN
-const sandbox = await compute.sandbox.create();
-console.log('Created function:', sandbox.id);
-
-// List all functions
-const allFunctions = await compute.sandbox.list();
-console.log('All functions:', allFunctions.length);
-
-// Destroy the function
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { awsLambda } from '@computesdk/aws-lambda';
 
@@ -68,8 +45,8 @@ const compute = awsLambda({
 });
 
 // Create a Lambda function
-const sandbox = await compute.sandbox.create({ runtime: 'node' });
-console.log('Created function:', sandbox.id);
+const sandbox = await compute.sandbox.create();
+console.log('Created function:', sandbox.sandboxId);
 
 // List all functions
 const allFunctions = await compute.sandbox.list();

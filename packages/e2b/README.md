@@ -68,8 +68,6 @@ export E2B_API_KEY=e2b_your_api_key_here
 interface E2BConfig {
   /** E2B API key - if not provided, will use E2B_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: 'python' | 'node';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
@@ -77,46 +75,36 @@ interface E2BConfig {
 
 ## Features
 
-- ✅ **Code Execution** - Python and Node.js runtime support
-- ✅ **Command Execution** - Run shell commands in sandbox
+- ✅ **Command Execution** - Run shell commands in sandbox (Python/Node.js available)
 - ✅ **Filesystem Operations** - Full file system access via E2B API
-- ✅ **Terminal Support** - Interactive PTY terminals
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 - ✅ **Data Science Ready** - Pre-installed pandas, numpy, matplotlib, etc.
 
 ## API Reference
 
-### Code Execution
+### Command Execution
 
 ```typescript
-// Execute Python code
+// Run Python code via heredoc
 const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
 PY`);
 
-// Execute Node.js code  
+// Run Node.js code via heredoc
 const result = await sandbox.runCommand(`node - <<'JS'
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
 JS`);
 
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCommand('python -c "print(\"Auto-detected as Python\")"');
-```
-
-### Command Execution
-
-```typescript
 // List files
-const result = await sandbox.runCommand('ls', ['-la']);
+const result = await sandbox.runCommand('ls -la');
 
 // Install packages
-const result = await sandbox.runCommand('pip', ['install', 'requests']);
+const result = await sandbox.runCommand('pip install requests');
 
 // Run scripts
-const result = await sandbox.runCommand('python', ['script.py']);
+const result = await sandbox.runCommand('python script.py');
 ```
 
 ### Filesystem Operations
@@ -151,18 +139,6 @@ console.log(info.id, info.status, info.createdAt);
 // Destroy sandbox
 await sandbox.destroy();
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print(` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
 
 ## Error Handling
 
@@ -358,8 +334,7 @@ await sandbox.destroy();
 2. **Error Handling**: Use try-catch blocks for robust error handling
 3. **Timeouts**: Set appropriate timeouts for long-running tasks
 4. **File Organization**: Use the filesystem API to organize project files
-5. **Terminal Sessions**: Clean up terminal sessions with `terminal.kill()`
-6. **API Key Security**: Never commit API keys to version control
+5. **API Key Security**: Never commit API keys to version control
 
 ## Limitations
 

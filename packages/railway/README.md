@@ -1,76 +1,20 @@
 # @computesdk/railway
 
-Railway provider for ComputeSDK that enables creating and managing containerized sandboxes on Railway's infrastructure.
+> **Deprecated.** This package is no longer functional.
 
-## Installation
+Railway support previously depended on the hosted control-plane transport, which was removed from `computesdk` in v3.0.0. Importing and calling `railway()` now throws a migration error.
 
-```bash
-npm install @computesdk/railway
-```
+## Migrating
 
-## Configuration
+Use one of the supported direct provider packages instead:
 
-The Railway provider requires the following environment variables:
+- [@computesdk/e2b](https://www.npmjs.com/package/@computesdk/e2b)
+- [@computesdk/modal](https://www.npmjs.com/package/@computesdk/modal)
+- [@computesdk/vercel](https://www.npmjs.com/package/@computesdk/vercel)
+- [@computesdk/daytona](https://www.npmjs.com/package/@computesdk/daytona)
 
-```bash
-RAILWAY_API_KEY=your_railway_api_key
-RAILWAY_PROJECT_ID=your_railway_project_id
-RAILWAY_ENVIRONMENT_ID=your_railway_environment_id
-```
+See the [ComputeSDK getting-started guide](https://github.com/computesdk/computesdk/tree/main/docs/getting-started) for direct-mode setup.
 
-## Quick Start
+## License
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects Railway from RAILWAY_API_KEY/RAILWAY_PROJECT_ID/RAILWAY_ENVIRONMENT_ID environment variables
-const sandbox = await compute.sandbox.create();
-console.log(`Created sandbox: ${sandbox.sandboxId}`);
-
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
-```typescript
-import { railway } from '@computesdk/railway';
-
-const compute = railway({
-  apiKey: process.env.RAILWAY_API_KEY,
-  projectId: process.env.RAILWAY_PROJECT_ID,
-  environmentId: process.env.RAILWAY_ENVIRONMENT_ID
-});
-
-const sandbox = await compute.sandbox.create();
-console.log(`Created sandbox: ${sandbox.sandboxId}`);
-
-await sandbox.destroy();
-```
-
-## Currently Implemented
-
-### Sandbox Operations
-- **create()** - Creates a new Railway service with Docker container deployment
-- **destroy()** - Deletes a Railway service
-
-### Supported Runtimes
-- **node** - Uses `node:alpine` Docker image
-- **python** - Uses `python:alpine` Docker image (default)
-
-### Configuration Options
-- **apiKey** - Railway API authentication token
-- **projectId** - Railway project identifier
-- **environmentId** - Railway environment identifier
-
-## Notes
-
-- Services are automatically deployed upon creation
-- Service names are generated with timestamp: `sandbox-{timestamp}`
-- All operations use Railway's GraphQL API
-- Environment variables take precedence over config options
+MIT
