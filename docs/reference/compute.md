@@ -435,8 +435,8 @@ async function runUserCode(userId: string, code: string) {
 
 ## Related
 
-- [compute.sandbox](./compute.sandbox.md) — sandbox lifecycle methods
-- [Sandbox](./Sandbox.md) — sandbox instance methods (code, commands, filesystem, terminal)
-- [Introduction](../getting-started/introduction.md) — high-level overview
-- [Installation](../getting-started/installation.md) — provider setup and credentials
-- [Quick Start](../getting-started/quick-start.md) — minimal end-to-end walkthrough
+- [compute.sandbox](./computesandbox/) — sandbox lifecycle methods
+- [Sandbox](./sandbox/) — sandbox instance methods (code, commands, filesystem, terminal)
+- [Introduction](../getting-started/introduction/) — high-level overview
+- [Installation](../getting-started/installation/) — provider setup and credentials
+- [Quick Start](../getting-started/quick-start/) — minimal end-to-end walkthrough
