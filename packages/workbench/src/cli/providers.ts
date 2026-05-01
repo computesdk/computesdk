@@ -7,7 +7,6 @@ import { c } from './output.js';
 
 const SHARED_PROVIDER_NAMES = [
   'e2b',
-  'railway',
   'daytona',
   'modal',
   'runloop',
@@ -31,7 +30,6 @@ type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
 
 const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string[])[]> = {
   e2b: [['E2B_API_KEY']],
-  railway: [['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID']],
   daytona: [['DAYTONA_API_KEY']],
   modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
   runloop: [['RUNLOOP_API_KEY']],
@@ -59,11 +57,6 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
 
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   e2b: { apiKey: 'E2B_API_KEY' },
-  railway: {
-    apiKey: 'RAILWAY_API_KEY',
-    projectId: 'RAILWAY_PROJECT_ID',
-    environmentId: 'RAILWAY_ENVIRONMENT_ID',
-  },
   daytona: { apiKey: 'DAYTONA_API_KEY' },
   modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
   runloop: { apiKey: 'RUNLOOP_API_KEY' },
@@ -309,8 +302,6 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
     switch (providerName) {
       case 'e2b':
         return await import('@computesdk/e2b');
-      case 'railway':
-        return await import('@computesdk/railway');
       case 'daytona':
         return await import('@computesdk/daytona');
       case 'modal':

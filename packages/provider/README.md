@@ -514,9 +514,9 @@ describe('MyProvider', () => {
 
 See these provider implementations for reference:
 
-- **[@computesdk/e2b](../e2b)** - Full-featured provider with filesystem and terminals
+- **[@computesdk/e2b](../e2b)** - Full-featured provider with filesystem operations
 - **[@computesdk/modal](../modal)** - GPU-accelerated Python provider
-- **[@computesdk/railway](../railway)** - Infrastructure provider using gateway mode
+- **[@computesdk/daytona](../daytona)** - Workspace-based development sandboxes
 
 ## Related Packages
 

@@ -370,7 +370,7 @@ For advanced use cases where you want to use provider SDKs directly, see individ
 
 - **[@computesdk/e2b](../e2b)** - E2B provider
 - **[@computesdk/modal](../modal)** - Modal provider
-- **[@computesdk/railway](../railway)** - Railway provider
+- **[@computesdk/vercel](../vercel)** - Vercel provider
 - **[@computesdk/daytona](../daytona)** - Daytona provider
 
 Example direct mode usage:

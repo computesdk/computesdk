@@ -50,8 +50,8 @@ The workbench needs at least one provider package installed:
 ```bash
 # Install providers you want to test
 pnpm install --filter @computesdk/workbench @computesdk/e2b
-# or
-pnpm install --filter @computesdk/workbench @computesdk/railway
+# or any other provider
+pnpm install --filter @computesdk/workbench @computesdk/modal
 ```
 
 Or install them in the root:

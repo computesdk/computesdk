@@ -17,8 +17,6 @@ npm install -D @computesdk/workbench
 
 # Install at least one provider
 npm install @computesdk/e2b
-# or
-npm install @computesdk/railway
 # or any other provider
 ```
 
@@ -183,7 +181,6 @@ e2b  railway  daytona  modal  runloop  vercel
 Install any combination of:
 
 - `@computesdk/e2b` - E2B sandboxes
-- `@computesdk/railway` - Railway environments
 - `@computesdk/daytona` - Daytona workspaces
 - `@computesdk/modal` - Modal containers
 - `@computesdk/runloop` - Runloop instances

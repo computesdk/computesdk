@@ -66,7 +66,6 @@
     "@computesdk/hopx": "workspace:*",
     "@computesdk/declaw": "workspace:*",
     "@computesdk/modal": "workspace:*",
-    "@computesdk/railway": "workspace:*",
     "@computesdk/runloop": "workspace:*",
     "@computesdk/vercel": "workspace:*",
     "@computesdk/namespace": "workspace:*",
@@ -78,9 +77,6 @@
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
-      "optional": true
-    },
-    "@computesdk/railway": {
       "optional": true
     },
     "@computesdk/daytona": {
