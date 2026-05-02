@@ -7,13 +7,7 @@ import { db } from "../index";
 async function main() {
   console.log("Seeding started...");
   await reset(db, schema);
-  await seed(db, { users: schema.users }).refine((f) => ({
-    users: {
-      columns: {
-        age: f.number({ minValue: 0, maxValue: 100, precision: 1 }),
-      },
-    },
-  }));
+  await seed(db, { user: schema.user, account: schema.account });
   console.log("Seeding done...");
   process.exit(0);
 }
