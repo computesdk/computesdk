@@ -1,13 +1,20 @@
-import { reset, seed } from 'drizzle-seed'
+import * as schema from "../schema";
 
-import { db } from '../index';
-import { users } from '../schema';
+import { reset, seed } from "drizzle-seed";
+
+import { db } from "../index";
 
 async function main() {
-  console.log('Seeding started...');
-  await reset(db, { users })
-  await seed(db, { users })
-  console.log('Seeding done...');
+  console.log("Seeding started...");
+  await reset(db, schema);
+  await seed(db, { users: schema.users }).refine((f) => ({
+    users: {
+      columns: {
+        age: f.number({ minValue: 0, maxValue: 100, precision: 1 }),
+      },
+    },
+  }));
+  console.log("Seeding done...");
   process.exit(0);
 }
 
