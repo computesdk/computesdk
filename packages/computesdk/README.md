@@ -13,8 +13,6 @@ npm install computesdk
 
 ## Quick Start
 
-### Direct Provider Mode (Recommended)
-
 ```typescript
 import { compute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
@@ -33,24 +31,6 @@ console.log(result.stdout); // "Hello World!"
 
 // Clean up
 await sandbox.destroy();
-```
-
-### Explicit Configuration
-
-For more control, configure `compute` with an explicit provider:
-
-```typescript
-import { compute } from 'computesdk';
-import { modal } from '@computesdk/modal';
-
-compute.setConfig({
-  provider: modal({
-    tokenId: process.env.MODAL_TOKEN_ID,
-    tokenSecret: process.env.MODAL_TOKEN_SECRET,
-  }),
-});
-
-const sandbox = await compute.sandbox.create();
 ```
 
 ### Multi-Provider Configuration
@@ -79,29 +59,6 @@ const sandbox = await compute.sandbox.create();
 
 // Force a specific provider for one call
 const modalSandbox = await compute.sandbox.create({ provider: 'modal' });
-```
-
-## Supported Providers
-
-Use provider packages directly to create provider instances:
-
-| Provider | Environment Variables | Use Cases |
-|----------|----------------------|-----------|
-| **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
-| **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference, Python workloads |
-| **Daytona** | `DAYTONA_API_KEY` | Development workspaces, custom environments |
-| **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
-| **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions, web apps |
-| **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_SECRET` | Edge computing |
-| **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
-
-Example imports:
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-import { modal } from '@computesdk/modal';
-import { vercel } from '@computesdk/vercel';
-import { daytona } from '@computesdk/daytona';
 ```
 
 ## API Reference
