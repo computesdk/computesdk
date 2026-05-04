@@ -261,6 +261,7 @@ npm install @computesdk/e2b        # E2B provider
 npm install @computesdk/modal      # Modal provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/prime      # Prime Intellect Sandboxes provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
 ```
 
@@ -278,6 +279,7 @@ See individual provider READMEs for details:
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
+- **[@computesdk/prime](./packages/prime)** - Prime Intellect Docker sandboxes with gateway command execution
 - **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
 
 ## Building Custom Providers
