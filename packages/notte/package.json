@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/notte",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Notte browser provider for ComputeSDK - cloud browser sessions powered by Notte",
   "author": "Notte Labs",
   "license": "MIT",
