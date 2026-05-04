@@ -28,6 +28,7 @@ import type {
   CreateBrowserSessionOptions,
   BrowserProfile,
   BrowserSession,
+  ProxyConfig,
 } from '@computesdk/provider';
 
 /**
@@ -70,6 +71,47 @@ function createClient(config: NotteConfig) {
 }
 
 /**
+ * Map a single ComputeSDK `ProxyConfig` onto a Notte proxy entry.
+ *
+ * Rules:
+ * - If `server` is set, route to Notte's `ExternalProxy` (any custom proxy URL).
+ *   `username` / `password` are forwarded; `domainPattern` is dropped (Notte's
+ *   `bypass` has opposite semantics and can't be mapped cleanly).
+ * - If no `server` is set, route to Notte's managed `NotteProxy` pool, using
+ *   `geolocation.country` (lowercased to match Notte's ISO 3166-1 alpha-2 enum).
+ *   The ComputeSDK `type` discriminator (residential/isp/datacenter) is dropped
+ *   because Notte's pool doesn't expose a type knob, and `geolocation.state` /
+ *   `geolocation.city` are dropped because Notte only targets at country
+ *   granularity.
+ * - `type: 'custom'` with no `server` is rejected — custom-without-server is
+ *   meaningless and likely a config bug worth surfacing.
+ */
+type NotteProxyEntry =
+  | ({ type: 'notte' } & { id?: string | null; country?: string | null })
+  | ({ type: 'external' } & { server: string; username?: string | null; password?: string | null; bypass?: string | null });
+
+function mapProxyConfig(p: ProxyConfig): NotteProxyEntry {
+  if (p.server) {
+    return {
+      type: 'external',
+      server: p.server,
+      username: p.username ?? null,
+      password: p.password ?? null,
+    };
+  }
+  if (p.type === 'custom') {
+    throw new Error(
+      `@computesdk/notte: ProxyConfig with type 'custom' requires a server URL. ` +
+      `Either pass server in the ProxyConfig, or use type 'residential' / 'isp' / 'datacenter' to use Notte's managed proxy pool.`
+    );
+  }
+  return {
+    type: 'notte',
+    country: p.geolocation?.country ? p.geolocation.country.toLowerCase() : null,
+  };
+}
+
+/**
  * Map Notte session status onto our standard set.
  */
 function mapStatus(status: SessionResponse['status'] | undefined): BrowserSession['status'] {
@@ -85,9 +127,11 @@ function mapStatus(status: SessionResponse['status'] | undefined): BrowserSessio
 /**
  * Map ComputeSDK session options to Notte's ApiSessionStartRequest body.
  *
- * Mapped: `viewport`, `timeout` (sec → max_duration_minutes), `proxies` (boolean only),
- * `profileId`. Unmapped (no Notte equivalent yet): `stealth`, `keepAlive`, `recording`,
- * `logging`, `userMetadata`, `extensionIds`, `region`.
+ * Mapped: `viewport`, `timeout` (sec → max_duration_minutes),
+ * `proxies` (boolean toggles Notte's default pool; `ProxyConfig[]` mapped per
+ * `mapProxyConfig`), `profileId`. Unmapped (no Notte equivalent yet):
+ * `stealth`, `keepAlive`, `recording`, `logging`, `userMetadata`,
+ * `extensionIds`, `region`.
  */
 function mapSessionOptions(options?: CreateBrowserSessionOptions): ApiSessionStartRequest {
   const body: ApiSessionStartRequest = {};
@@ -105,17 +149,19 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): ApiSessionSta
     body.max_duration_minutes = Math.max(1, Math.ceil(options.timeout / 60));
   }
 
-  // Proxies — ComputeSDK's `ProxyConfig[]` shape doesn't 1:1 map onto Notte's
-  // `(NotteProxy | ExternalProxy)[]`. For first-pass support we forward only the
-  // `boolean` form (Notte's "default proxies"); per-proxy custom config can land
-  // in a follow-up via Notte-specific config keys (`web_bot_auth`, etc.).
+  // Proxies — `boolean` toggles Notte's default proxy pool; `ProxyConfig[]`
+  // is mapped via `mapProxyConfig`. Notte's runtime accepts only a single
+  // proxy entry per session (multi-element arrays return HTTP 500), so we
+  // forward only the first ProxyConfig — matching `@computesdk/hyperbrowser`'s
+  // "first ProxyConfig wins" convention. Empty array is treated as "no
+  // proxies" (same as omitting). The mapping is best-effort and lossy for
+  // fields Notte doesn't model (sub-country geolocation, ComputeSDK proxy
+  // `type` discriminator, `domainPattern`).
   if (typeof options.proxies === 'boolean') {
     body.proxies = options.proxies;
-  } else if (Array.isArray(options.proxies)) {
-    throw new Error(
-      `@computesdk/notte: ProxyConfig[] proxies are not yet supported — pass proxies: true ` +
-      `to use Notte's default proxies, or omit to disable.`
-    );
+  } else if (Array.isArray(options.proxies) && options.proxies.length > 0) {
+    const [first] = options.proxies;
+    body.proxies = [mapProxyConfig(first)] as ApiSessionStartRequest['proxies'];
   }
 
   // Profile — map profileId to Notte's session profile config.
@@ -193,6 +239,19 @@ export const notte = defineBrowserProvider<SessionResponse, NotteConfig>({
       create: async (config, options) => {
         const client = createClient(config);
         const { data } = await sessionStart({ client, body: mapSessionOptions(options), throwOnError: true });
+        // If Notte returns a session without `cdp_url`, the caller can't
+        // connect — but the remote session exists and would leak quota until
+        // its idle/max timeout. Best-effort destroy on the way out, then
+        // throw with the session_id so the caller can correlate / retry
+        // cleanup if our destroy also fails.
+        if (!data.cdp_url) {
+          await sessionStop({ client, path: { session_id: data.session_id }, throwOnError: true })
+            .catch(() => { /* swallow — we're already throwing the original error */ });
+          throw new Error(
+            `Notte session ${data.session_id} returned without cdp_url (status: ${data.status}); ` +
+            `attempted cleanup. If the issue persists, manually destroy via DELETE /sessions/${data.session_id}/stop.`
+          );
+        }
         return normalizeSession(data);
       },
 
