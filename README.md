@@ -74,7 +74,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions |
 | **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_SECRET` | Edge computing |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
-| **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxex |
+| **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
 
 ## Configuration
 
@@ -258,21 +258,12 @@ await sandbox.destroy();
 Install the provider packages you need and pass their instances into `compute.setConfig`:
 
 ```bash
-<<<<<<< HEAD
 npm install @computesdk/e2b        # E2B provider
 npm install @computesdk/modal      # Modal provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/tensorlake # Tensorlake provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
-=======
-npm install @computesdk/e2b          # E2B provider
-npm install @computesdk/modal        # Modal provider
-npm install @computesdk/railway      # Railway provider
-npm install @computesdk/daytona      # Daytona provider
-npm install @computesdk/vercel       # Vercel provider
-npm install @computesdk/tensorlake   # Tensorlake provider
-npm install @computesdk/just-bash    # Local bash sandbox (no auth needed)
->>>>>>> fa870340 (Update Tensorlake SDK to 0.5.7)
 ```
 
 You can also use a provider's callable form directly, bypassing `compute.setConfig`:
