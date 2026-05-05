@@ -10,7 +10,6 @@ import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
 import type { SandboxInfo } from "tensorlake";
 import { defineProvider } from "@computesdk/provider";
 import type {
-  Runtime,
   CodeResult,
   CommandResult,
   SandboxInfo as ComputeSandboxInfo,
@@ -59,10 +58,6 @@ function resolveAuth(config: TensorlakeConfig): {
     (typeof process !== "undefined" && process.env?.TENSORLAKE_API_URL) ||
     undefined;
   return { apiKey, apiUrl };
-}
-
-function sandboxInfoToRuntime(info: SandboxInfo): Runtime {
-  return (info.image?.startsWith("python") ? "python" : "node") as Runtime;
 }
 
 export const tensorlake = defineProvider<
@@ -174,60 +169,6 @@ export const tensorlake = defineProvider<
         }
       },
 
-      runCode: async (
-        ctx: TensorlakeSandboxContext,
-        code: string,
-        runtime?: Runtime
-      ): Promise<CodeResult> => {
-        const effectiveRuntime =
-          runtime ||
-          (code.includes("print(") ||
-          code.includes("import ") ||
-          code.includes("def ") ||
-          code.includes("sys.") ||
-          code.includes('f"') ||
-          code.includes("f'") ||
-          code.includes("raise ")
-            ? "python"
-            : "node");
-
-        const encoded = Buffer.from(code).toString("base64");
-        const interpreter = effectiveRuntime === "python" ? "python3" : "node";
-        const script = `echo "${encoded}" | base64 -d | ${interpreter}`;
-
-        try {
-          const result = await ctx.sandbox.run("sh", { args: ["-c", script] });
-          const exitCode = result.exitCode ?? 0;
-
-          if (
-            exitCode !== 0 &&
-            result.stderr &&
-            (result.stderr.includes("SyntaxError") ||
-              result.stderr.includes("invalid syntax") ||
-              result.stderr.includes("Unexpected token") ||
-              result.stderr.includes("Unexpected identifier"))
-          ) {
-            throw new Error(`Syntax error: ${result.stderr.trim()}`);
-          }
-
-          const output = result.stderr
-            ? `${result.stdout}${result.stdout && result.stderr ? "\n" : ""}${
-                result.stderr
-              }`
-            : result.stdout;
-
-          return { output, exitCode, language: effectiveRuntime };
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("Syntax error"))
-            throw error;
-          throw new Error(
-            `Tensorlake code execution failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      },
-
       runCommand: async (
         ctx: TensorlakeSandboxContext,
         command: string,
@@ -291,7 +232,6 @@ export const tensorlake = defineProvider<
           return {
             id: ctx.sandbox.sandboxId,
             provider: "tensorlake",
-            runtime: sandboxInfoToRuntime(info),
             status:
               info.status === SandboxStatus.RUNNING ? "running" : "stopped",
             createdAt: info.createdAt || new Date(),
@@ -303,7 +243,6 @@ export const tensorlake = defineProvider<
           return {
             id: ctx.sandbox.sandboxId,
             provider: "tensorlake",
-            runtime: "python",
             status: "running",
             createdAt: new Date(),
             timeout: 300_000,

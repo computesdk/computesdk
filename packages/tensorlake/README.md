@@ -29,7 +29,7 @@ import { compute } from 'computesdk';
 // Auto-detects Tensorlake from TENSORLAKE_API_KEY environment variable
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('print("Hello from Tensorlake!")');
+const result = await sandbox.runCommand('uname -a');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -46,11 +46,7 @@ const compute = tensorlake({ apiKey: process.env.TENSORLAKE_API_KEY });
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
-import sys
-print(f"Python {sys.version}")
-print("Running in a Tensorlake MicroVM!")
-`);
+const result = await sandbox.runCommand(`uname -a`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -116,19 +112,6 @@ const sandboxes = await compute.sandbox.list();
 
 // Destroy a sandbox
 await sandbox.destroy();
-```
-
-### Code Execution
-
-```typescript
-// Auto-detect runtime from code patterns
-const result = await sandbox.runCode('print("Hello, world!")');
-console.log(result.stdout);  // "Hello, world!"
-console.log(result.exitCode);
-
-// Explicit runtime
-const pyResult = await sandbox.runCode('print("Python")', 'python');
-const jsResult = await sandbox.runCode('console.log("Node")', 'node');
 ```
 
 ### Command Execution
@@ -212,17 +195,7 @@ const sandbox = await compute.sandbox.create({ timeout: 600000 });
 // Install dependencies once
 await sandbox.runCommand('pip install requests pandas');
 
-// Execute LLM-generated code safely
-const userCode = `
-import pandas as pd
-import requests
-
-data = requests.get('https://api.example.com/data').json()
-df = pd.DataFrame(data)
-print(df.describe())
-`;
-
-const result = await sandbox.runCode(userCode, 'python');
+const result = await sandbox.runCommand('python --version');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -248,11 +221,7 @@ async function createBaseSnapshot(): Promise<string> {
 const snapshotId = await createBaseSnapshot();
 const sandbox = await compute.sandbox.create({ snapshotId });
 
-const result = await sandbox.runCode(`
-import pandas as pd
-import numpy as np
-print("Ready instantly — no install needed!")
-`);
+const result = await sandbox.runCommand(`uname -a`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -266,15 +235,15 @@ import { tensorlake } from '@computesdk/tensorlake';
 try {
   const compute = tensorlake({ apiKey: process.env.TENSORLAKE_API_KEY });
   const sandbox = await compute.sandbox.create();
-  const result = await sandbox.runCode('1/0');
+  const result = await sandbox.runCommand('umane -a');
   console.log(result.stdout);
 } catch (error) {
   if (error.message.includes('Missing Tensorlake API key')) {
     console.error('Set TENSORLAKE_API_KEY environment variable');
   } else if (error.message.includes('authentication failed')) {
     console.error('Check your API key at https://app.tensorlake.ai');
-  } else if (error.message.includes('Syntax error')) {
-    console.error('Code contains a syntax error:', error.message);
+  } else {
+    console.error(error);
   }
 }
 ```
