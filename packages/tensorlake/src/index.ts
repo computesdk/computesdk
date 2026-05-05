@@ -6,20 +6,20 @@
  * Uses the official tensorlake npm SDK (^0.4.47).
  */
 
-import { SandboxClient, SandboxStatus, OutputMode } from 'tensorlake';
-import type { Sandbox } from 'tensorlake';
-import { defineProvider } from '@computesdk/provider';
+import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
+import type { SandboxInfo } from "tensorlake";
+import { defineProvider } from "@computesdk/provider";
 import type {
   Runtime,
   CodeResult,
   CommandResult,
-  SandboxInfo,
+  SandboxInfo as ComputeSandboxInfo,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
-} from '@computesdk/provider';
+} from "@computesdk/provider";
 
-const DEFAULT_IMAGE = 'ubuntu-minimal';
+const DEFAULT_IMAGE = "ubuntu-minimal";
 
 export interface TensorlakeConfig {
   /** Tensorlake API key — falls back to TENSORLAKE_API_KEY environment variable */
@@ -35,18 +35,20 @@ export interface TensorlakeConfig {
 }
 
 export interface TensorlakeSandboxContext {
-  sandboxId: string;
   config: TensorlakeConfig;
   /** Connected SDK Sandbox instance — used for all proxy operations */
-  sandbox: Sandbox;
+  sandbox: InstanceType<typeof Sandbox>;
 }
 
-function getClient(config: TensorlakeConfig): SandboxClient {
-  const key =
+function resolveAuth(config: TensorlakeConfig): {
+  apiKey: string;
+  apiUrl?: string;
+} {
+  const apiKey =
     config.apiKey ||
-    (typeof process !== 'undefined' && process.env?.TENSORLAKE_API_KEY) ||
-    '';
-  if (!key) {
+    (typeof process !== "undefined" && process.env?.TENSORLAKE_API_KEY) ||
+    "";
+  if (!apiKey) {
     throw new Error(
       `Missing Tensorlake API key. Provide 'apiKey' in config or set TENSORLAKE_API_KEY environment variable. ` +
         `Get your API key from https://app.tensorlake.ai`
@@ -54,25 +56,35 @@ function getClient(config: TensorlakeConfig): SandboxClient {
   }
   const apiUrl =
     config.apiUrl ||
-    (typeof process !== 'undefined' && process.env?.TENSORLAKE_API_URL) ||
+    (typeof process !== "undefined" && process.env?.TENSORLAKE_API_URL) ||
     undefined;
-  return new SandboxClient({ apiKey: key, apiUrl });
+  return { apiKey, apiUrl };
 }
 
-export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeConfig>({
-  name: 'tensorlake',
+function sandboxInfoToRuntime(info: SandboxInfo): Runtime {
+  return (info.image?.startsWith("python") ? "python" : "node") as Runtime;
+}
+
+export const tensorlake = defineProvider<
+  TensorlakeSandboxContext,
+  TensorlakeConfig
+>({
+  name: "tensorlake",
   methods: {
     sandbox: {
-      create: async (config: TensorlakeConfig, options?: CreateSandboxOptions) => {
-        const client = getClient(config);
+      create: async (
+        config: TensorlakeConfig,
+        options?: CreateSandboxOptions
+      ) => {
+        const { apiKey, apiUrl } = resolveAuth(config);
         const image = options?.image || config.image || DEFAULT_IMAGE;
         const timeoutSecs = options?.timeout
           ? Math.ceil(options.timeout / 1000)
           : config.timeout;
 
-        let sandbox: Sandbox;
         try {
-          sandbox = await client.createAndConnect({
+          const startTime = Date.now();
+          const instance = await Sandbox.create({
             image,
             cpus: 1,
             memoryMb: 1024,
@@ -80,32 +92,48 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
             ...(timeoutSecs && { timeoutSecs }),
             ...(options?.name && { name: options.name }),
             ...(options?.snapshotId && { snapshotId: options.snapshotId }),
+            proxyUrl: config.proxyUrl,
+            apiKey,
+            apiUrl,
           });
+
+          const sandbox: TensorlakeSandboxContext = {
+            config,
+            sandbox: instance,
+          };
+          const durationMs = Date.now() - startTime;
+          console.log(
+            `sandbox ${instance.sandboxId} created in ${durationMs}ms`
+          );
+          return {
+            sandbox,
+            sandboxId: instance.sandboxId,
+            durationMs,
+          };
         } catch (error) {
-          if (error instanceof Error && error.message.includes('401')) {
+          if (error instanceof Error && error.message.includes("401")) {
             throw new Error(
               `Tensorlake authentication failed. Please check your TENSORLAKE_API_KEY. ` +
                 `Get your API key from https://app.tensorlake.ai`
             );
           }
           throw new Error(
-            `Failed to create Tensorlake sandbox: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to create Tensorlake sandbox: ${
+              error instanceof Error ? error.message : String(error)
+            }`
           );
         }
-
-        const sandboxId = sandbox.sandboxId;
-        const ctx: TensorlakeSandboxContext = { sandboxId, config, sandbox };
-        return { sandbox: ctx, sandboxId };
       },
 
       getById: async (config: TensorlakeConfig, sandboxId: string) => {
         try {
-          const client = getClient(config);
-          const info = await client.get(sandboxId);
-          if (!info) return null;
-          const sandbox = client.connect(sandboxId, config.proxyUrl);
-          const ctx: TensorlakeSandboxContext = { sandboxId, config, sandbox };
-          return { sandbox: ctx, sandboxId };
+          const { apiKey, apiUrl } = resolveAuth(config);
+          const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+          const ctx: TensorlakeSandboxContext = {
+            config,
+            sandbox,
+          };
+          return { sandbox: ctx, sandboxId: sandbox.sandboxId };
         } catch {
           return null;
         }
@@ -113,15 +141,27 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
 
       list: async (config: TensorlakeConfig) => {
         try {
-          const client = getClient(config);
-          const sandboxes = await client.list();
-          return sandboxes.map((s) => {
-            const sandbox = client.connect(s.sandboxId, config.proxyUrl);
-            return {
-              sandbox: { sandboxId: s.sandboxId, config, sandbox } as TensorlakeSandboxContext,
-              sandboxId: s.sandboxId,
-            };
-          });
+          const { apiKey, apiUrl } = resolveAuth(config);
+          const sandboxes = await Sandbox.list({ apiKey, apiUrl });
+          return Promise.all(
+            sandboxes.map(async (s) => {
+              const sandbox = await Sandbox.connect({
+                sandboxId: s.sandboxId,
+                proxyUrl: config.proxyUrl,
+                routingHint: s.routingHint,
+                apiKey,
+                apiUrl,
+              });
+              return {
+                sandbox: {
+                  sandboxId: s.sandboxId,
+                  config,
+                  sandbox,
+                } as TensorlakeSandboxContext,
+                sandboxId: s.sandboxId,
+              };
+            })
+          );
         } catch {
           return [];
         }
@@ -129,8 +169,9 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
 
       destroy: async (config: TensorlakeConfig, sandboxId: string) => {
         try {
-          const client = getClient(config);
-          await client.delete(sandboxId);
+          const { apiKey, apiUrl } = resolveAuth(config);
+          const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+          await sandbox.terminate();
         } catch {
           // Sandbox may already be terminated
         }
@@ -143,44 +184,49 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
       ): Promise<CodeResult> => {
         const effectiveRuntime =
           runtime ||
-          (code.includes('print(') ||
-          code.includes('import ') ||
-          code.includes('def ') ||
-          code.includes('sys.') ||
+          (code.includes("print(") ||
+          code.includes("import ") ||
+          code.includes("def ") ||
+          code.includes("sys.") ||
           code.includes('f"') ||
           code.includes("f'") ||
-          code.includes('raise ')
-            ? 'python'
-            : 'node');
+          code.includes("raise ")
+            ? "python"
+            : "node");
 
-        const encoded = Buffer.from(code).toString('base64');
-        const interpreter = effectiveRuntime === 'python' ? 'python3' : 'node';
+        const encoded = Buffer.from(code).toString("base64");
+        const interpreter = effectiveRuntime === "python" ? "python3" : "node";
         const script = `echo "${encoded}" | base64 -d | ${interpreter}`;
 
         try {
-          const result = await ctx.sandbox.run('sh', { args: ['-c', script] });
+          const result = await ctx.sandbox.run("sh", { args: ["-c", script] });
           const exitCode = result.exitCode ?? 0;
 
           if (
             exitCode !== 0 &&
             result.stderr &&
-            (result.stderr.includes('SyntaxError') ||
-              result.stderr.includes('invalid syntax') ||
-              result.stderr.includes('Unexpected token') ||
-              result.stderr.includes('Unexpected identifier'))
+            (result.stderr.includes("SyntaxError") ||
+              result.stderr.includes("invalid syntax") ||
+              result.stderr.includes("Unexpected token") ||
+              result.stderr.includes("Unexpected identifier"))
           ) {
             throw new Error(`Syntax error: ${result.stderr.trim()}`);
           }
 
           const output = result.stderr
-            ? `${result.stdout}${result.stdout && result.stderr ? '\n' : ''}${result.stderr}`
+            ? `${result.stdout}${result.stdout && result.stderr ? "\n" : ""}${
+                result.stderr
+              }`
             : result.stdout;
 
           return { output, exitCode, language: effectiveRuntime };
         } catch (error) {
-          if (error instanceof Error && error.message.includes('Syntax error')) throw error;
+          if (error instanceof Error && error.message.includes("Syntax error"))
+            throw error;
           throw new Error(
-            `Tensorlake code execution failed: ${error instanceof Error ? error.message : String(error)}`
+            `Tensorlake code execution failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       },
@@ -194,36 +240,48 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
 
         if (options?.background) {
           try {
-            const [bin, ...args] = command.split(' ');
+            const [bin, ...args] = command.split(" ");
             await ctx.sandbox.startProcess(bin, {
               args,
               stdoutMode: OutputMode.DISCARD,
               stderrMode: OutputMode.DISCARD,
-              ...(options.env && Object.keys(options.env).length > 0 && { env: options.env }),
+              ...(options.env &&
+                Object.keys(options.env).length > 0 && { env: options.env }),
               ...(options.cwd && { workingDir: options.cwd }),
             });
           } catch {
             // background — ignore errors
           }
-          return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+          return {
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+            durationMs: Date.now() - startTime,
+          };
         }
 
         try {
-          const [executable, ...commandArgs] = command.split(' ');
+          const [executable, ...commandArgs] = command.split(" ");
           const result = await ctx.sandbox.run(executable, {
-              args: commandArgs,
-              ...(options?.env && Object.keys(options.env).length > 0 && { env: options.env }),
-              ...(options?.cwd && { workingDir: options.cwd }),
+            args: commandArgs,
+            ...(options?.env &&
+              Object.keys(options.env).length > 0 && { env: options.env }),
+            ...(options?.cwd && { workingDir: options.cwd }),
           });
+
+          const durationMs = Date.now() - startTime;
+          console.log(
+            `sandbox ${ctx.sandbox.sandboxId} run in ${durationMs}ms`
+          );
           return {
             stdout: result.stdout,
             stderr: result.stderr,
             exitCode: result.exitCode ?? 0,
-            durationMs: Date.now() - startTime,
+            durationMs,
           };
         } catch (error) {
           return {
-            stdout: '',
+            stdout: "",
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 1,
             durationMs: Date.now() - startTime,
@@ -231,53 +289,57 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         }
       },
 
-      getInfo: async (ctx: TensorlakeSandboxContext): Promise<SandboxInfo> => {
+      getInfo: async (
+        ctx: TensorlakeSandboxContext
+      ): Promise<ComputeSandboxInfo> => {
         try {
-          const client = getClient(ctx.config);
-          const info = await client.get(ctx.sandboxId);
-          if (info) {
-            return {
-              id: ctx.sandboxId,
-              provider: 'tensorlake',
-              runtime: (info.image?.startsWith('python') ? 'python' : 'node') as Runtime,
-              status: info.status === SandboxStatus.RUNNING ? 'running' : 'stopped',
-              createdAt: new Date(),
-              timeout: info.timeoutSecs != null ? info.timeoutSecs * 1000 : 300_000,
-              metadata: { tensorlakeSandboxId: ctx.sandboxId },
-            };
-          }
+          const info = await ctx.sandbox.info();
+          return {
+            id: ctx.sandbox.sandboxId,
+            provider: "tensorlake",
+            runtime: sandboxInfoToRuntime(info),
+            status:
+              info.status === SandboxStatus.RUNNING ? "running" : "stopped",
+            createdAt: info.createdAt || new Date(),
+            timeout:
+              info.timeoutSecs != null ? info.timeoutSecs * 1000 : 300_000,
+            metadata: {},
+          };
         } catch {
-          // fall through to default
+          return {
+            id: ctx.sandbox.sandboxId,
+            provider: "tensorlake",
+            runtime: "python",
+            status: "running",
+            createdAt: new Date(),
+            timeout: 300_000,
+            metadata: {},
+          };
         }
-        return {
-          id: ctx.sandboxId,
-          provider: 'tensorlake',
-          runtime: 'python',
-          status: 'running',
-          createdAt: new Date(),
-          timeout: 300_000,
-          metadata: { tensorlakeSandboxId: ctx.sandboxId },
-        };
       },
 
       getUrl: async (
         ctx: TensorlakeSandboxContext,
         options: { port: number; protocol?: string }
       ): Promise<string> => {
-        const protocol = options.protocol || 'https';
-        // Derive proxy domain from apiUrl (api.tensorlake.X → sandbox.tensorlake.X)
+        const protocol = options.protocol || "https";
         const apiUrl =
           ctx.config.apiUrl ||
-          (typeof process !== 'undefined' && process.env?.TENSORLAKE_API_URL) ||
-          'https://api.tensorlake.ai';
-        const proxyDomain = apiUrl.replace(/^https?:\/\/api\./, '').replace(/\/$/, '');
-        return `${protocol}://${ctx.sandboxId}.sandbox.${proxyDomain}:${options.port}`;
+          (typeof process !== "undefined" && process.env?.TENSORLAKE_API_URL) ||
+          "https://api.tensorlake.ai";
+        const proxyDomain = apiUrl
+          .replace(/^https?:\/\/api\./, "")
+          .replace(/\/$/, "");
+        return `${protocol}://sandbox.${proxyDomain}:${options.port}`;
       },
 
       filesystem: {
-        readFile: async (ctx: TensorlakeSandboxContext, path: string): Promise<string> => {
+        readFile: async (
+          ctx: TensorlakeSandboxContext,
+          path: string
+        ): Promise<string> => {
           const bytes = await ctx.sandbox.readFile(path);
-          return Buffer.from(bytes).toString('utf-8');
+          return Buffer.from(bytes).toString("utf-8");
         },
 
         writeFile: async (
@@ -285,38 +347,58 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
           path: string,
           content: string
         ): Promise<void> => {
-          await ctx.sandbox.writeFile(path, Buffer.from(content, 'utf-8'));
+          await ctx.sandbox.writeFile(path, Buffer.from(content, "utf-8"));
         },
 
-        mkdir: async (ctx: TensorlakeSandboxContext, path: string): Promise<void> => {
-          const result = await ctx.sandbox.run('mkdir', { args: ['-p', path] });
+        mkdir: async (
+          ctx: TensorlakeSandboxContext,
+          path: string
+        ): Promise<void> => {
+          const result = await ctx.sandbox.run("mkdir", { args: ["-p", path] });
           if (result.exitCode !== 0) {
-            throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
+            throw new Error(
+              `Failed to create directory ${path}: ${result.stderr}`
+            );
           }
         },
 
-        readdir: async (ctx: TensorlakeSandboxContext, path: string): Promise<FileEntry[]> => {
+        readdir: async (
+          ctx: TensorlakeSandboxContext,
+          path: string
+        ): Promise<FileEntry[]> => {
           const response = await ctx.sandbox.listDirectory(path);
           return response.entries.map((e) => ({
             name: e.name,
-            type: e.isDir ? ('directory' as const) : ('file' as const),
+            type: e.isDir ? ("directory" as const) : ("file" as const),
             size: e.size || 0,
             modified: e.modifiedAt ?? new Date(),
           }));
         },
 
-        exists: async (ctx: TensorlakeSandboxContext, path: string): Promise<boolean> => {
-          try { await ctx.sandbox.readFile(path); return true; } catch {}
-          try { await ctx.sandbox.listDirectory(path); return true; } catch {}
+        exists: async (
+          ctx: TensorlakeSandboxContext,
+          path: string
+        ): Promise<boolean> => {
+          try {
+            await ctx.sandbox.readFile(path);
+            return true;
+          } catch {}
+          try {
+            await ctx.sandbox.listDirectory(path);
+            return true;
+          } catch {}
           return false;
         },
 
-        remove: async (ctx: TensorlakeSandboxContext, path: string): Promise<void> => {
+        remove: async (
+          ctx: TensorlakeSandboxContext,
+          path: string
+        ): Promise<void> => {
           try {
             await ctx.sandbox.deleteFile(path);
           } catch {
             // May be a directory — fall back to rm -rf
-            const result = await ctx.sandbox.run('rm', { args: ['-rf', path] });
+            const result = await ctx.sandbox.run("rm", { args: ["-rf", path] });
             if (result.exitCode !== 0) {
               throw new Error(`Failed to remove ${path}: ${result.stderr}`);
             }
@@ -324,7 +406,8 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         },
       },
 
-      getInstance: (ctx: TensorlakeSandboxContext): TensorlakeSandboxContext => ctx,
+      getInstance: (ctx: TensorlakeSandboxContext): TensorlakeSandboxContext =>
+        ctx,
     },
 
     snapshot: {
@@ -333,11 +416,12 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
         sandboxId: string,
         options?: { name?: string }
       ) => {
-        const client = getClient(config);
-        const result = await client.snapshotAndWait(sandboxId);
+        const { apiKey, apiUrl } = resolveAuth(config);
+        const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+        const result = await sandbox.checkpoint();
         return {
-          id: result.snapshotId,
-          provider: 'tensorlake',
+          id: result!.snapshotId,
+          provider: "tensorlake",
           createdAt: new Date(),
           metadata: { name: options?.name },
         };
@@ -345,8 +429,8 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
 
       list: async (config: TensorlakeConfig) => {
         try {
-          const client = getClient(config);
-          return await client.listSnapshots();
+          const { apiKey, apiUrl } = resolveAuth(config);
+          return await Sandbox.listSnapshots({ apiKey, apiUrl });
         } catch {
           return [];
         }
@@ -354,8 +438,8 @@ export const tensorlake = defineProvider<TensorlakeSandboxContext, TensorlakeCon
 
       delete: async (config: TensorlakeConfig, snapshotId: string) => {
         try {
-          const client = getClient(config);
-          await client.deleteSnapshot(snapshotId);
+          const { apiKey, apiUrl } = resolveAuth(config);
+          await Sandbox.deleteSnapshot(snapshotId, { apiKey, apiUrl });
         } catch {
           // Ignore
         }
