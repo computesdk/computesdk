@@ -17,6 +17,7 @@ npm install @computesdk/hopx
 npm install @computesdk/modal
 npm install @computesdk/namespace
 npm install @computesdk/runloop
+npm install @computesdk/tensorlake
 npm install @computesdk/upstash
 npm install @computesdk/vercel
 ```
@@ -91,6 +92,12 @@ NSC_TOKEN=your_namespace_nsc_token
 
 ```bash
 RUNLOOP_API_KEY=your_runloop_api_key
+```
+
+### Tensorlake
+
+```bash
+TENSORLAKE_API_KEY=your_tensorlake_api_key
 ```
 
 ### Upstash
