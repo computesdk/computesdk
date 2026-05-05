@@ -8,6 +8,7 @@ import type {
   Sandbox as SandboxInterface,
   CreateSandboxOptions as UniversalCreateSandboxOptions,
 } from './types/universal-sandbox';
+import { applySetup } from './apply-setup';
 
 export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
   /** Optional provider name override (must match provider.name) */
@@ -214,7 +215,9 @@ class ComputeManager {
 
   private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
-    const { provider: _providerName, ...providerOptions } = options || {};
+    const { provider: _providerName, ...rest } = options || {};
+    const providerOptions = this.applySetupEnvToOptions(rest);
+    const setup = providerOptions.setup;
     const candidates = this.getCreateCandidates(preferredProviderName);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
@@ -223,6 +226,14 @@ class ComputeManager {
       try {
         const sandbox = await provider.sandbox.create(providerOptions);
         this.registerSandboxProvider(sandbox, provider);
+        if (setup) {
+          try {
+            await applySetup(sandbox, setup);
+          } catch (setupError) {
+            await this.cleanupAfterSetupFailure(sandbox);
+            throw setupError;
+          }
+        }
         return sandbox;
       } catch (error) {
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -236,6 +247,31 @@ class ComputeManager {
       `Failed to create sandbox across ${candidates.length} provider(s).\n` +
       errors.map((error) => `- ${error}`).join('\n')
     );
+  }
+
+  /**
+   * Merge `setup.env` into `options.envs` so the provider sees them at create
+   * time. User-supplied envs win over setup-supplied envs.
+   */
+  private applySetupEnvToOptions(options: UniversalCreateSandboxOptions): UniversalCreateSandboxOptions {
+    const setup = options.setup;
+    if (!setup?.env) return options;
+    return {
+      ...options,
+      envs: { ...setup.env, ...(options.envs || {}) },
+    };
+  }
+
+  private async cleanupAfterSetupFailure(sandbox: SandboxInterface): Promise<void> {
+    const sandboxId = getSandboxId(sandbox);
+    try {
+      await sandbox.destroy();
+    } catch {
+      // best-effort cleanup; surface the original setup error
+    }
+    if (sandboxId) {
+      this.sandboxProviders.delete(sandboxId);
+    }
   }
 
   setConfig(config: ExplicitComputeConfig): void {
