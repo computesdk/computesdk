@@ -176,10 +176,14 @@ const sandbox = await compute.sandbox.create({ snapshotId: 'snap-abc123' });
 
 ```typescript
 // Get a proxy URL for a port exposed inside the sandbox
-const url = await sandbox.getUrl({ port: 8080 });
-// → "https://<sandbox-id>.sandbox.tensorlake.ai:8080"
+const url = await sandbox.getUrl({ port: 443 });
+// → "https://<sandbox-id>.sandbox.tensorlake.ai"
 
-const wsUrl = await sandbox.getUrl({ port: 3000, protocol: 'wss' });
+const customPortUrl = await sandbox.getUrl({ port: 8080 });
+// → "https://8080-<sandbox-id>.sandbox.tensorlake.ai"
+
+const wsUrl = await sandbox.getUrl({ port: 443, protocol: 'wss' });
+// → "wss://<sandbox-id>.sandbox.tensorlake.ai"
 ```
 
 ## Examples
