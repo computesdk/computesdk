@@ -102,9 +102,6 @@ export const tensorlake = defineProvider<
             sandbox: instance,
           };
           const durationMs = Date.now() - startTime;
-          console.log(
-            `sandbox ${instance.sandboxId} created in ${durationMs}ms`
-          );
           return {
             sandbox,
             sandboxId: instance.sandboxId,
@@ -270,9 +267,6 @@ export const tensorlake = defineProvider<
           });
 
           const durationMs = Date.now() - startTime;
-          console.log(
-            `sandbox ${ctx.sandbox.sandboxId} run in ${durationMs}ms`
-          );
           return {
             stdout: result.stdout,
             stderr: result.stderr,
@@ -322,15 +316,21 @@ export const tensorlake = defineProvider<
         ctx: TensorlakeSandboxContext,
         options: { port: number; protocol?: string }
       ): Promise<string> => {
-        const protocol = options.protocol || "https";
+        const { port, protocol: optionsProtocol } = options;
+        const protocol = optionsProtocol || "https";
+
         const apiUrl =
           ctx.config.apiUrl ||
           (typeof process !== "undefined" && process.env?.TENSORLAKE_API_URL) ||
           "https://api.tensorlake.ai";
-        const proxyDomain = apiUrl
-          .replace(/^https?:\/\/api\./, "")
-          .replace(/\/$/, "");
-        return `${protocol}://sandbox.${proxyDomain}:${options.port}`;
+
+        const proxyDomain = new URL(apiUrl).hostname;
+        const subdomain =
+          port === 443 || port === 80
+            ? ctx.sandbox.sandboxId
+            : `${port}-${ctx.sandbox.sandboxId}`;
+
+        return `${protocol}://${subdomain}.${proxyDomain}`;
       },
 
       filesystem: {
