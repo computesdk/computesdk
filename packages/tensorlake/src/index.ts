@@ -180,7 +180,6 @@ export const tensorlake = defineProvider<
           try {
             await ctx.sandbox.startProcess("sh", {
               args: ["-c", command],
-              args,
               stdoutMode: OutputMode.DISCARD,
               stderrMode: OutputMode.DISCARD,
               ...(options.env &&
