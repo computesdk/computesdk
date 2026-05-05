@@ -216,7 +216,7 @@ const compute = tensorlake({ apiKey: process.env.TENSORLAKE_API_KEY });
 async function createBaseSnapshot(): Promise<string> {
   const sandbox = await compute.sandbox.create();
   await sandbox.runCommand('pip install pandas numpy scikit-learn');
-  const snapshot = await compute.snapshot.create(sandbox.id);
+  const snapshot = await compute.snapshot.create(sandbox.sandboxId);
   await sandbox.destroy();
   return snapshot.id;
 }
@@ -245,7 +245,7 @@ try {
   if (error.message.includes('Missing Tensorlake API key')) {
     console.error('Set TENSORLAKE_API_KEY environment variable');
   } else if (error.message.includes('authentication failed')) {
-    console.error('Check your API key at https://app.tensorlake.ai');
+    console.error('Check your API key at https://cloud.tensorlake.ai');
   } else {
     console.error(error);
   }

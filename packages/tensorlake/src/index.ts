@@ -3,7 +3,7 @@
  * Tensorlake Provider - SDK-based Implementation
  *
  * Stateful MicroVM sandboxes for agentic applications and LLM-generated code execution.
- * Uses the official tensorlake npm SDK (^0.4.47).
+ * Uses the official tensorlake npm SDK (0.5.7).
  */
 
 import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
@@ -29,7 +29,7 @@ export interface TensorlakeConfig {
   proxyUrl?: string;
   /** Default container image for new sandboxes (default: ubuntu-minimal) */
   image?: string;
-  /** Default timeout in seconds for sandboxes */
+  /** Default timeout in milliseconds for sandboxes */
   timeout?: number;
 }
 
@@ -178,8 +178,8 @@ export const tensorlake = defineProvider<
 
         if (options?.background) {
           try {
-            const [bin, ...args] = command.split(" ");
-            await ctx.sandbox.startProcess(bin, {
+            await ctx.sandbox.startProcess("sh", {
+              args: ["-c", command],
               args,
               stdoutMode: OutputMode.DISCARD,
               stderrMode: OutputMode.DISCARD,
@@ -187,21 +187,19 @@ export const tensorlake = defineProvider<
                 Object.keys(options.env).length > 0 && { env: options.env }),
               ...(options.cwd && { workingDir: options.cwd }),
             });
-          } catch {
-            // background — ignore errors
+          } catch (error) {
+            return {
+              stdout: "",
+              stderr: error instanceof Error ? error.message : String(error),
+              exitCode: 127,
+              durationMs: Date.now() - startTime,
+            };
           }
-          return {
-            stdout: "",
-            stderr: "",
-            exitCode: 0,
-            durationMs: Date.now() - startTime,
-          };
         }
 
         try {
-          const [executable, ...commandArgs] = command.split(" ");
-          const result = await ctx.sandbox.run(executable, {
-            args: commandArgs,
+          const result = await ctx.sandbox.run("sh", {
+            args: ["-c", command],
             ...(options?.env &&
               Object.keys(options.env).length > 0 && { env: options.env }),
             ...(options?.cwd && { workingDir: options.cwd }),
@@ -218,7 +216,7 @@ export const tensorlake = defineProvider<
           return {
             stdout: "",
             stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 1,
+            exitCode: 127,
             durationMs: Date.now() - startTime,
           };
         }
@@ -358,8 +356,15 @@ export const tensorlake = defineProvider<
         const { apiKey, apiUrl } = resolveAuth(config);
         const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
         const result = await sandbox.checkpoint();
+
+        if (!result) {
+          throw new Error(
+            `Failed to create snapshot for sandbox '${sandboxId}': checkpoint() did not return a snapshot result.`
+          );
+        }
+
         return {
-          id: result!.snapshotId,
+          id: result.snapshotId,
           provider: "tensorlake",
           createdAt: new Date(),
           metadata: { name: options?.name },
