@@ -1340,11 +1340,11 @@ importers:
   packages/tensorlake:
     dependencies:
       '@computesdk/provider':
-        specifier: ^1.3.0
-        version: 1.4.0
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
-        specifier: ^2.6.0
-        version: 2.6.0
+        specifier: workspace:*
+        version: link:../computesdk
       tensorlake:
         specifier: 0.5.7
         version: 0.5.7(bufferutil@4.1.0)(utf-8-validate@6.0.6)
@@ -2129,12 +2129,6 @@ packages:
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
     engines: {node: '>=0.1.90'}
-
-  '@computesdk/cmd@0.4.1':
-    resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
-
-  '@computesdk/provider@1.4.0':
-    resolution: {integrity: sha512-l3ihPRAkZQSDf/Mru4RXyrWYAYevDSXXZBB3LVF9jnacnMACHPQglbHP0VtkWPYN1jU+jqh+SwWxhdE97cyPnw==}
 
   '@connectrpc/connect-web@2.0.0-rc.3':
     resolution: {integrity: sha512-w88P8Lsn5CCsA7MFRl2e6oLY4J/5toiNtJns/YJrlyQaWOy3RO8pDgkz+iIkG98RPMhj2thuBvsd3Cn4DKKCkw==}
@@ -4812,13 +4806,6 @@ packages:
   compressjs@1.0.3:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
-
-  computesdk@2.6.0:
-    resolution: {integrity: sha512-XM4O9YdoAOm/mmTG+H4gKbivdlfzuFeR7Iax6B2vhQ5I9T29wnvnN4U09TzKaiJ+WkdTYfKVv+yo7jcv1Mcsuw==}
-
-  computesdk@3.0.0:
-    resolution: {integrity: sha512-0/7MVrAr2k4A/S3uYiZJcUF3W2O103432ZY/CTNPVMUeY88yklloieUWWbe11y6ADcMOh39aFvZfiTkVuuDdhA==}
-    deprecated: This version was released in error - v3 was skipped. Please use 2.0.0 instead.
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -9081,13 +9068,6 @@ snapshots:
   '@colors/colors@1.5.0':
     optional: true
 
-  '@computesdk/cmd@0.4.1': {}
-
-  '@computesdk/provider@1.4.0':
-    dependencies:
-      '@computesdk/cmd': 0.4.1
-      computesdk: 3.0.0
-
   '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.7.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.7.0))':
     dependencies:
       '@bufbuild/protobuf': 2.7.0
@@ -12125,14 +12105,6 @@ snapshots:
     dependencies:
       amdefine: 1.0.1
       commander: 2.8.1
-
-  computesdk@2.6.0:
-    dependencies:
-      '@computesdk/cmd': 0.4.1
-
-  computesdk@3.0.0:
-    dependencies:
-      '@computesdk/cmd': 0.4.1
 
   concat-map@0.0.1: {}
 
