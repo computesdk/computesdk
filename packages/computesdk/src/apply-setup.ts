@@ -39,9 +39,26 @@ async function materializeSource(
   switch (source.type) {
     case 'github': {
       const url = `https://github.com/${source.repo}.git`;
-      const refFlag = source.ref ? `--branch ${shellEscape(source.ref)} ` : '';
-      const command = `git clone --depth 1 ${refFlag}${shellEscape(url)} .`;
-      await runOrThrow(sandbox, command, env ? { env } : undefined, `clone ${source.repo}`);
+      if (source.ref) {
+        // `git clone --branch` only resolves branches and tags, so it rejects
+        // commit SHAs — the standard way to pin a reproducible checkout.
+        // `git fetch <ref>` accepts branches, tags, and SHAs uniformly on GitHub
+        // (uploadpack.allowReachableSHA1InWant is enabled there by default).
+        const command =
+          `git init -q && ` +
+          `git remote add origin ${shellEscape(url)} && ` +
+          `git fetch --depth 1 origin ${shellEscape(source.ref)} && ` +
+          `git checkout -q FETCH_HEAD`;
+        await runOrThrow(
+          sandbox,
+          command,
+          env ? { env } : undefined,
+          `clone ${source.repo}@${source.ref}`,
+        );
+      } else {
+        const command = `git clone --depth 1 ${shellEscape(url)} .`;
+        await runOrThrow(sandbox, command, env ? { env } : undefined, `clone ${source.repo}`);
+      }
       return;
     }
     case 'tar': {
@@ -108,9 +125,18 @@ async function runInstall(
  * Materialize a SetupConfig inside an already-created sandbox: pull source,
  * install deps via Nix, run install scripts. Throws on the first failure;
  * caller is responsible for destroying the sandbox if it wants to clean up.
+ *
+ * `options.env` overrides `setup.env` for the duration of setup commands. The
+ * caller (compute core) is responsible for resolving precedence between
+ * user-supplied envs and `setup.env` and passing the merged result here.
  */
-export async function applySetup(sandbox: Sandbox, setup: SetupConfig): Promise<void> {
-  const env = setup.env as Record<string, string> | undefined;
+export async function applySetup(
+  sandbox: Sandbox,
+  setup: SetupConfig,
+  options?: { env?: Record<string, string> },
+): Promise<void> {
+  const env =
+    options?.env ?? (setup.env as Record<string, string> | undefined);
   if (setup.source) {
     await materializeSource(sandbox, setup.source, env);
   }

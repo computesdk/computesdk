@@ -215,9 +215,10 @@ class ComputeManager {
 
   private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
-    const { provider: _providerName, ...rest } = options || {};
-    const providerOptions = this.applySetupEnvToOptions(rest);
-    const setup = providerOptions.setup;
+    const { provider: _providerName, setup, ...rest } = options || {};
+    const effectiveEnv = this.resolveEffectiveEnv(rest.envs, setup?.env);
+    const providerOptions: Omit<UniversalCreateSandboxOptions, 'setup'> =
+      effectiveEnv ? { ...rest, envs: effectiveEnv } : rest;
     const candidates = this.getCreateCandidates(preferredProviderName);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
@@ -228,7 +229,11 @@ class ComputeManager {
         this.registerSandboxProvider(sandbox, provider);
         if (setup) {
           try {
-            await applySetup(sandbox, setup);
+            await applySetup(
+              sandbox,
+              setup,
+              effectiveEnv ? { env: effectiveEnv } : undefined,
+            );
           } catch (setupError) {
             await this.cleanupAfterSetupFailure(sandbox);
             throw setupError;
@@ -250,16 +255,21 @@ class ComputeManager {
   }
 
   /**
-   * Merge `setup.env` into `options.envs` so the provider sees them at create
-   * time. User-supplied envs win over setup-supplied envs.
+   * Merge `setup.env` with user-supplied `options.envs`, with user envs winning
+   * on conflict. Returns undefined when both sides are empty so callers can
+   * skip threading an env at all.
+   *
+   * The same merged env is used in two places: as `options.envs` for
+   * provider.sandbox.create (sandbox-level env) and as `applySetup`'s `env`
+   * override (per-command env during setup steps). Computing it once keeps
+   * those two paths from drifting.
    */
-  private applySetupEnvToOptions(options: UniversalCreateSandboxOptions): UniversalCreateSandboxOptions {
-    const setup = options.setup;
-    if (!setup?.env) return options;
-    return {
-      ...options,
-      envs: { ...setup.env, ...(options.envs || {}) },
-    };
+  private resolveEffectiveEnv(
+    userEnvs: Record<string, string> | undefined,
+    setupEnv: Record<string, string> | undefined,
+  ): Record<string, string> | undefined {
+    if (!setupEnv && !userEnvs) return undefined;
+    return { ...(setupEnv || {}), ...(userEnvs || {}) };
   }
 
   private async cleanupAfterSetupFailure(sandbox: SandboxInterface): Promise<void> {

@@ -75,13 +75,31 @@ describe('deps registry', () => {
 });
 
 describe('applySetup', () => {
-  it('clones a github source with depth=1 and the given ref', async () => {
+  it('fetches a github source at depth=1 for the given branch ref', async () => {
     const sandbox = makeSandbox();
     await applySetup(sandbox, {
       source: { type: 'github', repo: 'acme/my-app', ref: 'main' },
     });
     expect(sandbox.runCommand).toHaveBeenCalledWith(
-      "git clone --depth 1 --branch 'main' 'https://github.com/acme/my-app.git' .",
+      "git init -q && " +
+        "git remote add origin 'https://github.com/acme/my-app.git' && " +
+        "git fetch --depth 1 origin 'main' && " +
+        "git checkout -q FETCH_HEAD",
+      undefined,
+    );
+  });
+
+  it('fetches a github source at a 40-char commit SHA (pinning works)', async () => {
+    const sandbox = makeSandbox();
+    const sha = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0';
+    await applySetup(sandbox, {
+      source: { type: 'github', repo: 'acme/my-app', ref: sha },
+    });
+    expect(sandbox.runCommand).toHaveBeenCalledWith(
+      "git init -q && " +
+        "git remote add origin 'https://github.com/acme/my-app.git' && " +
+        `git fetch --depth 1 origin '${sha}' && ` +
+        "git checkout -q FETCH_HEAD",
       undefined,
     );
   });
@@ -201,7 +219,7 @@ describe('applySetup', () => {
     });
     const cmd = (sandbox.runCommand as any).mock.calls[0][0] as string;
     // The escaped form is '\'' — the ref must round-trip cleanly through the shell.
-    expect(cmd).toContain("--branch 'weird'\\''branch'");
+    expect(cmd).toContain("git fetch --depth 1 origin 'weird'\\''branch'");
   });
 });
 
@@ -228,6 +246,27 @@ describe('compute.sandbox.create with setup', () => {
     expect(runCommand).toHaveBeenCalledWith('echo hi', undefined);
   });
 
+  it('does not forward setup to the provider create call', async () => {
+    const create = vi.fn(async () => makeSandbox());
+    const provider: DirectProvider = {
+      name: 'mock',
+      sandbox: { create, getById: async () => null, destroy: async () => {} },
+    };
+    compute.setConfig({ providers: [provider] });
+
+    await compute.sandbox.create({
+      setup: defineSetup({
+        source: { type: 'github', repo: 'a/b' },
+        install: 'echo hi',
+      }),
+      envs: { USER_VAR: 'v' },
+    });
+
+    const passedOptions = (create as any).mock.calls[0][0];
+    expect(passedOptions).not.toHaveProperty('setup');
+    expect(passedOptions.envs).toEqual({ USER_VAR: 'v' });
+  });
+
   it('merges setup.env into options.envs (user envs win)', async () => {
     const create = vi.fn(async () => makeSandbox());
     const provider: DirectProvider = {
@@ -243,6 +282,34 @@ describe('compute.sandbox.create with setup', () => {
 
     const passedOptions = (create as any).mock.calls[0][0];
     expect(passedOptions.envs).toEqual({ A: 'from-user', B: 'from-setup' });
+  });
+
+  it('runs setup commands with the merged env (user envs win on conflict)', async () => {
+    const runCommand = vi.fn(async () => ({
+      stdout: '', stderr: '', exitCode: 0, durationMs: 1,
+    }));
+    const sandbox = makeSandbox({ runCommand });
+    const provider: DirectProvider = {
+      name: 'mock',
+      sandbox: {
+        create: vi.fn(async () => sandbox),
+        getById: async () => null,
+        destroy: async () => {},
+      },
+    };
+    compute.setConfig({ providers: [provider] });
+
+    await compute.sandbox.create({
+      envs: { A: 'user', USER_ONLY: 'u' },
+      setup: defineSetup({
+        env: { A: 'setup', SETUP_ONLY: 's' },
+        install: 'echo hi',
+      }),
+    });
+
+    expect(runCommand).toHaveBeenCalledWith('echo hi', {
+      env: { A: 'user', SETUP_ONLY: 's', USER_ONLY: 'u' },
+    });
   });
 
   it('destroys the sandbox if applySetup fails', async () => {
