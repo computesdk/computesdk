@@ -86,14 +86,41 @@ async function uploadDirectory(
   for (const entry of entries) {
     const childHost = path.join(hostPath, entry.name);
     const childSandbox = sandboxPath === '.' ? entry.name : `${sandboxPath}/${entry.name}`;
-    if (entry.isDirectory()) {
+    if (entry.isSymbolicLink()) {
+      // Phase 1 has no symlink primitive on the universal filesystem, and
+      // dereferencing on the host risks cycles and path-escape. Fail loud
+      // instead of silently dropping the entry from the upload.
+      throw new Error(
+        `Cannot upload symlink from local source: ${childHost}. ` +
+          `defineSetup({ source: { type: 'local' } }) currently does not support symbolic links. ` +
+          `Use a github or tar source for projects that rely on symlinks.`,
+      );
+    } else if (entry.isDirectory()) {
       await sandbox.filesystem.mkdir(childSandbox);
       await uploadDirectory(sandbox, childHost, childSandbox);
     } else if (entry.isFile()) {
       // Phase 1: text files only. The universal SandboxFileSystem.writeFile
       // signature is (path, content: string) — binary uploads need a future
-      // extension to the interface.
-      const content = await fs.readFile(childHost, 'utf-8');
+      // extension to the interface. Read raw bytes and reject anything that
+      // isn't UTF-8 text so a binary asset can't silently corrupt on upload.
+      const buffer = await fs.readFile(childHost);
+      if (buffer.includes(0)) {
+        throw new Error(
+          `Cannot upload binary file from local source: ${childHost}. ` +
+            `defineSetup({ source: { type: 'local' } }) currently supports UTF-8 text files only. ` +
+            `Use a github or tar source for projects with binary assets.`,
+        );
+      }
+      let content: string;
+      try {
+        content = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+      } catch {
+        throw new Error(
+          `Cannot upload non-UTF-8 file from local source: ${childHost}. ` +
+            `defineSetup({ source: { type: 'local' } }) currently supports UTF-8 text files only. ` +
+            `Use a github or tar source for projects with binary assets.`,
+        );
+      }
       await sandbox.filesystem.writeFile(childSandbox, content);
     }
   }
@@ -104,10 +131,14 @@ async function installDeps(
   deps: readonly Dep[],
   env: Record<string, string> | undefined,
 ): Promise<void> {
-  for (const dep of deps) {
-    const command = `nix profile install ${shellEscape(`nixpkgs#${dep.nixPkg}`)}`;
-    await runOrThrow(sandbox, command, env ? { env } : undefined, `install dep ${dep.name}`);
-  }
+  if (deps.length === 0) return;
+  // Batch into a single `nix profile install` so we pay the eval cost once and
+  // let Nix parallelize fetches/builds across the whole list, instead of
+  // serializing N separate invocations.
+  const args = deps.map((dep) => shellEscape(`nixpkgs#${dep.nixPkg}`)).join(' ');
+  const command = `nix profile install ${args}`;
+  const context = `install deps [${deps.map((dep) => dep.name).join(', ')}]`;
+  await runOrThrow(sandbox, command, env ? { env } : undefined, context);
 }
 
 async function runInstall(

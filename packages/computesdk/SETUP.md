@@ -3,7 +3,7 @@
 ## Background
 
 This document describes the `defineSetup` primitive added to ComputeSDK in
-response to the Linear issue:"Add `defineSetup` primitive to
+response to the Linear issue: "Add `defineSetup` primitive to
 ComputeSDK". It captures what was built in phase 1, the reasoning behind the
 key design decisions, and the work still needed for phase 2.
 
@@ -107,9 +107,19 @@ errors when sizing isn't honored.
 ### Phase 1 limitations (deliberate)
 
 - Sandbox base image must have Nix installed for `deps` to work.
-- `local` source uploads text files only — the universal
-  `SandboxFileSystem.writeFile(path, content: string)` signature can't carry
-  binaries.
+- Sandbox base image must have the per-source-type toolchain installed for
+  `source` to work: `git` for `source: 'github'`, and `curl` plus `tar` (with
+  gzip support) for `source: 'tar'`. `source: 'local'` has no sandbox-side
+  toolchain requirement — it uploads through the universal filesystem
+  interface. Missing tools surface as a generic `Setup step failed` with the
+  shell's `command not found` error; clearer preflight diagnostics are a
+  Phase 2 item (see "Setup validation and clearer errors" below).
+- `local` source uploads UTF-8 text files in plain directory trees only —
+  the universal `SandboxFileSystem.writeFile(path, content: string)` signature
+  can't carry binaries, and there's no symlink primitive on the universal
+  filesystem. Non-UTF-8 / binary files and symbolic links in the source tree
+  throw a clear error rather than silently corrupting or being dropped from
+  the upload.
 - `resources` is plumbed but unused by core; provider authors must opt in.
 - No caching — every `create({ setup })` re-clones, re-installs from
   scratch on a fresh sandbox.

@@ -138,12 +138,82 @@ describe('applySetup', () => {
     }
   });
 
-  it('installs each dep via nix profile install', async () => {
+  it('uploads valid multi-byte UTF-8 text without rejection', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'setup-test-'));
+    try {
+      // 'héllo 🌍' exercises 2-byte and 4-byte UTF-8 sequences — must not be
+      // mistaken for non-UTF-8 by the binary check.
+      await fs.writeFile(path.join(tmp, 'a.txt'), 'héllo 🌍');
+      const sandbox = makeSandbox();
+      await applySetup(sandbox, { source: { type: 'local', path: tmp } });
+      expect(sandbox.filesystem.writeFile).toHaveBeenCalledWith('a.txt', 'héllo 🌍');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('throws a clear error for files containing NUL bytes (binary)', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'setup-test-'));
+    try {
+      await fs.writeFile(path.join(tmp, 'logo.png'), Buffer.from([0x00, 0x01, 0x02, 0x03]));
+      const sandbox = makeSandbox();
+      await expect(
+        applySetup(sandbox, { source: { type: 'local', path: tmp } }),
+      ).rejects.toThrow(/Cannot upload binary file.*logo\.png/);
+      expect(sandbox.filesystem.writeFile).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('throws a clear error for symlinks (would otherwise silently drop)', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'setup-test-'));
+    try {
+      // Dangling symlink — readdir still surfaces it and isSymbolicLink() is
+      // true regardless of whether the target exists.
+      await fs.symlink('nonexistent-target', path.join(tmp, 'link.txt'));
+      const sandbox = makeSandbox();
+      await expect(
+        applySetup(sandbox, { source: { type: 'local', path: tmp } }),
+      ).rejects.toThrow(/Cannot upload symlink.*link\.txt/);
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('throws a clear error for files with invalid UTF-8 byte sequences', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'setup-test-'));
+    try {
+      // PNG magic header: 0x89 is an invalid UTF-8 leading byte. No NUL, so this
+      // exercises the TextDecoder path rather than the NUL-byte fast path.
+      await fs.writeFile(path.join(tmp, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      const sandbox = makeSandbox();
+      await expect(
+        applySetup(sandbox, { source: { type: 'local', path: tmp } }),
+      ).rejects.toThrow(/Cannot upload non-UTF-8 file.*logo\.png/);
+      expect(sandbox.filesystem.writeFile).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('installs all deps in a single batched nix profile install', async () => {
     const sandbox = makeSandbox();
     await applySetup(sandbox, { deps: [deps.python, deps.ffmpeg] });
     const calls = sandbox.runCommand.mock.calls.map((c: any[]) => c[0]);
-    expect(calls).toContain("nix profile install 'nixpkgs#python3'");
-    expect(calls).toContain("nix profile install 'nixpkgs#ffmpeg'");
+    // One invocation, both installables — pays Nix eval cost once and lets
+    // builds/fetches parallelize across the list.
+    const nixCalls = calls.filter((c: string) => c.startsWith('nix profile install'));
+    expect(nixCalls).toEqual([
+      "nix profile install 'nixpkgs#python3' 'nixpkgs#ffmpeg'",
+    ]);
+  });
+
+  it('skips nix profile install entirely when deps is empty', async () => {
+    const sandbox = makeSandbox();
+    await applySetup(sandbox, { deps: [] });
+    const calls = sandbox.runCommand.mock.calls.map((c: any[]) => c[0]);
+    expect(calls.some((c: string) => c.startsWith('nix profile install'))).toBe(false);
   });
 
   it('runs install command with env and string form', async () => {
