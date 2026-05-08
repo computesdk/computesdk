@@ -315,7 +315,7 @@ Affinity is **preferred, not exclusive**: if the owning provider fails, ComputeS
 
 ## `compute.sandbox.*`
 
-The full sandbox API is documented in [compute.sandbox](./compute.sandbox/). Summary of available methods:
+The full sandbox API is documented in [compute.sandbox](./computesandbox/). Summary of available methods:
 
 | Method | Purpose |
 |--------|---------|
@@ -324,7 +324,7 @@ The full sandbox API is documented in [compute.sandbox](./compute.sandbox/). Sum
 | `list()` | List active sandboxes (aggregated across providers in multi-provider mode) |
 | `destroy(sandboxId)` | Tear down a sandbox |
 
-All of these accept a `provider` override where applicable. See [Sandbox](./Sandbox.md) for the instance methods (`runCommand`, `filesystem.*`).
+All of these accept a `provider` override where applicable. See [Sandbox](./sandbox/) for the instance methods (`runCommand`, `filesystem.*`).
 
 > **Reserved methods.** The TypeScript surface also declares `compute.sandbox.find`, `compute.sandbox.findOrCreate`, and `compute.sandbox.extendTimeout`. These are reserved for a future gateway / named-sandbox mode and are not implemented by the currently shipped provider packages — calling them today throws `Provider 'X' does not support …`. Don't rely on them in direct-mode code.
 
