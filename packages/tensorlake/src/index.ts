@@ -73,9 +73,8 @@ export const tensorlake = defineProvider<
       ) => {
         const { apiKey, apiUrl } = resolveAuth(config);
         const image = options?.image || config.image || DEFAULT_IMAGE;
-        const timeoutSecs = options?.timeout
-          ? Math.ceil(options.timeout / 1000)
-          : config.timeout;
+        const timeoutMs = options?.timeout ?? config.timeout;
+        const timeoutSecs = timeoutMs ? Math.ceil(timeoutMs / 1000) : undefined;
 
         try {
           const startTime = Date.now();
