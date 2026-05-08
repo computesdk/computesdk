@@ -4,7 +4,7 @@
  * Wraps `@declaw/sdk` to expose the ComputeSDK provider interface.
  */
 
-import { Sandbox as DeclawSandbox } from '@declaw/sdk';
+import { Sandbox as DeclawSandbox, ConnectionConfig } from '@declaw/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type {
@@ -116,9 +116,12 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
         const domain = config.domain || process.env.DECLAW_DOMAIN;
         try {
-          const sandbox = await DeclawSandbox.connect(sandboxId, { apiKey, domain });
-          await sandbox.kill();
-        } catch { /* idempotent */ }
+          await DeclawSandbox.kill(sandboxId, {
+            config: new ConnectionConfig({ apiKey, domain }),
+          });
+        } catch {
+          // Idempotent: sandbox may already be gone.
+        }
       },
 
       runCommand: async (sandbox: DeclawSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
