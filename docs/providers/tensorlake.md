@@ -26,9 +26,9 @@ const compute = tensorlake({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Tensorlake!")');
-console.log(result.output); // "Hello from Tensorlake!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Tensorlake!"');
+console.log(result.stdout); // "Hello from Tensorlake!"
 
 // Clean up
 await sandbox.destroy();
@@ -46,7 +46,7 @@ interface TensorlakeConfig {
   proxyUrl?: string;
   /** Default container image for new sandboxes (default: ubuntu-minimal) */
   image?: string;
-  /** Default timeout in seconds for sandboxes */
+  /** Execution timeout in milliseconds */
   timeout?: number;
 }
 ```
@@ -70,15 +70,3 @@ const snapshot = await compute.snapshot.create(sandboxId);
 // Restore from a snapshot
 const sandbox = await compute.sandbox.create({ snapshotId: snapshot.id });
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements
-- `def` function definitions
-- Python-specific syntax (`f"`, `raise`, `sys.`, etc.)
-
-**Default:** Node.js for all other cases
