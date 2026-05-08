@@ -315,7 +315,7 @@ Affinity is **preferred, not exclusive**: if the owning provider fails, ComputeS
 
 ## `compute.sandbox.*`
 
-The full sandbox API is documented in [compute.sandbox](./compute.sandbox.md). Summary of available methods:
+The full sandbox API is documented in [compute.sandbox](./compute.sandbox/). Summary of available methods:
 
 | Method | Purpose |
 |--------|---------|
