@@ -1,5 +1,11 @@
 # @computesdk/tensorlake
 
+## 0.1.1
+
+### Patch Changes
+
+- e07d46f: Fix `timeout` unit mismatch in the Tensorlake provider. `config.timeout` (passed to `tensorlake({ timeout: ... })`) was being forwarded to the underlying SDK as seconds while `options.timeout` (passed to `compute.sandbox.create({ timeout: ... })`) was correctly treated as milliseconds, contradicting the `TensorlakeConfig` interface comment. Both inputs are now consistently milliseconds and converted to seconds at the SDK boundary, matching the convention used by every other ComputeSDK provider.
+
 ## 0.1.0
 
 ### Minor Changes
