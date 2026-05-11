@@ -2184,7 +2184,7 @@ packages:
 
   '@declaw/sdk@1.1.7':
     resolution: {integrity: sha512-UwheCemk8557byAk86SSyI3FeoM6OauU7E70mDjHQEXIH2U/q70dR5sILMLFR3DkYvfVo9ygSgDb2s3fGX+OlA==}
-    engines: {node: '>=20.18.1'}
+    engines: {node: '>=18.0.0'}
 
   '@emnapi/runtime@1.4.5':
     resolution: {integrity: sha512-++LApOtY0pEEz1zrd9vy1/zXVaVJJ/EbAF3u0fXIzPJEDtnITsBGbbK0EkM72amhl/R5b+5xx0Y/QhcVOpuulg==}
