@@ -629,8 +629,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@declaw/sdk':
-        specifier: ^1.1.1
-        version: 1.1.1
+        specifier: ^1.1.7
+        version: 1.1.7
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2182,8 +2182,8 @@ packages:
   '@daytonaio/toolbox-api-client@0.143.0':
     resolution: {integrity: sha512-E6+yHPnFygNqRIctoDheISHCpzQkHydAU7fiBfsA5pnElfB/yLTOXQlnZfP8gfvOmUkRNU8QCXKzaualRTlI7w==}
 
-  '@declaw/sdk@1.1.1':
-    resolution: {integrity: sha512-+wJNqZHZQlgoq9vJrOQuzzOKSsrnLvKWupMoC5j4gT1da6YWb8pUGemdVu0aXMTk0DbGdRdS9oURinqLKh18yw==}
+  '@declaw/sdk@1.1.7':
+    resolution: {integrity: sha512-UwheCemk8557byAk86SSyI3FeoM6OauU7E70mDjHQEXIH2U/q70dR5sILMLFR3DkYvfVo9ygSgDb2s3fGX+OlA==}
     engines: {node: '>=18.0.0'}
 
   '@emnapi/runtime@1.4.5':
@@ -9149,9 +9149,11 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  '@declaw/sdk@1.1.1':
+  '@declaw/sdk@1.1.7':
     dependencies:
       eventsource-parser: 3.0.6
+    optionalDependencies:
+      undici: 7.19.0
 
   '@emnapi/runtime@1.4.5':
     dependencies:
