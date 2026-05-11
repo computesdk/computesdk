@@ -304,16 +304,6 @@ export const myProvider = defineProvider({
 });
 ```
 
-## Examples
-
-Check out the [examples directory](./examples) for complete implementations:
-
-- **[Next.js](./examples/nextjs)** - API routes with ComputeSDK
-- **[Nuxt](./examples/nuxt)** - Server API integration
-- **[SvelteKit](./examples/sveltekit)** - Endpoints with ComputeSDK
-- **[Remix](./examples/remix)** - Loader/action integration
-- **[Astro](./examples/astro)** - API endpoints
-
 ## Documentation
 
 - 📖 **[Full Documentation](https://computesdk.com)** - Complete guides and API reference
