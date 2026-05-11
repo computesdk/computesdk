@@ -1,5 +1,11 @@
 # @computesdk/declaw
 
+## 0.2.3
+
+### Patch Changes
+
+- d651717: Adopt `Sandbox.kill(id)` static from `@declaw/sdk` 1.1.7 in `destroy`.
+
 ## 0.2.2
 
 ### Patch Changes
