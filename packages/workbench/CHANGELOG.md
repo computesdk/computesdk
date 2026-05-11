@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 24.0.3
+
+### Patch Changes
+
+- Updated dependencies [d651717]
+  - @computesdk/declaw@0.2.3
+
 ## 24.0.2
 
 ### Patch Changes
