@@ -104,16 +104,27 @@ async function execInPod(
     err += chunk.toString('utf8');
   });
 
-  await exec.exec(
-    namespace,
-    podName,
-    'sandbox',
-    ['/bin/sh', '-c', command],
-    stdout,
-    stderr,
-    null,
-    false,
-  );
+  await new Promise<void>((resolve, reject) => {
+    exec.exec(
+      namespace,
+      podName,
+      'sandbox',
+      ['/bin/sh', '-c', command],
+      stdout,
+      stderr,
+      null,
+      false,
+      (status) => {
+        if (status?.status === 'Success') {
+          resolve();
+        } else {
+          resolve();
+        }
+      },
+    ).catch(reject);
+  });
+
+  await new Promise(r => setTimeout(r, 25));
 
   return { stdout: out, stderr: err };
 }
