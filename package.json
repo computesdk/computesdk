@@ -4,7 +4,7 @@
   "private": true,
   "description": "A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
   "scripts": {
-    "build": "pnpm --filter '@computesdk/cmd' run build && pnpm --filter computesdk run build && pnpm --filter '@computesdk/provider' run build && pnpm --filter '@computesdk/test-utils' run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!@computesdk/provider' --filter '!@computesdk/cmd' --filter '!@computesdk/test-utils' --filter '!@computesdk/avm' --filter '!@computesdk/aws-ecs' --filter '!@computesdk/aws-lambda' --filter '!@computesdk/lambda' run build",
+    "build": "pnpm --filter '@computesdk/cmd' run build && pnpm --filter computesdk run build && pnpm --filter '@computesdk/provider' run build && pnpm --filter '@computesdk/test-utils' run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!@computesdk/provider' --filter '!@computesdk/cmd' --filter '!@computesdk/test-utils' run build",
     "clean": "pnpm -r run clean",
     "dev": "pnpm -r --parallel run dev",
     "lint": "pnpm -r run lint",

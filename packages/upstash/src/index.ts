@@ -8,7 +8,7 @@
 import { Box, EphemeralBox } from '@upstash/box';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 export type UpstashSandboxInstance = Box | EphemeralBox;
 
@@ -29,8 +29,8 @@ export function isUpstashBoxInstance(sandbox: UpstashSandboxInstance): sandbox i
 export interface UpstashConfig {
   /** Upstash Box API key - if not provided, will fallback to UPSTASH_BOX_API_KEY environment variable */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds (default: 600000) */
   timeout?: number;
 }
@@ -69,20 +69,23 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         }
 
         const timeout = options?.timeout ?? config.timeout ?? 600000;
+        const optRuntime = (options as any)?.runtime as string | undefined;
+        const ephemeral = (options as any)?.ephemeral as boolean | undefined;
+        const ttl = (options as any)?.ttl as number | undefined;
 
         try {
           let box: UpstashSandboxInstance;
 
           if (options?.snapshotId) {
-            const runtime = (options?.runtime ?? config.runtime ?? 'node') as any;
+            const runtime = (optRuntime ?? config.runtime ?? 'node') as any;
 
-            if (options?.ephemeral === true) {
+            if (ephemeral === true) {
               // Restore lightweight ephemeral box from snapshot
               box = await EphemeralBox.fromSnapshot(options.snapshotId, {
                 apiKey,
                 runtime,
                 timeout,
-                ttl: options?.ttl,
+                ttl,
                 env: options?.envs,
               });
             } else {
@@ -94,10 +97,9 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
                 env: options?.envs,
               });
             }
-          } else if (options?.ephemeral !== true) {
+          } else if (ephemeral !== true) {
             // Destructure known ComputeSDK fields, collect the rest for passthrough
             const {
-              runtime: _runtime,
               timeout: _timeout,
               envs,
               name: _name,
@@ -107,17 +109,13 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               sandboxId: _sandboxId,
               namespace: _namespace,
               directory: _directory,
-              overlays: _overlays,
-              servers: _servers,
-              ephemeral: _ephemeral,
-              ttl: _ttl,
               ...providerOptions
             } = options || {};
 
             // Create new full box
             box = await Box.create({
               apiKey,
-              runtime: (_runtime ?? config.runtime ?? 'node') as any,
+              runtime: (optRuntime ?? config.runtime ?? 'node') as any,
               timeout,
               env: envs,
               ...providerOptions,
@@ -126,9 +124,9 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
             // create lightweight ephemeral box (exec + files only, instant ready)
             const ephemeralBox = await EphemeralBox.create({
               apiKey,
-              runtime: (options?.runtime ?? config.runtime ?? 'node') as any,
+              runtime: (optRuntime ?? config.runtime ?? 'node') as any,
               timeout,
-              ttl: options?.ttl,
+              ttl,
             });
             box = ephemeralBox;
           }
@@ -197,101 +195,28 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       },
 
       // Instance operations
-      runCode: async (sandbox: UpstashSandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        try {
-          // Auto-detect runtime if not specified
-          const effectiveRuntime = runtime || (
-            code.includes('print(') ||
-              code.includes('import ') ||
-              code.includes('def ') ||
-              code.includes('sys.') ||
-              code.includes('json.') ||
-              code.includes('__') ||
-              code.includes('f"') ||
-              code.includes("f'") ||
-              code.includes('raise ')
-              ? 'python'
-              : 'node'
-          );
-
-          // Map ComputeSDK runtime to Upstash CodeLanguage: "js" | "ts" | "python"
-          const lang = effectiveRuntime === 'python' ? 'python' as const : 'js' as const;
-
-          // exec.code() returns a Run<string> with .result, .exitCode, .status
-          const run = await sandbox.exec.code({ code, lang });
-
-          const output = run.result || '';
-          const exitCode = run.exitCode ?? 0;
-
-          // Check for syntax errors and throw them
-          if (exitCode !== 0 && output) {
-            if (output.includes('SyntaxError') ||
-              output.includes('invalid syntax') ||
-              output.includes('Unexpected token') ||
-              output.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${output.trim()}`);
-            }
-          }
-
-          return {
-            output,
-            exitCode,
-            language: effectiveRuntime,
-          };
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-
-          // Handle Upstash Run failures (status === "failed")
-          if (error instanceof Error && error.message === 'exit status 1') {
-            const result = (error as any)?.result;
-            if (result) {
-              const stderr = typeof result === 'string' ? result : result.output || '';
-              if (stderr.includes('SyntaxError')) {
-                const syntaxErrorLine = stderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
-                throw new Error(`Syntax error: ${syntaxErrorLine}`);
-              }
-              return {
-                output: stderr || 'Error: Runtime error occurred during execution',
-                exitCode: 1,
-                language: runtime || 'node',
-              };
-            }
-          }
-
-          throw new Error(
-            `Upstash code execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
 
       runCommand: async (sandbox: UpstashSandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
 
         try {
-          // Build command with options
           let fullCommand = command;
 
-          // Handle environment variables
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
 
-          // Handle working directory
           if (options?.cwd) {
             fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
 
-          // Handle background execution
           if (options?.background) {
             fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           }
 
-          // exec.command() returns a Run<string> with .result, .exitCode, .status
           const run = await sandbox.exec.command(fullCommand);
 
           return {
@@ -301,7 +226,6 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
             durationMs: Date.now() - startTime,
           };
         } catch (error) {
-          // Extract result from error if available (non-zero exit codes)
           const result = (error as any)?.result;
           if (result) {
             return {
@@ -322,20 +246,16 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       },
 
       getInfo: async (sandbox: UpstashSandboxInstance): Promise<SandboxInfo> => {
-        // getStatus() returns { status: string } where status is one of:
-        // "creating" | "idle" | "running" | "paused" | "error" | "deleted"
         const { status } = await sandbox.getStatus();
 
-        // Map Upstash statuses to universal set: 'running' | 'stopped' | 'error'
         const universalStatus: SandboxInfo['status'] =
           (status === 'creating' || status === 'idle' || status === 'running') ? 'running' :
             status === 'error' ? 'error' :
-              'stopped'; // paused, deleted, or any unknown state
+              'stopped';
 
         return {
           id: sandbox.id,
           provider: 'upstash',
-          runtime: 'node',
           status: universalStatus,
           createdAt: new Date(),
           timeout: 600000,
@@ -354,8 +274,6 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         }
 
         try {
-          // getPreviewUrl() creates a publicly accessible URL for a port
-          // Returns: { url, port, token?, username?, password? }
           const preview = await sandbox.getPreviewUrl(options.port);
           return preview.url;
         } catch (error) {
@@ -366,7 +284,6 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       },
 
       // Filesystem methods - Upstash Box has full filesystem support
-      // All paths must be under /workspace/home — resolvePath() remaps absolute paths.
       filesystem: {
         readFile: async (sandbox: UpstashSandboxInstance, path: string): Promise<string> => {
           return await sandbox.files.read(resolvePath(sandbox, path));
@@ -416,8 +333,6 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
 
         try {
-          // Reconnect to the box and create a snapshot
-          // snapshot() creates asynchronously and polls until ready
           const box = await Box.get(sandboxId, { apiKey });
           const snapshot = await box.snapshot({
             name: options?.name || `snapshot-${Date.now()}`,
@@ -439,13 +354,11 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         }
       },
 
-      list: async (config: UpstashConfig) => {
-        // Upstash lists snapshots per-box via box.listSnapshots(), not globally.
-        // No global snapshot list API exists.
+      list: async (_config: UpstashConfig) => {
         return [];
       },
 
-      delete: async (config: UpstashConfig, snapshotId: string) => {
+      delete: async (_config: UpstashConfig, _snapshotId: string) => {
         throw new Error(
           'Upstash snapshot deletion requires a box context. Use sandbox.getInstance().deleteSnapshot(snapshotId) instead.'
         );
@@ -453,17 +366,17 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
     },
 
     template: {
-      create: async (config: UpstashConfig, options: { name: string }) => {
+      create: async (_config: UpstashConfig, _options: { name: string }) => {
         throw new Error(
           'Upstash Box does not support template creation directly. Use snapshot.create() to save a box state, then Box.fromSnapshot() to restore from it.'
         );
       },
 
-      list: async (config: UpstashConfig) => {
+      list: async (_config: UpstashConfig) => {
         return [];
       },
 
-      delete: async (config: UpstashConfig, templateId: string) => {
+      delete: async (_config: UpstashConfig, _templateId: string) => {
         // No-op - Upstash uses snapshots instead of templates
       },
     },

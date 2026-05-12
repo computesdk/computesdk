@@ -6,7 +6,7 @@ Interactive REPL for testing ComputeSDK sandbox operations with instant feedback
 
 - 🚀 **Zero ceremony** - Just run commands, no sandbox ID management
 - ✨ **Tab autocomplete** - All 100+ `@computesdk/cmd` functions autocomplete
-- 🔄 **Provider switching** - Seamlessly switch between e2b, railway, daytona, etc.
+- 🔄 **Provider switching** - Seamlessly switch between e2b, daytona, modal, etc.
 - ⚡ **Smart evaluation** - Type `npm.install('express')` and it just runs
 - 📊 **Real-time feedback** - See timing, output, and errors instantly
 
@@ -17,8 +17,6 @@ npm install -D @computesdk/workbench
 
 # Install at least one provider
 npm install @computesdk/e2b
-# or
-npm install @computesdk/railway
 # or any other provider
 ```
 
@@ -30,10 +28,8 @@ npm install @computesdk/railway
 # E2B Provider
 E2B_API_KEY=e2b_your_api_key_here
 
-# Railway Provider  
-RAILWAY_API_KEY=your_railway_api_key
-RAILWAY_PROJECT_ID=your_project_id
-RAILWAY_ENVIRONMENT_ID=your_environment_id
+# Daytona Provider
+DAYTONA_API_KEY=your_daytona_api_key
 ```
 
 2. **Start workbench**:
@@ -67,24 +63,16 @@ drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
 
 ### Workbench Commands
 
-- `provider <name>` - Switch provider via gateway (e.g., `provider e2b`)
-- `provider direct <name>` - Switch to direct provider connection (e.g., `provider direct e2b`)
+- `provider <name>` - Switch provider (e.g., `provider e2b`)
 - `providers` - List all providers with status
 - `restart` - Restart current sandbox
 - `destroy` - Destroy current sandbox
-- `connect <url> [token]` - Connect to existing sandbox via URL (e.g., `connect https://sandbox-123.localhost:8080` or `connect https://sandbox-123.localhost:8080 your_token`)
 - `info` - Show sandbox info (provider, uptime)
 - `env` - Show environment/credentials status
 - `help` - Show this help
 - `exit` - Exit workbench
 
-**Provider Modes:**
-- **Gateway mode (default)**: Routes through ComputeSDK API, zero-config setup
-  - Example: `provider e2b` uses E2B via gateway
-  - Requires: `COMPUTESDK_API_KEY` + provider credentials
-- **Direct mode**: Connects directly to provider, requires provider packages
-  - Example: `provider direct e2b` connects directly to E2B
-  - Requires: Provider package installed (`@computesdk/e2b`) + provider credentials
+Each provider requires its package installed (e.g. `@computesdk/e2b`) and its credentials configured.
 
 ### Running Commands
 
@@ -127,100 +115,45 @@ wget('https://file.com/download.zip')
 
 ## Provider Switching
 
-### Gateway Mode (Default - Zero Config)
-
-Switch between providers via the gateway:
+Switch between providers:
 
 ```
 workbench> provider e2b
-✅ Switched to e2b (via gateway)
+✅ Switched to e2b
 
 workbench> npm.install('express')
-⏳ Creating sandbox with e2b (via gateway)...
+⏳ Creating sandbox with e2b...
 ✅ Sandbox ready (1.2s)
 Running: npm install express
 ✅ Completed (3.2s)
 
-workbench> provider railway
+workbench> provider daytona
 Destroy current sandbox? (y/N): y
-✅ Switched to railway (via gateway)
+✅ Switched to daytona
 ```
-
-### Direct Mode (Advanced)
-
-Connect directly to providers (requires provider packages):
-
-```
-workbench> provider direct e2b
-✅ Switched to e2b (direct)
-
-workbench> pwd()
-⏳ Creating sandbox with e2b (direct)...
-✅ Sandbox ready (2.5s)
-Running: pwd
-/home
-✅ Completed (0.1s)
-```
-
-## Connect to Existing Sandboxes
-
-You can connect to an existing sandbox instance via its URL. This is particularly useful for:
-- Connecting to locally running sandboxes
-- Attaching to sandboxes created by other tools
-- Debugging existing sandbox instances
-
-### Without Authentication
-
-```
-workbench> connect https://sandbox-123.localhost:8080
-⏳ Connecting to https://sandbox-123.localhost:8080...
-✅ Connected to sandbox (0.5s)
-Provider: e2b
-Sandbox ID: sandbox-123
-
-connected:sandbox-123> ls('/home')
-Running: ls /home
-total 8
-drwxr-xr-x 3 user user 4096 Dec 12 19:00 app
-✅ Completed (0.1s)
-```
-
-### With Access Token
-
-If the sandbox requires authentication, you can provide an access token:
-
-```
-workbench> connect https://sandbox-123.localhost:8080 your_access_token_here
-⏳ Connecting to https://sandbox-123.localhost:8080...
-✅ Connected to sandbox (0.5s)
-Provider: e2b
-Sandbox ID: sandbox-123
-```
-
-Note: When you exit the workbench after connecting to an external sandbox, it will disconnect without destroying the sandbox (since you don't own it).
 
 ## Creating and Switching Sandboxes
 
-When you create a sandbox using `create()`, `findOrCreate()`, or `find()`, it automatically becomes your current active sandbox. All subsequent commands will run on this sandbox.
+When you create a sandbox using `create()`, it automatically becomes your current active sandbox. All subsequent commands will run on this sandbox.
 
 ```javascript
 > create({ namespace: "h" })
 ✅ Switched to sandbox sandbox-123
-{ sandboxId: 'sandbox-123', provider: 'gateway', metadata: {} }
-gateway:sandbox-123>  // Prompt shows you're now on this sandbox
+{ sandboxId: 'sandbox-123', provider: 'e2b', metadata: {} }
+e2b:sandbox-123>  // Prompt shows you're now on this sandbox
 
 > ls('/home')  // Runs on sandbox-123
 ```
 
 ### Switching Between Sandboxes
 
-If you already have an active sandbox and create/find another one, the workbench will prompt you:
+If you already have an active sandbox and create another one, the workbench will prompt you:
 
 ```javascript
 e2b:sandbox-456> create({ namespace: "prod" })
 Switch to new sandbox? (Y/n): y
 ✅ Switched to sandbox sandbox-789
-gateway:sandbox-789>
+e2b:sandbox-789>
 ```
 
 Press Enter or type "y" to switch. Type "n" to create the sandbox without switching to it.
@@ -238,25 +171,14 @@ add  branch  checkout  clone  commit  diff  fetch
 init  log  pull  push  reset  stash  status
 
 workbench> provider <TAB>
-e2b  railway  daytona  modal  runloop  vercel
+e2b  daytona  modal  runloop  vercel
 ```
 
 ## Supported Providers
 
-### Gateway Provider (Zero-Config)
-
-The **gateway** provider uses the ComputeSDK API to automatically route to any provider:
-
-- No provider packages needed
-- Just set `COMPUTESDK_API_KEY` + provider credentials
-- Auto-detects provider from your environment
-
-### Direct Provider Packages
-
 Install any combination of:
 
 - `@computesdk/e2b` - E2B sandboxes
-- `@computesdk/railway` - Railway environments
 - `@computesdk/daytona` - Daytona workspaces
 - `@computesdk/modal` - Modal containers
 - `@computesdk/runloop` - Runloop instances
@@ -270,16 +192,8 @@ Install any combination of:
 Set provider credentials in `.env`:
 
 ```bash
-# Gateway Provider (Zero-Config)
-COMPUTESDK_API_KEY=computesdk_live_xxx
-
 # E2B
 E2B_API_KEY=e2b_xxx
-
-# Railway
-RAILWAY_API_KEY=xxx
-RAILWAY_PROJECT_ID=xxx
-RAILWAY_ENVIRONMENT_ID=xxx
 
 # Daytona
 DAYTONA_API_KEY=xxx
@@ -325,7 +239,6 @@ The workbench is a full Node.js REPL with the ComputeSDK pre-loaded. You can rep
 | SDK Test Code | Workbench Equivalent |
 |---------------|---------------------|
 | `sandbox.runCommand('echo hi')` | `runCommand('echo hi')` or `getInstance().runCommand(...)` |
-| `sandbox.terminal.create()` | `terminal.create()` |
 | `sandbox.filesystem.readFile(path)` | `filesystem.readFile(path)` |
 | `sandbox.getInfo()` | `sandboxInfo()` |
 | `sandbox.getUrl({ port })` | `getUrl({ port: 3000 })` |

@@ -37,49 +37,25 @@ Get your token from [Vercel Account Tokens](https://vercel.com/account/tokens)
 
 ## Quick Start
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects Vercel from VERCEL_OIDC_TOKEN or VERCEL_TOKEN environment variables
-const sandbox = await compute.sandbox.create();
-
-// Execute Node.js code
-const result = await sandbox.runCode('console.log("Hello from Vercel!");');
-console.log(result.stdout); // "Hello from Vercel!"
-
-// Execute Python code
-const pythonResult = await sandbox.runCode('print("Hello from Python!")', 'python');
-console.log(pythonResult.stdout); // "Hello from Python!"
-
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { vercel } from '@computesdk/vercel';
 
 const compute = vercel({
   token: process.env.VERCEL_TOKEN,
-  teamId: process.env.VERCEL_TEAM_ID, 
+  teamId: process.env.VERCEL_TEAM_ID,
   projectId: process.env.VERCEL_PROJECT_ID,
-  runtime: 'python',
   timeout: 600000 // 10 minutes
 });
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('console.log("Hello from Vercel!");');
+const result = await sandbox.runCommand('node -e "console.log(\"Hello from Vercel!\")"');
 console.log(result.stdout);
 
 await sandbox.destroy();
 ```
+
+OIDC tokens (`VERCEL_OIDC_TOKEN`) are auto-detected from the environment when no explicit credentials are provided in config.
 
 ## Configuration
 
@@ -105,19 +81,17 @@ interface VercelConfig {
   teamId?: string;
   /** Vercel project ID - if not provided, will use VERCEL_PROJECT_ID env var */
   projectId?: string;
-  /** Default runtime environment */
-  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Ports to expose */
+  ports?: number[];
 }
 ```
 
 ## Features
 
-- ✅ **Code Execution** - Node.js 22 and Python 3.13 runtime support
-- ✅ **Command Execution** - Run shell commands in sandbox
+- ✅ **Command Execution** - Run shell commands in sandbox (Node.js 22, Python 3.13 available)
 - ✅ **Filesystem Operations** - Full file system access via shell commands
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 - ✅ **Long-running Tasks** - Up to 45 minutes execution time
 - ✅ **Global Infrastructure** - Runs on Vercel's global network
 - ❌ **Interactive Terminals** - Not supported by Vercel Sandbox
@@ -125,40 +99,33 @@ interface VercelConfig {
 
 ## API Reference
 
-### Code Execution
-
-```typescript
-// Execute Node.js code
-const result = await sandbox.runCode(`
-const data = { message: "Hello from Node.js" };
-console.log(JSON.stringify(data));
-`, 'node');
-
-// Execute Python code  
-const result = await sandbox.runCode(`
-import json
-data = {"message": "Hello from Python"}
-print(json.dumps(data))
-`, 'python');
-
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
-```
-
 ### Command Execution
 
 ```typescript
+// Run Node.js code via heredoc
+const result = await sandbox.runCommand(`node - <<'JS'
+const data = { message: "Hello from Node.js" };
+console.log(JSON.stringify(data));
+JS`);
+
+// Run Python code via heredoc
+const result = await sandbox.runCommand(`python - <<'PY'
+import json
+data = {"message": "Hello from Python"}
+print(json.dumps(data))
+PY`);
+
 // List files
-const result = await sandbox.runCommand('ls', ['-la']);
+const result = await sandbox.runCommand('ls -la');
 
 // Install packages (Node.js)
-const result = await sandbox.runCommand('npm', ['install', 'lodash']);
+const result = await sandbox.runCommand('npm install lodash');
 
 // Install packages (Python)
-const result = await sandbox.runCommand('pip', ['install', 'requests']);
+const result = await sandbox.runCommand('pip install requests');
 
 // Run scripts
-const result = await sandbox.runCommand('node', ['script.js']);
+const result = await sandbox.runCommand('node script.js');
 ```
 
 ### Filesystem Operations
@@ -191,26 +158,14 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // Get existing sandbox
-const existing = await compute.sandbox.getById(provider, 'sandbox-id');
+const existing = await compute.sandbox.getById('sandbox-id');
 
 // Destroy sandbox
-await compute.sandbox.destroy(provider, 'sandbox-id');
+await compute.sandbox.destroy('sandbox-id');
 
 // Note: Vercel doesn't support listing all sandboxes
 // Each sandbox is ephemeral and single-use
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print(` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
 
 ## Error Handling
 
@@ -225,7 +180,7 @@ try {
   });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Missing Vercel authentication')) {
     console.error('Set VERCEL_OIDC_TOKEN or VERCEL_TOKEN environment variables');
@@ -246,10 +201,10 @@ try {
 ```typescript
 import { vercel } from '@computesdk/vercel';
 
-const compute = vercel({ runtime: 'node' });
+const compute = vercel({});
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const http = require('http');
 const url = require('url');
 
@@ -272,7 +227,7 @@ const path = '/api/users';
 const response = routes[path] ? routes[path]() : { error: 'Not found' };
 
 console.log('Response:', JSON.stringify(response, null, 2));
-`);
+JS`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -283,10 +238,10 @@ await sandbox.destroy();
 ```typescript
 import { vercel } from '@computesdk/vercel';
 
-const compute = vercel({ runtime: 'python' });
+const compute = vercel({});
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 import statistics
 from collections import Counter
@@ -317,7 +272,7 @@ print(f"Average Revenue per Product: ${avg_revenue:.2f}")
 print("\\nRevenue by Product:")
 for product, revenue in sorted(product_sales.items(), key=lambda x: x[1], reverse=True):
     print(f"  {product}: ${revenue}")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -328,7 +283,7 @@ await sandbox.destroy();
 ```typescript
 import { vercel } from '@computesdk/vercel';
 
-const compute = vercel({ runtime: 'python' });
+const compute = vercel({});
 const sandbox = await compute.sandbox.create();
 
 // Create project structure
@@ -366,7 +321,7 @@ await sandbox.filesystem.writeFile(
 );
 
 // Process data
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 import csv
 from collections import defaultdict
@@ -416,7 +371,7 @@ print(f"Generated {len(results)} department statistics")
 # Print summary
 for result in results:
     print(f"{result['department']}: {result['employee_count']} employees, avg salary ${result['average_salary']}")
-`);
+PY`);
 
 console.log('Execution Output:', result.stdout);
 
@@ -442,15 +397,15 @@ await sandbox.destroy();
 ```typescript
 import { vercel } from '@computesdk/vercel';
 
-const compute = vercel({ runtime: 'node' });
+const compute = vercel({});
 const sandbox = await compute.sandbox.create();
 
 // Install lodash
-const installResult = await sandbox.runCommand('npm', ['install', 'lodash']);
+const installResult = await sandbox.runCommand('npm install lodash');
 console.log('Install result:', installResult.stdout);
 
 // Use lodash in code
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`node - <<'JS'
 const _ = require('lodash');
 
 const data = [
@@ -470,7 +425,7 @@ console.log('Average age:', avgAge);
 // Find oldest person
 const oldest = _.maxBy(data, 'age');
 console.log('Oldest person:', oldest.name);
-`);
+JS`);
 
 console.log(result.stdout);
 await sandbox.destroy();

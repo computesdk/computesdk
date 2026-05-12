@@ -10,37 +10,16 @@ npm install @computesdk/daytona
 
 ## Quick Start
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects Daytona from DAYTONA_API_KEY environment variable
-const sandbox = await compute.sandbox.create();
-
-// Execute code
-const result = await sandbox.runCode('print("Hello from Daytona!")');
-console.log(result.stdout); // "Hello from Daytona!"
-
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { daytona } from '@computesdk/daytona';
 
-const compute = daytona({ 
+const compute = daytona({
   apiKey: process.env.DAYTONA_API_KEY
 });
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode('print("Hello from Daytona!")');
+const result = await sandbox.runCommand('python -c "print(\"Hello from Daytona!\")"');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -60,8 +39,8 @@ export DAYTONA_API_KEY=your_api_key_here
 interface DaytonaConfig {
   /** Daytona API key - if not provided, will use DAYTONA_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: 'python' | 'node';
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
@@ -69,45 +48,36 @@ interface DaytonaConfig {
 
 ## Features
 
-- ✅ **Code Execution** - Python and Node.js runtime support
 - ✅ **Command Execution** - Run shell commands in workspace
 - ✅ **Filesystem Operations** - Full file system access
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 - ❌ **Interactive Terminals** - Not supported by Daytona SDK
 
 ## API Reference
 
-### Code Execution
-
-```typescript
-// Execute Python code
-const result = await sandbox.runCode(`
-import json
-data = {"message": "Hello from Python"}
-print(json.dumps(data))
-`, 'python');
-
-// Execute Node.js code  
-const result = await sandbox.runCode(`
-const data = { message: "Hello from Node.js" };
-console.log(JSON.stringify(data));
-`, 'node');
-
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
-```
-
 ### Command Execution
 
 ```typescript
+// Run Python code via heredoc
+const result = await sandbox.runCommand(`python - <<'PY'
+import json
+data = {"message": "Hello from Python"}
+print(json.dumps(data))
+PY`);
+
+// Run Node.js code via heredoc
+const result = await sandbox.runCommand(`node - <<'JS'
+const data = { message: "Hello from Node.js" };
+console.log(JSON.stringify(data));
+JS`);
+
 // List files
-const result = await sandbox.runCommand('ls', ['-la']);
+const result = await sandbox.runCommand('ls -la');
 
 // Install packages
-const result = await sandbox.runCommand('pip', ['install', 'requests']);
+const result = await sandbox.runCommand('pip install requests');
 
 // Run scripts
-const result = await sandbox.runCommand('python', ['script.py']);
+const result = await sandbox.runCommand('python script.py');
 ```
 
 ### Filesystem Operations
@@ -140,26 +110,14 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // List all sandboxes
-const sandboxes = await compute.sandbox.list(provider);
+const sandboxes = await compute.sandbox.list();
 
 // Get existing sandbox
-const existing = await compute.sandbox.getById(provider, 'sandbox-id');
+const existing = await compute.sandbox.getById('sandbox-id');
 
 // Destroy sandbox
-await compute.sandbox.destroy(provider, 'sandbox-id');
+await compute.sandbox.destroy('sandbox-id');
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print(` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
 
 ## Error Handling
 
@@ -170,7 +128,7 @@ try {
   const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
     console.error('Code has syntax errors');
@@ -192,7 +150,7 @@ import { daytona } from '@computesdk/daytona';
 const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 
 # Process data
@@ -204,7 +162,7 @@ result = {
 }
 
 print(json.dumps(result))
-`);
+PY`);
 
 const output = JSON.parse(result.stdout);
 console.log(output); // { sum: 15, average: 3, max: 5 }
@@ -226,7 +184,7 @@ await sandbox.filesystem.writeFile('/workspace/data.json',
 );
 
 // Process file
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 
 with open('/workspace/data.json', 'r') as f:
@@ -240,7 +198,7 @@ print(f"Found {user_count} users")
 result = {"user_count": user_count, "processed": True}
 with open('/workspace/result.json', 'w') as f:
     json.dump(result, f)
-`);
+PY`);
 
 // Read result
 const resultData = await sandbox.filesystem.readFile('/workspace/result.json');

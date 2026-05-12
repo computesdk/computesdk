@@ -86,13 +86,13 @@ describe('just-bash provider', () => {
     expect(existsAfter).toBe(false);
   });
 
-  it('should run code as bash scripts', async () => {
+  it('should run shell commands', async () => {
     provider = justBash({});
     const sandbox = await provider.sandbox.create();
     sandboxId = sandbox.sandboxId;
 
-    const result = await sandbox.runCode('echo "computed: $((2 + 3))"');
-    expect(result.output.trim()).toBe('computed: 5');
+    const result = await sandbox.runCommand('echo "computed: $((2 + 3))"');
+    expect(result.stdout.trim()).toBe('computed: 5');
     expect(result.exitCode).toBe(0);
   });
 

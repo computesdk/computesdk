@@ -30,9 +30,9 @@ const compute = blaxel({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Blaxel!")');
-console.log(result.output); // "Hello from Blaxel!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Blaxel!"');
+console.log(result.stdout); // "Hello from Blaxel!"
 
 // Clean up
 await sandbox.destroy();
@@ -56,21 +56,9 @@ interface BlaxelConfig {
 }
 ```
 
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
-
 ### Default Images
 
-The provider automatically selects images based on runtime:
+The provider automatically selects images based on the configured runtime:
 - **Python:** `blaxel/prod-py-app:latest`
 - **Node.js:** `blaxel/prod-ts-app:latest`
 - **Default:** `blaxel/prod-base:latest`

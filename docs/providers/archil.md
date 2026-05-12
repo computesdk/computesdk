@@ -58,24 +58,6 @@ interface ArchilConfig {
 }
 ```
 
-## Runtime Selection
-
-Archil does not auto-detect runtimes — `runCode` requires an explicit runtime:
-
-```typescript
-// Python
-await sandbox.runCode('print("Hello from Archil!")', 'python');
-
-// Node.js
-await sandbox.runCode('console.log("Hello from Archil!")', 'node');
-```
-
-**Supported runtimes:**
-- `node` — wraps code in `node -e`
-- `python` — wraps code in `python3 -c`
-
-Passing any other runtime (or omitting it) throws.
-
 ### Supported Operations
 
 | Method        | Supported | Notes                                                                 |
@@ -85,7 +67,6 @@ Passing any other runtime (or omitting it) throws.
 | `list`        | ✅        | Lists all disks visible to the API key.                               |
 | `destroy`     | no-op     | Disk lifecycle is managed by Archil.                                  |
 | `runCommand`  | ✅        | Calls Archil's HTTP `exec` endpoint and waits for completion.         |
-| `runCode`     | ✅        | Wraps code in `node -e` or `python3 -c`. Requires explicit `runtime`. |
 | `getInfo`     | ✅        |                                                                       |
 | `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose.    |
 | `filesystem`  | ✅        | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.).        |
