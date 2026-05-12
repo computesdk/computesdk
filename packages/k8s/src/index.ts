@@ -66,7 +66,9 @@ function serviceNameForPod(podName: string): string {
 }
 
 function isNotFound(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { statusCode?: number }).statusCode === 404;
+  if (typeof error !== 'object' || error === null) return false;
+  const err = error as { statusCode?: number; code?: number };
+  return err.statusCode === 404 || err.code === 404;
 }
 
 async function waitForPodRunning(core: CoreV1Api, namespace: string, podName: string, timeoutMs: number) {
@@ -88,7 +90,7 @@ async function execInPod(
   namespace: string,
   podName: string,
   command: string,
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+): Promise<{ stdout: string; stderr: string }> {
   const exec = new Exec(kc);
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -102,7 +104,7 @@ async function execInPod(
     err += chunk.toString('utf8');
   });
 
-  const code = await exec.exec(
+  await exec.exec(
     namespace,
     podName,
     'sandbox',
@@ -113,7 +115,7 @@ async function execInPod(
     false,
   );
 
-  return { stdout: out, stderr: err, exitCode: code.status === 'Success' ? 0 : 1 };
+  return { stdout: out, stderr: err };
 }
 
 function loadKubeConfigFromHandle(sandbox: K8sSandboxHandle): KubeConfig {
@@ -126,11 +128,11 @@ function loadKubeConfigFromHandle(sandbox: K8sSandboxHandle): KubeConfig {
 function withCommandOptions(command: string, options?: RunCommandOptions): string {
   let full = command;
   if (options?.cwd) {
-    full = `cd '${escapeShellArg(options.cwd)}' && ${full}`;
+    full = `cd "${escapeShellArg(options.cwd)}" && ${full}`;
   }
   if (options?.env && Object.keys(options.env).length > 0) {
     const envPrefix = Object.entries(options.env)
-      .map(([k, v]) => `${k}='${escapeShellArg(v)}'`)
+      .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
       .join(' ');
     full = `${envPrefix} ${full}`;
   }
@@ -138,6 +140,30 @@ function withCommandOptions(command: string, options?: RunCommandOptions): strin
     full = `nohup ${full} >/tmp/computesdk-bg.log 2>&1 &`;
   }
   return full;
+}
+
+function parseExitCode(stdout: string, stderr: string): { stdout: string; stderr: string; exitCode: number } {
+  const marker = '__COMPUTESDK_EXIT_CODE__=';
+  const parse = (text: string) => {
+    const idx = text.lastIndexOf(marker);
+    if (idx < 0) return null;
+    const before = text.slice(0, idx).replace(/\n$/, '');
+    const token = text.slice(idx + marker.length).trim().split(/\s+/)[0] || '1';
+    const parsed = Number.parseInt(token, 10);
+    return { before, code: Number.isNaN(parsed) ? 1 : parsed };
+  };
+
+  const outParsed = parse(stdout);
+  if (outParsed) {
+    return { stdout: outParsed.before, stderr, exitCode: outParsed.code };
+  }
+
+  const errParsed = parse(stderr);
+  if (errParsed) {
+    return { stdout, stderr: errParsed.before, exitCode: errParsed.code };
+  }
+
+  return { stdout, stderr, exitCode: stderr.trim().length > 0 ? 1 : 0 };
 }
 
 export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
@@ -278,14 +304,16 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
       runCommand: async (sandbox: K8sSandboxHandle, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const start = Date.now();
         const fullCommand = withCommandOptions(command, options);
+        const wrappedCommand = `(${fullCommand}); __ec=$?; printf '\n__COMPUTESDK_EXIT_CODE__=%s\n' "$__ec"`;
 
         const kc = loadKubeConfigFromHandle(sandbox);
-        const result = await execInPod(kc, sandbox.namespace, sandbox.podName, fullCommand);
+        const result = await execInPod(kc, sandbox.namespace, sandbox.podName, wrappedCommand);
+        const parsed = parseExitCode(result.stdout, result.stderr);
 
         return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
+          stdout: parsed.stdout,
+          stderr: parsed.stderr,
+          exitCode: parsed.exitCode,
           durationMs: Date.now() - start,
         };
       },
