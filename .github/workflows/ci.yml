@@ -257,3 +257,39 @@ jobs:
 
         echo "Running computesdk integration test for $TEST_PROVIDER..."
         pnpm --filter computesdk test compute-provider-integration
+
+  k8s-integration-tests:
+    runs-on: namespace-profile-default
+    needs: test
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+
+    - name: Set up kind cluster
+      uses: helm/kind-action@v1.10.0
+
+    - name: Verify cluster is reachable
+      run: kubectl get nodes
+
+    - name: Build required packages
+      run: pnpm --filter @computesdk/cmd build && pnpm --filter computesdk build && pnpm --filter @computesdk/provider build && pnpm --filter @computesdk/test-utils build && pnpm --filter @computesdk/k8s build
+
+    - name: Run Kubernetes provider integration tests
+      env:
+        COMPUTESDK_TEST_K8S: "1"
+      run: pnpm --filter @computesdk/k8s test
