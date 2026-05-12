@@ -21,8 +21,8 @@ const compute = k8s({
 });
 
 const sandbox = await compute.sandbox.create();
-const result = await sandbox.runCode('console.log("Hello from k8s")');
-console.log(result.output);
+const result = await sandbox.runCommand('node -e "console.log(\"Hello from k8s\")"');
+console.log(result.stdout);
 await sandbox.destroy();
 ```
 

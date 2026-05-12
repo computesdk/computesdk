@@ -8,8 +8,6 @@ import {
 } from '@kubernetes/client-node';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
-  Runtime,
-  CodeResult,
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
@@ -20,6 +18,7 @@ const PROVIDER = 'k8s' as const;
 const LABEL_MANAGED = 'computesdk.io/managed';
 const LABEL_RUNTIME = 'computesdk.io/runtime';
 const LABEL_SID = 'computesdk.io/sandbox-id';
+type Runtime = 'node' | 'python';
 
 export interface K8sConfig {
   kubeConfigPath?: string;
@@ -55,17 +54,6 @@ function loadKubeConfig(config: K8sConfig): KubeConfig {
 
 function getNamespace(config: K8sConfig, options?: CreateSandboxOptions): string {
   return options?.namespace || config.namespace || 'default';
-}
-
-function detectRuntime(code: string, runtime?: Runtime): Runtime {
-  if (runtime) return runtime;
-  const looksPython =
-    code.includes('print(') ||
-    code.includes('import ') ||
-    code.includes('def ') ||
-    code.includes('__') ||
-    code.includes('raise ');
-  return looksPython ? 'python' : 'node';
 }
 
 function imageForRuntime(runtime: Runtime, configured?: string): string {
@@ -287,23 +275,6 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
         });
       },
 
-      runCode: async (sandbox: K8sSandboxHandle, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const effectiveRuntime = detectRuntime(code, runtime || sandbox.runtime);
-        const encoded = Buffer.from(code, 'utf8').toString('base64');
-        const command = effectiveRuntime === 'python'
-          ? `echo '${encoded}' | base64 -d | python3`
-          : `echo '${encoded}' | base64 -d | node`;
-
-        const kc = loadKubeConfigFromHandle(sandbox);
-        const result = await execInPod(kc, sandbox.namespace, sandbox.podName, command);
-
-        return {
-          output: result.stderr ? `${result.stdout}${result.stdout ? '\n' : ''}${result.stderr}` : result.stdout,
-          exitCode: result.exitCode,
-          language: effectiveRuntime,
-        };
-      },
-
       runCommand: async (sandbox: K8sSandboxHandle, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const start = Date.now();
         const fullCommand = withCommandOptions(command, options);
@@ -328,11 +299,11 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
         return {
           id: sandbox.podName,
           provider: PROVIDER,
-          runtime: sandbox.runtime,
           status: phase === 'Running' ? 'running' : phase === 'Succeeded' ? 'stopped' : 'error',
           createdAt: pod.metadata?.creationTimestamp || sandbox.createdAt,
           timeout: 120000,
           metadata: {
+            runtime: sandbox.runtime,
             namespace: sandbox.namespace,
             podIP: pod.status?.podIP,
             nodeName: pod.spec?.nodeName,
