@@ -10,27 +10,6 @@ npm install @computesdk/blaxel
 
 ## Quick Start
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
-
-```typescript
-import { compute } from 'computesdk';
-
-// Auto-detects Blaxel from BL_WORKSPACE/BL_API_KEY environment variables
-const sandbox = await compute.sandbox.create();
-
-// Execute code
-const result = await sandbox.runCode('console.log("Hello from Blaxel!")');
-console.log(result.stdout); // "Hello from Blaxel!"
-
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
 ```typescript
 import { blaxel } from '@computesdk/blaxel';
 
@@ -43,14 +22,13 @@ const compute = blaxel({
 });
 
 const sandbox = await compute.sandbox.create({
-  runtime: 'python',  // Runtime specified at creation time
   timeout: 3600000,   // 1 hour timeout
   envs: { 
     DEBUG: 'true' 
   }
 });
 
-const result = await sandbox.runCode('print("Hello from Blaxel!")');
+const result = await sandbox.runCommand('python -c "print(\"Hello from Blaxel!\")"');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -95,10 +73,8 @@ The provider automatically selects images based on runtime:
 
 ## Features
 
-- ✅ **Code Execution** - Python and Node.js runtime support with proper stdout/stderr streaming
-- ✅ **Command Execution** - Run shell commands with background support
+- ✅ **Command Execution** - Run shell commands with background support and stdout/stderr streaming
 - ✅ **Filesystem Operations** - Full file system access (read, write, mkdir, ls, rm)
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js from code patterns
 - ✅ **Custom Images** - Support for custom Docker images
 - ✅ **Memory Configuration** - Configurable memory allocation
 - ✅ **Preview URLs** - Public/private preview URLs with TTL, custom domains, and headers
@@ -111,37 +87,30 @@ The provider automatically selects images based on runtime:
 
 ## API Reference
 
-### Code Execution
-
-```typescript
-// Execute Python code
-const result = await sandbox.runCode(`
-import json
-data = {"message": "Hello from Python"}
-print(json.dumps(data))
-`, 'python');
-
-// Execute Node.js code  
-const result = await sandbox.runCode(`
-const data = { message: "Hello from Node.js" };
-console.log(JSON.stringify(data));
-`, 'node');
-
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
-```
-
 ### Command Execution
 
 ```typescript
+// Run Python code via heredoc
+const result = await sandbox.runCommand(`python - <<'PY'
+import json
+data = {"message": "Hello from Python"}
+print(json.dumps(data))
+PY`);
+
+// Run Node.js code via heredoc
+const result = await sandbox.runCommand(`node - <<'JS'
+const data = { message: "Hello from Node.js" };
+console.log(JSON.stringify(data));
+JS`);
+
 // List files
-const result = await sandbox.runCommand('ls', ['-la']);
+const result = await sandbox.runCommand('ls -la');
 
 // Install packages
-const result = await sandbox.runCommand('pip', ['install', 'requests']);
+const result = await sandbox.runCommand('pip install requests');
 
 // Run background process
-const bgResult = await sandbox.runCommand('npm', ['start'], { background: true });
+const bgResult = await sandbox.runCommand('npm start', { background: true });
 console.log('Process started in background');
 ```
 
@@ -175,13 +144,11 @@ await sandbox.filesystem.remove('/tmp/hello.py');
 ```typescript
 // Get sandbox info
 const info = await sandbox.getInfo();
-console.log(info.id, info.provider, info.status, info.runtime);
+console.log(info.id, info.provider, info.status);
 // Status: 'running', 'stopped', or 'error'
-// Runtime: Automatically detected from image name
 
 // Create with specific configuration
 const sandbox = await provider.sandbox.create({
-  runtime: 'python',              // Selects appropriate image
   timeout: 1800000,               // 30 minutes in milliseconds (converted to "1800s")
   envs: {                         // Environment variables
     API_KEY: 'secret-key',
@@ -317,9 +284,9 @@ const advancedUrl = await sandbox.getUrl({
 > 📚 You can also [connect to sandboxes remotely from a terminal](https://docs.blaxel.ai/Sandboxes/Overview#connect-to-a-sandbox-with-a-terminal) for direct access
 
 ```typescript
-import { createBlaxelCompute } from '@computesdk/blaxel';
+import { blaxel } from '@computesdk/blaxel';
 
-const compute = createBlaxelCompute({ 
+const compute = blaxel({
   workspace: 'your-workspace',
   apiKey: 'your-key',
   memory: 4096,
@@ -357,18 +324,6 @@ const preview = await instance.previews.create({
 });
 ```
 
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print(` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `f'`, `__`, `sys.`, `json.`)
-
-**Default:** Node.js for all other cases
-
 ## Error Handling
 
 ```typescript
@@ -381,7 +336,7 @@ try {
   });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Syntax error')) {
     console.error('Code has syntax errors');
@@ -411,7 +366,7 @@ const compute = blaxel({
 });
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 
 # Process data
@@ -423,7 +378,7 @@ result = {
 }
 
 print(json.dumps(result))
-`);
+PY`);
 
 const output = JSON.parse(result.stdout);
 console.log(output); // { sum: 15, average: 3, max: 5 }
@@ -448,7 +403,7 @@ await sandbox.filesystem.writeFile('/tmp/data.json',
 );
 
 // Process file
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 
 with open('/tmp/data.json', 'r') as f:
@@ -462,7 +417,7 @@ print(f"Found {user_count} users")
 result = {"user_count": user_count, "processed": True}
 with open('/tmp/result.json', 'w') as f:
     json.dump(result, f)
-`);
+PY`);
 
 // Read result
 const resultData = await sandbox.filesystem.readFile('/tmp/result.json');
@@ -483,10 +438,10 @@ const compute = blaxel({
 const sandbox = await compute.sandbox.create();
 
 // Install dependencies
-await sandbox.runCommand('pip', ['install', 'requests', 'beautifulsoup4']);
+await sandbox.runCommand('pip install requests beautifulsoup4');
 
 // Scrape website
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -506,7 +461,7 @@ result = {
 }
 
 print(json.dumps(result))
-`);
+PY`);
 
 console.log(JSON.parse(result.stdout));
 
@@ -543,7 +498,7 @@ server.listen(3000, () => {
 `);
 
 // Start server in background
-await sandbox.runCommand('node', ['/tmp/server.js'], { background: true });
+await sandbox.runCommand('node /tmp/server.js', { background: true });
 
 // Get the preview URL (public by default)
 const url = await sandbox.getUrl({ port: 3000 });

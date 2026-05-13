@@ -19,37 +19,19 @@ export E2B_API_KEY=e2b_your_api_key_here
 
 ## Quick Start
 
-### Gateway Mode (Recommended)
-
-Use the gateway for zero-config auto-detection:
+Configure `compute` with the E2B provider and create a sandbox:
 
 ```typescript
 import { compute } from 'computesdk';
-
-// Auto-detects E2B from E2B_API_KEY environment variable
-const sandbox = await compute.sandbox.create();
-
-const result = await sandbox.runCode(`
-import pandas as pd
-print(pd.__version__)
-`);
-
-console.log(result.stdout);
-await sandbox.destroy();
-```
-
-### Direct Mode
-
-For direct SDK usage without the gateway:
-
-```typescript
 import { e2b } from '@computesdk/e2b';
 
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
+compute.setConfig({
+  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
+});
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 import numpy as np
 
@@ -57,10 +39,19 @@ data = {'A': [1, 2, 3], 'B': [4, 5, 6]}
 df = pd.DataFrame(data)
 print(df)
 print(f"Sum: {df.sum().sum()}")
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
+```
+
+Alternatively, call the provider factory directly when you only need one provider:
+
+```typescript
+import { e2b } from '@computesdk/e2b';
+
+const sdk = e2b({ apiKey: process.env.E2B_API_KEY });
+const sandbox = await sdk.sandbox.create();
 ```
 
 ## Configuration
@@ -77,8 +68,6 @@ export E2B_API_KEY=e2b_your_api_key_here
 interface E2BConfig {
   /** E2B API key - if not provided, will use E2B_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: 'python' | 'node';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
@@ -86,46 +75,36 @@ interface E2BConfig {
 
 ## Features
 
-- ✅ **Code Execution** - Python and Node.js runtime support
-- ✅ **Command Execution** - Run shell commands in sandbox
+- ✅ **Command Execution** - Run shell commands in sandbox (Python/Node.js available)
 - ✅ **Filesystem Operations** - Full file system access via E2B API
-- ✅ **Terminal Support** - Interactive PTY terminals
-- ✅ **Auto Runtime Detection** - Automatically detects Python vs Node.js
 - ✅ **Data Science Ready** - Pre-installed pandas, numpy, matplotlib, etc.
 
 ## API Reference
 
-### Code Execution
-
-```typescript
-// Execute Python code
-const result = await sandbox.runCode(`
-import json
-data = {"message": "Hello from Python"}
-print(json.dumps(data))
-`, 'python');
-
-// Execute Node.js code  
-const result = await sandbox.runCode(`
-const data = { message: "Hello from Node.js" };
-console.log(JSON.stringify(data));
-`, 'node');
-
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
-```
-
 ### Command Execution
 
 ```typescript
+// Run Python code via heredoc
+const result = await sandbox.runCommand(`python - <<'PY'
+import json
+data = {"message": "Hello from Python"}
+print(json.dumps(data))
+PY`);
+
+// Run Node.js code via heredoc
+const result = await sandbox.runCommand(`node - <<'JS'
+const data = { message: "Hello from Node.js" };
+console.log(JSON.stringify(data));
+JS`);
+
 // List files
-const result = await sandbox.runCommand('ls', ['-la']);
+const result = await sandbox.runCommand('ls -la');
 
 // Install packages
-const result = await sandbox.runCommand('pip', ['install', 'requests']);
+const result = await sandbox.runCommand('pip install requests');
 
 // Run scripts
-const result = await sandbox.runCommand('python', ['script.py']);
+const result = await sandbox.runCommand('python script.py');
 ```
 
 ### Filesystem Operations
@@ -150,36 +129,6 @@ const exists = await sandbox.filesystem.exists('/tmp/hello.py');
 await sandbox.filesystem.remove('/tmp/hello.py');
 ```
 
-### Terminal Operations
-
-```typescript
-// Create terminal
-const terminal = await sandbox.terminal.create({
-  command: 'bash',
-  cols: 80,
-  rows: 24,
-  onData: (data: Uint8Array) => {
-    const output = new TextDecoder().decode(data);
-    console.log('Terminal output:', output);
-  }
-});
-
-// Write to terminal
-await terminal.write('echo "Hello Terminal!"\n');
-
-// Resize terminal
-await terminal.resize(120, 30);
-
-// Kill terminal
-await terminal.kill();
-
-// List all terminals
-const terminals = await sandbox.terminal.list();
-
-// Get terminal by ID
-const existingTerminal = await sandbox.terminal.getById('terminal-id');
-```
-
 ### Sandbox Management
 
 ```typescript
@@ -191,18 +140,6 @@ console.log(info.id, info.status, info.createdAt);
 await sandbox.destroy();
 ```
 
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print(` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
-
 ## Error Handling
 
 ```typescript
@@ -212,7 +149,7 @@ try {
   const compute = e2b({ apiKey: process.env.E2B_API_KEY });
   const sandbox = await compute.sandbox.create();
   
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Missing E2B API key')) {
     console.error('Set E2B_API_KEY environment variable');
@@ -250,7 +187,7 @@ Charlie,35,Chicago`;
 await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
 
 // Process data with Python
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -284,7 +221,7 @@ with open('/analysis/output/results.json', 'w') as f:
     json.dump(results, f, indent=2)
 
 print("Results saved!")
-`);
+PY`);
 
 console.log(result.stdout);
 
@@ -296,40 +233,6 @@ console.log('Analysis results:', JSON.parse(results));
 const chartExists = await sandbox.filesystem.exists('/analysis/output/age_chart.png');
 console.log('Chart created:', chartExists);
 
-await sandbox.destroy();
-```
-
-### Interactive Terminal Session
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await compute.sandbox.create();
-
-// Create interactive Python terminal
-const terminal = await sandbox.terminal.create({
-  command: 'python3',
-  cols: 80,
-  rows: 24,
-  onData: (data: Uint8Array) => {
-    const output = new TextDecoder().decode(data);
-    process.stdout.write(output); // Forward to console
-  }
-});
-
-// Send Python commands
-await terminal.write('import numpy as np\n');
-await terminal.write('import pandas as pd\n');
-await terminal.write('print("Libraries loaded!")\n');
-await terminal.write('data = np.array([1, 2, 3, 4, 5])\n');
-await terminal.write('print(f"Mean: {data.mean()}")\n');
-await terminal.write('exit()\n');
-
-// Wait for commands to execute
-await new Promise(resolve => setTimeout(resolve, 2000));
-
-await terminal.kill();
 await sandbox.destroy();
 ```
 
@@ -347,7 +250,7 @@ await sandbox.filesystem.mkdir('/ml-project/data');
 await sandbox.filesystem.mkdir('/ml-project/models');
 
 // Generate and process data
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -410,7 +313,7 @@ with open('/ml-project/results.json', 'w') as f:
     json.dump(results, f, indent=2)
 
 print("Results saved!")
-`);
+PY`);
 
 console.log(result.stdout);
 
@@ -431,8 +334,7 @@ await sandbox.destroy();
 2. **Error Handling**: Use try-catch blocks for robust error handling
 3. **Timeouts**: Set appropriate timeouts for long-running tasks
 4. **File Organization**: Use the filesystem API to organize project files
-5. **Terminal Sessions**: Clean up terminal sessions with `terminal.kill()`
-6. **API Key Security**: Never commit API keys to version control
+5. **API Key Security**: Never commit API keys to version control
 
 ## Limitations
 

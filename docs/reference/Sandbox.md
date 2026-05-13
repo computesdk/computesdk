@@ -94,72 +94,17 @@ const result = await sandbox.runCommand('cat data.txt | grep "error" | wc -l');
 
 ---
 
-## `runCode(code, language?)`
-
-Execute code in the sandbox with automatic language detection or explicit runtime.
-
-**Parameters:**
-
-- `code` (string, required): The code to execute
-- `language` ('node' | 'python' | 'deno' | 'bun', optional): Runtime environment for execution. Auto-detects if not specified.
-
-**Returns:** `Promise<CodeResult>` - Execution result with output, exit code, and detected language
-
-**CodeResult interface:**
-- `output` (string): Combined output from code execution
-- `exitCode` (number): Exit code (0 for success, non-zero for errors)
-- `language` (string): Detected or specified programming language
-
-**Examples:**
-
-```typescript
-// Auto-detect language (Python)
-const result = await sandbox.runCode('print("Hello from Python")');
-console.log(result.output);    // "Hello from Python\n"
-console.log(result.exitCode);  // 0
-console.log(result.language);  // "python"
-
-// Auto-detect language (Node.js)
-const result = await sandbox.runCode('console.log("Hello from Node.js")');
-console.log(result.output);    // "Hello from Node.js\n"
-console.log(result.language);  // "node"
-
-// Explicit runtime
-const result = await sandbox.runCode('console.log("Hello")', 'node');
-
-// Multi-line Python code
-const pythonResult = await sandbox.runCode(`
-def greet(name):
-    return f"Hello, {name}!"
-    
-print(greet("World"))
-`, 'python');
-console.log(pythonResult.output); // "Hello, World!\n"
-```
-
-**Notes:**
-- Supports automatic language detection for Python and Node.js code
-- Available on all sandbox instances regardless of provider
-- Returns structured output with exit codes for error handling
-
-
-<br/>
-<br/>
-
----
-
 ## `getInfo()`
 
-Get information about the sandbox including status, runtime, provider, and metadata.
+Get information about the sandbox including status, provider, and metadata.
 
 **Parameters:** None
 
-**Returns:** `Promise<SandboxInfo>` - Sandbox information including status, runtime, and configuration
+**Returns:** `Promise<SandboxInfo>` - Sandbox information including status and configuration
 
 **SandboxInfo interface:**
 - `id` (string): Unique identifier for the sandbox
 - `provider` (string): Provider hosting the sandbox (e.g., 'e2b', 'modal', 'docker')
-- `runtime` (Runtime): Runtime environment ('node' | 'python' | 'deno' | 'bun')
 - `status` (string): Current sandbox status ('running' | 'stopped' | 'error')
 - `createdAt` (Date): Timestamp when the sandbox was created
 - `timeout` (number): Execution timeout in milliseconds
@@ -172,21 +117,20 @@ Get information about the sandbox including status, runtime, provider, and metad
 const info = await sandbox.getInfo();
 console.log(info.id);         // "sb_abc123..."
 console.log(info.provider);   // "e2b"
-console.log(info.runtime);    // "python"
 console.log(info.status);     // "running"
 
 // Check sandbox status
 const info = await sandbox.getInfo();
 if (info.status === 'running') {
   console.log('Sandbox is active');
-  await sandbox.runCode('print("Hello")');
+  await sandbox.runCommand('echo "Hello"');
 } else {
   console.log('Sandbox is not available');
 }
 
-// Access provider and runtime info
+// Access provider info
 const info = await sandbox.getInfo();
-console.log(`Running on ${info.provider} with ${info.runtime} runtime`);
+console.log(`Running on ${info.provider}`);
 console.log(`Created: ${info.createdAt.toISOString()}`);
 console.log(`Timeout: ${info.timeout}ms`);
 
@@ -195,7 +139,6 @@ const info = await sandbox.getInfo();
 console.log('Sandbox Information:');
 console.log(`  ID: ${info.id}`);
 console.log(`  Provider: ${info.provider}`);
-console.log(`  Runtime: ${info.runtime}`);
 console.log(`  Status: ${info.status}`);
 console.log(`  Created: ${info.createdAt}`);
 console.log(`  Timeout: ${info.timeout}ms`);

@@ -1,0 +1,69 @@
+{
+  "name": "@computesdk/browseruse",
+  "version": "0.2.0",
+  "description": "Browser Use Cloud browser provider for ComputeSDK - cloud browser sessions with stealth mode, residential proxies, profiles, and session recording",
+  "author": "Garrison",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "browser-use-sdk": "^3.4.3",
+    "computesdk": "workspace:*",
+    "dotenv": "^16.0.0",
+    "playwright-core": "^1.40.0"
+  },
+  "keywords": [
+    "computesdk",
+    "browser-use",
+    "browseruse",
+    "browser",
+    "headless",
+    "playwright",
+    "puppeteer",
+    "stealth",
+    "proxy",
+    "provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/browseruse"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

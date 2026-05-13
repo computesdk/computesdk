@@ -12,7 +12,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { startPTY } from './pty.js';
+import { startREPL } from './repl.js';
 
 const WORKSPACE_STATE_FILE = path.join(os.homedir(), '.computesdk', 'workspaces.json');
 
@@ -216,15 +216,11 @@ export async function workspaceAttach(id: string): Promise<void> {
   saveState(state);
   
   p.log.info(`Attaching to workspace: ${pc.cyan(id)}`);
-  p.log.info(`Changing to: ${pc.dim(workspace.worktreePath)}`);
-  
-  // Start PTY in the worktree directory
-  console.log(pc.gray('Starting shell...'));
-  
+  p.log.info(`Worktree: ${pc.dim(workspace.worktreePath)}`);
+  console.log(pc.gray(`Tip: commands run at sandbox root; use { cwd: "${workspace.worktreePath}" } on runCommand to scope them.`));
+
   try {
-    // Clear screen for clean PTY session
-    process.stdout.write('\x1b[2J\x1b[H\x1b[3J');
-    await startPTY(sandbox, { initialCommand: `cd ${shellEscape(workspace.worktreePath)}` });
+    await startREPL(sandbox, workspace.provider);
   } catch (error) {
     p.log.error(`Failed to attach: ${(error as Error).message}`);
     process.exit(1);

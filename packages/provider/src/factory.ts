@@ -7,7 +7,6 @@
 
 // Import all types from local types
 import type {
-  Runtime,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
@@ -18,15 +17,11 @@ import type {
   ProviderSnapshotManager,
   ProviderSandbox,
   SandboxInfo,
-  CodeResult,
   CommandResult,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
   CreateTemplateOptions,
   ListTemplatesOptions,
-  FindOrCreateSandboxOptions,
-  FindSandboxOptions,
-  ExtendTimeoutOptions,
 } from './types/index.js';
 
 /**
@@ -39,15 +34,7 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   list: (config: TConfig) => Promise<Array<{ sandbox: TSandbox; sandboxId: string }>>;
   destroy: (config: TConfig, sandboxId: string) => Promise<void>;
 
-  // Optional named sandbox operations
-  findOrCreate?: (config: TConfig, options: FindOrCreateSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string }>;
-  find?: (config: TConfig, options: FindSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
-  
-  // Optional timeout management
-  extendTimeout?: (config: TConfig, sandboxId: string, options?: ExtendTimeoutOptions) => Promise<void>;
-
   // Instance operations
-  runCode: (sandbox: TSandbox, code: string, runtime?: Runtime, config?: TConfig) => Promise<CodeResult>;
   runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
@@ -179,8 +166,6 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
-  private defaultRuntime?: Runtime;
-
   constructor(
     private sandbox: TSandbox,
     sandboxId: string,
@@ -188,12 +173,10 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     private methods: SandboxMethods<TSandbox>,
     private config: any,
     private destroyMethod: (config: any, sandboxId: string) => Promise<void>,
-    private providerInstance: Provider,
-    defaultRuntime?: Runtime
+    private providerInstance: Provider
   ) {
     this.sandboxId = sandboxId;
     this.provider = providerName;
-    this.defaultRuntime = defaultRuntime;
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
@@ -210,10 +193,6 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     }
     // Fallback to returning the sandbox directly
     return this.sandbox;
-  }
-
-  async runCode(code: string, runtime?: Runtime): Promise<CodeResult> {
-    return await this.methods.runCode(this.sandbox, code, runtime ?? this.defaultRuntime, this.config);
   }
 
   async runCommand(
@@ -255,9 +234,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   ) {}
 
   async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
-    // Default to 'node' runtime if not specified for consistency across providers
-    const optionsWithDefaults = { runtime: 'node' as Runtime, ...options };
-    const result = await this.methods.create(this.config, optionsWithDefaults);
+    const result = await this.methods.create(this.config, options);
 
     return new GeneratedSandbox<TSandbox>(
       result.sandbox,
@@ -266,8 +243,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance,
-      options?.runtime
+      this.providerInstance
     );
   }
 
@@ -304,62 +280,6 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
 
   async destroy(sandboxId: string): Promise<void> {
     await this.methods.destroy(this.config, sandboxId);
-  }
-
-  async findOrCreate(options: FindOrCreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
-    if (!this.methods.findOrCreate) {
-      throw new Error(
-        `Provider '${this.providerName}' does not support findOrCreate.\n` +
-        `This feature requires gateway provider with named sandbox support.`
-      );
-    }
-
-    const result = await this.methods.findOrCreate(this.config, options);
-    
-    return new GeneratedSandbox<TSandbox>(
-      result.sandbox,
-      result.sandboxId,
-      this.providerName,
-      this.methods,
-      this.config,
-      this.methods.destroy,
-      this.providerInstance
-    );
-  }
-
-  async find(options: FindSandboxOptions): Promise<ProviderSandbox<TSandbox> | null> {
-    if (!this.methods.find) {
-      throw new Error(
-        `Provider '${this.providerName}' does not support find.\n` +
-        `This feature requires gateway provider with named sandbox support.`
-      );
-    }
-
-    const result = await this.methods.find(this.config, options);
-    if (!result) {
-      return null;
-    }
-
-    return new GeneratedSandbox<TSandbox>(
-      result.sandbox,
-      result.sandboxId,
-      this.providerName,
-      this.methods,
-      this.config,
-      this.methods.destroy,
-      this.providerInstance
-    );
-  }
-
-  async extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void> {
-    if (!this.methods.extendTimeout) {
-      throw new Error(
-        `Provider '${this.providerName}' does not support extendTimeout.\n` +
-        `This feature requires gateway provider with timeout extension support.`
-      );
-    }
-
-    await this.methods.extendTimeout(this.config, sandboxId, options);
   }
 }
 
@@ -433,12 +353,6 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
     if (providerConfig.methods.snapshot) {
       this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
     }
-  }
-
-  getSupportedRuntimes(): Runtime[] {
-    // For now, all providers support both node and python
-    // In the future, this could be configurable per provider
-    return ['node', 'python'];
   }
 }
 

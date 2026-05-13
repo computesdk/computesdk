@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineProvider } from '../factory.js'
-import type { Runtime, CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
+import type { CommandResult, SandboxInfo } from '../types/index.js'
 
 describe('Factory', () => {
   describe('defineProvider', () => {
@@ -16,11 +16,6 @@ describe('Factory', () => {
         }),
         list: vi.fn().mockResolvedValue([]),
         destroy: vi.fn().mockResolvedValue(undefined),
-        runCode: vi.fn().mockResolvedValue({
-          output: 'Hello World',
-          exitCode: 0,
-          language: 'python'
-        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'Command output',
           stderr: '',
@@ -30,7 +25,6 @@ describe('Factory', () => {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: 'mock',
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
@@ -70,11 +64,6 @@ describe('Factory', () => {
         }),
         list: vi.fn().mockResolvedValue([]),
         destroy: vi.fn().mockResolvedValue(undefined),
-        runCode: vi.fn().mockResolvedValue({
-          output: 'print("Hello")',
-          exitCode: 0,
-          language: 'python'
-        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'ls output',
           stderr: '',
@@ -84,7 +73,6 @@ describe('Factory', () => {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: 'mock',
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000
@@ -102,15 +90,9 @@ describe('Factory', () => {
       const sandbox = await provider.sandbox.create()
 
       expect(sandbox.sandboxId).toBe('test-123')
-      expect(typeof sandbox.runCode).toBe('function')
       expect(typeof sandbox.runCommand).toBe('function')
       expect(typeof sandbox.getInfo).toBe('function')
       expect(typeof sandbox.destroy).toBe('function')
-
-      // Test sandbox methods
-      const codeResult = await sandbox.runCode('print("Hello")')
-      expect(codeResult.output).toContain('print("Hello")')
-      expect(codeResult.exitCode).toBe(0)
 
       const commandResult = await sandbox.runCommand('ls')
       expect(commandResult.stdout).toBe('ls output')
@@ -138,11 +120,6 @@ describe('Factory', () => {
         getById: vi.fn().mockResolvedValue(null),
         list: vi.fn().mockResolvedValue([]),
         destroy: vi.fn().mockResolvedValue(undefined),
-        runCode: vi.fn().mockResolvedValue({
-          output: '',
-          exitCode: 0,
-          language: 'python'
-        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: '',
           stderr: '',
@@ -152,7 +129,6 @@ describe('Factory', () => {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-456',
           provider: 'mock',
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000

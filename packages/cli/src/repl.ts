@@ -11,9 +11,8 @@ import * as os from 'os';
 import * as fs from 'fs';
 import pc from 'picocolors';
 import { compute, type SandboxInterface } from 'computesdk';
-import { startPTY } from './pty.js';
 
-type SessionResult = 'exit' | 'shell';
+type SessionResult = 'exit';
 
 interface ReplContext {
   sandboxes: Map<string, SandboxInterface>;
@@ -21,13 +20,7 @@ interface ReplContext {
 }
 
 /**
- * Start REPL mode
- *
- * Loops between REPL sessions and PTY sessions.
- * Each /shell command closes the readline cleanly, runs PTY,
- * then creates a fresh readline on return.
- *
- * Returns all sandboxes that are still alive so the caller can clean them up.
+ * Start REPL mode.
  */
 export async function startREPL(sandbox: SandboxInterface, provider: string): Promise<void> {
   // Mark provider as used - reserved for future provider-specific REPL behavior
@@ -37,20 +30,7 @@ export async function startREPL(sandbox: SandboxInterface, provider: string): Pr
     activeSandboxId: sandbox.sandboxId,
   };
 
-  while (true) {
-    const result = await runSession(ctx);
-    if (result === 'exit') break;
-
-    // result === 'shell' — drop into PTY, then loop back
-    const activeSandbox = ctx.sandboxes.get(ctx.activeSandboxId)!;
-    console.log(pc.gray('  Entering PTY shell... (.exit or Ctrl+D to return to REPL)'));
-    console.log();
-    // Clear screen for clean PTY session
-    process.stdout.write('\x1b[2J\x1b[H\x1b[3J');
-    await startPTY(activeSandbox);
-    console.log(pc.gray('  Back in REPL.'));
-  }
-
+  await runSession(ctx);
 }
 
 function buildPrompt(sandboxId: string): string {
@@ -62,7 +42,7 @@ function buildPrompt(sandboxId: string): string {
  * Run a single REPL session.
  *
  * Creates a readline interface, processes commands, and returns
- * 'exit' when the user wants to quit or 'shell' when they want PTY.
+ * 'exit' when the user wants to quit.
  */
 function runSession(ctx: ReplContext): Promise<SessionResult> {
   const rl = readline.createInterface({
@@ -113,7 +93,7 @@ function runSession(ctx: ReplContext): Promise<SessionResult> {
       try {
         if (trimmed.startsWith('/')) {
           const result = await handleSpecialCommand(ctx, trimmed, rl);
-          if (result === 'exit' || result === 'shell') {
+          if (result === 'exit') {
             done(result);
             return;
           }
@@ -166,7 +146,7 @@ async function executeCommand(sandbox: SandboxInterface, command: string): Promi
 
 /**
  * Handle special commands (prefixed with /)
- * Returns 'exit' to quit, 'shell' for PTY, or null to continue
+ * Returns 'exit' to quit, or null to continue
  */
 async function handleSpecialCommand(
   ctx: ReplContext,
@@ -316,14 +296,6 @@ async function handleSpecialCommand(
       return null;
     }
 
-    case 'shell':
-    case 'sh':
-      if (ctx.sandboxes.size === 0) {
-        console.log(pc.yellow('No active sandbox. Use /new to create one.'));
-        return null;
-      }
-      return 'shell';
-
     case 'exit':
     case 'quit':
     case 'q':
@@ -386,7 +358,6 @@ function showHelp(): void {
   console.log();
   console.log(pc.bold('  Other Commands'));
   console.log();
-  console.log(pc.cyan('    /shell') + pc.gray('            Drop into interactive PTY (vim, htop, etc.)'));
   console.log(pc.cyan('    /info') + pc.gray('             Show active sandbox info'));
   console.log(pc.cyan('    /url <port>') + pc.gray('       Get public URL for port'));
   console.log(pc.cyan('    /help') + pc.gray('             Show this help'));

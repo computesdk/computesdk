@@ -38,7 +38,12 @@ import type {
 export interface BrowserSessionMethods<TSession = any, TConfig = any> {
   create: (config: TConfig, options?: CreateBrowserSessionOptions) => Promise<{ session: TSession; sessionId: string; connectUrl: string; status?: BrowserSession['status'] }>;
   getById: (config: TConfig, sessionId: string) => Promise<{ session: TSession; sessionId: string; connectUrl: string; status?: BrowserSession['status'] } | null>;
-  list: (config: TConfig) => Promise<Array<{ session: TSession; sessionId: string; connectUrl: string; status?: BrowserSession['status'] }>>;
+  /**
+   * List sessions. `connectUrl` may be omitted on entries when the provider's
+   * list endpoint doesn't include it — callers needing a connectable URL
+   * should use `provider.getConnectUrl(sessionId)`.
+   */
+  list: (config: TConfig) => Promise<Array<{ session: TSession; sessionId: string; connectUrl?: string; status?: BrowserSession['status'] }>>;
   destroy: (config: TConfig, sessionId: string) => Promise<void>;
   getConnectUrl: (config: TConfig, sessionId: string) => Promise<string>;
 }
@@ -122,7 +127,7 @@ export interface BrowserProviderConfig<TSession = any, TConfig = any> {
  */
 class GeneratedBrowserSession<TSession = any> implements ProviderBrowserSession<TSession> {
   readonly sessionId: string;
-  readonly connectUrl: string;
+  readonly connectUrl?: string;
   readonly status: BrowserSession['status'];
   readonly createdAt?: Date;
   readonly metadata?: Record<string, unknown>;
@@ -130,7 +135,7 @@ class GeneratedBrowserSession<TSession = any> implements ProviderBrowserSession<
   constructor(
     private session: TSession,
     sessionId: string,
-    connectUrl: string,
+    connectUrl: string | undefined,
     status: BrowserSession['status'] | undefined,
     private providerInstance: BrowserProvider<TSession>,
     private config: any,
