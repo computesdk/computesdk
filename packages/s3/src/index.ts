@@ -15,12 +15,8 @@ export interface S3Config {
   accessKeyId?: string;
   /** Secret Access Key - if not provided, uses TIGRIS_STORAGE_SECRET_ACCESS_KEY */
   secretAccessKey?: string;
-  /** Region value kept for backward compatibility */
-  region?: string;
   /** Required endpoint for the target S3-compatible service */
   endpoint?: string;
-  /** Optional force path style value kept for backward compatibility */
-  forcePathStyle?: boolean;
 }
 
 /**
@@ -70,12 +66,7 @@ export function s3(config: S3Config): S3 {
     throw new Error(`Missing endpoint. Provide 'endpoint' in config or set TIGRIS_STORAGE_ENDPOINT.`);
   }
 
-  const operationConfig = {
-    bucket: undefined as string | undefined,
-    accessKeyId,
-    secretAccessKey,
-    endpoint,
-  };
+  const operationConfig = { accessKeyId, secretAccessKey, endpoint };
 
   return {
     async upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject> {
@@ -94,7 +85,7 @@ export function s3(config: S3Config): S3 {
         return {
           bucket,
           key,
-          size: typeof data === 'string' ? data.length : data.byteLength,
+          size: typeof data === 'string' ? Buffer.byteLength(data, 'utf8') : data.byteLength,
           etag: undefined,
           lastModified: new Date(),
           metadata: options?.metadata,
@@ -138,10 +129,13 @@ export function s3(config: S3Config): S3 {
           size: data.length,
           contentType: undefined,
           etag: undefined,
-          lastModified: new Date(),
+          lastModified: undefined,
           metadata: undefined,
         };
       } catch (error) {
+        if (error instanceof Error && /not\s*found|no\s*such\s*key/i.test(error.message)) {
+          throw new Error(`Object not found: s3://${bucket}/${key}`);
+        }
         throw new Error(`Failed to download from storage: ${error instanceof Error ? error.message : String(error)}`);
       }
     },

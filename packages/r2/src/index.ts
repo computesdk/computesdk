@@ -97,12 +97,7 @@ export function r2(config: R2Config): R2 {
     throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY/R2_SECRET_ACCESS_KEY.`);
   }
 
-  const operationConfig = {
-    bucket: undefined as string | undefined,
-    accessKeyId,
-    secretAccessKey,
-    endpoint,
-  };
+  const operationConfig = { accessKeyId, secretAccessKey, endpoint };
 
   return {
     async upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject> {
@@ -120,7 +115,7 @@ export function r2(config: R2Config): R2 {
         return {
           bucket,
           key,
-          size: typeof data === 'string' ? data.length : data.byteLength,
+          size: typeof data === 'string' ? Buffer.byteLength(data, 'utf8') : data.byteLength,
           etag: undefined,
           lastModified: new Date(),
           metadata: options?.metadata,
@@ -166,7 +161,7 @@ export function r2(config: R2Config): R2 {
           size: data.length,
           contentType: undefined,
           etag: undefined,
-          lastModified: new Date(),
+          lastModified: undefined,
           metadata: undefined,
         };
       } catch (error) {
