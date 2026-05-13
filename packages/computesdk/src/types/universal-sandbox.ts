@@ -1,3 +1,5 @@
+import type { SeedScriptConfig } from 'daemond';
+
 /**
  * Universal Sandbox Interface
  *
@@ -60,6 +62,13 @@ export interface RunCommandOptions {
   env?: Record<string, string>;
   timeout?: number;
   background?: boolean;
+  /**
+   * Optional daemon seed config for providers that support daemonized command execution.
+   *
+   * - `true`: enable provider default daemon seed behavior
+   * - object: enable daemon mode with explicit seed config
+   */
+  daemon?: boolean | SeedScriptConfig;
 }
 
 /**
