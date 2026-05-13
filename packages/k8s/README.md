@@ -33,6 +33,7 @@ await sandbox.destroy();
 ```ts
 interface K8sConfig {
   kubeConfigPath?: string;
+  kubeConfigRaw?: string;
   context?: string;
   namespace?: string;
   image?: string;
@@ -43,6 +44,12 @@ interface K8sConfig {
   urlTemplate?: string;
 }
 ```
+
+Kubeconfig loading precedence:
+1. `kubeConfigRaw`
+2. `KUBECONFIG_B64` (base64-encoded kubeconfig)
+3. `kubeConfigPath`
+4. default kubeconfig resolution
 
 ## Notes
 

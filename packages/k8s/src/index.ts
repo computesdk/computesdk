@@ -21,6 +21,7 @@ type Runtime = 'node' | 'python';
 
 export interface K8sConfig {
   kubeConfigPath?: string;
+  kubeConfigRaw?: string;
   context?: string;
   namespace?: string;
   image?: string;
@@ -38,6 +39,7 @@ interface K8sSandboxHandle {
   createdAt: Date;
   timeout: number;
   kubeConfigPath?: string;
+  kubeConfigRaw?: string;
   context?: string;
   urlTemplate?: string;
   serviceType?: 'ClusterIP' | 'NodePort';
@@ -45,8 +47,18 @@ interface K8sSandboxHandle {
 
 function loadKubeConfig(config: K8sConfig): KubeConfig {
   const kc = new KubeConfig();
-  if (config.kubeConfigPath) kc.loadFromFile(config.kubeConfigPath);
-  else kc.loadFromDefault();
+
+  if (config.kubeConfigRaw) {
+    kc.loadFromString(config.kubeConfigRaw);
+  } else if (process.env.KUBECONFIG_B64) {
+    const decoded = Buffer.from(process.env.KUBECONFIG_B64, 'base64').toString('utf8');
+    kc.loadFromString(decoded);
+  } else if (config.kubeConfigPath) {
+    kc.loadFromFile(config.kubeConfigPath);
+  } else {
+    kc.loadFromDefault();
+  }
+
   if (config.context) kc.setCurrentContext(config.context);
   return kc;
 }
@@ -144,6 +156,7 @@ async function execInPod(
 function loadKubeConfigFromHandle(sandbox: K8sSandboxHandle): KubeConfig {
   return loadKubeConfig({
     kubeConfigPath: sandbox.kubeConfigPath,
+    kubeConfigRaw: sandbox.kubeConfigRaw,
     context: sandbox.context,
   });
 }
@@ -260,6 +273,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
             createdAt: new Date(),
             timeout,
             kubeConfigPath: config.kubeConfigPath,
+            kubeConfigRaw: config.kubeConfigRaw,
             context: config.context,
             urlTemplate: config.urlTemplate,
             serviceType: config.serviceType || 'ClusterIP',
@@ -286,6 +300,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               createdAt: pod.metadata?.creationTimestamp || new Date(),
               timeout: config.timeout ?? 120000,
               kubeConfigPath: config.kubeConfigPath,
+              kubeConfigRaw: config.kubeConfigRaw,
               context: config.context,
               urlTemplate: config.urlTemplate,
               serviceType: config.serviceType || 'ClusterIP',
@@ -315,6 +330,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               createdAt: pod.metadata?.creationTimestamp || new Date(),
               timeout: config.timeout ?? 120000,
               kubeConfigPath: config.kubeConfigPath,
+              kubeConfigRaw: config.kubeConfigRaw,
               context: config.context,
               urlTemplate: config.urlTemplate,
               serviceType: config.serviceType || 'ClusterIP',
