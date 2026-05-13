@@ -97,31 +97,21 @@ export function r2(config: R2Config): R2 {
     throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY/R2_SECRET_ACCESS_KEY.`);
   }
 
-  process.env.TIGRIS_STORAGE_ACCESS_KEY_ID = accessKeyId;
-  process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY = secretAccessKey;
-  process.env.TIGRIS_STORAGE_ENDPOINT = endpoint;
-
-  const withBucket = async <T>(bucket: string, operation: () => Promise<T>): Promise<T> => {
-    const prevBucket = process.env.TIGRIS_STORAGE_BUCKET;
-    process.env.TIGRIS_STORAGE_BUCKET = bucket;
-    try {
-      return await operation();
-    } finally {
-      if (prevBucket !== undefined) {
-        process.env.TIGRIS_STORAGE_BUCKET = prevBucket;
-      } else {
-        delete process.env.TIGRIS_STORAGE_BUCKET;
-      }
-    }
+  const operationConfig = {
+    bucket: undefined as string | undefined,
+    accessKeyId,
+    secretAccessKey,
+    endpoint,
   };
 
   return {
     async upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject> {
       try {
         const body = typeof data === 'string' ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-        const result = await withBucket(bucket, () =>
-          put(key, body, options?.contentType ? { contentType: options.contentType } : undefined)
-        );
+        const result = await put(key, body, {
+          ...(options?.contentType ? { contentType: options.contentType } : {}),
+          config: { ...operationConfig, bucket },
+        });
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -143,7 +133,9 @@ export function r2(config: R2Config): R2 {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        const result = await withBucket(bucket, () => get(key, 'stream'));
+        const result = await get(key, 'stream', {
+          config: { ...operationConfig, bucket },
+        });
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -185,7 +177,9 @@ export function r2(config: R2Config): R2 {
 
     async delete(bucket: string, key: string): Promise<void> {
       try {
-        const result = await withBucket(bucket, () => remove(key));
+        const result = await remove(key, {
+          config: { ...operationConfig, bucket },
+        });
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -198,13 +192,12 @@ export function r2(config: R2Config): R2 {
 
     async list(bucket: string, options?: ListOptions): Promise<ListResult> {
       try {
-        const result = await withBucket(bucket, () =>
-          tigrisList({
-            prefix: options?.prefix,
-            limit: options?.maxKeys,
-            cursor: options?.continuationToken,
-          } as any)
-        );
+        const result = await tigrisList({
+          prefix: options?.prefix,
+          limit: options?.maxKeys,
+          cursor: options?.continuationToken,
+          config: { ...operationConfig, bucket },
+        } as any);
         if (result.error) {
           throw new Error(result.error.message);
         }

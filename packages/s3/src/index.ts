@@ -47,55 +47,36 @@ export interface S3 extends StorageProvider {
 /**
  * Create an S3-compatible storage provider instance backed by Tigris SDK.
  *
- * Supports existing AWS env vars for backward compatibility and maps them
- * to Tigris env vars used by the SDK.
+ * Uses explicit config values or TIGRIS_STORAGE_* env vars via per-call config.
  */
 export function s3(config: S3Config): S3 {
-  const accessKeyId =
-    config.accessKeyId ||
-    process.env.TIGRIS_STORAGE_ACCESS_KEY_ID ||
-    process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey =
-    config.secretAccessKey ||
-    process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY ||
-    process.env.AWS_SECRET_ACCESS_KEY;
+  const accessKeyId = config.accessKeyId || process.env.TIGRIS_STORAGE_ACCESS_KEY_ID;
+  const secretAccessKey = config.secretAccessKey || process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY;
   const endpoint = config.endpoint || process.env.TIGRIS_STORAGE_ENDPOINT;
 
   if (!accessKeyId) {
-    throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID/AWS_ACCESS_KEY_ID.`);
+    throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID.`);
   }
 
   if (!secretAccessKey) {
-    throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY/AWS_SECRET_ACCESS_KEY.`);
+    throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY.`);
   }
 
-  process.env.TIGRIS_STORAGE_ACCESS_KEY_ID = accessKeyId;
-  process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY = secretAccessKey;
-  if (endpoint) {
-    process.env.TIGRIS_STORAGE_ENDPOINT = endpoint;
-  }
-
-  const withBucket = async <T>(bucket: string, operation: () => Promise<T>): Promise<T> => {
-    const prevBucket = process.env.TIGRIS_STORAGE_BUCKET;
-    process.env.TIGRIS_STORAGE_BUCKET = bucket;
-    try {
-      return await operation();
-    } finally {
-      if (prevBucket !== undefined) {
-        process.env.TIGRIS_STORAGE_BUCKET = prevBucket;
-      } else {
-        delete process.env.TIGRIS_STORAGE_BUCKET;
-      }
-    }
+  const operationConfig = {
+    bucket: undefined as string | undefined,
+    accessKeyId,
+    secretAccessKey,
+    endpoint,
   };
 
   return {
     async upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject> {
       try {
         const body = typeof data === 'string' ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-        const result = await withBucket(bucket, () =>
-          put(key, body, options?.contentType ? { contentType: options.contentType } : undefined)
-        );
+        const result = await put(key, body, {
+          ...(options?.contentType ? { contentType: options.contentType } : {}),
+          config: { ...operationConfig, bucket },
+        });
 
         if (result.error) {
           throw new Error(result.error.message);
@@ -116,7 +97,9 @@ export function s3(config: S3Config): S3 {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        const result = await withBucket(bucket, () => get(key, 'stream'));
+        const result = await get(key, 'stream', {
+          config: { ...operationConfig, bucket },
+        });
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -156,7 +139,9 @@ export function s3(config: S3Config): S3 {
 
     async delete(bucket: string, key: string): Promise<void> {
       try {
-        const result = await withBucket(bucket, () => remove(key));
+        const result = await remove(key, {
+          config: { ...operationConfig, bucket },
+        });
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -167,13 +152,12 @@ export function s3(config: S3Config): S3 {
 
     async list(bucket: string, options?: ListOptions): Promise<ListResult> {
       try {
-        const result = await withBucket(bucket, () =>
-          tigrisList({
-            prefix: options?.prefix,
-            limit: options?.maxKeys,
-            cursor: options?.continuationToken,
-          } as any)
-        );
+        const result = await tigrisList({
+          prefix: options?.prefix,
+          limit: options?.maxKeys,
+          cursor: options?.continuationToken,
+          config: { ...operationConfig, bucket },
+        } as any);
 
         if (result.error) {
           throw new Error(result.error.message);

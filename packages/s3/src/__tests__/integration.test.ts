@@ -7,7 +7,7 @@
  * These tests run against a real S3-compatible endpoint and only execute when credentials
  * are available in environment variables.
  * 
- * To run: Set TIGRIS_STORAGE_ACCESS_KEY_ID/TIGRIS_STORAGE_SECRET_ACCESS_KEY (or AWS_*), then run tests
+ * To run: Set TIGRIS_STORAGE_ACCESS_KEY_ID and TIGRIS_STORAGE_SECRET_ACCESS_KEY, then run tests
  * These tests are automatically skipped in CI without credentials.
  */
 
@@ -17,8 +17,8 @@ import { s3 } from '../index';
 
 // Only run integration tests if credentials are available
 const runIntegration = !!(
-  (process.env.TIGRIS_STORAGE_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID) &&
-  (process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY)
+  process.env.TIGRIS_STORAGE_ACCESS_KEY_ID &&
+  process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY
 );
 
 // Use environment bucket or default test bucket
@@ -29,8 +29,8 @@ if (runIntegration) {
   runStorageProviderTestSuite({
     name: 'S3-compatible (Tigris SDK)',
     provider: s3({
-      accessKeyId: process.env.TIGRIS_STORAGE_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY,
+      accessKeyId: process.env.TIGRIS_STORAGE_ACCESS_KEY_ID,
+      secretAccessKey: process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY,
       endpoint: process.env.TIGRIS_STORAGE_ENDPOINT,
     }),
     bucket: testBucket,
