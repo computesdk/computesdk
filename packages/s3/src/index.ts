@@ -11,13 +11,13 @@ import type { StorageProvider, StorageObject, UploadOptions, DownloadResult, Lis
  * S3-compatible configuration options.
  */
 export interface S3Config {
-  /** Access Key ID - if not provided, falls back to AWS or Tigris env vars */
+  /** Access Key ID - if not provided, uses TIGRIS_STORAGE_ACCESS_KEY_ID */
   accessKeyId?: string;
-  /** Secret Access Key - if not provided, falls back to AWS or Tigris env vars */
+  /** Secret Access Key - if not provided, uses TIGRIS_STORAGE_SECRET_ACCESS_KEY */
   secretAccessKey?: string;
   /** Region value kept for backward compatibility */
   region?: string;
-  /** Optional custom endpoint for S3-compatible services */
+  /** Required endpoint for the target S3-compatible service */
   endpoint?: string;
   /** Optional force path style value kept for backward compatibility */
   forcePathStyle?: boolean;
@@ -60,6 +60,10 @@ export function s3(config: S3Config): S3 {
 
   if (!secretAccessKey) {
     throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY.`);
+  }
+
+  if (!endpoint) {
+    throw new Error(`Missing endpoint. Provide 'endpoint' in config or set TIGRIS_STORAGE_ENDPOINT.`);
   }
 
   const operationConfig = {
