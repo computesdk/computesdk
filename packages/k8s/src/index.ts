@@ -4,7 +4,6 @@ import {
   CoreV1Api,
   Exec,
   type V1Pod,
-  type V1Service,
 } from '@kubernetes/client-node';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
@@ -38,6 +37,7 @@ interface K8sSandboxHandle {
   namespace: string;
   runtime: Runtime;
   createdAt: Date;
+  timeout: number;
   kubeConfigPath?: string;
   context?: string;
   urlTemplate?: string;
@@ -177,7 +177,7 @@ function parseExitCode(stdout: string, stderr: string): { stdout: string; stderr
   return { stdout, stderr, exitCode: stderr.trim().length > 0 ? 1 : 0 };
 }
 
-export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
+const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
   name: PROVIDER,
   methods: {
     sandbox: {
@@ -237,6 +237,7 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
             namespace,
             runtime,
             createdAt: new Date(),
+            timeout,
             kubeConfigPath: config.kubeConfigPath,
             context: config.context,
             urlTemplate: config.urlTemplate,
@@ -260,6 +261,7 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
               namespace,
               runtime,
               createdAt: pod.metadata?.creationTimestamp || new Date(),
+              timeout: config.timeout ?? 120000,
               kubeConfigPath: config.kubeConfigPath,
               context: config.context,
               urlTemplate: config.urlTemplate,
@@ -288,6 +290,7 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
               namespace,
               runtime,
               createdAt: pod.metadata?.creationTimestamp || new Date(),
+              timeout: config.timeout ?? 120000,
               kubeConfigPath: config.kubeConfigPath,
               context: config.context,
               urlTemplate: config.urlTemplate,
@@ -340,7 +343,7 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
           provider: PROVIDER,
           status: phase === 'Running' ? 'running' : phase === 'Succeeded' ? 'stopped' : 'error',
           createdAt: pod.metadata?.creationTimestamp || sandbox.createdAt,
-          timeout: 120000,
+          timeout: sandbox.timeout,
           metadata: {
             runtime: sandbox.runtime,
             namespace: sandbox.namespace,
@@ -352,66 +355,20 @@ export const k8s = defineProvider<K8sSandboxHandle, K8sConfig>({
       },
 
       getUrl: async (sandbox: K8sSandboxHandle, options: { port: number; protocol?: string }): Promise<string> => {
+        if (!sandbox.urlTemplate) {
+          return `${options.protocol || 'http'}://k8s-sandbox-url-not-configured.invalid:${options.port}`;
+        }
+
         const protocol = options.protocol || 'http';
         const serviceName = serviceNameForPod(sandbox.podName);
-
-        const kc = loadKubeConfigFromHandle(sandbox);
-        const core = kc.makeApiClient(CoreV1Api);
-
-        let service: V1Service | null = null;
-        try {
-          const existing = await core.readNamespacedService({ namespace: sandbox.namespace, name: serviceName });
-          service = existing;
-        } catch (error) {
-          if (!isNotFound(error)) throw error;
-        }
-
-        if (!service) {
-          const created = await core.createNamespacedService({
-            namespace: sandbox.namespace,
-            body: {
-              metadata: {
-                name: serviceName,
-                namespace: sandbox.namespace,
-                labels: {
-                  [LABEL_MANAGED]: 'true',
-                  [LABEL_SID]: sandbox.podName,
-                },
-              },
-              spec: {
-                type: sandbox.serviceType || 'ClusterIP',
-                selector: { [LABEL_SID]: sandbox.podName },
-                ports: [{
-                  name: `p${options.port}`,
-                  port: options.port,
-                  targetPort: options.port,
-                  protocol: 'TCP',
-                }],
-              },
-            },
-          });
-          service = created;
-        }
-
-        if (service.spec?.type === 'NodePort') {
-          const nodePort = service.spec.ports?.[0]?.nodePort;
-          if (nodePort) return `${protocol}://localhost:${nodePort}`;
-        }
-
-        if (service.spec?.clusterIP && service.spec.clusterIP !== 'None') {
-          return `${protocol}://${serviceName}.${sandbox.namespace}.svc.cluster.local:${options.port}`;
-        }
-
-        if (sandbox.urlTemplate) {
-          return sandbox.urlTemplate
-            .replace('{protocol}', protocol)
-            .replace('{service}', serviceName)
-            .replace('{namespace}', sandbox.namespace)
-            .replace('{port}', String(options.port));
-        }
-
-        return `${protocol}://${serviceName}.${sandbox.namespace}.svc.cluster.local:${options.port}`;
+        return sandbox.urlTemplate
+          .replace('{protocol}', protocol)
+          .replace('{service}', serviceName)
+          .replace('{namespace}', sandbox.namespace)
+          .replace('{port}', String(options.port));
       },
     },
   },
 });
+
+export const k8s = (config: K8sConfig = {}) => createK8sProvider(config);

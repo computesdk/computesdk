@@ -42,3 +42,5 @@ interface K8sConfig {
   urlTemplate?: string;
 }
 ```
+
+Note: In this MVP, `getUrl` uses `urlTemplate` for URL construction and does not provision Kubernetes Services automatically.

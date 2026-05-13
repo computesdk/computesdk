@@ -48,5 +48,4 @@ interface K8sConfig {
 ## Notes
 
 - Sandboxes are labeled with `computesdk.io/managed=true`.
-- `getUrl` returns an internal cluster URL by default.
-- Set `serviceType: 'NodePort'` to return a localhost node port URL when available.
+- `getUrl` is template-based in this MVP. Set `urlTemplate` (for example via your gateway/ingress pattern) to return a routable URL.
