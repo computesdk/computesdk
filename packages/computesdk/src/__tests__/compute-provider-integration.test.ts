@@ -115,8 +115,8 @@ describeIntegration('compute provider integration', () => {
     } as any);
 
     try {
-      const result = await sandbox.runCode('print("computesdk-integration-ok")', 'python');
-      expect(result.output).toContain('computesdk-integration-ok');
+      const result = await sandbox.runCommand('echo computesdk-integration-ok');
+      expect(result.stdout).toContain('computesdk-integration-ok');
 
       const fetched = await sdk.sandbox.getById(sandbox.sandboxId);
       expect(fetched?.sandboxId).toBe(sandbox.sandboxId);

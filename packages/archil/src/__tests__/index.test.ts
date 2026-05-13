@@ -157,6 +157,7 @@ runProviderTestSuite({
   // Keep command/runtime integration coverage on, and add dedicated filesystem
   // integration once mount-path behavior is standardized.
   supportsFilesystem: false,
+  supportsGetUrl: false,
   skipIntegration:
     !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION || !process.env.ARCHIL_DISK_ID,
 });

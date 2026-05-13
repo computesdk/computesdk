@@ -28,9 +28,9 @@ const compute = runloop({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Runloop!")');
-console.log(result.output); // "Hello from Runloop!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Runloop!"');
+console.log(result.stdout); // "Hello from Runloop!"
 
 // Clean up
 await sandbox.destroy();
@@ -47,15 +47,3 @@ interface RunloopConfig {
   timeout?: number;
 }
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases

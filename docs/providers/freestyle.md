@@ -28,9 +28,9 @@ const compute = freestyle({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Freestyle!")');
-console.log(result.output); // "Hello from Freestyle!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Freestyle!"');
+console.log(result.stdout); // "Hello from Freestyle!"
 
 // Clean up
 await sandbox.destroy();
@@ -43,21 +43,9 @@ await sandbox.destroy();
 interface FreestyleConfig {
   /** Freestyle API key - if not provided, will use FREESTYLE_API_KEY env var */
   apiKey?: string;
-  /** Default runtime hint used to auto-detect the language. Default: 'node' */
-  runtime?: Runtime;
+  /** Default runtime hint (e.g. 'node', 'python'). Default: 'node' */
+  runtime?: string;
   /** Timeout in milliseconds for shell commands (runCommand). Default: 30000 */
   timeout?: number;
 }
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases

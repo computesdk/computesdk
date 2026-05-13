@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createCompute } from '../compute.js'
-import type { CodeResult, CommandResult, SandboxInfo } from '../types/index.js'
-import type { Runtime } from 'computesdk'
+import type { CommandResult, SandboxInfo } from '../types/index.js'
 
-const MOCK_SUPPORTED_RUNTIMES: Runtime[] = ['node', 'python']
+type MockSandboxInstance = {
+  setTimeout: ReturnType<typeof vi.fn>
+  specialMethod: ReturnType<typeof vi.fn>
+}
 
 // Mock E2B-like provider
 function createMockProvider(name: string) {
@@ -15,16 +17,10 @@ function createMockProvider(name: string) {
 
   return {
     name,
-    getSupportedRuntimes: () => MOCK_SUPPORTED_RUNTIMES,
     sandbox: {
       create: vi.fn().mockResolvedValue({
         sandboxId: 'test-123',
         provider: name,
-        runCode: vi.fn().mockResolvedValue({
-          output: 'Hello World',
-          exitCode: 0,
-          language: 'python'
-        } as CodeResult),
         runCommand: vi.fn().mockResolvedValue({
           stdout: 'Command output',
           stderr: '',
@@ -34,7 +30,6 @@ function createMockProvider(name: string) {
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-123',
           provider: name,
-          runtime: 'python' as Runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
@@ -85,16 +80,12 @@ describe('createCompute function', () => {
 
     const sandbox = await compute.sandbox.create()
 
-    // Should be properly typed and return the provider-specific instance
-    // Note: In real usage with defineProvider<E2BSandbox>, getInstance() returns E2BSandbox
-    // Here we cast to any since the mock doesn't preserve generic types
-    const instance = sandbox.getInstance() as any
+    const instance = sandbox.getInstance() as MockSandboxInstance
 
     expect(instance).toBeTruthy()
     expect(typeof instance.setTimeout).toBe('function')
     expect(typeof instance.specialMethod).toBe('function')
 
-    // Should be able to call provider-specific methods
     instance.setTimeout(5000)
     expect(instance.setTimeout).toHaveBeenCalledWith(5000)
 
@@ -115,7 +106,6 @@ describe('createCompute function', () => {
     expect(sandbox.sandboxId).toBe('test-123')
 
     // Test other operations exist
-    expect(typeof sandbox.runCode).toBe('function')
     expect(typeof sandbox.runCommand).toBe('function')
     expect(typeof sandbox.getInfo).toBe('function')
     expect(typeof sandbox.getUrl).toBe('function')
@@ -150,7 +140,6 @@ describe('createCompute function', () => {
       defaultProvider: mockProvider1
     })
 
-    // setConfig should return a new typed compute instance
     const compute2 = compute1.setConfig({
       defaultProvider: mockProvider2
     })

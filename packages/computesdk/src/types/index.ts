@@ -1,8 +1,7 @@
 /**
  * ComputeSDK Types
- * 
- * Re-exports sandbox types
+ *
+ * Re-exports the universal Sandbox types.
  */
 
-// Re-export everything from client for backward compatibility
-export * from './sandbox';
+export * from './universal-sandbox';

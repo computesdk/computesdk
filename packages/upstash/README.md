@@ -26,10 +26,10 @@ const compute = upstash({ apiKey: process.env.UPSTASH_BOX_API_KEY });
 
 const sandbox = await compute.sandbox.create();
 
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 print(pd.__version__)
-`);
+PY`);
 
 console.log(result.stdout);
 await sandbox.destroy();
@@ -49,8 +49,8 @@ export UPSTASH_BOX_API_KEY=your_api_key_here
 interface UpstashConfig {
   /** Upstash Box API key - if not provided, will use UPSTASH_BOX_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: 'python' | 'node';
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds (default: 600000) */
   timeout?: number;
 }
@@ -58,36 +58,28 @@ interface UpstashConfig {
 
 ## Features
 
-- **Code Execution** - Python and Node.js runtime support
-- **Command Execution** - Run shell commands in sandbox
+- **Command Execution** - Run shell commands in sandbox (Python/Node.js available)
 - **Filesystem Operations** - Full file system access
 - **Preview URLs** - Get publicly accessible URLs for running services
 - **Snapshots** - Save and restore sandbox state
-- **Auto Runtime Detection** - Automatically detects Python vs Node.js
 
 ## API Reference
 
-### Code Execution
+### Command Execution
 
 ```typescript
-// Execute Python code
-const result = await sandbox.runCode(`
+// Run Python code via heredoc
+const result = await sandbox.runCommand(`python - <<'PY'
 import json
 data = {"message": "Hello from Python"}
 print(json.dumps(data))
-`, 'python');
+PY`);
 
-// Execute Node.js code
-const result = await sandbox.runCode(`
+// Run Node.js code via heredoc
+const result = await sandbox.runCommand(`node - <<'JS'
 const data = { message: "Hello from Node.js" };
 console.log(JSON.stringify(data));
-`, 'node');
-
-// Auto-detection (based on code patterns)
-const result = await sandbox.runCode('print("Auto-detected as Python")');
-```
-
-### Command Execution
+JS`);
 
 ```typescript
 // List files
@@ -175,18 +167,6 @@ const sandboxes = await compute.sandbox.list();
 await sandbox.destroy();
 ```
 
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print(` statements
-- `import` statements
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, `raise`, etc.)
-
-**Default:** Node.js for all other cases
-
 ## Error Handling
 
 ```typescript
@@ -196,7 +176,7 @@ try {
   const compute = upstash({ apiKey: process.env.UPSTASH_BOX_API_KEY });
   const sandbox = await compute.sandbox.create();
 
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('invalid code');
 } catch (error) {
   if (error.message.includes('Missing Upstash Box API key')) {
     console.error('Set UPSTASH_BOX_API_KEY environment variable');
@@ -231,7 +211,7 @@ Charlie,35,Chicago`;
 await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
 
 // Process data with Python
-const result = await sandbox.runCode(`
+const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -250,7 +230,7 @@ plt.bar(df['name'], df['age'])
 plt.title('Age by Person')
 plt.savefig('/analysis/output/age_chart.png')
 print("\\nChart saved!")
-`);
+PY`);
 
 console.log(result.stdout);
 

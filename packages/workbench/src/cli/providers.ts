@@ -7,7 +7,6 @@ import { c } from './output.js';
 
 const SHARED_PROVIDER_NAMES = [
   'e2b',
-  'railway',
   'daytona',
   'modal',
   'runloop',
@@ -19,6 +18,7 @@ const SHARED_PROVIDER_NAMES = [
   'blaxel',
   'namespace',
   'hopx',
+  'declaw',
   'sprites',
   'agentuity',
   'freestyle',
@@ -30,7 +30,6 @@ type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
 
 const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string[])[]> = {
   e2b: [['E2B_API_KEY']],
-  railway: [['RAILWAY_API_KEY', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID']],
   daytona: [['DAYTONA_API_KEY']],
   modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
   runloop: [['RUNLOOP_API_KEY']],
@@ -48,6 +47,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
+  declaw: [['DECLAW_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
   freestyle: [['FREESTYLE_API_KEY']],
@@ -57,11 +57,6 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
 
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   e2b: { apiKey: 'E2B_API_KEY' },
-  railway: {
-    apiKey: 'RAILWAY_API_KEY',
-    projectId: 'RAILWAY_PROJECT_ID',
-    environmentId: 'RAILWAY_ENVIRONMENT_ID',
-  },
   daytona: { apiKey: 'DAYTONA_API_KEY' },
   modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
   runloop: { apiKey: 'RUNLOOP_API_KEY' },
@@ -80,6 +75,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   blaxel: { apiKey: 'BL_API_KEY', workspace: 'BL_WORKSPACE' },
   namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
   hopx: { apiKey: 'HOPX_API_KEY' },
+  declaw: { apiKey: 'DECLAW_API_KEY' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
   freestyle: { apiKey: 'FREESTYLE_API_KEY' },
@@ -97,24 +93,11 @@ function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, 
   return config;
 }
 
-/**
- * Workbench-specific provider names (includes gateway)
- */
-export const PROVIDER_NAMES = [
-  'gateway',
-  ...SHARED_PROVIDER_NAMES,
-] as const;
+export const PROVIDER_NAMES = SHARED_PROVIDER_NAMES;
 
 export type ProviderName = typeof PROVIDER_NAMES[number];
 
-/**
- * Auth requirements for each provider
- * Extends shared config with gateway-specific auth
- */
-export const PROVIDER_AUTH: Record<ProviderName, readonly (readonly string[])[]> = {
-  gateway: [['COMPUTESDK_API_KEY']],
-  ...SHARED_PROVIDER_AUTH,
-};
+export const PROVIDER_AUTH: Record<ProviderName, readonly (readonly string[])[]> = SHARED_PROVIDER_AUTH;
 
 /**
  * Get detailed status for a specific provider
@@ -253,16 +236,11 @@ export function showEnv() {
 /**
  * Auto-detect best provider to use
  */
-export function autoDetectProvider(forceGatewayMode = false): string | null {
+export function autoDetectProvider(): string | null {
   // Check for explicit override
   const explicit = process.env.COMPUTESDK_PROVIDER?.toLowerCase();
   if (explicit && isValidProvider(explicit) && isProviderReady(explicit)) {
     return explicit;
-  }
-
-  // If forcing gateway mode, only return gateway if available
-  if (forceGatewayMode) {
-    return isProviderReady('gateway') ? 'gateway' : null;
   }
 
   // Auto-detect based on priority order
@@ -322,13 +300,8 @@ export function getProviderSetupHelp(provider: string): string {
 export async function loadProvider(providerName: ProviderName): Promise<any> {
   try {
     switch (providerName) {
-      case 'gateway':
-        // Gateway is built into computesdk package
-        return await import('computesdk');
       case 'e2b':
         return await import('@computesdk/e2b');
-      case 'railway':
-        return await import('@computesdk/railway');
       case 'daytona':
         return await import('@computesdk/daytona');
       case 'modal':
@@ -354,6 +327,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/namespace');
       case 'hopx':
         return await import('@computesdk/hopx');
+      case 'declaw':
+        return await import('@computesdk/declaw');
       case 'sprites':
         return await import('@computesdk/sprites');
       case 'agentuity':
@@ -368,9 +343,6 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         throw new Error(`Unknown provider: ${providerName}`);
     }
   } catch (error) {
-    if (providerName === 'gateway') {
-      throw new Error(`Failed to load gateway provider from computesdk package.`);
-    }
     throw new Error(
       `Failed to load provider ${providerName}. ` +
       `Make sure to install it: npm install @computesdk/${providerName}`
@@ -380,16 +352,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
 
 /**
  * Create provider config from environment variables
- * Uses shared PROVIDER_ENV_MAP from computesdk
  */
 export function getProviderConfig(providerName: ProviderName): Record<string, string> {
-  // Handle gateway separately (not in shared config)
-  if (providerName === 'gateway') {
-    const config: Record<string, string> = {};
-    if (process.env.COMPUTESDK_API_KEY) config.apiKey = process.env.COMPUTESDK_API_KEY;
-    return config;
-  }
-
-  // Use shared utility for other providers
-  return getProviderConfigFromEnv(providerName as SharedProviderName);
+  return getProviderConfigFromEnv(providerName);
 }

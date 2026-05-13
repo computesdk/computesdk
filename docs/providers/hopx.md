@@ -28,9 +28,9 @@ const compute = hopx({
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from HopX!")');
-console.log(result.output); // "Hello from HopX!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from HopX!"');
+console.log(result.stdout); // "Hello from HopX!"
 
 // Clean up
 await sandbox.destroy();
@@ -43,8 +43,6 @@ await sandbox.destroy();
 interface HopxConfig {
   /** HopX API key - if not provided, will use HOPX_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Template name for sandbox creation (e.g. 'code-interpreter') */
@@ -53,15 +51,3 @@ interface HopxConfig {
   baseURL?: string;
 }
 ```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
