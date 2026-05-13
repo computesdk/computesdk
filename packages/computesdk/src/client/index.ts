@@ -14,6 +14,12 @@ import { TerminalInstance } from './terminal';
 import { FileWatcher } from './file-watcher';
 import { SignalService } from './signal-service';
 import { escapeArgs, mkdir, test } from '@computesdk/cmd';
+import {
+  daemonSeedScriptCommand,
+  parseSeedInvocationOutput,
+  type SeedCommandInput,
+  type SeedScriptConfig,
+} from 'daemond';
 
 // Import resource namespaces
 import {
@@ -2444,6 +2450,7 @@ export class Sandbox {
    * @param options.background - Run in background (server uses goroutines)
    * @param options.cwd - Working directory (server uses cmd.Dir)
    * @param options.env - Environment variables (server uses cmd.Env)
+   * @param options.daemon - Run via daemond seed launcher for repeatable local command daemon execution
    * @param options.onStdout - Callback for streaming stdout data
    * @param options.onStderr - Callback for streaming stderr data
    * @param options.timeout - Timeout in seconds (max 300 for long-running commands)
@@ -2479,6 +2486,7 @@ export class Sandbox {
       background?: boolean;
       cwd?: string;
       env?: Record<string, string>;
+      daemon?: boolean | SeedScriptConfig;
       onStdout?: (data: string) => void;
       onStderr?: (data: string) => void;
       /** Timeout in seconds (max 300 for long-running commands) */
@@ -2490,6 +2498,36 @@ export class Sandbox {
     exitCode: number;
     durationMs: number;
   }> {
+    if (options?.daemon) {
+      if (options.background) {
+        throw new Error('runCommand({ daemon: true }) does not support background mode.');
+      }
+      if (options.onStdout || options.onStderr) {
+        throw new Error('runCommand({ daemon: true }) does not support WebSocket streaming callbacks.');
+      }
+
+      const daemonPayload: SeedCommandInput = {
+        command,
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeout ? options.timeout * 1000 : undefined,
+      };
+
+      const daemonCommand = daemonSeedScriptCommand(
+        typeof options.daemon === 'object' ? options.daemon : undefined,
+        daemonPayload
+      );
+
+      const daemonResult = await this.run.command(daemonCommand);
+      const invocation = parseSeedInvocationOutput(daemonResult.stdout);
+      return {
+        stdout: invocation.command.stdout,
+        stderr: invocation.command.stderr,
+        exitCode: invocation.command.exitCode ?? -1,
+        durationMs: daemonResult.durationMs,
+      };
+    }
+
     const hasStreamingCallbacks = options?.onStdout || options?.onStderr;
     
     if (!hasStreamingCallbacks) {

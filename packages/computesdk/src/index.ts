@@ -80,6 +80,22 @@ export {
 // Export WebSocket type for Node.js environments without native WebSocket
 export type { WebSocketConstructor } from './client';
 
+// Re-export daemon seed launcher helpers for command-daemon flows
+export {
+  daemonSeedScript,
+  daemonSeedScriptCommand,
+  parseSeedInvocationOutput,
+} from 'daemond';
+export type {
+  SeedScriptConfig,
+  SeedCommandInput,
+  SeedCommandResult,
+  SeedInvocationResult,
+  SeedDaemonInfo,
+  SeedHealthPayload,
+  SeedEventFilter,
+} from 'daemond';
+
 // ============================================================================
 // Compute API - Direct Provider Implementation
 // ============================================================================

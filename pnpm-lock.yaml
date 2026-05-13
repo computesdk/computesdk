@@ -548,6 +548,9 @@ importers:
       '@computesdk/cmd':
         specifier: workspace:*
         version: link:../cmd
+      daemond:
+        specifier: ^0.1.2
+        version: 0.1.2
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -5061,6 +5064,10 @@ packages:
   cssstyle@4.6.0:
     resolution: {integrity: sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg==}
     engines: {node: '>=18'}
+
+  daemond@0.1.2:
+    resolution: {integrity: sha512-Ev6+xXEG/FDe6cSts7A7jQffhQKTIIgeVK+fH3OZAAs8Q5VOeexQqkxpfoQ3KrjBrDS3LeqZ+BL/1yXTnbyrfg==}
+    engines: {node: '>=18.0.0'}
 
   data-uri-to-buffer@2.0.2:
     resolution: {integrity: sha512-ND9qDTLc6diwj+Xe5cdAgVTbLVdXbtxTJRXRhli8Mowuaan+0EJOtdqJ0QCHNSSPyoXGx9HX2/VMnKeC34AChA==}
@@ -12949,6 +12956,8 @@ snapshots:
       '@asamuzakjp/css-color': 3.2.0
       rrweb-cssom: 0.8.0
     optional: true
+
+  daemond@0.1.2: {}
 
   data-uri-to-buffer@2.0.2: {}
 
