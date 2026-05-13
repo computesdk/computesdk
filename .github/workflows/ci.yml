@@ -259,7 +259,7 @@ jobs:
         pnpm --filter computesdk test compute-provider-integration
 
   k8s-integration-tests:
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'namespace-profile-default' }}
+    runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
     permissions:
