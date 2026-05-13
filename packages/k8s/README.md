@@ -36,11 +36,10 @@ interface K8sConfig {
   context?: string;
   namespace?: string;
   image?: string;
-  runtime?: 'node' | 'python' | 'deno' | 'bun';
+  runtime?: 'node' | 'python';
   timeout?: number;
   serviceType?: 'ClusterIP' | 'NodePort';
   podNamePrefix?: string;
-  ttlSeconds?: number;
   urlTemplate?: string;
 }
 ```

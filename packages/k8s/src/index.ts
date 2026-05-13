@@ -28,7 +28,6 @@ export interface K8sConfig {
   timeout?: number;
   serviceType?: 'ClusterIP' | 'NodePort';
   podNamePrefix?: string;
-  ttlSeconds?: number;
   urlTemplate?: string;
 }
 
@@ -56,6 +55,15 @@ function getNamespace(config: K8sConfig, options?: CreateSandboxOptions): string
   return options?.namespace || config.namespace || 'default';
 }
 
+function parseRuntime(runtime: unknown): Runtime {
+  if (runtime === 'node' || runtime === 'python') return runtime;
+  throw new Error(`Unsupported runtime '${String(runtime)}' for k8s provider. Supported runtimes: node, python.`);
+}
+
+function isValidEnvKey(key: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
+}
+
 function imageForRuntime(runtime: Runtime, configured?: string): string {
   if (configured) return configured;
   return runtime === 'python' ? 'python:3.11-slim' : 'node:20-alpine';
@@ -63,6 +71,10 @@ function imageForRuntime(runtime: Runtime, configured?: string): string {
 
 function serviceNameForPod(podName: string): string {
   return `${podName}-svc`;
+}
+
+function getPodName(handle: K8sSandboxHandle): string {
+  return handle.podName.includes('/') ? handle.podName.split('/', 2)[1] : handle.podName;
 }
 
 function isNotFound(error: unknown): boolean {
@@ -143,7 +155,12 @@ function withCommandOptions(command: string, options?: RunCommandOptions): strin
   }
   if (options?.env && Object.keys(options.env).length > 0) {
     const envPrefix = Object.entries(options.env)
-      .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+      .map(([k, v]) => {
+        if (!isValidEnvKey(k)) {
+          throw new Error(`Invalid environment variable name '${k}'.`);
+        }
+        return `${k}="${escapeShellArg(v)}"`;
+      })
       .join(' ');
     full = `${envPrefix} ${full}`;
   }
@@ -183,7 +200,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
     sandbox: {
       create: async (config: K8sConfig, options?: CreateSandboxOptions) => {
         const namespace = getNamespace(config, options);
-        const runtime = (options?.runtime || config.runtime || 'node') as Runtime;
+        const runtime = parseRuntime(options?.runtime || config.runtime || 'node');
         const timeout = options?.timeout ?? config.timeout ?? 120000;
         const podNamePrefix = config.podNamePrefix || 'computesdk-sbx';
 
@@ -200,15 +217,19 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           [LABEL_SID]: sandboxId,
         };
 
-        for (const [key, value] of Object.entries(options?.metadata || {})) {
-          labels[`computesdk.io/meta-${key}`] = typeof value === 'string' ? value : JSON.stringify(value);
-        }
+        const annotations = Object.fromEntries(
+          Object.entries(options?.metadata || {}).map(([key, value]) => [
+            `computesdk.io/meta-${key}`,
+            typeof value === 'string' ? value : JSON.stringify(value),
+          ]),
+        );
 
         const pod: V1Pod = {
           metadata: {
             name: podName,
             namespace,
             labels,
+            annotations,
           },
           spec: {
             restartPolicy: 'Never',
@@ -233,7 +254,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
 
         return {
           sandbox: {
-            podName,
+            podName: `${namespace}/${podName}`,
             namespace,
             runtime,
             createdAt: new Date(),
@@ -250,14 +271,16 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
       getById: async (config: K8sConfig, sandboxId: string) => {
         const kc = loadKubeConfig(config);
         const core = kc.makeApiClient(CoreV1Api);
-        const namespace = config.namespace || 'default';
+        const [namespace, name] = sandboxId.includes('/')
+          ? sandboxId.split('/', 2)
+          : [config.namespace || 'default', sandboxId];
 
         try {
-          const pod = await core.readNamespacedPod({ name: sandboxId, namespace });
-          const runtime = (pod.metadata?.labels?.[LABEL_RUNTIME] || config.runtime || 'node') as Runtime;
+          const pod = await core.readNamespacedPod({ name, namespace });
+          const runtime = parseRuntime(pod.metadata?.labels?.[LABEL_RUNTIME] || config.runtime || 'node');
           return {
             sandbox: {
-              podName: sandboxId,
+              podName: `${namespace}/${name}`,
               namespace,
               runtime,
               createdAt: pod.metadata?.creationTimestamp || new Date(),
@@ -267,11 +290,11 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               urlTemplate: config.urlTemplate,
               serviceType: config.serviceType || 'ClusterIP',
             },
-            sandboxId,
+            sandboxId: `${namespace}/${name}`,
           };
         } catch (error) {
           if (isNotFound(error)) return null;
-          throw new Error(`Failed to fetch Kubernetes sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`);
+          throw new Error(`Failed to fetch Kubernetes sandbox ${namespace}/${name}: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
 
@@ -283,10 +306,10 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         const pods = await core.listNamespacedPod({ namespace, labelSelector: `${LABEL_MANAGED}=true` });
         return (pods.items || []).map(pod => {
           const podName = pod.metadata?.name || '';
-          const runtime = (pod.metadata?.labels?.[LABEL_RUNTIME] || config.runtime || 'node') as Runtime;
+          const runtime = parseRuntime(pod.metadata?.labels?.[LABEL_RUNTIME] || config.runtime || 'node');
           return {
             sandbox: {
-              podName,
+              podName: `${namespace}/${podName}`,
               namespace,
               runtime,
               createdAt: pod.metadata?.creationTimestamp || new Date(),
@@ -296,7 +319,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               urlTemplate: config.urlTemplate,
               serviceType: config.serviceType || 'ClusterIP',
             },
-            sandboxId: podName,
+            sandboxId: `${namespace}/${podName}`,
           };
         }).filter(item => item.sandboxId);
       },
@@ -304,13 +327,15 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
       destroy: async (config: K8sConfig, sandboxId: string) => {
         const kc = loadKubeConfig(config);
         const core = kc.makeApiClient(CoreV1Api);
-        const namespace = config.namespace || 'default';
+        const [namespace, name] = sandboxId.includes('/')
+          ? sandboxId.split('/', 2)
+          : [config.namespace || 'default', sandboxId];
 
-        await core.deleteNamespacedPod({ namespace, name: sandboxId }).catch(error => {
+        await core.deleteNamespacedPod({ namespace, name }).catch(error => {
           if (!isNotFound(error)) throw error;
         });
 
-        await core.deleteNamespacedService({ namespace, name: serviceNameForPod(sandboxId) }).catch(error => {
+        await core.deleteNamespacedService({ namespace, name: serviceNameForPod(name) }).catch(error => {
           if (!isNotFound(error)) throw error;
         });
       },
@@ -321,7 +346,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         const wrappedCommand = `(${fullCommand}); __ec=$?; printf '\n__COMPUTESDK_EXIT_CODE__=%s\n' "$__ec"`;
 
         const kc = loadKubeConfigFromHandle(sandbox);
-        const result = await execInPod(kc, sandbox.namespace, sandbox.podName, wrappedCommand);
+        const result = await execInPod(kc, sandbox.namespace, getPodName(sandbox), wrappedCommand);
         const parsed = parseExitCode(result.stdout, result.stderr);
 
         return {
@@ -335,7 +360,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
       getInfo: async (sandbox: K8sSandboxHandle): Promise<SandboxInfo> => {
         const kc = loadKubeConfigFromHandle(sandbox);
         const core = kc.makeApiClient(CoreV1Api);
-        const pod = await core.readNamespacedPod({ namespace: sandbox.namespace, name: sandbox.podName });
+        const pod = await core.readNamespacedPod({ namespace: sandbox.namespace, name: getPodName(sandbox) });
         const phase = pod.status?.phase || 'Unknown';
 
         return {
@@ -360,7 +385,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         }
 
         const protocol = options.protocol || 'http';
-        const serviceName = serviceNameForPod(sandbox.podName);
+        const serviceName = serviceNameForPod(getPodName(sandbox));
         return sandbox.urlTemplate
           .replace('{protocol}', protocol)
           .replace('{service}', serviceName)
