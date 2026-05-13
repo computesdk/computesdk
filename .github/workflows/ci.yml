@@ -259,20 +259,23 @@ jobs:
         pnpm --filter computesdk test compute-provider-integration
 
   k8s-integration-tests:
-    runs-on: namespace-profile-default
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'namespace-profile-default' }}
     needs: test
     if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    permissions:
+      contents: read
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        persist-credentials: false
 
     - name: Install pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
 
     - name: Use Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
         node-version: '22'
         cache: 'pnpm'
@@ -281,7 +284,7 @@ jobs:
       run: pnpm install --ignore-scripts
 
     - name: Set up kind cluster
-      uses: helm/kind-action@v1.10.0
+      uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
 
     - name: Verify cluster is reachable
       run: kubectl get nodes
