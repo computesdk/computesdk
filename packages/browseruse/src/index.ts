@@ -75,6 +75,7 @@ function applyProxy(params: Partial<CreateBrowserSessionRequest>, proxy: ProxyCo
         port,
         username: proxy.username ?? null,
         password: proxy.password ?? null,
+        ignoreCertErrors: false,
       };
       return;
     }
