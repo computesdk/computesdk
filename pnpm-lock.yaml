@@ -1374,6 +1374,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/superserve:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@superserve/sdk':
+        specifier: ^0.7.1
+        version: 0.7.1
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.39
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.39)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.39)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/tensorlake:
     dependencies:
       '@computesdk/provider':
@@ -4135,6 +4172,9 @@ packages:
   '@smithy/uuid@1.1.2':
     resolution: {integrity: sha512-O/IEdcCUKkubz60tFbGA7ceITTAJsty+lBjNoorP4Z6XRqaFb/OjQjZODophEcuq68nKm6/0r+6/lLQ+XVpk8g==}
     engines: {node: '>=18.0.0'}
+
+  '@superserve/sdk@0.7.1':
+    resolution: {integrity: sha512-A6uciIFs7N/uR/exMTXml3Kaqmw9U8QogzRABCYdz0ANKnya8GJPQDhK4z6vZfnj8+LFsrtA/d4jJq7K6cvAGQ==}
 
   '@tigrisdata/storage@2.15.5':
     resolution: {integrity: sha512-U/59S5JR8y5CvbFDV6OKlxOyafKbV6g4tga3PjGoh6Ugl0eN7GIjilDCcuL1DwI60VX7CF3lyuC7egcLnqUHNA==}
@@ -11414,6 +11454,8 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@superserve/sdk@0.7.1': {}
+
   '@tigrisdata/storage@2.15.5':
     dependencies:
       '@aws-crypto/sha256-js': 5.2.0
@@ -11455,7 +11497,7 @@ snapshots:
   '@types/dockerode@3.3.44':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 20.19.5
+      '@types/node': 20.19.39
       '@types/ssh2': 1.15.5
 
   '@types/dotenv@8.2.3':
