@@ -52,20 +52,18 @@ export interface S3 extends StorageProvider {
 export function s3(config: S3Config): S3 {
   const accessKeyId =
     config.accessKeyId ||
-    process.env.TIGRIS_STORAGE_ACCESS_KEY_ID ||
-    process.env.AWS_ACCESS_KEY_ID;
+    process.env.TIGRIS_STORAGE_ACCESS_KEY_ID;
   const secretAccessKey =
     config.secretAccessKey ||
-    process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY ||
-    process.env.AWS_SECRET_ACCESS_KEY;
+    process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY;
   const endpoint = config.endpoint || process.env.TIGRIS_STORAGE_ENDPOINT;
 
   if (!accessKeyId) {
-    throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID/AWS_ACCESS_KEY_ID.`);
+    throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID.`);
   }
 
   if (!secretAccessKey) {
-    throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY/AWS_SECRET_ACCESS_KEY.`);
+    throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY.`);
   }
 
   if (!endpoint) {
