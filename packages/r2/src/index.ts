@@ -35,10 +35,10 @@ export interface R2 extends StorageProvider {
   list(bucket: string, options?: ListOptions): Promise<ListResult>;
   /** Exposes storage SDK operations for advanced use */
   getClient(): {
-    put: typeof put;
-    get: typeof get;
-    list: typeof tigrisList;
-    remove: typeof remove;
+    put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) => ReturnType<typeof put>;
+    get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) => ReturnType<typeof get>;
+    list: (options?: Record<string, unknown>) => ReturnType<typeof tigrisList>;
+    remove: (key: string, options?: Record<string, unknown>) => ReturnType<typeof remove>;
   };
 }
 
@@ -72,12 +72,12 @@ export interface R2 extends StorageProvider {
 export function r2(config: R2Config): R2 {
   const accessKeyId =
     config.accessKeyId ||
-    process.env.TIGRIS_STORAGE_ACCESS_KEY_ID ||
-    process.env.R2_ACCESS_KEY_ID;
+    process.env.R2_ACCESS_KEY_ID ||
+    process.env.TIGRIS_STORAGE_ACCESS_KEY_ID;
   const secretAccessKey =
     config.secretAccessKey ||
-    process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY ||
-    process.env.R2_SECRET_ACCESS_KEY;
+    process.env.R2_SECRET_ACCESS_KEY ||
+    process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY;
   const accountId = config.accountId || process.env.R2_ACCOUNT_ID;
 
   let endpoint = config.endpoint;
@@ -110,8 +110,9 @@ export function r2(config: R2Config): R2 {
         const body = typeof data === 'string' ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
         const result = await put(key, body, {
           ...(options?.contentType ? { contentType: options.contentType } : {}),
+          ...(options?.metadata ? { metadata: options.metadata } : {}),
           config: { ...operationConfig, bucket },
-        });
+        } as any);
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -222,7 +223,28 @@ export function r2(config: R2Config): R2 {
     },
 
     getClient() {
-      return { put, get, list: tigrisList, remove };
+      return {
+        put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) =>
+          put(key, body, {
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+        get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) =>
+          get(key, format, {
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+        list: (options?: Record<string, unknown>) =>
+          tigrisList({
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+        remove: (key: string, options?: Record<string, unknown>) =>
+          remove(key, {
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+      };
     },
   };
 }

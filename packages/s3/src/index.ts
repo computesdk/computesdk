@@ -37,10 +37,10 @@ export interface S3 extends StorageProvider {
   list(bucket: string, options?: ListOptions): Promise<ListResult>;
   /** Exposes storage SDK operations for advanced use */
   getClient(): {
-    put: typeof put;
-    get: typeof get;
-    list: typeof tigrisList;
-    remove: typeof remove;
+    put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) => ReturnType<typeof put>;
+    get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) => ReturnType<typeof get>;
+    list: (options?: Record<string, unknown>) => ReturnType<typeof tigrisList>;
+    remove: (key: string, options?: Record<string, unknown>) => ReturnType<typeof remove>;
   };
 }
 
@@ -50,16 +50,22 @@ export interface S3 extends StorageProvider {
  * Uses explicit config values or TIGRIS_STORAGE_* env vars via per-call config.
  */
 export function s3(config: S3Config): S3 {
-  const accessKeyId = config.accessKeyId || process.env.TIGRIS_STORAGE_ACCESS_KEY_ID;
-  const secretAccessKey = config.secretAccessKey || process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY;
+  const accessKeyId =
+    config.accessKeyId ||
+    process.env.TIGRIS_STORAGE_ACCESS_KEY_ID ||
+    process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey =
+    config.secretAccessKey ||
+    process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY ||
+    process.env.AWS_SECRET_ACCESS_KEY;
   const endpoint = config.endpoint || process.env.TIGRIS_STORAGE_ENDPOINT;
 
   if (!accessKeyId) {
-    throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID.`);
+    throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID/AWS_ACCESS_KEY_ID.`);
   }
 
   if (!secretAccessKey) {
-    throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY.`);
+    throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY/AWS_SECRET_ACCESS_KEY.`);
   }
 
   if (!endpoint) {
@@ -79,8 +85,9 @@ export function s3(config: S3Config): S3 {
         const body = typeof data === 'string' ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
         const result = await put(key, body, {
           ...(options?.contentType ? { contentType: options.contentType } : {}),
+          ...(options?.metadata ? { metadata: options.metadata } : {}),
           config: { ...operationConfig, bucket },
-        });
+        } as any);
 
         if (result.error) {
           throw new Error(result.error.message);
@@ -186,7 +193,28 @@ export function s3(config: S3Config): S3 {
     },
 
     getClient() {
-      return { put, get, list: tigrisList, remove };
+      return {
+        put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) =>
+          put(key, body, {
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+        get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) =>
+          get(key, format, {
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+        list: (options?: Record<string, unknown>) =>
+          tigrisList({
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+        remove: (key: string, options?: Record<string, unknown>) =>
+          remove(key, {
+            ...(options || {}),
+            config: { ...operationConfig, ...(options?.config as object || {}) },
+          } as any),
+      };
     },
   };
 }
