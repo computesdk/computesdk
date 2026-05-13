@@ -36,9 +36,9 @@ export interface S3 extends StorageProvider {
   /** List objects in bucket */
   list(bucket: string, options?: ListOptions): Promise<ListResult>;
   /** Exposes storage SDK operations for advanced use */
-  getClient(): {
-    put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) => ReturnType<typeof put>;
-    get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) => ReturnType<typeof get>;
+    getClient(): {
+    put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) => Promise<unknown>;
+    get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) => Promise<unknown>;
     list: (options?: Record<string, unknown>) => ReturnType<typeof tigrisList>;
     remove: (key: string, options?: Record<string, unknown>) => ReturnType<typeof remove>;
   };
@@ -195,12 +195,12 @@ export function s3(config: S3Config): S3 {
     getClient() {
       return {
         put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) =>
-          put(key, body, {
+          put(key, typeof body === 'string' || Buffer.isBuffer(body) ? body : Buffer.from(body), {
             ...(options || {}),
             config: { ...operationConfig, ...(options?.config as object || {}) },
           } as any),
         get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) =>
-          get(key, format, {
+          get(key, format as any, {
             ...(options || {}),
             config: { ...operationConfig, ...(options?.config as object || {}) },
           } as any),
