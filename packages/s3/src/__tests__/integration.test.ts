@@ -1,13 +1,14 @@
 /**
- * AWS S3 Storage Provider Integration Tests
+ * S3-Compatible Storage Provider Integration Tests
  * 
  * Uses the unified storage provider test suite to ensure S3 implements
  * the standard StorageProvider interface correctly.
  * 
- * These tests run against real S3 and only execute when AWS credentials
+ * These tests run against a real S3-compatible endpoint and only execute when credentials
  * are available in environment variables.
  * 
- * To run: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, then run tests
+ * To run: Set TIGRIS_STORAGE_ACCESS_KEY_ID, TIGRIS_STORAGE_SECRET_ACCESS_KEY, and
+ * TIGRIS_STORAGE_ENDPOINT, then run tests
  * These tests are automatically skipped in CI without credentials.
  */
 
@@ -17,21 +18,22 @@ import { s3 } from '../index';
 
 // Only run integration tests if credentials are available
 const runIntegration = !!(
-  process.env.AWS_ACCESS_KEY_ID && 
-  process.env.AWS_SECRET_ACCESS_KEY
+  process.env.TIGRIS_STORAGE_ACCESS_KEY_ID &&
+  process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY &&
+  process.env.TIGRIS_STORAGE_ENDPOINT
 );
 
 // Use environment bucket or default test bucket
-const testBucket = process.env.AWS_TEST_BUCKET || 'computesdk-test-bucket';
+const testBucket = process.env.TIGRIS_STORAGE_BUCKET || process.env.AWS_TEST_BUCKET || 'computesdk-test-bucket';
 
 if (runIntegration) {
-  // Run the full test suite with real S3
+  // Run the full test suite with a real S3-compatible store
   runStorageProviderTestSuite({
-    name: 'AWS S3',
+    name: 'S3-compatible (Tigris SDK)',
     provider: s3({
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-      region: process.env.AWS_REGION || 'us-east-1',
+      accessKeyId: process.env.TIGRIS_STORAGE_ACCESS_KEY_ID,
+      secretAccessKey: process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY,
+      endpoint: process.env.TIGRIS_STORAGE_ENDPOINT,
     }),
     bucket: testBucket,
     skipIntegration: false,
@@ -39,7 +41,7 @@ if (runIntegration) {
   });
 } else {
   // Add a placeholder test so vitest doesn't complain about empty file
-  describe('AWS S3 Integration', () => {
-    it.skip('skipped - no AWS credentials available', () => {});
+  describe('S3-Compatible Integration', () => {
+    it.skip('skipped - no credentials available', () => {});
   });
 }

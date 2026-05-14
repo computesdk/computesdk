@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/tensorlake",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Tensorlake provider for ComputeSDK - stateful MicroVM sandboxes for agentic applications and LLM-generated code execution",
   "author": "Garrison",
   "license": "MIT",

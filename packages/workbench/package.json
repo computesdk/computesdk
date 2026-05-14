@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/workbench",
-  "version": "24.0.3",
+  "version": "24.0.4",
   "description": "Interactive REPL for testing ComputeSDK sandbox operations",
   "author": "Garrison",
   "license": "MIT",
@@ -73,7 +73,8 @@
     "@computesdk/agentuity": "workspace:*",
     "@computesdk/freestyle": "workspace:*",
     "@computesdk/secure-exec": "workspace:*",
-    "@computesdk/upstash": "workspace:*"
+    "@computesdk/upstash": "workspace:*",
+    "@computesdk/k8s": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
@@ -128,6 +129,9 @@
       "optional": true
     },
     "@computesdk/upstash": {
+      "optional": true
+    },
+    "@computesdk/k8s": {
       "optional": true
     }
   },
