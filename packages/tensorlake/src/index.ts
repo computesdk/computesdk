@@ -18,8 +18,6 @@ import type {
   RunCommandOptions,
 } from "@computesdk/provider";
 
-const DEFAULT_IMAGE = "ubuntu-minimal";
-
 export interface TensorlakeConfig {
   /** Tensorlake API key — falls back to TENSORLAKE_API_KEY environment variable */
   apiKey?: string;
@@ -50,7 +48,7 @@ function resolveAuth(config: TensorlakeConfig): {
   if (!apiKey) {
     throw new Error(
       `Missing Tensorlake API key. Provide 'apiKey' in config or set TENSORLAKE_API_KEY environment variable. ` +
-        `Get your API key from https://app.tensorlake.ai`
+        `Get your API key from https://app.tensorlake.ai`,
     );
   }
   const apiUrl =
@@ -69,27 +67,31 @@ export const tensorlake = defineProvider<
     sandbox: {
       create: async (
         config: TensorlakeConfig,
-        options?: CreateSandboxOptions
+        options?: CreateSandboxOptions,
       ) => {
         const { apiKey, apiUrl } = resolveAuth(config);
-        const image = options?.image || config.image || DEFAULT_IMAGE;
+        const image = options?.image || config.image;
         const timeoutMs = options?.timeout ?? config.timeout;
         const timeoutSecs = timeoutMs ? Math.ceil(timeoutMs / 1000) : undefined;
 
+        const params = {
+          ...(image && { image }),
+          ...(timeoutSecs && { timeoutSecs }),
+          ...(options?.cpus && { cpus: options.cpus }),
+          ...(options?.memoryMb && { memoryMb: options.memoryMb }),
+          ...(options?.ephemeralDiskMb && {
+            ephemeralDiskMb: options.ephemeralDiskMb,
+          }),
+          ...(options?.name && { name: options.name }),
+          ...(options?.snapshotId && { snapshotId: options.snapshotId }),
+          proxyUrl: config.proxyUrl,
+          apiKey,
+          apiUrl,
+        };
+
         try {
           const startTime = Date.now();
-          const instance = await Sandbox.create({
-            image,
-            cpus: 1,
-            memoryMb: 1024,
-            ephemeralDiskMb: 2048,
-            ...(timeoutSecs && { timeoutSecs }),
-            ...(options?.name && { name: options.name }),
-            ...(options?.snapshotId && { snapshotId: options.snapshotId }),
-            proxyUrl: config.proxyUrl,
-            apiKey,
-            apiUrl,
-          });
+          const instance = await Sandbox.create(params);
 
           const sandbox: TensorlakeSandboxContext = {
             config,
@@ -105,13 +107,13 @@ export const tensorlake = defineProvider<
           if (error instanceof Error && error.message.includes("401")) {
             throw new Error(
               `Tensorlake authentication failed. Please check your TENSORLAKE_API_KEY. ` +
-                `Get your API key from https://app.tensorlake.ai`
+                `Get your API key from https://app.tensorlake.ai`,
             );
           }
           throw new Error(
             `Failed to create Tensorlake sandbox: ${
               error instanceof Error ? error.message : String(error)
-            }`
+            }`,
           );
         }
       },
@@ -151,7 +153,7 @@ export const tensorlake = defineProvider<
                 } as TensorlakeSandboxContext,
                 sandboxId: s.sandboxId,
               };
-            })
+            }),
           );
         } catch {
           return [];
@@ -171,7 +173,7 @@ export const tensorlake = defineProvider<
       runCommand: async (
         ctx: TensorlakeSandboxContext,
         command: string,
-        options?: RunCommandOptions
+        options?: RunCommandOptions,
       ): Promise<CommandResult> => {
         const startTime = Date.now();
 
@@ -221,7 +223,7 @@ export const tensorlake = defineProvider<
       },
 
       getInfo: async (
-        ctx: TensorlakeSandboxContext
+        ctx: TensorlakeSandboxContext,
       ): Promise<ComputeSandboxInfo> => {
         try {
           const info = await ctx.sandbox.info();
@@ -249,7 +251,7 @@ export const tensorlake = defineProvider<
 
       getUrl: async (
         ctx: TensorlakeSandboxContext,
-        options: { port: number; protocol?: string }
+        options: { port: number; protocol?: string },
       ): Promise<string> => {
         const { port, protocol: optionsProtocol } = options;
         const protocol = optionsProtocol || "https";
@@ -271,7 +273,7 @@ export const tensorlake = defineProvider<
       filesystem: {
         readFile: async (
           ctx: TensorlakeSandboxContext,
-          path: string
+          path: string,
         ): Promise<string> => {
           const bytes = await ctx.sandbox.readFile(path);
           return Buffer.from(bytes).toString("utf-8");
@@ -280,26 +282,26 @@ export const tensorlake = defineProvider<
         writeFile: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          content: string
+          content: string,
         ): Promise<void> => {
           await ctx.sandbox.writeFile(path, Buffer.from(content, "utf-8"));
         },
 
         mkdir: async (
           ctx: TensorlakeSandboxContext,
-          path: string
+          path: string,
         ): Promise<void> => {
           const result = await ctx.sandbox.run("mkdir", { args: ["-p", path] });
           if (result.exitCode !== 0) {
             throw new Error(
-              `Failed to create directory ${path}: ${result.stderr}`
+              `Failed to create directory ${path}: ${result.stderr}`,
             );
           }
         },
 
         readdir: async (
           ctx: TensorlakeSandboxContext,
-          path: string
+          path: string,
         ): Promise<FileEntry[]> => {
           const response = await ctx.sandbox.listDirectory(path);
           return response.entries.map((e) => ({
@@ -312,7 +314,7 @@ export const tensorlake = defineProvider<
 
         exists: async (
           ctx: TensorlakeSandboxContext,
-          path: string
+          path: string,
         ): Promise<boolean> => {
           try {
             await ctx.sandbox.readFile(path);
@@ -327,7 +329,7 @@ export const tensorlake = defineProvider<
 
         remove: async (
           ctx: TensorlakeSandboxContext,
-          path: string
+          path: string,
         ): Promise<void> => {
           try {
             await ctx.sandbox.deleteFile(path);
@@ -349,7 +351,7 @@ export const tensorlake = defineProvider<
       create: async (
         config: TensorlakeConfig,
         sandboxId: string,
-        options?: { name?: string }
+        options?: { name?: string },
       ) => {
         const { apiKey, apiUrl } = resolveAuth(config);
         const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
@@ -357,7 +359,7 @@ export const tensorlake = defineProvider<
 
         if (!result) {
           throw new Error(
-            `Failed to create snapshot for sandbox '${sandboxId}': checkpoint() did not return a snapshot result.`
+            `Failed to create snapshot for sandbox '${sandboxId}': checkpoint() did not return a snapshot result.`,
           );
         }
 
