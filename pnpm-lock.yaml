@@ -1126,6 +1126,9 @@ importers:
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
+      daemond:
+        specifier: ^0.1.2
+        version: 0.1.2
     devDependencies:
       '@types/node':
         specifier: ^20.0.0

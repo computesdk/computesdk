@@ -23,6 +23,11 @@ import type {
   CreateTemplateOptions,
   ListTemplatesOptions,
 } from './types/index.js';
+import {
+  daemonSeedScriptCommand,
+  parseSeedInvocationOutput,
+  type SeedCommandInput,
+} from 'daemond';
 
 /**
  * Flat sandbox method implementations - all operations in one place
@@ -199,6 +204,36 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     command: string,
     options?: RunCommandOptions
   ): Promise<CommandResult> {
+    if (options?.daemon) {
+      if (options.background) {
+        throw new Error('runCommand({ daemon: true }) does not support background mode.');
+      }
+
+      const daemonPayload: SeedCommandInput = {
+        command,
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeout ? options.timeout * 1000 : undefined,
+      };
+
+      const daemonCommand = daemonSeedScriptCommand(
+        typeof options.daemon === 'object' ? options.daemon : undefined,
+        daemonPayload
+      );
+
+      const forwardedOptions: RunCommandOptions = { ...options };
+      delete forwardedOptions.daemon;
+
+      const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
+      const invocation = parseSeedInvocationOutput(daemonResult.stdout);
+      return {
+        stdout: invocation.command.stdout,
+        stderr: invocation.command.stderr,
+        exitCode: invocation.command.exitCode ?? -1,
+        durationMs: daemonResult.durationMs,
+      };
+    }
+
     // Pass command and options directly to provider - no preprocessing
     // Provider is responsible for handling cwd, env, background, etc.
     return await this.methods.runCommand(this.sandbox, command, options);

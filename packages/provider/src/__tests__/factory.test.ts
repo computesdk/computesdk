@@ -2,6 +2,19 @@ import { describe, it, expect, vi } from 'vitest'
 import { defineProvider } from '../factory.js'
 import type { CommandResult, SandboxInfo } from '../types/index.js'
 
+const {
+  daemonSeedScriptCommand,
+  parseSeedInvocationOutput,
+} = vi.hoisted(() => ({
+  daemonSeedScriptCommand: vi.fn(),
+  parseSeedInvocationOutput: vi.fn(),
+}))
+
+vi.mock('daemond', () => ({
+  daemonSeedScriptCommand,
+  parseSeedInvocationOutput,
+}))
+
 describe('Factory', () => {
   describe('defineProvider', () => {
     it('should create a provider factory function', () => {
@@ -150,6 +163,122 @@ describe('Factory', () => {
         { id: 'test-456', status: 'running' },
         { port: 8080, protocol: 'wss' }
       )
+    })
+
+    it('should run command through daemond when daemon option is set', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-789', status: 'running' },
+          sandboxId: 'test-789'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: 'daemon invocation output',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 35
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-789',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-789-3000.mock.dev')
+      }
+
+      daemonSeedScriptCommand.mockReturnValue('node -e "seed" "pwd"')
+      parseSeedInvocationOutput.mockReturnValue({
+        token: 'tok',
+        requestId: 'req_1',
+        daemon: { reused: true, pid: 1, sseUrl: 'http://127.0.0.1/events?token=tok' },
+        command: {
+          exitCode: 0,
+          signal: null,
+          stdout: '/workspace\n',
+          stderr: '',
+          combined: '/workspace\n',
+        },
+      })
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+      const result = await sandbox.runCommand('pwd', {
+        daemon: { name: 'seed-control', socket: '/tmp/seed.sock' },
+        cwd: '/workspace',
+        timeout: 12,
+      })
+
+      expect(daemonSeedScriptCommand).toHaveBeenCalledWith(
+        { name: 'seed-control', socket: '/tmp/seed.sock' },
+        {
+          command: 'pwd',
+          cwd: '/workspace',
+          env: undefined,
+          timeoutMs: 12000,
+        }
+      )
+      expect(methods.runCommand).toHaveBeenCalledWith(
+        { id: 'test-789', status: 'running' },
+        'node -e "seed" "pwd"',
+        {
+          cwd: '/workspace',
+          timeout: 12,
+        }
+      )
+      expect(parseSeedInvocationOutput).toHaveBeenCalledWith('daemon invocation output')
+      expect(result).toEqual({
+        stdout: '/workspace\n',
+        stderr: '',
+        exitCode: 0,
+        durationMs: 35,
+      })
+    })
+
+    it('should reject daemon mode when background is true', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-790', status: 'running' },
+          sandboxId: 'test-790'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 1
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-790',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-790-3000.mock.dev')
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+
+      await expect(
+        sandbox.runCommand('pwd', { daemon: true, background: true })
+      ).rejects.toThrow('runCommand({ daemon: true }) does not support background mode.')
     })
   })
 })
