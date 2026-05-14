@@ -62,6 +62,8 @@ export interface RunCommandOptions {
   env?: Record<string, string>;
   timeout?: number;
   background?: boolean;
+  onStdout?: (data: string) => void;
+  onStderr?: (data: string) => void;
   /**
    * Optional daemon seed config for providers that support daemonized command execution.
    *

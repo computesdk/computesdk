@@ -29,6 +29,106 @@ import {
   type SeedCommandInput,
 } from 'daemond';
 
+type DaemonStreamState = {
+  token: string;
+  sseUrl: string;
+};
+
+function parseSseDataLines(raw: string): string[] {
+  const chunks = raw.split(/\n\n+/);
+  const out: string[] = [];
+  for (const chunk of chunks) {
+    const lines = chunk.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data:')) {
+        out.push(line.slice(5).trim());
+      }
+    }
+  }
+  return out;
+}
+
+function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestId?: string; stdout?: string; stderr?: string } {
+  if (!payload || typeof payload !== 'object') return {};
+  const record = payload as Record<string, any>;
+  const data = (record.data && typeof record.data === 'object') ? record.data : undefined;
+  const type = typeof record.type === 'string' ? record.type : typeof record.event === 'string' ? record.event : undefined;
+  const requestId = typeof record.requestId === 'string'
+    ? record.requestId
+    : typeof data?.requestId === 'string'
+      ? data.requestId
+      : undefined;
+  const stdout = typeof record.stdout === 'string'
+    ? record.stdout
+    : typeof record.output === 'string'
+      ? record.output
+      : typeof record.chunk === 'string'
+        ? record.chunk
+        : typeof data?.stdout === 'string'
+          ? data.stdout
+          : typeof data?.output === 'string'
+            ? data.output
+            : typeof data?.chunk === 'string'
+              ? data.chunk
+              : undefined;
+  const stderr = typeof record.stderr === 'string'
+    ? record.stderr
+    : typeof data?.stderr === 'string'
+      ? data.stderr
+      : undefined;
+  return { type, requestId, stdout, stderr };
+}
+
+async function streamDaemonEvents(
+  sseUrl: string,
+  requestIdFilter: { current?: string },
+  callbacks: { onStdout?: (data: string) => void; onStderr?: (data: string) => void; markStdout: () => void; markStderr: () => void },
+  signal: AbortSignal
+): Promise<void> {
+  const response = await fetch(sseUrl, { signal });
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to open daemon event stream: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const frames = buffer.split('\n\n');
+    buffer = frames.pop() ?? '';
+
+    for (const frame of frames) {
+      const dataLines = parseSseDataLines(frame);
+      for (const dataLine of dataLines) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(dataLine);
+        } catch {
+          continue;
+        }
+        const event = normalizeDaemonStreamEvent(parsed);
+        if (requestIdFilter.current && event.requestId && requestIdFilter.current !== event.requestId) {
+          continue;
+        }
+        if ((event.type === 'command.stdout' || !event.type) && event.stdout && callbacks.onStdout) {
+          callbacks.markStdout();
+          callbacks.onStdout(event.stdout);
+        }
+        const stderrChunk = event.stderr ?? (event.type === 'command.stderr' ? event.stdout : undefined);
+        if ((event.type === 'command.stderr' || !event.type) && stderrChunk && callbacks.onStderr) {
+          callbacks.markStderr();
+          callbacks.onStderr(stderrChunk);
+        }
+      }
+    }
+  }
+}
+
 /**
  * Flat sandbox method implementations - all operations in one place
  */
@@ -171,6 +271,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
+  private daemonStreamState?: DaemonStreamState;
   constructor(
     private sandbox: TSandbox,
     sandboxId: string,
@@ -223,9 +324,55 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
       const forwardedOptions: RunCommandOptions = { ...options };
       delete forwardedOptions.daemon;
+      delete forwardedOptions.onStdout;
+      delete forwardedOptions.onStderr;
+
+      const requestIdFilter: { current?: string } = {};
+      let sawStreamStdout = false;
+      let sawStreamStderr = false;
+
+      const streamController = new AbortController();
+      let streamPromise: Promise<void> | undefined;
+      if ((options.onStdout || options.onStderr) && this.daemonStreamState?.sseUrl) {
+        streamPromise = streamDaemonEvents(
+          this.daemonStreamState.sseUrl,
+          requestIdFilter,
+          {
+            onStdout: options.onStdout,
+            onStderr: options.onStderr,
+            markStdout: () => {
+              sawStreamStdout = true;
+            },
+            markStderr: () => {
+              sawStreamStderr = true;
+            },
+          },
+          streamController.signal
+        ).catch(() => {
+          // Best effort streaming: command result still determines success.
+        });
+      }
 
       const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
       const invocation = parseSeedInvocationOutput(daemonResult.stdout);
+      this.daemonStreamState = {
+        token: invocation.token,
+        sseUrl: invocation.daemon.sseUrl,
+      };
+      requestIdFilter.current = invocation.requestId;
+
+      if (options.onStdout && invocation.command.stdout && !sawStreamStdout) {
+        options.onStdout(invocation.command.stdout);
+      }
+      if (options.onStderr && invocation.command.stderr && !sawStreamStderr) {
+        options.onStderr(invocation.command.stderr);
+      }
+
+      streamController.abort();
+      if (streamPromise) {
+        await streamPromise;
+      }
+
       return {
         stdout: invocation.command.stdout,
         stderr: invocation.command.stderr,

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { defineProvider } from '../factory.js'
 import type { CommandResult, SandboxInfo } from '../types/index.js'
 
@@ -14,6 +14,10 @@ vi.mock('daemond', () => ({
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
 }))
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('Factory', () => {
   describe('defineProvider', () => {
@@ -211,10 +215,14 @@ describe('Factory', () => {
 
       const provider = providerFactory({ apiKey: 'test-key' })
       const sandbox = await provider.sandbox.create()
+      const onStdout = vi.fn()
+      const onStderr = vi.fn()
       const result = await sandbox.runCommand('pwd', {
         daemon: { name: 'seed-control', socket: '/tmp/seed.sock' },
         cwd: '/workspace',
         timeout: 12,
+        onStdout,
+        onStderr,
       })
 
       expect(daemonSeedScriptCommand).toHaveBeenCalledWith(
@@ -241,6 +249,8 @@ describe('Factory', () => {
         exitCode: 0,
         durationMs: 35,
       })
+      expect(onStdout).toHaveBeenCalledWith('/workspace\n')
+      expect(onStderr).not.toHaveBeenCalled()
     })
 
     it('should reject daemon mode when background is true', async () => {
@@ -279,6 +289,110 @@ describe('Factory', () => {
       await expect(
         sandbox.runCommand('pwd', { daemon: true, background: true })
       ).rejects.toThrow('runCommand({ daemon: true }) does not support background mode.')
+    })
+
+    it('should stream daemon stdout and stderr when daemon SSE is available', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-791', status: 'running' },
+          sandboxId: 'test-791'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi
+          .fn()
+          .mockResolvedValueOnce({
+            stdout: 'first',
+            stderr: '',
+            exitCode: 0,
+            durationMs: 4
+          } as CommandResult)
+          .mockResolvedValueOnce({
+            stdout: 'second',
+            stderr: '',
+            exitCode: 0,
+            durationMs: 6
+          } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-791',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-791-3000.mock.dev')
+      }
+
+      daemonSeedScriptCommand.mockReturnValue('node -e "seed" "echo hi"')
+      parseSeedInvocationOutput
+        .mockReturnValueOnce({
+          token: 'tok',
+          requestId: 'req_0',
+          daemon: { reused: false, pid: 42, sseUrl: 'http://127.0.0.1/events?token=tok' },
+          command: {
+            exitCode: 0,
+            signal: null,
+            stdout: '',
+            stderr: '',
+            combined: '',
+          },
+        })
+        .mockReturnValueOnce({
+          token: 'tok',
+          requestId: 'req_1',
+          daemon: { reused: true, pid: 42, sseUrl: 'http://127.0.0.1/events?token=tok' },
+          command: {
+            exitCode: 0,
+            signal: null,
+            stdout: 'final\n',
+            stderr: 'final err\n',
+            combined: 'final\nfinal err\n',
+          },
+        })
+
+      const encoder = new TextEncoder()
+      const ssePayload = [
+        'data: {"type":"command.stdout","requestId":"req_1","data":{"chunk":"chunk-a\\n"}}\n\n',
+        'data: {"type":"command.stderr","requestId":"req_1","data":{"chunk":"err-a\\n"}}\n\n',
+      ].join('')
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(ssePayload))
+            controller.close()
+          },
+          cancel() {
+            // noop
+          },
+        }),
+      })
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+
+      await sandbox.runCommand('echo prewarm', { daemon: true })
+
+      const onStdout = vi.fn()
+      const onStderr = vi.fn()
+      await sandbox.runCommand('echo hi', {
+        daemon: true,
+        onStdout,
+        onStderr,
+      })
+
+      expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1/events?token=tok', expect.any(Object))
+      expect(onStdout).toHaveBeenCalledWith('chunk-a\n')
+      expect(onStderr).toHaveBeenCalledWith('err-a\n')
     })
   })
 })
