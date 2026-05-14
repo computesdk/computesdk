@@ -1,5 +1,13 @@
 # @computesdk/tigris
 
+## 1.1.6
+
+### Patch Changes
+
+- d65c97b: Migrate S3 and R2 providers from direct AWS SDK usage to `@tigrisdata/storage`, including per-call config forwarding and improved object metadata handling on downloads.
+
+  Align Tigris storage dependency usage across providers and include a BrowserUse typing fix for custom proxy configuration.
+
 ## 1.1.5
 
 ### Patch Changes
