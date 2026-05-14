@@ -31,6 +31,7 @@ await sandbox.destroy();
 ```typescript
 interface K8sConfig {
   kubeConfigPath?: string;
+  kubeConfigRaw?: string;
   context?: string;
   namespace?: string;
   image?: string;
@@ -41,5 +42,11 @@ interface K8sConfig {
   urlTemplate?: string;
 }
 ```
+
+Kubeconfig loading precedence:
+1. `kubeConfigRaw`
+2. `KUBECONFIG_B64` (base64-encoded kubeconfig)
+3. `kubeConfigPath`
+4. default kubeconfig resolution
 
 Note: In this MVP, `getUrl` uses `urlTemplate` for URL construction and does not provision Kubernetes Services automatically.
