@@ -4,7 +4,7 @@
  * Object storage using the Tigris Storage SDK.
  */
 
-import { get, list as tigrisList, put, remove } from '@tigrisdata/storage';
+import { get, head, list as tigrisList, put, remove } from '@tigrisdata/storage';
 import type { StorageProvider, StorageObject, UploadOptions, DownloadResult, ListOptions, ListResult } from '@computesdk/provider';
 
 /**
@@ -35,11 +35,31 @@ export interface R2 extends StorageProvider {
   list(bucket: string, options?: ListOptions): Promise<ListResult>;
   /** Exposes storage SDK operations for advanced use */
   getClient(): {
-    put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) => Promise<unknown>;
-    get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) => Promise<unknown>;
-    list: (options?: Record<string, unknown>) => ReturnType<typeof tigrisList>;
-    remove: (key: string, options?: Record<string, unknown>) => ReturnType<typeof remove>;
+    put: (key: string, body: string | Uint8Array | Buffer, options?: Parameters<typeof put>[2]) => ReturnType<typeof put>;
+    get: (key: string, format: Parameters<typeof get>[1], options?: Parameters<typeof get>[2]) => ReturnType<typeof get>;
+    list: (options?: Parameters<typeof tigrisList>[0]) => ReturnType<typeof tigrisList>;
+    remove: (key: string, options?: Parameters<typeof remove>[1]) => ReturnType<typeof remove>;
   };
+}
+
+interface ListedObject {
+  key?: string;
+  size?: number;
+  etag?: string;
+  lastModified?: string | Date;
+}
+
+interface ListData {
+  objects?: ListedObject[];
+  truncated?: boolean;
+  nextContinuationToken?: string;
+}
+
+interface HeadData {
+  contentType?: string;
+  etag?: string;
+  lastModified?: string | Date;
+  metadata?: Record<string, string>;
 }
 
 /**
@@ -98,16 +118,27 @@ export function r2(config: R2Config): R2 {
   }
 
   const operationConfig = { accessKeyId, secretAccessKey, endpoint };
+  const withConfig = <T extends object | undefined>(bucket: string | undefined, options?: T): T & { config: Record<string, string> } => {
+    const baseOptions = (options ?? {}) as object;
+    const optionConfig = (options as { config?: Record<string, string> } | undefined)?.config;
+    return {
+      ...(baseOptions as object),
+      config: {
+        ...operationConfig,
+        ...(bucket ? { bucket } : {}),
+        ...(optionConfig || {}),
+      },
+    } as T & { config: Record<string, string> };
+  };
 
   return {
     async upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject> {
       try {
         const body = typeof data === 'string' ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-        const result = await put(key, body, {
+        const result = await put(key, body, withConfig(bucket, {
           ...(options?.contentType ? { contentType: options.contentType } : {}),
           ...(options?.metadata ? { metadata: options.metadata } : {}),
-          config: { ...operationConfig, bucket },
-        } as any);
+        }));
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -129,12 +160,13 @@ export function r2(config: R2Config): R2 {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        const result = await get(key, 'stream', {
-          config: { ...operationConfig, bucket },
-        });
+        const result = await get(key, 'stream', withConfig(bucket));
         if (result.error) {
           throw new Error(result.error.message);
         }
+
+        const headResult = await head(key, withConfig(bucket));
+        const headData: HeadData | undefined = headResult.error ? undefined : (headResult.data as HeadData | undefined);
 
         const stream = result.data as ReadableStream;
         const reader = stream.getReader();
@@ -159,10 +191,10 @@ export function r2(config: R2Config): R2 {
         return {
           data,
           size: data.length,
-          contentType: undefined,
-          etag: undefined,
-          lastModified: undefined,
-          metadata: undefined,
+          contentType: headData?.contentType,
+          etag: headData?.etag,
+          lastModified: headData?.lastModified ? new Date(headData.lastModified) : undefined,
+          metadata: headData?.metadata,
         };
       } catch (error) {
         throw new Error(
@@ -173,9 +205,7 @@ export function r2(config: R2Config): R2 {
 
     async delete(bucket: string, key: string): Promise<void> {
       try {
-        const result = await remove(key, {
-          config: { ...operationConfig, bucket },
-        });
+        const result = await remove(key, withConfig(bucket));
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -188,19 +218,18 @@ export function r2(config: R2Config): R2 {
 
     async list(bucket: string, options?: ListOptions): Promise<ListResult> {
       try {
-        const result = await tigrisList({
+        const result = await tigrisList(withConfig(bucket, {
           prefix: options?.prefix,
           limit: options?.maxKeys,
           cursor: options?.continuationToken,
-          config: { ...operationConfig, bucket },
-        } as any);
+        }));
         if (result.error) {
           throw new Error(result.error.message);
         }
-        const responseData = result.data as any;
+        const responseData = (result.data ?? {}) as ListData;
 
         return {
-          objects: (responseData?.objects || []).map((obj: any) => ({
+          objects: (responseData.objects || []).map((obj) => ({
             bucket,
             key: obj.key || '',
             size: obj.size || 0,
@@ -219,26 +248,14 @@ export function r2(config: R2Config): R2 {
 
     getClient() {
       return {
-        put: (key: string, body: string | Uint8Array | Buffer, options?: Record<string, unknown>) =>
-          put(key, typeof body === 'string' || Buffer.isBuffer(body) ? body : Buffer.from(body), {
-            ...(options || {}),
-            config: { ...operationConfig, ...(options?.config as object || {}) },
-          } as any),
-        get: (key: string, format: 'string' | 'file' | 'stream', options?: Record<string, unknown>) =>
-          get(key, format as any, {
-            ...(options || {}),
-            config: { ...operationConfig, ...(options?.config as object || {}) },
-          } as any),
-        list: (options?: Record<string, unknown>) =>
-          tigrisList({
-            ...(options || {}),
-            config: { ...operationConfig, ...(options?.config as object || {}) },
-          } as any),
-        remove: (key: string, options?: Record<string, unknown>) =>
-          remove(key, {
-            ...(options || {}),
-            config: { ...operationConfig, ...(options?.config as object || {}) },
-          } as any),
+        put: (key: string, body: string | Uint8Array | Buffer, options?: Parameters<typeof put>[2]) =>
+          put(key, typeof body === 'string' || Buffer.isBuffer(body) ? body : Buffer.from(body), withConfig(undefined, options)),
+        get: (key: string, format: Parameters<typeof get>[1], options?: Parameters<typeof get>[2]) =>
+          get(key, format, withConfig(undefined, options)),
+        list: (options?: Parameters<typeof tigrisList>[0]) =>
+          tigrisList(withConfig(undefined, options)),
+        remove: (key: string, options?: Parameters<typeof remove>[1]) =>
+          remove(key, withConfig(undefined, options)),
       };
     },
   };
