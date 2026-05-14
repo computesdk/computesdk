@@ -24,6 +24,7 @@ const SHARED_PROVIDER_NAMES = [
   'freestyle',
   'secure-exec',
   'upstash',
+  'k8s',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -53,6 +54,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   freestyle: [['FREESTYLE_API_KEY']],
   'secure-exec': [[]],
   upstash: [['UPSTASH_BOX_API_KEY']],
+  k8s: [[]],
 };
 
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
@@ -81,6 +83,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   freestyle: { apiKey: 'FREESTYLE_API_KEY' },
   'secure-exec': {},
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
+  k8s: {},
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
@@ -339,6 +342,9 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/secure-exec');
       case 'upstash':
         return await import('@computesdk/upstash');
+      case 'k8s':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/k8s');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }

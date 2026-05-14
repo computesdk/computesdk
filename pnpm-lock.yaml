@@ -1579,6 +1579,9 @@ importers:
       '@computesdk/just-bash':
         specifier: workspace:*
         version: link:../just-bash
+      '@computesdk/k8s':
+        specifier: workspace:*
+        version: link:../k8s
       '@computesdk/modal':
         specifier: workspace:*
         version: link:../modal
