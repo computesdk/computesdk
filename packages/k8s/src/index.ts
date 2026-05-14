@@ -21,6 +21,7 @@ type Runtime = 'node' | 'python';
 
 export interface K8sConfig {
   kubeConfigPath?: string;
+  kubeConfigRaw?: string;
   context?: string;
   namespace?: string;
   image?: string;
@@ -43,10 +44,42 @@ interface K8sSandboxHandle {
   serviceType?: 'ClusterIP' | 'NodePort';
 }
 
+const rawKubeConfigBySandboxId = new Map<string, string>();
+
+type KubeConfigSource =
+  | { type: 'raw'; value: string }
+  | { type: 'env'; value: string }
+  | { type: 'path'; value: string }
+  | { type: 'default' };
+
+export function resolveKubeConfigSource(config: K8sConfig, env: NodeJS.ProcessEnv = process.env): KubeConfigSource {
+  if (config.kubeConfigRaw) {
+    return { type: 'raw', value: config.kubeConfigRaw };
+  }
+
+  if (env.KUBECONFIG_B64) {
+    return { type: 'env', value: Buffer.from(env.KUBECONFIG_B64, 'base64').toString('utf8') };
+  }
+
+  if (config.kubeConfigPath) {
+    return { type: 'path', value: config.kubeConfigPath };
+  }
+
+  return { type: 'default' };
+}
+
 function loadKubeConfig(config: K8sConfig): KubeConfig {
   const kc = new KubeConfig();
-  if (config.kubeConfigPath) kc.loadFromFile(config.kubeConfigPath);
-  else kc.loadFromDefault();
+
+  const source = resolveKubeConfigSource(config);
+  if (source.type === 'raw' || source.type === 'env') {
+    kc.loadFromString(source.value);
+  } else if (source.type === 'path') {
+    kc.loadFromFile(source.value);
+  } else {
+    kc.loadFromDefault();
+  }
+
   if (config.context) kc.setCurrentContext(config.context);
   return kc;
 }
@@ -142,8 +175,10 @@ async function execInPod(
 }
 
 function loadKubeConfigFromHandle(sandbox: K8sSandboxHandle): KubeConfig {
+  const sandboxId = sandbox.podName;
   return loadKubeConfig({
     kubeConfigPath: sandbox.kubeConfigPath,
+    kubeConfigRaw: rawKubeConfigBySandboxId.get(sandboxId),
     context: sandbox.context,
   });
 }
@@ -251,6 +286,9 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
 
         await core.createNamespacedPod({ namespace, body: pod });
         await waitForPodRunning(core, namespace, podName, timeout);
+        if (config.kubeConfigRaw) {
+          rawKubeConfigBySandboxId.set(`${namespace}/${podName}`, config.kubeConfigRaw);
+        }
 
         return {
           sandbox: {
@@ -278,6 +316,9 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         try {
           const pod = await core.readNamespacedPod({ name, namespace });
           const runtime = parseRuntime(pod.metadata?.labels?.[LABEL_RUNTIME] || config.runtime || 'node');
+          if (config.kubeConfigRaw) {
+            rawKubeConfigBySandboxId.set(`${namespace}/${name}`, config.kubeConfigRaw);
+          }
           return {
             sandbox: {
               podName: `${namespace}/${name}`,
@@ -307,6 +348,9 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         return (pods.items || []).map(pod => {
           const podName = pod.metadata?.name || '';
           const runtime = parseRuntime(pod.metadata?.labels?.[LABEL_RUNTIME] || config.runtime || 'node');
+          if (config.kubeConfigRaw) {
+            rawKubeConfigBySandboxId.set(`${namespace}/${podName}`, config.kubeConfigRaw);
+          }
           return {
             sandbox: {
               podName: `${namespace}/${podName}`,
@@ -338,6 +382,8 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         await core.deleteNamespacedService({ namespace, name: serviceNameForPod(name) }).catch(error => {
           if (!isNotFound(error)) throw error;
         });
+
+        rawKubeConfigBySandboxId.delete(sandboxId);
       },
 
       runCommand: async (sandbox: K8sSandboxHandle, command: string, options?: RunCommandOptions): Promise<CommandResult> => {

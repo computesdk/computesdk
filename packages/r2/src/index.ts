@@ -1,11 +1,10 @@
 /**
  * Cloudflare R2 Storage Provider
- * 
- * Object storage using Cloudflare R2 with S3-compatible API.
+ *
+ * Object storage using the Tigris Storage SDK.
  */
 
-import { S3Client, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { Upload } from '@aws-sdk/lib-storage';
+import { get, head, list as tigrisList, put, remove } from '@tigrisdata/storage';
 import type { StorageProvider, StorageObject, UploadOptions, DownloadResult, ListOptions, ListResult } from '@computesdk/provider';
 
 /**
@@ -34,8 +33,33 @@ export interface R2 extends StorageProvider {
   delete(bucket: string, key: string): Promise<void>;
   /** List objects in R2 bucket */
   list(bucket: string, options?: ListOptions): Promise<ListResult>;
-  /** Get the underlying S3 client for advanced operations */
-  getClient(): S3Client;
+  /** Exposes storage SDK operations for advanced use */
+  getClient(): {
+    put: (key: string, body: string | Uint8Array | Buffer, options?: Parameters<typeof put>[2]) => ReturnType<typeof put>;
+    get: (key: string, format: Parameters<typeof get>[1], options?: Parameters<typeof get>[2]) => ReturnType<typeof get>;
+    list: (options?: Parameters<typeof tigrisList>[0]) => ReturnType<typeof tigrisList>;
+    remove: (key: string, options?: Parameters<typeof remove>[1]) => ReturnType<typeof remove>;
+  };
+}
+
+interface ListedObject {
+  key?: string;
+  size?: number;
+  etag?: string;
+  lastModified?: string | Date;
+}
+
+interface ListData {
+  objects?: ListedObject[];
+  truncated?: boolean;
+  nextContinuationToken?: string;
+}
+
+interface HeadData {
+  contentType?: string;
+  etag?: string;
+  lastModified?: string | Date;
+  metadata?: Record<string, string>;
 }
 
 /**
@@ -66,12 +90,16 @@ export interface R2 extends StorageProvider {
  * ```
  */
 export function r2(config: R2Config): R2 {
-  // Resolve configuration from parameters or environment
-  const accessKeyId = config.accessKeyId || process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = config.secretAccessKey || process.env.R2_SECRET_ACCESS_KEY;
+  const accessKeyId =
+    config.accessKeyId ||
+    process.env.R2_ACCESS_KEY_ID ||
+    process.env.TIGRIS_STORAGE_ACCESS_KEY_ID;
+  const secretAccessKey =
+    config.secretAccessKey ||
+    process.env.R2_SECRET_ACCESS_KEY ||
+    process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY;
   const accountId = config.accountId || process.env.R2_ACCOUNT_ID;
-  
-  // Build endpoint URL
+
   let endpoint = config.endpoint;
   if (!endpoint && accountId) {
     endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
@@ -82,57 +110,46 @@ export function r2(config: R2Config): R2 {
   }
 
   if (!accessKeyId) {
-    throw new Error(
-      `Missing R2 Access Key ID. Provide 'accessKeyId' in config or set R2_ACCESS_KEY_ID environment variable.`
-    );
+    throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID/R2_ACCESS_KEY_ID.`);
   }
 
   if (!secretAccessKey) {
-    throw new Error(
-      `Missing R2 Secret Access Key. Provide 'secretAccessKey' in config or set R2_SECRET_ACCESS_KEY environment variable.`
-    );
+    throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY/R2_SECRET_ACCESS_KEY.`);
   }
 
-  // Create S3-compatible client for R2
-  // R2 requires forcePathStyle: true and uses 'auto' as the region
-  const client = new S3Client({
-    region: 'auto',
-    endpoint,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-    forcePathStyle: true, // R2 requires path-style URLs
-  });
+  const operationConfig = { accessKeyId, secretAccessKey, endpoint };
+  const withConfig = <T extends object | undefined>(bucket: string | undefined, options?: T): T & { config: Record<string, string> } => {
+    const baseOptions = (options ?? {}) as object;
+    const optionConfig = (options as { config?: Record<string, string> } | undefined)?.config;
+    return {
+      ...(baseOptions as object),
+      config: {
+        ...operationConfig,
+        ...(bucket ? { bucket } : {}),
+        ...(optionConfig || {}),
+      },
+    } as T & { config: Record<string, string> };
+  };
 
   return {
     async upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject> {
       try {
-        const body = typeof data === 'string' ? Buffer.from(data) : Buffer.from(data);
-        const contentType = options?.contentType || 'application/octet-stream';
-
-        // Use multipart upload for files larger than 5MB
-        const upload = new Upload({
-          client,
-          params: {
-            Bucket: bucket,
-            Key: key,
-            Body: body,
-            ContentType: contentType,
-            ...(options?.metadata && { Metadata: options.metadata }),
-          },
-          queueSize: 4,
-          partSize: 5 * 1024 * 1024, // 5MB
-        });
-
-        await upload.done();
+        const body = typeof data === 'string' ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+        const result = await put(key, body, withConfig(bucket, {
+          ...(options?.contentType ? { contentType: options.contentType } : {}),
+          ...(options?.metadata ? { metadata: options.metadata } : {}),
+        }));
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
 
         return {
           bucket,
           key,
-          size: body.length,
+          size: typeof data === 'string' ? Buffer.byteLength(data, 'utf8') : data.byteLength,
           etag: undefined,
           lastModified: new Date(),
+          metadata: options?.metadata,
         };
       } catch (error) {
         throw new Error(
@@ -143,22 +160,23 @@ export function r2(config: R2Config): R2 {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        const command = new GetObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        });
-
-        const response = await client.send(command);
-        
-        // Convert stream to Uint8Array
-        const chunks: Uint8Array[] = [];
-        if (response.Body) {
-          for await (const chunk of response.Body as any) {
-            chunks.push(new Uint8Array(chunk));
-          }
+        const result = await get(key, 'stream', withConfig(bucket));
+        if (result.error) {
+          throw new Error(result.error.message);
         }
-        
-        // Concatenate all chunks
+
+        const headResult = await head(key, withConfig(bucket));
+        const headData: HeadData | undefined = headResult.error ? undefined : (headResult.data as HeadData | undefined);
+
+        const stream = result.data as ReadableStream;
+        const reader = stream.getReader();
+        const chunks: Uint8Array[] = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
         let totalLength = 0;
         for (const chunk of chunks) {
           totalLength += chunk.length;
@@ -173,15 +191,12 @@ export function r2(config: R2Config): R2 {
         return {
           data,
           size: data.length,
-          contentType: response.ContentType,
-          etag: response.ETag,
-          lastModified: response.LastModified,
-          metadata: response.Metadata,
+          contentType: headData?.contentType,
+          etag: headData?.etag,
+          lastModified: headData?.lastModified ? new Date(headData.lastModified) : undefined,
+          metadata: headData?.metadata,
         };
       } catch (error) {
-        if (error instanceof Error && error.name === 'NoSuchKey') {
-          throw new Error(`Object not found: r2://${bucket}/${key}`);
-        }
         throw new Error(
           `Failed to download from R2: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -190,12 +205,10 @@ export function r2(config: R2Config): R2 {
 
     async delete(bucket: string, key: string): Promise<void> {
       try {
-        const command = new DeleteObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        });
-
-        await client.send(command);
+        const result = await remove(key, withConfig(bucket));
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
       } catch (error) {
         throw new Error(
           `Failed to delete from R2: ${error instanceof Error ? error.message : String(error)}`
@@ -205,25 +218,26 @@ export function r2(config: R2Config): R2 {
 
     async list(bucket: string, options?: ListOptions): Promise<ListResult> {
       try {
-        const command = new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: options?.prefix,
-          MaxKeys: options?.maxKeys ?? 1000,
-          ContinuationToken: options?.continuationToken,
-        });
-
-        const response = await client.send(command);
+        const result = await tigrisList(withConfig(bucket, {
+          prefix: options?.prefix,
+          limit: options?.maxKeys,
+          cursor: options?.continuationToken,
+        }));
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
+        const responseData = (result.data ?? {}) as ListData;
 
         return {
-          objects: (response.Contents || []).map(obj => ({
+          objects: (responseData.objects || []).map((obj) => ({
             bucket,
-            key: obj.Key || '',
-            size: obj.Size || 0,
-            etag: obj.ETag,
-            lastModified: obj.LastModified,
+            key: obj.key || '',
+            size: obj.size || 0,
+            etag: obj.etag,
+            lastModified: obj.lastModified ? new Date(obj.lastModified) : undefined,
           })),
-          truncated: response.IsTruncated || false,
-          continuationToken: response.NextContinuationToken,
+          truncated: responseData?.truncated || false,
+          continuationToken: responseData?.nextContinuationToken,
         };
       } catch (error) {
         throw new Error(
@@ -232,8 +246,17 @@ export function r2(config: R2Config): R2 {
       }
     },
 
-    getClient(): S3Client {
-      return client;
+    getClient() {
+      return {
+        put: (key: string, body: string | Uint8Array | Buffer, options?: Parameters<typeof put>[2]) =>
+          put(key, typeof body === 'string' || Buffer.isBuffer(body) ? body : Buffer.from(body), withConfig(undefined, options)),
+        get: (key: string, format: Parameters<typeof get>[1], options?: Parameters<typeof get>[2]) =>
+          get(key, format, withConfig(undefined, options)),
+        list: (options?: Parameters<typeof tigrisList>[0]) =>
+          tigrisList(withConfig(undefined, options)),
+        remove: (key: string, options?: Parameters<typeof remove>[1]) =>
+          remove(key, withConfig(undefined, options)),
+      };
     },
   };
 }

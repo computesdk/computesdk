@@ -1,5 +1,11 @@
 # @computesdk/tensorlake
 
+## 0.1.2
+
+### Patch Changes
+
+- 7c6b99b: Remove hardcoded default image name and resource values when creating Tensorlake sandboxes; let the server choose defaults when options are omitted.
+
 ## 0.1.1
 
 ### Patch Changes
