@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@tigrisdata/storage": "^2.15.0",
+    "@tigrisdata/storage": "^3.6.0",
     "@computesdk/provider": "workspace:*"
   },
   "keywords": [
