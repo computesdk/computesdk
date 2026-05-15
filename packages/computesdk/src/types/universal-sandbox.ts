@@ -103,7 +103,10 @@ export interface SandboxFileSystem {
  */
 export interface CreateSandboxOptions {
   timeout?: number;
+  /** Boot from a pre-existing template (provider-specific template/image ID) */
   templateId?: string;
+  /** Boot from a snapshot created via compute.snapshot.create() */
+  snapshotId?: string;
   metadata?: Record<string, any>;
   envs?: Record<string, string>;
   name?: string;
