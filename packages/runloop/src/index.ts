@@ -123,7 +123,7 @@ export const runloop = defineProvider<
             name,
             metadata,
             templateId,
-            snapshotId: _snapshotId,
+            snapshotId,
             sandboxId: optSandboxId,
             namespace: _namespace,
             directory: _directory,
@@ -145,11 +145,17 @@ export const runloop = defineProvider<
             ...providerOptions,
           };
 
-          if (templateId) {
+          // snapshotId is the canonical cross-provider key for booting from a snapshot
+          if (snapshotId) {
+            devboxParams.snapshot_id = snapshotId;
+          } else if (templateId) {
+            // templateId fallback: support blueprint (bpt_) and snapshot (snp_) prefixes
             if (templateId.startsWith("bpt_")) {
               devboxParams.blueprint_id = templateId;
             } else if (templateId.startsWith("snp_")) {
               devboxParams.snapshot_id = templateId;
+            } else {
+              devboxParams.blueprint_id = templateId;
             }
           }
 
