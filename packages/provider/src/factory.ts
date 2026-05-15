@@ -352,33 +352,34 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           // Best effort streaming: command result still determines success.
         });
       }
+      try {
+        const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
+        const invocation = parseSeedInvocationOutput(daemonResult.stdout);
+        this.daemonStreamState = {
+          token: invocation.token,
+          sseUrl: invocation.daemon.sseUrl,
+        };
+        requestIdFilter.current = invocation.requestId;
 
-      const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
-      const invocation = parseSeedInvocationOutput(daemonResult.stdout);
-      this.daemonStreamState = {
-        token: invocation.token,
-        sseUrl: invocation.daemon.sseUrl,
-      };
-      requestIdFilter.current = invocation.requestId;
+        if (options.onStdout && invocation.command.stdout && !sawStreamStdout) {
+          options.onStdout(invocation.command.stdout);
+        }
+        if (options.onStderr && invocation.command.stderr && !sawStreamStderr) {
+          options.onStderr(invocation.command.stderr);
+        }
 
-      if (options.onStdout && invocation.command.stdout && !sawStreamStdout) {
-        options.onStdout(invocation.command.stdout);
+        return {
+          stdout: invocation.command.stdout,
+          stderr: invocation.command.stderr,
+          exitCode: invocation.command.exitCode ?? -1,
+          durationMs: daemonResult.durationMs,
+        };
+      } finally {
+        streamController.abort();
+        if (streamPromise) {
+          await streamPromise;
+        }
       }
-      if (options.onStderr && invocation.command.stderr && !sawStreamStderr) {
-        options.onStderr(invocation.command.stderr);
-      }
-
-      streamController.abort();
-      if (streamPromise) {
-        await streamPromise;
-      }
-
-      return {
-        stdout: invocation.command.stdout,
-        stderr: invocation.command.stderr,
-        exitCode: invocation.command.exitCode ?? -1,
-        durationMs: daemonResult.durationMs,
-      };
     }
 
     // Pass command and options directly to provider - no preprocessing
