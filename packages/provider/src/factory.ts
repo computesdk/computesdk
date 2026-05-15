@@ -311,7 +311,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       }
 
       const daemonPayload: SeedCommandInput = {
-        command,
+        command: 'sh',
+        args: ['-lc', command],
         cwd: options.cwd,
         env: options.env,
         timeoutMs: options.timeout ? options.timeout * 1000 : undefined,

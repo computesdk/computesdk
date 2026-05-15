@@ -228,7 +228,8 @@ describe('Factory', () => {
       expect(daemonSeedScriptCommand).toHaveBeenCalledWith(
         { name: 'seed-control', socket: '/tmp/seed.sock' },
         {
-          command: 'pwd',
+          command: 'sh',
+          args: ['-lc', 'pwd'],
           cwd: '/workspace',
           env: undefined,
           timeoutMs: 12000,
