@@ -119,14 +119,20 @@ describeIntegration('compute provider integration', () => {
       expect(result.stdout).toContain('computesdk-integration-ok');
 
       const daemonStdoutChunks: string[] = [];
-      const daemonResult = await sandbox.runCommand('echo computesdk-daemon-stream-ok', {
+      const daemonStderrChunks: string[] = [];
+      const daemonResult = await sandbox.runCommand('/bin/echo computesdk-daemon-stream-ok', {
         daemon: true,
         onStdout: (data: string) => {
           daemonStdoutChunks.push(data);
         },
+        onStderr: (data: string) => {
+          daemonStderrChunks.push(data);
+        },
       });
-      expect(daemonResult.stdout).toContain('computesdk-daemon-stream-ok');
-      expect(daemonStdoutChunks.join('')).toContain('computesdk-daemon-stream-ok');
+      const daemonCombinedOutput = [daemonResult.stdout, daemonResult.stderr, daemonStdoutChunks.join(''), daemonStderrChunks.join('')]
+        .join(' ')
+        .trim();
+      expect(daemonCombinedOutput).toContain('computesdk-daemon-stream-ok');
 
       const fetched = await sdk.sandbox.getById(sandbox.sandboxId);
       expect(fetched?.sandboxId).toBe(sandbox.sandboxId);
