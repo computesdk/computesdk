@@ -118,6 +118,16 @@ describeIntegration('compute provider integration', () => {
       const result = await sandbox.runCommand('echo computesdk-integration-ok');
       expect(result.stdout).toContain('computesdk-integration-ok');
 
+      const daemonStdoutChunks: string[] = [];
+      const daemonResult = await sandbox.runCommand('echo computesdk-daemon-stream-ok', {
+        daemon: true,
+        onStdout: (data: string) => {
+          daemonStdoutChunks.push(data);
+        },
+      });
+      expect(daemonResult.stdout).toContain('computesdk-daemon-stream-ok');
+      expect(daemonStdoutChunks.join('')).toContain('computesdk-daemon-stream-ok');
+
       const fetched = await sdk.sandbox.getById(sandbox.sandboxId);
       expect(fetched?.sandboxId).toBe(sandbox.sandboxId);
 
