@@ -25,6 +25,7 @@ const SHARED_PROVIDER_NAMES = [
   'secure-exec',
   'upstash',
   'k8s',
+  'northflank',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -55,6 +56,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   'secure-exec': [[]],
   upstash: [['UPSTASH_BOX_API_KEY']],
   k8s: [[]],
+  northflank: [['NORTHFLANK_TOKEN', 'NORTHFLANK_PROJECT_ID']],
 };
 
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
@@ -84,6 +86,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   'secure-exec': {},
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
   k8s: {},
+  northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
@@ -345,6 +348,9 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'k8s':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/k8s');
+      case 'northflank':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/northflank');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }
