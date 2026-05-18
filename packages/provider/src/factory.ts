@@ -32,7 +32,12 @@ import {
 type DaemonStreamState = {
   token: string;
   sseUrl: string;
+  sseOrigin: string;
 };
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
+}
 
 function createDaemonRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -334,6 +339,54 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     return this.sandbox;
   }
 
+  private async resolveDaemonSseUrl(rawUrl: string, expectedToken: string): Promise<DaemonStreamState> {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      throw new Error('Invalid daemon SSE URL returned by command invocation.');
+    }
+
+    const allowedProtocols = new Set(['http:', 'https:']);
+    if (!allowedProtocols.has(parsed.protocol)) {
+      throw new Error(`Unsupported daemon SSE URL protocol: ${parsed.protocol}`);
+    }
+
+    const urlToken = parsed.searchParams.get('token');
+    if (!urlToken || urlToken !== expectedToken) {
+      throw new Error('Daemon SSE URL token mismatch.');
+    }
+
+    if (isLoopbackHost(parsed.hostname)) {
+      const parsedPort = parsed.port ? Number(parsed.port) : NaN;
+      if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+        throw new Error('Daemon SSE URL must include a valid port.');
+      }
+
+      const protocol = parsed.protocol === 'https:' ? 'https' : 'http';
+      const providerBaseUrl = await this.methods.getUrl(this.sandbox, { port: parsedPort, protocol });
+      const providerUrl = new URL(providerBaseUrl);
+
+      parsed = new URL(providerUrl.toString());
+      parsed.pathname = '/events';
+      parsed.search = `?token=${encodeURIComponent(expectedToken)}`;
+      parsed.hash = '';
+    }
+
+    const resolvedUrl = parsed.toString();
+    const resolvedOrigin = new URL(resolvedUrl).origin;
+
+    if (this.daemonStreamState?.sseOrigin && this.daemonStreamState.sseOrigin !== resolvedOrigin) {
+      throw new Error('Daemon SSE URL origin changed unexpectedly.');
+    }
+
+    return {
+      token: expectedToken,
+      sseUrl: resolvedUrl,
+      sseOrigin: resolvedOrigin,
+    };
+  }
+
   async runCommand(
     command: string,
     options?: RunCommandOptions
@@ -369,31 +422,30 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       const streamController = new AbortController();
       let streamPromise: Promise<void> | undefined;
       if ((options.onStdout || options.onStderr) && this.daemonStreamState?.sseUrl) {
-        streamPromise = streamDaemonEvents(
-          this.daemonStreamState.sseUrl,
-          requestIdFilter,
-          {
-            onStdout: options.onStdout,
-            onStderr: options.onStderr,
-            markStdout: (chunk?: string) => {
-              if (chunk) streamStdout += chunk;
+        streamPromise = this.resolveDaemonSseUrl(this.daemonStreamState.sseUrl, this.daemonStreamState.token)
+          .then((trustedState) => streamDaemonEvents(
+            trustedState.sseUrl,
+            requestIdFilter,
+            {
+              onStdout: options.onStdout,
+              onStderr: options.onStderr,
+              markStdout: (chunk?: string) => {
+                if (chunk) streamStdout += chunk;
+              },
+              markStderr: (chunk?: string) => {
+                if (chunk) streamStderr += chunk;
+              },
             },
-            markStderr: (chunk?: string) => {
-              if (chunk) streamStderr += chunk;
-            },
-          },
-          streamController.signal
-        ).catch(() => {
-          // Best effort streaming: command result still determines success.
-        });
+            streamController.signal
+          ))
+          .catch(() => {
+            // Best effort streaming: command result still determines success.
+          });
       }
       try {
         const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
         const invocation = parseSeedInvocationOutput(daemonResult.stdout);
-        this.daemonStreamState = {
-          token: invocation.token,
-          sseUrl: invocation.daemon.sseUrl,
-        };
+        this.daemonStreamState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
         if (options.onStdout) {
           emitMissingOutput(streamStdout, invocation.command.stdout, options.onStdout);
         }

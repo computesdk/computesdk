@@ -199,7 +199,7 @@ describe('Factory', () => {
       parseSeedInvocationOutput.mockReturnValue({
         token: 'tok',
         requestId: 'req_1',
-        daemon: { reused: true, pid: 1, sseUrl: 'http://127.0.0.1/events?token=tok' },
+        daemon: { reused: true, pid: 1, sseUrl: 'http://127.0.0.1:33937/events?token=tok' },
         command: {
           exitCode: 0,
           signal: null,
@@ -341,7 +341,7 @@ describe('Factory', () => {
         .mockImplementationOnce(() => ({
           token: 'tok',
           requestId: 'req_0',
-          daemon: { reused: false, pid: 42, sseUrl: 'http://127.0.0.1/events?token=tok' },
+          daemon: { reused: false, pid: 42, sseUrl: 'http://127.0.0.1:33937/events?token=tok' },
           command: {
             exitCode: 0,
             signal: null,
@@ -353,7 +353,7 @@ describe('Factory', () => {
         .mockImplementationOnce(() => ({
           token: 'tok',
           requestId: latestRequestId,
-          daemon: { reused: true, pid: 42, sseUrl: 'http://127.0.0.1/events?token=tok' },
+          daemon: { reused: true, pid: 42, sseUrl: 'http://127.0.0.1:33937/events?token=tok' },
           command: {
             exitCode: 0,
             signal: null,
@@ -404,7 +404,11 @@ describe('Factory', () => {
         onStderr,
       })
 
-      expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1/events?token=tok', expect.any(Object))
+      expect(methods.getUrl).toHaveBeenCalledWith(
+        { id: 'test-791', status: 'running' },
+        { port: 33937, protocol: 'http' }
+      )
+      expect(fetchMock).toHaveBeenCalledWith('https://test-791-3000.mock.dev/events?token=tok', expect.any(Object))
       expect(onStdout).toHaveBeenCalledWith('chunk-a\n')
       expect(onStderr).toHaveBeenCalledWith('err-a\n')
     })
