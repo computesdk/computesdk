@@ -123,7 +123,7 @@ export const runloop = defineProvider<
             name,
             metadata,
             templateId,
-            snapshotId: _snapshotId,
+            snapshotId,
             sandboxId: optSandboxId,
             namespace: _namespace,
             directory: _directory,
@@ -145,7 +145,11 @@ export const runloop = defineProvider<
             ...providerOptions,
           };
 
-          if (templateId) {
+          // snapshotId is the canonical cross-provider field — map it directly to snapshot_id.
+          // templateId is kept for backwards compatibility: bpt_ prefix → blueprint_id, snp_ prefix → snapshot_id.
+          if (snapshotId) {
+            devboxParams.snapshot_id = snapshotId;
+          } else if (templateId) {
             if (templateId.startsWith("bpt_")) {
               devboxParams.blueprint_id = templateId;
             } else if (templateId.startsWith("snp_")) {
