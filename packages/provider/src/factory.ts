@@ -34,6 +34,33 @@ type DaemonStreamState = {
   sseUrl: string;
 };
 
+function createDaemonRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `req_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function emitMissingOutput(
+  emitted: string,
+  finalOutput: string,
+  emit: (data: string) => void
+): void {
+  if (!finalOutput) return;
+  if (!emitted) {
+    emit(finalOutput);
+    return;
+  }
+  if (finalOutput.startsWith(emitted)) {
+    const missing = finalOutput.slice(emitted.length);
+    if (missing) emit(missing);
+    return;
+  }
+  if (!emitted.includes(finalOutput)) {
+    emit(finalOutput);
+  }
+}
+
 function parseSseDataLines(raw: string): string[] {
   const chunks = raw.split(/\n\n+/);
   const out: string[] = [];
@@ -82,7 +109,7 @@ function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestI
 async function streamDaemonEvents(
   sseUrl: string,
   requestIdFilter: { current?: string },
-  callbacks: { onStdout?: (data: string) => void; onStderr?: (data: string) => void; markStdout: () => void; markStderr: () => void },
+  callbacks: { onStdout?: (data: string) => void; onStderr?: (data: string) => void; markStdout: (chunk?: string) => void; markStderr: (chunk?: string) => void },
   signal: AbortSignal
 ): Promise<void> {
   const response = await fetch(sseUrl, { signal });
@@ -116,12 +143,12 @@ async function streamDaemonEvents(
           continue;
         }
         if ((event.type === 'command.stdout' || !event.type) && event.stdout && callbacks.onStdout) {
-          callbacks.markStdout();
+          callbacks.markStdout(event.stdout);
           callbacks.onStdout(event.stdout);
         }
         const stderrChunk = event.stderr ?? (event.type === 'command.stderr' ? event.stdout : undefined);
         if ((event.type === 'command.stderr' || !event.type) && stderrChunk && callbacks.onStderr) {
-          callbacks.markStderr();
+          callbacks.markStderr(stderrChunk);
           callbacks.onStderr(stderrChunk);
         }
       }
@@ -315,7 +342,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         args: ['-lc', command],
         cwd: options.cwd,
         env: options.env,
-        timeoutMs: options.timeout ? options.timeout * 1000 : undefined,
+        timeoutMs: options.timeout,
+        requestId: createDaemonRequestId(),
       };
 
       const daemonCommand = daemonSeedScriptCommand(
@@ -328,9 +356,9 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       delete forwardedOptions.onStdout;
       delete forwardedOptions.onStderr;
 
-      const requestIdFilter: { current?: string } = {};
-      let sawStreamStdout = false;
-      let sawStreamStderr = false;
+      const requestIdFilter: { current?: string } = { current: daemonPayload.requestId };
+      let streamStdout = '';
+      let streamStderr = '';
 
       const streamController = new AbortController();
       let streamPromise: Promise<void> | undefined;
@@ -341,11 +369,11 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           {
             onStdout: options.onStdout,
             onStderr: options.onStderr,
-            markStdout: () => {
-              sawStreamStdout = true;
+            markStdout: (chunk?: string) => {
+              if (chunk) streamStdout += chunk;
             },
-            markStderr: () => {
-              sawStreamStderr = true;
+            markStderr: (chunk?: string) => {
+              if (chunk) streamStderr += chunk;
             },
           },
           streamController.signal
@@ -360,13 +388,11 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           token: invocation.token,
           sseUrl: invocation.daemon.sseUrl,
         };
-        requestIdFilter.current = invocation.requestId;
-
-        if (options.onStdout && invocation.command.stdout && !sawStreamStdout) {
-          options.onStdout(invocation.command.stdout);
+        if (options.onStdout) {
+          emitMissingOutput(streamStdout, invocation.command.stdout, options.onStdout);
         }
-        if (options.onStderr && invocation.command.stderr && !sawStreamStderr) {
-          options.onStderr(invocation.command.stderr);
+        if (options.onStderr) {
+          emitMissingOutput(streamStderr, invocation.command.stderr, options.onStderr);
         }
 
         return {

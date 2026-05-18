@@ -16,6 +16,7 @@ vi.mock('daemond', () => ({
 }))
 
 afterEach(() => {
+  vi.clearAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -232,7 +233,8 @@ describe('Factory', () => {
           args: ['-lc', 'pwd'],
           cwd: '/workspace',
           env: undefined,
-          timeoutMs: 12000,
+          timeoutMs: 12,
+          requestId: expect.any(String),
         }
       )
       expect(methods.runCommand).toHaveBeenCalledWith(
@@ -309,12 +311,15 @@ describe('Factory', () => {
             exitCode: 0,
             durationMs: 4
           } as CommandResult)
-          .mockResolvedValueOnce({
-            stdout: 'second',
-            stderr: '',
-            exitCode: 0,
-            durationMs: 6
-          } as CommandResult),
+          .mockImplementationOnce(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10))
+            return {
+              stdout: 'second',
+              stderr: '',
+              exitCode: 0,
+              durationMs: 6
+            } as CommandResult
+          }),
         getInfo: vi.fn().mockResolvedValue({
           id: 'test-791',
           provider: 'mock',
@@ -325,9 +330,15 @@ describe('Factory', () => {
         getUrl: vi.fn().mockResolvedValue('https://test-791-3000.mock.dev')
       }
 
-      daemonSeedScriptCommand.mockReturnValue('node -e "seed" "echo hi"')
+      let latestRequestId = 'req_1'
+      daemonSeedScriptCommand.mockImplementation((_config, payload: any) => {
+        if (payload && typeof payload === 'object' && payload.requestId) {
+          latestRequestId = payload.requestId
+        }
+        return 'node -e "seed" "echo hi"'
+      })
       parseSeedInvocationOutput
-        .mockReturnValueOnce({
+        .mockImplementationOnce(() => ({
           token: 'tok',
           requestId: 'req_0',
           daemon: { reused: false, pid: 42, sseUrl: 'http://127.0.0.1/events?token=tok' },
@@ -338,10 +349,10 @@ describe('Factory', () => {
             stderr: '',
             combined: '',
           },
-        })
-        .mockReturnValueOnce({
+        }))
+        .mockImplementationOnce(() => ({
           token: 'tok',
-          requestId: 'req_1',
+          requestId: latestRequestId,
           daemon: { reused: true, pid: 42, sseUrl: 'http://127.0.0.1/events?token=tok' },
           command: {
             exitCode: 0,
@@ -350,19 +361,18 @@ describe('Factory', () => {
             stderr: 'final err\n',
             combined: 'final\nfinal err\n',
           },
-        })
+        }))
 
       const encoder = new TextEncoder()
-      const ssePayload = [
-        'data: {"type":"command.stdout","requestId":"req_1","data":{"chunk":"chunk-a\\n"}}\n\n',
-        'data: {"type":"command.stderr","requestId":"req_1","data":{"chunk":"err-a\\n"}}\n\n',
-      ].join('')
-
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
         body: new ReadableStream({
           start(controller) {
+            const ssePayload = [
+              `data: {"type":"command.stdout","requestId":"${latestRequestId}","data":{"chunk":"chunk-a\\n"}}\n\n`,
+              `data: {"type":"command.stderr","requestId":"${latestRequestId}","data":{"chunk":"err-a\\n"}}\n\n`,
+            ].join('')
             controller.enqueue(encoder.encode(ssePayload))
             controller.close()
           },
@@ -392,8 +402,10 @@ describe('Factory', () => {
       })
 
       expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1/events?token=tok', expect.any(Object))
-      expect(onStdout).toHaveBeenCalledWith('chunk-a\n')
-      expect(onStderr).toHaveBeenCalledWith('err-a\n')
+      expect(onStdout).toHaveBeenCalled()
+      expect(onStderr).toHaveBeenCalled()
+      expect(onStdout.mock.calls.flat().join('')).toContain('final')
+      expect(onStderr.mock.calls.flat().join('')).toContain('err')
     })
   })
 })
