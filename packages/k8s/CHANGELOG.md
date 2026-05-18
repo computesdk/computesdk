@@ -1,5 +1,11 @@
 # @computesdk/k8s
 
+## 0.2.0
+
+### Minor Changes
+
+- 1882c17: Add the initial Kubernetes provider package with pod-backed sandbox lifecycle support, command execution, provider docs, and CI integration coverage.
+
 ## 0.1.1
 
 ### Patch Changes
