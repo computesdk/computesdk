@@ -38,3 +38,7 @@ export type {
 // `compute.setConfig({...}); compute.sandbox.create()`.
 export { compute } from './compute';
 export type { CallableCompute, ExplicitComputeConfig } from './compute';
+
+// Setup primitive — declarative environment specs for sandboxes.
+export { defineSetup, deps } from './setup';
+export type { Dep, SetupConfig, SetupSource, SetupResources } from './setup';

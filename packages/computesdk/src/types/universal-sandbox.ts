@@ -5,6 +5,8 @@
  * @computesdk/provider implement this shape (re-exported as SandboxInterface).
  */
 
+import type { SetupConfig } from '../setup';
+
 /**
  * Code execution result
  */
@@ -98,7 +100,7 @@ export interface SandboxFileSystem {
 
 /**
  * Options for creating a sandbox
- * 
+ *
  * Providers can extend this with additional properties specific to their implementation
  */
 export interface CreateSandboxOptions {
@@ -121,6 +123,12 @@ export interface CreateSandboxOptions {
   name?: string;
   namespace?: string;
   directory?: string;
+  /**
+   * Declarative environment spec applied after the sandbox is created.
+   * Materializes source code, installs system deps via Nix, and runs install
+   * scripts. Build with `defineSetup({...})`.
+   */
+  setup?: SetupConfig;
   // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
 }
