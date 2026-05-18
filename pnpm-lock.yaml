@@ -518,8 +518,8 @@ importers:
         specifier: workspace:*
         version: link:../cmd
       daemond:
-        specifier: ^0.1.2
-        version: 0.1.2
+        specifier: ^0.1.3
+        version: 0.1.3
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -1127,8 +1127,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       daemond:
-        specifier: ^0.1.2
-        version: 0.1.2
+        specifier: ^0.1.3
+        version: 0.1.3
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -5092,8 +5092,8 @@ packages:
     resolution: {integrity: sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg==}
     engines: {node: '>=18'}
 
-  daemond@0.1.2:
-    resolution: {integrity: sha512-Ev6+xXEG/FDe6cSts7A7jQffhQKTIIgeVK+fH3OZAAs8Q5VOeexQqkxpfoQ3KrjBrDS3LeqZ+BL/1yXTnbyrfg==}
+  daemond@0.1.3:
+    resolution: {integrity: sha512-Veq4R2JEKb7x/PI7jX50XFUnjuQAj4RnohrNKi/OJgsQJ63JR39+BaOPA3YQuqTOAXy15dHbINjOemxHwU2xpA==}
     engines: {node: '>=18.0.0'}
 
   data-uri-to-buffer@2.0.2:
@@ -12671,7 +12671,7 @@ snapshots:
       rrweb-cssom: 0.8.0
     optional: true
 
-  daemond@0.1.2: {}
+  daemond@0.1.3: {}
 
   data-uri-to-buffer@2.0.2: {}
 
@@ -13662,7 +13662,7 @@ snapshots:
       type-fest: 4.41.0
       widest-line: 5.0.0
       wrap-ansi: 9.0.0
-      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yoga-layout: 3.2.1
     transitivePeerDependencies:
       - bufferutil
@@ -13859,7 +13859,7 @@ snapshots:
       whatwg-encoding: 3.1.1
       whatwg-mimetype: 4.0.0
       whatwg-url: 14.2.0
-      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - bufferutil

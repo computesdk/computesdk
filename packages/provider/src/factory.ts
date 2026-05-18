@@ -35,6 +35,8 @@ type DaemonStreamState = {
   sseOrigin: string;
 };
 
+const DEFAULT_DAEMON_SSE_PORT = 38989;
+
 function isLoopbackHost(hostname: string): boolean {
   return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
 }
@@ -405,8 +407,14 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         requestId: createDaemonRequestId(),
       };
 
+      const daemonConfig = typeof options.daemon === 'object' ? options.daemon : {};
+      const normalizedDaemonConfig = {
+        ...daemonConfig,
+        ssePort: daemonConfig.ssePort ?? DEFAULT_DAEMON_SSE_PORT,
+      };
+
       const daemonCommand = daemonSeedScriptCommand(
-        typeof options.daemon === 'object' ? options.daemon : undefined,
+        normalizedDaemonConfig,
         daemonPayload
       );
 

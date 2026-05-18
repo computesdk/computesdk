@@ -227,7 +227,7 @@ describe('Factory', () => {
       })
 
       expect(daemonSeedScriptCommand).toHaveBeenCalledWith(
-        { name: 'seed-control', socket: '/tmp/seed.sock' },
+        { name: 'seed-control', socket: '/tmp/seed.sock', ssePort: 38989 },
         {
           command: 'sh',
           args: ['-lc', 'pwd'],
