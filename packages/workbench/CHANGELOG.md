@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 25.0.0
+
+### Patch Changes
+
+- Updated dependencies [1882c17]
+  - @computesdk/k8s@0.2.0
+
 ## 24.0.4
 
 ### Patch Changes
