@@ -1,6 +1,6 @@
 ---
-"computesdk": patch
-"@computesdk/provider": patch
+"computesdk": minor
+"@computesdk/provider": minor
 ---
 
 Add `daemond` as a runtime dependency and re-export daemon seed helpers/types from the `computesdk` package entrypoint.

@@ -16,7 +16,7 @@ vi.mock('daemond', () => ({
 }))
 
 afterEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -517,7 +517,7 @@ describe('Factory', () => {
 
       expect(methods.getUrl).toHaveBeenCalledWith(
         { id: 'test-791', status: 'running' },
-        { port: 33937, protocol: 'http' }
+        { port: 33937 }
       )
       expect(fetchMock).toHaveBeenCalledWith('https://test-791-3000.mock.dev/events?token=tok', expect.any(Object))
       expect(onStdout).toHaveBeenCalledWith('chunk-a\n')

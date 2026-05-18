@@ -31,8 +31,9 @@ import {
 
 type DaemonStreamState = {
   token: string;
-  sseUrl: string;
-  sseOrigin: string;
+  rawSseUrl: string;
+  sseUrl?: string;
+  sseOrigin?: string;
 };
 
 const DEFAULT_DAEMON_SSE_PORT = 38989;
@@ -58,15 +59,15 @@ function emitMissingOutput(
     emit(finalOutput);
     return;
   }
+  if (finalOutput.startsWith(emitted)) {
+    const missing = finalOutput.slice(emitted.length);
+    if (missing) emit(missing);
+    return;
+  }
   if (finalOutput.includes(emitted)) {
     return;
   }
   if (emitted.includes(finalOutput)) {
-    return;
-  }
-  if (finalOutput.startsWith(emitted)) {
-    const missing = finalOutput.slice(emitted.length);
-    if (missing) emit(missing);
     return;
   }
   if (!emitted.includes(finalOutput)) {
@@ -152,7 +153,7 @@ async function streamDaemonEvents(
           continue;
         }
         const event = normalizeDaemonStreamEvent(parsed);
-        if (requestIdFilter.current && event.requestId && requestIdFilter.current !== event.requestId) {
+        if (requestIdFilter.current && event.requestId !== requestIdFilter.current) {
           continue;
         }
         if ((event.type === 'command.stdout' || !event.type) && event.stdout && callbacks.onStdout) {
@@ -341,7 +342,11 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     return this.sandbox;
   }
 
-  private async resolveDaemonSseUrl(rawUrl: string, expectedToken: string): Promise<DaemonStreamState> {
+  private async resolveDaemonSseUrl(
+    rawUrl: string,
+    expectedToken: string,
+    knownOrigin?: string
+  ): Promise<{ sseUrl: string; sseOrigin: string }> {
     let parsed: URL;
     try {
       parsed = new URL(rawUrl);
@@ -361,7 +366,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
     if (!isLoopbackHost(parsed.hostname)) {
       const parsedOrigin = parsed.origin;
-      if (!this.daemonStreamState?.sseOrigin || this.daemonStreamState.sseOrigin !== parsedOrigin) {
+      if (!knownOrigin || knownOrigin !== parsedOrigin) {
         throw new Error(`Untrusted daemon SSE URL host: ${parsed.hostname}`);
       }
     }
@@ -372,8 +377,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         throw new Error('Daemon SSE URL must include a valid port.');
       }
 
-      const protocol = parsed.protocol === 'https:' ? 'https' : 'http';
-      const providerBaseUrl = await this.methods.getUrl(this.sandbox, { port: parsedPort, protocol });
+      const providerBaseUrl = await this.methods.getUrl(this.sandbox, { port: parsedPort });
       const providerUrl = new URL(providerBaseUrl);
 
       parsed = new URL(providerUrl.toString());
@@ -389,11 +393,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       throw new Error('Daemon SSE URL origin changed unexpectedly.');
     }
 
-    return {
-      token: expectedToken,
-      sseUrl: resolvedUrl,
-      sseOrigin: resolvedOrigin,
-    };
+    return { sseUrl: resolvedUrl, sseOrigin: resolvedOrigin };
   }
 
   async runCommand(
@@ -436,8 +436,22 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
       const streamController = new AbortController();
       let streamPromise: Promise<void> | undefined;
-      if ((options.onStdout || options.onStderr) && this.daemonStreamState?.sseUrl) {
-        streamPromise = this.resolveDaemonSseUrl(this.daemonStreamState.sseUrl, this.daemonStreamState.token)
+      let streamFinalized = false;
+      const finalizeStream = async () => {
+        if (streamFinalized) return;
+        streamFinalized = true;
+        streamController.abort();
+        if (streamPromise) {
+          await streamPromise;
+        }
+      };
+
+      if ((options.onStdout || options.onStderr) && this.daemonStreamState?.rawSseUrl) {
+        streamPromise = this.resolveDaemonSseUrl(
+          this.daemonStreamState.rawSseUrl,
+          this.daemonStreamState.token,
+          this.daemonStreamState.sseOrigin
+        )
           .then((trustedState) => streamDaemonEvents(
             trustedState.sseUrl,
             requestIdFilter,
@@ -453,18 +467,36 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
             },
             streamController.signal
           ))
-          .catch(() => {
-            // Best effort streaming: command result still determines success.
+          .then(() => undefined)
+          .catch((error) => {
+            if (error instanceof Error && /Failed to open daemon event stream|fetch|network|aborted|AbortError/i.test(error.message)) {
+              return;
+            }
+            throw error;
           });
       }
       try {
         const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
         const invocation = parseSeedInvocationOutput(daemonResult.stdout);
-        try {
-          this.daemonStreamState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
-        } catch {
-          this.daemonStreamState = undefined;
+        this.daemonStreamState = {
+          token: invocation.token,
+          rawSseUrl: invocation.daemon.sseUrl,
+          sseUrl: this.daemonStreamState?.sseUrl,
+          sseOrigin: this.daemonStreamState?.sseOrigin,
+        };
+
+        if ((options.onStdout || options.onStderr) && !this.daemonStreamState.sseOrigin) {
+          try {
+            const trustedState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
+            this.daemonStreamState.sseUrl = trustedState.sseUrl;
+            this.daemonStreamState.sseOrigin = trustedState.sseOrigin;
+          } catch {
+            // Best-effort streaming only; fall back to parsed output.
+          }
         }
+
+        await finalizeStream();
+
         if (options.onStdout) {
           emitMissingOutput(streamStdout, invocation.command.stdout, options.onStdout);
         }
@@ -479,10 +511,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           durationMs: daemonResult.durationMs,
         };
       } finally {
-        streamController.abort();
-        if (streamPromise) {
-          await streamPromise;
-        }
+        await finalizeStream();
       }
     }
 
