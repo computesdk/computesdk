@@ -359,6 +359,13 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       throw new Error('Daemon SSE URL token mismatch.');
     }
 
+    if (!isLoopbackHost(parsed.hostname)) {
+      const parsedOrigin = parsed.origin;
+      if (!this.daemonStreamState?.sseOrigin || this.daemonStreamState.sseOrigin !== parsedOrigin) {
+        throw new Error(`Untrusted daemon SSE URL host: ${parsed.hostname}`);
+      }
+    }
+
     if (isLoopbackHost(parsed.hostname)) {
       const parsedPort = parsed.port ? Number(parsed.port) : NaN;
       if (!Number.isFinite(parsedPort) || parsedPort <= 0) {

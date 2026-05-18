@@ -347,6 +347,64 @@ describe('Factory', () => {
       expect(onStdout).toHaveBeenCalledWith('hi\n')
     })
 
+    it('should ignore untrusted non-loopback daemon SSE URL and use fallback output', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-793', status: 'running' },
+          sandboxId: 'test-793'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: 'daemon invocation output',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 18
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-793',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://unused.mock.dev')
+      }
+
+      daemonSeedScriptCommand.mockReturnValue('node -e "seed" "echo hi"')
+      parseSeedInvocationOutput.mockReturnValue({
+        token: 'tok',
+        requestId: 'req_3',
+        daemon: { reused: false, pid: 99, sseUrl: 'https://evil.example/events?token=tok' },
+        command: {
+          exitCode: 0,
+          signal: null,
+          stdout: 'safe\n',
+          stderr: '',
+          combined: 'safe\n',
+        },
+      })
+
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+      const onStdout = vi.fn()
+      const result = await sandbox.runCommand('echo hi', { daemon: true, onStdout })
+
+      expect(result.stdout).toBe('safe\n')
+      expect(onStdout).toHaveBeenCalledWith('safe\n')
+      expect(methods.getUrl).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
     it('should stream daemon stdout and stderr when daemon SSE is available', async () => {
       const methods = {
         create: vi.fn().mockResolvedValue({
