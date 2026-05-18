@@ -121,8 +121,8 @@ compute.setConfig({
     endpoint: 'https://bench.example.com/v1/events',
     sdkVersion: '4.x',
     onEvent: (event) => {
-      // eventName: "benchmark.config" | "benchmark.span"
-      // benchmark.span includes traceId/spanId, startedAt, endedAt,
+      // eventName: "telemetry.config" | "telemetry.span"
+      // telemetry.span includes traceId/spanId, startedAt, endedAt,
       // durationMs, provider attempts, and outcome.
     },
   },

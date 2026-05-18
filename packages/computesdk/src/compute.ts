@@ -69,7 +69,7 @@ export interface BenchmarkAttempt {
 }
 
 export interface TelemetryEvent {
-  eventName: 'benchmark.config' | 'benchmark.span';
+  eventName: 'telemetry.config' | 'telemetry.span';
   installId: string;
   traceId?: string;
   spanId?: string;
@@ -138,7 +138,7 @@ class ComputeTelemetry {
 
   emitConfig(config: { providerStrategy: 'priority' | 'round-robin'; fallbackOnError: boolean }): void {
     this.send({
-      eventName: 'benchmark.config',
+      eventName: 'telemetry.config',
       installId: this.installId,
       sdkVersion: this.sdkVersion,
       runtime: this.runtime,
@@ -168,7 +168,7 @@ class ComputeTelemetry {
   emitSpanSuccess(span: BenchmarkSpan, provider?: string): void {
     const endedAtMs = Date.now();
     this.send({
-      eventName: 'benchmark.span',
+      eventName: 'telemetry.span',
       installId: this.installId,
       traceId: span.traceId,
       spanId: span.spanId,
@@ -191,7 +191,7 @@ class ComputeTelemetry {
   emitSpanFailure(span: BenchmarkSpan, error: unknown, provider?: string): void {
     const endedAtMs = Date.now();
     this.send({
-      eventName: 'benchmark.span',
+      eventName: 'telemetry.span',
       installId: this.installId,
       traceId: span.traceId,
       spanId: span.spanId,

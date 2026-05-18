@@ -271,7 +271,7 @@ describe('compute multi-provider', () => {
 
     await expect(sdk.sandbox.create()).rejects.toThrow('not available');
 
-    expect(events.some((event) => event.eventName === 'benchmark.config')).toBe(true);
+    expect(events.some((event) => event.eventName === 'telemetry.config')).toBe(true);
     expect(events.some((event) => event.operation === 'sandbox.create' && event.outcome === 'failure')).toBe(true);
     expect(events.some((event) => event.operation === 'sandbox.create' && !!event.startedAt)).toBe(true);
     expect(events.some((event) => event.operation === 'sandbox.create' && (event.attempts?.length || 0) > 0)).toBe(true);
