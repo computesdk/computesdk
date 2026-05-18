@@ -51,6 +51,12 @@ function emitMissingOutput(
     emit(finalOutput);
     return;
   }
+  if (finalOutput.includes(emitted)) {
+    return;
+  }
+  if (emitted.includes(finalOutput)) {
+    return;
+  }
   if (finalOutput.startsWith(emitted)) {
     const missing = finalOutput.slice(emitted.length);
     if (missing) emit(missing);
