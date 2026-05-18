@@ -54,6 +54,116 @@ export interface ExplicitComputeConfig {
   providerStrategy?: 'priority' | 'round-robin';
   /** Retry the next provider when create fails */
   fallbackOnError?: boolean;
+  /** Anonymized telemetry for provider-level observability */
+  telemetry?: TelemetryConfig;
+}
+
+export interface TelemetryEvent {
+  eventName: 'compute.config' | 'compute.operation';
+  timestamp: string;
+  installId: string;
+  operation?: string;
+  provider?: string;
+  outcome?: 'success' | 'failure';
+  durationMs?: number;
+  errorCode?: string;
+}
+
+export interface TelemetryConfig {
+  enabled?: boolean;
+  endpoint?: string;
+  headers?: Record<string, string>;
+  onEvent?: (event: TelemetryEvent) => void;
+}
+
+function createInstallId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function telemetryDisabledByEnv(): boolean {
+  return typeof process !== 'undefined' && process?.env?.COMPUTESDK_TELEMETRY === '0';
+}
+
+function toErrorCode(error: unknown): string {
+  if (error instanceof Error && error.name) {
+    return error.name;
+  }
+  return 'ERROR';
+}
+
+class ComputeTelemetry {
+  private enabled = true;
+  private endpoint?: string;
+  private headers: Record<string, string> = {};
+  private onEvent?: (event: TelemetryEvent) => void;
+  private installId = createInstallId();
+
+  configure(config?: TelemetryConfig): void {
+    this.enabled = (config?.enabled ?? true) && !telemetryDisabledByEnv();
+    this.endpoint = config?.endpoint;
+    this.headers = config?.headers ?? {};
+    this.onEvent = config?.onEvent;
+  }
+
+  emitConfig(): void {
+    this.send({
+      eventName: 'compute.config',
+      timestamp: new Date().toISOString(),
+      installId: this.installId,
+    });
+  }
+
+  async track<T>(operation: string, provider: string | undefined, fn: () => Promise<T>): Promise<T> {
+    const startedAt = Date.now();
+    try {
+      const result = await fn();
+      this.send({
+        eventName: 'compute.operation',
+        timestamp: new Date().toISOString(),
+        installId: this.installId,
+        operation,
+        provider,
+        outcome: 'success',
+        durationMs: Date.now() - startedAt,
+      });
+      return result;
+    } catch (error) {
+      this.send({
+        eventName: 'compute.operation',
+        timestamp: new Date().toISOString(),
+        installId: this.installId,
+        operation,
+        provider,
+        outcome: 'failure',
+        durationMs: Date.now() - startedAt,
+        errorCode: toErrorCode(error),
+      });
+      throw error;
+    }
+  }
+
+  private send(event: TelemetryEvent): void {
+    if (!this.enabled) return;
+    if (this.onEvent) {
+      try {
+        this.onEvent(event);
+      } catch {
+      }
+    }
+    if (!this.endpoint || typeof fetch === 'undefined') return;
+    void fetch(this.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.headers,
+      },
+      body: JSON.stringify(event),
+    }).catch(() => {
+    });
+  }
 }
 
 function isProviderLike(value: unknown): value is DirectProvider {
@@ -135,6 +245,7 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private sandboxProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
+  private telemetry = new ComputeTelemetry();
 
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
@@ -242,6 +353,8 @@ class ComputeManager {
     this.providers = resolveProviders(config);
     this.providerStrategy = config.providerStrategy ?? 'priority';
     this.fallbackOnError = config.fallbackOnError ?? true;
+    this.telemetry.configure(config.telemetry);
+    this.telemetry.emitConfig();
     this.roundRobinCursor = 0;
     this.sandboxProviders.clear();
     this.snapshotProviders.clear();
@@ -249,129 +362,141 @@ class ComputeManager {
 
   sandbox = {
     create: async (options?: CreateSandboxOptions): Promise<SandboxInterface> => {
-      return this.createWithFallback(options);
+      return this.telemetry.track('sandbox.create', options?.provider, async () => this.createWithFallback(options));
     },
 
     getById: async (sandboxId: string): Promise<SandboxInterface | null> => {
-      for (const provider of this.getByIdCandidates(sandboxId)) {
-        const sandbox = await provider.sandbox.getById(sandboxId);
-        if (sandbox) {
-          this.registerSandboxProvider(sandbox, provider);
-          return sandbox;
+      return this.telemetry.track('sandbox.getById', undefined, async () => {
+        for (const provider of this.getByIdCandidates(sandboxId)) {
+          const sandbox = await provider.sandbox.getById(sandboxId);
+          if (sandbox) {
+            this.registerSandboxProvider(sandbox, provider);
+            return sandbox;
+          }
         }
-      }
 
-      this.sandboxProviders.delete(sandboxId);
-      return null;
+        this.sandboxProviders.delete(sandboxId);
+        return null;
+      });
     },
 
     list: async (): Promise<SandboxInterface[]> => {
-      const all: SandboxInterface[] = [];
+      return this.telemetry.track('sandbox.list', undefined, async () => {
+        const all: SandboxInterface[] = [];
 
-      for (const provider of this.getProviders()) {
-        if (!provider.sandbox.list) {
-          continue;
+        for (const provider of this.getProviders()) {
+          if (!provider.sandbox.list) {
+            continue;
+          }
+
+          const sandboxes = await provider.sandbox.list();
+          for (const sandbox of sandboxes) {
+            this.registerSandboxProvider(sandbox, provider);
+          }
+          all.push(...sandboxes);
         }
 
-        const sandboxes = await provider.sandbox.list();
-        for (const sandbox of sandboxes) {
-          this.registerSandboxProvider(sandbox, provider);
-        }
-        all.push(...sandboxes);
-      }
-
-      return all;
+        return all;
+      });
     },
 
     destroy: async (sandboxId: string): Promise<void> => {
-      const candidates = this.getByIdCandidates(sandboxId);
-      const errors: string[] = [];
+      return this.telemetry.track('sandbox.destroy', undefined, async () => {
+        const candidates = this.getByIdCandidates(sandboxId);
+        const errors: string[] = [];
 
-      for (const [index, provider] of candidates.entries()) {
-        try {
-          await provider.sandbox.destroy(sandboxId);
-          this.sandboxProviders.delete(sandboxId);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        for (const [index, provider] of candidates.entries()) {
+          try {
+            await provider.sandbox.destroy(sandboxId);
+            this.sandboxProviders.delete(sandboxId);
+            return;
+          } catch (error) {
+            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          }
         }
-      }
 
-      throw new Error(
-        `Failed to destroy sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+        throw new Error(
+          `Failed to destroy sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+          errors.map((error) => `- ${error}`).join('\n')
+        );
+      });
     },
   };
 
   snapshot = {
     create: async (sandboxId: string, options?: CreateSnapshotOptions): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
-      const preferredProviderName = options?.provider;
-      const { provider: _providerName, ...providerOptions } = options || {};
-      const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
-      const errors: string[] = [];
+      return this.telemetry.track('snapshot.create', options?.provider, async () => {
+        const preferredProviderName = options?.provider;
+        const { provider: _providerName, ...providerOptions } = options || {};
+        const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
+        const errors: string[] = [];
 
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.snapshot) {
-          errors.push(`${getProviderLabel(provider, index)}: snapshots not supported`);
-          continue;
+        for (const [index, provider] of candidates.entries()) {
+          if (!provider.snapshot) {
+            errors.push(`${getProviderLabel(provider, index)}: snapshots not supported`);
+            continue;
+          }
+
+          try {
+            const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
+            this.snapshotProviders.set(snapshot.id, provider);
+            return {
+              ...snapshot,
+              createdAt: new Date(snapshot.createdAt),
+            };
+          } catch (error) {
+            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          }
         }
 
-        try {
-          const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
-          this.snapshotProviders.set(snapshot.id, provider);
-          return {
-            ...snapshot,
-            createdAt: new Date(snapshot.createdAt),
-          };
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
-        }
-      }
-
-      throw new Error(
-        `Failed to create snapshot for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+        throw new Error(
+          `Failed to create snapshot for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+          errors.map((error) => `- ${error}`).join('\n')
+        );
+      });
     },
 
     list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
-      const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
+      return this.telemetry.track('snapshot.list', undefined, async () => {
+        const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
 
-      for (const provider of this.getProviders()) {
-        if (!provider.snapshot) continue;
-        const listed = await provider.snapshot.list();
-        for (const snapshot of listed) {
-          this.snapshotProviders.set(snapshot.id, provider);
-          snapshots.push({
-            ...snapshot,
-            createdAt: new Date(snapshot.createdAt),
-          });
+        for (const provider of this.getProviders()) {
+          if (!provider.snapshot) continue;
+          const listed = await provider.snapshot.list();
+          for (const snapshot of listed) {
+            this.snapshotProviders.set(snapshot.id, provider);
+            snapshots.push({
+              ...snapshot,
+              createdAt: new Date(snapshot.createdAt),
+            });
+          }
         }
-      }
 
-      return snapshots;
+        return snapshots;
+      });
     },
 
     delete: async (snapshotId: string): Promise<void> => {
-      const candidates = this.getSnapshotDeleteCandidates(snapshotId);
-      const errors: string[] = [];
+      return this.telemetry.track('snapshot.delete', undefined, async () => {
+        const candidates = this.getSnapshotDeleteCandidates(snapshotId);
+        const errors: string[] = [];
 
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.snapshot) continue;
-        try {
-          await provider.snapshot.delete(snapshotId);
-          this.snapshotProviders.delete(snapshotId);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        for (const [index, provider] of candidates.entries()) {
+          if (!provider.snapshot) continue;
+          try {
+            await provider.snapshot.delete(snapshotId);
+            this.snapshotProviders.delete(snapshotId);
+            return;
+          } catch (error) {
+            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          }
         }
-      }
 
-      throw new Error(
-        `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+        throw new Error(
+          `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
+          errors.map((error) => `- ${error}`).join('\n')
+        );
+      });
     },
   };
 }

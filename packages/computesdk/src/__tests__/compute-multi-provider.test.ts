@@ -245,6 +245,34 @@ describe('compute multi-provider', () => {
     await expect(sdk.sandbox.create({ provider: 'modal' })).rejects.toThrow(/is not configured/);
   });
 
+  it('emits telemetry for successful and failed operations', async () => {
+    const events: Array<{ eventName: string; operation?: string; outcome?: string }> = [];
+    const failingProvider = makeProvider('e2b', {
+      create: async () => {
+        throw new Error('not available');
+      },
+    });
+
+    const sdk = compute({
+      providers: [failingProvider],
+      telemetry: {
+        onEvent: (event) => {
+          events.push({
+            eventName: event.eventName,
+            operation: event.operation,
+            outcome: event.outcome,
+          });
+        },
+      },
+      fallbackOnError: false,
+    });
+
+    await expect(sdk.sandbox.create()).rejects.toThrow('not available');
+
+    expect(events.some((event) => event.eventName === 'compute.config')).toBe(true);
+    expect(events.some((event) => event.operation === 'sandbox.create' && event.outcome === 'failure')).toBe(true);
+  });
+
   it('creates snapshots using snapshot-capable providers without mutating round-robin create order', async () => {
     const e2bCreate = vi.fn(async () => makeSandbox('e2b-sbx', 'e2b'));
     const e2b = makeProvider('e2b', { create: e2bCreate });

@@ -98,6 +98,14 @@ compute.setConfig({
   providers: [e2b({...}), modal({...})],
   providerStrategy: 'priority', // default: 'priority'
   fallbackOnError: true,        // default: true
+  telemetry: {
+    enabled: true,              // default: true (set COMPUTESDK_TELEMETRY=0 to disable)
+    endpoint: 'https://obs.example.com/v1/events',
+    onEvent: (event) => {
+      // Local hook for custom observability pipelines
+      console.log(event);
+    },
+  },
 });
 ```
 
@@ -111,6 +119,9 @@ compute.setConfig({
 ```
 
 When both are present, `provider` is treated as the primary provider and is placed first.
+
+Telemetry events are anonymized and include operation names, provider labels, outcomes, and durations.
+The SDK does not collect environment variables or request/response payloads.
 
 ### Sandbox Management
 
