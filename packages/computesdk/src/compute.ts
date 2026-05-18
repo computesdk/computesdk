@@ -54,25 +54,48 @@ export interface ExplicitComputeConfig {
   providerStrategy?: 'priority' | 'round-robin';
   /** Retry the next provider when create fails */
   fallbackOnError?: boolean;
-  /** Anonymized telemetry for provider-level observability */
+  /** Benchmark-grade anonymized telemetry */
   telemetry?: TelemetryConfig;
 }
 
-export interface TelemetryEvent {
-  eventName: 'compute.config' | 'compute.operation';
-  timestamp: string;
-  installId: string;
-  operation?: string;
-  provider?: string;
-  outcome?: 'success' | 'failure';
-  durationMs?: number;
+export interface BenchmarkAttempt {
+  provider: string;
+  candidateIndex: number;
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  outcome: 'success' | 'failure';
   errorCode?: string;
+}
+
+export interface TelemetryEvent {
+  eventName: 'benchmark.config' | 'benchmark.span';
+  installId: string;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  operation?: string;
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: number;
+  outcome?: 'success' | 'failure';
+  provider?: string;
+  attemptCount?: number;
+  attempts?: BenchmarkAttempt[];
+  errorCode?: string;
+  sdkVersion?: string;
+  runtime?: 'node' | 'browser' | 'unknown';
+  os?: string;
+  arch?: string;
+  providerStrategy?: 'priority' | 'round-robin';
+  fallbackOnError?: boolean;
 }
 
 export interface TelemetryConfig {
   enabled?: boolean;
   endpoint?: string;
   headers?: Record<string, string>;
+  sdkVersion?: string;
   onEvent?: (event: TelemetryEvent) => void;
 }
 
@@ -100,49 +123,125 @@ class ComputeTelemetry {
   private headers: Record<string, string> = {};
   private onEvent?: (event: TelemetryEvent) => void;
   private installId = createInstallId();
+  private sdkVersion = 'unknown';
+  private runtime: 'node' | 'browser' | 'unknown' = this.resolveRuntime();
+  private os = this.resolveOs();
+  private arch = this.resolveArch();
 
   configure(config?: TelemetryConfig): void {
     this.enabled = (config?.enabled ?? true) && !telemetryDisabledByEnv();
     this.endpoint = config?.endpoint;
     this.headers = config?.headers ?? {};
+    this.sdkVersion = config?.sdkVersion ?? this.sdkVersion;
     this.onEvent = config?.onEvent;
   }
 
-  emitConfig(): void {
+  emitConfig(config: { providerStrategy: 'priority' | 'round-robin'; fallbackOnError: boolean }): void {
     this.send({
-      eventName: 'compute.config',
-      timestamp: new Date().toISOString(),
+      eventName: 'benchmark.config',
       installId: this.installId,
+      sdkVersion: this.sdkVersion,
+      runtime: this.runtime,
+      os: this.os,
+      arch: this.arch,
+      providerStrategy: config.providerStrategy,
+      fallbackOnError: config.fallbackOnError,
     });
   }
 
-  async track<T>(operation: string, provider: string | undefined, fn: () => Promise<T>): Promise<T> {
-    const startedAt = Date.now();
+  createSpan(operation: string, parentSpanId?: string): BenchmarkSpan {
+    return {
+      traceId: createInstallId(),
+      spanId: createInstallId(),
+      parentSpanId,
+      operation,
+      startedAtMs: Date.now(),
+      startedAtIso: new Date().toISOString(),
+      attempts: [],
+    };
+  }
+
+  addAttempt(span: BenchmarkSpan, attempt: BenchmarkAttempt): void {
+    span.attempts.push(attempt);
+  }
+
+  emitSpanSuccess(span: BenchmarkSpan, provider?: string): void {
+    const endedAtMs = Date.now();
+    this.send({
+      eventName: 'benchmark.span',
+      installId: this.installId,
+      traceId: span.traceId,
+      spanId: span.spanId,
+      parentSpanId: span.parentSpanId,
+      operation: span.operation,
+      startedAt: span.startedAtIso,
+      endedAt: new Date(endedAtMs).toISOString(),
+      durationMs: endedAtMs - span.startedAtMs,
+      outcome: 'success',
+      provider,
+      attemptCount: span.attempts.length,
+      attempts: span.attempts,
+      sdkVersion: this.sdkVersion,
+      runtime: this.runtime,
+      os: this.os,
+      arch: this.arch,
+    });
+  }
+
+  emitSpanFailure(span: BenchmarkSpan, error: unknown, provider?: string): void {
+    const endedAtMs = Date.now();
+    this.send({
+      eventName: 'benchmark.span',
+      installId: this.installId,
+      traceId: span.traceId,
+      spanId: span.spanId,
+      parentSpanId: span.parentSpanId,
+      operation: span.operation,
+      startedAt: span.startedAtIso,
+      endedAt: new Date(endedAtMs).toISOString(),
+      durationMs: endedAtMs - span.startedAtMs,
+      outcome: 'failure',
+      provider,
+      attemptCount: span.attempts.length,
+      attempts: span.attempts,
+      errorCode: toErrorCode(error),
+      sdkVersion: this.sdkVersion,
+      runtime: this.runtime,
+      os: this.os,
+      arch: this.arch,
+    });
+  }
+
+  async track<T>(operation: string, provider: string | undefined, fn: (span: BenchmarkSpan) => Promise<T>): Promise<T> {
+    const span = this.createSpan(operation);
     try {
-      const result = await fn();
-      this.send({
-        eventName: 'compute.operation',
-        timestamp: new Date().toISOString(),
-        installId: this.installId,
-        operation,
-        provider,
-        outcome: 'success',
-        durationMs: Date.now() - startedAt,
-      });
+      const result = await fn(span);
+      this.emitSpanSuccess(span, provider);
       return result;
     } catch (error) {
-      this.send({
-        eventName: 'compute.operation',
-        timestamp: new Date().toISOString(),
-        installId: this.installId,
-        operation,
-        provider,
-        outcome: 'failure',
-        durationMs: Date.now() - startedAt,
-        errorCode: toErrorCode(error),
-      });
+      this.emitSpanFailure(span, error, provider);
       throw error;
     }
+  }
+
+  private resolveRuntime(): 'node' | 'browser' | 'unknown' {
+    if (typeof window !== 'undefined') return 'browser';
+    if (typeof process !== 'undefined') return 'node';
+    return 'unknown';
+  }
+
+  private resolveOs(): string {
+    if (typeof process !== 'undefined' && process.platform) {
+      return process.platform;
+    }
+    return 'unknown';
+  }
+
+  private resolveArch(): string {
+    if (typeof process !== 'undefined' && process.arch) {
+      return process.arch;
+    }
+    return 'unknown';
   }
 
   private send(event: TelemetryEvent): void {
@@ -164,6 +263,16 @@ class ComputeTelemetry {
     }).catch(() => {
     });
   }
+}
+
+interface BenchmarkSpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  operation: string;
+  startedAtMs: number;
+  startedAtIso: string;
+  attempts: BenchmarkAttempt[];
 }
 
 function isProviderLike(value: unknown): value is DirectProvider {
@@ -323,7 +432,7 @@ class ComputeManager {
     return providers;
   }
 
-  private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
+  private async createWithFallbackAndSpan(span: BenchmarkSpan, options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
     const { provider: _providerName, ...providerOptions } = options || {};
     const candidates = this.getCreateCandidates(preferredProviderName);
@@ -331,11 +440,29 @@ class ComputeManager {
     const errors: string[] = [];
 
     for (const [index, provider] of candidates.entries()) {
+      const attemptStartedAtMs = Date.now();
       try {
         const sandbox = await provider.sandbox.create(providerOptions);
+        this.telemetry.addAttempt(span, {
+          provider: getProviderLabel(provider, index),
+          candidateIndex: index,
+          startedAt: new Date(attemptStartedAtMs).toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: Date.now() - attemptStartedAtMs,
+          outcome: 'success',
+        });
         this.registerSandboxProvider(sandbox, provider);
         return sandbox;
       } catch (error) {
+        this.telemetry.addAttempt(span, {
+          provider: getProviderLabel(provider, index),
+          candidateIndex: index,
+          startedAt: new Date(attemptStartedAtMs).toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: Date.now() - attemptStartedAtMs,
+          outcome: 'failure',
+          errorCode: toErrorCode(error),
+        });
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         if (!canFallback) {
           throw error;
@@ -354,7 +481,10 @@ class ComputeManager {
     this.providerStrategy = config.providerStrategy ?? 'priority';
     this.fallbackOnError = config.fallbackOnError ?? true;
     this.telemetry.configure(config.telemetry);
-    this.telemetry.emitConfig();
+    this.telemetry.emitConfig({
+      providerStrategy: this.providerStrategy,
+      fallbackOnError: this.fallbackOnError,
+    });
     this.roundRobinCursor = 0;
     this.sandboxProviders.clear();
     this.snapshotProviders.clear();
@@ -362,13 +492,23 @@ class ComputeManager {
 
   sandbox = {
     create: async (options?: CreateSandboxOptions): Promise<SandboxInterface> => {
-      return this.telemetry.track('sandbox.create', options?.provider, async () => this.createWithFallback(options));
+      return this.telemetry.track('sandbox.create', options?.provider, async (span) => this.createWithFallbackAndSpan(span, options));
     },
 
     getById: async (sandboxId: string): Promise<SandboxInterface | null> => {
-      return this.telemetry.track('sandbox.getById', undefined, async () => {
+      return this.telemetry.track('sandbox.getById', undefined, async (span) => {
         for (const provider of this.getByIdCandidates(sandboxId)) {
+          const attemptStartedAtMs = Date.now();
           const sandbox = await provider.sandbox.getById(sandboxId);
+          this.telemetry.addAttempt(span, {
+            provider: provider.name || 'unknown',
+            candidateIndex: span.attempts.length,
+            startedAt: new Date(attemptStartedAtMs).toISOString(),
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - attemptStartedAtMs,
+            outcome: sandbox ? 'success' : 'failure',
+            errorCode: sandbox ? undefined : 'NOT_FOUND',
+          });
           if (sandbox) {
             this.registerSandboxProvider(sandbox, provider);
             return sandbox;
@@ -381,7 +521,7 @@ class ComputeManager {
     },
 
     list: async (): Promise<SandboxInterface[]> => {
-      return this.telemetry.track('sandbox.list', undefined, async () => {
+      return this.telemetry.track('sandbox.list', undefined, async (span) => {
         const all: SandboxInterface[] = [];
 
         for (const provider of this.getProviders()) {
@@ -389,7 +529,16 @@ class ComputeManager {
             continue;
           }
 
+          const attemptStartedAtMs = Date.now();
           const sandboxes = await provider.sandbox.list();
+          this.telemetry.addAttempt(span, {
+            provider: provider.name || 'unknown',
+            candidateIndex: span.attempts.length,
+            startedAt: new Date(attemptStartedAtMs).toISOString(),
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - attemptStartedAtMs,
+            outcome: 'success',
+          });
           for (const sandbox of sandboxes) {
             this.registerSandboxProvider(sandbox, provider);
           }
@@ -401,16 +550,34 @@ class ComputeManager {
     },
 
     destroy: async (sandboxId: string): Promise<void> => {
-      return this.telemetry.track('sandbox.destroy', undefined, async () => {
+      return this.telemetry.track('sandbox.destroy', undefined, async (span) => {
         const candidates = this.getByIdCandidates(sandboxId);
         const errors: string[] = [];
 
         for (const [index, provider] of candidates.entries()) {
+          const attemptStartedAtMs = Date.now();
           try {
             await provider.sandbox.destroy(sandboxId);
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              outcome: 'success',
+            });
             this.sandboxProviders.delete(sandboxId);
             return;
           } catch (error) {
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              outcome: 'failure',
+              errorCode: toErrorCode(error),
+            });
             errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
           }
         }
@@ -425,7 +592,7 @@ class ComputeManager {
 
   snapshot = {
     create: async (sandboxId: string, options?: CreateSnapshotOptions): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
-      return this.telemetry.track('snapshot.create', options?.provider, async () => {
+      return this.telemetry.track('snapshot.create', options?.provider, async (span) => {
         const preferredProviderName = options?.provider;
         const { provider: _providerName, ...providerOptions } = options || {};
         const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
@@ -437,14 +604,32 @@ class ComputeManager {
             continue;
           }
 
+          const attemptStartedAtMs = Date.now();
           try {
             const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              outcome: 'success',
+            });
             this.snapshotProviders.set(snapshot.id, provider);
             return {
               ...snapshot,
               createdAt: new Date(snapshot.createdAt),
             };
           } catch (error) {
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              outcome: 'failure',
+              errorCode: toErrorCode(error),
+            });
             errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
           }
         }
@@ -457,12 +642,21 @@ class ComputeManager {
     },
 
     list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
-      return this.telemetry.track('snapshot.list', undefined, async () => {
+      return this.telemetry.track('snapshot.list', undefined, async (span) => {
         const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
 
-        for (const provider of this.getProviders()) {
+        for (const [index, provider] of this.getProviders().entries()) {
           if (!provider.snapshot) continue;
+          const attemptStartedAtMs = Date.now();
           const listed = await provider.snapshot.list();
+          this.telemetry.addAttempt(span, {
+            provider: getProviderLabel(provider, index),
+            candidateIndex: index,
+            startedAt: new Date(attemptStartedAtMs).toISOString(),
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - attemptStartedAtMs,
+            outcome: 'success',
+          });
           for (const snapshot of listed) {
             this.snapshotProviders.set(snapshot.id, provider);
             snapshots.push({
@@ -477,17 +671,35 @@ class ComputeManager {
     },
 
     delete: async (snapshotId: string): Promise<void> => {
-      return this.telemetry.track('snapshot.delete', undefined, async () => {
+      return this.telemetry.track('snapshot.delete', undefined, async (span) => {
         const candidates = this.getSnapshotDeleteCandidates(snapshotId);
         const errors: string[] = [];
 
         for (const [index, provider] of candidates.entries()) {
           if (!provider.snapshot) continue;
+          const attemptStartedAtMs = Date.now();
           try {
             await provider.snapshot.delete(snapshotId);
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              outcome: 'success',
+            });
             this.snapshotProviders.delete(snapshotId);
             return;
           } catch (error) {
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              outcome: 'failure',
+              errorCode: toErrorCode(error),
+            });
             errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
           }
         }

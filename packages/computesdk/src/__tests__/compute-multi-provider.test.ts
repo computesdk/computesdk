@@ -245,8 +245,8 @@ describe('compute multi-provider', () => {
     await expect(sdk.sandbox.create({ provider: 'modal' })).rejects.toThrow(/is not configured/);
   });
 
-  it('emits telemetry for successful and failed operations', async () => {
-    const events: Array<{ eventName: string; operation?: string; outcome?: string }> = [];
+  it('emits benchmark spans with timing and attempt data', async () => {
+    const events: Array<{ eventName: string; operation?: string; outcome?: string; startedAt?: string; attempts?: unknown[] }> = [];
     const failingProvider = makeProvider('e2b', {
       create: async () => {
         throw new Error('not available');
@@ -261,6 +261,8 @@ describe('compute multi-provider', () => {
             eventName: event.eventName,
             operation: event.operation,
             outcome: event.outcome,
+            startedAt: event.startedAt,
+            attempts: event.attempts,
           });
         },
       },
@@ -269,8 +271,10 @@ describe('compute multi-provider', () => {
 
     await expect(sdk.sandbox.create()).rejects.toThrow('not available');
 
-    expect(events.some((event) => event.eventName === 'compute.config')).toBe(true);
+    expect(events.some((event) => event.eventName === 'benchmark.config')).toBe(true);
     expect(events.some((event) => event.operation === 'sandbox.create' && event.outcome === 'failure')).toBe(true);
+    expect(events.some((event) => event.operation === 'sandbox.create' && !!event.startedAt)).toBe(true);
+    expect(events.some((event) => event.operation === 'sandbox.create' && (event.attempts?.length || 0) > 0)).toBe(true);
   });
 
   it('creates snapshots using snapshot-capable providers without mutating round-robin create order', async () => {
