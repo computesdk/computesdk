@@ -98,14 +98,6 @@ compute.setConfig({
   providers: [e2b({...}), modal({...})],
   providerStrategy: 'priority', // default: 'priority'
   fallbackOnError: true,        // default: true
-  telemetry: {
-    enabled: true,              // default: true (set COMPUTESDK_TELEMETRY=0 to disable)
-    endpoint: 'https://obs.example.com/v1/events',
-    onEvent: (event) => {
-      // Local hook for custom observability pipelines
-      console.log(event);
-    },
-  },
 });
 ```
 
