@@ -37,4 +37,4 @@ export type {
 // Works as both callable `compute({...}).sandbox.create()` and singleton
 // `compute.setConfig({...}); compute.sandbox.create()`.
 export { compute } from './compute';
-export type { CallableCompute, ExplicitComputeConfig } from './compute';
+export type { CallableCompute, ExplicitComputeConfig, TelemetryConfig, TelemetryEvent } from './compute';

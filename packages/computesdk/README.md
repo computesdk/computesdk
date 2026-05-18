@@ -112,6 +112,26 @@ compute.setConfig({
 
 When both are present, `provider` is treated as the primary provider and is placed first.
 
+Telemetry is benchmark-first and anonymized by default. Configure it in `compute.setConfig`:
+
+```typescript
+compute.setConfig({
+  providers: [e2b({...}), modal({...})],
+  telemetry: {
+    endpoint: 'https://bench.example.com/v1/events',
+    sdkVersion: '4.x',
+    onEvent: (event) => {
+      // eventName: "telemetry.config" | "telemetry.span"
+      // telemetry.span includes traceId/spanId, startedAt, endedAt,
+      // durationMs, provider attempts, and outcome.
+    },
+  },
+});
+```
+
+The SDK does not collect environment variables or request/response payloads.
+Set `COMPUTESDK_TELEMETRY=0` to disable emission.
+
 ### Sandbox Management
 
 #### `compute.sandbox.create(options?)`
