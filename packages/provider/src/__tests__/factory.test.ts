@@ -364,22 +364,25 @@ describe('Factory', () => {
         }))
 
       const encoder = new TextEncoder()
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: new ReadableStream({
-          start(controller) {
-            const ssePayload = [
-              `data: {"type":"command.stdout","requestId":"${latestRequestId}","data":{"chunk":"chunk-a\\n"}}\n\n`,
-              `data: {"type":"command.stderr","requestId":"${latestRequestId}","data":{"chunk":"err-a\\n"}}\n\n`,
-            ].join('')
-            controller.enqueue(encoder.encode(ssePayload))
-            controller.close()
-          },
-          cancel() {
-            // noop
-          },
-        }),
+      const fetchMock = vi.fn().mockImplementation(async () => {
+        const requestIdForThisStream = latestRequestId
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(controller) {
+              const ssePayload = [
+                `data: {"type":"command.stdout","requestId":"${requestIdForThisStream}","data":{"chunk":"chunk-a\\n"}}\n\n`,
+                `data: {"type":"command.stderr","requestId":"${requestIdForThisStream}","data":{"chunk":"err-a\\n"}}\n\n`,
+              ].join('')
+              controller.enqueue(encoder.encode(ssePayload))
+              controller.close()
+            },
+            cancel() {
+              // noop
+            },
+          }),
+        }
       })
       vi.stubGlobal('fetch', fetchMock as any)
 
@@ -402,10 +405,8 @@ describe('Factory', () => {
       })
 
       expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1/events?token=tok', expect.any(Object))
-      expect(onStdout).toHaveBeenCalled()
-      expect(onStderr).toHaveBeenCalled()
-      expect(onStdout.mock.calls.flat().join('')).toContain('final')
-      expect(onStderr.mock.calls.flat().join('')).toContain('err')
+      expect(onStdout).toHaveBeenCalledWith('chunk-a\n')
+      expect(onStderr).toHaveBeenCalledWith('err-a\n')
     })
   })
 })
