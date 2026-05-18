@@ -445,7 +445,11 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       try {
         const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
         const invocation = parseSeedInvocationOutput(daemonResult.stdout);
-        this.daemonStreamState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
+        try {
+          this.daemonStreamState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
+        } catch {
+          this.daemonStreamState = undefined;
+        }
         if (options.onStdout) {
           emitMissingOutput(streamStdout, invocation.command.stdout, options.onStdout);
         }

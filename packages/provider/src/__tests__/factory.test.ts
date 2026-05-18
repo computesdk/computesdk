@@ -294,6 +294,59 @@ describe('Factory', () => {
       ).rejects.toThrow('runCommand({ daemon: true }) does not support background mode.')
     })
 
+    it('should not fail daemon command when provider cannot expose SSE URL', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-792', status: 'running' },
+          sandboxId: 'test-792'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: 'daemon invocation output',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 21
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-792',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockRejectedValue(new Error('port not exposed'))
+      }
+
+      daemonSeedScriptCommand.mockReturnValue('node -e "seed" "echo hi"')
+      parseSeedInvocationOutput.mockReturnValue({
+        token: 'tok',
+        requestId: 'req_2',
+        daemon: { reused: true, pid: 42, sseUrl: 'http://127.0.0.1:33937/events?token=tok' },
+        command: {
+          exitCode: 0,
+          signal: null,
+          stdout: 'hi\n',
+          stderr: '',
+          combined: 'hi\n',
+        },
+      })
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+      const onStdout = vi.fn()
+      const result = await sandbox.runCommand('echo hi', { daemon: true, onStdout })
+
+      expect(result.stdout).toBe('hi\n')
+      expect(onStdout).toHaveBeenCalledWith('hi\n')
+    })
+
     it('should stream daemon stdout and stderr when daemon SSE is available', async () => {
       const methods = {
         create: vi.fn().mockResolvedValue({
