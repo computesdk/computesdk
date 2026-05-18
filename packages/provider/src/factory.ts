@@ -23,6 +23,152 @@ import type {
   CreateTemplateOptions,
   ListTemplatesOptions,
 } from './types/index.js';
+import {
+  daemonSeedScriptCommand,
+  parseSeedInvocationOutput,
+  type SeedCommandInput,
+} from 'daemond';
+
+type DaemonStreamState = {
+  token: string;
+  rawSseUrl: string;
+  sseUrl?: string;
+  sseOrigin?: string;
+};
+
+const DEFAULT_DAEMON_SSE_PORT = 38989;
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
+}
+
+function createDaemonRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `req_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function emitMissingOutput(
+  emitted: string,
+  finalOutput: string,
+  emit: (data: string) => void
+): void {
+  if (!finalOutput) return;
+  if (!emitted) {
+    emit(finalOutput);
+    return;
+  }
+  if (finalOutput.startsWith(emitted)) {
+    const missing = finalOutput.slice(emitted.length);
+    if (missing) emit(missing);
+    return;
+  }
+  if (finalOutput.includes(emitted)) {
+    return;
+  }
+  if (emitted.includes(finalOutput)) {
+    return;
+  }
+  if (!emitted.includes(finalOutput)) {
+    emit(finalOutput);
+  }
+}
+
+function parseSseDataLines(raw: string): string[] {
+  const chunks = raw.split(/\n\n+/);
+  const out: string[] = [];
+  for (const chunk of chunks) {
+    const lines = chunk.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data:')) {
+        out.push(line.slice(5).trim());
+      }
+    }
+  }
+  return out;
+}
+
+function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestId?: string; stdout?: string; stderr?: string } {
+  if (!payload || typeof payload !== 'object') return {};
+  const record = payload as Record<string, any>;
+  const data = (record.data && typeof record.data === 'object') ? record.data : undefined;
+  const type = typeof record.type === 'string' ? record.type : typeof record.event === 'string' ? record.event : undefined;
+  const requestId = typeof record.requestId === 'string'
+    ? record.requestId
+    : typeof data?.requestId === 'string'
+      ? data.requestId
+      : undefined;
+  const stdout = typeof record.stdout === 'string'
+    ? record.stdout
+    : typeof record.output === 'string'
+      ? record.output
+      : typeof record.chunk === 'string'
+        ? record.chunk
+        : typeof data?.stdout === 'string'
+          ? data.stdout
+          : typeof data?.output === 'string'
+            ? data.output
+            : typeof data?.chunk === 'string'
+              ? data.chunk
+              : undefined;
+  const stderr = typeof record.stderr === 'string'
+    ? record.stderr
+    : typeof data?.stderr === 'string'
+      ? data.stderr
+      : undefined;
+  return { type, requestId, stdout, stderr };
+}
+
+async function streamDaemonEvents(
+  sseUrl: string,
+  requestIdFilter: { current?: string },
+  callbacks: { onStdout?: (data: string) => void; onStderr?: (data: string) => void; markStdout: (chunk?: string) => void; markStderr: (chunk?: string) => void },
+  signal: AbortSignal
+): Promise<void> {
+  const response = await fetch(sseUrl, { signal });
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to open daemon event stream: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const frames = buffer.split('\n\n');
+    buffer = frames.pop() ?? '';
+
+    for (const frame of frames) {
+      const dataLines = parseSseDataLines(frame);
+      for (const dataLine of dataLines) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(dataLine);
+        } catch {
+          continue;
+        }
+        const event = normalizeDaemonStreamEvent(parsed);
+        if (requestIdFilter.current && event.requestId !== requestIdFilter.current) {
+          continue;
+        }
+        if ((event.type === 'command.stdout' || !event.type) && event.stdout && callbacks.onStdout) {
+          callbacks.markStdout(event.stdout);
+          callbacks.onStdout(event.stdout);
+        }
+        const stderrChunk = event.stderr ?? (event.type === 'command.stderr' ? event.stdout : undefined);
+        if ((event.type === 'command.stderr' || !event.type) && stderrChunk && callbacks.onStderr) {
+          callbacks.markStderr(stderrChunk);
+          callbacks.onStderr(stderrChunk);
+        }
+      }
+    }
+  }
+}
 
 /**
  * Flat sandbox method implementations - all operations in one place
@@ -166,6 +312,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
+  private daemonStreamState?: DaemonStreamState;
   constructor(
     private sandbox: TSandbox,
     sandboxId: string,
@@ -195,10 +342,179 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     return this.sandbox;
   }
 
+  private async resolveDaemonSseUrl(
+    rawUrl: string,
+    expectedToken: string,
+    knownOrigin?: string
+  ): Promise<{ sseUrl: string; sseOrigin: string }> {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      throw new Error('Invalid daemon SSE URL returned by command invocation.');
+    }
+
+    const allowedProtocols = new Set(['http:', 'https:']);
+    if (!allowedProtocols.has(parsed.protocol)) {
+      throw new Error(`Unsupported daemon SSE URL protocol: ${parsed.protocol}`);
+    }
+
+    const urlToken = parsed.searchParams.get('token');
+    if (!urlToken || urlToken !== expectedToken) {
+      throw new Error('Daemon SSE URL token mismatch.');
+    }
+
+    if (!isLoopbackHost(parsed.hostname)) {
+      const parsedOrigin = parsed.origin;
+      if (!knownOrigin || knownOrigin !== parsedOrigin) {
+        throw new Error(`Untrusted daemon SSE URL host: ${parsed.hostname}`);
+      }
+    }
+
+    if (isLoopbackHost(parsed.hostname)) {
+      const parsedPort = parsed.port ? Number(parsed.port) : NaN;
+      if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+        throw new Error('Daemon SSE URL must include a valid port.');
+      }
+
+      const providerBaseUrl = await this.methods.getUrl(this.sandbox, { port: parsedPort });
+      const providerUrl = new URL(providerBaseUrl);
+
+      parsed = new URL(providerUrl.toString());
+      parsed.pathname = '/events';
+      parsed.search = `?token=${encodeURIComponent(expectedToken)}`;
+      parsed.hash = '';
+    }
+
+    const resolvedUrl = parsed.toString();
+    const resolvedOrigin = new URL(resolvedUrl).origin;
+
+    if (this.daemonStreamState?.sseOrigin && this.daemonStreamState.sseOrigin !== resolvedOrigin) {
+      throw new Error('Daemon SSE URL origin changed unexpectedly.');
+    }
+
+    return { sseUrl: resolvedUrl, sseOrigin: resolvedOrigin };
+  }
+
   async runCommand(
     command: string,
     options?: RunCommandOptions
   ): Promise<CommandResult> {
+    if (options?.daemon) {
+      if (options.background) {
+        throw new Error('runCommand({ daemon: true }) does not support background mode.');
+      }
+
+      const daemonPayload: SeedCommandInput = {
+        command: 'sh',
+        args: ['-lc', command],
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeout,
+        requestId: createDaemonRequestId(),
+      };
+
+      const daemonConfig = typeof options.daemon === 'object' ? options.daemon : {};
+      const normalizedDaemonConfig = {
+        ...daemonConfig,
+        ssePort: daemonConfig.ssePort ?? DEFAULT_DAEMON_SSE_PORT,
+      };
+
+      const daemonCommand = daemonSeedScriptCommand(
+        normalizedDaemonConfig,
+        daemonPayload
+      );
+
+      const forwardedOptions: RunCommandOptions = { ...options };
+      delete forwardedOptions.daemon;
+      delete forwardedOptions.onStdout;
+      delete forwardedOptions.onStderr;
+
+      const requestIdFilter: { current?: string } = { current: daemonPayload.requestId };
+      let streamStdout = '';
+      let streamStderr = '';
+
+      const streamController = new AbortController();
+      let streamPromise: Promise<void> | undefined;
+      let streamFinalized = false;
+      const finalizeStream = async () => {
+        if (streamFinalized) return;
+        streamFinalized = true;
+        streamController.abort();
+        if (streamPromise) {
+          await streamPromise;
+        }
+      };
+
+      if ((options.onStdout || options.onStderr) && this.daemonStreamState?.rawSseUrl) {
+        streamPromise = this.resolveDaemonSseUrl(
+          this.daemonStreamState.rawSseUrl,
+          this.daemonStreamState.token,
+          this.daemonStreamState.sseOrigin
+        )
+          .then((trustedState) => streamDaemonEvents(
+            trustedState.sseUrl,
+            requestIdFilter,
+            {
+              onStdout: options.onStdout,
+              onStderr: options.onStderr,
+              markStdout: (chunk?: string) => {
+                if (chunk) streamStdout += chunk;
+              },
+              markStderr: (chunk?: string) => {
+                if (chunk) streamStderr += chunk;
+              },
+            },
+            streamController.signal
+          ))
+          .then(() => undefined)
+          .catch((error) => {
+            if (error instanceof Error && /Failed to open daemon event stream|fetch|network|aborted|AbortError/i.test(error.message)) {
+              return;
+            }
+            throw error;
+          });
+      }
+      try {
+        const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
+        const invocation = parseSeedInvocationOutput(daemonResult.stdout);
+        this.daemonStreamState = {
+          token: invocation.token,
+          rawSseUrl: invocation.daemon.sseUrl,
+          sseUrl: this.daemonStreamState?.sseUrl,
+          sseOrigin: this.daemonStreamState?.sseOrigin,
+        };
+
+        if ((options.onStdout || options.onStderr) && !this.daemonStreamState.sseOrigin) {
+          try {
+            const trustedState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
+            this.daemonStreamState.sseUrl = trustedState.sseUrl;
+            this.daemonStreamState.sseOrigin = trustedState.sseOrigin;
+          } catch {
+            // Best-effort streaming only; fall back to parsed output.
+          }
+        }
+
+        await finalizeStream();
+
+        if (options.onStdout) {
+          emitMissingOutput(streamStdout, invocation.command.stdout, options.onStdout);
+        }
+        if (options.onStderr) {
+          emitMissingOutput(streamStderr, invocation.command.stderr, options.onStderr);
+        }
+
+        return {
+          stdout: invocation.command.stdout,
+          stderr: invocation.command.stderr,
+          exitCode: invocation.command.exitCode ?? -1,
+          durationMs: daemonResult.durationMs,
+        };
+      } finally {
+        await finalizeStream();
+      }
+    }
+
     // Pass command and options directly to provider - no preprocessing
     // Provider is responsible for handling cwd, env, background, etc.
     return await this.methods.runCommand(this.sandbox, command, options);

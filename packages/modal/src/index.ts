@@ -14,6 +14,12 @@ type ModalNativeSandbox = Sandbox;
 
 const DEFAULT_IMAGE = 'node:20';
 const DEFAULT_APP_NAME = 'computesdk-modal';
+const DEFAULT_DAEMON_SSE_PORT = 38989;
+
+function mergeExposedPorts(primary?: number[], fallback?: number[]): number[] {
+  const merged = [...(primary ?? fallback ?? []), DEFAULT_DAEMON_SSE_PORT];
+  return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
+}
 
 
 export interface ModalConfig {
@@ -80,7 +86,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
 
-          const ports = optPorts ?? config.ports;
+          const ports = mergeExposedPorts(optPorts, config.ports);
           if (ports && ports.length > 0) sandboxOptions.unencryptedPorts = ports;
 
           const timeout = optTimeout ?? config.timeout;

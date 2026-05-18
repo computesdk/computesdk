@@ -18,6 +18,13 @@ export interface VercelConfig {
   ports?: number[];
 }
 
+const DEFAULT_DAEMON_SSE_PORT = 38989;
+
+function mergeExposedPorts(primary?: number[], fallback?: number[]): number[] {
+  const merged = [...(primary ?? fallback ?? []), DEFAULT_DAEMON_SSE_PORT];
+  return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
+}
+
 interface ResolvedCredentials {
   useOidc: boolean;
   token: string;
@@ -79,7 +86,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           const optSource = (options as any)?.source;
 
           const params: any = { timeout, ...providerOptions };
-          const ports = optPorts ?? config.ports;
+          const ports = mergeExposedPorts(optPorts, config.ports);
           if (ports && ports.length > 0) params.ports = ports;
 
           if (optRuntime) {
