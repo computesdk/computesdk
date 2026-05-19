@@ -1,5 +1,13 @@
 # @computesdk/blaxel
 
+## 1.6.13
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
 ## 1.6.12
 
 ### Patch Changes
