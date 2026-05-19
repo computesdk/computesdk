@@ -32,14 +32,9 @@ import {
 type DaemonStreamState = {
   token: string;
   rawSseUrl: string;
-  sseUrl?: string;
 };
 
 const DEFAULT_DAEMON_SSE_PORT = 38989;
-
-function isLoopbackHost(hostname: string): boolean {
-  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
-}
 
 function createDaemonRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -364,7 +359,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   private async resolveDaemonSseUrl(
     rawUrl: string,
     expectedToken: string
-  ): Promise<{ sseUrl: string }> {
+  ): Promise<string> {
     let parsed: URL;
     try {
       parsed = new URL(rawUrl);
@@ -372,18 +367,13 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       throw new Error('Invalid daemon SSE URL returned by command invocation.');
     }
 
-    const allowedProtocols = new Set(['http:', 'https:']);
-    if (!allowedProtocols.has(parsed.protocol)) {
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error(`Unsupported daemon SSE URL protocol: ${parsed.protocol}`);
     }
 
     const urlToken = parsed.searchParams.get('token');
     if (!urlToken || urlToken !== expectedToken) {
       throw new Error('Daemon SSE URL token mismatch.');
-    }
-
-    if (!isLoopbackHost(parsed.hostname)) {
-      throw new Error(`Daemon SSE URL must use loopback host: ${parsed.hostname}`);
     }
 
     const parsedPort = parsed.port ? Number(parsed.port) : NaN;
@@ -399,7 +389,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     parsed.search = `?token=${encodeURIComponent(expectedToken)}`;
     parsed.hash = '';
 
-    return { sseUrl: parsed.toString() };
+    return parsed.toString();
   }
 
   async runCommand(
@@ -457,8 +447,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           this.daemonStreamState.rawSseUrl,
           this.daemonStreamState.token
         )
-          .then((trustedState) => streamDaemonEvents(
-            trustedState.sseUrl,
+          .then((sseUrl) => streamDaemonEvents(
+            sseUrl,
             requestIdFilter,
             {
               onStdout: options.onStdout,
@@ -486,17 +476,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         this.daemonStreamState = {
           token: invocation.token,
           rawSseUrl: invocation.daemon.sseUrl,
-          sseUrl: this.daemonStreamState?.sseUrl,
         };
-
-        if ((options.onStdout || options.onStderr) && !this.daemonStreamState.sseUrl) {
-          try {
-            const trustedState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
-            this.daemonStreamState.sseUrl = trustedState.sseUrl;
-          } catch {
-            // Best-effort streaming only; fall back to parsed output.
-          }
-        }
 
         await finalizeStream();
 
