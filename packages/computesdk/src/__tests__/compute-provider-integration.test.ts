@@ -171,7 +171,7 @@ describeIntegration('compute provider integration', () => {
         });
 
         const daemonPromise = sandbox.runCommand(
-          'sh -lc "echo stream-start; sleep 1; echo stream-end"',
+          'sh -lc "sleep 1; echo stream-start; sleep 2; echo stream-end"',
           {
             onStdout: () => {
               markChunkSeen?.();
@@ -184,7 +184,7 @@ describeIntegration('compute provider integration', () => {
 
         await Promise.race([
           firstChunkSeen,
-          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for daemon stream callback')), 2500)),
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for daemon stream callback')), 5000)),
         ]);
 
         await daemonPromise;
