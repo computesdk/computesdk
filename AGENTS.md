@@ -36,3 +36,10 @@ The `just-bash` npm dependency only exports ESM (no CJS `require` entry). When r
 ### pnpm install warning
 
 After `pnpm install`, you may see: `WARN Failed to create bin at .../computesdk-cloudflare. ENOENT`. This is benign — the cloudflare setup binary depends on `dist/setup.mjs` which is created by `pnpm build`.
+
+### Changeset policy
+
+When creating changesets in this repository, always use `patch` release bumps by default.
+
+- Never choose `minor` or `major` unless the user explicitly asks for it in this session.
+- If uncertain about bump level, use `patch`.
