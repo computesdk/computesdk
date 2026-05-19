@@ -89,34 +89,25 @@ function parseSseDataLines(raw: string): string[] {
   return out;
 }
 
+function pickString(source: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+  if (!source) return undefined;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string') return value;
+  }
+  return undefined;
+}
+
 function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestId?: string; stdout?: string; stderr?: string } {
   if (!payload || typeof payload !== 'object') return {};
-  const record = payload as Record<string, any>;
-  const data = (record.data && typeof record.data === 'object') ? record.data : undefined;
-  const type = typeof record.type === 'string' ? record.type : typeof record.event === 'string' ? record.event : undefined;
-  const requestId = typeof record.requestId === 'string'
-    ? record.requestId
-    : typeof data?.requestId === 'string'
-      ? data.requestId
-      : undefined;
-  const stdout = typeof record.stdout === 'string'
-    ? record.stdout
-    : typeof record.output === 'string'
-      ? record.output
-      : typeof record.chunk === 'string'
-        ? record.chunk
-        : typeof data?.stdout === 'string'
-          ? data.stdout
-          : typeof data?.output === 'string'
-            ? data.output
-            : typeof data?.chunk === 'string'
-              ? data.chunk
-              : undefined;
-  const stderr = typeof record.stderr === 'string'
-    ? record.stderr
-    : typeof data?.stderr === 'string'
-      ? data.stderr
-      : undefined;
+  const record = payload as Record<string, unknown>;
+  const data = (record.data && typeof record.data === 'object')
+    ? (record.data as Record<string, unknown>)
+    : undefined;
+  const type = pickString(record, ['type', 'event']);
+  const requestId = pickString(record, ['requestId']) ?? pickString(data, ['requestId']);
+  const stdout = pickString(record, ['stdout', 'output', 'chunk']) ?? pickString(data, ['stdout', 'output', 'chunk']);
+  const stderr = pickString(record, ['stderr']) ?? pickString(data, ['stderr']);
   return { type, requestId, stdout, stderr };
 }
 
