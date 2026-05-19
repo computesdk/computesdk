@@ -45,7 +45,7 @@ console.log(result.stdout); // "Hello from k8s!"
 await sandbox.destroy();
 ```
 
-Sandbox IDs returned from `create()` are the bare Pod name (e.g. `computesdk-sbx-abc12345`); `getById()` and `list()` return the namespace-prefixed form `<namespace>/<podName>`. Both forms are accepted by `compute.sandbox.getById(...)` and `compute.sandbox.destroy(...)` — bare IDs are resolved against the provider's configured `namespace`.
+Sandbox IDs are namespace-prefixed: `<namespace>/<podName>` (e.g. `default/computesdk-sbx-abc12345`). `create()`, `getById()`, and `list()` all return this form, so values round-trip without normalization. `getById()` and `destroy()` also accept a bare Pod name for convenience — bare IDs are resolved against the provider's configured `namespace`.
 
 ### Pod Layout
 
@@ -132,8 +132,6 @@ interface K8sConfig {
   runtime?: 'node' | 'python';
   /** Time to wait for Pod to reach Running state, in ms - defaults to 120000 */
   timeout?: number;
-  /** Reserved — currently has no effect. The provider does not create Services; use `urlTemplate` for routing. */
-  serviceType?: 'ClusterIP' | 'NodePort';
   /** Prefix for generated Pod names - defaults to "computesdk-sbx" */
   podNamePrefix?: string;
   /** URL template for getUrl - see Port Forwarding section */
@@ -150,7 +148,7 @@ Kubeconfig loading precedence:
 ## Limitations
 
 - Filesystem methods are not implemented in this MVP — use `runCommand` with `cat`, `tee`, etc. to read and write files.
-- The provider never creates Kubernetes Services. `getUrl` is purely template-based — set `urlTemplate` to match your existing routing setup (ingress, gateway, or DNS). `serviceType` is accepted for forward compatibility but currently has no effect.
+- The provider never creates Kubernetes Services. `getUrl` is purely template-based — set `urlTemplate` to match your existing routing setup (ingress, gateway, or DNS).
 - Pod resource requests and limits are fixed (250m / 256Mi requests, 1 CPU / 1Gi limits). Set `image` if you need a different runtime; CPU/memory are not yet configurable.
 - Pods use `restartPolicy: Never`. If the container exits, the sandbox is gone — create a new one.
 - `compute.sandbox.list()` only scans the namespace configured on the provider; it does not enumerate across namespaces.
