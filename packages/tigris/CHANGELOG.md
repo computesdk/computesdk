@@ -1,5 +1,12 @@
 # @computesdk/tigris
 
+## 1.1.8
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - @computesdk/provider@2.1.1
+
 ## 1.1.7
 
 ### Patch Changes

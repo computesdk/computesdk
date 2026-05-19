@@ -1,5 +1,13 @@
 # @computesdk/archil
 
+## 0.4.4
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
 ## 0.4.3
 
 ### Patch Changes
