@@ -6,14 +6,6 @@ export const DEFAULT_SERVICE_PREFIX = 'computesdk-';
 export const DEFAULT_DEPLOYMENT_PLAN = 'nf-compute-50';
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
-export function debug(event: string, data?: Record<string, unknown>): void {
-  if (process.env.COMPUTESDK_DEBUG) {
-    console.error(
-      `[northflank] ${new Date().toISOString()} ${event}`,
-      data ? JSON.stringify(data) : '',
-    );
-  }
-}
 
 export type Runtime = 'node' | 'python';
 export type NorthflankProtocol = 'HTTP' | 'HTTP/2' | 'TCP' | 'UDP';
@@ -176,7 +168,6 @@ export async function withExecRetry<T>(
   while (Date.now() - start < timeoutMs) {
     attemptNum++;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    debug('exec.attempt', { attempt: attemptNum, serviceId });
     try {
       const result = await Promise.race([
         attempt(),
@@ -187,18 +178,15 @@ export async function withExecRetry<T>(
           );
         }),
       ]);
-      debug('exec.attempt.success', { attempt: attemptNum, serviceId, elapsedMs: Date.now() - start });
       return result;
     } catch (error) {
       const status = extractStatus(error);
       const msg = error instanceof Error ? error.message : String(error);
-      debug('exec.attempt.error', { attempt: attemptNum, serviceId, error: msg, status });
       if (is404(error) || isAuthError(error) || isPermanentClientError(error)) throw error;
     } finally {
       if (timer) clearTimeout(timer);
     }
     await new Promise(r => setTimeout(r, pollIntervalMs));
   }
-  debug('exec.attempt.timeout', { serviceId, attempts: attemptNum });
   throw new Error(`Timeout running exec on service ${serviceId} after ${timeoutMs}ms`);
 }
