@@ -120,6 +120,35 @@ function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestI
   return { type, requestId, stdout, stderr };
 }
 
+function isExpectedDaemonStreamError(error: unknown): boolean {
+  if (!error) return false;
+
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return true;
+    }
+
+    const message = error.message.toLowerCase();
+    if (message.includes('failed to open daemon event stream')) {
+      return true;
+    }
+
+    if (message.includes('fetch') || message.includes('network')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function streamDaemonEvents(
   sseUrl: string,
   requestIdFilter: { current?: string },
@@ -469,7 +498,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           ))
           .then(() => undefined)
           .catch((error) => {
-            if (error instanceof Error && /Failed to open daemon event stream|fetch|network|aborted|AbortError/i.test(error.message)) {
+            if (isExpectedDaemonStreamError(error)) {
               return;
             }
             throw error;

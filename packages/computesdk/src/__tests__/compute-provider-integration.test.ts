@@ -120,7 +120,7 @@ describeIntegration('compute provider integration', () => {
 
       const daemonStdoutChunks: string[] = [];
       const daemonStderrChunks: string[] = [];
-      const daemonResult = await sandbox.runCommand('/bin/echo computesdk-daemon-stream-ok', {
+      const daemonResult = await sandbox.runCommand('echo computesdk-daemon-stream-ok', {
         daemon: true,
         onStdout: (data: string) => {
           daemonStdoutChunks.push(data);
