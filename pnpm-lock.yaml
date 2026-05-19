@@ -594,6 +594,15 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^6.0.0
+        version: 6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
+      '@typescript-eslint/parser':
+        specifier: ^6.0.0
+        version: 6.21.0(eslint@8.57.1)(typescript@5.8.3)
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
       rimraf:
         specifier: ^5.0.0
         version: 5.0.10
