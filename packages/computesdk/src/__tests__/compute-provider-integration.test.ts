@@ -219,7 +219,7 @@ describeIntegration('compute provider integration', () => {
         let stderrChunks = 0;
 
         const result = await sandbox.runCommand(
-          'sh -lc "for i in 1 2 3 4 5; do echo stream-$i; sleep 1; done"',
+          'sh -lc "echo stream-a; sleep 1; echo stream-b; sleep 1; echo stream-c; sleep 1; echo stream-d; sleep 1; echo stream-e"',
           {
             onStdout: () => {
               stdoutChunks += 1;
@@ -247,7 +247,7 @@ describeIntegration('compute provider integration', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('stream-5');
+        expect(result.stdout).toContain('stream-e');
       } finally {
         await sdk.sandbox.destroy(sandbox.sandboxId);
       }
