@@ -170,7 +170,7 @@ describe('Factory', () => {
       )
     })
 
-    it('should run command through daemond when daemon option is set', async () => {
+    it('should run command through daemon transport when callbacks are provided', async () => {
       const methods = {
         create: vi.fn().mockResolvedValue({
           sandbox: { id: 'test-789', status: 'running' },
@@ -219,15 +219,27 @@ describe('Factory', () => {
       const onStdout = vi.fn()
       const onStderr = vi.fn()
       const result = await sandbox.runCommand('pwd', {
-        daemon: { name: 'seed-control', socket: '/tmp/seed.sock' },
         cwd: '/workspace',
         timeout: 12,
         onStdout,
         onStderr,
       })
 
-      expect(daemonSeedScriptCommand).toHaveBeenCalledWith(
-        { name: 'seed-control', socket: '/tmp/seed.sock', ssePort: 38989 },
+      expect(daemonSeedScriptCommand).toHaveBeenNthCalledWith(
+        1,
+        { ssePort: 38989 },
+        {
+          command: 'sh',
+          args: ['-lc', 'true'],
+          cwd: '/workspace',
+          env: undefined,
+          timeoutMs: 12,
+          requestId: expect.any(String),
+        }
+      )
+      expect(daemonSeedScriptCommand).toHaveBeenNthCalledWith(
+        2,
+        { ssePort: 38989 },
         {
           command: 'sh',
           args: ['-lc', 'pwd'],
@@ -237,7 +249,8 @@ describe('Factory', () => {
           requestId: expect.any(String),
         }
       )
-      expect(methods.runCommand).toHaveBeenCalledWith(
+      expect(methods.runCommand).toHaveBeenNthCalledWith(
+        2,
         { id: 'test-789', status: 'running' },
         'node -e "seed" "pwd"',
         {
@@ -256,7 +269,7 @@ describe('Factory', () => {
       expect(onStderr).not.toHaveBeenCalled()
     })
 
-    it('should reject daemon mode when background is true', async () => {
+    it('should reject streaming callbacks when background is true', async () => {
       const methods = {
         create: vi.fn().mockResolvedValue({
           sandbox: { id: 'test-790', status: 'running' },
@@ -290,8 +303,8 @@ describe('Factory', () => {
       const sandbox = await provider.sandbox.create()
 
       await expect(
-        sandbox.runCommand('pwd', { daemon: true, background: true })
-      ).rejects.toThrow('runCommand({ daemon: true }) does not support background mode.')
+        sandbox.runCommand('pwd', { onStdout: vi.fn(), background: true })
+      ).rejects.toThrow('runCommand with streaming callbacks does not support background mode.')
     })
 
     it('should not fail daemon command when provider cannot expose SSE URL', async () => {
@@ -341,13 +354,13 @@ describe('Factory', () => {
       const provider = providerFactory({ apiKey: 'test-key' })
       const sandbox = await provider.sandbox.create()
       const onStdout = vi.fn()
-      const result = await sandbox.runCommand('echo hi', { daemon: true, onStdout })
+      const result = await sandbox.runCommand('echo hi', { onStdout })
 
       expect(result.stdout).toBe('hi\n')
       expect(onStdout).toHaveBeenCalledWith('hi\n')
     })
 
-    it('should ignore untrusted non-loopback daemon SSE URL and use fallback output', async () => {
+    it('should derive daemon SSE URL host via getUrl', async () => {
       const methods = {
         create: vi.fn().mockResolvedValue({
           sandbox: { id: 'test-793', status: 'running' },
@@ -369,14 +382,14 @@ describe('Factory', () => {
           createdAt: new Date(),
           timeout: 300000
         } as SandboxInfo),
-        getUrl: vi.fn().mockResolvedValue('https://unused.mock.dev')
+        getUrl: vi.fn().mockResolvedValue('https://derived.mock.dev')
       }
 
       daemonSeedScriptCommand.mockReturnValue('node -e "seed" "echo hi"')
       parseSeedInvocationOutput.mockReturnValue({
         token: 'tok',
         requestId: 'req_3',
-        daemon: { reused: false, pid: 99, sseUrl: 'https://evil.example/events?token=tok' },
+        daemon: { reused: false, pid: 99, sseUrl: 'https://evil.example:33937/events?token=tok' },
         command: {
           exitCode: 0,
           signal: null,
@@ -397,12 +410,15 @@ describe('Factory', () => {
       const provider = providerFactory({ apiKey: 'test-key' })
       const sandbox = await provider.sandbox.create()
       const onStdout = vi.fn()
-      const result = await sandbox.runCommand('echo hi', { daemon: true, onStdout })
+      const result = await sandbox.runCommand('echo hi', { onStdout })
 
       expect(result.stdout).toBe('safe\n')
       expect(onStdout).toHaveBeenCalledWith('safe\n')
-      expect(methods.getUrl).not.toHaveBeenCalled()
-      expect(fetchMock).not.toHaveBeenCalled()
+      expect(methods.getUrl).toHaveBeenCalledWith(
+        { id: 'test-793', status: 'running' },
+        { port: 33937 }
+      )
+      expect(fetchMock).toHaveBeenCalledWith('https://derived.mock.dev/events?token=tok', expect.any(Object))
     })
 
     it('should stream daemon stdout and stderr when daemon SSE is available', async () => {
@@ -505,12 +521,9 @@ describe('Factory', () => {
       const provider = providerFactory({ apiKey: 'test-key' })
       const sandbox = await provider.sandbox.create()
 
-      await sandbox.runCommand('echo prewarm', { daemon: true })
-
       const onStdout = vi.fn()
       const onStderr = vi.fn()
       await sandbox.runCommand('echo hi', {
-        daemon: true,
         onStdout,
         onStderr,
       })

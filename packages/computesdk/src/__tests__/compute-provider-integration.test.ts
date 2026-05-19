@@ -121,7 +121,6 @@ describeIntegration('compute provider integration', () => {
       const daemonStdoutChunks: string[] = [];
       const daemonStderrChunks: string[] = [];
       const daemonResult = await sandbox.runCommand('echo computesdk-daemon-stream-ok', {
-        daemon: true,
         onStdout: (data: string) => {
           daemonStdoutChunks.push(data);
         },
@@ -159,9 +158,6 @@ describeIntegration('compute provider integration', () => {
       const sandbox = await sdk.sandbox.create({ timeout: 120000 } as any);
 
       try {
-        // Prewarm daemon state so the next invocation can attach to SSE.
-        await sandbox.runCommand('echo computesdk-daemon-prewarm', { daemon: true });
-
         let commandResolved = false;
         let sawChunkBeforeResolve = false;
         let markChunkSeen: (() => void) | undefined;
@@ -177,7 +173,6 @@ describeIntegration('compute provider integration', () => {
         const daemonPromise = sandbox.runCommand(
           'sh -lc "echo stream-start; sleep 1; echo stream-end"',
           {
-            daemon: true,
             onStdout: () => {
               markChunkSeen?.();
             },

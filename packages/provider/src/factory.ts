@@ -105,35 +105,6 @@ function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestI
   return { type, requestId, stdout, stderr };
 }
 
-function isExpectedDaemonStreamError(error: unknown): boolean {
-  if (!error) return false;
-
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return true;
-  }
-
-  if (error instanceof TypeError) {
-    return true;
-  }
-
-  if (error instanceof Error) {
-    if (error.name === 'AbortError') {
-      return true;
-    }
-
-    const message = error.message.toLowerCase();
-    if (message.includes('failed to open daemon event stream')) {
-      return true;
-    }
-
-    if (message.includes('fetch') || message.includes('network')) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 async function streamDaemonEvents(
   sseUrl: string,
   requestIdFilter: { current?: string },
@@ -396,9 +367,34 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     command: string,
     options?: RunCommandOptions
   ): Promise<CommandResult> {
-    if (options?.daemon) {
+    if (options?.onStdout || options?.onStderr) {
       if (options.background) {
-        throw new Error('runCommand({ daemon: true }) does not support background mode.');
+        throw new Error('runCommand with streaming callbacks does not support background mode.');
+      }
+
+      const forwardedOptions: RunCommandOptions = { ...options };
+      delete forwardedOptions.onStdout;
+      delete forwardedOptions.onStderr;
+
+      if (!this.daemonStreamState) {
+        const bootstrapPayload: SeedCommandInput = {
+          command: 'sh',
+          args: ['-lc', 'true'],
+          cwd: options.cwd,
+          env: options.env,
+          timeoutMs: options.timeout,
+          requestId: createDaemonRequestId(),
+        };
+        const bootstrapCommand = daemonSeedScriptCommand(
+          { ssePort: DEFAULT_DAEMON_SSE_PORT },
+          bootstrapPayload
+        );
+        const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
+        const bootstrapInvocation = parseSeedInvocationOutput(bootstrapResult.stdout);
+        this.daemonStreamState = {
+          token: bootstrapInvocation.token,
+          rawSseUrl: bootstrapInvocation.daemon.sseUrl,
+        };
       }
 
       const daemonPayload: SeedCommandInput = {
@@ -410,21 +406,10 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         requestId: createDaemonRequestId(),
       };
 
-      const daemonConfig = typeof options.daemon === 'object' ? options.daemon : {};
-      const normalizedDaemonConfig = {
-        ...daemonConfig,
-        ssePort: daemonConfig.ssePort ?? DEFAULT_DAEMON_SSE_PORT,
-      };
-
       const daemonCommand = daemonSeedScriptCommand(
-        normalizedDaemonConfig,
+        { ssePort: DEFAULT_DAEMON_SSE_PORT },
         daemonPayload
       );
-
-      const forwardedOptions: RunCommandOptions = { ...options };
-      delete forwardedOptions.daemon;
-      delete forwardedOptions.onStdout;
-      delete forwardedOptions.onStderr;
 
       const requestIdFilter: { current?: string } = { current: daemonPayload.requestId };
       let streamStdout = '';
@@ -463,12 +448,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
             streamController.signal
           ))
           .then(() => undefined)
-          .catch((error) => {
-            if (isExpectedDaemonStreamError(error)) {
-              return;
-            }
-            throw error;
-          });
+          .catch(() => undefined);
       }
       try {
         const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
