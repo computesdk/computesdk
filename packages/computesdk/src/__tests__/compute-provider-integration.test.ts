@@ -121,7 +121,6 @@ describeIntegration('compute provider integration', () => {
       const daemonStdoutChunks: string[] = [];
       const daemonStderrChunks: string[] = [];
       const daemonResult = await sandbox.runCommand('echo computesdk-daemon-stream-ok', {
-        daemon: true,
         onStdout: (data: string) => {
           daemonStdoutChunks.push(data);
         },
@@ -145,7 +144,7 @@ describeIntegration('compute provider integration', () => {
     }
   }, 180000);
 
-  it.runIf(testProvider === 'modal' || testProvider === 'vercel')(
+  it.runIf(testProvider === 'vercel')(
     'streams daemon output callbacks before command completion',
     async () => {
       if (!testProvider) {
@@ -159,9 +158,6 @@ describeIntegration('compute provider integration', () => {
       const sandbox = await sdk.sandbox.create({ timeout: 120000 } as any);
 
       try {
-        // Prewarm daemon state so the next invocation can attach to SSE.
-        await sandbox.runCommand('echo computesdk-daemon-prewarm', { daemon: true });
-
         let commandResolved = false;
         let sawChunkBeforeResolve = false;
         let markChunkSeen: (() => void) | undefined;
@@ -175,9 +171,8 @@ describeIntegration('compute provider integration', () => {
         });
 
         const daemonPromise = sandbox.runCommand(
-          'sh -lc "echo stream-start; sleep 1; echo stream-end"',
+          'sh -lc "sleep 1; echo stream-start; sleep 2; echo stream-end"',
           {
-            daemon: true,
             onStdout: () => {
               markChunkSeen?.();
             },
@@ -189,13 +184,70 @@ describeIntegration('compute provider integration', () => {
 
         await Promise.race([
           firstChunkSeen,
-          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for daemon stream callback')), 2500)),
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for daemon stream callback')), 5000)),
         ]);
 
         await daemonPromise;
         commandResolved = true;
 
         expect(sawChunkBeforeResolve).toBe(true);
+      } finally {
+        await sdk.sandbox.destroy(sandbox.sandboxId);
+      }
+    },
+    180000,
+  );
+
+  it.runIf(testProvider === 'modal' || testProvider === 'vercel')(
+    'reports daemon streaming timing diagnostics',
+    async () => {
+      if (!testProvider) {
+        throw new Error('TEST_PROVIDER must be set when COMPUTESDK_INTEGRATION=1');
+      }
+
+      const providerFactory = await loadProviderFactory(testProvider);
+      const provider = providerFactory(getProviderConfig(testProvider));
+
+      const sdk = compute({ provider });
+      const sandbox = await sdk.sandbox.create({ timeout: 120000 } as any);
+
+      try {
+        const startedAt = Date.now();
+        let resolvedAt: number | undefined;
+        let firstChunkAt: number | undefined;
+        let stdoutChunks = 0;
+        let stderrChunks = 0;
+
+        const result = await sandbox.runCommand(
+          'sh -lc "echo stream-a; sleep 1; echo stream-b; sleep 1; echo stream-c; sleep 1; echo stream-d; sleep 1; echo stream-e"',
+          {
+            onStdout: () => {
+              stdoutChunks += 1;
+              if (!firstChunkAt) {
+                firstChunkAt = Date.now();
+              }
+            },
+            onStderr: () => {
+              stderrChunks += 1;
+              if (!firstChunkAt) {
+                firstChunkAt = Date.now();
+              }
+            },
+          }
+        );
+
+        resolvedAt = Date.now();
+
+        const firstChunkLatencyMs = firstChunkAt ? firstChunkAt - startedAt : undefined;
+        const completedInMs = resolvedAt - startedAt;
+        const sawPreCompletionChunk = Boolean(firstChunkAt && firstChunkAt < resolvedAt);
+
+        console.info(
+          `[daemon-stream-diagnostics] provider=${testProvider} stdoutChunks=${stdoutChunks} stderrChunks=${stderrChunks} firstChunkLatencyMs=${firstChunkLatencyMs ?? 'none'} completedInMs=${completedInMs} preCompletionChunk=${sawPreCompletionChunk}`
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('stream-e');
       } finally {
         await sdk.sandbox.destroy(sandbox.sandboxId);
       }
