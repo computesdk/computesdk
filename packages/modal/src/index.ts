@@ -16,8 +16,10 @@ const DEFAULT_IMAGE = 'node:20';
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
 
-function mergeExposedPorts(primary?: number[], fallback?: number[]): number[] {
-  const merged = [...(primary ?? fallback ?? []), DEFAULT_DAEMON_SSE_PORT];
+function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePort?: number | false): number[] {
+  const daemonPort = daemonSsePort === false ? undefined : (daemonSsePort ?? DEFAULT_DAEMON_SSE_PORT);
+  const merged = [...(primary ?? fallback ?? [])];
+  if (typeof daemonPort === 'number') merged.push(daemonPort);
   return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
 }
 
@@ -28,6 +30,7 @@ export interface ModalConfig {
   timeout?: number;
   environment?: string;
   ports?: number[];
+  daemonSsePort?: number | false;
   appName?: string;
 }
 
@@ -86,7 +89,8 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
 
-          const ports = mergeExposedPorts(optPorts, config.ports);
+          const optDaemonSsePort = (options as any)?.daemonSsePort as number | false | undefined;
+          const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.unencryptedPorts = ports;
 
           const timeout = optTimeout ?? config.timeout;

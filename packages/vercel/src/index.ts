@@ -16,12 +16,15 @@ export interface VercelConfig {
   projectId?: string;
   timeout?: number;
   ports?: number[];
+  daemonSsePort?: number | false;
 }
 
 const DEFAULT_DAEMON_SSE_PORT = 38989;
 
-function mergeExposedPorts(primary?: number[], fallback?: number[]): number[] {
-  const merged = [...(primary ?? fallback ?? []), DEFAULT_DAEMON_SSE_PORT];
+function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePort?: number | false): number[] {
+  const daemonPort = daemonSsePort === false ? undefined : (daemonSsePort ?? DEFAULT_DAEMON_SSE_PORT);
+  const merged = [...(primary ?? fallback ?? [])];
+  if (typeof daemonPort === 'number') merged.push(daemonPort);
   return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
 }
 
@@ -86,7 +89,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           const optSource = (options as any)?.source;
 
           const params: any = { timeout, ...providerOptions };
-          const ports = mergeExposedPorts(optPorts, config.ports);
+          const optDaemonSsePort = (options as any)?.daemonSsePort as number | false | undefined;
+          const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) params.ports = ports;
 
           if (optRuntime) {
