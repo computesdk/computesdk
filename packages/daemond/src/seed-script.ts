@@ -65,7 +65,7 @@ function parseSsePort(value: number | undefined): number {
 }
 
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `"'"'"`)}'`;
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 export function daemonSeedScriptCommand(
