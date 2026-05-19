@@ -34,6 +34,22 @@ export type {
 
 // Compute API
 //
+// Re-export daemon seed launcher helpers for command-daemon flows
+export {
+  daemonSeedScript,
+  daemonSeedScriptCommand,
+  parseSeedInvocationOutput,
+} from 'daemond';
+export type {
+  SeedScriptConfig,
+  SeedCommandInput,
+  SeedCommandResult,
+  SeedInvocationResult,
+  SeedDaemonInfo,
+  SeedHealthPayload,
+  SeedEventFilter,
+} from 'daemond';
+
 // Works as both callable `compute({...}).sandbox.create()` and singleton
 // `compute.setConfig({...}); compute.sandbox.create()`.
 export { compute } from './compute';
