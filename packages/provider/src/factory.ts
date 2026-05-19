@@ -33,7 +33,6 @@ type DaemonStreamState = {
   token: string;
   rawSseUrl: string;
   sseUrl?: string;
-  sseOrigin?: string;
 };
 
 const DEFAULT_DAEMON_SSE_PORT = 38989;
@@ -364,9 +363,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
   private async resolveDaemonSseUrl(
     rawUrl: string,
-    expectedToken: string,
-    knownOrigin?: string
-  ): Promise<{ sseUrl: string; sseOrigin: string }> {
+    expectedToken: string
+  ): Promise<{ sseUrl: string }> {
     let parsed: URL;
     try {
       parsed = new URL(rawUrl);
@@ -385,35 +383,23 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     }
 
     if (!isLoopbackHost(parsed.hostname)) {
-      const parsedOrigin = parsed.origin;
-      if (!knownOrigin || knownOrigin !== parsedOrigin) {
-        throw new Error(`Untrusted daemon SSE URL host: ${parsed.hostname}`);
-      }
+      throw new Error(`Daemon SSE URL must use loopback host: ${parsed.hostname}`);
     }
 
-    if (isLoopbackHost(parsed.hostname)) {
-      const parsedPort = parsed.port ? Number(parsed.port) : NaN;
-      if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
-        throw new Error('Daemon SSE URL must include a valid port.');
-      }
-
-      const providerBaseUrl = await this.methods.getUrl(this.sandbox, { port: parsedPort });
-      const providerUrl = new URL(providerBaseUrl);
-
-      parsed = new URL(providerUrl.toString());
-      parsed.pathname = '/events';
-      parsed.search = `?token=${encodeURIComponent(expectedToken)}`;
-      parsed.hash = '';
+    const parsedPort = parsed.port ? Number(parsed.port) : NaN;
+    if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+      throw new Error('Daemon SSE URL must include a valid port.');
     }
 
-    const resolvedUrl = parsed.toString();
-    const resolvedOrigin = new URL(resolvedUrl).origin;
+    const providerBaseUrl = await this.methods.getUrl(this.sandbox, { port: parsedPort });
+    const providerUrl = new URL(providerBaseUrl);
 
-    if (this.daemonStreamState?.sseOrigin && this.daemonStreamState.sseOrigin !== resolvedOrigin) {
-      throw new Error('Daemon SSE URL origin changed unexpectedly.');
-    }
+    parsed = new URL(providerUrl.toString());
+    parsed.pathname = '/events';
+    parsed.search = `?token=${encodeURIComponent(expectedToken)}`;
+    parsed.hash = '';
 
-    return { sseUrl: resolvedUrl, sseOrigin: resolvedOrigin };
+    return { sseUrl: parsed.toString() };
   }
 
   async runCommand(
@@ -469,8 +455,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       if ((options.onStdout || options.onStderr) && this.daemonStreamState?.rawSseUrl) {
         streamPromise = this.resolveDaemonSseUrl(
           this.daemonStreamState.rawSseUrl,
-          this.daemonStreamState.token,
-          this.daemonStreamState.sseOrigin
+          this.daemonStreamState.token
         )
           .then((trustedState) => streamDaemonEvents(
             trustedState.sseUrl,
@@ -502,14 +487,12 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           token: invocation.token,
           rawSseUrl: invocation.daemon.sseUrl,
           sseUrl: this.daemonStreamState?.sseUrl,
-          sseOrigin: this.daemonStreamState?.sseOrigin,
         };
 
-        if ((options.onStdout || options.onStderr) && !this.daemonStreamState.sseOrigin) {
+        if ((options.onStdout || options.onStderr) && !this.daemonStreamState.sseUrl) {
           try {
             const trustedState = await this.resolveDaemonSseUrl(invocation.daemon.sseUrl, invocation.token);
             this.daemonStreamState.sseUrl = trustedState.sseUrl;
-            this.daemonStreamState.sseOrigin = trustedState.sseOrigin;
           } catch {
             // Best-effort streaming only; fall back to parsed output.
           }
