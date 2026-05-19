@@ -1,3 +1,5 @@
+import type { SeedScriptConfig } from 'daemond';
+
 /**
  * Universal Sandbox Interface
  *
@@ -60,6 +62,27 @@ export interface RunCommandOptions {
   env?: Record<string, string>;
   timeout?: number;
   background?: boolean;
+  /**
+   * Daemon-mode callback for streamed stdout chunks.
+   *
+   * This callback is only invoked when `daemon` mode is enabled and the
+   * provider can establish a daemon event stream.
+   */
+  onStdout?: (data: string) => void;
+  /**
+   * Daemon-mode callback for streamed stderr chunks.
+   *
+   * This callback is only invoked when `daemon` mode is enabled and the
+   * provider can establish a daemon event stream.
+   */
+  onStderr?: (data: string) => void;
+  /**
+   * Optional daemon seed config for providers that support daemonized command execution.
+   *
+   * - `true`: enable provider default daemon seed behavior
+   * - object: enable daemon mode with explicit seed config
+   */
+  daemon?: boolean | SeedScriptConfig;
 }
 
 /**

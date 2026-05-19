@@ -46,7 +46,8 @@
   },
   "dependencies": {
     "@computesdk/cmd": "workspace:*",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "daemond": "^0.1.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

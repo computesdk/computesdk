@@ -47,7 +47,8 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@computesdk/cmd": "workspace:*"
+    "@computesdk/cmd": "workspace:*",
+    "daemond": "^0.1.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
