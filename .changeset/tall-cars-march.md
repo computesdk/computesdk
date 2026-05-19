@@ -1,6 +1,6 @@
 ---
-"computesdk": minor
-"@computesdk/provider": minor
+"computesdk": patch
+"@computesdk/provider": patch
 ---
 
 Remove `RunCommandOptions.daemon` from the public API and make command streaming callback-driven.
