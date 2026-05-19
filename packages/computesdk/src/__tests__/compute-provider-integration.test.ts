@@ -197,4 +197,61 @@ describeIntegration('compute provider integration', () => {
     },
     180000,
   );
+
+  it.runIf(testProvider === 'modal' || testProvider === 'vercel')(
+    'reports daemon streaming timing diagnostics',
+    async () => {
+      if (!testProvider) {
+        throw new Error('TEST_PROVIDER must be set when COMPUTESDK_INTEGRATION=1');
+      }
+
+      const providerFactory = await loadProviderFactory(testProvider);
+      const provider = providerFactory(getProviderConfig(testProvider));
+
+      const sdk = compute({ provider });
+      const sandbox = await sdk.sandbox.create({ timeout: 120000 } as any);
+
+      try {
+        const startedAt = Date.now();
+        let resolvedAt: number | undefined;
+        let firstChunkAt: number | undefined;
+        let stdoutChunks = 0;
+        let stderrChunks = 0;
+
+        const result = await sandbox.runCommand(
+          'sh -lc "for i in 1 2 3 4 5; do echo stream-$i; sleep 1; done"',
+          {
+            onStdout: () => {
+              stdoutChunks += 1;
+              if (!firstChunkAt) {
+                firstChunkAt = Date.now();
+              }
+            },
+            onStderr: () => {
+              stderrChunks += 1;
+              if (!firstChunkAt) {
+                firstChunkAt = Date.now();
+              }
+            },
+          }
+        );
+
+        resolvedAt = Date.now();
+
+        const firstChunkLatencyMs = firstChunkAt ? firstChunkAt - startedAt : undefined;
+        const completedInMs = resolvedAt - startedAt;
+        const sawPreCompletionChunk = Boolean(firstChunkAt && firstChunkAt < resolvedAt);
+
+        console.info(
+          `[daemon-stream-diagnostics] provider=${testProvider} stdoutChunks=${stdoutChunks} stderrChunks=${stderrChunks} firstChunkLatencyMs=${firstChunkLatencyMs ?? 'none'} completedInMs=${completedInMs} preCompletionChunk=${sawPreCompletionChunk}`
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('stream-5');
+      } finally {
+        await sdk.sandbox.destroy(sandbox.sandboxId);
+      }
+    },
+    180000,
+  );
 });
