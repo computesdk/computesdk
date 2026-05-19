@@ -144,4 +144,62 @@ describeIntegration('compute provider integration', () => {
       await sdk.sandbox.destroy(sandbox.sandboxId);
     }
   }, 180000);
+
+  it.runIf(testProvider === 'modal' || testProvider === 'vercel')(
+    'streams daemon output callbacks before command completion',
+    async () => {
+      if (!testProvider) {
+        throw new Error('TEST_PROVIDER must be set when COMPUTESDK_INTEGRATION=1');
+      }
+
+      const providerFactory = await loadProviderFactory(testProvider);
+      const provider = providerFactory(getProviderConfig(testProvider));
+
+      const sdk = compute({ provider });
+      const sandbox = await sdk.sandbox.create({ timeout: 120000 } as any);
+
+      try {
+        // Prewarm daemon state so the next invocation can attach to SSE.
+        await sandbox.runCommand('echo computesdk-daemon-prewarm', { daemon: true });
+
+        let commandResolved = false;
+        let sawChunkBeforeResolve = false;
+        let markChunkSeen: (() => void) | undefined;
+        const firstChunkSeen = new Promise<void>((resolve) => {
+          markChunkSeen = () => {
+            if (!commandResolved) {
+              sawChunkBeforeResolve = true;
+            }
+            resolve();
+          };
+        });
+
+        const daemonPromise = sandbox.runCommand(
+          'sh -lc "echo stream-start; sleep 1; echo stream-end"',
+          {
+            daemon: true,
+            onStdout: () => {
+              markChunkSeen?.();
+            },
+            onStderr: () => {
+              markChunkSeen?.();
+            },
+          }
+        );
+
+        await Promise.race([
+          firstChunkSeen,
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for daemon stream callback')), 2500)),
+        ]);
+
+        await daemonPromise;
+        commandResolved = true;
+
+        expect(sawChunkBeforeResolve).toBe(true);
+      } finally {
+        await sdk.sandbox.destroy(sandbox.sandboxId);
+      }
+    },
+    180000,
+  );
 });
