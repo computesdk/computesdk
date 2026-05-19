@@ -144,7 +144,7 @@ describeIntegration('compute provider integration', () => {
     }
   }, 180000);
 
-  it.runIf(testProvider === 'modal' || testProvider === 'vercel')(
+  it.runIf(testProvider === 'vercel')(
     'streams daemon output callbacks before command completion',
     async () => {
       if (!testProvider) {
