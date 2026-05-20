@@ -90,7 +90,7 @@ The daemon speaks newline-delimited JSON over its Unix socket.
 
 Supported message types:
 
-- `health` (no auth required)
+- `health` (optional `token`; validated when provided)
 - `exec` (requires `token`)
 - `subscribe` / `unsubscribe` (requires `token`)
 - `stop` (requires `token`)
@@ -126,6 +126,6 @@ pnpm run test:integration:docker
 
 ## Scope
 
-- Linux-only today (Unix socket)
+- Linux and macOS only (Unix socket)
 - Local process model
 - Runtime state under `/tmp/.computesdk`

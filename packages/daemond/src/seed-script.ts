@@ -49,6 +49,10 @@ function createLauncherScript(config: {
 }
 
 export function daemonSeedScript(config?: SeedScriptConfig): string {
+  if (process.platform === "win32") {
+    throw new Error("daemond: Windows is not supported (Unix socket runtime required)");
+  }
+
   const name = config?.name?.trim() || "daemond-seed";
   const socket = config?.socket;
   const ssePort = parseSsePort(config?.ssePort);

@@ -101,6 +101,22 @@ function removeSocket(): void {
   } catch {}
 }
 
+function sanitizeEnvInput(input: unknown): Record<string, string> {
+  if (!input || typeof input !== "object") return {};
+
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof value === "string") {
+      env[key] = value;
+      continue;
+    }
+    if (value === undefined || value === null) continue;
+    env[key] = String(value);
+  }
+
+  return env;
+}
+
 function handleExec(msg: WireMessage, conn: net.Socket): void {
   const payload = msg.payload ?? {};
   const requestId = msg.id || makeId();
@@ -109,6 +125,7 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
   const cwd = typeof payload.cwd === "string" && payload.cwd.length > 0 ? payload.cwd : process.cwd();
   const shell = payload.shell === true;
   const timeoutMs = Number.isFinite(payload.timeoutMs) ? Math.max(1, Number(payload.timeoutMs)) : 60_000;
+  const extraEnv = sanitizeEnvInput(payload.env);
 
   if (!command) {
     writeLine(conn, {
@@ -141,9 +158,7 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
     shell,
     env: {
       ...process.env,
-      ...(payload.env && typeof payload.env === "object"
-        ? (payload.env as Record<string, string>)
-        : {}),
+      ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -152,11 +167,20 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
   let stderr = "";
   let combined = "";
   let finished = false;
+  let timedOut = false;
+  let killTimer: NodeJS.Timeout | null = null;
 
   const timer = setTimeout(() => {
+    timedOut = true;
     try {
       child.kill("SIGTERM");
     } catch {}
+
+    killTimer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {}
+    }, 1_500);
   }, timeoutMs);
 
   child.stdout.on("data", (chunk: Buffer | string) => {
@@ -177,6 +201,15 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
     if (finished) return;
     finished = true;
     clearTimeout(timer);
+    if (killTimer) {
+      clearTimeout(killTimer);
+      killTimer = null;
+    }
+
+    if (timedOut) {
+      stderr += stderr.endsWith("\n") || stderr.length === 0 ? "seed daemon: command timed out\n" : "\nseed daemon: command timed out\n";
+      combined += combined.endsWith("\n") || combined.length === 0 ? "seed daemon: command timed out\n" : "\nseed daemon: command timed out\n";
+    }
 
     publish({
       channel: "daemon",
@@ -324,6 +357,17 @@ async function main(): Promise<void> {
         const id = msg.id || makeId();
 
         if (msg.type === "health") {
+          if (msg.token && !isAuthed(msg)) {
+            writeLine(conn, {
+              id: makeId(),
+              type: "error",
+              replyTo: id,
+              ts: now(),
+              payload: { message: "unauthorized" },
+            });
+            continue;
+          }
+
           writeLine(conn, {
             id: makeId(),
             type: "health",
