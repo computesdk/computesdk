@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createTelemetryId, emitTelemetryEvent, toErrorCode } from '../index';
+import { createTelemetryId, DEFAULT_TELEMETRY_ENDPOINT, emitTelemetryEvent, toErrorCode } from '../index';
 
 describe('@computesdk/telemetry', () => {
   it('creates non-empty telemetry IDs', () => {
@@ -61,5 +61,24 @@ describe('@computesdk/telemetry', () => {
 
     expect(onEvent).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('uses default telemetry endpoint when endpoint is omitted', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(undefined);
+    const event = {
+      eventName: 'benchmark.config' as const,
+      installId: 'inst_3',
+    };
+
+    await emitTelemetryEvent(event, { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(DEFAULT_TELEMETRY_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ events: [event] }),
+    });
   });
 });

@@ -52,6 +52,8 @@ export interface TelemetryTransport {
   fetchImpl?: typeof fetch;
 }
 
+export const DEFAULT_TELEMETRY_ENDPOINT = 'https://api.computesdk.com/v1/events';
+
 export function createTelemetryId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -100,11 +102,11 @@ export async function emitTelemetryEvent(event: TelemetryEvent, transport: Telem
     }
   }
 
-  if (!transport.endpoint) return;
+  const endpoint = transport.endpoint ?? DEFAULT_TELEMETRY_ENDPOINT;
   const fetchImpl = transport.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : undefined);
   if (!fetchImpl) return;
 
-  await fetchImpl(transport.endpoint, {
+  await fetchImpl(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
