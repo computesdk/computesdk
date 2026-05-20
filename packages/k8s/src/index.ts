@@ -27,7 +27,6 @@ export interface K8sConfig {
   image?: string;
   runtime?: Runtime;
   timeout?: number;
-  serviceType?: 'ClusterIP' | 'NodePort';
   podNamePrefix?: string;
   urlTemplate?: string;
 }
@@ -41,7 +40,6 @@ interface K8sSandboxHandle {
   kubeConfigPath?: string;
   context?: string;
   urlTemplate?: string;
-  serviceType?: 'ClusterIP' | 'NodePort';
 }
 
 const rawKubeConfigBySandboxId = new Map<string, string>();
@@ -242,14 +240,13 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         const kc = loadKubeConfig(config);
         const core = kc.makeApiClient(CoreV1Api);
 
-        const sandboxId = `${podNamePrefix}-${Math.random().toString(36).slice(2, 10)}`;
-        const podName = sandboxId;
+        const podName = `${podNamePrefix}-${Math.random().toString(36).slice(2, 10)}`;
         const image = imageForRuntime(runtime, config.image);
 
         const labels: Record<string, string> = {
           [LABEL_MANAGED]: 'true',
           [LABEL_RUNTIME]: runtime,
-          [LABEL_SID]: sandboxId,
+          [LABEL_SID]: podName,
         };
 
         const annotations = Object.fromEntries(
@@ -300,9 +297,8 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
             kubeConfigPath: config.kubeConfigPath,
             context: config.context,
             urlTemplate: config.urlTemplate,
-            serviceType: config.serviceType || 'ClusterIP',
           },
-          sandboxId,
+          sandboxId: `${namespace}/${podName}`,
         };
       },
 
@@ -329,7 +325,6 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               kubeConfigPath: config.kubeConfigPath,
               context: config.context,
               urlTemplate: config.urlTemplate,
-              serviceType: config.serviceType || 'ClusterIP',
             },
             sandboxId: `${namespace}/${name}`,
           };
@@ -361,7 +356,6 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               kubeConfigPath: config.kubeConfigPath,
               context: config.context,
               urlTemplate: config.urlTemplate,
-              serviceType: config.serviceType || 'ClusterIP',
             },
             sandboxId: `${namespace}/${podName}`,
           };
@@ -383,7 +377,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           if (!isNotFound(error)) throw error;
         });
 
-        rawKubeConfigBySandboxId.delete(sandboxId);
+        rawKubeConfigBySandboxId.delete(`${namespace}/${name}`);
       },
 
       runCommand: async (sandbox: K8sSandboxHandle, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
