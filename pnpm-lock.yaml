@@ -518,8 +518,8 @@ importers:
         specifier: workspace:*
         version: link:../cmd
       daemond:
-        specifier: ^0.1.3
-        version: 0.1.3
+        specifier: workspace:*
+        version: link:../daemond
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
