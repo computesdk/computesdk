@@ -48,6 +48,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "dependencies": {
+    "@computesdk/telemetry": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",

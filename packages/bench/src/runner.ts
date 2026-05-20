@@ -1,4 +1,13 @@
 import { buildStats } from './stats';
+import {
+  createTelemetryId,
+  detectArch,
+  detectOs,
+  detectRuntime,
+  emitTelemetryEvent,
+  telemetryDisabledByEnv,
+  toErrorCode,
+} from '@computesdk/telemetry';
 import type {
   BenchConfig,
   BenchResult,
@@ -20,64 +29,15 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
-function createId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function detectRuntime(): 'node' | 'browser' | 'unknown' {
-  if (typeof window !== 'undefined') return 'browser';
-  if (typeof process !== 'undefined') return 'node';
-  return 'unknown';
-}
-
-function detectOs(): string {
-  if (typeof process !== 'undefined' && process.platform) return process.platform;
-  return 'unknown';
-}
-
-function detectArch(): string {
-  if (typeof process !== 'undefined' && process.arch) return process.arch;
-  return 'unknown';
-}
-
-function toErrorCode(error: unknown): string {
-  if (error instanceof Error && error.name) return error.name;
-  return 'ERROR';
-}
-
 export function createBench(config: BenchConfig = {}) {
-  const enabled = (config.enabled ?? true) && !(typeof process !== 'undefined' && process.env.COMPUTESDK_TELEMETRY === '0');
-  const installId = config.installId ?? createId();
+  const enabled = (config.enabled ?? true) && !telemetryDisabledByEnv();
+  const installId = config.installId ?? createTelemetryId();
   const runtime = detectRuntime();
   const os = detectOs();
   const arch = detectArch();
 
   async function emit(event: TelemetryEvent): Promise<void> {
-    if (!enabled) return;
-
-    if (config.telemetry?.onEvent) {
-      try {
-        config.telemetry.onEvent(event);
-      } catch {
-      }
-    }
-
-    if (!config.telemetry?.endpoint) return;
-    const fetchImpl = config.telemetry.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : undefined);
-    if (!fetchImpl) return;
-
-    await fetchImpl(config.telemetry.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(config.telemetry.headers ?? {}),
-      },
-      body: JSON.stringify(event),
-    }).catch(() => {
-    });
+    await emitTelemetryEvent(event, config.telemetry ?? {}, enabled);
   }
 
   async function emitConfig(): Promise<void> {
@@ -100,8 +60,8 @@ export function createBench(config: BenchConfig = {}) {
     const iterations = options.iterations ?? 25;
     const warmup = options.warmup ?? 3;
     const throwOnError = options.throwOnError ?? true;
-    const benchmarkRunId = createId();
-    const traceId = createId();
+    const benchmarkRunId = createTelemetryId();
+    const traceId = createTelemetryId();
     const measuredDurations: number[] = [];
     let successes = 0;
     let failures = 0;
@@ -137,7 +97,7 @@ export function createBench(config: BenchConfig = {}) {
           eventName: 'telemetry.span',
           installId,
           traceId,
-          spanId: createId(),
+          spanId: createTelemetryId(),
           parentSpanId: options.parentSpanId,
           operation,
           startedAt,
@@ -174,7 +134,7 @@ export function createBench(config: BenchConfig = {}) {
           eventName: 'telemetry.span',
           installId,
           traceId,
-          spanId: createId(),
+          spanId: createTelemetryId(),
           parentSpanId: options.parentSpanId,
           operation,
           startedAt,

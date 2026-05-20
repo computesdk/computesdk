@@ -1,17 +1,18 @@
 {
-  "name": "computesdk",
-  "version": "4.1.1",
-  "description": "A free and open-source toolkit for running other people's code in your applications.",
+  "name": "@computesdk/telemetry",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shared telemetry schema and transport for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [
@@ -29,27 +30,22 @@
     "lint": "eslint"
   },
   "keywords": [
-    "sandbox",
-    "code-execution",
-    "cloud",
-    "e2b",
-    "vercel",
-    "daytona",
-    "compute",
-    "containers"
+    "computesdk",
+    "telemetry",
+    "observability",
+    "benchmark"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git"
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/telemetry"
   },
-  "homepage": "https://www.computesdk.com/",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
-  "dependencies": {
-    "@computesdk/cmd": "workspace:*",
-    "@computesdk/telemetry": "workspace:*",
-    "daemond": "^0.1.3"
+  "engines": {
+    "node": ">=18.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

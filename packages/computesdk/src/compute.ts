@@ -8,6 +8,21 @@ import type {
   Sandbox as SandboxInterface,
   CreateSandboxOptions as UniversalCreateSandboxOptions,
 } from './types/universal-sandbox';
+import {
+  createTelemetryId,
+  detectArch,
+  detectOs,
+  detectRuntime,
+  emitTelemetryEvent,
+  telemetryDisabledByEnv,
+  toErrorCode,
+} from '@computesdk/telemetry';
+import type {
+  TelemetryAttempt as BenchmarkAttempt,
+  TelemetryEvent,
+  TelemetryTransport,
+} from '@computesdk/telemetry';
+export type { TelemetryEvent } from '@computesdk/telemetry';
 
 export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
   /** Optional provider name override (must match provider.name) */
@@ -58,63 +73,9 @@ export interface ExplicitComputeConfig {
   telemetry?: TelemetryConfig;
 }
 
-export interface BenchmarkAttempt {
-  provider: string;
-  candidateIndex: number;
-  startedAt: string;
-  endedAt: string;
-  durationMs: number;
-  outcome: 'success' | 'failure';
-  errorCode?: string;
-}
-
-export interface TelemetryEvent {
-  eventName: 'telemetry.config' | 'telemetry.span';
-  installId: string;
-  traceId?: string;
-  spanId?: string;
-  parentSpanId?: string;
-  operation?: string;
-  startedAt?: string;
-  endedAt?: string;
-  durationMs?: number;
-  outcome?: 'success' | 'failure';
-  provider?: string;
-  attemptCount?: number;
-  attempts?: BenchmarkAttempt[];
-  errorCode?: string;
-  sdkVersion?: string;
-  runtime?: 'node' | 'browser' | 'unknown';
-  os?: string;
-  arch?: string;
-  providerStrategy?: 'priority' | 'round-robin';
-  fallbackOnError?: boolean;
-}
-
-export interface TelemetryConfig {
+export interface TelemetryConfig extends TelemetryTransport {
   enabled?: boolean;
-  endpoint?: string;
-  headers?: Record<string, string>;
   sdkVersion?: string;
-  onEvent?: (event: TelemetryEvent) => void;
-}
-
-function createInstallId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function telemetryDisabledByEnv(): boolean {
-  return typeof process !== 'undefined' && process?.env?.COMPUTESDK_TELEMETRY === '0';
-}
-
-function toErrorCode(error: unknown): string {
-  if (error instanceof Error && error.name) {
-    return error.name;
-  }
-  return 'ERROR';
 }
 
 class ComputeTelemetry {
@@ -122,16 +83,18 @@ class ComputeTelemetry {
   private endpoint?: string;
   private headers: Record<string, string> = {};
   private onEvent?: (event: TelemetryEvent) => void;
-  private installId = createInstallId();
+  private fetchImpl?: typeof fetch;
+  private installId = createTelemetryId();
   private sdkVersion = 'unknown';
-  private runtime: 'node' | 'browser' | 'unknown' = this.resolveRuntime();
-  private os = this.resolveOs();
-  private arch = this.resolveArch();
+  private runtime: 'node' | 'browser' | 'unknown' = detectRuntime();
+  private os = detectOs();
+  private arch = detectArch();
 
   configure(config?: TelemetryConfig): void {
     this.enabled = (config?.enabled ?? true) && !telemetryDisabledByEnv();
     this.endpoint = config?.endpoint;
     this.headers = config?.headers ?? {};
+    this.fetchImpl = config?.fetchImpl;
     this.sdkVersion = config?.sdkVersion ?? this.sdkVersion;
     this.onEvent = config?.onEvent;
   }
@@ -151,8 +114,8 @@ class ComputeTelemetry {
 
   createSpan(operation: string, parentSpanId?: string): BenchmarkSpan {
     return {
-      traceId: createInstallId(),
-      spanId: createInstallId(),
+      traceId: createTelemetryId(),
+      spanId: createTelemetryId(),
       parentSpanId,
       operation,
       startedAtMs: Date.now(),
@@ -224,44 +187,13 @@ class ComputeTelemetry {
     }
   }
 
-  private resolveRuntime(): 'node' | 'browser' | 'unknown' {
-    if (typeof window !== 'undefined') return 'browser';
-    if (typeof process !== 'undefined') return 'node';
-    return 'unknown';
-  }
-
-  private resolveOs(): string {
-    if (typeof process !== 'undefined' && process.platform) {
-      return process.platform;
-    }
-    return 'unknown';
-  }
-
-  private resolveArch(): string {
-    if (typeof process !== 'undefined' && process.arch) {
-      return process.arch;
-    }
-    return 'unknown';
-  }
-
   private send(event: TelemetryEvent): void {
-    if (!this.enabled) return;
-    if (this.onEvent) {
-      try {
-        this.onEvent(event);
-      } catch {
-      }
-    }
-    if (!this.endpoint || typeof fetch === 'undefined') return;
-    void fetch(this.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.headers,
-      },
-      body: JSON.stringify(event),
-    }).catch(() => {
-    });
+    void emitTelemetryEvent(event, {
+      endpoint: this.endpoint,
+      headers: this.headers,
+      onEvent: this.onEvent,
+      fetchImpl: this.fetchImpl,
+    }, this.enabled);
   }
 }
 
