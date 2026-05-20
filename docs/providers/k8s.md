@@ -20,6 +20,8 @@ The identity used by your kubeconfig needs the following RBAC in the target name
 | `pods/exec` | `create` |
 | `services` | `delete` |
 
+`services: delete` is required because `destroy` opportunistically cleans up a Service named `<pod-name>-svc` (in case one was created out-of-band to back `getUrl`). The provider never creates Services itself.
+
 Local clusters (kind, k3d, minikube, Docker Desktop) grant cluster-admin by default and need no extra setup.
 
 ## Usage
@@ -43,6 +45,20 @@ console.log(result.stdout); // "Hello from k8s!"
 await sandbox.destroy();
 ```
 
+Sandbox IDs are namespace-prefixed: `<namespace>/<podName>` (e.g. `default/computesdk-sbx-abc12345`). `create()`, `getById()`, and `list()` all return this form, so values round-trip without normalization. `getById()` and `destroy()` also accept a bare Pod name for convenience — bare IDs are resolved against the provider's configured `namespace`.
+
+### Pod Layout
+
+Each sandbox is a single Pod with one container:
+
+- **Pod name**: `<podNamePrefix>-<up to 8 random base36 chars>` (default prefix `computesdk-sbx`).
+- **Container name**: `sandbox` — use this with `kubectl exec` (e.g. `kubectl exec -it -c sandbox <pod> -- /bin/sh`).
+- **Labels**: `computesdk.io/managed=true`, `computesdk.io/runtime=<node|python>`, `computesdk.io/sandbox-id=<pod-name>`.
+- **Annotations**: any `metadata` you pass to `create()` is stored as `computesdk.io/meta-<key>`. Non-string values are JSON-stringified.
+- **Restart policy**: `Never`. Pods are one-shot; recreate the sandbox if the container dies.
+
+`compute.sandbox.list()` returns Pods in the configured `namespace` that match `computesdk.io/managed=true`. Sandboxes in other namespaces are not returned.
+
 ### Run Commands
 
 ```typescript
@@ -57,6 +73,8 @@ await sandbox.runCommand('node app.js', {
 
 await sandbox.runCommand('python server.py', { background: true });
 ```
+
+Background commands are launched with `nohup` and their combined stdout/stderr is redirected to `/tmp/computesdk-bg.log` inside the Pod. Tail it with another `runCommand('cat /tmp/computesdk-bg.log')` if you need the output.
 
 ### Environment Variables
 
@@ -114,8 +132,6 @@ interface K8sConfig {
   runtime?: 'node' | 'python';
   /** Time to wait for Pod to reach Running state, in ms - defaults to 120000 */
   timeout?: number;
-  /** Service type used when constructing URLs - defaults to "ClusterIP" */
-  serviceType?: 'ClusterIP' | 'NodePort';
   /** Prefix for generated Pod names - defaults to "computesdk-sbx" */
   podNamePrefix?: string;
   /** URL template for getUrl - see Port Forwarding section */
@@ -132,5 +148,7 @@ Kubeconfig loading precedence:
 ## Limitations
 
 - Filesystem methods are not implemented in this MVP — use `runCommand` with `cat`, `tee`, etc. to read and write files.
-- `getUrl` does not provision Kubernetes Services automatically. Set `urlTemplate` to match your existing routing setup.
-- Pod resource requests and limits are fixed (250m / 256Mi requests, 1 CPU / 1Gi limits).
+- The provider never creates Kubernetes Services. `getUrl` is purely template-based — set `urlTemplate` to match your existing routing setup (ingress, gateway, or DNS).
+- Pod resource requests and limits are fixed (250m / 256Mi requests, 1 CPU / 1Gi limits). Set `image` if you need a different runtime; CPU/memory are not yet configurable.
+- Pods use `restartPolicy: Never`. If the container exits, the sandbox is gone — create a new one.
+- `compute.sandbox.list()` only scans the namespace configured on the provider; it does not enumerate across namespaces.

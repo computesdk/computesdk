@@ -49,7 +49,7 @@
   "dependencies": {
     "@computesdk/cmd": "workspace:*",
     "@computesdk/telemetry": "workspace:*",
-    "daemond": "^0.1.3"
+    "daemond": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

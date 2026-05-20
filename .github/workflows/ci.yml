@@ -290,7 +290,7 @@ jobs:
       run: kubectl get nodes
 
     - name: Build required packages
-      run: pnpm --filter @computesdk/cmd build && pnpm --filter computesdk build && pnpm --filter @computesdk/provider build && pnpm --filter @computesdk/test-utils build && pnpm --filter @computesdk/k8s build
+      run: pnpm --filter @computesdk/cmd build && pnpm --filter daemond build && pnpm --filter computesdk build && pnpm --filter @computesdk/provider build && pnpm --filter @computesdk/test-utils build && pnpm --filter @computesdk/k8s build
 
     - name: Run Kubernetes provider integration tests
       env:
