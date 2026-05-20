@@ -101,7 +101,7 @@ class ComputeTelemetry {
 
   emitConfig(config: { providerStrategy: 'priority' | 'round-robin'; fallbackOnError: boolean }): void {
     this.send({
-      eventName: 'telemetry.config',
+      eventName: 'benchmark.config',
       installId: this.installId,
       sdkVersion: this.sdkVersion,
       runtime: this.runtime,
@@ -131,7 +131,7 @@ class ComputeTelemetry {
   emitSpanSuccess(span: BenchmarkSpan, provider?: string): void {
     const endedAtMs = Date.now();
     this.send({
-      eventName: 'telemetry.span',
+      eventName: 'benchmark.span',
       installId: this.installId,
       traceId: span.traceId,
       spanId: span.spanId,
@@ -154,7 +154,7 @@ class ComputeTelemetry {
   emitSpanFailure(span: BenchmarkSpan, error: unknown, provider?: string): void {
     const endedAtMs = Date.now();
     this.send({
-      eventName: 'telemetry.span',
+      eventName: 'benchmark.span',
       installId: this.installId,
       traceId: span.traceId,
       spanId: span.spanId,

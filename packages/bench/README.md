@@ -1,8 +1,8 @@
 # @computesdk/bench
 
-Tinybench-style benchmarking helpers for ComputeSDK telemetry.
+Tinybench-style benchmarking helpers for ComputeSDK benchmark events.
 
-`@computesdk/bench` runs warmups + measured iterations and emits `telemetry.config` and `telemetry.span` events with timing and attempt metadata.
+`@computesdk/bench` runs warmups + measured iterations and emits `benchmark.config` and `benchmark.span` events with timing and attempt metadata.
 
 ## Installation
 
@@ -18,7 +18,7 @@ import { createBench } from '@computesdk/bench';
 const bench = createBench({
   sdkVersion: '4.x',
   telemetry: {
-    endpoint: 'https://telemetry.example.com/v1/telemetry',
+    endpoint: 'https://bench.example.com/api/v1/events',
   },
 });
 

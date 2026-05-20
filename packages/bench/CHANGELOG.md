@@ -4,4 +4,4 @@
 
 - Initial release.
 - Add Tinybench-style `createBench().run(...)` API.
-- Emit ComputeSDK-compatible `telemetry.config` and `telemetry.span` events.
+- Emit ComputeSDK-compatible `benchmark.config` and `benchmark.span` events.

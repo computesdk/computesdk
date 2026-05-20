@@ -9,7 +9,7 @@ export interface TelemetryAttempt {
 }
 
 export interface TelemetryConfigEvent {
-  eventName: 'telemetry.config';
+  eventName: 'benchmark.config';
   installId: string;
   sdkVersion?: string;
   runtime?: 'node' | 'browser' | 'unknown';
@@ -20,7 +20,7 @@ export interface TelemetryConfigEvent {
 }
 
 export interface TelemetrySpanEvent {
-  eventName: 'telemetry.span';
+  eventName: 'benchmark.span';
   installId: string;
   traceId: string;
   spanId: string;
@@ -110,7 +110,7 @@ export async function emitTelemetryEvent(event: TelemetryEvent, transport: Telem
       'Content-Type': 'application/json',
       ...(transport.headers ?? {}),
     },
-    body: JSON.stringify(event),
+    body: JSON.stringify({ events: [event] }),
   }).catch(() => {
   });
 }

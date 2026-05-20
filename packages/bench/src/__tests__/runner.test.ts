@@ -21,9 +21,9 @@ describe('createBench', () => {
     expect(result.successes).toBe(5);
     expect(result.failures).toBe(0);
     expect(result.stats.count).toBe(5);
-    expect(events.some((event) => event.eventName === 'telemetry.config')).toBe(true);
+    expect(events.some((event) => event.eventName === 'benchmark.config')).toBe(true);
 
-    const spanEvents = events.filter((event) => event.eventName === 'telemetry.span');
+    const spanEvents = events.filter((event) => event.eventName === 'benchmark.span');
     expect(spanEvents).toHaveLength(5);
     expect(spanEvents.every((event) => event.operation === 'sandbox.create')).toBe(true);
   });
@@ -50,6 +50,6 @@ describe('createBench', () => {
 
     expect(result.successes).toBe(2);
     expect(result.failures).toBe(1);
-    expect(events.filter((event) => event.eventName === 'telemetry.span')).toHaveLength(3);
+    expect(events.filter((event) => event.eventName === 'benchmark.span')).toHaveLength(3);
   });
 });

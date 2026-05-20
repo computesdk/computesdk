@@ -42,7 +42,7 @@ export function createBench(config: BenchConfig = {}) {
 
   async function emitConfig(): Promise<void> {
     const event: TelemetryConfigEvent = {
-      eventName: 'telemetry.config',
+      eventName: 'benchmark.config',
       installId,
       sdkVersion: config.sdkVersion,
       runtime,
@@ -94,7 +94,7 @@ export function createBench(config: BenchConfig = {}) {
         });
 
         const event: TelemetrySpanEvent = {
-          eventName: 'telemetry.span',
+          eventName: 'benchmark.span',
           installId,
           traceId,
           spanId: createTelemetryId(),
@@ -131,7 +131,7 @@ export function createBench(config: BenchConfig = {}) {
         });
 
         const event: TelemetrySpanEvent = {
-          eventName: 'telemetry.span',
+          eventName: 'benchmark.span',
           installId,
           traceId,
           spanId: createTelemetryId(),
