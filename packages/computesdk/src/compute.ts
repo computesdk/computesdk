@@ -101,7 +101,7 @@ class ComputeTelemetry {
 
   emitConfig(config: { providerStrategy: 'priority' | 'round-robin'; fallbackOnError: boolean }): void {
     this.send({
-      eventName: 'benchmark.config',
+      event: 'benchmark.config',
       installId: this.installId,
       sdkVersion: this.sdkVersion,
       runtime: this.runtime,
@@ -131,7 +131,7 @@ class ComputeTelemetry {
   emitSpanSuccess(span: BenchmarkSpan, provider?: string): void {
     const endedAtMs = Date.now();
     this.send({
-      eventName: 'benchmark.span',
+      event: 'benchmark.span',
       installId: this.installId,
       traceId: span.traceId,
       spanId: span.spanId,
@@ -140,7 +140,7 @@ class ComputeTelemetry {
       startedAt: span.startedAtIso,
       endedAt: new Date(endedAtMs).toISOString(),
       durationMs: endedAtMs - span.startedAtMs,
-      outcome: 'success',
+      status: 'ok',
       provider,
       attemptCount: span.attempts.length,
       attempts: span.attempts,
@@ -154,7 +154,7 @@ class ComputeTelemetry {
   emitSpanFailure(span: BenchmarkSpan, error: unknown, provider?: string): void {
     const endedAtMs = Date.now();
     this.send({
-      eventName: 'benchmark.span',
+      event: 'benchmark.span',
       installId: this.installId,
       traceId: span.traceId,
       spanId: span.spanId,
@@ -163,7 +163,7 @@ class ComputeTelemetry {
       startedAt: span.startedAtIso,
       endedAt: new Date(endedAtMs).toISOString(),
       durationMs: endedAtMs - span.startedAtMs,
-      outcome: 'failure',
+      status: 'error',
       provider,
       attemptCount: span.attempts.length,
       attempts: span.attempts,
@@ -381,7 +381,7 @@ class ComputeManager {
           startedAt: new Date(attemptStartedAtMs).toISOString(),
           endedAt: new Date().toISOString(),
           durationMs: Date.now() - attemptStartedAtMs,
-          outcome: 'success',
+          status: 'ok',
         });
         this.registerSandboxProvider(sandbox, provider);
         return sandbox;
@@ -392,7 +392,7 @@ class ComputeManager {
           startedAt: new Date(attemptStartedAtMs).toISOString(),
           endedAt: new Date().toISOString(),
           durationMs: Date.now() - attemptStartedAtMs,
-          outcome: 'failure',
+          status: 'error',
           errorCode: toErrorCode(error),
         });
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -438,7 +438,7 @@ class ComputeManager {
             startedAt: new Date(attemptStartedAtMs).toISOString(),
             endedAt: new Date().toISOString(),
             durationMs: Date.now() - attemptStartedAtMs,
-            outcome: sandbox ? 'success' : 'failure',
+            status: sandbox ? 'ok' : 'error',
             errorCode: sandbox ? undefined : 'NOT_FOUND',
           });
           if (sandbox) {
@@ -469,7 +469,7 @@ class ComputeManager {
             startedAt: new Date(attemptStartedAtMs).toISOString(),
             endedAt: new Date().toISOString(),
             durationMs: Date.now() - attemptStartedAtMs,
-            outcome: 'success',
+            status: 'ok',
           });
           for (const sandbox of sandboxes) {
             this.registerSandboxProvider(sandbox, provider);
@@ -496,7 +496,7 @@ class ComputeManager {
               startedAt: new Date(attemptStartedAtMs).toISOString(),
               endedAt: new Date().toISOString(),
               durationMs: Date.now() - attemptStartedAtMs,
-              outcome: 'success',
+              status: 'ok',
             });
             this.sandboxProviders.delete(sandboxId);
             return;
@@ -507,7 +507,7 @@ class ComputeManager {
               startedAt: new Date(attemptStartedAtMs).toISOString(),
               endedAt: new Date().toISOString(),
               durationMs: Date.now() - attemptStartedAtMs,
-              outcome: 'failure',
+              status: 'error',
               errorCode: toErrorCode(error),
             });
             errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -545,7 +545,7 @@ class ComputeManager {
               startedAt: new Date(attemptStartedAtMs).toISOString(),
               endedAt: new Date().toISOString(),
               durationMs: Date.now() - attemptStartedAtMs,
-              outcome: 'success',
+              status: 'ok',
             });
             this.snapshotProviders.set(snapshot.id, provider);
             return {
@@ -559,7 +559,7 @@ class ComputeManager {
               startedAt: new Date(attemptStartedAtMs).toISOString(),
               endedAt: new Date().toISOString(),
               durationMs: Date.now() - attemptStartedAtMs,
-              outcome: 'failure',
+              status: 'error',
               errorCode: toErrorCode(error),
             });
             errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -587,7 +587,7 @@ class ComputeManager {
             startedAt: new Date(attemptStartedAtMs).toISOString(),
             endedAt: new Date().toISOString(),
             durationMs: Date.now() - attemptStartedAtMs,
-            outcome: 'success',
+            status: 'ok',
           });
           for (const snapshot of listed) {
             this.snapshotProviders.set(snapshot.id, provider);
@@ -618,7 +618,7 @@ class ComputeManager {
               startedAt: new Date(attemptStartedAtMs).toISOString(),
               endedAt: new Date().toISOString(),
               durationMs: Date.now() - attemptStartedAtMs,
-              outcome: 'success',
+              status: 'ok',
             });
             this.snapshotProviders.delete(snapshotId);
             return;
@@ -629,7 +629,7 @@ class ComputeManager {
               startedAt: new Date(attemptStartedAtMs).toISOString(),
               endedAt: new Date().toISOString(),
               durationMs: Date.now() - attemptStartedAtMs,
-              outcome: 'failure',
+              status: 'error',
               errorCode: toErrorCode(error),
             });
             errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);

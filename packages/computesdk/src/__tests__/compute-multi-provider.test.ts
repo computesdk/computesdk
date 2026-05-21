@@ -246,7 +246,7 @@ describe('compute multi-provider', () => {
   });
 
   it('emits benchmark spans with timing and attempt data', async () => {
-    const events: Array<{ eventName: string; operation?: string; outcome?: string; startedAt?: string; attempts?: unknown[] }> = [];
+    const events: Array<{ event: string; operation?: string; status?: string; startedAt?: string; attempts?: unknown[] }> = [];
     const failingProvider = makeProvider('e2b', {
       create: async () => {
         throw new Error('not available');
@@ -257,17 +257,17 @@ describe('compute multi-provider', () => {
       providers: [failingProvider],
       telemetry: {
         onEvent: (event) => {
-          const spanFields = event.eventName === 'benchmark.span'
+          const spanFields = event.event === 'benchmark.span'
             ? {
                 operation: event.operation,
-                outcome: event.outcome,
+                status: event.status,
                 startedAt: event.startedAt,
                 attempts: event.attempts,
               }
             : {};
 
           events.push({
-            eventName: event.eventName,
+            event: event.event,
             ...spanFields,
           });
         },
@@ -277,8 +277,8 @@ describe('compute multi-provider', () => {
 
     await expect(sdk.sandbox.create()).rejects.toThrow('not available');
 
-    expect(events.some((event) => event.eventName === 'benchmark.config')).toBe(true);
-    expect(events.some((event) => event.operation === 'sandbox.create' && event.outcome === 'failure')).toBe(true);
+    expect(events.some((event) => event.event === 'benchmark.config')).toBe(true);
+    expect(events.some((event) => event.operation === 'sandbox.create' && event.status === 'error')).toBe(true);
     expect(events.some((event) => event.operation === 'sandbox.create' && !!event.startedAt)).toBe(true);
     expect(events.some((event) => event.operation === 'sandbox.create' && (event.attempts?.length || 0) > 0)).toBe(true);
   });

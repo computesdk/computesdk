@@ -53,7 +53,7 @@ jobs:
     - name: Telemetry ingest smoke test
       if: steps.skip_check.outputs.skip != 'true'
       run: |
-        node --input-type=module -e "const endpoint='https://platform.computesdk.com/api/v1/events'; const event={eventName:'benchmark.config',installId:'ci-smoke',sdkVersion:'ci',runtime:'node',os:'linux',arch:'x64'}; const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events:[event]})}); if(!res.ok){const body=await res.text().catch(()=>'<no-body>'); throw new Error('Telemetry smoke failed: '+res.status+' '+body);}" 
+        node --input-type=module -e "const endpoint='https://platform.computesdk.com/api/v1/events'; const now=new Date(); const ended=new Date(now.getTime()+1000); const event={event:'benchmark.span',traceId:'trc_ci_'+Date.now(),spanId:'spn_ci_'+Date.now(),operation:'ci.telemetry.smoke',startedAt:now.toISOString(),endedAt:ended.toISOString(),durationMs:1000,status:'ok',sdkVersion:'ci',runtime:'node',os:'linux',arch:'x64'}; const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events:[event]})}); if(!res.ok){const body=await res.text().catch(()=>'<no-body>'); throw new Error('Telemetry smoke failed: '+res.status+' '+body);}"
     
     - name: Run all tests (mock mode)
       if: steps.skip_check.outputs.skip != 'true'

@@ -4,12 +4,12 @@ export interface TelemetryAttempt {
   startedAt: string;
   endedAt: string;
   durationMs: number;
-  outcome: 'success' | 'failure';
+  status: 'ok' | 'error';
   errorCode?: string;
 }
 
 export interface TelemetryConfigEvent {
-  eventName: 'benchmark.config';
+  event: 'benchmark.config';
   installId: string;
   sdkVersion?: string;
   runtime?: 'node' | 'browser' | 'unknown';
@@ -20,7 +20,7 @@ export interface TelemetryConfigEvent {
 }
 
 export interface TelemetrySpanEvent {
-  eventName: 'benchmark.span';
+  event: 'benchmark.span';
   installId: string;
   traceId: string;
   spanId: string;
@@ -29,7 +29,7 @@ export interface TelemetrySpanEvent {
   startedAt: string;
   endedAt: string;
   durationMs: number;
-  outcome: 'success' | 'failure';
+  status: 'ok' | 'error';
   provider?: string;
   attemptCount: number;
   attempts: TelemetryAttempt[];
@@ -53,6 +53,13 @@ export interface TelemetryTransport {
 }
 
 export const DEFAULT_TELEMETRY_ENDPOINT = 'https://platform.computesdk.com/api/v1/events';
+
+function toPlatformEvent(event: TelemetryEvent): TelemetrySpanEvent | null {
+  if (event.event !== 'benchmark.span') {
+    return null;
+  }
+  return event;
+}
 
 export function createTelemetryId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -106,13 +113,16 @@ export async function emitTelemetryEvent(event: TelemetryEvent, transport: Telem
   const fetchImpl = transport.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : undefined);
   if (!fetchImpl) return;
 
+  const platformEvent = toPlatformEvent(event);
+  if (!platformEvent) return;
+
   await fetchImpl(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(transport.headers ?? {}),
     },
-    body: JSON.stringify({ events: [event] }),
+    body: JSON.stringify({ events: [platformEvent] }),
   }).catch(() => {
   });
 }

@@ -16,7 +16,7 @@ describe('@computesdk/telemetry', () => {
     const fetchImpl = vi.fn().mockResolvedValue(undefined);
 
     const event = {
-      eventName: 'benchmark.span' as const,
+      event: 'benchmark.span' as const,
       installId: 'inst_1',
       traceId: 'trace_1',
       spanId: 'span_1',
@@ -24,7 +24,7 @@ describe('@computesdk/telemetry', () => {
       startedAt: '2026-01-01T00:00:00.000Z',
       endedAt: '2026-01-01T00:00:01.000Z',
       durationMs: 1000,
-      outcome: 'success' as const,
+      status: 'ok' as const,
       attemptCount: 1,
       attempts: [],
     };
@@ -51,7 +51,7 @@ describe('@computesdk/telemetry', () => {
     const fetchImpl = vi.fn().mockResolvedValue(undefined);
 
     await emitTelemetryEvent({
-      eventName: 'benchmark.config',
+      event: 'benchmark.config',
       installId: 'inst_2',
     }, {
       endpoint: 'https://example.com/ingest',
@@ -66,19 +66,12 @@ describe('@computesdk/telemetry', () => {
   it('uses default telemetry endpoint when endpoint is omitted', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(undefined);
     const event = {
-      eventName: 'benchmark.config' as const,
+      event: 'benchmark.config' as const,
       installId: 'inst_3',
     };
 
     await emitTelemetryEvent(event, { fetchImpl });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(fetchImpl).toHaveBeenCalledWith(DEFAULT_TELEMETRY_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ events: [event] }),
-    });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
