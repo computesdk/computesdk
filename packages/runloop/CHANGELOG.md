@@ -1,5 +1,18 @@
 # @computesdk/runloop
 
+## 1.3.50
+
+### Patch Changes
+
+- 5b1046f: Reduce Runloop provider round trips by reusing the SDK client, using long-poll waits, and enabling optimistic command completion.
+
+## 1.3.49
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 1.3.48
 
 ### Patch Changes

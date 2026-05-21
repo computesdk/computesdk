@@ -1,5 +1,13 @@
 # @computesdk/modal
 
+## 1.8.45
+
+### Patch Changes
+
+- 643c935: Use `encryptedPorts` instead of `unencryptedPorts` when creating Modal sandboxes. This ensures the SDK <> sandbox connection is TLS-wrapped (https://) rather than plaintext (http://), improving both security and latency per Modal's recommendation.
+  - computesdk@4.1.2
+  - @computesdk/provider@2.1.2
+
 ## 1.8.44
 
 ### Patch Changes

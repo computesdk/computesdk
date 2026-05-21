@@ -11,11 +11,15 @@ permissions:
   pull-requests: write
   issues: write
   repository-projects: write
+  id-token: write # Required for npm OIDC trusted publishing
 
 jobs:
   release:
     name: Release
-    runs-on: namespace-profile-default
+    # Must use a GitHub-hosted runner — npm OIDC trusted publishing does not
+    # support self-hosted runners (including Namespace) at this time.
+    # https://docs.npmjs.com/trusted-publishers/
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,6 +36,10 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
+      - name: Update npm
+        # npm 11.5.1+ is required for OIDC trusted publishing support
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: pnpm install --ignore-scripts
 
@@ -42,9 +50,15 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: pnpm changeset publish
+          # --provenance generates signed attestations linking each package
+          # to this workflow run. Automatically enabled when using trusted
+          # publishers, but explicit here for clarity.
+          publish: pnpm changeset publish --provenance
           title: "Version Packages"
           commit: "Version Packages"
         env:
           GITHUB_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.GITHUB_TOKEN }}
+          # TODO: once every package has a trusted publisher configured on
+          # npmjs.com, remove NPM_TOKEN entirely. For now it acts as a
+          # fallback for packages not yet configured.
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
