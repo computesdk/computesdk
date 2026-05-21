@@ -1216,8 +1216,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@runloop/api-client':
-        specifier: ^1.11.0
-        version: 1.11.0
+        specifier: ^1.21.0
+        version: 1.21.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3674,8 +3674,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@runloop/api-client@1.11.0':
-    resolution: {integrity: sha512-3m31w9k6xwfcYbkQrZfkdGdR5ZJPgGTADpHie+edJcoAzS/u0dpcZnuWOoM06b1Z5+wRXyOxW475wJN9eIioBw==}
+  '@runloop/api-client@1.21.0':
+    resolution: {integrity: sha512-gDPXEo5shVmLcD7LU7/B+kqmw/Y+r2ZrTRD2BHW+pBpSgRFJ9KrOdYF/bwi6QzrRuxnOaouLlFD8JQUgIdD7qg==}
 
   '@secure-exec/browser@0.1.1-rc.3':
     resolution: {integrity: sha512-syjym68632Yzba6Uu9tfnd2KGHTHoiOMTg3hnYRxs4t2RrTfzKm3fWOBVmOZHaZT7ECMCItXerDfYmH05tbHDg==}
@@ -10747,7 +10747,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@runloop/api-client@1.11.0':
+  '@runloop/api-client@1.21.0':
     dependencies:
       '@types/node': 18.19.123
       '@types/node-fetch': 2.6.13
