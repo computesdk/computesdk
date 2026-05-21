@@ -91,7 +91,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           const optDaemonSsePort = (options as any)?.daemonSsePort as number | false | undefined;
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
-          if (ports && ports.length > 0) sandboxOptions.unencryptedPorts = ports;
+          if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;
 
           const timeout = optTimeout ?? config.timeout;
           if (timeout) sandboxOptions.timeoutMs = timeout;
