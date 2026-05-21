@@ -49,6 +49,11 @@ jobs:
     - name: Build packages
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm build
+
+    - name: Telemetry ingest smoke test
+      if: steps.skip_check.outputs.skip != 'true'
+      run: |
+        node --input-type=module -e "const endpoint='https://platform.computesdk.com/api/v1/events'; const now=new Date(); const ended=new Date(now.getTime()+1000); const event={event:'benchmark.span',traceId:'trc_ci_'+Date.now(),spanId:'spn_ci_'+Date.now(),operation:'ci.telemetry.smoke',startedAt:now.toISOString(),endedAt:ended.toISOString(),durationMs:1000,status:'ok',sdkVersion:'ci',runtime:'node',os:'linux',arch:'x64'}; const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events:[event]})}); if(!res.ok){const body=await res.text().catch(()=>'<no-body>'); throw new Error('Telemetry smoke failed: '+res.status+' '+body);}"
     
     - name: Run all tests (mock mode)
       if: steps.skip_check.outputs.skip != 'true'
@@ -290,7 +295,7 @@ jobs:
       run: kubectl get nodes
 
     - name: Build required packages
-      run: pnpm --filter @computesdk/cmd build && pnpm --filter daemond build && pnpm --filter computesdk build && pnpm --filter @computesdk/provider build && pnpm --filter @computesdk/test-utils build && pnpm --filter @computesdk/k8s build
+      run: pnpm --filter @computesdk/cmd build && pnpm --filter @computesdk/telemetry build && pnpm --filter daemond build && pnpm --filter computesdk build && pnpm --filter @computesdk/provider build && pnpm --filter @computesdk/test-utils build && pnpm --filter @computesdk/k8s build
 
     - name: Run Kubernetes provider integration tests
       env:

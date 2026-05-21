@@ -8,6 +8,21 @@ import type {
   Sandbox as SandboxInterface,
   CreateSandboxOptions as UniversalCreateSandboxOptions,
 } from './types/universal-sandbox';
+import {
+  createTelemetryId,
+  detectArch,
+  detectOs,
+  detectRuntime,
+  emitTelemetryEvent,
+  telemetryDisabledByEnv,
+  toErrorCode,
+} from '@computesdk/telemetry';
+import type {
+  TelemetryAttempt as BenchmarkAttempt,
+  TelemetryEvent,
+  TelemetryTransport,
+} from '@computesdk/telemetry';
+export type { TelemetryEvent } from '@computesdk/telemetry';
 
 export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
   /** Optional provider name override (must match provider.name) */
@@ -54,6 +69,142 @@ export interface ExplicitComputeConfig {
   providerStrategy?: 'priority' | 'round-robin';
   /** Retry the next provider when create fails */
   fallbackOnError?: boolean;
+  /** Benchmark-grade anonymized telemetry */
+  telemetry?: TelemetryConfig;
+}
+
+export interface TelemetryConfig extends TelemetryTransport {
+  enabled?: boolean;
+  sdkVersion?: string;
+}
+
+class ComputeTelemetry {
+  private enabled = true;
+  private endpoint?: string;
+  private headers: Record<string, string> = {};
+  private onEvent?: (event: TelemetryEvent) => void;
+  private fetchImpl?: typeof fetch;
+  private installId = createTelemetryId();
+  private sdkVersion = 'unknown';
+  private runtime: 'node' | 'browser' | 'unknown' = detectRuntime();
+  private os = detectOs();
+  private arch = detectArch();
+
+  configure(config?: TelemetryConfig): void {
+    this.enabled = (config?.enabled ?? true) && !telemetryDisabledByEnv();
+    this.endpoint = config?.endpoint;
+    this.headers = config?.headers ?? {};
+    this.fetchImpl = config?.fetchImpl;
+    this.sdkVersion = config?.sdkVersion ?? this.sdkVersion;
+    this.onEvent = config?.onEvent;
+  }
+
+  emitConfig(config: { providerStrategy: 'priority' | 'round-robin'; fallbackOnError: boolean }): void {
+    this.send({
+      event: 'benchmark.config',
+      installId: this.installId,
+      sdkVersion: this.sdkVersion,
+      runtime: this.runtime,
+      os: this.os,
+      arch: this.arch,
+      providerStrategy: config.providerStrategy,
+      fallbackOnError: config.fallbackOnError,
+    });
+  }
+
+  createSpan(operation: string, parentSpanId?: string): BenchmarkSpan {
+    return {
+      traceId: createTelemetryId(),
+      spanId: createTelemetryId(),
+      parentSpanId,
+      operation,
+      startedAtMs: Date.now(),
+      startedAtIso: new Date().toISOString(),
+      attempts: [],
+    };
+  }
+
+  addAttempt(span: BenchmarkSpan, attempt: BenchmarkAttempt): void {
+    span.attempts.push(attempt);
+  }
+
+  emitSpanSuccess(span: BenchmarkSpan, provider?: string): void {
+    const endedAtMs = Date.now();
+    this.send({
+      event: 'benchmark.span',
+      installId: this.installId,
+      traceId: span.traceId,
+      spanId: span.spanId,
+      parentSpanId: span.parentSpanId,
+      operation: span.operation,
+      startedAt: span.startedAtIso,
+      endedAt: new Date(endedAtMs).toISOString(),
+      durationMs: endedAtMs - span.startedAtMs,
+      status: 'ok',
+      provider,
+      attemptCount: span.attempts.length,
+      attempts: span.attempts,
+      sdkVersion: this.sdkVersion,
+      runtime: this.runtime,
+      os: this.os,
+      arch: this.arch,
+    });
+  }
+
+  emitSpanFailure(span: BenchmarkSpan, error: unknown, provider?: string): void {
+    const endedAtMs = Date.now();
+    this.send({
+      event: 'benchmark.span',
+      installId: this.installId,
+      traceId: span.traceId,
+      spanId: span.spanId,
+      parentSpanId: span.parentSpanId,
+      operation: span.operation,
+      startedAt: span.startedAtIso,
+      endedAt: new Date(endedAtMs).toISOString(),
+      durationMs: endedAtMs - span.startedAtMs,
+      status: 'error',
+      provider,
+      attemptCount: span.attempts.length,
+      attempts: span.attempts,
+      errorCode: toErrorCode(error),
+      sdkVersion: this.sdkVersion,
+      runtime: this.runtime,
+      os: this.os,
+      arch: this.arch,
+    });
+  }
+
+  async track<T>(operation: string, provider: string | undefined, fn: (span: BenchmarkSpan) => Promise<T>): Promise<T> {
+    const span = this.createSpan(operation);
+    try {
+      const result = await fn(span);
+      this.emitSpanSuccess(span, provider);
+      return result;
+    } catch (error) {
+      this.emitSpanFailure(span, error, provider);
+      throw error;
+    }
+  }
+
+  private send(event: TelemetryEvent): void {
+    void emitTelemetryEvent(event, {
+      endpoint: this.endpoint,
+      headers: this.headers,
+      onEvent: this.onEvent,
+      fetchImpl: this.fetchImpl,
+    }, this.enabled);
+  }
+}
+
+interface BenchmarkSpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  operation: string;
+  startedAtMs: number;
+  startedAtIso: string;
+  attempts: BenchmarkAttempt[];
 }
 
 function isProviderLike(value: unknown): value is DirectProvider {
@@ -135,6 +286,7 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private sandboxProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
+  private telemetry = new ComputeTelemetry();
 
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
@@ -212,7 +364,7 @@ class ComputeManager {
     return providers;
   }
 
-  private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
+  private async createWithFallbackAndSpan(span: BenchmarkSpan, options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
     const { provider: _providerName, ...providerOptions } = options || {};
     const candidates = this.getCreateCandidates(preferredProviderName);
@@ -220,11 +372,29 @@ class ComputeManager {
     const errors: string[] = [];
 
     for (const [index, provider] of candidates.entries()) {
+      const attemptStartedAtMs = Date.now();
       try {
         const sandbox = await provider.sandbox.create(providerOptions);
+        this.telemetry.addAttempt(span, {
+          provider: getProviderLabel(provider, index),
+          candidateIndex: index,
+          startedAt: new Date(attemptStartedAtMs).toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: Date.now() - attemptStartedAtMs,
+          status: 'ok',
+        });
         this.registerSandboxProvider(sandbox, provider);
         return sandbox;
       } catch (error) {
+        this.telemetry.addAttempt(span, {
+          provider: getProviderLabel(provider, index),
+          candidateIndex: index,
+          startedAt: new Date(attemptStartedAtMs).toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: Date.now() - attemptStartedAtMs,
+          status: 'error',
+          errorCode: toErrorCode(error),
+        });
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         if (!canFallback) {
           throw error;
@@ -242,6 +412,11 @@ class ComputeManager {
     this.providers = resolveProviders(config);
     this.providerStrategy = config.providerStrategy ?? 'priority';
     this.fallbackOnError = config.fallbackOnError ?? true;
+    this.telemetry.configure(config.telemetry);
+    this.telemetry.emitConfig({
+      providerStrategy: this.providerStrategy,
+      fallbackOnError: this.fallbackOnError,
+    });
     this.roundRobinCursor = 0;
     this.sandboxProviders.clear();
     this.snapshotProviders.clear();
@@ -249,129 +424,223 @@ class ComputeManager {
 
   sandbox = {
     create: async (options?: CreateSandboxOptions): Promise<SandboxInterface> => {
-      return this.createWithFallback(options);
+      return this.telemetry.track('sandbox.create', options?.provider, async (span) => this.createWithFallbackAndSpan(span, options));
     },
 
     getById: async (sandboxId: string): Promise<SandboxInterface | null> => {
-      for (const provider of this.getByIdCandidates(sandboxId)) {
-        const sandbox = await provider.sandbox.getById(sandboxId);
-        if (sandbox) {
-          this.registerSandboxProvider(sandbox, provider);
-          return sandbox;
+      return this.telemetry.track('sandbox.getById', undefined, async (span) => {
+        for (const provider of this.getByIdCandidates(sandboxId)) {
+          const attemptStartedAtMs = Date.now();
+          const sandbox = await provider.sandbox.getById(sandboxId);
+          this.telemetry.addAttempt(span, {
+            provider: provider.name || 'unknown',
+            candidateIndex: span.attempts.length,
+            startedAt: new Date(attemptStartedAtMs).toISOString(),
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - attemptStartedAtMs,
+            status: sandbox ? 'ok' : 'error',
+            errorCode: sandbox ? undefined : 'NOT_FOUND',
+          });
+          if (sandbox) {
+            this.registerSandboxProvider(sandbox, provider);
+            return sandbox;
+          }
         }
-      }
 
-      this.sandboxProviders.delete(sandboxId);
-      return null;
+        this.sandboxProviders.delete(sandboxId);
+        return null;
+      });
     },
 
     list: async (): Promise<SandboxInterface[]> => {
-      const all: SandboxInterface[] = [];
+      return this.telemetry.track('sandbox.list', undefined, async (span) => {
+        const all: SandboxInterface[] = [];
 
-      for (const provider of this.getProviders()) {
-        if (!provider.sandbox.list) {
-          continue;
+        for (const provider of this.getProviders()) {
+          if (!provider.sandbox.list) {
+            continue;
+          }
+
+          const attemptStartedAtMs = Date.now();
+          const sandboxes = await provider.sandbox.list();
+          this.telemetry.addAttempt(span, {
+            provider: provider.name || 'unknown',
+            candidateIndex: span.attempts.length,
+            startedAt: new Date(attemptStartedAtMs).toISOString(),
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - attemptStartedAtMs,
+            status: 'ok',
+          });
+          for (const sandbox of sandboxes) {
+            this.registerSandboxProvider(sandbox, provider);
+          }
+          all.push(...sandboxes);
         }
 
-        const sandboxes = await provider.sandbox.list();
-        for (const sandbox of sandboxes) {
-          this.registerSandboxProvider(sandbox, provider);
-        }
-        all.push(...sandboxes);
-      }
-
-      return all;
+        return all;
+      });
     },
 
     destroy: async (sandboxId: string): Promise<void> => {
-      const candidates = this.getByIdCandidates(sandboxId);
-      const errors: string[] = [];
+      return this.telemetry.track('sandbox.destroy', undefined, async (span) => {
+        const candidates = this.getByIdCandidates(sandboxId);
+        const errors: string[] = [];
 
-      for (const [index, provider] of candidates.entries()) {
-        try {
-          await provider.sandbox.destroy(sandboxId);
-          this.sandboxProviders.delete(sandboxId);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        for (const [index, provider] of candidates.entries()) {
+          const attemptStartedAtMs = Date.now();
+          try {
+            await provider.sandbox.destroy(sandboxId);
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              status: 'ok',
+            });
+            this.sandboxProviders.delete(sandboxId);
+            return;
+          } catch (error) {
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              status: 'error',
+              errorCode: toErrorCode(error),
+            });
+            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          }
         }
-      }
 
-      throw new Error(
-        `Failed to destroy sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+        throw new Error(
+          `Failed to destroy sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+          errors.map((error) => `- ${error}`).join('\n')
+        );
+      });
     },
   };
 
   snapshot = {
     create: async (sandboxId: string, options?: CreateSnapshotOptions): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
-      const preferredProviderName = options?.provider;
-      const { provider: _providerName, ...providerOptions } = options || {};
-      const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
-      const errors: string[] = [];
+      return this.telemetry.track('snapshot.create', options?.provider, async (span) => {
+        const preferredProviderName = options?.provider;
+        const { provider: _providerName, ...providerOptions } = options || {};
+        const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
+        const errors: string[] = [];
 
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.snapshot) {
-          errors.push(`${getProviderLabel(provider, index)}: snapshots not supported`);
-          continue;
+        for (const [index, provider] of candidates.entries()) {
+          if (!provider.snapshot) {
+            errors.push(`${getProviderLabel(provider, index)}: snapshots not supported`);
+            continue;
+          }
+
+          const attemptStartedAtMs = Date.now();
+          try {
+            const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              status: 'ok',
+            });
+            this.snapshotProviders.set(snapshot.id, provider);
+            return {
+              ...snapshot,
+              createdAt: new Date(snapshot.createdAt),
+            };
+          } catch (error) {
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              status: 'error',
+              errorCode: toErrorCode(error),
+            });
+            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          }
         }
 
-        try {
-          const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
-          this.snapshotProviders.set(snapshot.id, provider);
-          return {
-            ...snapshot,
-            createdAt: new Date(snapshot.createdAt),
-          };
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
-        }
-      }
-
-      throw new Error(
-        `Failed to create snapshot for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+        throw new Error(
+          `Failed to create snapshot for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+          errors.map((error) => `- ${error}`).join('\n')
+        );
+      });
     },
 
     list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
-      const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
+      return this.telemetry.track('snapshot.list', undefined, async (span) => {
+        const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
 
-      for (const provider of this.getProviders()) {
-        if (!provider.snapshot) continue;
-        const listed = await provider.snapshot.list();
-        for (const snapshot of listed) {
-          this.snapshotProviders.set(snapshot.id, provider);
-          snapshots.push({
-            ...snapshot,
-            createdAt: new Date(snapshot.createdAt),
+        for (const [index, provider] of this.getProviders().entries()) {
+          if (!provider.snapshot) continue;
+          const attemptStartedAtMs = Date.now();
+          const listed = await provider.snapshot.list();
+          this.telemetry.addAttempt(span, {
+            provider: getProviderLabel(provider, index),
+            candidateIndex: index,
+            startedAt: new Date(attemptStartedAtMs).toISOString(),
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - attemptStartedAtMs,
+            status: 'ok',
           });
+          for (const snapshot of listed) {
+            this.snapshotProviders.set(snapshot.id, provider);
+            snapshots.push({
+              ...snapshot,
+              createdAt: new Date(snapshot.createdAt),
+            });
+          }
         }
-      }
 
-      return snapshots;
+        return snapshots;
+      });
     },
 
     delete: async (snapshotId: string): Promise<void> => {
-      const candidates = this.getSnapshotDeleteCandidates(snapshotId);
-      const errors: string[] = [];
+      return this.telemetry.track('snapshot.delete', undefined, async (span) => {
+        const candidates = this.getSnapshotDeleteCandidates(snapshotId);
+        const errors: string[] = [];
 
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.snapshot) continue;
-        try {
-          await provider.snapshot.delete(snapshotId);
-          this.snapshotProviders.delete(snapshotId);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        for (const [index, provider] of candidates.entries()) {
+          if (!provider.snapshot) continue;
+          const attemptStartedAtMs = Date.now();
+          try {
+            await provider.snapshot.delete(snapshotId);
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              status: 'ok',
+            });
+            this.snapshotProviders.delete(snapshotId);
+            return;
+          } catch (error) {
+            this.telemetry.addAttempt(span, {
+              provider: getProviderLabel(provider, index),
+              candidateIndex: index,
+              startedAt: new Date(attemptStartedAtMs).toISOString(),
+              endedAt: new Date().toISOString(),
+              durationMs: Date.now() - attemptStartedAtMs,
+              status: 'error',
+              errorCode: toErrorCode(error),
+            });
+            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          }
         }
-      }
 
-      throw new Error(
-        `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+        throw new Error(
+          `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
+          errors.map((error) => `- ${error}`).join('\n')
+        );
+      });
     },
   };
 }
