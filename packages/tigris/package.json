@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/tigris",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "Tigris storage provider for ComputeSDK - S3-compatible object storage",
   "author": "Garrison",
   "license": "MIT",

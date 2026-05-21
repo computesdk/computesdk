@@ -1,5 +1,12 @@
 # @computesdk/k8s
 
+## 0.2.2
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 0.2.1
 
 ### Patch Changes

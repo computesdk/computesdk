@@ -1,5 +1,12 @@
 # @computesdk/kernel
 
+## 0.2.7
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 0.2.6
 
 ### Patch Changes

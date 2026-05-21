@@ -1,5 +1,12 @@
 # @computesdk/declaw
 
+## 0.2.6
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 0.2.5
 
 ### Patch Changes
