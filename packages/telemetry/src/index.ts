@@ -52,7 +52,7 @@ export interface TelemetryTransport {
   fetchImpl?: typeof fetch;
 }
 
-export const DEFAULT_TELEMETRY_ENDPOINT = 'https://api.computesdk.com/v1/events';
+export const DEFAULT_TELEMETRY_ENDPOINT = 'https://platform.computesdk.com/v1/events';
 
 export function createTelemetryId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
