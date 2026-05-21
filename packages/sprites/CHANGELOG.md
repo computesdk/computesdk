@@ -1,5 +1,12 @@
 # @computesdk/sprites
 
+## 0.1.12
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 0.1.11
 
 ### Patch Changes

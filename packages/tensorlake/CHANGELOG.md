@@ -1,5 +1,12 @@
 # @computesdk/tensorlake
 
+## 0.1.5
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 0.1.4
 
 ### Patch Changes

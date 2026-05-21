@@ -1,5 +1,12 @@
 # @computesdk/browseruse
 
+## 0.2.4
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 0.2.3
 
 ### Patch Changes

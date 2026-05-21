@@ -1,5 +1,12 @@
 # @computesdk/daytona
 
+## 1.7.29
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
 ## 1.7.28
 
 ### Patch Changes
