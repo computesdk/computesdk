@@ -32,6 +32,7 @@ export interface ModalConfig {
   ports?: number[];
   daemonSsePort?: number | false;
   appName?: string;
+  scalableSandboxes?: boolean;
 }
 
 /**
@@ -70,8 +71,9 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             namespace: _namespace,
             directory: _directory,
             ports: optPorts,
+            scalableSandboxes: optScalableSandboxes,
             ...providerOptions
-          } = options || {};
+          } = (options || {}) as CreateSandboxOptions & { scalableSandboxes?: boolean };
 
           let image: Image;
           const sourceId = snapshotId || templateId;
@@ -99,7 +101,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (envs && Object.keys(envs).length > 0) sandboxOptions.env = envs;
           if (name) sandboxOptions.name = name;
 
-          const sandbox = await client.sandboxes.create(app, image, sandboxOptions);
+          const useScalableSandboxes = optScalableSandboxes ?? config.scalableSandboxes ?? false;
+          const sandbox = useScalableSandboxes
+            ? await client.sandboxes.experimentalCreate(app, image, sandboxOptions)
+            : await client.sandboxes.create(app, image, sandboxOptions);
           const sandboxId = sandbox.sandboxId;
 
           return { sandbox: { sandbox, sandboxId }, sandboxId };
