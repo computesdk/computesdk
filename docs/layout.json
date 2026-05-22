@@ -1,0 +1,65 @@
+{
+  "name": "ComputeSDK",
+  "logo": {
+    "light": "/logo.svg",
+    "dark": "/logo-dark.svg",
+    "href": "https://computesdk.com"
+  },
+  "favicon": "/logo.svg",
+  "colors": {
+    "primary": "#10B981",
+    "light": "#34D399",
+    "dark": "#059669"
+  },
+  "anchors": [
+    {
+      "name": "GitHub",
+      "icon": "github",
+      "url": "https://github.com/computesdk/computesdk"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "getting-started/introduction",
+        "getting-started/installation",
+        "getting-started/quick-start"
+      ]
+    },
+    {
+      "group": "Reference",
+      "pages": [
+        "reference/compute",
+        "reference/compute.sandbox",
+        "reference/Sandbox"
+      ]
+    },
+    {
+      "group": "Providers",
+      "pages": [
+        "providers/archil",
+        "providers/blaxel",
+        "providers/cloudflare",
+        "providers/codesandbox",
+        "providers/daytona",
+        "providers/declaw",
+        "providers/e2b",
+        "providers/hopx",
+        "providers/k8s",
+        "providers/modal",
+        "providers/namespace",
+        "providers/runloop",
+        "providers/tensorlake",
+        "providers/upstash",
+        "providers/vercel"
+      ]
+    },
+    {
+      "group": "Resources",
+      "pages": [
+        "llm-docs"
+      ]
+    }
+  ]
+}

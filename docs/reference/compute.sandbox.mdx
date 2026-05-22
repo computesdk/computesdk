@@ -1,5 +1,6 @@
-# compute.sandbox
-
+---
+title: "compute.sandbox"
+---
 
 ## Overview
 
@@ -17,8 +18,8 @@ Create a new compute sandbox instance.
 - `options` (CreateSandboxOptions, optional): Configuration options for sandbox creation
   - `timeout` (number, optional): Sandbox execution timeout in milliseconds
   - `templateId` (string, optional): Provider-specific template or image identifier
-  - `metadata` (Record<string, any>, optional): Custom metadata to attach to the sandbox
-  - `envs` (Record<string, string>, optional): Environment variables to set in the sandbox
+  - `metadata` (`Record<string, any>`, optional): Custom metadata to attach to the sandbox
+  - `envs` (`Record<string, string>`, optional): Environment variables to set in the sandbox
 
 **Returns:** `Promise<Sandbox>` - New sandbox instance ready for code execution and commands
 

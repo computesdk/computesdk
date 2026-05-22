@@ -1,4 +1,6 @@
-# Sandbox (interface)
+---
+title: "Sandbox (interface)"
+---
 
 ## Overview
 
@@ -18,7 +20,7 @@ Execute shell commands in the sandbox with full control over execution environme
 - `command` (string, required): The shell command to execute as a single string
 - `options` (RunCommandOptions, optional): Execution options
   - `cwd` (string, optional): Working directory for command execution
-  - `env` (Record<string, string>, optional): Environment variables to set
+  - `env` (`Record<string, string>`, optional): Environment variables to set
   - `timeout` (number, optional): Command timeout in milliseconds
   - `background` (boolean, optional): Run command in background without waiting for completion
   - `onStdout` ((data: string) => void, optional): Callback invoked with stdout chunks as the command runs
@@ -172,7 +174,7 @@ Get information about the sandbox including status, provider, and metadata.
 - `status` (string): Current sandbox status ('running' | 'stopped' | 'error')
 - `createdAt` (Date): Timestamp when the sandbox was created
 - `timeout` (number): Execution timeout in milliseconds
-- `metadata` (Record<string, any>, optional): Additional provider-specific metadata
+- `metadata` (`Record<string, any>`, optional): Additional provider-specific metadata
 
 **Examples:**
 

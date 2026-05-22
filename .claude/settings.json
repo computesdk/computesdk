@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docsalot cli-docs *)",
+      "Bash(docsalot docs *)",
+      "Read(//tmp/**)",
+      "Bash(docsalot auth *)"
+    ]
+  }
+}
