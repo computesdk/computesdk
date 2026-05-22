@@ -21,6 +21,8 @@ Execute shell commands in the sandbox with full control over execution environme
   - `env` (Record<string, string>, optional): Environment variables to set
   - `timeout` (number, optional): Command timeout in milliseconds
   - `background` (boolean, optional): Run command in background without waiting for completion
+  - `onStdout` ((data: string) => void, optional): Callback invoked with stdout chunks as the command runs
+  - `onStderr` ((data: string) => void, optional): Callback invoked with stderr chunks as the command runs
 
 **Returns:** `Promise<CommandResult>` - Command execution result with output streams, exit code, and duration
 
@@ -66,6 +68,14 @@ const result = await sandbox.runCommand('python script.py', {
   timeout: 30000
 });
 
+// Stream output as it arrives
+const result = await sandbox.runCommand('npm install', {
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
+});
+// Callbacks fire incrementally during execution;
+// the resolved `result` still contains the full stdout/stderr.
+
 // Error handling with exit codes
 const result = await sandbox.runCommand('grep pattern file.txt');
 if (result.exitCode !== 0) {
@@ -87,6 +97,8 @@ const result = await sandbox.runCommand('cat data.txt | grep "error" | wc -l');
 - Non-zero exit codes indicate command failure but do not throw errors - check `exitCode` in the result
 - Background commands return immediately with `exitCode: 0` without waiting for completion
 - The command runs in a shell context, so all shell features (pipes, redirects, etc.) are available
+- Passing `onStdout` / `onStderr` enables incremental streaming of command output. The returned `CommandResult` still contains the complete `stdout` and `stderr` once the command finishes
+- Streaming callbacks cannot be combined with `background: true` — doing so throws
 - Available on all sandbox instances regardless of provider
 
 <br/>
