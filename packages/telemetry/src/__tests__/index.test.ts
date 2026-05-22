@@ -11,7 +11,7 @@ describe('@computesdk/telemetry', () => {
     expect(toErrorCode('boom')).toBe('ERROR');
   });
 
-  it('emits benchmark events to callback and transport', async () => {
+  it('emits benchmark span events to callback and transport', async () => {
     const onEvent = vi.fn();
     const fetchImpl = vi.fn().mockResolvedValue(undefined);
 
@@ -27,6 +27,38 @@ describe('@computesdk/telemetry', () => {
       status: 'ok' as const,
       attemptCount: 1,
       attempts: [],
+    };
+
+    await emitTelemetryEvent(event, {
+      endpoint: 'https://example.com/ingest',
+      onEvent,
+      fetchImpl,
+    });
+
+    expect(onEvent).toHaveBeenCalledWith(event);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith('https://example.com/ingest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ events: [event] }),
+    });
+  });
+
+  it('emits benchmark config events to callback and transport', async () => {
+    const onEvent = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue(undefined);
+
+    const event = {
+      event: 'benchmark.config' as const,
+      installId: 'inst_cfg_1',
+      sdkVersion: '4.x',
+      runtime: 'node' as const,
+      os: 'linux',
+      arch: 'x64',
+      providerStrategy: 'priority' as const,
+      fallbackOnError: true,
     };
 
     await emitTelemetryEvent(event, {
@@ -72,6 +104,12 @@ describe('@computesdk/telemetry', () => {
 
     await emitTelemetryEvent(event, { fetchImpl });
 
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledWith(DEFAULT_TELEMETRY_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ events: [event] }),
+    });
   });
 });

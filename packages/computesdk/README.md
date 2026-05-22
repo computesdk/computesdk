@@ -131,6 +131,7 @@ compute.setConfig({
 
 The SDK does not collect environment variables or request/response payloads.
 Set `COMPUTESDK_TELEMETRY=0` to disable emission.
+When telemetry HTTP transport is enabled, both `benchmark.config` and `benchmark.span` are sent to `/api/v1/events` in `{ events: [...] }` format.
 
 ### Sandbox Management
 

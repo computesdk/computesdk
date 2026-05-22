@@ -3,6 +3,7 @@
 Tinybench-style benchmarking helpers for ComputeSDK benchmark events.
 
 `@computesdk/bench` runs warmups + measured iterations and emits `benchmark.config` and `benchmark.span` events with timing and attempt metadata.
+When an endpoint is configured, both event types are posted to `/api/v1/events` in the same `{ events: [...] }` envelope.
 
 ## Installation
 

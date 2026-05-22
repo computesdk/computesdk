@@ -54,13 +54,6 @@ export interface TelemetryTransport {
 
 export const DEFAULT_TELEMETRY_ENDPOINT = 'https://platform.computesdk.com/api/v1/events';
 
-function toPlatformEvent(event: TelemetryEvent): TelemetrySpanEvent | null {
-  if (event.event !== 'benchmark.span') {
-    return null;
-  }
-  return event;
-}
-
 export function createTelemetryId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -113,16 +106,13 @@ export async function emitTelemetryEvent(event: TelemetryEvent, transport: Telem
   const fetchImpl = transport.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : undefined);
   if (!fetchImpl) return;
 
-  const platformEvent = toPlatformEvent(event);
-  if (!platformEvent) return;
-
   await fetchImpl(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(transport.headers ?? {}),
     },
-    body: JSON.stringify({ events: [platformEvent] }),
+    body: JSON.stringify({ events: [event] }),
   }).catch(() => {
   });
 }
