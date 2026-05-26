@@ -1,5 +1,11 @@
 # @computesdk/modal
 
+## 1.8.46
+
+### Patch Changes
+
+- Add `scalableSandboxes` to opt into Modal's scalable sandboxes create path.
+
 ## 1.8.45
 
 ### Patch Changes
