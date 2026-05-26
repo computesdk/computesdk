@@ -1,13 +1,18 @@
 import { NorthflankApiCallError } from '@northflank/js-client';
 
 export const PROVIDER = 'northflank' as const;
-export const RUNTIME_ENV_KEY = 'COMPUTESDK_RUNTIME';
 export const DEFAULT_SERVICE_PREFIX = 'computesdk-';
 export const DEFAULT_DEPLOYMENT_PLAN = 'nf-compute-50';
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
 
-export type Runtime = 'node' | 'python';
+/**
+ * Any runtime label the caller wants — defaults to "node". `RUNTIME_IMAGES`
+ * holds known image defaults; unknown runtimes work too, but the caller
+ * must supply `config.image` or `internalDeployment` since there's no
+ * default image to fall back on.
+ */
+export type Runtime = string;
 export type NorthflankProtocol = 'HTTP' | 'HTTP/2' | 'TCP' | 'UDP';
 
 export interface NorthflankPort {
@@ -28,7 +33,7 @@ export interface NorthflankInternalDeployment {
   buildSHA?: string;
 }
 
-export const RUNTIME_IMAGES: Record<Runtime, string> = {
+export const RUNTIME_IMAGES: Record<string, string> = {
   node: 'node:20-slim',
   python: 'python:3.11-slim',
 };
@@ -40,7 +45,7 @@ export interface NorthflankConfig {
   host?: string;
   servicePrefix?: string;
   image?: string;
-  runtime?: Runtime;
+  runtime?: string;
   deploymentPlan?: string;
   ports?: NorthflankPortInput[];
   timeout?: number;
@@ -92,20 +97,28 @@ export function isPermanentClientError(error: unknown): boolean {
   return error instanceof Error && /\b(bad request|unprocessable)\b/i.test(error.message);
 }
 
-export function parseRuntime(value: unknown): Runtime {
-  if (value === 'node' || value === 'python') return value;
-  throw new Error(`Unsupported runtime '${String(value)}' for northflank provider. Supported runtimes: node, python.`);
+/**
+ * Missing-file error — a `fileCopy` op against a path that doesn't exist.
+ * Retrying never helps, so it must fast-fail out of the retry loop.
+ */
+export function isFileNotFound(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /not found|enoent|no such file|does not exist/i.test(error.message)
+  );
 }
 
-export function readManagedRuntime(env: unknown): Runtime | null {
-  if (!env || typeof env !== 'object') return null;
-  const value = (env as Record<string, unknown>)[RUNTIME_ENV_KEY];
-  if (value === 'node' || value === 'python') return value;
-  return null;
+export function parseRuntime(value: unknown): string {
+  return typeof value === 'string' && value.length > 0 ? value : 'node';
 }
 
-export function imageForRuntime(runtime: Runtime, configured?: string): string {
-  return configured ?? RUNTIME_IMAGES[runtime];
+export function imageForRuntime(runtime: string, configured?: string): string {
+  if (configured) return configured;
+  const def = RUNTIME_IMAGES[runtime];
+  if (def) return def;
+  throw new Error(
+    `No default image for runtime '${runtime}' — provide config.image or internalDeployment.`,
+  );
 }
 
 export function generateServiceName(p: string, custom?: string): string {
@@ -150,41 +163,29 @@ export function mapStatus(
   return 'stopped';
 }
 
-export const EXEC_ATTEMPT_TIMEOUT_MS = 5_000;
-
 export async function withExecRetry<T>(
   attempt: () => Promise<T>,
   opts: {
     serviceId: string;
     timeoutMs: number;
     pollIntervalMs?: number;
-    perAttemptTimeoutMs?: number;
   },
 ): Promise<T> {
-  const { serviceId, timeoutMs, pollIntervalMs = 50, perAttemptTimeoutMs = EXEC_ATTEMPT_TIMEOUT_MS } = opts;
+  const { serviceId, timeoutMs, pollIntervalMs = 50 } = opts;
   const start = Date.now();
-  let attemptNum = 0;
 
   while (Date.now() - start < timeoutMs) {
-    attemptNum++;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const result = await Promise.race([
-        attempt(),
-        new Promise<T>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error(`exec attempt timed out after ${perAttemptTimeoutMs}ms`)),
-            perAttemptTimeoutMs,
-          );
-        }),
-      ]);
-      return result;
+      return await attempt();
     } catch (error) {
-      const status = extractStatus(error);
-      const msg = error instanceof Error ? error.message : String(error);
-      if (is404(error) || isAuthError(error) || isPermanentClientError(error)) throw error;
-    } finally {
-      if (timer) clearTimeout(timer);
+      if (
+        is404(error) ||
+        isAuthError(error) ||
+        isPermanentClientError(error) ||
+        isFileNotFound(error)
+      ) {
+        throw error;
+      }
     }
     await new Promise(r => setTimeout(r, pollIntervalMs));
   }

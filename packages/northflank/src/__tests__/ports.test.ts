@@ -36,9 +36,10 @@ describe('Northflank Port Forwarding Integration Tests', () => {
   it.skipIf(skipTests)(
     'should patch a private port to public when getUrl is called',
     async () => {
-      // Declare the port as private at create time. The keep-alive will still
-      // bind to it internally, so the deployment reaches COMPLETED. Then
-      // getUrl() needs to patch the port to public and return a routable URL.
+      // Declare the port as private at create time. The keep-alive is
+      // `sleep infinity` — it doesn't bind anything; these tests verify
+      // DNS / port config, not actual port reachability. getUrl() needs
+      // to patch the port to public and return a routable URL.
       const PRIVATE_PORT = 4100;
       const provider = makeProvider();
       const sandbox = await provider.sandbox.create({
@@ -48,11 +49,7 @@ describe('Northflank Port Forwarding Integration Tests', () => {
       } as any);
       try {
         const url = await sandbox.getUrl({ port: PRIVATE_PORT });
-        expect(url).toMatch(/^https?:\/\//);
-        // Northflank's public DNS for a port follows a predictable pattern;
-        // we don't pin the exact subdomain but the URL must contain the
-        // service identifier substring.
-        expect(url.length).toBeGreaterThan('https://'.length);
+        expect(url).toMatch(/^https:\/\/[^\s]+\.(code\.run|northflank\.app)\b/);
       } finally {
         await sandbox.destroy();
       }
@@ -69,8 +66,8 @@ describe('Northflank Port Forwarding Integration Tests', () => {
         const url1 = await sandbox.getUrl({ port: MULTI_PORT_1 });
         const url2 = await sandbox.getUrl({ port: MULTI_PORT_2 });
 
-        expect(url1).toMatch(/^https?:\/\//);
-        expect(url2).toMatch(/^https?:\/\//);
+        expect(url1).toMatch(/^https:\/\/[^\s]+\.(code\.run|northflank\.app)\b/);
+        expect(url2).toMatch(/^https:\/\/[^\s]+\.(code\.run|northflank\.app)\b/);
         expect(url1).not.toBe(url2);
       } finally {
         await sandbox.destroy();
@@ -106,7 +103,7 @@ describe('Northflank Port Forwarding Integration Tests', () => {
       const sandbox = await provider.sandbox.create({ ports: [SINGLE_PORT] } as any);
       try {
         const url = await sandbox.getUrl({ port: UNUSED_PORT });
-        expect(url).toMatch(/^https?:\/\//);
+        expect(url).toMatch(/^https:\/\/[^\s]+\.(code\.run|northflank\.app)\b/);
       } finally {
         await sandbox.destroy();
       }

@@ -14,7 +14,6 @@ import type {
 } from '@computesdk/provider';
 import {
   PROVIDER,
-  RUNTIME_ENV_KEY,
   DEFAULT_DEPLOYMENT_PLAN,
   DEFAULT_KEEP_ALIVE_COMMAND,
   DEFAULT_TIMEOUT_MS,
@@ -27,13 +26,14 @@ import {
   generateServiceName,
   imageForRuntime,
   is404,
+  isAuthError,
+  isPermanentClientError,
   isValidEnvKey,
   mapStatus,
   normalizePort,
   parseRuntime,
   prefix,
   projectParams,
-  readManagedRuntime,
   serviceParams,
   withExecRetry,
 } from './utils';
@@ -49,6 +49,25 @@ interface NorthflankSandboxHandle {
   config: NorthflankConfig;
   api: ApiClient;
   instanceName?: string;
+  /**
+   * Whether the container has accepted at least one exec call. The first
+   * exec retries until the pod is ready; once it succeeds this flips to
+   * true and subsequent exec/fileCopy calls run directly with no retry.
+   */
+  ready: boolean;
+}
+
+async function execWithReadiness<T>(
+  handle: NorthflankSandboxHandle,
+  attempt: () => Promise<T>,
+): Promise<T> {
+  if (handle.ready) return attempt();
+  const result = await withExecRetry(attempt, {
+    serviceId: handle.serviceId,
+    timeoutMs: handle.timeout,
+  });
+  handle.ready = true;
+  return result;
 }
 
 interface NorthflankCreateOptions extends CreateSandboxOptions {
@@ -78,14 +97,12 @@ async function execArgv(
   handle: NorthflankSandboxHandle,
   argv: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const { commandResult, stdOut, stdErr } = await withExecRetry(
-    () =>
-      handle.api.exec.execServiceCommand(serviceParams(handle.config, handle.serviceId), {
-        command: argv,
-        shell: 'none',
-        ...(handle.instanceName ? { instanceName: handle.instanceName } : {}),
-      }),
-    { serviceId: handle.serviceId, timeoutMs: handle.timeout },
+  const { commandResult, stdOut, stdErr } = await execWithReadiness(handle, () =>
+    handle.api.exec.execServiceCommand(serviceParams(handle.config, handle.serviceId), {
+      command: argv,
+      shell: 'none',
+      ...(handle.instanceName ? { instanceName: handle.instanceName } : {}),
+    }),
   );
   return { stdout: stdOut ?? '', stderr: stdErr ?? '', exitCode: commandResult.exitCode };
 }
@@ -99,6 +116,12 @@ async function execCommand(
 
 function withCommandOptions(command: string, options?: RunCommandOptions): string {
   let full = command;
+  // Wrap with nohup first so env vars end up OUTSIDE the nohup invocation
+  // (`KEY=value nohup cmd …`), which is the correct shell form. Otherwise
+  // nohup would try to exec the env-assignment string as the command.
+  if (options?.background) {
+    full = `nohup ${full} >/tmp/computesdk-bg.log 2>&1 &`;
+  }
   if (options?.env && Object.keys(options.env).length > 0) {
     const envPrefix = Object.entries(options.env)
       .map(([k, v]) => {
@@ -109,9 +132,6 @@ function withCommandOptions(command: string, options?: RunCommandOptions): strin
       })
       .join(' ');
     full = `${envPrefix} ${full}`;
-  }
-  if (options?.background) {
-    full = `nohup ${full} >/tmp/computesdk-bg.log 2>&1 &`;
   }
   if (options?.cwd) {
     full = `cd "${escapeShellArg(options.cwd)}" && ${full}`;
@@ -146,14 +166,16 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
             buildSHA: internalDeployment.buildSHA ?? 'latest',
           };
         } else {
-          deployment.external = { imagePath: imageForRuntime(runtime, opts.image ?? config.image) };
+          const explicitImage = opts.image ?? config.image;
+          const imagePath = explicitImage ?? imageForRuntime(runtime);
+          deployment.external = { imagePath };
         }
 
         const data: Parameters<typeof client.create.service.deployment>[0]['data'] = {
           name: serviceName,
           billing: { deploymentPlan: plan },
           deployment: deployment as Parameters<typeof client.create.service.deployment>[0]['data']['deployment'],
-          runtimeEnvironment: { [RUNTIME_ENV_KEY]: runtime, ...opts.envs },
+          runtimeEnvironment: { ...opts.envs },
         };
 
         if (ports && ports.length > 0) {
@@ -180,6 +202,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
             config,
             api: client,
             instanceName: undefined,
+            ready: false,
           },
           sandboxId: serviceId,
         };
@@ -195,21 +218,17 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           if (!service.name.startsWith(prefix(config))) {
             throw new Error(`Service ${sandboxId} is not managed by ComputeSDK`);
           }
-          const envRes = await client.get.service.runtimeEnvironment({ parameters: params });
-          const runtime = readManagedRuntime(envRes.data.runtimeEnvironment);
-          if (!runtime) {
-            throw new Error(`Service ${sandboxId} missing ${RUNTIME_ENV_KEY}`);
-          }
           return {
             sandbox: {
               serviceId: service.id,
               serviceName: service.name,
-              runtime,
+              runtime: config.runtime ?? 'node',
               createdAt: new Date(service.createdAt),
               timeout: config.timeout ?? DEFAULT_TIMEOUT_MS,
               config,
               api: client,
               instanceName: undefined,
+              ready: false,
             },
             sandboxId: service.id,
           };
@@ -222,7 +241,8 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
       list: async (config: NorthflankConfig) => {
         const client = buildClient(config);
         const p = prefix(config);
-        const managed: Array<{ id: string; name: string; createdAt: string }> = [];
+        const runtime = config.runtime ?? 'node';
+        const results: Array<{ sandbox: NorthflankSandboxHandle; sandboxId: string }> = [];
         let cursor: string | undefined;
 
         do {
@@ -231,45 +251,25 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
             ...(cursor ? { options: { cursor } } : {}),
           });
           for (const svc of res.data.services ?? []) {
-            if (svc.name?.startsWith(p)) {
-              managed.push({
-                id: svc.id,
-                name: svc.name,
-                createdAt: (svc as { createdAt?: string }).createdAt ?? new Date().toISOString(),
-              });
-            }
-          }
-          cursor = res.pagination?.hasNextPage ? res.pagination.cursor : undefined;
-        } while (cursor);
-
-        const results: Array<{ sandbox: NorthflankSandboxHandle; sandboxId: string }> = [];
-        for (const svc of managed) {
-          try {
-            const params = serviceParams(config, svc.id);
-            const [envRes, serviceRes] = await Promise.all([
-              client.get.service.runtimeEnvironment({ parameters: params }),
-              client.get.service({ parameters: params }),
-            ]);
-            const runtime = readManagedRuntime(envRes.data.runtimeEnvironment);
-            if (!runtime) continue;
-            if (serviceRes.data.status.deployment?.status === 'FAILED') continue;
+            if (!svc.name?.startsWith(p)) continue;
             results.push({
               sandbox: {
                 serviceId: svc.id,
                 serviceName: svc.name,
                 runtime,
-                createdAt: new Date(svc.createdAt),
+                createdAt: new Date((svc as { createdAt?: string }).createdAt ?? Date.now()),
                 timeout: config.timeout ?? DEFAULT_TIMEOUT_MS,
                 config,
                 api: client,
                 instanceName: undefined,
+                ready: false,
               },
               sandboxId: svc.id,
             });
-          } catch {
-            // Skip services whose runtime env can't be read
           }
-        }
+          cursor = res.pagination?.hasNextPage ? res.pagination.cursor : undefined;
+        } while (cursor);
+
         return results;
       },
 
@@ -307,6 +307,9 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
             durationMs: Date.now() - start,
           };
         } catch (error) {
+          // Fatal errors (auth, not-found, malformed request) should propagate
+          // so the caller can see them — not be masked as a command failure.
+          if (is404(error) || isAuthError(error) || isPermanentClientError(error)) throw error;
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
@@ -358,8 +361,13 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           domains: port.domains?.map(d => d.name) ?? [],
         }));
 
-        const hasPort = current.some(port => port.internalPort === options.port);
-        const updated = hasPort
+        const existingForPatch = current.find(port => port.internalPort === options.port);
+        if (existingForPatch && (existingForPatch.protocol === 'TCP' || existingForPatch.protocol === 'UDP')) {
+          throw new Error(
+            `Cannot expose ${existingForPatch.protocol} port ${options.port} as a public URL — only HTTP and HTTP/2 ports support public DNS`,
+          );
+        }
+        const updated = existingForPatch
           ? current.map(port =>
               port.internalPort === options.port ? { ...port, public: true } : port,
             )
@@ -396,17 +404,15 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
         readFile: async (sandbox: NorthflankSandboxHandle, path: string) => {
           const tmpDir = await fs.mkdtemp(joinPath(tmpdir(), 'cs-nf-'));
           try {
-            await withExecRetry(
-              () =>
-                sandbox.api.fileCopy.downloadServiceFiles(
-                  serviceParams(sandbox.config, sandbox.serviceId),
-                  {
-                    remotePath: path,
-                    localPath: tmpDir,
-                    ...(sandbox.instanceName ? { instanceName: sandbox.instanceName } : {}),
-                  },
-                ),
-              { serviceId: sandbox.serviceId, timeoutMs: sandbox.timeout },
+            await execWithReadiness(sandbox, () =>
+              sandbox.api.fileCopy.downloadServiceFiles(
+                serviceParams(sandbox.config, sandbox.serviceId),
+                {
+                  remotePath: path,
+                  localPath: tmpDir,
+                  ...(sandbox.instanceName ? { instanceName: sandbox.instanceName } : {}),
+                },
+              ),
             );
             const local = joinPath(tmpDir, posix.basename(path));
             return await fs.readFile(local, 'utf8');
@@ -429,17 +435,15 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           const tmpFile = joinPath(tmpDir, posix.basename(path));
           try {
             await fs.writeFile(tmpFile, content, 'utf8');
-            await withExecRetry(
-              () =>
-                sandbox.api.fileCopy.uploadServiceFiles(
-                  serviceParams(sandbox.config, sandbox.serviceId),
-                  {
-                    localPath: tmpFile,
-                    remotePath: path,
-                    ...(sandbox.instanceName ? { instanceName: sandbox.instanceName } : {}),
-                  },
-                ),
-              { serviceId: sandbox.serviceId, timeoutMs: sandbox.timeout },
+            await execWithReadiness(sandbox, () =>
+              sandbox.api.fileCopy.uploadServiceFiles(
+                serviceParams(sandbox.config, sandbox.serviceId),
+                {
+                  localPath: tmpFile,
+                  remotePath: path,
+                  ...(sandbox.instanceName ? { instanceName: sandbox.instanceName } : {}),
+                },
+              ),
             );
           } catch (error) {
             throw new Error(`Failed to write file: ${path} (${error instanceof Error ? error.message : String(error)})`);

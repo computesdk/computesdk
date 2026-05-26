@@ -56,13 +56,13 @@ interface NorthflankConfig {
   servicePrefix?: string;
   /** Container image — overrides the default for the runtime */
   image?: string;
-  /** Default runtime when none is passed to create() — "node" | "python" */
-  runtime?: 'node' | 'python';
+  /** Default runtime label when none is passed to create() — any string; defaults to "node". "node" and "python" map to built-in image defaults; anything else needs `image` or `internalDeployment` */
+  runtime?: string;
   /** Northflank deployment plan — defaults to "nf-compute-50" */
   deploymentPlan?: string;
   /** Default ports to expose on every sandbox */
   ports?: { name: string; internalPort: number; public?: boolean; protocol?: 'HTTP' | 'HTTP/2' | 'TCP' | 'UDP' }[];
-  /** Deployment readiness timeout in ms (default: 120000) */
+  /** Budget in ms for the first exec to retry while the container starts (default: 120000) */
   timeout?: number;
   /** Deploy from a Northflank build service instead of an external image */
   internalDeployment?: { id: string; branch?: string; buildSHA?: string };
@@ -103,7 +103,7 @@ await compute.sandbox.create({
 });
 ```
 
-Image defaults: `node:20-slim`, `python:3.11-slim`.
+Built-in image defaults: `node` → `node:20-slim`, `python` → `python:3.11-slim`. Any other runtime label is accepted, but you must supply `image` or `internalDeployment` — there's no default to fall back on.
 
 ## Running code
 
@@ -156,7 +156,7 @@ const exists = await sandbox.filesystem.exists('/tmp/hello.txt');
 await sandbox.filesystem.remove('/tmp/hello.txt');
 ```
 
-All paths are shell-escaped before being interpolated into exec commands.
+Filesystem operations send paths as plain argv elements to the exec proxy (e.g. `['mkdir', '-p', '--', path]`) or through Northflank's `fileCopy` API — no shell parsing is involved, so paths don't need escaping. Only `runCommand` (which actually invokes a shell) escapes the `env` / `cwd` values it interpolates.
 
 ## Sandbox management
 
@@ -180,8 +180,8 @@ await sandbox.destroy();
 ## Notes
 
 - Services are named `<servicePrefix><timestamp>-<random>` (or `<servicePrefix><name>` if you pass `name`). `list`, `getById` and `destroy` only operate on services whose name starts with the prefix.
-- Sandboxes are tagged via the `COMPUTESDK_RUNTIME` runtime env var. `list` skips any service that doesn't have it set to `node` or `python`.
-- `create` waits for the service to become **exec-ready** (up to `timeout` ms) by spam-calling `exec` (`true`) until it succeeds — this is faster than polling `deployment.status` because the exec proxy connects to the pod *before* Kubernetes reports `COMPLETED`. The loop retries on 5xx and connection-level errors; it fast-fails on `401`/`403` (auth) and `404` (service was deleted mid-wait). If readiness times out, the orphaned service is deleted before the error is thrown.
+- `create` returns immediately after the Northflank API call that creates the service — it does **not** wait for the container to be ready. The first `runCommand` (or filesystem call) may therefore take longer: it retries transient exec failures (up to `timeout` ms) while the pod finishes starting. Once one exec succeeds, subsequent calls run directly with no retry.
+- `list` returns every prefixed service regardless of deployment status. Use `getInfo` to check each one's state and filter client-side if needed.
 - `getInfo` re-reads the service from the API every call — `running` means the deployment status is `COMPLETED` and the service isn't paused; `stopped` means paused, `PENDING`, or `IN_PROGRESS`; `error` means `FAILED`.
 - `getUrl` will patch the service's port config to make the requested port public if it isn't already, then return its `dns`.
 

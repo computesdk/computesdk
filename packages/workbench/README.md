@@ -186,6 +186,7 @@ Install any combination of:
 - `@computesdk/cloudflare` - Cloudflare Workers
 - `@computesdk/codesandbox` - CodeSandbox boxes
 - `@computesdk/blaxel` - Blaxel environments
+- `@computesdk/northflank` - Northflank deployment services
 
 ## Environment Variables
 
@@ -220,6 +221,12 @@ CSB_API_KEY=xxx
 # Blaxel
 BL_API_KEY=xxx
 BL_WORKSPACE=xxx
+
+# Northflank
+NORTHFLANK_TOKEN=nf_xxx
+NORTHFLANK_PROJECT_ID=my-project
+NORTHFLANK_TEAM_ID=xxx       # optional — required only for organization API tokens
+NORTHFLANK_API_URL=xxx       # optional — defaults to https://api.northflank.com
 ```
 
 ## Tips

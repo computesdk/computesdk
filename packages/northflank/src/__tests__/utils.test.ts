@@ -8,6 +8,7 @@ import {
   imageForRuntime,
   is404,
   isAuthError,
+  isFileNotFound,
   isPermanentClientError,
   isValidEnvKey,
   mapStatus,
@@ -15,7 +16,6 @@ import {
   parseRuntime,
   prefix,
   projectParams,
-  readManagedRuntime,
   serviceParams,
   type NorthflankConfig,
 } from '../utils';
@@ -53,28 +53,15 @@ describe('projectParams / serviceParams', () => {
 });
 
 describe('parseRuntime', () => {
-  it.each(['node', 'python'])('accepts %s', (value) => {
-    expect(parseRuntime(value)).toBe(value);
-  });
+  it.each(['node', 'python', 'go', 'rust', 'bash', 'custom-thing'])(
+    'passes through arbitrary string %s',
+    (value) => {
+      expect(parseRuntime(value)).toBe(value);
+    },
+  );
 
-  it.each([undefined, null, '', 'ruby', 'bash', 42])('rejects %p', (value) => {
-    expect(() => parseRuntime(value)).toThrow(/Unsupported runtime/);
-  });
-});
-
-describe('readManagedRuntime', () => {
-  it('returns the runtime when COMPUTESDK_RUNTIME is set to a supported value', () => {
-    expect(readManagedRuntime({ COMPUTESDK_RUNTIME: 'node' })).toBe('node');
-    expect(readManagedRuntime({ COMPUTESDK_RUNTIME: 'python' })).toBe('python');
-  });
-
-  it('returns null when the marker is missing, malformed, or non-object', () => {
-    expect(readManagedRuntime(null)).toBeNull();
-    expect(readManagedRuntime(undefined)).toBeNull();
-    expect(readManagedRuntime('node')).toBeNull();
-    expect(readManagedRuntime({})).toBeNull();
-    expect(readManagedRuntime({ COMPUTESDK_RUNTIME: 'ruby' })).toBeNull();
-    expect(readManagedRuntime({ OTHER: 'node' })).toBeNull();
+  it.each([undefined, null, '', 42, {}])('defaults to "node" for falsy / non-string %p', (value) => {
+    expect(parseRuntime(value)).toBe('node');
   });
 });
 
@@ -128,8 +115,14 @@ describe('imageForRuntime', () => {
     expect(imageForRuntime('python')).toBe('python:3.11-slim');
   });
 
-  it('returns the override when supplied', () => {
+  it('returns the override when supplied (overrides even known defaults)', () => {
     expect(imageForRuntime('node', 'node:22-alpine')).toBe('node:22-alpine');
+    expect(imageForRuntime('go', 'golang:1.22')).toBe('golang:1.22');
+  });
+
+  it('throws for an unknown runtime with no override', () => {
+    expect(() => imageForRuntime('go')).toThrow(/No default image for runtime 'go'/);
+    expect(() => imageForRuntime('rust')).toThrow(/provide config\.image or internalDeployment/);
   });
 });
 
@@ -234,6 +227,26 @@ describe('isPermanentClientError', () => {
     expect(isPermanentClientError(new NorthflankApiCallError({ status: 400, message: 'x' }))).toBe(true);
     expect(isPermanentClientError(new NorthflankApiCallError({ status: 422, message: 'x' }))).toBe(true);
     expect(isPermanentClientError(new NorthflankApiCallError({ status: 500, message: 'x' }))).toBe(false);
+  });
+});
+
+describe('isFileNotFound', () => {
+  it('matches missing-file error messages (case-insensitive)', () => {
+    expect(isFileNotFound(new Error('file not found: /tmp/x'))).toBe(true);
+    expect(isFileNotFound(new Error('Not Found'))).toBe(true);
+    expect(isFileNotFound(new Error('ENOENT: open /tmp/x'))).toBe(true);
+    expect(isFileNotFound(new Error('stat /tmp/x: No such file or directory'))).toBe(true);
+    // Actual @northflank/js-client downloadFiles message for a missing remote path.
+    expect(
+      isFileNotFound(new Error("Remote path '/nonexistent/file.txt' does not exists but is required for downloads.")),
+    ).toBe(true);
+  });
+
+  it('does not match unrelated errors', () => {
+    expect(isFileNotFound(new Error('Unexpected server response: 500'))).toBe(false);
+    expect(isFileNotFound(new Error('socket hang up'))).toBe(false);
+    expect(isFileNotFound(null)).toBe(false);
+    expect(isFileNotFound(undefined)).toBe(false);
   });
 });
 
