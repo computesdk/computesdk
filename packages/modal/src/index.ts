@@ -94,13 +94,15 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           const sourceId = snapshotId || templateId;
           const cacheKey = sourceId ?? DEFAULT_IMAGE;
-          const cached = config._imageCache.get(cacheKey);
-          let image = cached ? await cached.catch(() => null) : null;
-          if (!image) {
-            const promise = loadImage(client, sourceId);
+          let promise = config._imageCache.get(cacheKey);
+          if (!promise) {
+            promise = loadImage(client, sourceId).catch((err) => {
+              config._imageCache.delete(cacheKey);
+              throw err;
+            });
             config._imageCache.set(cacheKey, promise);
-            image = await promise;
           }
+          const image = await promise;
 
           const sandboxOptions: SandboxCreateParams = {
             ...(providerOptions as Partial<SandboxCreateParams>),
