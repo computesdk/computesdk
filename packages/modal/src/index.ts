@@ -35,6 +35,11 @@ export interface ModalConfig {
   scalableSandboxes?: boolean;
 }
 
+export interface ModalCreateSandboxOptions extends CreateSandboxOptions {
+  daemonSsePort?: number | false;
+  scalableSandboxes?: boolean;
+}
+
 /**
  * extends ModalConfig with resources initialised once at
  * factory time so they don't need to be recreated on every sandbox operation.
@@ -60,6 +65,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           const app = await config._appPromise;
 
+          const modalOptions = (options ?? {}) as ModalCreateSandboxOptions;
           const {
             timeout: optTimeout,
             envs,
@@ -71,9 +77,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             namespace: _namespace,
             directory: _directory,
             ports: optPorts,
+            daemonSsePort: optDaemonSsePort,
             scalableSandboxes: optScalableSandboxes,
             ...providerOptions
-          } = (options || {}) as CreateSandboxOptions & { scalableSandboxes?: boolean };
+          } = modalOptions;
 
           let image: Image;
           const sourceId = snapshotId || templateId;
@@ -91,7 +98,6 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
 
-          const optDaemonSsePort = (options as any)?.daemonSsePort as number | false | undefined;
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;
 
