@@ -23,13 +23,18 @@ function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePor
   return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
 }
 
-async function loadImage(client: ModalClient, sourceId: string | undefined): Promise<Image> {
-  if (!sourceId) return client.images.fromRegistry(DEFAULT_IMAGE);
-  try {
-    return await client.images.fromId(sourceId);
-  } catch {
-    return client.images.fromRegistry(sourceId);
+async function loadImage(client: ModalClient, app: App, sourceId: string | undefined): Promise<Image> {
+  let image: Image;
+  if (sourceId) {
+    try {
+      image = await client.images.fromId(sourceId);
+    } catch {
+      image = client.images.fromRegistry(sourceId);
+    }
+  } else {
+    image = client.images.fromRegistry(DEFAULT_IMAGE);
   }
+  return image.build(app);
 }
 
 
@@ -96,7 +101,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           const cacheKey = sourceId ?? DEFAULT_IMAGE;
           let promise = config._imageCache.get(cacheKey);
           if (!promise) {
-            promise = loadImage(client, sourceId).catch((err) => {
+            promise = loadImage(client, app, sourceId).catch((err) => {
               config._imageCache.delete(cacheKey);
               throw err;
             });
