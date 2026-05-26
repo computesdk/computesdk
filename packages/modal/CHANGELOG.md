@@ -1,5 +1,15 @@
 # @computesdk/modal
 
+## 1.9.0
+
+### Minor Changes
+
+- f4941b9: Add `scalableSandboxes` option to the Modal provider, enabling Modal's experimental scalable sandbox creation. Configurable via provider config or per `create()` call.
+
+### Patch Changes
+
+- f1d87cb: Cache resolved `Image` per provider instance in `modal.sandbox.create`, sharing a single Modal API call across concurrent bursts of sandbox creations for the same template/snapshot id (or default image).
+
 ## 1.8.46
 
 ### Patch Changes
