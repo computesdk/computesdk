@@ -32,6 +32,12 @@ export interface ModalConfig {
   ports?: number[];
   daemonSsePort?: number | false;
   appName?: string;
+  scalableSandboxes?: boolean;
+}
+
+export interface ModalCreateSandboxOptions extends CreateSandboxOptions {
+  daemonSsePort?: number | false;
+  scalableSandboxes?: boolean;
 }
 
 /**
@@ -59,6 +65,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           const app = await config._appPromise;
 
+          const modalOptions = (options ?? {}) as ModalCreateSandboxOptions;
           const {
             timeout: optTimeout,
             envs,
@@ -70,8 +77,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             namespace: _namespace,
             directory: _directory,
             ports: optPorts,
+            daemonSsePort: optDaemonSsePort,
+            scalableSandboxes: optScalableSandboxes,
             ...providerOptions
-          } = options || {};
+          } = modalOptions;
 
           let image: Image;
           const sourceId = snapshotId || templateId;
@@ -89,7 +98,6 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
 
-          const optDaemonSsePort = (options as any)?.daemonSsePort as number | false | undefined;
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;
 
@@ -99,7 +107,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (envs && Object.keys(envs).length > 0) sandboxOptions.env = envs;
           if (name) sandboxOptions.name = name;
 
-          const sandbox = await client.sandboxes.create(app, image, sandboxOptions);
+          const useScalableSandboxes = optScalableSandboxes ?? config.scalableSandboxes ?? false;
+          const sandbox = useScalableSandboxes
+            ? await client.sandboxes.experimentalCreate(app, image, sandboxOptions)
+            : await client.sandboxes.create(app, image, sandboxOptions);
           const sandboxId = sandbox.sandboxId;
 
           return { sandbox: { sandbox, sandboxId }, sandboxId };
