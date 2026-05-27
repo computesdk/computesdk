@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 26.0.2
+
+### Patch Changes
+
+- Updated dependencies [0470843]
+  - @computesdk/e2b@1.7.50
+
 ## 26.0.1
 
 ### Patch Changes
