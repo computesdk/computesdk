@@ -19,6 +19,7 @@ const SHARED_PROVIDER_NAMES = [
   'namespace',
   'hopx',
   'declaw',
+  'isorun',
   'sprites',
   'agentuity',
   'freestyle',
@@ -51,6 +52,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
   declaw: [['DECLAW_API_KEY']],
+  isorun: [['ISORUN_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
   freestyle: [['FREESTYLE_API_KEY']],
@@ -82,6 +84,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
   hopx: { apiKey: 'HOPX_API_KEY' },
   declaw: { apiKey: 'DECLAW_API_KEY' },
+  isorun: { apiKey: 'ISORUN_API_KEY' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
   freestyle: { apiKey: 'FREESTYLE_API_KEY' },
@@ -338,6 +341,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/hopx');
       case 'declaw':
         return await import('@computesdk/declaw');
+      case 'isorun':
+        return await import('@computesdk/isorun');
       case 'sprites':
         return await import('@computesdk/sprites');
       case 'agentuity':
