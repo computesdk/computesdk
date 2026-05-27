@@ -23,6 +23,20 @@ function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePor
   return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
 }
 
+async function loadImage(client: ModalClient, app: App, sourceId: string | undefined): Promise<Image> {
+  let image: Image;
+  if (sourceId) {
+    try {
+      image = await client.images.fromId(sourceId);
+    } catch {
+      image = client.images.fromRegistry(sourceId);
+    }
+  } else {
+    image = client.images.fromRegistry(DEFAULT_IMAGE);
+  }
+  return image.build(app);
+}
+
 
 export interface ModalConfig {
   tokenId?: string;
@@ -47,6 +61,7 @@ export interface ModalCreateSandboxOptions extends CreateSandboxOptions {
 interface ModalInternalConfig extends ModalConfig {
   _client: ModalClient;
   _appPromise: Promise<App>;
+  _imageCache: Map<string, Promise<Image>>;
 }
 
 
@@ -82,17 +97,17 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             ...providerOptions
           } = modalOptions;
 
-          let image: Image;
           const sourceId = snapshotId || templateId;
-          if (sourceId) {
-            try {
-              image = await client.images.fromId(sourceId);
-            } catch {
-              image = client.images.fromRegistry(sourceId);
-            }
-          } else {
-            image = client.images.fromRegistry(DEFAULT_IMAGE);
+          const cacheKey = sourceId ?? DEFAULT_IMAGE;
+          let promise = config._imageCache.get(cacheKey);
+          if (!promise) {
+            promise = loadImage(client, app, sourceId).catch((err) => {
+              config._imageCache.delete(cacheKey);
+              throw err;
+            });
+            config._imageCache.set(cacheKey, promise);
           }
+          const image = await promise;
 
           const sandboxOptions: SandboxCreateParams = {
             ...(providerOptions as Partial<SandboxCreateParams>),
@@ -289,5 +304,6 @@ export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
     appName,
     _client: client,
     _appPromise: appPromise,
+    _imageCache: new Map(),
   });
 }
