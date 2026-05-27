@@ -1,5 +1,11 @@
 # @computesdk/modal
 
+## 1.9.2
+
+### Patch Changes
+
+- 5812a55: Await `process.stdout.readText()`, `process.stderr.readText()`, and `process.wait()` in parallel inside `runCommand` and filesystem ops (`readFile` cat-fallback, `mkdir`, `readdir`, `remove`), removing a serial round trip per exec.
+
 ## 1.9.1
 
 ### Patch Changes
