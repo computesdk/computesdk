@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.84
+
+### Patch Changes
+
+- Updated dependencies [0470843]
+  - @computesdk/e2b@1.7.50
+
 ## 0.4.83
 
 ### Patch Changes
