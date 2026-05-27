@@ -7,7 +7,6 @@
  */
 
 import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
-import type { SandboxInfo } from "tensorlake";
 import { defineProvider } from "@computesdk/provider";
 import type {
   CodeResult,
@@ -29,6 +28,8 @@ export interface TensorlakeConfig {
   image?: string;
   /** Default timeout in milliseconds for sandboxes */
   timeout?: number;
+  /** Provider-specific sandbox creation options forwarded to Tensorlake */
+  [key: string]: any;
 }
 
 export interface TensorlakeSandboxContext {
@@ -37,7 +38,7 @@ export interface TensorlakeSandboxContext {
   sandbox: InstanceType<typeof Sandbox>;
 }
 
-function resolveAuth(config: TensorlakeConfig): {
+function resolveAuth(config: Pick<TensorlakeConfig, "apiKey" | "apiUrl">): {
   apiKey: string;
   apiUrl?: string;
 } {
@@ -69,12 +70,24 @@ export const tensorlake = defineProvider<
         config: TensorlakeConfig,
         options?: CreateSandboxOptions,
       ) => {
-        const { apiKey, apiUrl } = resolveAuth(config);
-        const image = options?.image || config.image;
-        const timeoutMs = options?.timeout ?? config.timeout;
+        const {
+          apiKey: configApiKey,
+          apiUrl: configApiUrl,
+          proxyUrl,
+          image: configImage,
+          timeout: configTimeout,
+          ...configSandboxOptions
+        } = config;
+        const { apiKey, apiUrl } = resolveAuth({
+          apiKey: configApiKey,
+          apiUrl: configApiUrl,
+        });
+        const image = options?.image || configImage;
+        const timeoutMs = options?.timeout ?? configTimeout;
         const timeoutSecs = timeoutMs ? Math.ceil(timeoutMs / 1000) : undefined;
 
         const params = {
+          ...configSandboxOptions,
           ...(image && { image }),
           ...(timeoutSecs && { timeoutSecs }),
           ...(options?.cpus && { cpus: options.cpus }),
@@ -84,7 +97,7 @@ export const tensorlake = defineProvider<
           }),
           ...(options?.name && { name: options.name }),
           ...(options?.snapshotId && { snapshotId: options.snapshotId }),
-          proxyUrl: config.proxyUrl,
+          proxyUrl,
           apiKey,
           apiUrl,
         };
