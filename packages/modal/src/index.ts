@@ -174,8 +174,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           
           const process = await modalSandbox.sandbox.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe' });
-          const [stdout, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [stdout, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           return { stdout: stdout || '', stderr: stderr || '', exitCode: exitCode || 0, durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
@@ -226,8 +225,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           } catch (error) {
             try {
               const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-              const [content, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-              const exitCode = await process.wait();
+              const [content, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
               if (exitCode !== 0) throw new Error(`cat failed: ${stderr}`);
               return content.trim();
             } catch {
@@ -245,14 +243,12 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         },
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           if (exitCode !== 0) throw new Error(`mkdir failed: ${stderr}`);
         },
         readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
           const process = await modalSandbox.sandbox.exec(['ls', '-la', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [output, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [output, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           if (exitCode !== 0) throw new Error(`ls failed: ${stderr}`);
           const lines = output.split('\n').slice(1);
           return lines.filter((l: string) => l.trim()).map((line: string) => {
@@ -270,8 +266,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         },
         remove: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           const process = await modalSandbox.sandbox.exec(['rm', '-rf', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           if (exitCode !== 0) throw new Error(`rm failed: ${stderr}`);
         }
       },
