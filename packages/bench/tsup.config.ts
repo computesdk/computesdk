@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import pkg from './package.json';
 
 export default defineConfig({
   entry: {
@@ -9,4 +10,7 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
+  define: {
+    __BENCH_VERSION__: JSON.stringify(pkg.version),
+  },
 });

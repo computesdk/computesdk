@@ -48,7 +48,6 @@
   },
   "dependencies": {
     "@computesdk/cmd": "workspace:*",
-    "@computesdk/telemetry": "workspace:*",
     "daemond": "workspace:*"
   },
   "devDependencies": {

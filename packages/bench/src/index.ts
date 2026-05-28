@@ -1,12 +1,16 @@
 export type {
-  TelemetrySpanEvent,
-  TelemetryConfigEvent,
-  TelemetryEvent,
-  TelemetryAttempt,
+  BenchAttempt,
+  BenchEvent,
+  BenchOutputEvent,
+  BenchSpanEvent,
+  BenchRunEvent,
+  BenchCaptureOutputConfig,
+  BenchShardConfig,
   BenchConfig,
   BenchRunOptions,
-  BenchResult,
+  BenchContext,
+  BenchSuiteResult,
+  BenchTaskResult,
   BenchmarkStats,
-  TelemetryTransport,
 } from './types';
 export { createBench } from './runner';
