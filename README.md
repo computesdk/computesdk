@@ -68,6 +68,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | Provider | Environment Variables | Use Cases |
 |----------|----------------------|-----------|
 | **Archil** | `ARCHIL_API_KEY` | Disk-attached command execution |
+| **Arker** | `ARKER_API_KEY` | Sandboxed VMs with persistent filesystems, forked from golden images |
 | **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
 | **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
 | **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
