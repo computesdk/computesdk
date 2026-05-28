@@ -26,6 +26,7 @@ const SHARED_PROVIDER_NAMES = [
   'upstash',
   'k8s',
   'northflank',
+  'collimate',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -57,6 +58,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   upstash: [['UPSTASH_BOX_API_KEY']],
   k8s: [[]],
   northflank: [['NORTHFLANK_TOKEN', 'NORTHFLANK_PROJECT_ID']],
+  collimate: [['COLLIMATE_API_KEY']],
 };
 
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
@@ -87,6 +89,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
   k8s: {},
   northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL' },
+  collimate: { apiKey: 'COLLIMATE_API_KEY', host: 'COLLIMATE_API_URL' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
@@ -351,6 +354,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'northflank':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/northflank');
+      case 'collimate':
+        return await import('@computesdk/collimate');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }
