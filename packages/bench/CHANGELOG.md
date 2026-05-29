@@ -1,5 +1,17 @@
 # @computesdk/bench
 
+## 0.1.5
+
+### Patch Changes
+
+- 0094dc9: Add batch metric aggregate query helpers to the bench SDK query client.
+
+  - Add `getBatchMetricStats(batchId, { name, field, groupBy? })` to `BenchQueryClient`.
+  - Add `getBatchMetricCounts(batchId, { name, field })` to `BenchQueryClient`.
+  - Add `getBatchMetricTimeline(batchId, { name, field, interval?, agg? })` to `BenchQueryClient`.
+  - Add `BenchMetricDistribution`, `BenchGroupedMetricDistribution`, `BenchMetricCounts`, and `BenchMetricTimeline` types for aggregate responses.
+  - Export the new aggregate query types from the public package entrypoint.
+
 ## 0.1.4
 
 ### Patch Changes
