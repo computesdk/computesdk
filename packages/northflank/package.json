@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/northflank",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Northflank provider for ComputeSDK - Deploy and manage compute workloads on Northflank's container platform",
   "author": "Simo Aleksandrov <simo@northflank.com>",
   "license": "MIT",
