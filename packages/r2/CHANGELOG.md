@@ -1,5 +1,11 @@
 # @computesdk/r2
 
+## 1.2.4
+
+### Patch Changes
+
+- @computesdk/provider@2.1.3
+
 ## 1.2.3
 
 ### Patch Changes
