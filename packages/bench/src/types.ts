@@ -49,6 +49,13 @@ export interface BenchRunOptions {
   concurrency?: number;
 }
 
+export interface BenchAddOptions {
+  /** Per-step concurrency cap (defaults to run concurrency/iterations) */
+  concurrency?: number;
+  /** Run this step for units that failed earlier steps (useful for cleanup) */
+  runOnFailed?: boolean;
+}
+
 export interface BenchContext {
   /** Current iteration index within the current phase (0-based) */
   iteration: number;
@@ -92,4 +99,9 @@ export interface BenchSuiteResult {
   label: string;
   runId: string;
   tasks: BenchTaskResult[];
+  mode?: 'sequential' | 'concurrent';
+  concurrency?: number;
+  iterations?: number;
+  warmup?: number;
+  workloadCounters?: Record<string, number>;
 }

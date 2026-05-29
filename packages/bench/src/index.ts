@@ -10,6 +10,7 @@ export type {
   BenchShardConfig,
   BenchConfig,
   BenchRunOptions,
+  BenchAddOptions,
   BenchContext,
   BenchSuiteResult,
   BenchTaskResult,
