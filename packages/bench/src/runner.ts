@@ -12,6 +12,7 @@ import {
 } from './events';
 import type { BenchOutputEvent, BenchRunEvent, BenchSpanEvent, BenchTransport, BenchMetricEvent, BenchProgressEvent } from './events';
 import type {
+  BenchAddOptions,
   BenchConfig,
   BenchContext,
   BenchRunOptions,
@@ -36,6 +37,7 @@ function isoNow(): string {
 }
 
 type TaskFn = (ctx: BenchContext) => Promise<unknown> | unknown;
+type RegisteredTask = { name: string; fn: TaskFn; options?: BenchAddOptions };
 
 const LOG_MAX_ENTRIES = 50;
 const OUTPUT_FLUSH_INTERVAL = 30000;
@@ -59,6 +61,10 @@ function formatMs(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
 function printSummary(result: BenchSuiteResult): void {
   const rows = result.tasks.map((task) => ({
     task: task.taskName,
@@ -67,25 +73,42 @@ function printSummary(result: BenchSuiteResult): void {
     p95: formatMs(task.stats.p95Ms),
     min: formatMs(task.stats.minMs),
     max: formatMs(task.stats.maxMs),
+    concurrency: result.mode === 'concurrent'
+      ? String(result.concurrency ?? result.iterations ?? task.stats.count)
+      : '-',
     runs: String(task.stats.count),
     errors: String(task.failures),
   }));
 
-  const headers = ['Task', 'Avg', 'P50', 'P95', 'Min', 'Max', 'Runs', 'Errors'];
+  const headers = ['Task', 'Avg', 'P50', 'P95', 'Min', 'Max', 'Concurrency', 'Runs', 'Errors'];
   const widths = headers.map((header, index) => Math.max(
     header.length,
     ...rows.map((row) => Object.values(row)[index].length),
   ));
   const line = (values: string[]) => values.map((value, index) => value.padEnd(widths[index])).join('  ');
+  const workloadCounters = result.workloadCounters ?? {};
+  const workloadCounterKeys = Object.keys(workloadCounters);
+
   const output = [
     '',
     result.label,
+    result.mode === 'concurrent'
+      ? `Mode: concurrent${typeof result.concurrency === 'number' ? ` (limit=${result.concurrency})` : ''}`
+      : undefined,
+    typeof result.iterations === 'number' ? `Iterations per task: ${result.iterations}` : undefined,
+    typeof result.warmup === 'number' ? `Warmup per task: ${result.warmup}` : undefined,
+    result.mode === 'concurrent' && result.iterations === 1 && workloadCounterKeys.length > 0
+      ? 'Note: 1 benchmark iteration can still represent many concurrent workload operations.'
+      : undefined,
+    workloadCounterKeys.length > 0
+      ? `Workload counters: ${workloadCounterKeys.sort().map((key) => `${key}=${formatNumber(workloadCounters[key])}`).join(', ')}`
+      : undefined,
     '',
     line(headers),
     line(widths.map((width) => '-'.repeat(width))),
     ...rows.map((row) => line(Object.values(row))),
     '',
-  ].join('\n');
+  ].filter((entry): entry is string => typeof entry === 'string').join('\n');
 
   if (typeof process !== 'undefined' && process.stdout?.write) {
     process.stdout.write(output);
@@ -230,21 +253,26 @@ export function createBench(config: BenchConfig) {
   });
   const query = createBenchQueryClient({ baseUrl, apiKey });
 
-  const tasks: Array<{ name: string; fn: TaskFn }> = [];
+  const tasks: RegisteredTask[] = [];
   let currentRunId: string | undefined;
   let currentProvider: string | undefined;
+  let collectWorkloadCounters: ((data?: Record<string, unknown>) => void) | undefined;
 
-  function add(taskName: string, fn: TaskFn): void {
+  let api: any;
+
+  function add(taskName: string, fn: TaskFn, options: BenchAddOptions = {}) {
     if (taskName.trim() === '') {
       throw new Error('Bench task name must be non-empty.');
     }
     if (tasks.some((task) => task.name === taskName)) {
       throw new Error(`Bench task "${taskName}" is already registered.`);
     }
-    tasks.push({ name: taskName, fn });
+    tasks.push({ name: taskName, fn, options });
+    return api;
   }
 
   function emitMetric(name: string, data: Record<string, unknown>, runId?: string): void {
+    collectWorkloadCounters?.(data);
     const event: BenchMetricEvent = {
       event: 'benchmark.metric',
       eventId: createPrefixedId('event'),
@@ -267,6 +295,7 @@ export function createBench(config: BenchConfig) {
   }
 
   function emitProgress(params: { done: number; inFlight: number; errors: number; total: number; extra?: Record<string, unknown> }, runId?: string): void {
+    collectWorkloadCounters?.(params.extra);
     const event: BenchProgressEvent = {
       event: 'benchmark.progress',
       eventId: createPrefixedId('event'),
@@ -333,197 +362,126 @@ export function createBench(config: BenchConfig) {
     outputCapture?.start();
 
     const taskResults: BenchTaskResult[] = [];
+    const workloadCounters = new Map<string, number>();
+
+    const addWorkloadCounters = (data?: Record<string, unknown>) => {
+      if (!data) return;
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+        workloadCounters.set(key, (workloadCounters.get(key) ?? 0) + value);
+      }
+    };
+    collectWorkloadCounters = addWorkloadCounters;
+    if (mode === 'concurrent' && concurrency > 1) {
+      addWorkloadCounters({ concurrency_target: concurrency });
+    }
 
     try {
-      for (const task of tasks) {
-      const measuredDurations: number[] = [];
-      let successes = 0;
-      let failures = 0;
-
-      // Warmup runs (errors silently ignored)
-      for (let i = 0; i < warmup; i++) {
-        const logs: string[] = [];
-        const metadata: Record<string, unknown>[] = [];
-        const ctx: BenchContext = {
-          iteration: i,
-          phase: 'warmup',
-          taskName: task.name,
-          log: (...args) => logs.push(args.map(String).join(' ')),
-          setMetadata: (data) => metadata.push(data),
-          emitMetric: (name, data) => emitMetric(name, data, runId),
+      const emitMeasuredSpan = (params: {
+        taskName: string;
+        iteration: number;
+        startedAt: string;
+        durationMs: number;
+        status: 'ok' | 'error';
+        logs: string[];
+        metadata: Record<string, unknown>[];
+        error?: unknown;
+      }) => {
+        const mergedMetadata = Object.assign({}, ...params.metadata);
+        const event: BenchSpanEvent = {
+          event: 'benchmark.span',
+          eventId: createPrefixedId('event'),
+          runId,
+          label: config.label,
+          installId,
+          traceId,
+          spanId: createPrefixedId('span'),
+          operation: params.taskName,
+          startedAt: params.startedAt,
+          endedAt: isoNow(),
+          durationMs: params.durationMs,
+          status: params.status,
+          provider: options.provider ?? config.provider,
+          attemptCount: 1,
+          attempts: [{
+            provider: options.provider ?? config.provider ?? 'unknown',
+            candidateIndex: 0,
+            startedAt: params.startedAt,
+            endedAt: isoNow(),
+            durationMs: params.durationMs,
+            status: params.status,
+            errorCode: params.error ? toErrorCode(params.error) : undefined,
+          }],
+          errorCode: params.error ? toErrorCode(params.error) : undefined,
+          benchVersion: BENCH_VERSION,
+          runtime,
+          os,
+          arch,
+          batch: config.batch,
+          shardIndex: config.shard?.index,
+          shardCount: config.shard?.count,
+          taskName: params.taskName,
+          logs: finalizeLogs(params.logs),
+          iteration: params.iteration,
+          phase: 'measured',
+          metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
         };
-        try {
-          await task.fn(ctx);
-        } catch {
-          // ignore warmup errors
-        }
+        emitBenchEvent(event, transport);
+      };
+
+      const taskStats = new Map<string, { durations: number[]; successes: number; failures: number }>();
+      for (const task of tasks) {
+        taskStats.set(task.name, { durations: [], successes: 0, failures: 0 });
       }
 
-      if (mode === 'concurrent') {
-        // Concurrent mode: fire all iterations concurrently up to concurrency limit.
-        // Uses Promise.allSettled so every task runs to completion regardless of
-        // individual failures. If throwOnError is true, an aggregate error is thrown
-        // after all tasks settle.
-        let done = 0;
-        let inFlight = 0;
-        let errorCount = 0;
-        const concurrentErrors: unknown[] = [];
+      const stageErrors: unknown[] = [];
+      const unitFailed = new Array(iterations).fill(false);
 
-        const runOne = async (i: number) => {
-          inFlight++;
-          const logs: string[] = [];
-          const metadata: Record<string, unknown>[] = [];
-          const ctx: BenchContext = {
-            iteration: i,
-            phase: 'measured',
-            taskName: task.name,
-            log: (...args) => logs.push(args.map(String).join(' ')),
-            setMetadata: (data) => metadata.push(data),
-            emitMetric: (name, data) => emitMetric(name, data, runId),
-          };
-          const startedAtMs = nowMs();
-          const startedAt = isoNow();
-
-          try {
-            await task.fn(ctx);
-            const durationMs = nowMs() - startedAtMs;
-            measuredDurations.push(durationMs);
-            successes += 1;
-            done++;
-
-            const mergedMetadata = Object.assign({}, ...metadata);
-            const event: BenchSpanEvent = {
-              event: 'benchmark.span',
-              eventId: createPrefixedId('event'),
-              runId,
-              label: config.label,
-              installId,
-              traceId,
-              spanId: createPrefixedId('span'),
-              operation: task.name,
-              startedAt,
-              endedAt: isoNow(),
-              durationMs,
-              status: 'ok',
-              provider: options.provider ?? config.provider,
-              attemptCount: 1,
-              attempts: [{
-                provider: options.provider ?? config.provider ?? 'unknown',
-                candidateIndex: 0,
-                startedAt,
-                endedAt: isoNow(),
-                durationMs,
-                status: 'ok',
-              }],
-              benchVersion: BENCH_VERSION,
-              runtime,
-              os,
-              arch,
-              batch: config.batch,
-              shardIndex: config.shard?.index,
-              shardCount: config.shard?.count,
-              taskName: task.name,
-              logs: finalizeLogs(logs),
-              iteration: i,
-              phase: 'measured',
-              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
-            };
-            emitBenchEvent(event, transport);
-          } catch (error) {
-            failures += 1;
-            errorCount++;
-            done++;
-            concurrentErrors.push(error);
-            const durationMs = nowMs() - startedAtMs;
-
-            const mergedMetadata = Object.assign({}, ...metadata);
-            const event: BenchSpanEvent = {
-              event: 'benchmark.span',
-              eventId: createPrefixedId('event'),
-              runId,
-              label: config.label,
-              installId,
-              traceId,
-              spanId: createPrefixedId('span'),
-              operation: task.name,
-              startedAt,
-              endedAt: isoNow(),
-              durationMs,
-              status: 'error',
-              provider: options.provider ?? config.provider,
-              attemptCount: 1,
-              attempts: [{
-                provider: options.provider ?? config.provider ?? 'unknown',
-                candidateIndex: 0,
-                startedAt,
-                endedAt: isoNow(),
-                durationMs,
-                status: 'error',
-                errorCode: toErrorCode(error),
-              }],
-              errorCode: toErrorCode(error),
-              benchVersion: BENCH_VERSION,
-              runtime,
-              os,
-              arch,
-              batch: config.batch,
-              shardIndex: config.shard?.index,
-              shardCount: config.shard?.count,
-              taskName: task.name,
-              logs: finalizeLogs(logs),
-              iteration: i,
-              phase: 'measured',
-              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
-            };
-            emitBenchEvent(event, transport);
-          }
-
-          inFlight--;
-        };
-
-        // Simple concurrency limiter using a semaphore pattern with a queue
-        const promises: Promise<void>[] = [];
-        let activeCount = 0;
-        const waitQueue: (() => void)[] = [];
-
-        const acquire = () => new Promise<void>((resolve) => {
-          if (activeCount < concurrency) {
-            activeCount++;
-            resolve();
-          } else {
-            waitQueue.push(resolve);
+      const runWithLimit = async (indices: number[], limit: number, worker: (i: number) => Promise<void>) => {
+        if (indices.length === 0) return;
+        if (limit <= 0) throw new Error('Concurrency must be > 0.');
+        let cursor = 0;
+        const runners = Array.from({ length: Math.min(limit, indices.length) }, async () => {
+          while (cursor < indices.length) {
+            const idx = indices[cursor++];
+            await worker(idx);
           }
         });
+        await Promise.all(runners);
+      };
 
-        const release = () => {
-          activeCount--;
-          if (waitQueue.length > 0) {
-            const next = waitQueue.shift()!;
-            activeCount++;
-            next();
+      for (let i = 0; i < warmup; i++) {
+        for (const task of tasks) {
+          const logs: string[] = [];
+          const metadata: Record<string, unknown>[] = [];
+          const ctx: BenchContext = {
+            iteration: i,
+            phase: 'warmup',
+            taskName: task.name,
+            log: (...args) => logs.push(args.map(String).join(' ')),
+            setMetadata: (data) => metadata.push(data),
+            emitMetric: (name, data) => emitMetric(name, data, runId),
+          };
+          try {
+            await task.fn(ctx);
+          } catch {
+            // Ignore warmup failures.
           }
-        };
-
-        for (let i = 0; i < iterations; i++) {
-          const p = (async () => {
-            await acquire();
-            try {
-              await runOne(i);
-            } finally {
-              release();
-            }
-          })();
-          promises.push(p);
         }
+      }
 
-        await Promise.allSettled(promises);
+      for (const task of tasks) {
+        const stats = taskStats.get(task.name)!;
+        const eligible = unitFailed
+          .map((failed, index) => ({ failed, index }))
+          .filter((item) => task.options?.runOnFailed || !item.failed)
+          .map((item) => item.index);
 
-        if (throwOnError && concurrentErrors.length > 0) {
-          throw concurrentErrors[0];
-        }
-      } else {
-        // Sequential mode (default)
-        for (let i = 0; i < iterations; i++) {
+        const stageConcurrency = mode === 'concurrent'
+          ? Math.min(concurrency, task.options?.concurrency ?? concurrency)
+          : 1;
+
+        await runWithLimit(eligible, stageConcurrency, async (i) => {
           const logs: string[] = [];
           const metadata: Record<string, unknown>[] = [];
           const ctx: BenchContext = {
@@ -536,115 +494,57 @@ export function createBench(config: BenchConfig) {
           };
           const startedAtMs = nowMs();
           const startedAt = isoNow();
-          let spanError: unknown;
 
           try {
             await task.fn(ctx);
             const durationMs = nowMs() - startedAtMs;
-            measuredDurations.push(durationMs);
-            successes += 1;
-
-            const mergedMetadata = Object.assign({}, ...metadata);
-            const event: BenchSpanEvent = {
-              event: 'benchmark.span',
-              eventId: createPrefixedId('event'),
-              runId,
-              label: config.label,
-              installId,
-              traceId,
-              spanId: createPrefixedId('span'),
-              operation: task.name,
+            stats.durations.push(durationMs);
+            stats.successes += 1;
+            emitMeasuredSpan({
+              taskName: task.name,
+              iteration: i,
               startedAt,
-              endedAt: isoNow(),
               durationMs,
               status: 'ok',
-              provider: options.provider ?? config.provider,
-              attemptCount: 1,
-              attempts: [{
-                provider: options.provider ?? config.provider ?? 'unknown',
-                candidateIndex: 0,
-                startedAt,
-                endedAt: isoNow(),
-                durationMs,
-                status: 'ok',
-              }],
-              benchVersion: BENCH_VERSION,
-              runtime,
-              os,
-              arch,
-              batch: config.batch,
-              shardIndex: config.shard?.index,
-              shardCount: config.shard?.count,
-              taskName: task.name,
-              logs: finalizeLogs(logs),
-              iteration: i,
-              phase: 'measured',
-              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
-            };
-            emitBenchEvent(event, transport);
+              logs,
+              metadata,
+            });
           } catch (error) {
-            spanError = error;
-            failures += 1;
             const durationMs = nowMs() - startedAtMs;
-
-            const mergedMetadata = Object.assign({}, ...metadata);
-            const event: BenchSpanEvent = {
-              event: 'benchmark.span',
-              eventId: createPrefixedId('event'),
-              runId,
-              label: config.label,
-              installId,
-              traceId,
-              spanId: createPrefixedId('span'),
-              operation: task.name,
+            stats.failures += 1;
+            unitFailed[i] = true;
+            stageErrors.push(error);
+            emitMeasuredSpan({
+              taskName: task.name,
+              iteration: i,
               startedAt,
-              endedAt: isoNow(),
               durationMs,
               status: 'error',
-              provider: options.provider ?? config.provider,
-              attemptCount: 1,
-              attempts: [{
-                provider: options.provider ?? config.provider ?? 'unknown',
-                candidateIndex: 0,
-                startedAt,
-                endedAt: isoNow(),
-                durationMs,
-                status: 'error',
-                errorCode: toErrorCode(error),
-              }],
-              errorCode: toErrorCode(error),
-              benchVersion: BENCH_VERSION,
-              runtime,
-              os,
-              arch,
-              batch: config.batch,
-              shardIndex: config.shard?.index,
-              shardCount: config.shard?.count,
-              taskName: task.name,
-              logs: finalizeLogs(logs),
-              iteration: i,
-              phase: 'measured',
-              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
-            };
-            emitBenchEvent(event, transport);
+              logs,
+              metadata,
+              error,
+            });
           }
-
-          if (spanError && throwOnError) {
-            throw spanError;
-          }
-        }
+        });
       }
 
-      taskResults.push({
-        taskName: task.name,
-        iterations,
-        warmup,
-        successes,
-        failures,
-        stats: buildStats(measuredDurations),
-      });
+      if (throwOnError && stageErrors.length > 0) {
+        throw stageErrors[0];
+      }
+
+      for (const task of tasks) {
+        const stats = taskStats.get(task.name)!;
+        taskResults.push({
+          taskName: task.name,
+          iterations,
+          warmup,
+          successes: stats.successes,
+          failures: stats.failures,
+          stats: buildStats(stats.durations),
+        });
       }
     } finally {
+      collectWorkloadCounters = undefined;
       currentRunId = undefined;
       currentProvider = undefined;
       await outputCapture?.stop();
@@ -655,6 +555,11 @@ export function createBench(config: BenchConfig) {
       label: config.label,
       runId,
       tasks: taskResults,
+      mode,
+      concurrency: mode === 'concurrent' ? concurrency : undefined,
+      iterations,
+      warmup,
+      workloadCounters: Object.fromEntries(workloadCounters),
     };
     printSummary(result);
     return result;

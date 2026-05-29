@@ -208,6 +208,31 @@ describe('createBench', () => {
     expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('op'));
   });
 
+  it('prints concurrent context and workload counters in summary', async () => {
+    const bench = createBench({ label: 'concurrent-summary-test' });
+
+    bench.add('concurrent-op', async (ctx) => {
+      ctx.emitMetric('workload', {
+        sandboxes_attempted: 100,
+        sandboxes_success: 99,
+        sandboxes_errors: 1,
+      });
+    });
+
+    await bench.run({ iterations: 1, warmup: 0, mode: 'concurrent', concurrency: 100 });
+
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('Mode: concurrent (limit=100)'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('Concurrency'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('100'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('Iterations per task: 1'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('Note: 1 benchmark iteration can still represent many concurrent workload operations.'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('Workload counters:'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('concurrency_target=100'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('sandboxes_attempted=100'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('sandboxes_success=99'));
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('sandboxes_errors=1'));
+  });
+
   it('can continue on failures when throwOnError is false', async () => {
     const events: BenchEvent[] = [];
     const bench = createBench({
@@ -351,6 +376,73 @@ describe('createBench', () => {
 
       const result = await bench.run({ iterations: 20, warmup: 0, mode: 'concurrent' });
       expect(result.tasks[0].successes).toBe(20);
+    });
+
+    it('supports pipeline execution model where each iteration runs all tasks', async () => {
+      const bench = createBench({ label: 'pipeline-concurrent' });
+      const observed: string[] = [];
+
+      bench.add('create', async (ctx) => {
+        observed.push(`create:${ctx.iteration}`);
+      });
+      bench.add('exec', async (ctx) => {
+        observed.push(`exec:${ctx.iteration}`);
+      });
+
+      const result = await bench.run({
+        iterations: 3,
+        warmup: 0,
+        mode: 'concurrent',
+        concurrency: 3,
+      });
+
+      expect(result.tasks).toHaveLength(2);
+      expect(result.tasks[0].taskName).toBe('create');
+      expect(result.tasks[0].stats.count).toBe(3);
+      expect(result.tasks[1].taskName).toBe('exec');
+      expect(result.tasks[1].stats.count).toBe(3);
+      expect(observed).toEqual(expect.arrayContaining([
+        'create:0', 'exec:0',
+        'create:1', 'exec:1',
+        'create:2', 'exec:2',
+      ]));
+    });
+
+    it('continues same stage on failures and skips failed units in next step by default', async () => {
+      const bench = createBench({ label: 'pipeline-failure-skip' });
+      const createSeen: number[] = [];
+      const execSeen: number[] = [];
+
+      bench.add('create', async (ctx) => {
+        createSeen.push(ctx.iteration);
+        if (ctx.iteration === 1) {
+          throw new Error('create failed for unit 1');
+        }
+      });
+
+      bench.add('exec', async (ctx) => {
+        execSeen.push(ctx.iteration);
+      });
+
+      const result = await bench.run({
+        iterations: 3,
+        warmup: 0,
+        mode: 'concurrent',
+        concurrency: 3,
+        throwOnError: false,
+      });
+
+      expect(createSeen.sort((a, b) => a - b)).toEqual([0, 1, 2]);
+      expect(execSeen.sort((a, b) => a - b)).toEqual([0, 2]);
+
+      const createTask = result.tasks.find((task) => task.taskName === 'create');
+      const execTask = result.tasks.find((task) => task.taskName === 'exec');
+
+      expect(createTask?.successes).toBe(2);
+      expect(createTask?.failures).toBe(1);
+      expect(execTask?.successes).toBe(2);
+      expect(execTask?.failures).toBe(0);
+      expect(execTask?.stats.count).toBe(2);
     });
 
     it('runs all iterations to completion even when some fail with throwOnError', async () => {
