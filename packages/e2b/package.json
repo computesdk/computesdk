@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/e2b",
-  "version": "1.7.46",
+  "version": "1.7.51",
   "description": "E2B provider for ComputeSDK - cloud sandboxes with full Linux environments, filesystem access, and microVM isolation",
   "author": "Garrison",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "e2b": "^2.12.1",
+    "e2b": "^2.26.0",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },

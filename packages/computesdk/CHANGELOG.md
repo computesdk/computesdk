@@ -1,5 +1,65 @@
 # computesdk
 
+## 4.1.3
+
+### Patch Changes
+
+- 607a11b: Redesign `@computesdk/bench` with a suite-based API and move benchmark recording into the bench package.
+
+  **`@computesdk/bench` (breaking)**
+
+  - Replace single-shot `bench.run(operation, fn, options)` with a suite API: `bench.add(name, fn)` + `bench.run(options)`
+  - `createBench()` now requires a `label` field — the human-readable suite name used as the primary grouping key in benchmark events
+  - Task functions receive a `BenchContext` (`ctx.iteration`, `ctx.phase`, `ctx.taskName`, `ctx.log(...)`) instead of a bare iteration index
+  - `ctx.log()` entries are attached as redacted `logs[]` on the benchmark span for that iteration
+  - Remove `sdkVersion` from `BenchConfig` — version is now auto-detected via build-time injection
+  - Add optional `apiUrl` / `apiKey` on `BenchConfig`; when omitted, events are local-only via `onEvent`
+  - Upload benchmark events in background batches with a bounded queue and best-effort final flush
+  - Add optional `groupId` and `shard` metadata for multi-process/sharded benchmark runs
+  - Add optional `captureOutput.file` / `captureOutput.flushInterval` to emit tailed process output as `benchmark.output` events
+  - Return type changes from `BenchResult` to `BenchSuiteResult` with per-task stats
+
+  **`@computesdk/bench` benchmark primitives**
+
+  - Add `BenchSuiteEvent` (`benchmark.suite`) emitted once per `bench.run()` with label, task names, provider, iterations, and warmup
+  - Add `BenchEvent`, `BenchSpanEvent`, `BenchOutputEvent`, and `BenchAttempt` types
+  - Add shared benchmark helpers for IDs, runtime detection, error codes, and event emission
+  - Print a Tinybench-style summary table to stdout after `bench.run()` completes
+
+  **`computesdk` (patch)**
+
+  - Remove the experimental automatic telemetry configuration/export surface while bench is redesigned independently
+  - daemond@0.1.4
+
+## 4.1.2
+
+### Patch Changes
+
+- Updated dependencies [1519626]
+  - daemond@0.1.4
+
+## 4.1.1
+
+### Patch Changes
+
+- eca5ec2: Remove `RunCommandOptions.daemon` from the public API and make command streaming callback-driven.
+
+  `sandbox.runCommand(...)` now automatically uses daemon-backed streaming internally when `onStdout` and/or `onStderr` callbacks are provided.
+
+  This also removes the need for daemon prewarming in callers and updates provider behavior/tests to treat streaming as an internal transport detail.
+
+## 4.1.0
+
+### Minor Changes
+
+- cc79d78: Add `daemond` as a runtime dependency and re-export daemon seed helpers/types from the `computesdk` package entrypoint.
+
+  Also extend `RunCommandOptions` with an optional `daemon` field (`boolean | SeedScriptConfig`) so provider-backed sandboxes can opt into daemonized command execution via `sandbox.runCommand(...)`.
+
+  In `@computesdk/provider`, add runtime handling for `runCommand(..., { daemon })` in generated sandbox instances: commands are routed through `daemond` seed launcher, parsed, and normalized into `CommandResult`.
+
+  Also add daemon output callback support via `RunCommandOptions.onStdout` / `RunCommandOptions.onStderr`. When daemon SSE is available from a prior daemon invocation, callbacks receive streamed command chunks; otherwise callbacks receive final parsed stdout/stderr as fallback.
+
 ## 4.0.0
 
 ### Major Changes

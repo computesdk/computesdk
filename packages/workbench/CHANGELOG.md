@@ -1,5 +1,150 @@
 # @computesdk/workbench
 
+## 26.0.4
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/agentuity@0.0.11
+  - @computesdk/beam@0.1.14
+  - @computesdk/blaxel@1.6.15
+  - @computesdk/cloudflare@1.6.12
+  - @computesdk/codesandbox@1.5.50
+  - @computesdk/daytona@1.7.30
+  - @computesdk/declaw@0.2.7
+  - @computesdk/e2b@1.7.51
+  - @computesdk/freestyle@0.1.10
+  - @computesdk/hopx@0.2.26
+  - @computesdk/just-bash@0.4.14
+  - @computesdk/k8s@0.2.3
+  - @computesdk/modal@1.9.3
+  - @computesdk/namespace@1.6.12
+  - @computesdk/provider@2.1.3
+  - @computesdk/runloop@1.3.51
+  - @computesdk/secure-exec@0.1.10
+  - @computesdk/sprites@0.1.13
+  - @computesdk/upstash@0.3.6
+  - @computesdk/vercel@1.7.30
+
+## 26.0.3
+
+### Patch Changes
+
+- Updated dependencies [5812a55]
+  - @computesdk/modal@1.9.2
+
+## 26.0.2
+
+### Patch Changes
+
+- Updated dependencies [0470843]
+  - @computesdk/e2b@1.7.50
+
+## 26.0.1
+
+### Patch Changes
+
+- Updated dependencies [d1a81bb]
+  - @computesdk/modal@1.9.1
+
+## 26.0.0
+
+### Patch Changes
+
+- Updated dependencies [f1d87cb]
+- Updated dependencies [f4941b9]
+  - @computesdk/modal@1.9.0
+
+## 25.0.3
+
+### Patch Changes
+
+- Updated dependencies [5b1046f]
+  - @computesdk/runloop@1.3.50
+
+## 25.0.2
+
+### Patch Changes
+
+- Updated dependencies [643c935]
+  - @computesdk/modal@1.8.45
+  - computesdk@4.1.2
+  - @computesdk/provider@2.1.2
+  - @computesdk/agentuity@0.0.10
+  - @computesdk/beam@0.1.13
+  - @computesdk/blaxel@1.6.14
+  - @computesdk/cloudflare@1.6.11
+  - @computesdk/codesandbox@1.5.49
+  - @computesdk/daytona@1.7.29
+  - @computesdk/declaw@0.2.6
+  - @computesdk/e2b@1.7.49
+  - @computesdk/freestyle@0.1.9
+  - @computesdk/hopx@0.2.25
+  - @computesdk/just-bash@0.4.13
+  - @computesdk/k8s@0.2.2
+  - @computesdk/namespace@1.6.11
+  - @computesdk/runloop@1.3.49
+  - @computesdk/secure-exec@0.1.9
+  - @computesdk/sprites@0.1.12
+  - @computesdk/upstash@0.3.5
+  - @computesdk/vercel@1.7.29
+
+## 25.0.1
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+  - @computesdk/agentuity@0.0.9
+  - @computesdk/beam@0.1.12
+  - @computesdk/blaxel@1.6.13
+  - @computesdk/cloudflare@1.6.10
+  - @computesdk/codesandbox@1.5.48
+  - @computesdk/daytona@1.7.28
+  - @computesdk/declaw@0.2.5
+  - @computesdk/e2b@1.7.48
+  - @computesdk/freestyle@0.1.8
+  - @computesdk/hopx@0.2.24
+  - @computesdk/just-bash@0.4.12
+  - @computesdk/k8s@0.2.1
+  - @computesdk/modal@1.8.44
+  - @computesdk/namespace@1.6.10
+  - @computesdk/runloop@1.3.48
+  - @computesdk/secure-exec@0.1.8
+  - @computesdk/sprites@0.1.11
+  - @computesdk/upstash@0.3.4
+  - @computesdk/vercel@1.7.28
+
+## 25.0.0
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+- Updated dependencies [1882c17]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+  - @computesdk/k8s@0.2.0
+  - @computesdk/agentuity@0.0.8
+  - @computesdk/beam@0.1.11
+  - @computesdk/blaxel@1.6.12
+  - @computesdk/cloudflare@1.6.9
+  - @computesdk/codesandbox@1.5.47
+  - @computesdk/daytona@1.7.27
+  - @computesdk/declaw@0.2.4
+  - @computesdk/e2b@1.7.47
+  - @computesdk/freestyle@0.1.7
+  - @computesdk/hopx@0.2.23
+  - @computesdk/just-bash@0.4.11
+  - @computesdk/modal@1.8.43
+  - @computesdk/namespace@1.6.9
+  - @computesdk/runloop@1.3.47
+  - @computesdk/secure-exec@0.1.7
+  - @computesdk/sprites@0.1.10
+  - @computesdk/upstash@0.3.3
+  - @computesdk/vercel@1.7.27
+
 ## 24.0.4
 
 ### Patch Changes

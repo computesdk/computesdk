@@ -135,7 +135,6 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private sandboxProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
-
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
       throw new Error(

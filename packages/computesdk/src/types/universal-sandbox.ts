@@ -60,6 +60,14 @@ export interface RunCommandOptions {
   env?: Record<string, string>;
   timeout?: number;
   background?: boolean;
+  /**
+   * Callback for streamed stdout chunks when supported by the provider.
+   */
+  onStdout?: (data: string) => void;
+  /**
+   * Callback for streamed stderr chunks when supported by the provider.
+   */
+  onStderr?: (data: string) => void;
 }
 
 /**
@@ -103,7 +111,19 @@ export interface SandboxFileSystem {
  */
 export interface CreateSandboxOptions {
   timeout?: number;
+  /** Provider-agnostic template/image ID to boot from */
   templateId?: string;
+  /**
+   * Snapshot ID to restore from when creating a sandbox.
+   *
+   * Each provider maps this to its native concept:
+   * - E2B: passed directly as the template/image ID
+   * - Daytona: sets `createParams.snapshot`
+   * - Modal: loads the image via `client.images.fromId(snapshotId)`
+   * - CodeSandbox: calls `sdk.sandboxes.resume(snapshotId)`
+   * - Runloop: maps to `snapshot_id` in devbox creation params
+   */
+  snapshotId?: string;
   metadata?: Record<string, any>;
   envs?: Record<string, string>;
   name?: string;

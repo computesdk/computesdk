@@ -39,7 +39,6 @@ interface K8sConfig {
   image?: string;
   runtime?: 'node' | 'python';
   timeout?: number;
-  serviceType?: 'ClusterIP' | 'NodePort';
   podNamePrefix?: string;
   urlTemplate?: string;
 }

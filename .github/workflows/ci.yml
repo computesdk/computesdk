@@ -49,7 +49,7 @@ jobs:
     - name: Build packages
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm build
-    
+
     - name: Run all tests (mock mode)
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm test
@@ -290,7 +290,7 @@ jobs:
       run: kubectl get nodes
 
     - name: Build required packages
-      run: pnpm --filter @computesdk/cmd build && pnpm --filter computesdk build && pnpm --filter @computesdk/provider build && pnpm --filter @computesdk/test-utils build && pnpm --filter @computesdk/k8s build
+      run: pnpm --filter @computesdk/cmd build && pnpm --filter @computesdk/bench build && pnpm --filter daemond build && pnpm --filter computesdk build && pnpm --filter @computesdk/provider build && pnpm --filter @computesdk/test-utils build && pnpm --filter @computesdk/k8s build
 
     - name: Run Kubernetes provider integration tests
       env:

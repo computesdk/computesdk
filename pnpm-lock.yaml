@@ -43,7 +43,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   examples/basic:
     dependencies:
@@ -108,7 +108,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -123,7 +123,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/anchorbrowser:
     dependencies:
@@ -166,7 +166,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/archil:
     dependencies:
@@ -185,7 +185,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -200,7 +200,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/beam:
     dependencies:
@@ -237,7 +237,35 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
+
+  packages/bench:
+    dependencies:
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.9
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/blaxel:
     dependencies:
@@ -274,7 +302,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/browserbase:
     dependencies:
@@ -302,7 +330,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -317,7 +345,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/browseruse:
     dependencies:
@@ -345,7 +373,7 @@ importers:
         version: 20.19.41
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -360,7 +388,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/cli:
     dependencies:
@@ -391,7 +419,7 @@ importers:
         version: 6.21.0(eslint@8.57.1)(typescript@5.8.3)
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -406,7 +434,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/cloudflare:
     dependencies:
@@ -449,7 +477,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
       wrangler:
         specifier: ^3.0.0
         version: 3.114.14(@cloudflare/workers-types@4.20250826.0)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
@@ -473,7 +501,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/codesandbox:
     dependencies:
@@ -510,20 +538,23 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/computesdk:
     dependencies:
       '@computesdk/cmd':
         specifier: workspace:*
         version: link:../cmd
+      daemond:
+        specifier: workspace:*
+        version: link:../daemond
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -538,7 +569,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/create-compute:
     dependencies:
@@ -569,7 +600,7 @@ importers:
         version: 6.21.0(eslint@8.57.1)(typescript@5.8.3)
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -584,7 +615,31 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
+
+  packages/daemond:
+    devDependencies:
+      '@computesdk/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^6.0.0
+        version: 6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser':
+        specifier: ^6.0.0
+        version: 6.21.0(eslint@8.57.1)(typescript@5.9.3)
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
 
   packages/daytona:
     dependencies:
@@ -621,7 +676,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/declaw:
     dependencies:
@@ -643,7 +698,7 @@ importers:
         version: 20.19.41
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -658,7 +713,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/docker:
     dependencies:
@@ -683,7 +738,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -698,7 +753,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/e2b:
     dependencies:
@@ -709,8 +764,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       e2b:
-        specifier: ^2.12.1
-        version: 2.12.1
+        specifier: ^2.26.0
+        version: 2.26.0
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -720,7 +775,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -735,7 +790,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/events:
     devDependencies:
@@ -744,7 +799,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -759,7 +814,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/freestyle:
     dependencies:
@@ -787,7 +842,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -802,7 +857,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/hopx:
     dependencies:
@@ -839,7 +894,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/hyperbrowser:
     dependencies:
@@ -882,7 +937,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/just-bash:
     dependencies:
@@ -922,7 +977,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/k8s:
     dependencies:
@@ -959,7 +1014,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/kernel:
     dependencies:
@@ -981,7 +1036,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -996,7 +1051,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/modal:
     dependencies:
@@ -1007,8 +1062,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       modal:
-        specifier: ^0.7.4
-        version: 0.7.4
+        specifier: 0.7.6
+        version: 0.7.6
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -1018,7 +1073,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1033,7 +1088,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/namespace:
     dependencies:
@@ -1052,7 +1107,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
@@ -1070,7 +1125,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/northflank:
     dependencies:
@@ -1150,7 +1205,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/provider:
     dependencies:
@@ -1160,13 +1215,16 @@ importers:
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
+      daemond:
+        specifier: workspace:*
+        version: link:../daemond
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1181,7 +1239,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/r2:
     dependencies:
@@ -1200,7 +1258,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1215,7 +1273,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/runloop:
     dependencies:
@@ -1223,8 +1281,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@runloop/api-client':
-        specifier: ^1.11.0
-        version: 1.11.0
+        specifier: ^1.21.0
+        version: 1.21.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -1237,7 +1295,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1252,7 +1310,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/s3:
     dependencies:
@@ -1271,7 +1329,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1286,7 +1344,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/secure-exec:
     dependencies:
@@ -1326,7 +1384,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/sprites:
     dependencies:
@@ -1345,7 +1403,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1360,7 +1418,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/steel:
     dependencies:
@@ -1388,7 +1446,7 @@ importers:
         version: 20.19.41
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1403,7 +1461,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/tensorlake:
     dependencies:
@@ -1440,7 +1498,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.6.1
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/test-utils:
     dependencies:
@@ -1462,7 +1520,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@24.12.4)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@24.12.4)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/tigris:
     dependencies:
@@ -1481,7 +1539,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1496,7 +1554,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/upstash:
     dependencies:
@@ -1518,7 +1576,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1533,7 +1591,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/vercel:
     dependencies:
@@ -1561,7 +1619,7 @@ importers:
         version: 20.19.5
       '@vitest/coverage-v8':
         specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
@@ -1576,7 +1634,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
 
   packages/workbench:
     dependencies:
@@ -3685,8 +3743,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@runloop/api-client@1.11.0':
-    resolution: {integrity: sha512-3m31w9k6xwfcYbkQrZfkdGdR5ZJPgGTADpHie+edJcoAzS/u0dpcZnuWOoM06b1Z5+wRXyOxW475wJN9eIioBw==}
+  '@runloop/api-client@1.21.0':
+    resolution: {integrity: sha512-gDPXEo5shVmLcD7LU7/B+kqmw/Y+r2ZrTRD2BHW+pBpSgRFJ9KrOdYF/bwi6QzrRuxnOaouLlFD8JQUgIdD7qg==}
 
   '@secure-exec/browser@0.1.1-rc.3':
     resolution: {integrity: sha512-syjym68632Yzba6Uu9tfnd2KGHTHoiOMTg3hnYRxs4t2RrTfzKm3fWOBVmOZHaZT7ECMCItXerDfYmH05tbHDg==}
@@ -5282,9 +5340,9 @@ packages:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
 
-  e2b@2.12.1:
-    resolution: {integrity: sha512-qKYwS0VSZqvtWAT4OrCtOwRhhMlcd359zyFRGAZZ1wpYHHjr9zR872UCoDb/d5jFVUsREcUgktURc47XxfznPg==}
-    engines: {node: '>=20'}
+  e2b@2.26.0:
+    resolution: {integrity: sha512-yMAWaIFMW8jNCWOPU+Kix+tbyZQ2yd4zYumOcJcEkMwkCjtLCJmDLto4zRa2GtLyL+61v+NF3ykT72X3UEdFpw==}
+    engines: {node: '>=20.18.1'}
 
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
@@ -6404,10 +6462,6 @@ packages:
     resolution: {integrity: sha512-3FnjYuehv9k6ovOEbyOswadCDPX1piCfhV8ncmYtHOjuPwylVWsghTLo7rabjC3Rx5xD4HDx8Wm1xnMF7S5qFQ==}
     engines: {node: '>=8'}
 
-  minipass@7.1.2:
-    resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
-    engines: {node: '>=16 || 14 >=14.17'}
-
   minipass@7.1.3:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
@@ -6431,8 +6485,8 @@ packages:
   mlly@1.8.0:
     resolution: {integrity: sha512-l8D9ODSRWLe2KHJSifWGwBqpTZXIXTeo8mlKjY+E2HAakaTeNpqAyBZ8GSqLzHgw4XmHmC8whvpjJNMbFZN7/g==}
 
-  modal@0.7.4:
-    resolution: {integrity: sha512-md/+L67tM1RazAt2xvLO+gUqRz6zllyYoNNiM8h+Eb1wLy7JzliH7vnx9f9Sq4zE3qQHENpX0Tjy/LSkIyrANA==}
+  modal@0.7.6:
+    resolution: {integrity: sha512-AOFRO/eGl4fcNKxHkNLx55+tL318IeAiTDJCMh/Q1ZXhoaZFnpmlirVV2J5BhO32XLA7AiH6KYGA7gRBGA09lQ==}
 
   modern-tar@0.7.5:
     resolution: {integrity: sha512-YTefgdpKKFgoTDbEUqXqgUJct2OG6/4hs4XWLsxcHkDLj/x/V8WmKIRppPnXP5feQ7d1vuYWSp3qKkxfwaFaxA==}
@@ -7756,6 +7810,10 @@ packages:
 
   undici@7.19.0:
     resolution: {integrity: sha512-Heho1hJD81YChi+uS2RkSjcVO+EQLmLSyUlHyp7Y/wFbxQaGb4WXVKD073JytrjXJVkSZVzoE2MCSOKugFGtOQ==}
+    engines: {node: '>=20.18.1'}
+
+  undici@7.26.0:
+    resolution: {integrity: sha512-3O9Tf67pGhgOv9jM35AbhkXAKi13f3oy3aE4CSgr+TckGeY+/iu97ZXN+J7DpHPzLbVApFd1IFhcnBjREYXYcg==}
     engines: {node: '>=20.18.1'}
 
   undici@8.2.0:
@@ -10791,7 +10849,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@runloop/api-client@1.11.0':
+  '@runloop/api-client@1.21.0':
     dependencies:
       '@types/node': 18.19.123
       '@types/node-fetch': 2.6.13
@@ -11831,6 +11889,26 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)':
+    dependencies:
+      '@eslint-community/regexpp': 4.12.1
+      '@typescript-eslint/parser': 6.21.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/scope-manager': 6.21.0
+      '@typescript-eslint/type-utils': 6.21.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/utils': 6.21.0(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/visitor-keys': 6.21.0
+      debug: 4.4.1
+      eslint: 8.57.1
+      graphemer: 1.4.0
+      ignore: 5.3.2
+      natural-compare: 1.4.0
+      semver: 7.7.2
+      ts-api-utils: 1.4.3(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - supports-color
+
   '@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:
       '@typescript-eslint/scope-manager': 6.21.0
@@ -11841,6 +11919,19 @@ snapshots:
       eslint: 8.57.1
     optionalDependencies:
       typescript: 5.8.3
+    transitivePeerDependencies:
+      - supports-color
+
+  '@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.3)':
+    dependencies:
+      '@typescript-eslint/scope-manager': 6.21.0
+      '@typescript-eslint/types': 6.21.0
+      '@typescript-eslint/typescript-estree': 6.21.0(typescript@5.9.3)
+      '@typescript-eslint/visitor-keys': 6.21.0
+      debug: 4.4.1
+      eslint: 8.57.1
+    optionalDependencies:
+      typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
@@ -11861,6 +11952,18 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@typescript-eslint/type-utils@6.21.0(eslint@8.57.1)(typescript@5.9.3)':
+    dependencies:
+      '@typescript-eslint/typescript-estree': 6.21.0(typescript@5.9.3)
+      '@typescript-eslint/utils': 6.21.0(eslint@8.57.1)(typescript@5.9.3)
+      debug: 4.4.3
+      eslint: 8.57.1
+      ts-api-utils: 1.4.3(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - supports-color
+
   '@typescript-eslint/types@6.21.0': {}
 
   '@typescript-eslint/typescript-estree@6.21.0(typescript@5.8.3)':
@@ -11878,6 +11981,21 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@typescript-eslint/typescript-estree@6.21.0(typescript@5.9.3)':
+    dependencies:
+      '@typescript-eslint/types': 6.21.0
+      '@typescript-eslint/visitor-keys': 6.21.0
+      debug: 4.4.3
+      globby: 11.1.0
+      is-glob: 4.0.3
+      minimatch: 9.0.3
+      semver: 7.7.2
+      ts-api-utils: 1.4.3(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - supports-color
+
   '@typescript-eslint/utils@6.21.0(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:
       '@eslint-community/eslint-utils': 4.7.0(eslint@8.57.1)
@@ -11886,6 +12004,20 @@ snapshots:
       '@typescript-eslint/scope-manager': 6.21.0
       '@typescript-eslint/types': 6.21.0
       '@typescript-eslint/typescript-estree': 6.21.0(typescript@5.8.3)
+      eslint: 8.57.1
+      semver: 7.7.2
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
+
+  '@typescript-eslint/utils@6.21.0(eslint@8.57.1)(typescript@5.9.3)':
+    dependencies:
+      '@eslint-community/eslint-utils': 4.7.0(eslint@8.57.1)
+      '@types/json-schema': 7.0.15
+      '@types/semver': 7.7.0
+      '@typescript-eslint/scope-manager': 6.21.0
+      '@typescript-eslint/types': 6.21.0
+      '@typescript-eslint/typescript-estree': 6.21.0(typescript@5.9.3)
       eslint: 8.57.1
       semver: 7.7.2
     transitivePeerDependencies:
@@ -11938,6 +12070,25 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@vitest/coverage-v8@1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1))':
+    dependencies:
+      '@ampproject/remapping': 2.3.0
+      '@bcoe/v8-coverage': 0.2.3
+      debug: 4.4.3
+      istanbul-lib-coverage: 3.2.2
+      istanbul-lib-report: 3.0.1
+      istanbul-lib-source-maps: 5.0.6
+      istanbul-reports: 3.1.7
+      magic-string: 0.30.17
+      magicast: 0.3.5
+      picocolors: 1.1.1
+      std-env: 3.9.0
+      strip-literal: 2.1.1
+      test-exclude: 6.0.0
+      vitest: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
+    transitivePeerDependencies:
+      - supports-color
+
   '@vitest/coverage-v8@1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))':
     dependencies:
       '@ampproject/remapping': 2.3.0
@@ -11954,6 +12105,25 @@ snapshots:
       strip-literal: 2.1.1
       test-exclude: 6.0.0
       vitest: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@vitest/coverage-v8@1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1))':
+    dependencies:
+      '@ampproject/remapping': 2.3.0
+      '@bcoe/v8-coverage': 0.2.3
+      debug: 4.4.3
+      istanbul-lib-coverage: 3.2.2
+      istanbul-lib-report: 3.0.1
+      istanbul-lib-source-maps: 5.0.6
+      istanbul-reports: 3.1.7
+      magic-string: 0.30.17
+      magicast: 0.3.5
+      picocolors: 1.1.1
+      std-env: 3.9.0
+      strip-literal: 2.1.1
+      test-exclude: 6.0.0
+      vitest: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -12876,7 +13046,7 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  e2b@2.12.1:
+  e2b@2.26.0:
     dependencies:
       '@bufbuild/protobuf': 2.7.0
       '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.7.0)
@@ -12887,7 +13057,8 @@ snapshots:
       glob: 11.1.0
       openapi-fetch: 0.14.1
       platform: 1.3.6
-      tar: 7.5.9
+      tar: 7.5.15
+      undici: 7.26.0
 
   eastasianwidth@0.2.0: {}
 
@@ -13491,7 +13662,7 @@ snapshots:
       foreground-child: 3.3.1
       jackspeak: 4.2.3
       minimatch: 10.2.2
-      minipass: 7.1.2
+      minipass: 7.1.3
       package-json-from-dist: 1.0.1
       path-scurry: 2.0.2
 
@@ -14214,8 +14385,6 @@ snapshots:
 
   minipass@5.0.0: {}
 
-  minipass@7.1.2: {}
-
   minipass@7.1.3: {}
 
   minizlib@2.1.2:
@@ -14238,7 +14407,7 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.1
 
-  modal@0.7.4:
+  modal@0.7.6:
     dependencies:
       cbor-x: 1.6.0
       long: 5.3.2
@@ -15588,6 +15757,10 @@ snapshots:
     dependencies:
       typescript: 5.8.3
 
+  ts-api-utils@1.4.3(typescript@5.9.3):
+    dependencies:
+      typescript: 5.9.3
+
   ts-error@1.0.6: {}
 
   ts-interface-checker@0.1.13: {}
@@ -15732,6 +15905,8 @@ snapshots:
       '@fastify/busboy': 2.1.1
 
   undici@7.19.0: {}
+
+  undici@7.26.0: {}
 
   undici@8.2.0: {}
 
@@ -15914,6 +16089,41 @@ snapshots:
       - supports-color
       - terser
 
+  vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1):
+    dependencies:
+      '@vitest/expect': 1.6.1
+      '@vitest/runner': 1.6.1
+      '@vitest/snapshot': 1.6.1
+      '@vitest/spy': 1.6.1
+      '@vitest/utils': 1.6.1
+      acorn-walk: 8.3.4
+      chai: 4.5.0
+      debug: 4.4.3
+      execa: 8.0.1
+      local-pkg: 0.5.1
+      magic-string: 0.30.17
+      pathe: 1.1.2
+      picocolors: 1.1.1
+      std-env: 3.9.0
+      strip-literal: 2.1.1
+      tinybench: 2.9.0
+      tinypool: 0.8.4
+      vite: 5.4.19(@types/node@20.19.41)(terser@5.43.1)
+      vite-node: 1.6.1(@types/node@20.19.41)(terser@5.43.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 20.19.41
+      jsdom: 23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
   vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1):
     dependencies:
       '@vitest/expect': 1.6.1
@@ -15949,7 +16159,42 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@1.6.1(@types/node@24.12.4)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1):
+  vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0)(terser@5.43.1):
+    dependencies:
+      '@vitest/expect': 1.6.1
+      '@vitest/runner': 1.6.1
+      '@vitest/snapshot': 1.6.1
+      '@vitest/spy': 1.6.1
+      '@vitest/utils': 1.6.1
+      acorn-walk: 8.3.4
+      chai: 4.5.0
+      debug: 4.4.3
+      execa: 8.0.1
+      local-pkg: 0.5.1
+      magic-string: 0.30.17
+      pathe: 1.1.2
+      picocolors: 1.1.1
+      std-env: 3.9.0
+      strip-literal: 2.1.1
+      tinybench: 2.9.0
+      tinypool: 0.8.4
+      vite: 5.4.19(@types/node@20.19.5)(terser@5.43.1)
+      vite-node: 1.6.1(@types/node@20.19.5)(terser@5.43.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 20.19.5
+      jsdom: 23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
+  vitest@1.6.1(@types/node@24.12.4)(jsdom@23.2.0)(terser@5.43.1):
     dependencies:
       '@vitest/expect': 1.6.1
       '@vitest/runner': 1.6.1

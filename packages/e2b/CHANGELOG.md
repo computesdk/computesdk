@@ -1,5 +1,42 @@
 # @computesdk/e2b
 
+## 1.7.51
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 1.7.50
+
+### Patch Changes
+
+- 0470843: Update e2b SDK dependency to `^2.26.0`.
+
+## 1.7.49
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
+## 1.7.48
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
+## 1.7.47
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+
 ## 1.7.46
 
 ### Patch Changes
