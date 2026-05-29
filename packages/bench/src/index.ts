@@ -23,6 +23,7 @@ export type {
   BenchBatchStats,
   BenchBatchProgress,
   BenchQueryClient,
+  BenchQueryClientConfig,
   PaginatedResponse,
 } from './query';
 export { createBenchQueryClient } from './query';
