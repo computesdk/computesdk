@@ -57,6 +57,7 @@ For scale/lifecycle benchmarks, model each lifecycle phase as a step and let
 
 ```ts
 import { createBench } from '@computesdk/bench';
+import { compute } from 'computesdk';
 
 const bench = createBench({ label: 'scale.e2b' });
 const sandboxes: Array<any | undefined> = [];

@@ -85,6 +85,16 @@ describe('createBench', () => {
     expect(() => bench.add('op', async () => {})).toThrow(/already registered/);
   });
 
+  it('supports chaining add calls', async () => {
+    const bench = createBench({ label: 'chain-add-test' });
+    bench
+      .add('one', async () => {})
+      .add('two', async () => {});
+
+    const result = await bench.run({ iterations: 1, warmup: 0 });
+    expect(result.tasks.map((task) => task.taskName)).toEqual(['one', 'two']);
+  });
+
   it('includes sanitized logs on spans', async () => {
     const events: BenchEvent[] = [];
     const bench = createBench({

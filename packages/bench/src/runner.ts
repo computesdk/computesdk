@@ -38,6 +38,12 @@ function isoNow(): string {
 
 type TaskFn = (ctx: BenchContext) => Promise<unknown> | unknown;
 type RegisteredTask = { name: string; fn: TaskFn; options?: BenchAddOptions };
+type BenchApi = {
+  add: (taskName: string, fn: TaskFn, options?: BenchAddOptions) => BenchApi;
+  run: (options?: BenchRunOptions) => Promise<BenchSuiteResult>;
+  emit: (name: string, data: Record<string, unknown>, runId?: string) => void;
+  progress: (params: { done: number; inFlight: number; errors: number; total: number; extra?: Record<string, unknown> }, runId?: string) => void;
+} & ReturnType<typeof createBenchQueryClient>;
 
 const LOG_MAX_ENTRIES = 50;
 const OUTPUT_FLUSH_INTERVAL = 30000;
@@ -258,7 +264,7 @@ export function createBench(config: BenchConfig) {
   let currentProvider: string | undefined;
   let collectWorkloadCounters: ((data?: Record<string, unknown>) => void) | undefined;
 
-  let api: any;
+  let api: BenchApi;
 
   function add(taskName: string, fn: TaskFn, options: BenchAddOptions = {}) {
     if (taskName.trim() === '') {
@@ -326,6 +332,9 @@ export function createBench(config: BenchConfig) {
     const throwOnError = options.throwOnError ?? true;
     const mode = options.mode ?? 'sequential';
     const concurrency = options.concurrency ?? iterations;
+    if (!Number.isFinite(concurrency) || concurrency <= 0) {
+      throw new Error('Bench concurrency must be a positive number.');
+    }
     const runId = createPrefixedId('run');
     currentRunId = runId;
     currentProvider = options.provider ?? config.provider;
@@ -388,6 +397,7 @@ export function createBench(config: BenchConfig) {
         error?: unknown;
       }) => {
         const mergedMetadata = Object.assign({}, ...params.metadata);
+        const endedAt = isoNow();
         const event: BenchSpanEvent = {
           event: 'benchmark.span',
           eventId: createPrefixedId('event'),
@@ -398,7 +408,7 @@ export function createBench(config: BenchConfig) {
           spanId: createPrefixedId('span'),
           operation: params.taskName,
           startedAt: params.startedAt,
-          endedAt: isoNow(),
+          endedAt,
           durationMs: params.durationMs,
           status: params.status,
           provider: options.provider ?? config.provider,
@@ -407,7 +417,7 @@ export function createBench(config: BenchConfig) {
             provider: options.provider ?? config.provider ?? 'unknown',
             candidateIndex: 0,
             startedAt: params.startedAt,
-            endedAt: isoNow(),
+            endedAt,
             durationMs: params.durationMs,
             status: params.status,
             errorCode: params.error ? toErrorCode(params.error) : undefined,
@@ -480,6 +490,9 @@ export function createBench(config: BenchConfig) {
         const stageConcurrency = mode === 'concurrent'
           ? Math.min(concurrency, task.options?.concurrency ?? concurrency)
           : 1;
+        if (!Number.isFinite(stageConcurrency) || stageConcurrency <= 0) {
+          throw new Error(`Bench step "${task.name}" has invalid concurrency: ${String(task.options?.concurrency)}.`);
+        }
 
         await runWithLimit(eligible, stageConcurrency, async (i) => {
           const logs: string[] = [];
@@ -565,5 +578,6 @@ export function createBench(config: BenchConfig) {
     return result;
   }
 
-  return { add, run, emit: emitMetric, progress: emitProgress, ...query };
+  api = { add, run, emit: emitMetric, progress: emitProgress, ...query };
+  return api;
 }
