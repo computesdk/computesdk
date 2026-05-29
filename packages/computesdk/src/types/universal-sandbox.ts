@@ -22,6 +22,13 @@ export interface CommandResult {
   stderr: string;
   exitCode: number;
   durationMs: number;
+  /**
+   * Present when the command was started with `background: true`.
+   * Use with `daemonSeedScriptJobReadCommand` to poll buffered output
+   * from the daemon, or call `sandbox.runCommand(daemonSeedScriptJobReadCommand(config, jobId))`
+   * to retrieve accumulated stdout/stderr.
+   */
+  jobId?: string;
 }
 
 /**
