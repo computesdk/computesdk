@@ -70,6 +70,8 @@ export interface BenchSpanEvent {
   benchmarkRunId?: string;
   iteration?: number;
   phase?: 'warmup' | 'measured';
+  /** Arbitrary caller-supplied metadata attached to this span */
+  metadata?: Record<string, unknown>;
 }
 
 export interface BenchOutputEvent {
@@ -91,9 +93,54 @@ export interface BenchOutputEvent {
   arch?: string;
 }
 
-export type BenchEvent = BenchConfigEvent | BenchRunEvent | BenchSpanEvent | BenchOutputEvent;
+export interface BenchMetricEvent {
+  event: 'benchmark.metric';
+  eventId: string;
+  runId: string;
+  label: string;
+  installId: string;
+  batch?: string;
+  shardIndex?: number;
+  shardCount?: number;
+  timestamp: string;
+  /** Metric name / category */
+  name: string;
+  /** Arbitrary metric payload */
+  data: Record<string, unknown>;
+  provider?: string;
+  benchVersion?: string;
+  runtime?: 'node' | 'browser' | 'unknown';
+  os?: string;
+  arch?: string;
+}
 
-type NetworkBenchEvent = BenchRunEvent | BenchSpanEvent | BenchOutputEvent;
+export interface BenchProgressEvent {
+  event: 'benchmark.progress';
+  eventId: string;
+  runId: string;
+  label: string;
+  installId: string;
+  batch?: string;
+  shardIndex?: number;
+  shardCount?: number;
+  timestamp: string;
+  /** Progress counters */
+  done: number;
+  inFlight: number;
+  errors: number;
+  total: number;
+  /** Optional extra fields */
+  extra?: Record<string, unknown>;
+  provider?: string;
+  benchVersion?: string;
+  runtime?: 'node' | 'browser' | 'unknown';
+  os?: string;
+  arch?: string;
+}
+
+export type BenchEvent = BenchConfigEvent | BenchRunEvent | BenchSpanEvent | BenchOutputEvent | BenchMetricEvent | BenchProgressEvent;
+
+type NetworkBenchEvent = BenchRunEvent | BenchSpanEvent | BenchOutputEvent | BenchMetricEvent | BenchProgressEvent;
 
 const API_BATCH_SIZE = 100;
 const API_FLUSH_INTERVAL = 1000;
@@ -109,8 +156,8 @@ export interface BenchTransport {
   flushing?: Promise<void>;
 }
 
-function isNetworkEvent(event: BenchEvent): event is BenchSpanEvent | BenchRunEvent | BenchOutputEvent {
-  return event.event === 'benchmark.span' || event.event === 'benchmark.run' || event.event === 'benchmark.output';
+function isNetworkEvent(event: BenchEvent): event is NetworkBenchEvent {
+  return event.event === 'benchmark.span' || event.event === 'benchmark.run' || event.event === 'benchmark.output' || event.event === 'benchmark.metric' || event.event === 'benchmark.progress';
 }
 
 export function createPrefixedId(prefix: string): string {
