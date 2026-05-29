@@ -74,7 +74,8 @@
     "@computesdk/freestyle": "workspace:*",
     "@computesdk/secure-exec": "workspace:*",
     "@computesdk/upstash": "workspace:*",
-    "@computesdk/k8s": "workspace:*"
+    "@computesdk/k8s": "workspace:*",
+    "@computesdk/northflank": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
@@ -132,6 +133,9 @@
       "optional": true
     },
     "@computesdk/k8s": {
+      "optional": true
+    },
+    "@computesdk/northflank": {
       "optional": true
     }
   },
