@@ -2,7 +2,7 @@
   "name": "@computesdk/bench",
   "version": "0.1.0",
   "type": "module",
-  "description": "Tinybench-style benchmarking toolkit for ComputeSDK telemetry spans",
+  "description": "Tinybench-style benchmarking toolkit for ComputeSDK benchmark spans",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.cjs",
@@ -26,13 +26,13 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run src/__tests__/integration.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
   "keywords": [
     "computesdk",
     "benchmark",
-    "telemetry",
     "observability",
     "tinybench"
   ],
@@ -49,7 +49,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@computesdk/telemetry": "workspace:*"
+    "nanoid": "^5.1.6"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

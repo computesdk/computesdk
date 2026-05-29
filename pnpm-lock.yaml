@@ -241,9 +241,9 @@ importers:
 
   packages/bench:
     dependencies:
-      '@computesdk/telemetry':
-        specifier: workspace:*
-        version: link:../telemetry
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.9
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -545,9 +545,6 @@ importers:
       '@computesdk/cmd':
         specifier: workspace:*
         version: link:../cmd
-      '@computesdk/telemetry':
-        specifier: workspace:*
-        version: link:../telemetry
       daemond:
         specifier: workspace:*
         version: link:../daemond
@@ -1407,30 +1404,6 @@ importers:
       '@computesdk/test-utils':
         specifier: workspace:*
         version: link:../test-utils
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.41
-      '@vitest/coverage-v8':
-        specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1))
-      eslint:
-        specifier: ^8.37.0
-        version: 8.57.1
-      rimraf:
-        specifier: ^5.0.0
-        version: 5.0.10
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0)(terser@5.43.1)
-
-  packages/telemetry:
-    devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.41
