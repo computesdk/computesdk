@@ -14,7 +14,13 @@ export function buildStats(durations: number[]): BenchmarkStats {
       maxMs: 0,
       meanMs: 0,
       medianMs: 0,
+      p10Ms: 0,
+      p25Ms: 0,
+      p50Ms: 0,
+      p75Ms: 0,
+      p90Ms: 0,
       p95Ms: 0,
+      p99Ms: 0,
     };
   }
 
@@ -31,6 +37,12 @@ export function buildStats(durations: number[]): BenchmarkStats {
     maxMs: sorted[sorted.length - 1],
     meanMs: sum / sorted.length,
     medianMs: median,
+    p10Ms: percentile(sorted, 10),
+    p25Ms: percentile(sorted, 25),
+    p50Ms: percentile(sorted, 50),
+    p75Ms: percentile(sorted, 75),
+    p90Ms: percentile(sorted, 90),
     p95Ms: percentile(sorted, 95),
+    p99Ms: percentile(sorted, 99),
   };
 }
