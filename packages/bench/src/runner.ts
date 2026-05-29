@@ -213,22 +213,22 @@ function createOutputCapture(params: {
   };
 }
 
-const DEFAULT_INGEST_URL = 'https://platform.computesdk.com/api/v1/events';
+const DEFAULT_BASE_URL = 'https://platform.computesdk.com/api/v1';
 
 export function createBench(config: BenchConfig) {
   const installId = createPrefixedId('install');
   const runtime = detectRuntime();
   const os = detectOs();
   const arch = detectArch();
-  const apiUrl = config.apiUrl ?? DEFAULT_INGEST_URL;
+  const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
+  const apiUrl = `${baseUrl}/events`;
   const apiKey = config.apiKey ?? process.env.COMPUTESDK_API_KEY;
-  const queryBaseUrl = config.queryUrl ?? apiUrl.replace(/\/events\/?$/, '');
   const transport: BenchTransport = createBenchTransport({
     onEvent: config.onEvent,
     apiUrl,
     apiKey,
   });
-  const query = createBenchQueryClient(queryBaseUrl, apiKey);
+  const query = createBenchQueryClient({ baseUrl, apiKey });
 
   const tasks: Array<{ name: string; fn: TaskFn }> = [];
   let currentRunId: string | undefined;

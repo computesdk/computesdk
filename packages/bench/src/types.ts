@@ -20,11 +20,9 @@ export interface BenchConfig {
   label: string;
   /** Provider name to tag on all spans (overridable per-run via BenchRunOptions) */
   provider?: string;
-  /** API endpoint for uploading benchmark events (default: https://platform.computesdk.com/api/v1/events) */
-  apiUrl?: string;
-  /** Base URL for query endpoints. Defaults to apiUrl with /events stripped, e.g. apiUrl = https://.../api/v1/events → queryUrl = https://.../api/v1 */
-  queryUrl?: string;
-  /** Bearer token sent when apiUrl is set (default: process.env.COMPUTESDK_API_KEY) */
+  /** Base URL for ingest/query APIs (default: https://platform.computesdk.com/api/v1) */
+  baseUrl?: string;
+  /** Bearer token sent for ingest/query requests (default: process.env.COMPUTESDK_API_KEY) */
   apiKey?: string;
   /** Shared logical batch id for multi-process/sharded runs */
   batch?: string;

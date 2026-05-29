@@ -15,7 +15,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://platform.computesdk.com/api/v1', 'my-key');
+    const query = createBenchQueryClient({ baseUrl: 'https://platform.computesdk.com/api/v1', apiKey: 'my-key' });
     await query.listRuns({ batch: 'group_abc123' });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -33,7 +33,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://platform.computesdk.com/api/v1');
+    const query = createBenchQueryClient({ baseUrl: 'https://platform.computesdk.com/api/v1' });
     await query.listRuns();
 
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
@@ -54,7 +54,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://api.example.com/v1');
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
     const run = await query.getRun('run_abc123');
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/runs/run_abc123');
@@ -77,7 +77,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://api.example.com/v1');
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
     const progress = await query.getRunProgress('run_abc123');
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/runs/run_abc123/progress');
@@ -98,7 +98,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://api.example.com/v1');
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
     const stats = await query.getBatchStats('batch_xyz');
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/batches/batch_xyz/stats');
@@ -121,7 +121,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://api.example.com/v1');
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
     const progress = await query.getBatchProgress('batch_xyz');
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/batches/batch_xyz/progress');
@@ -137,7 +137,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://api.example.com/v1');
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
     await expect(query.getRun('missing')).rejects.toThrow('Bench query failed: 404 Not Found');
   });
 
@@ -149,7 +149,7 @@ describe('createBenchQueryClient', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const query = createBenchQueryClient('https://api.example.com/v1');
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
     await query.getRun('run/with/slashes');
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/runs/run%2Fwith%2Fslashes');

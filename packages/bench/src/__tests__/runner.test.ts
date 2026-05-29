@@ -109,7 +109,7 @@ describe('createBench', () => {
     expect(spans[0].logs[2]).not.toContain('[truncated]');
   });
 
-  it('defaults apiUrl to platform endpoint and uses explicit override when provided', async () => {
+  it('defaults ingest endpoint to platform and supports baseUrl override', async () => {
     const fetchMock = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -118,7 +118,7 @@ describe('createBench', () => {
     await withDefault.run({ iterations: 1, warmup: 0 });
     expect(fetchMock.mock.calls[0][0]).toBe('https://platform.computesdk.com/api/v1/events');
 
-    const withOverride = createBench({ label: 'custom-api', apiUrl: 'https://example.test/events' });
+    const withOverride = createBench({ label: 'custom-api', baseUrl: 'https://example.test' });
     withOverride.add('op', async () => {});
     await withOverride.run({ iterations: 1, warmup: 0 });
     expect(fetchMock.mock.calls[1][0]).toBe('https://example.test/events');
@@ -134,13 +134,13 @@ describe('createBench', () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
     vi.stubGlobal('fetch', fetchMock);
 
-    const bench = createBench({ label: 'api-failure-test', apiUrl: 'https://example.test/events' });
+    const bench = createBench({ label: 'api-failure-test', baseUrl: 'https://example.test' });
     bench.add('op', async () => {});
 
     await expect(bench.run({ iterations: 1, warmup: 0 })).resolves.toBeDefined();
   });
 
-  it('defaults apiUrl to platform endpoint and apiKey to COMPUTESDK_API_KEY env var', async () => {
+  it('defaults baseUrl to platform endpoint and apiKey to COMPUTESDK_API_KEY env var', async () => {
     const fetchMock = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -543,14 +543,14 @@ describe('createBench', () => {
     });
   });
 
-  describe('new event types are uploaded when apiUrl is set', () => {
+  describe('new event types are uploaded when baseUrl is set', () => {
     it('posts metric and progress events to API', async () => {
       const fetchMock = vi.fn().mockResolvedValue(undefined);
       vi.stubGlobal('fetch', fetchMock);
 
       const bench = createBench({
         label: 'api-metric-test',
-        apiUrl: 'https://example.test/events',
+        baseUrl: 'https://example.test',
       });
 
       bench.emit('cpu', { usage: 0.5 });
@@ -573,7 +573,7 @@ describe('createBench', () => {
     it('exposes query methods flat on the bench object', () => {
       const bench = createBench({
         label: 'query-test',
-        apiUrl: 'https://platform.computesdk.com/api/v1/events',
+        baseUrl: 'https://platform.computesdk.com/api/v1',
         apiKey: 'my-key',
       });
 
@@ -582,7 +582,7 @@ describe('createBench', () => {
       expect(typeof bench.getBatchStats).toBe('function');
     });
 
-    it('derives query base URL from ingest apiUrl', async () => {
+    it('uses baseUrl for query methods', async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -591,30 +591,13 @@ describe('createBench', () => {
       vi.stubGlobal('fetch', fetchMock);
 
       const bench = createBench({
-        label: 'url-derive-test',
-        apiUrl: 'https://platform.computesdk.com/api/v1/events',
+        label: 'base-url-query-test',
+        baseUrl: 'https://platform.computesdk.com/api/v1',
       });
 
       await bench.listRuns();
       expect(fetchMock.mock.calls[0][0]).toBe('https://platform.computesdk.com/api/v1/runs');
     });
 
-    it('uses explicit queryUrl when provided', async () => {
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ runs: [], nextCursor: null }),
       });
-      vi.stubGlobal('fetch', fetchMock);
-
-      const bench = createBench({
-        label: 'custom-query-url-test',
-        apiUrl: 'https://my-proxy.internal/bench-ingest',
-        queryUrl: 'https://platform.computesdk.com/api/v1',
-      });
-
-      await bench.listRuns();
-      expect(fetchMock.mock.calls[0][0]).toBe('https://platform.computesdk.com/api/v1/runs');
-    });
-  });
 });

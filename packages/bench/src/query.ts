@@ -81,6 +81,13 @@ export interface BenchQueryClient {
   getBatchProgress(batchId: string): Promise<BenchBatchProgress>;
 }
 
+export interface BenchQueryClientConfig {
+  /** Base URL for query endpoints (default: https://platform.computesdk.com/api/v1) */
+  baseUrl?: string;
+  /** Bearer token for query requests (default: process.env.COMPUTESDK_API_KEY) */
+  apiKey?: string;
+}
+
 function getHeaders(apiKey?: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) {
@@ -114,7 +121,12 @@ function buildQueryString(params: Record<string, unknown>): string {
   return str ? `?${str}` : '';
 }
 
-export function createBenchQueryClient(baseUrl: string, apiKey?: string): BenchQueryClient {
+const DEFAULT_BASE_URL = 'https://platform.computesdk.com/api/v1';
+
+export function createBenchQueryClient(config: BenchQueryClientConfig = {}): BenchQueryClient {
+  const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
+  const apiKey = config.apiKey ?? process.env.COMPUTESDK_API_KEY;
+
   function url(path: string, params?: Record<string, unknown>): string {
     return `${baseUrl}${path}${params ? buildQueryString(params) : ''}`;
   }
