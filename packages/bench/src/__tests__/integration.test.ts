@@ -24,8 +24,6 @@ describeIntegration('bench integration', () => {
   });
 
   it('uploads SDK-generated benchmark events to the platform ingest endpoint', async () => {
-    const endpoint = process.env.BENCHMARK_INGEST_URL ?? 'https://platform.computesdk.com/api/v1/events';
-    const apiKey = process.env.BENCHMARK_INGEST_API_KEY;
     const realFetch = globalThis.fetch;
 
     if (!realFetch) {
@@ -63,8 +61,6 @@ describeIntegration('bench integration', () => {
 
       const bench = createBench({
         label: 'ci.benchmark.ingest',
-        apiUrl: endpoint,
-        apiKey,
         batch: `ci_${runId}`,
         shard: { index: 0, count: 1 },
         captureOutput: { file: logFile },

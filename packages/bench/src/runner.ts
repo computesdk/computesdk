@@ -10,7 +10,7 @@ import {
   flushBenchTransportBestEffort,
   toErrorCode,
 } from './events';
-import type { BenchOutputEvent, BenchRunEvent, BenchSpanEvent, BenchTransport } from './events';
+import type { BenchOutputEvent, BenchRunEvent, BenchSpanEvent, BenchTransport, BenchMetricEvent, BenchProgressEvent } from './events';
 import type {
   BenchConfig,
   BenchContext,
@@ -18,6 +18,7 @@ import type {
   BenchSuiteResult,
   BenchTaskResult,
 } from './types';
+import { createBenchQueryClient } from './query';
 
 declare const __BENCH_VERSION__: string;
 const BENCH_VERSION =
@@ -62,7 +63,7 @@ function printSummary(result: BenchSuiteResult): void {
   const rows = result.tasks.map((task) => ({
     task: task.taskName,
     avg: formatMs(task.stats.meanMs),
-    p50: formatMs(task.stats.medianMs),
+    p50: formatMs(task.stats.p50Ms),
     p95: formatMs(task.stats.p95Ms),
     min: formatMs(task.stats.minMs),
     max: formatMs(task.stats.maxMs),
@@ -212,18 +213,26 @@ function createOutputCapture(params: {
   };
 }
 
+const DEFAULT_INGEST_URL = 'https://platform.computesdk.com/api/v1/events';
+
 export function createBench(config: BenchConfig) {
   const installId = createPrefixedId('install');
   const runtime = detectRuntime();
   const os = detectOs();
   const arch = detectArch();
+  const apiUrl = config.apiUrl ?? DEFAULT_INGEST_URL;
+  const apiKey = config.apiKey ?? process.env.COMPUTESDK_API_KEY;
+  const queryBaseUrl = config.queryUrl ?? apiUrl.replace(/\/events\/?$/, '');
   const transport: BenchTransport = createBenchTransport({
     onEvent: config.onEvent,
-    apiUrl: config.apiUrl,
-    apiKey: config.apiKey,
+    apiUrl,
+    apiKey,
   });
+  const query = createBenchQueryClient(queryBaseUrl, apiKey);
 
   const tasks: Array<{ name: string; fn: TaskFn }> = [];
+  let currentRunId: string | undefined;
+  let currentProvider: string | undefined;
 
   function add(taskName: string, fn: TaskFn): void {
     if (taskName.trim() === '') {
@@ -235,11 +244,62 @@ export function createBench(config: BenchConfig) {
     tasks.push({ name: taskName, fn });
   }
 
+  function emitMetric(name: string, data: Record<string, unknown>, runId?: string): void {
+    const event: BenchMetricEvent = {
+      event: 'benchmark.metric',
+      eventId: createPrefixedId('event'),
+      runId: runId ?? currentRunId ?? createPrefixedId('run'),
+      label: config.label,
+      installId,
+      batch: config.batch,
+      shardIndex: config.shard?.index,
+      shardCount: config.shard?.count,
+      timestamp: isoNow(),
+      name,
+      data,
+      provider: currentProvider ?? config.provider,
+      benchVersion: BENCH_VERSION,
+      runtime,
+      os,
+      arch,
+    };
+    emitBenchEvent(event, transport);
+  }
+
+  function emitProgress(params: { done: number; inFlight: number; errors: number; total: number; extra?: Record<string, unknown> }, runId?: string): void {
+    const event: BenchProgressEvent = {
+      event: 'benchmark.progress',
+      eventId: createPrefixedId('event'),
+      runId: runId ?? currentRunId ?? createPrefixedId('run'),
+      label: config.label,
+      installId,
+      batch: config.batch,
+      shardIndex: config.shard?.index,
+      shardCount: config.shard?.count,
+      timestamp: isoNow(),
+      done: params.done,
+      inFlight: params.inFlight,
+      errors: params.errors,
+      total: params.total,
+      extra: params.extra,
+      provider: currentProvider ?? config.provider,
+      benchVersion: BENCH_VERSION,
+      runtime,
+      os,
+      arch,
+    };
+    emitBenchEvent(event, transport);
+  }
+
   async function run(options: BenchRunOptions = {}): Promise<BenchSuiteResult> {
     const iterations = options.iterations ?? 25;
     const warmup = options.warmup ?? 3;
     const throwOnError = options.throwOnError ?? true;
+    const mode = options.mode ?? 'sequential';
+    const concurrency = options.concurrency ?? iterations;
     const runId = createPrefixedId('run');
+    currentRunId = runId;
+    currentProvider = options.provider ?? config.provider;
     const traceId = createPrefixedId('trace');
     const outputCapture = createOutputCapture({
       config,
@@ -260,7 +320,7 @@ export function createBench(config: BenchConfig) {
       shardIndex: config.shard?.index,
       shardCount: config.shard?.count,
       tasks: tasks.map((t) => t.name),
-      provider: options.provider,
+      provider: options.provider ?? config.provider,
       iterations,
       warmup,
       installId,
@@ -283,11 +343,14 @@ export function createBench(config: BenchConfig) {
       // Warmup runs (errors silently ignored)
       for (let i = 0; i < warmup; i++) {
         const logs: string[] = [];
+        const metadata: Record<string, unknown>[] = [];
         const ctx: BenchContext = {
           iteration: i,
           phase: 'warmup',
           taskName: task.name,
           log: (...args) => logs.push(args.map(String).join(' ')),
+          setMetadata: (data) => metadata.push(data),
+          emitMetric: (name, data) => emitMetric(name, data, runId),
         };
         try {
           await task.fn(ctx);
@@ -296,108 +359,279 @@ export function createBench(config: BenchConfig) {
         }
       }
 
-      // Measured runs
-      for (let i = 0; i < iterations; i++) {
-        const logs: string[] = [];
-        const ctx: BenchContext = {
-          iteration: i,
-          phase: 'measured',
-          taskName: task.name,
-          log: (...args) => logs.push(args.map(String).join(' ')),
-        };
-        const startedAtMs = nowMs();
-        const startedAt = isoNow();
-        let spanError: unknown;
+      if (mode === 'concurrent') {
+        // Concurrent mode: fire all iterations concurrently up to concurrency limit.
+        // Uses Promise.allSettled so every task runs to completion regardless of
+        // individual failures. If throwOnError is true, an aggregate error is thrown
+        // after all tasks settle.
+        let done = 0;
+        let inFlight = 0;
+        let errorCount = 0;
+        const concurrentErrors: unknown[] = [];
 
-        try {
-          await task.fn(ctx);
-          const durationMs = nowMs() - startedAtMs;
-          measuredDurations.push(durationMs);
-          successes += 1;
+        const runOne = async (i: number) => {
+          inFlight++;
+          const logs: string[] = [];
+          const metadata: Record<string, unknown>[] = [];
+          const ctx: BenchContext = {
+            iteration: i,
+            phase: 'measured',
+            taskName: task.name,
+            log: (...args) => logs.push(args.map(String).join(' ')),
+            setMetadata: (data) => metadata.push(data),
+            emitMetric: (name, data) => emitMetric(name, data, runId),
+          };
+          const startedAtMs = nowMs();
+          const startedAt = isoNow();
 
-          const event: BenchSpanEvent = {
-            event: 'benchmark.span',
-            eventId: createPrefixedId('event'),
-            runId,
-            label: config.label,
-            installId,
-            traceId,
-            spanId: createPrefixedId('span'),
-            operation: task.name,
-            startedAt,
-            endedAt: isoNow(),
-            durationMs,
-            status: 'ok',
-            provider: options.provider,
-            attemptCount: 1,
-            attempts: [{
-              provider: options.provider ?? 'unknown',
-              candidateIndex: 0,
+          try {
+            await task.fn(ctx);
+            const durationMs = nowMs() - startedAtMs;
+            measuredDurations.push(durationMs);
+            successes += 1;
+            done++;
+
+            const mergedMetadata = Object.assign({}, ...metadata);
+            const event: BenchSpanEvent = {
+              event: 'benchmark.span',
+              eventId: createPrefixedId('event'),
+              runId,
+              label: config.label,
+              installId,
+              traceId,
+              spanId: createPrefixedId('span'),
+              operation: task.name,
               startedAt,
               endedAt: isoNow(),
               durationMs,
               status: 'ok',
-            }],
-            benchVersion: BENCH_VERSION,
-            runtime,
-            os,
-            arch,
-            batch: config.batch,
-            shardIndex: config.shard?.index,
-            shardCount: config.shard?.count,
-            taskName: task.name,
-            logs: finalizeLogs(logs),
-            iteration: i,
-            phase: 'measured',
-          };
-          emitBenchEvent(event, transport);
-        } catch (error) {
-          spanError = error;
-          failures += 1;
-          const durationMs = nowMs() - startedAtMs;
+              provider: options.provider ?? config.provider,
+              attemptCount: 1,
+              attempts: [{
+                provider: options.provider ?? config.provider ?? 'unknown',
+                candidateIndex: 0,
+                startedAt,
+                endedAt: isoNow(),
+                durationMs,
+                status: 'ok',
+              }],
+              benchVersion: BENCH_VERSION,
+              runtime,
+              os,
+              arch,
+              batch: config.batch,
+              shardIndex: config.shard?.index,
+              shardCount: config.shard?.count,
+              taskName: task.name,
+              logs: finalizeLogs(logs),
+              iteration: i,
+              phase: 'measured',
+              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+            };
+            emitBenchEvent(event, transport);
+          } catch (error) {
+            failures += 1;
+            errorCount++;
+            done++;
+            concurrentErrors.push(error);
+            const durationMs = nowMs() - startedAtMs;
 
-          const event: BenchSpanEvent = {
-            event: 'benchmark.span',
-            eventId: createPrefixedId('event'),
-            runId,
-            label: config.label,
-            installId,
-            traceId,
-            spanId: createPrefixedId('span'),
-            operation: task.name,
-            startedAt,
-            endedAt: isoNow(),
-            durationMs,
-            status: 'error',
-            provider: options.provider,
-            attemptCount: 1,
-            attempts: [{
-              provider: options.provider ?? 'unknown',
-              candidateIndex: 0,
+            const mergedMetadata = Object.assign({}, ...metadata);
+            const event: BenchSpanEvent = {
+              event: 'benchmark.span',
+              eventId: createPrefixedId('event'),
+              runId,
+              label: config.label,
+              installId,
+              traceId,
+              spanId: createPrefixedId('span'),
+              operation: task.name,
               startedAt,
               endedAt: isoNow(),
               durationMs,
               status: 'error',
+              provider: options.provider ?? config.provider,
+              attemptCount: 1,
+              attempts: [{
+                provider: options.provider ?? config.provider ?? 'unknown',
+                candidateIndex: 0,
+                startedAt,
+                endedAt: isoNow(),
+                durationMs,
+                status: 'error',
+                errorCode: toErrorCode(error),
+              }],
               errorCode: toErrorCode(error),
-            }],
-            errorCode: toErrorCode(error),
-            benchVersion: BENCH_VERSION,
-            runtime,
-            os,
-            arch,
-            batch: config.batch,
-            shardIndex: config.shard?.index,
-            shardCount: config.shard?.count,
-            taskName: task.name,
-            logs: finalizeLogs(logs),
-            iteration: i,
-            phase: 'measured',
-          };
-          emitBenchEvent(event, transport);
+              benchVersion: BENCH_VERSION,
+              runtime,
+              os,
+              arch,
+              batch: config.batch,
+              shardIndex: config.shard?.index,
+              shardCount: config.shard?.count,
+              taskName: task.name,
+              logs: finalizeLogs(logs),
+              iteration: i,
+              phase: 'measured',
+              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+            };
+            emitBenchEvent(event, transport);
+          }
+
+          inFlight--;
+        };
+
+        // Simple concurrency limiter using a semaphore pattern with a queue
+        const promises: Promise<void>[] = [];
+        let activeCount = 0;
+        const waitQueue: (() => void)[] = [];
+
+        const acquire = () => new Promise<void>((resolve) => {
+          if (activeCount < concurrency) {
+            activeCount++;
+            resolve();
+          } else {
+            waitQueue.push(resolve);
+          }
+        });
+
+        const release = () => {
+          activeCount--;
+          if (waitQueue.length > 0) {
+            const next = waitQueue.shift()!;
+            activeCount++;
+            next();
+          }
+        };
+
+        for (let i = 0; i < iterations; i++) {
+          const p = (async () => {
+            await acquire();
+            try {
+              await runOne(i);
+            } finally {
+              release();
+            }
+          })();
+          promises.push(p);
         }
 
-        if (spanError && throwOnError) {
-          throw spanError;
+        await Promise.allSettled(promises);
+
+        if (throwOnError && concurrentErrors.length > 0) {
+          throw concurrentErrors[0];
+        }
+      } else {
+        // Sequential mode (default)
+        for (let i = 0; i < iterations; i++) {
+          const logs: string[] = [];
+          const metadata: Record<string, unknown>[] = [];
+          const ctx: BenchContext = {
+            iteration: i,
+            phase: 'measured',
+            taskName: task.name,
+            log: (...args) => logs.push(args.map(String).join(' ')),
+            setMetadata: (data) => metadata.push(data),
+            emitMetric: (name, data) => emitMetric(name, data, runId),
+          };
+          const startedAtMs = nowMs();
+          const startedAt = isoNow();
+          let spanError: unknown;
+
+          try {
+            await task.fn(ctx);
+            const durationMs = nowMs() - startedAtMs;
+            measuredDurations.push(durationMs);
+            successes += 1;
+
+            const mergedMetadata = Object.assign({}, ...metadata);
+            const event: BenchSpanEvent = {
+              event: 'benchmark.span',
+              eventId: createPrefixedId('event'),
+              runId,
+              label: config.label,
+              installId,
+              traceId,
+              spanId: createPrefixedId('span'),
+              operation: task.name,
+              startedAt,
+              endedAt: isoNow(),
+              durationMs,
+              status: 'ok',
+              provider: options.provider ?? config.provider,
+              attemptCount: 1,
+              attempts: [{
+                provider: options.provider ?? config.provider ?? 'unknown',
+                candidateIndex: 0,
+                startedAt,
+                endedAt: isoNow(),
+                durationMs,
+                status: 'ok',
+              }],
+              benchVersion: BENCH_VERSION,
+              runtime,
+              os,
+              arch,
+              batch: config.batch,
+              shardIndex: config.shard?.index,
+              shardCount: config.shard?.count,
+              taskName: task.name,
+              logs: finalizeLogs(logs),
+              iteration: i,
+              phase: 'measured',
+              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+            };
+            emitBenchEvent(event, transport);
+          } catch (error) {
+            spanError = error;
+            failures += 1;
+            const durationMs = nowMs() - startedAtMs;
+
+            const mergedMetadata = Object.assign({}, ...metadata);
+            const event: BenchSpanEvent = {
+              event: 'benchmark.span',
+              eventId: createPrefixedId('event'),
+              runId,
+              label: config.label,
+              installId,
+              traceId,
+              spanId: createPrefixedId('span'),
+              operation: task.name,
+              startedAt,
+              endedAt: isoNow(),
+              durationMs,
+              status: 'error',
+              provider: options.provider ?? config.provider,
+              attemptCount: 1,
+              attempts: [{
+                provider: options.provider ?? config.provider ?? 'unknown',
+                candidateIndex: 0,
+                startedAt,
+                endedAt: isoNow(),
+                durationMs,
+                status: 'error',
+                errorCode: toErrorCode(error),
+              }],
+              errorCode: toErrorCode(error),
+              benchVersion: BENCH_VERSION,
+              runtime,
+              os,
+              arch,
+              batch: config.batch,
+              shardIndex: config.shard?.index,
+              shardCount: config.shard?.count,
+              taskName: task.name,
+              logs: finalizeLogs(logs),
+              iteration: i,
+              phase: 'measured',
+              metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+            };
+            emitBenchEvent(event, transport);
+          }
+
+          if (spanError && throwOnError) {
+            throw spanError;
+          }
         }
       }
 
@@ -411,6 +645,8 @@ export function createBench(config: BenchConfig) {
       });
       }
     } finally {
+      currentRunId = undefined;
+      currentProvider = undefined;
       await outputCapture?.stop();
       await flushBenchTransportBestEffort(transport);
     }
@@ -424,5 +660,5 @@ export function createBench(config: BenchConfig) {
     return result;
   }
 
-  return { add, run };
+  return { add, run, emit: emitMetric, progress: emitProgress, ...query };
 }
