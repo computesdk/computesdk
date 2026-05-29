@@ -55,6 +55,21 @@ export interface BenchBatchProgress {
   latestProgressAt: string | null;
 }
 
+export interface BenchMetricDistribution {
+  count: number;
+  min: number | null;
+  avg: number | null;
+  max: number | null;
+  p10?: number | null;
+  p25?: number | null;
+  p50: number | null;
+  p75?: number | null;
+  p90?: number | null;
+  p95: number | null;
+  p99: number | null;
+  p999?: number | null;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   nextCursor: string | null;
@@ -79,6 +94,12 @@ export interface BenchQueryClient {
 
   /** Get per-run progress aggregated for a batch */
   getBatchProgress(batchId: string): Promise<BenchBatchProgress>;
+
+  /** Get aggregate distribution stats for a metric field in a batch */
+  getBatchMetricStats(batchId: string, opts: {
+    name: string;
+    field: string;
+  }): Promise<BenchMetricDistribution>;
 }
 
 export interface BenchQueryClientConfig {
@@ -154,6 +175,15 @@ export function createBenchQueryClient(config: BenchQueryClientConfig = {}): Ben
 
     async getBatchProgress(batchId) {
       return get<BenchBatchProgress>(url(`/batches/${encodeURIComponent(batchId)}/progress`), apiKey);
+    },
+
+    async getBatchMetricStats(batchId, opts) {
+      return get<BenchMetricDistribution>(
+        url(`/batches/${encodeURIComponent(batchId)}/metrics/${encodeURIComponent(opts.name)}/distribution`, {
+          field: opts.field,
+        }),
+        apiKey,
+      );
     },
   };
 }

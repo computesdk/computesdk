@@ -129,6 +129,33 @@ describe('createBenchQueryClient', () => {
     expect(progress.latestProgressAt).toBe('2026-05-29T04:30:00Z');
   });
 
+  it('GETs batch metric distribution', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        count: 200,
+        min: 100,
+        avg: 250.5,
+        max: 1200,
+        p50: 220,
+        p95: 700,
+        p99: 950,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
+    const stats = await query.getBatchMetricStats('batch_xyz', {
+      name: 'sandbox.result',
+      field: 'latency_ms',
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/batches/batch_xyz/metrics/sandbox.result/distribution?field=latency_ms');
+    expect(stats.count).toBe(200);
+    expect(stats.p95).toBe(700);
+  });
+
   it('throws on non-2xx responses', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,

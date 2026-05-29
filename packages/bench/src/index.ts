@@ -23,6 +23,7 @@ export type {
   BenchRunProgress,
   BenchBatchStats,
   BenchBatchProgress,
+  BenchMetricDistribution,
   BenchQueryClient,
   BenchQueryClientConfig,
   PaginatedResponse,
