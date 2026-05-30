@@ -501,6 +501,14 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   }
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    const error = new Error('The operation was aborted.');
+    (error as any).name = 'AbortError';
+    throw error;
+  }
+}
+
 /**
  * Auto-generated Sandbox Manager implementation
  */
@@ -513,7 +521,22 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   ) {}
 
   async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
+    throwIfAborted(options?.signal);
+
     const result = await this.methods.create(this.config, options);
+
+    if (options?.signal?.aborted) {
+      // Creation completed but the caller already aborted — clean up the orphaned sandbox
+      try {
+        await this.methods.destroy(this.config, result.sandboxId);
+      } catch {
+        // Ignore cleanup errors — the sandbox may already be gone or the provider
+        // may not support destroying during creation
+      }
+      const error = new Error('The operation was aborted.');
+      (error as any).name = 'AbortError';
+      throw error;
+    }
 
     return new GeneratedSandbox<TSandbox>(
       result.sandbox,
