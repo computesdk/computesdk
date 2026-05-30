@@ -503,10 +503,24 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
-    const error = new Error('The operation was aborted.');
-    (error as any).name = 'AbortError';
-    throw error;
+    throw makeAbortError();
   }
+}
+
+function makeAbortError(): Error {
+  const error = new Error('The operation was aborted.');
+  (error as any).name = 'AbortError';
+  return error;
+}
+
+function abortPromise(signal?: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal?.aborted) {
+      reject(makeAbortError());
+      return;
+    }
+    signal?.addEventListener('abort', () => reject(makeAbortError()), { once: true });
+  });
 }
 
 /**
@@ -523,19 +537,23 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
     throwIfAborted(options?.signal);
 
-    const result = await this.methods.create(this.config, options);
+    const signal = options?.signal;
+    const createPromise = this.methods.create(this.config, options);
 
-    if (options?.signal?.aborted) {
-      // Creation completed but the caller already aborted — clean up the orphaned sandbox
-      try {
-        await this.methods.destroy(this.config, result.sandboxId);
-      } catch {
-        // Ignore cleanup errors — the sandbox may already be gone or the provider
-        // may not support destroying during creation
-      }
-      const error = new Error('The operation was aborted.');
-      (error as any).name = 'AbortError';
-      throw error;
+    // If the provider promise resolves after abort, clean up the orphaned sandbox
+    createPromise.then(
+      (result) => {
+        if (signal?.aborted) {
+          this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+        }
+      },
+      () => {}
+    );
+
+    const result = await Promise.race([createPromise, abortPromise(signal)]);
+
+    if (signal?.aborted) {
+      throw makeAbortError();
     }
 
     return new GeneratedSandbox<TSandbox>(
