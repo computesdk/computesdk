@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -138,6 +138,45 @@ describe('createBench', () => {
     expect(spans).toHaveLength(1);
     expect(spans[0].logs).toHaveLength(75);
     expect(spans[0].logs[74]).toBe('entry 74');
+  });
+
+  it('writes raw events and manifest to local storage', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'bench-raw-store-'));
+    try {
+      const bench = createBench({
+        label: 'raw-store-test',
+        batch: 'group_test',
+        shard: { index: 1, count: 4 },
+        rawStorage: { dir },
+      });
+
+      bench.add('raw-task', async (ctx) => {
+        ctx.log('hello');
+      });
+
+      const result = await bench.run({ iterations: 2, warmup: 0, provider: 'just-bash' });
+      const runPath = join(dir, 'bench', 'v1', 'group_id=group_test', `run_id=${result.runId}`, 'shard=1');
+      const files = await readdir(runPath);
+
+      expect(files).toContain('manifest.json');
+      expect(files.some((name) => name.startsWith('part-') && name.endsWith('.jsonl'))).toBe(true);
+
+      const manifest = JSON.parse(await readFile(join(runPath, 'manifest.json'), 'utf8')) as any;
+      expect(manifest.schemaVersion).toBe('bench.manifest.v1');
+      expect(manifest.runId).toBe(result.runId);
+      expect(manifest.groupId).toBe('group_test');
+      expect(manifest.shardIndex).toBe(1);
+      expect(manifest.parts.length).toBeGreaterThan(0);
+
+      const partFile = manifest.parts[0].path as string;
+      const firstLine = (await readFile(partFile, 'utf8')).split('\n').find(Boolean);
+      const rawRecord = JSON.parse(firstLine ?? '{}');
+      expect(rawRecord.schemaVersion).toBe('bench.raw.v1');
+      expect(rawRecord.runId).toBe(result.runId);
+      expect(rawRecord.groupId).toBe('group_test');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('defaults ingest endpoint to platform and supports baseUrl override', async () => {

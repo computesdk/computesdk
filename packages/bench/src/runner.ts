@@ -20,6 +20,7 @@ import type {
   BenchTaskResult,
 } from './types';
 import { createBenchQueryClient } from './query';
+import { createRawEventStore, shouldEnableRawStorage } from './raw-store';
 
 declare const __BENCH_VERSION__: string;
 const BENCH_VERSION =
@@ -251,8 +252,13 @@ export function createBench(config: BenchConfig) {
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
   const apiUrl = `${baseUrl}/events`;
   const apiKey = config.apiKey ?? process.env.COMPUTESDK_API_KEY;
+  const userOnEvent = config.onEvent;
+  let currentRawStore: ReturnType<typeof createRawEventStore> | undefined;
   const transport: BenchTransport = createBenchTransport({
-    onEvent: config.onEvent,
+    onEvent: (event) => {
+      userOnEvent?.(event);
+      currentRawStore?.write(event);
+    },
     apiUrl,
     apiKey,
   });
@@ -338,6 +344,17 @@ export function createBench(config: BenchConfig) {
     currentRunId = runId;
     currentProvider = options.provider ?? config.provider;
     const traceId = createPrefixedId('trace');
+    if (shouldEnableRawStorage(config.rawStorage)) {
+      currentRawStore = createRawEventStore({
+        config: config.rawStorage,
+        runId,
+        batch: config.batch,
+        shardIndex: config.shard?.index,
+        shardCount: config.shard?.count,
+        provider: options.provider ?? config.provider,
+        label: config.label,
+      });
+    }
     const outputCapture = createOutputCapture({
       config,
       installId,
@@ -561,6 +578,8 @@ export function createBench(config: BenchConfig) {
       currentProvider = undefined;
       await outputCapture?.stop();
       await flushBenchTransportBestEffort(transport);
+      await currentRawStore?.close();
+      currentRawStore = undefined;
     }
 
     const result = {
