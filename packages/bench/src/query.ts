@@ -55,6 +55,49 @@ export interface BenchBatchProgress {
   latestProgressAt: string | null;
 }
 
+export interface BenchMetricDistribution {
+  count: number;
+  min: number | null;
+  avg: number | null;
+  max: number | null;
+  p10?: number | null;
+  p25?: number | null;
+  p50: number | null;
+  p75?: number | null;
+  p90?: number | null;
+  p95: number | null;
+  p99: number | null;
+  p999?: number | null;
+}
+
+export interface BenchGroupedMetricDistribution {
+  field: string;
+  groupBy: string;
+  groups: Array<{
+    key: string;
+    count: number;
+    min: number | null;
+    avg: number | null;
+    max: number | null;
+    p50: number | null;
+    p95: number | null;
+    p99: number | null;
+  }>;
+}
+
+export interface BenchMetricCounts {
+  field: string;
+  total: number;
+  counts: Array<{ key: string; count: number }>;
+}
+
+export interface BenchMetricTimeline {
+  field: string;
+  interval: '1s';
+  agg: 'sum' | 'avg' | 'max' | 'count';
+  points: Array<{ ts: string; value: number }>;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   nextCursor: string | null;
@@ -79,6 +122,27 @@ export interface BenchQueryClient {
 
   /** Get per-run progress aggregated for a batch */
   getBatchProgress(batchId: string): Promise<BenchBatchProgress>;
+
+  /** Get aggregate distribution stats for a metric field in a batch */
+  getBatchMetricStats(batchId: string, opts: {
+    name: string;
+    field: string;
+    groupBy?: string;
+  }): Promise<BenchMetricDistribution | BenchGroupedMetricDistribution>;
+
+  /** Get categorical counts for a metric field in a batch */
+  getBatchMetricCounts(batchId: string, opts: {
+    name: string;
+    field: string;
+  }): Promise<BenchMetricCounts>;
+
+  /** Get timeline points for a numeric metric field in a batch */
+  getBatchMetricTimeline(batchId: string, opts: {
+    name: string;
+    field: string;
+    interval?: '1s';
+    agg?: 'sum' | 'avg' | 'max' | 'count';
+  }): Promise<BenchMetricTimeline>;
 }
 
 export interface BenchQueryClientConfig {
@@ -154,6 +218,36 @@ export function createBenchQueryClient(config: BenchQueryClientConfig = {}): Ben
 
     async getBatchProgress(batchId) {
       return get<BenchBatchProgress>(url(`/batches/${encodeURIComponent(batchId)}/progress`), apiKey);
+    },
+
+    async getBatchMetricStats(batchId, opts) {
+      return get<BenchMetricDistribution | BenchGroupedMetricDistribution>(
+        url(`/batches/${encodeURIComponent(batchId)}/metrics/${encodeURIComponent(opts.name)}/distribution`, {
+          field: opts.field,
+          groupBy: opts.groupBy,
+        }),
+        apiKey,
+      );
+    },
+
+    async getBatchMetricCounts(batchId, opts) {
+      return get<BenchMetricCounts>(
+        url(`/batches/${encodeURIComponent(batchId)}/metrics/${encodeURIComponent(opts.name)}/counts`, {
+          field: opts.field,
+        }),
+        apiKey,
+      );
+    },
+
+    async getBatchMetricTimeline(batchId, opts) {
+      return get<BenchMetricTimeline>(
+        url(`/batches/${encodeURIComponent(batchId)}/metrics/${encodeURIComponent(opts.name)}/timeline`, {
+          field: opts.field,
+          interval: opts.interval ?? '1s',
+          agg: opts.agg ?? 'sum',
+        }),
+        apiKey,
+      );
     },
   };
 }

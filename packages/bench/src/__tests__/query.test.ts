@@ -129,6 +129,110 @@ describe('createBenchQueryClient', () => {
     expect(progress.latestProgressAt).toBe('2026-05-29T04:30:00Z');
   });
 
+  it('GETs batch metric distribution', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        count: 200,
+        min: 100,
+        avg: 250.5,
+        max: 1200,
+        p50: 220,
+        p95: 700,
+        p99: 950,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
+    const stats = await query.getBatchMetricStats('batch_xyz', {
+      name: 'sandbox.result',
+      field: 'latency_ms',
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/batches/batch_xyz/metrics/sandbox.result/distribution?field=latency_ms');
+    expect('groups' in stats).toBe(false);
+    if (!('groups' in stats)) {
+      expect(stats.count).toBe(200);
+      expect(stats.p95).toBe(700);
+    }
+  });
+
+  it('GETs grouped batch metric distribution', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        field: 'latency_ms',
+        groupBy: 'submission_segment',
+        groups: [
+          { key: 'first_25pct', count: 50, min: 100, avg: 200, max: 500, p50: 180, p95: 420, p99: 490 },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
+    const stats = await query.getBatchMetricStats('batch_xyz', {
+      name: 'sandbox.result',
+      field: 'latency_ms',
+      groupBy: 'submission_segment',
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/batches/batch_xyz/metrics/sandbox.result/distribution?field=latency_ms&groupBy=submission_segment');
+    expect('groups' in stats).toBe(true);
+  });
+
+  it('GETs batch metric counts', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        field: 'status',
+        total: 200,
+        counts: [
+          { key: 'success', count: 198 },
+          { key: 'failed', count: 2 },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
+    const counts = await query.getBatchMetricCounts('batch_xyz', {
+      name: 'sandbox.result',
+      field: 'status',
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/batches/batch_xyz/metrics/sandbox.result/counts?field=status');
+    expect(counts.total).toBe(200);
+  });
+
+  it('GETs batch metric timeline', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        field: 'active',
+        interval: '1s',
+        agg: 'sum',
+        points: [{ ts: '2026-05-29T18:00:00.000Z', value: 100 }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const query = createBenchQueryClient({ baseUrl: 'https://api.example.com/v1' });
+    const timeline = await query.getBatchMetricTimeline('batch_xyz', {
+      name: 'sandbox.concurrent',
+      field: 'active',
+      agg: 'sum',
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/v1/batches/batch_xyz/metrics/sandbox.concurrent/timeline?field=active&interval=1s&agg=sum');
+    expect(timeline.points[0].value).toBe(100);
+  });
+
   it('throws on non-2xx responses', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
