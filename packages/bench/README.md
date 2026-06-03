@@ -144,7 +144,12 @@ If a step returns a JSON object, it is merged into the task result `data` object
 ### Low-Level Client
 
 ```ts
+client.updateBenchmark(benchmarkSlug, input)
+client.updateRun(benchmarkSlug, runId, input)
+client.updateParticipant(benchmarkSlug, runId, participantSlug, input)
 client.planWorkers(benchmarkSlug, runId, participantSlug)
+client.getWorker(benchmarkSlug, runId, workerId)
+client.updateWorker(benchmarkSlug, runId, workerId, input)
 client.claimWorker(benchmarkSlug, runId, participantSlug, { processKind, processKey })
 client.sendTaskResults({ benchmarkSlug, runId, workerId, attemptId, sequenceNumber, isFinal, records })
 client.heartbeatWorker(benchmarkSlug, runId, workerId, {

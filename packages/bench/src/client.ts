@@ -26,6 +26,10 @@ import type {
   TaskResultRecord,
   TaskResultsResponse,
   RunProgress,
+  UpdateBenchmarkInput,
+  UpdateParticipantInput,
+  UpdateRunInput,
+  UpdateWorkerInput,
   UpsertBenchmarkInput,
   UpsertParticipantInput,
   WorkerConcurrencySample,
@@ -168,7 +172,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
     );
   }
 
-  async function updateWorker(
+  async function updateWorkerLifecycle(
     action: 'heartbeat' | 'complete' | 'fail',
     benchmarkSlug: string,
     runId: string,
@@ -194,6 +198,11 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return data.benchmark;
     },
 
+    async updateBenchmark(slug, input: UpdateBenchmarkInput) {
+      const data = await request<{ benchmark: BenchmarkResource }>('PATCH', `/benchmarks/${encodePath(slug)}`, input as unknown as JsonObject);
+      return data.benchmark;
+    },
+
     async listBenchmarks() {
       const data = await request<{ items?: BenchmarkResource[]; benchmarks?: BenchmarkResource[] }>('GET', '/benchmarks');
       return data.items ?? data.benchmarks ?? [];
@@ -214,6 +223,15 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
     async getRun(benchmarkSlug, runId) {
       const data = await request<{ run: BenchmarkRun }>('GET', `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}`);
+      return data.run;
+    },
+
+    async updateRun(benchmarkSlug, runId, input: UpdateRunInput) {
+      const data = await request<{ run: BenchmarkRun }>(
+        'PATCH',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}`,
+        input as unknown as JsonObject,
+      );
       return data.run;
     },
 
@@ -242,6 +260,15 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return data.participant;
     },
 
+    async updateParticipant(benchmarkSlug, runId, participantSlug, input: UpdateParticipantInput) {
+      const data = await request<{ participant: BenchmarkParticipant }>(
+        'PATCH',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/participants/${encodePath(participantSlug)}`,
+        input as unknown as JsonObject,
+      );
+      return data.participant;
+    },
+
     async getRunProgress(benchmarkSlug, runId) {
       return request<RunProgress>(
         'GET',
@@ -266,6 +293,23 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return data.items ?? data.workers ?? [];
     },
 
+    async getWorker(benchmarkSlug, runId, workerId) {
+      const data = await request<{ worker: BenchmarkRunWorker }>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/workers/${encodePath(workerId)}`,
+      );
+      return data.worker;
+    },
+
+    async updateWorker(benchmarkSlug, runId, workerId, input: UpdateWorkerInput) {
+      const data = await request<{ worker: BenchmarkRunWorker }>(
+        'PATCH',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/workers/${encodePath(workerId)}`,
+        input as unknown as JsonObject,
+      );
+      return data.worker;
+    },
+
     async claimWorker(benchmarkSlug, runId, participantSlug, input: ClaimWorkerInput = {}) {
       const data = await request<{ assignment: BenchmarkAssignment | null }>(
         'POST',
@@ -282,15 +326,15 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       if (extra.currentStep == null) {
         delete extra.currentStep;
       }
-      return updateWorker('heartbeat', benchmarkSlug, runId, workerId, attemptId, extra as JsonObject);
+      return updateWorkerLifecycle('heartbeat', benchmarkSlug, runId, workerId, attemptId, extra as JsonObject);
     },
 
     completeWorker(benchmarkSlug, runId, workerId, attemptId) {
-      return updateWorker('complete', benchmarkSlug, runId, workerId, attemptId);
+      return updateWorkerLifecycle('complete', benchmarkSlug, runId, workerId, attemptId);
     },
 
     failWorker(benchmarkSlug, runId, workerId, attemptId, error) {
-      return updateWorker('fail', benchmarkSlug, runId, workerId, attemptId, {
+      return updateWorkerLifecycle('fail', benchmarkSlug, runId, workerId, attemptId, {
         errorCode: getErrorCode(error),
         errorMessage: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
       });

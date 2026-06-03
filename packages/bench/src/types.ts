@@ -20,11 +20,14 @@ export interface BenchmarkResource {
   defaultRunConfig?: JsonObject;
 }
 
+export type BenchmarkRunStatus = 'planned' | 'in_progress' | 'completed' | 'failed';
+export type BenchmarkWorkerStatus = 'pending' | 'running' | 'completed' | 'failed';
+
 export interface BenchmarkRun {
   id: string;
   benchmarkId: string;
   name?: string | null;
-  status: string;
+  status: BenchmarkRunStatus | string;
   totalTasks: number;
   workerCount: number;
   config?: JsonObject;
@@ -39,7 +42,7 @@ export interface BenchmarkParticipant {
   slug: string;
   label?: string | null;
   provider?: string | null;
-  status: string;
+  status: BenchmarkRunStatus | string;
   totalTasks: number;
   workerCount: number;
   config?: JsonObject;
@@ -55,7 +58,11 @@ export interface BenchmarkRunWorker {
   taskIndexStart: number;
   taskIndexEnd: number;
   targetConcurrency: number;
-  status: string;
+  status: BenchmarkWorkerStatus | string;
+  progressDone?: number;
+  progressInFlight?: number;
+  progressErrors?: number;
+  progressTotal?: number;
   currentStep?: string | null;
   concurrency?: WorkerConcurrencySample[];
 }
@@ -99,11 +106,25 @@ export interface UpsertBenchmarkInput {
   defaultRunConfig?: JsonObject;
 }
 
+export interface UpdateBenchmarkInput {
+  name?: string;
+  kind?: string;
+  status?: string;
+  config?: JsonObject;
+  defaultRunConfig?: JsonObject;
+}
+
 export interface CreateRunInput {
   name?: string;
   totalTasks: number;
   workerCount: number;
   participants?: string[];
+  config?: JsonObject;
+}
+
+export interface UpdateRunInput {
+  name?: string;
+  status?: BenchmarkRunStatus;
   config?: JsonObject;
 }
 
@@ -114,6 +135,16 @@ export interface UpsertParticipantInput {
   totalTasks?: number;
   workerCount?: number;
   config?: JsonObject;
+}
+
+export type UpdateParticipantInput = UpsertParticipantInput;
+
+export interface UpdateWorkerInput {
+  status?: BenchmarkWorkerStatus;
+  progressDone?: number;
+  progressInFlight?: number;
+  progressErrors?: number;
+  progressTotal?: number;
 }
 
 export interface ClaimWorkerInput {
@@ -346,6 +377,7 @@ export interface BenchDefinition {
 
 export interface BenchmarkClient {
   upsertBenchmark(slug: string, input: UpsertBenchmarkInput): Promise<BenchmarkResource>;
+  updateBenchmark(slug: string, input: UpdateBenchmarkInput): Promise<BenchmarkResource>;
   getBenchmark(slug: string): Promise<BenchmarkResource>;
   listBenchmarks(): Promise<BenchmarkResource[]>;
   createRun(benchmarkSlug: string, input: CreateRunInput): Promise<{
@@ -354,11 +386,18 @@ export interface BenchmarkClient {
   }>;
   listRuns(benchmarkSlug: string): Promise<BenchmarkRun[]>;
   getRun(benchmarkSlug: string, runId: string): Promise<BenchmarkRun>;
+  updateRun(benchmarkSlug: string, runId: string, input: UpdateRunInput): Promise<BenchmarkRun>;
   upsertParticipant(
     benchmarkSlug: string,
     runId: string,
     participantSlug: string,
     input?: UpsertParticipantInput,
+  ): Promise<BenchmarkParticipant>;
+  updateParticipant(
+    benchmarkSlug: string,
+    runId: string,
+    participantSlug: string,
+    input: UpdateParticipantInput,
   ): Promise<BenchmarkParticipant>;
   listParticipants(benchmarkSlug: string, runId: string): Promise<BenchmarkParticipant[]>;
   getParticipant(
@@ -377,6 +416,13 @@ export interface BenchmarkClient {
     participantSlug: string,
     input?: PlanWorkersInput,
   ): Promise<BenchmarkRunWorker[]>;
+  getWorker(benchmarkSlug: string, runId: string, workerId: string): Promise<BenchmarkRunWorker>;
+  updateWorker(
+    benchmarkSlug: string,
+    runId: string,
+    workerId: string,
+    input: UpdateWorkerInput,
+  ): Promise<BenchmarkRunWorker>;
   getRunProgress(benchmarkSlug: string, runId: string): Promise<RunProgress>;
   claimWorker(
     benchmarkSlug: string,

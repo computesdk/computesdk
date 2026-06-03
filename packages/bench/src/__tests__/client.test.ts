@@ -120,6 +120,48 @@ describe('createBenchmarkClient', () => {
     ]);
   });
 
+  it('updates orchestration resources through low-level PATCH endpoints', async () => {
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/benchmarks/scale') && init?.method === 'PATCH') {
+        return jsonResponse({ benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale v2', status: 'active' } });
+      }
+      if (url.endsWith('/benchmarks/scale/runs/run_1') && init?.method === 'PATCH') {
+        return jsonResponse({ run: { id: 'run_1', benchmarkId: 'bench_1', status: 'in_progress', totalTasks: 100, workerCount: 10 } });
+      }
+      if (url.endsWith('/benchmarks/scale/runs/run_1/participants/e2b') && init?.method === 'PATCH') {
+        return jsonResponse({ participant: { id: 'participant_1', benchmarkId: 'bench_1', runId: 'run_1', slug: 'e2b', status: 'in_progress', totalTasks: 100, workerCount: 10 } });
+      }
+      if (url.endsWith('/benchmarks/scale/runs/run_1/workers/worker_1') && init?.method === 'GET') {
+        return jsonResponse({ worker: { id: 'worker_1', benchmarkId: 'bench_1', runId: 'run_1', participantId: 'participant_1', workerIndex: 0, workerCount: 10, taskIndexStart: 0, taskIndexEnd: 9, targetConcurrency: 10, status: 'running' } });
+      }
+      if (url.endsWith('/benchmarks/scale/runs/run_1/workers/worker_1') && init?.method === 'PATCH') {
+        return jsonResponse({ worker: { id: 'worker_1', benchmarkId: 'bench_1', runId: 'run_1', participantId: 'participant_1', workerIndex: 0, workerCount: 10, taskIndexStart: 0, taskIndexEnd: 9, targetConcurrency: 10, status: 'running', progressDone: 5 } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+
+    await expect(client.updateBenchmark('scale', { name: 'Scale v2' })).resolves.toMatchObject({ name: 'Scale v2' });
+    await expect(client.updateRun('scale', 'run_1', { status: 'in_progress' })).resolves.toMatchObject({ status: 'in_progress' });
+    await expect(client.updateParticipant('scale', 'run_1', 'e2b', { status: 'in_progress' })).resolves.toMatchObject({ status: 'in_progress' });
+    await expect(client.getWorker('scale', 'run_1', 'worker_1')).resolves.toMatchObject({ status: 'running' });
+    await expect(client.updateWorker('scale', 'run_1', 'worker_1', { status: 'running', progressDone: 5 })).resolves.toMatchObject({ progressDone: 5 });
+
+    expect(seen.map((entry) => [entry.method, entry.url, entry.body])).toMatchObject([
+      ['PATCH', 'https://platform.test/api/v1/benchmarks/scale', { name: 'Scale v2' }],
+      ['PATCH', 'https://platform.test/api/v1/benchmarks/scale/runs/run_1', { status: 'in_progress' }],
+      ['PATCH', 'https://platform.test/api/v1/benchmarks/scale/runs/run_1/participants/e2b', { status: 'in_progress' }],
+      ['GET', 'https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1', undefined],
+      ['PATCH', 'https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1', { status: 'running', progressDone: 5 }],
+    ]);
+  });
+
   it('claims a worker and sends task_results batches', async () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
