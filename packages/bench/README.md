@@ -35,7 +35,7 @@ const worker = defineWorker({
     defineStep('exec.first-command', async ({ state }) => {
       await (state.sandbox as any).runCommand('node -v');
     }),
-    defineStep('pause', { waitForReady: true }, async () => {
+    defineStep('pause', { readiness: 'poll' }, async () => {
       // Every worker reports active pause concurrency and waits here until
       // the platform reports the participant's pause step is ready.
     }),
@@ -131,8 +131,8 @@ If a step returns a JSON object, it is merged into the task result `data` object
 | Option | Type | Description |
 |--------|------|-------------|
 | `reportConcurrency` | `boolean?` | Include active count for this step in worker heartbeats. Defaults to `true` |
-| `targetConcurrency` | `number?` | Per-worker target for this step. Defaults to worker concurrency/assignment target |
-| `waitForReady` | `boolean?` | Poll run progress until this participant/step is ready before running `fn` |
+| `concurrency` | `number?` | Per-worker target for this step. Defaults to worker concurrency/assignment target |
+| `readiness` | `'poll' \| 'internal'?` | Readiness coordination mode. Defaults to `'poll'` |
 | `readyPollIntervalMs` | `number?` | Poll interval while waiting. Defaults to `1000` |
 | `readyTimeoutMs` | `number?` | Maximum readiness wait time |
 

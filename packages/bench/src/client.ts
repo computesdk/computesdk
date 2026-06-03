@@ -393,13 +393,13 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
             const shouldReportConcurrency = stepOptions.reportConcurrency ?? true;
             if (shouldReportConcurrency) {
-              targetByStep.set(name, stepOptions.targetConcurrency ?? options.concurrency ?? claimed.targetConcurrency);
+              targetByStep.set(name, stepOptions.concurrency ?? options.concurrency ?? claimed.targetConcurrency);
               activeByStep.set(name, (activeByStep.get(name) ?? 0) + 1);
               await sendHeartbeat().catch(() => {});
             }
 
             try {
-              if (stepOptions.waitForReady) {
+              if ((stepOptions.readiness ?? 'poll') === 'poll') {
                 await waitForStepReady(name, stepOptions);
               }
               return await fn();

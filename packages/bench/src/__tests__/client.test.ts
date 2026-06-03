@@ -88,8 +88,8 @@ describe('createBenchmarkClient', () => {
       participantSlug: 'e2b',
       batchSize: 2,
       task: async ({ taskIndex, step }) => {
-        const sandboxId = await step('create', () => `sbx_${taskIndex}`);
-        await step('exec.first-command', async () => undefined);
+        const sandboxId = await step('create', () => `sbx_${taskIndex}`, { readiness: 'internal' });
+        await step('exec.first-command', async () => undefined, { readiness: 'internal' });
         return { sandboxId };
       },
     });
@@ -136,7 +136,7 @@ describe('createBenchmarkClient', () => {
       task: async ({ step }) => {
         await step('create', () => {
           throw new TypeError('boom');
-        });
+        }, { readiness: 'internal' });
       },
     });
 
@@ -162,10 +162,10 @@ describe('createBenchmarkClient', () => {
 
     const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
     const task = defineTask('sandbox.lifecycle', [
-      defineStep('create', ({ state }) => {
-        state.sandboxId = 'sbx_0';
-      }),
-      defineStep('exec.first-command', ({ state }) => ({ sandboxId: String(state.sandboxId) })),
+        defineStep('create', { readiness: 'internal' }, ({ state }) => {
+          state.sandboxId = 'sbx_0';
+        }),
+        defineStep('exec.first-command', { readiness: 'internal' }, ({ state }) => ({ sandboxId: String(state.sandboxId) })),
     ]);
     const worker = defineWorker({
       benchmarkSlug: 'scale',
@@ -220,7 +220,7 @@ describe('createBenchmarkClient', () => {
       participantSlug: 'e2b',
       client,
       task: defineTask('pause-task', [
-        defineStep('pause', { waitForReady: true, readyPollIntervalMs: 1 }, () => {
+        defineStep('pause', { readiness: 'poll', readyPollIntervalMs: 1 }, () => {
           order.push('step');
         }),
       ]),
@@ -245,7 +245,7 @@ describe('createBenchmarkClient', () => {
       slug: 'scale',
       participantSlug: 'e2b',
       client,
-      task: defineTask('noop', [defineStep('step', () => ({ ok: true }))]),
+      task: defineTask('noop', [defineStep('step', { readiness: 'internal' }, () => ({ ok: true }))]),
     });
 
     const result = await bench.defineWorker({

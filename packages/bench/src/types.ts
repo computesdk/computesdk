@@ -220,9 +220,9 @@ export interface DefineStepOptions {
   /** Report this step as active in heartbeat concurrency samples. Defaults to true. */
   reportConcurrency?: boolean;
   /** Per-worker target for this step. Defaults to worker concurrency/assignment target. */
-  targetConcurrency?: number;
-  /** Wait until the platform reports this participant/step as ready before running the step body. */
-  waitForReady?: boolean;
+  concurrency?: number;
+  /** Readiness coordination mode. Defaults to poll. */
+  readiness?: 'poll' | 'internal';
   /** Poll interval while waiting for readiness. Defaults to 1000ms. */
   readyPollIntervalMs?: number;
   /** Maximum time to wait for readiness. Defaults to no timeout. */
