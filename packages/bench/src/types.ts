@@ -130,6 +130,15 @@ export interface TaskResultRecord {
   data?: JsonObject;
 }
 
+export interface TaskStepRecord {
+  name: string;
+  status: 'success' | 'error';
+  startedAt: string;
+  completedAt: string;
+  latencyMs: number;
+  errorCode?: string;
+}
+
 export interface SendTaskResultsInput {
   benchmarkSlug: string;
   runId: string;
@@ -149,6 +158,7 @@ export interface TaskResultsResponse {
 export interface RunShardContext {
   assignment: BenchmarkAssignment;
   taskIndex: number;
+  step<T>(name: string, fn: () => Promise<T> | T): Promise<T>;
 }
 
 export interface RunShardResult {

@@ -87,7 +87,11 @@ describe('createBenchmarkClient', () => {
       runId: '00000000-0000-4000-8000-000000000001',
       participantSlug: 'e2b',
       batchSize: 2,
-      task: ({ taskIndex }) => ({ sandboxId: `sbx_${taskIndex}` }),
+      task: async ({ taskIndex, step }) => {
+        const sandboxId = await step('create', () => `sbx_${taskIndex}`);
+        await step('exec.first-command', async () => undefined);
+        return { sandboxId };
+      },
     });
 
     expect(result.records).toHaveLength(3);
@@ -99,6 +103,14 @@ describe('createBenchmarkClient', () => {
       isFinal: false,
     });
     expect((seen[1].body as any).records).toHaveLength(2);
+    expect((seen[1].body as any).records[0].data).toMatchObject({
+      sandboxId: 'sbx_10',
+      steps: [
+        { name: 'create', status: 'success' },
+        { name: 'exec.first-command', status: 'success' },
+      ],
+    });
+    expect((seen[1].body as any).records[0].data.steps[0].latencyMs).toEqual(expect.any(Number));
     expect((seen[2].body as any).records).toHaveLength(1);
     expect(seen.at(-1)).toMatchObject({ method: 'POST' });
     expect(seen.at(-1)?.url).toContain('/complete');
@@ -120,12 +132,18 @@ describe('createBenchmarkClient', () => {
       benchmarkSlug: 'scale',
       runId: '00000000-0000-4000-8000-000000000001',
       participantSlug: 'e2b',
-      task: () => {
-        throw new TypeError('boom');
+      task: async ({ step }) => {
+        await step('create', () => {
+          throw new TypeError('boom');
+        });
       },
     });
 
     expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'TypeError' });
+    expect(result.records[0].data).toMatchObject({
+      errorMessage: 'boom',
+      steps: [{ name: 'create', status: 'error', errorCode: 'TypeError' }],
+    });
     expect(seen.at(-1)?.url).toContain('/fail');
     expect(seen.at(-1)?.body).toMatchObject({ errorMessage: 'One or more tasks failed' });
   });

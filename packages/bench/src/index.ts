@@ -16,6 +16,7 @@ export type {
   RunShardOptions,
   RunShardResult,
   SendTaskResultsInput,
+  TaskStepRecord,
   TaskResultRecord,
   TaskResultsResponse,
   UpsertBenchmarkInput,

@@ -13,6 +13,7 @@ import type {
   RunShardOptions,
   RunShardResult,
   SendTaskResultsInput,
+  TaskStepRecord,
   TaskResultRecord,
   TaskResultsResponse,
   UpsertBenchmarkInput,
@@ -54,6 +55,14 @@ function getErrorCode(error: unknown): string {
 function toJsonObject(value: unknown): JsonObject | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   return value as JsonObject;
+}
+
+function mergeTaskData(data: JsonObject | undefined, steps: TaskStepRecord[]): JsonObject | undefined {
+  if (steps.length === 0) return data;
+  return {
+    ...(data ?? {}),
+    steps: steps as unknown as JsonObject[],
+  };
 }
 
 async function mapPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
@@ -269,14 +278,38 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
             status: 'success',
             startedAt: startedAtDate.toISOString(),
           };
+          const steps: TaskStepRecord[] = [];
+
+          async function step<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
+            const stepStartedAtMs = Date.now();
+            const stepRecord: TaskStepRecord = {
+              name,
+              status: 'success',
+              startedAt: new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+              latencyMs: 0,
+            };
+
+            try {
+              return await fn();
+            } catch (error) {
+              stepRecord.status = 'error';
+              stepRecord.errorCode = getErrorCode(error);
+              throw error;
+            } finally {
+              stepRecord.completedAt = new Date().toISOString();
+              stepRecord.latencyMs = Date.now() - stepStartedAtMs;
+              steps.push(stepRecord);
+            }
+          }
 
           try {
-            const data = await options.task({ assignment: claimed, taskIndex });
-            record.data = toJsonObject(data);
+            const data = await options.task({ assignment: claimed, taskIndex, step });
+            record.data = mergeTaskData(toJsonObject(data), steps);
           } catch (error) {
             record.status = 'error';
             record.errorCode = getErrorCode(error);
-            record.data = { errorMessage: error instanceof Error ? error.message : String(error) };
+            record.data = mergeTaskData({ errorMessage: error instanceof Error ? error.message : String(error) }, steps);
           } finally {
             record.completedAt = new Date().toISOString();
             record.latencyMs = Date.now() - startedAtMs;
