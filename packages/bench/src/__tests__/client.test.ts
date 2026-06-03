@@ -17,9 +17,9 @@ function assignment(overrides: Partial<BenchmarkAssignment> = {}): BenchmarkAssi
     participantId: 'participant_1',
     participantSlug: 'e2b',
     provider: 'e2b',
-    shardId: '00000000-0000-4000-8000-000000000002',
-    shardIndex: 0,
-    shardCount: 1,
+    workerId: '00000000-0000-4000-8000-000000000002',
+    workerIndex: 0,
+    workerCount: 1,
     attemptId: '00000000-0000-4000-8000-000000000003',
     attemptNumber: 1,
     taskRange: { start: 10, end: 12, count: 3 },
@@ -38,8 +38,8 @@ describe('createBenchmarkClient', () => {
       }
       if (url.endsWith('/benchmarks/scale/runs') && init?.method === 'POST') {
         return jsonResponse({
-          run: { id: 'run_1', benchmarkId: 'bench_1', status: 'planned', totalTasks: 100, shardCount: 10 },
-          participants: [{ id: 'participant_1', benchmarkId: 'bench_1', runId: 'run_1', slug: 'e2b', status: 'planned', totalTasks: 100, shardCount: 10 }],
+          run: { id: 'run_1', benchmarkId: 'bench_1', status: 'planned', totalTasks: 100, workerCount: 10 },
+          participants: [{ id: 'participant_1', benchmarkId: 'bench_1', runId: 'run_1', slug: 'e2b', status: 'planned', totalTasks: 100, workerCount: 10 }],
         }, 201);
       }
       throw new Error(`unexpected request: ${url}`);
@@ -48,7 +48,7 @@ describe('createBenchmarkClient', () => {
     const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1/', apiKey: 'key_123', fetch: fetchMock as typeof fetch });
 
     await expect(client.upsertBenchmark('scale', { name: 'Scale', kind: 'scale' })).resolves.toMatchObject({ slug: 'scale' });
-    await expect(client.createRun('scale', { totalTasks: 100, shardCount: 10, participants: ['e2b'] })).resolves.toMatchObject({
+    await expect(client.createRun('scale', { totalTasks: 100, workerCount: 10, participants: ['e2b'] })).resolves.toMatchObject({
       run: { id: 'run_1' },
       participants: [{ slug: 'e2b' }],
     });
@@ -57,32 +57,32 @@ describe('createBenchmarkClient', () => {
     expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ Authorization: 'Bearer key_123' });
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
       totalTasks: 100,
-      shardCount: 10,
+      workerCount: 10,
       participants: ['e2b'],
     });
   });
 
-  it('claims a shard and sends task_results batches', async () => {
+  it('claims a worker and sends task_results batches', async () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       seen.push({ url, body, method: init?.method });
 
-      if (url.endsWith('/participants/e2b/shards/claim')) {
+      if (url.endsWith('/participants/e2b/workers/claim')) {
         return jsonResponse({ assignment: assignment() });
       }
       if (url.endsWith('/events')) {
         return jsonResponse({ eventBatch: { id: 'batch_1' }, queueMessageId: 'msg_1' }, 202);
       }
       if (url.endsWith('/complete')) {
-        return jsonResponse({ shard: { id: 'shard_1' }, attempt: { id: 'attempt_1' } });
+        return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
       }
       throw new Error(`unexpected request: ${url}`);
     });
 
     const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
-    const result = await client.runShard({
+    const result = await client.runWorker({
       benchmarkSlug: 'scale',
       runId: '00000000-0000-4000-8000-000000000001',
       participantSlug: 'e2b',
@@ -114,19 +114,19 @@ describe('createBenchmarkClient', () => {
     expect(seen.at(-1)?.url).toContain('/complete');
   });
 
-  it('fails the shard when any task fails', async () => {
+  it('fails the worker when any task fails', async () => {
     const seen: Array<{ url: string; body: unknown }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       seen.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-      if (url.endsWith('/participants/e2b/shards/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
       if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
-      if (url.endsWith('/fail')) return jsonResponse({ shard: { id: 'shard_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/fail')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
       throw new Error(`unexpected request: ${url}`);
     });
 
     const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
-    const result = await client.runShard({
+    const result = await client.runWorker({
       benchmarkSlug: 'scale',
       runId: '00000000-0000-4000-8000-000000000001',
       participantSlug: 'e2b',
@@ -151,9 +151,9 @@ describe('createBenchmarkClient', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       seen.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-      if (url.endsWith('/participants/e2b/shards/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
       if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
-      if (url.endsWith('/complete')) return jsonResponse({ shard: { id: 'shard_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
       throw new Error(`unexpected request: ${url}`);
     });
 
@@ -183,9 +183,9 @@ describe('createBenchmarkClient', () => {
   it('creates workers from a reusable bench definition', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.endsWith('/participants/e2b/shards/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
       if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
-      if (url.endsWith('/complete')) return jsonResponse({ shard: { id: 'shard_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
       throw new Error(`unexpected request: ${url}`);
     });
 

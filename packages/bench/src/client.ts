@@ -7,18 +7,18 @@ import type {
   BenchmarkParticipant,
   BenchmarkResource,
   BenchmarkRun,
-  BenchmarkShard,
-  BenchmarkShardAttempt,
-  ClaimShardInput,
+  BenchmarkRunWorker,
+  BenchmarkWorkerAttempt,
+  ClaimWorkerInput,
   CreateRunInput,
   DefineBenchOptions,
   DefinedStep,
   DefinedTask,
   DefineWorkerOptions,
   JsonObject,
-  RunShardOptions,
-  RunShardContext,
-  RunShardResult,
+  RunWorkerOptions,
+  RunWorkerContext,
+  RunWorkerResult,
   SendTaskResultsInput,
   TaskStepRecord,
   TaskResultRecord,
@@ -64,7 +64,7 @@ function toJsonObject(value: unknown): JsonObject | undefined {
   return value as JsonObject;
 }
 
-function isDefinedTask(task: RunShardOptions['task']): task is DefinedTask {
+function isDefinedTask(task: RunWorkerOptions['task']): task is DefinedTask {
   return typeof task === 'object' && task !== null && Array.isArray(task.steps);
 }
 
@@ -73,7 +73,7 @@ function mergeJsonObjects(target: JsonObject, source: JsonObject | void): void {
   Object.assign(target, source);
 }
 
-async function runWorkerTask(task: RunShardOptions['task'], context: RunShardContext): Promise<JsonObject | void> {
+async function runWorkerTask(task: RunWorkerOptions['task'], context: RunWorkerContext): Promise<JsonObject | void> {
   if (!isDefinedTask(task)) {
     return task(context);
   }
@@ -143,7 +143,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
     return request<TaskResultsResponse>(
       'POST',
-      `/benchmarks/${encodePath(input.benchmarkSlug)}/runs/${encodePath(input.runId)}/shards/${encodePath(input.shardId)}/events`,
+      `/benchmarks/${encodePath(input.benchmarkSlug)}/runs/${encodePath(input.runId)}/workers/${encodePath(input.workerId)}/events`,
       {
         type: 'task_results',
         attemptId: input.attemptId,
@@ -154,17 +154,17 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
     );
   }
 
-  async function updateShard(
+  async function updateWorker(
     action: 'heartbeat' | 'complete' | 'fail',
     benchmarkSlug: string,
     runId: string,
-    shardId: string,
+    workerId: string,
     attemptId: string,
     extra?: JsonObject,
-  ): Promise<{ shard: BenchmarkShard; attempt: BenchmarkShardAttempt }> {
-    return request<{ shard: BenchmarkShard; attempt: BenchmarkShardAttempt }>(
+  ): Promise<{ worker: BenchmarkRunWorker; attempt: BenchmarkWorkerAttempt }> {
+    return request<{ worker: BenchmarkRunWorker; attempt: BenchmarkWorkerAttempt }>(
       'POST',
-      `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/shards/${encodePath(shardId)}/${action}`,
+      `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/workers/${encodePath(workerId)}/${action}`,
       { attemptId, ...(extra ?? {}) },
     );
   }
@@ -228,18 +228,18 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return data.participant;
     },
 
-    async listShards(benchmarkSlug, runId, participantSlug) {
-      const data = await request<{ items?: BenchmarkShard[]; shards?: BenchmarkShard[] }>(
+    async listWorkers(benchmarkSlug, runId, participantSlug) {
+      const data = await request<{ items?: BenchmarkRunWorker[]; workers?: BenchmarkRunWorker[] }>(
         'GET',
-        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/participants/${encodePath(participantSlug)}/shards`,
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/participants/${encodePath(participantSlug)}/workers`,
       );
-      return data.items ?? data.shards ?? [];
+      return data.items ?? data.workers ?? [];
     },
 
-    async claimShard(benchmarkSlug, runId, participantSlug, input: ClaimShardInput = {}) {
+    async claimWorker(benchmarkSlug, runId, participantSlug, input: ClaimWorkerInput = {}) {
       const data = await request<{ assignment: BenchmarkAssignment | null }>(
         'POST',
-        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/participants/${encodePath(participantSlug)}/shards/claim`,
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/participants/${encodePath(participantSlug)}/workers/claim`,
         input as JsonObject,
       );
       return data.assignment;
@@ -247,25 +247,25 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
     sendTaskResults,
 
-    heartbeatShard(benchmarkSlug, runId, shardId, attemptId) {
-      return updateShard('heartbeat', benchmarkSlug, runId, shardId, attemptId);
+    heartbeatWorker(benchmarkSlug, runId, workerId, attemptId) {
+      return updateWorker('heartbeat', benchmarkSlug, runId, workerId, attemptId);
     },
 
-    completeShard(benchmarkSlug, runId, shardId, attemptId) {
-      return updateShard('complete', benchmarkSlug, runId, shardId, attemptId);
+    completeWorker(benchmarkSlug, runId, workerId, attemptId) {
+      return updateWorker('complete', benchmarkSlug, runId, workerId, attemptId);
     },
 
-    failShard(benchmarkSlug, runId, shardId, attemptId, error) {
-      return updateShard('fail', benchmarkSlug, runId, shardId, attemptId, {
+    failWorker(benchmarkSlug, runId, workerId, attemptId, error) {
+      return updateWorker('fail', benchmarkSlug, runId, workerId, attemptId, {
         errorCode: getErrorCode(error),
         errorMessage: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
       });
     },
 
-    async runShard(options: RunShardOptions): Promise<RunShardResult> {
-      const assignment = await client.claimShard(options.benchmarkSlug, options.runId, options.participantSlug, {
-        workerKind: options.workerKind,
-        workerId: options.workerId,
+    async runWorker(options: RunWorkerOptions): Promise<RunWorkerResult> {
+      const assignment = await client.claimWorker(options.benchmarkSlug, options.runId, options.participantSlug, {
+        processKind: options.processKind,
+        processKey: options.processKey,
       });
       if (!assignment) return { assignment: null, records: [] };
       const claimed = assignment;
@@ -277,7 +277,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       const taskIndices = Array.from({ length: claimed.taskRange.count }, (_, index) => claimed.taskRange.start + index);
 
       const heartbeat = setInterval(() => {
-        void client.heartbeatShard(options.benchmarkSlug, options.runId, claimed.shardId, claimed.attemptId).catch(() => {});
+        void client.heartbeatWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId).catch(() => {});
       }, options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
       heartbeat.unref?.();
 
@@ -287,7 +287,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         await sendTaskResults({
           benchmarkSlug: options.benchmarkSlug,
           runId: options.runId,
-          shardId: claimed.shardId,
+          workerId: claimed.workerId,
           attemptId: claimed.attemptId,
           sequenceNumber,
           isFinal,
@@ -352,15 +352,15 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         await flush(true);
 
         if (records.some((record) => record.status !== 'success')) {
-          await client.failShard(options.benchmarkSlug, options.runId, claimed.shardId, claimed.attemptId, new Error('One or more tasks failed'));
+          await client.failWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId, new Error('One or more tasks failed'));
         } else {
-          await client.completeShard(options.benchmarkSlug, options.runId, claimed.shardId, claimed.attemptId);
+          await client.completeWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId);
         }
 
         return { assignment: claimed, records };
       } catch (error) {
         await flush(true).catch(() => {});
-        await client.failShard(options.benchmarkSlug, options.runId, claimed.shardId, claimed.attemptId, error).catch(() => {});
+        await client.failWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId, error).catch(() => {});
         throw error;
       } finally {
         clearInterval(heartbeat);
@@ -371,11 +371,11 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
   return client;
 }
 
-export async function runBenchmarkShard(
+export async function runBenchmarkWorker(
   config: BenchmarkClientConfig,
-  options: RunShardOptions,
-): Promise<RunShardResult> {
-  return createBenchmarkClient(config).runShard(options);
+  options: RunWorkerOptions,
+): Promise<RunWorkerResult> {
+  return createBenchmarkClient(config).runWorker(options);
 }
 
 export function defineStep<TState extends Record<string, unknown> = Record<string, unknown>>(
@@ -406,12 +406,12 @@ export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {
 
   return {
     run(overrides = {}) {
-      return client.runShard({
+      return client.runWorker({
         benchmarkSlug: options.benchmarkSlug,
         runId: options.runId,
         participantSlug: options.participantSlug,
-        workerKind: options.workerKind,
-        workerId: options.workerId,
+        processKind: options.processKind,
+        processKey: options.processKey,
         concurrency: overrides.concurrency ?? options.concurrency,
         batchSize: overrides.batchSize ?? options.batchSize,
         heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
@@ -435,8 +435,8 @@ export function defineBench(options: DefineBenchOptions): BenchDefinition {
         benchmarkSlug: options.slug,
         runId: workerOptions.runId,
         participantSlug,
-        workerKind: workerOptions.workerKind,
-        workerId: workerOptions.workerId,
+        processKind: workerOptions.processKind,
+        processKey: workerOptions.processKey,
         concurrency: workerOptions.concurrency ?? options.concurrency,
         batchSize: workerOptions.batchSize ?? options.batchSize,
         heartbeatIntervalMs: workerOptions.heartbeatIntervalMs ?? options.heartbeatIntervalMs,

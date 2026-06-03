@@ -26,7 +26,7 @@ export interface BenchmarkRun {
   name?: string | null;
   status: string;
   totalTasks: number;
-  shardCount: number;
+  workerCount: number;
   config?: JsonObject;
   createdAt?: string;
   updatedAt?: string;
@@ -41,29 +41,29 @@ export interface BenchmarkParticipant {
   provider?: string | null;
   status: string;
   totalTasks: number;
-  shardCount: number;
+  workerCount: number;
   config?: JsonObject;
 }
 
-export interface BenchmarkShard {
+export interface BenchmarkRunWorker {
   id: string;
   benchmarkId: string;
   runId: string;
   participantId: string;
-  shardIndex: number;
-  shardCount: number;
+  workerIndex: number;
+  workerCount: number;
   taskIndexStart: number;
   taskIndexEnd: number;
   targetConcurrency: number;
   status: string;
 }
 
-export interface BenchmarkShardAttempt {
+export interface BenchmarkWorkerAttempt {
   id: string;
   benchmarkId: string;
   runId: string;
   participantId: string;
-  shardId: string;
+  workerId: string;
   attemptNumber: number;
   status: string;
 }
@@ -75,9 +75,9 @@ export interface BenchmarkAssignment {
   participantId: string;
   participantSlug: string;
   provider?: string | null;
-  shardId: string;
-  shardIndex: number;
-  shardCount: number;
+  workerId: string;
+  workerIndex: number;
+  workerCount: number;
   attemptId: string;
   attemptNumber: number;
   taskRange: {
@@ -100,7 +100,7 @@ export interface UpsertBenchmarkInput {
 export interface CreateRunInput {
   name?: string;
   totalTasks: number;
-  shardCount: number;
+  workerCount: number;
   participants?: string[];
   config?: JsonObject;
 }
@@ -110,13 +110,13 @@ export interface UpsertParticipantInput {
   provider?: string;
   status?: string;
   totalTasks?: number;
-  shardCount?: number;
+  workerCount?: number;
   config?: JsonObject;
 }
 
-export interface ClaimShardInput {
-  workerKind?: string;
-  workerId?: string;
+export interface ClaimWorkerInput {
+  processKind?: string;
+  processKey?: string;
 }
 
 export interface TaskResultRecord {
@@ -144,7 +144,7 @@ export interface TaskStepRecord {
 export interface SendTaskResultsInput {
   benchmarkSlug: string;
   runId: string;
-  shardId: string;
+  workerId: string;
   attemptId: string;
   sequenceNumber: number;
   isFinal: boolean;
@@ -157,7 +157,7 @@ export interface TaskResultsResponse {
   queueMessageId?: string;
 }
 
-export interface RunShardContext {
+export interface RunWorkerContext {
   assignment: BenchmarkAssignment;
   taskIndex: number;
   step<T>(name: string, fn: () => Promise<T> | T): Promise<T>;
@@ -179,20 +179,20 @@ export interface DefinedTask<TState extends Record<string, unknown> = Record<str
   steps: DefinedStep<TState>[];
 }
 
-export type TaskFunction = (context: RunShardContext) => Promise<JsonObject | void> | JsonObject | void;
+export type TaskFunction = (context: RunWorkerContext) => Promise<JsonObject | void> | JsonObject | void;
 export type WorkerTask = DefinedTask | TaskFunction;
 
-export interface RunShardResult {
+export interface RunWorkerResult {
   assignment: BenchmarkAssignment | null;
   records: TaskResultRecord[];
 }
 
-export interface RunShardOptions {
+export interface RunWorkerOptions {
   benchmarkSlug: string;
   runId: string;
   participantSlug: string;
-  workerKind?: string;
-  workerId?: string;
+  processKind?: string;
+  processKey?: string;
   concurrency?: number;
   batchSize?: number;
   heartbeatIntervalMs?: number;
@@ -210,14 +210,14 @@ export interface DefineWorkerOptions extends WorkerDefaults {
   benchmarkSlug: string;
   runId: string;
   participantSlug: string;
-  workerKind?: string;
-  workerId?: string;
+  processKind?: string;
+  processKey?: string;
   client?: BenchmarkClient;
   task: WorkerTask;
 }
 
 export interface BenchmarkWorker {
-  run(overrides?: Partial<WorkerDefaults>): Promise<RunShardResult>;
+  run(overrides?: Partial<WorkerDefaults>): Promise<RunWorkerResult>;
 }
 
 export interface DefineBenchOptions extends WorkerDefaults {
@@ -259,32 +259,32 @@ export interface BenchmarkClient {
     runId: string,
     participantSlug: string,
   ): Promise<BenchmarkParticipant>;
-  listShards(
+  listWorkers(
     benchmarkSlug: string,
     runId: string,
     participantSlug: string,
-  ): Promise<BenchmarkShard[]>;
-  claimShard(
+  ): Promise<BenchmarkRunWorker[]>;
+  claimWorker(
     benchmarkSlug: string,
     runId: string,
     participantSlug: string,
-    input?: ClaimShardInput,
+    input?: ClaimWorkerInput,
   ): Promise<BenchmarkAssignment | null>;
   sendTaskResults(input: SendTaskResultsInput): Promise<TaskResultsResponse>;
-  heartbeatShard(benchmarkSlug: string, runId: string, shardId: string, attemptId: string): Promise<{
-    shard: BenchmarkShard;
-    attempt: BenchmarkShardAttempt;
+  heartbeatWorker(benchmarkSlug: string, runId: string, workerId: string, attemptId: string): Promise<{
+    worker: BenchmarkRunWorker;
+    attempt: BenchmarkWorkerAttempt;
   }>;
-  completeShard(benchmarkSlug: string, runId: string, shardId: string, attemptId: string): Promise<{
-    shard: BenchmarkShard;
-    attempt: BenchmarkShardAttempt;
+  completeWorker(benchmarkSlug: string, runId: string, workerId: string, attemptId: string): Promise<{
+    worker: BenchmarkRunWorker;
+    attempt: BenchmarkWorkerAttempt;
   }>;
-  failShard(
+  failWorker(
     benchmarkSlug: string,
     runId: string,
-    shardId: string,
+    workerId: string,
     attemptId: string,
     error?: unknown,
-  ): Promise<{ shard: BenchmarkShard; attempt: BenchmarkShardAttempt }>;
-  runShard(options: RunShardOptions): Promise<RunShardResult>;
+  ): Promise<{ worker: BenchmarkRunWorker; attempt: BenchmarkWorkerAttempt }>;
+  runWorker(options: RunWorkerOptions): Promise<RunWorkerResult>;
 }

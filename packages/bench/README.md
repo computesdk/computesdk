@@ -2,7 +2,7 @@
 
 Client and worker helpers for the ComputeSDK benchmark orchestrator.
 
-This package talks to the platform-owned benchmark/run/participant/shard API. It does not mint canonical run, shard, attempt, event, or task IDs. Workers claim platform-assigned work, execute task indexes in their assigned range, and send `task_results` batches back to the platform.
+This package talks to the platform-owned benchmark/run/participant/worker API. It does not mint canonical run, worker, attempt, event, or task IDs. Workers claim platform-assigned work, execute task indexes in their assigned range, and send `task_results` batches back to the platform.
 
 ## Installation
 
@@ -20,8 +20,8 @@ const worker = defineWorker({
   benchmarkSlug: 'scale',
   runId: process.env.BENCHMARK_RUN_ID!,
   participantSlug: 'e2b',
-  workerKind: 'container',
-  workerId: process.env.HOSTNAME,
+  processKind: 'container',
+  processKey: process.env.HOSTNAME,
   concurrency: 100,
   task: defineTask('sandbox.lifecycle', [
     defineStep('create', async ({ assignment, state }) => {
@@ -69,7 +69,7 @@ const bench = defineBench({
 
 const worker = bench.defineWorker({
   runId: process.env.BENCHMARK_RUN_ID!,
-  workerId: process.env.HOSTNAME,
+  processKey: process.env.HOSTNAME,
 });
 
 await worker.run();
@@ -93,7 +93,7 @@ await client.upsertBenchmark('scale', {
 const { run } = await client.createRun('scale', {
   name: '10k smoke',
   totalTasks: 10_000,
-  shardCount: 20,
+  workerCount: 20,
   participants: ['e2b', 'modal'],
   config: { timeoutMs: 120_000 },
 });
@@ -125,15 +125,15 @@ If a step returns a JSON object, it is merged into the task result `data` object
 ### Low-Level Client
 
 ```ts
-client.claimShard(benchmarkSlug, runId, participantSlug, { workerKind, workerId })
-client.sendTaskResults({ benchmarkSlug, runId, shardId, attemptId, sequenceNumber, isFinal, records })
-client.heartbeatShard(benchmarkSlug, runId, shardId, attemptId)
-client.completeShard(benchmarkSlug, runId, shardId, attemptId)
-client.failShard(benchmarkSlug, runId, shardId, attemptId, error)
-client.runShard(options)
+client.claimWorker(benchmarkSlug, runId, participantSlug, { processKind, processKey })
+client.sendTaskResults({ benchmarkSlug, runId, workerId, attemptId, sequenceNumber, isFinal, records })
+client.heartbeatWorker(benchmarkSlug, runId, workerId, attemptId)
+client.completeWorker(benchmarkSlug, runId, workerId, attemptId)
+client.failWorker(benchmarkSlug, runId, workerId, attemptId, error)
+client.runWorker(options)
 ```
 
-Shard terminology is kept on the low-level client because it maps directly to platform orchestration. Most workers should use `defineWorker(...).run()`.
+Most workers should use `defineWorker(...).run()`.
 
 ## Task Result Shape
 
