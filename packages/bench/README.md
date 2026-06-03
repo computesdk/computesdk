@@ -158,6 +158,21 @@ client.failWorker(benchmarkSlug, runId, workerId, attemptId, error)
 client.runWorker(options)
 ```
 
+`client.getRunProgress(...)` returns a run summary plus per-participant worker, task, and concurrency progress:
+
+```ts
+const progress = await client.getRunProgress('scale', runId);
+
+console.log(progress.summary.status);
+console.log(progress.summary.participants);
+
+const participant = progress.participants.find((item) => item.slug === 'e2b');
+console.log(participant?.status);
+console.log(participant?.workers);
+console.log(participant?.tasks.completionRatio);
+console.log(participant?.concurrency.find((item) => item.step === 'pause')?.ready);
+```
+
 Most workers should use `defineWorker(...).run()`.
 
 ## Task Result Shape

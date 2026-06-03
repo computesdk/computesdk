@@ -189,12 +189,49 @@ export interface RunProgressConcurrency {
   freshWorkerCount: number;
 }
 
+export type RunProgressStatus = 'planned' | 'in_progress' | 'completed' | 'failed';
+
+export interface RunProgressWorkerCounts {
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+  stale: number;
+  total: number;
+}
+
+export interface RunProgressTaskCounts {
+  done: number;
+  inFlight: number;
+  errors: number;
+  total: number;
+  completionRatio: number;
+}
+
+export interface RunProgressParticipantCounts {
+  planned: number;
+  inProgress: number;
+  completed: number;
+  failed: number;
+  total: number;
+}
+
+export interface RunProgressSummary {
+  status: RunProgressStatus;
+  started: boolean;
+  completed: boolean;
+  participants: RunProgressParticipantCounts;
+}
+
 export interface RunProgressParticipant {
   id: string;
   slug: string;
   provider?: string | null;
+  status: RunProgressStatus;
   totalTasks: number;
   workerCount: number;
+  workers: RunProgressWorkerCounts;
+  tasks: RunProgressTaskCounts;
   concurrency: RunProgressConcurrency[];
 }
 
@@ -205,6 +242,7 @@ export interface RunProgress {
     totalTasks: number;
     workerCount: number;
   };
+  summary: RunProgressSummary;
   freshnessWindowSeconds: number;
   generatedAt: string;
   participants: RunProgressParticipant[];

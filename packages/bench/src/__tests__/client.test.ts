@@ -29,6 +29,30 @@ function assignment(overrides: Partial<BenchmarkAssignment> = {}): BenchmarkAssi
   };
 }
 
+function progressResponse() {
+  return {
+    run: { id: '00000000-0000-4000-8000-000000000001', status: 'running', totalTasks: 1, workerCount: 1 },
+    summary: {
+      status: 'in_progress',
+      started: true,
+      completed: false,
+      participants: { planned: 0, inProgress: 1, completed: 0, failed: 0, total: 1 },
+    },
+    freshnessWindowSeconds: 15,
+    generatedAt: new Date().toISOString(),
+    participants: [{
+      id: 'participant_1',
+      slug: 'e2b',
+      status: 'in_progress',
+      totalTasks: 1,
+      workerCount: 1,
+      workers: { pending: 0, running: 1, completed: 0, failed: 0, stale: 0, total: 1 },
+      tasks: { done: 0, inFlight: 1, errors: 0, total: 1, completionRatio: 0 },
+      concurrency: [{ step: 'pause', active: 1, target: 1, ready: true, freshWorkerCount: 1 }],
+    }],
+  };
+}
+
 describe('createBenchmarkClient', () => {
   it('calls benchmark and run orchestration endpoints', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -252,18 +276,7 @@ describe('createBenchmarkClient', () => {
       if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 }, targetConcurrency: 1 }) });
       if (url.endsWith('/progress')) {
         order.push('progress');
-        return jsonResponse({
-          run: { id: '00000000-0000-4000-8000-000000000001', status: 'running', totalTasks: 1, workerCount: 1 },
-          freshnessWindowSeconds: 15,
-          generatedAt: new Date().toISOString(),
-          participants: [{
-            id: 'participant_1',
-            slug: 'e2b',
-            totalTasks: 1,
-            workerCount: 1,
-            concurrency: [{ step: 'pause', active: 1, target: 1, ready: true, freshWorkerCount: 1 }],
-          }],
-        });
+        return jsonResponse(progressResponse());
       }
       if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
       if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
@@ -296,18 +309,7 @@ describe('createBenchmarkClient', () => {
       if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 }, targetConcurrency: 1 }) });
       if (url.endsWith('/progress')) {
         order.push('progress');
-        return jsonResponse({
-          run: { id: '00000000-0000-4000-8000-000000000001', status: 'running', totalTasks: 1, workerCount: 1 },
-          freshnessWindowSeconds: 15,
-          generatedAt: new Date().toISOString(),
-          participants: [{
-            id: 'participant_1',
-            slug: 'e2b',
-            totalTasks: 1,
-            workerCount: 1,
-            concurrency: [{ step: 'pause', active: 1, target: 1, ready: true, freshWorkerCount: 1 }],
-          }],
-        });
+        return jsonResponse(progressResponse());
       }
       if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
       if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
@@ -336,6 +338,29 @@ describe('createBenchmarkClient', () => {
 
     expect(order).toEqual(['create', 'progress', 'pause', 'destroy']);
     expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/progress'))).toHaveLength(1);
+  });
+
+  it('returns run progress summaries', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/progress')) return jsonResponse(progressResponse());
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const progress = await client.getRunProgress('scale', '00000000-0000-4000-8000-000000000001');
+
+    expect(progress.summary).toMatchObject({
+      status: 'in_progress',
+      started: true,
+      completed: false,
+      participants: { planned: 0, inProgress: 1, completed: 0, failed: 0, total: 1 },
+    });
+    expect(progress.participants[0]).toMatchObject({
+      status: 'in_progress',
+      workers: { pending: 0, running: 1, completed: 0, failed: 0, stale: 0, total: 1 },
+      tasks: { done: 0, inFlight: 1, errors: 0, total: 1, completionRatio: 0 },
+    });
   });
 
   it('creates workers from a reusable bench definition', async () => {
