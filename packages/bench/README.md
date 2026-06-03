@@ -102,8 +102,13 @@ const { run } = await client.createRun('scale', {
   config: { timeoutMs: 120_000 },
 });
 
+await client.planWorkers('scale', run.id, 'e2b');
+await client.planWorkers('scale', run.id, 'modal');
+
 console.log(run.id);
 ```
+
+Workers must be planned before `worker.run()` can claim assignments.
 
 ## API
 
@@ -132,13 +137,14 @@ If a step returns a JSON object, it is merged into the task result `data` object
 |--------|------|-------------|
 | `reportConcurrency` | `boolean?` | Include active count for this step in worker heartbeats. Defaults to `true` |
 | `concurrency` | `number?` | Per-worker target for this step. Defaults to worker concurrency/assignment target |
-| `readiness` | `'poll' \| 'internal'?` | Readiness coordination mode. Defaults to `'poll'` |
+| `readiness` | `'poll' \| 'internal'?` | Readiness coordination mode. Defaults to `'internal'`. Use `'poll'` for platform-coordinated barrier steps |
 | `readyPollIntervalMs` | `number?` | Poll interval while waiting. Defaults to `1000` |
 | `readyTimeoutMs` | `number?` | Maximum readiness wait time |
 
 ### Low-Level Client
 
 ```ts
+client.planWorkers(benchmarkSlug, runId, participantSlug)
 client.claimWorker(benchmarkSlug, runId, participantSlug, { processKind, processKey })
 client.sendTaskResults({ benchmarkSlug, runId, workerId, attemptId, sequenceNumber, isFinal, records })
 client.heartbeatWorker(benchmarkSlug, runId, workerId, {

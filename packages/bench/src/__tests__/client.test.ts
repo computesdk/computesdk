@@ -62,6 +62,40 @@ describe('createBenchmarkClient', () => {
     });
   });
 
+  it('creates a run, plans workers, then claims a worker', async () => {
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/benchmarks/scale/runs') && init?.method === 'POST') {
+        return jsonResponse({
+          run: { id: 'run_1', benchmarkId: 'bench_1', status: 'planned', totalTasks: 100, workerCount: 10 },
+          participants: [{ id: 'participant_1', benchmarkId: 'bench_1', runId: 'run_1', slug: 'e2b', status: 'planned', totalTasks: 100, workerCount: 10 }],
+        }, 201);
+      }
+      if (url.endsWith('/benchmarks/scale/runs/run_1/participants/e2b/workers') && init?.method === 'POST') {
+        return jsonResponse({ workers: [{ id: 'worker_1', workerIndex: 0, workerCount: 10, taskIndexStart: 0, taskIndexEnd: 9, targetConcurrency: 1, status: 'planned' }] });
+      }
+      if (url.endsWith('/benchmarks/scale/runs/run_1/participants/e2b/workers/claim') && init?.method === 'POST') {
+        return jsonResponse({ assignment: assignment({ runId: 'run_1' }) });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const { run } = await client.createRun('scale', { totalTasks: 100, workerCount: 10, participants: ['e2b'] });
+    await expect(client.planWorkers('scale', run.id, 'e2b')).resolves.toHaveLength(1);
+    await expect(client.claimWorker('scale', run.id, 'e2b')).resolves.toMatchObject({ workerId: '00000000-0000-4000-8000-000000000002' });
+
+    expect(seen.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'POST https://platform.test/api/v1/benchmarks/scale/runs',
+      'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/participants/e2b/workers',
+      'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/participants/e2b/workers/claim',
+    ]);
+  });
+
   it('claims a worker and sends task_results batches', async () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -115,6 +149,30 @@ describe('createBenchmarkClient', () => {
     expect((eventCalls[1].body as any).records).toHaveLength(1);
     expect(seen.at(-1)).toMatchObject({ method: 'POST' });
     expect(seen.at(-1)?.url).toContain('/complete');
+  });
+
+  it('omits currentStep from idle progress heartbeats', async () => {
+    const seen: Array<{ url: string; body: unknown }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await client.heartbeatWorker('scale', 'run_1', 'worker_1', {
+      attemptId: 'attempt_1',
+      progressDone: 0,
+      progressInFlight: 0,
+      progressErrors: 0,
+      progressTotal: 1,
+      currentStep: null,
+      concurrency: [],
+    } as any);
+
+    expect(seen[0].body).not.toHaveProperty('currentStep');
+    expect(seen[0].body).toMatchObject({ attemptId: 'attempt_1', concurrency: [] });
   });
 
   it('fails the worker when any task fails', async () => {
@@ -229,6 +287,55 @@ describe('createBenchmarkClient', () => {
     expect(order).toEqual(['progress', 'step']);
     expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).currentStep === 'pause')).toBe(true);
     expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).concurrency?.[0]?.target === 1)).toBe(true);
+  });
+
+  it('only polls progress for explicitly polled steps', async () => {
+    const order: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 }, targetConcurrency: 1 }) });
+      if (url.endsWith('/progress')) {
+        order.push('progress');
+        return jsonResponse({
+          run: { id: '00000000-0000-4000-8000-000000000001', status: 'running', totalTasks: 1, workerCount: 1 },
+          freshnessWindowSeconds: 15,
+          generatedAt: new Date().toISOString(),
+          participants: [{
+            id: 'participant_1',
+            slug: 'e2b',
+            totalTasks: 1,
+            workerCount: 1,
+            concurrency: [{ step: 'pause', active: 1, target: 1, ready: true, freshWorkerCount: 1 }],
+          }],
+        });
+      }
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await defineWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      client,
+      task: defineTask('mixed-readiness', [
+        defineStep('create', () => {
+          order.push('create');
+        }),
+        defineStep('pause', { readiness: 'poll', readyPollIntervalMs: 1 }, () => {
+          order.push('pause');
+        }),
+        defineStep('destroy', () => {
+          order.push('destroy');
+        }),
+      ]),
+    }).run();
+
+    expect(order).toEqual(['create', 'progress', 'pause', 'destroy']);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/progress'))).toHaveLength(1);
   });
 
   it('creates workers from a reusable bench definition', async () => {

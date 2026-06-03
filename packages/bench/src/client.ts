@@ -21,6 +21,7 @@ import type {
   RunWorkerContext,
   RunWorkerResult,
   SendTaskResultsInput,
+  PlanWorkersInput,
   TaskStepRecord,
   TaskResultRecord,
   TaskResultsResponse,
@@ -256,6 +257,15 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return data.items ?? data.workers ?? [];
     },
 
+    async planWorkers(benchmarkSlug, runId, participantSlug, input: PlanWorkersInput = {}) {
+      const data = await request<{ items?: BenchmarkRunWorker[]; workers?: BenchmarkRunWorker[] }>(
+        'POST',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/participants/${encodePath(participantSlug)}/workers`,
+        input as JsonObject,
+      );
+      return data.items ?? data.workers ?? [];
+    },
+
     async claimWorker(benchmarkSlug, runId, participantSlug, input: ClaimWorkerInput = {}) {
       const data = await request<{ assignment: BenchmarkAssignment | null }>(
         'POST',
@@ -269,6 +279,9 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
     heartbeatWorker(benchmarkSlug, runId, workerId, input: WorkerHeartbeatInput) {
       const { attemptId, ...extra } = input;
+      if (extra.currentStep == null) {
+        delete extra.currentStep;
+      }
       return updateWorker('heartbeat', benchmarkSlug, runId, workerId, attemptId, extra as JsonObject);
     },
 
@@ -318,13 +331,14 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       }
 
       async function sendHeartbeat(): Promise<void> {
+        const step = currentStep();
         await client.heartbeatWorker(options.benchmarkSlug, options.runId, claimed.workerId, {
           attemptId: claimed.attemptId,
           progressDone: doneCount,
           progressInFlight: inFlightCount,
           progressErrors: errorCount,
           progressTotal: taskIndices.length,
-          currentStep: currentStep(),
+          ...(step ? { currentStep: step } : {}),
           concurrency: concurrencySamples(),
         });
       }
@@ -399,7 +413,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
             }
 
             try {
-              if ((stepOptions.readiness ?? 'poll') === 'poll') {
+              if (stepOptions.readiness === 'poll') {
                 await waitForStepReady(name, stepOptions);
               }
               return await fn();

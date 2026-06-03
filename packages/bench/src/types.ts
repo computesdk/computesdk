@@ -121,6 +121,12 @@ export interface ClaimWorkerInput {
   processKey?: string;
 }
 
+export interface PlanWorkersInput {
+  workerCount?: number;
+  targetConcurrency?: number;
+  config?: JsonObject;
+}
+
 export interface TaskResultRecord {
   taskIndex: number;
   status: string;
@@ -171,7 +177,7 @@ export interface WorkerHeartbeatInput {
   progressInFlight?: number;
   progressErrors?: number;
   progressTotal?: number;
-  currentStep?: string | null;
+  currentStep?: string;
   concurrency?: WorkerConcurrencySample[];
 }
 
@@ -221,7 +227,7 @@ export interface DefineStepOptions {
   reportConcurrency?: boolean;
   /** Per-worker target for this step. Defaults to worker concurrency/assignment target. */
   concurrency?: number;
-  /** Readiness coordination mode. Defaults to poll. */
+  /** Readiness coordination mode. Defaults to internal. */
   readiness?: 'poll' | 'internal';
   /** Poll interval while waiting for readiness. Defaults to 1000ms. */
   readyPollIntervalMs?: number;
@@ -326,6 +332,12 @@ export interface BenchmarkClient {
     benchmarkSlug: string,
     runId: string,
     participantSlug: string,
+  ): Promise<BenchmarkRunWorker[]>;
+  planWorkers(
+    benchmarkSlug: string,
+    runId: string,
+    participantSlug: string,
+    input?: PlanWorkersInput,
   ): Promise<BenchmarkRunWorker[]>;
   getRunProgress(benchmarkSlug: string, runId: string): Promise<RunProgress>;
   claimWorker(
