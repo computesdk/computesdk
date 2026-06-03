@@ -127,6 +127,7 @@ export interface TaskResultRecord {
   latencyMs?: number;
   firstCommandMs?: number | null;
   errorCode?: string | null;
+  steps?: TaskStepRecord[];
   data?: JsonObject;
 }
 
@@ -136,7 +137,8 @@ export interface TaskStepRecord {
   startedAt: string;
   completedAt: string;
   latencyMs: number;
-  errorCode?: string;
+  errorCode?: string | null;
+  data?: JsonObject;
 }
 
 export interface SendTaskResultsInput {

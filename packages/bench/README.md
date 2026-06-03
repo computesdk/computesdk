@@ -64,7 +64,7 @@ await bench.runShard({
 ```
 
 `runShard()` claims the next pending shard for the participant. If no shard is available, it returns `{ assignment: null, records: [] }`.
-Each task receives `step(name, fn)`, which records named step timings in `record.data.steps`.
+Each task receives `step(name, fn)`, which records named step timings in `record.steps`.
 
 ## API
 
@@ -108,7 +108,7 @@ client.runShard(options)
 |-------|------|-------------|
 | `assignment` | `BenchmarkAssignment` | Platform-owned shard and attempt assignment |
 | `taskIndex` | `number` | Deterministic task index within the benchmark run |
-| `step` | `(name, fn) => Promise<T>` | Measures a named sub-operation and attaches it to `data.steps` |
+| `step` | `(name, fn) => Promise<T>` | Measures a named sub-operation and attaches it to `steps` |
 
 `sendTaskResults()` posts to:
 
@@ -131,13 +131,13 @@ with this payload shape:
       "startedAt": "2026-06-03T00:00:00.000Z",
       "completedAt": "2026-06-03T00:00:01.000Z",
       "latencyMs": 1000,
+      "steps": [
+        { "name": "create", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 700 },
+        { "name": "exec.first-command", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 120 },
+        { "name": "destroy", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 180 }
+      ],
       "data": {
-        "sandboxId": "...",
-        "steps": [
-          { "name": "create", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 700 },
-          { "name": "exec.first-command", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 120 },
-          { "name": "destroy", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 180 }
-        ]
+        "sandboxId": "..."
       }
     }
   ]

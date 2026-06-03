@@ -103,14 +103,12 @@ describe('createBenchmarkClient', () => {
       isFinal: false,
     });
     expect((seen[1].body as any).records).toHaveLength(2);
-    expect((seen[1].body as any).records[0].data).toMatchObject({
-      sandboxId: 'sbx_10',
-      steps: [
-        { name: 'create', status: 'success' },
-        { name: 'exec.first-command', status: 'success' },
-      ],
-    });
-    expect((seen[1].body as any).records[0].data.steps[0].latencyMs).toEqual(expect.any(Number));
+    expect((seen[1].body as any).records[0].data).toMatchObject({ sandboxId: 'sbx_10' });
+    expect((seen[1].body as any).records[0].steps).toMatchObject([
+      { name: 'create', status: 'success' },
+      { name: 'exec.first-command', status: 'success' },
+    ]);
+    expect((seen[1].body as any).records[0].steps[0].latencyMs).toEqual(expect.any(Number));
     expect((seen[2].body as any).records).toHaveLength(1);
     expect(seen.at(-1)).toMatchObject({ method: 'POST' });
     expect(seen.at(-1)?.url).toContain('/complete');
@@ -142,8 +140,8 @@ describe('createBenchmarkClient', () => {
     expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'TypeError' });
     expect(result.records[0].data).toMatchObject({
       errorMessage: 'boom',
-      steps: [{ name: 'create', status: 'error', errorCode: 'TypeError' }],
     });
+    expect(result.records[0].steps).toMatchObject([{ name: 'create', status: 'error', errorCode: 'TypeError' }]);
     expect(seen.at(-1)?.url).toContain('/fail');
     expect(seen.at(-1)?.body).toMatchObject({ errorMessage: 'One or more tasks failed' });
   });

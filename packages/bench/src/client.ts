@@ -57,14 +57,6 @@ function toJsonObject(value: unknown): JsonObject | undefined {
   return value as JsonObject;
 }
 
-function mergeTaskData(data: JsonObject | undefined, steps: TaskStepRecord[]): JsonObject | undefined {
-  if (steps.length === 0) return data;
-  return {
-    ...(data ?? {}),
-    steps: steps as unknown as JsonObject[],
-  };
-}
-
 async function mapPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
   let nextIndex = 0;
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
@@ -305,14 +297,15 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
           try {
             const data = await options.task({ assignment: claimed, taskIndex, step });
-            record.data = mergeTaskData(toJsonObject(data), steps);
+            record.data = toJsonObject(data);
           } catch (error) {
             record.status = 'error';
             record.errorCode = getErrorCode(error);
-            record.data = mergeTaskData({ errorMessage: error instanceof Error ? error.message : String(error) }, steps);
+            record.data = { errorMessage: error instanceof Error ? error.message : String(error) };
           } finally {
             record.completedAt = new Date().toISOString();
             record.latencyMs = Date.now() - startedAtMs;
+            record.steps = steps.length > 0 ? steps : undefined;
           }
 
           records.push(record);
