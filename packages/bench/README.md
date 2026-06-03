@@ -35,6 +35,10 @@ const worker = defineWorker({
     defineStep('exec.first-command', async ({ state }) => {
       await (state.sandbox as any).runCommand('node -v');
     }),
+    defineStep('pause', { waitForReady: true }, async () => {
+      // Every worker reports active pause concurrency and waits here until
+      // the platform reports the participant's pause step is ready.
+    }),
     defineStep('destroy', async ({ state }) => {
       await (state.sandbox as any).destroy();
     }),
@@ -122,12 +126,27 @@ Step functions receive:
 
 If a step returns a JSON object, it is merged into the task result `data` object. Defined tasks also include `taskName` in `data`.
 
+`defineStep(name, options, fn)` supports step-level progress coordination:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `reportConcurrency` | `boolean?` | Include active count for this step in worker heartbeats. Defaults to `true` |
+| `targetConcurrency` | `number?` | Per-worker target for this step. Defaults to worker concurrency/assignment target |
+| `waitForReady` | `boolean?` | Poll run progress until this participant/step is ready before running `fn` |
+| `readyPollIntervalMs` | `number?` | Poll interval while waiting. Defaults to `1000` |
+| `readyTimeoutMs` | `number?` | Maximum readiness wait time |
+
 ### Low-Level Client
 
 ```ts
 client.claimWorker(benchmarkSlug, runId, participantSlug, { processKind, processKey })
 client.sendTaskResults({ benchmarkSlug, runId, workerId, attemptId, sequenceNumber, isFinal, records })
-client.heartbeatWorker(benchmarkSlug, runId, workerId, attemptId)
+client.heartbeatWorker(benchmarkSlug, runId, workerId, {
+  attemptId,
+  currentStep: 'pause',
+  concurrency: [{ step: 'pause', active: 100, target: 100 }],
+})
+client.getRunProgress(benchmarkSlug, runId)
 client.completeWorker(benchmarkSlug, runId, workerId, attemptId)
 client.failWorker(benchmarkSlug, runId, workerId, attemptId, error)
 client.runWorker(options)

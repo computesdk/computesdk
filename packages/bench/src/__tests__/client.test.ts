@@ -95,21 +95,24 @@ describe('createBenchmarkClient', () => {
     });
 
     expect(result.records).toHaveLength(3);
-    expect(seen.filter((entry) => entry.url.endsWith('/events'))).toHaveLength(2);
-    expect(seen[1].body).toMatchObject({
+    const eventCalls = seen.filter((entry) => entry.url.endsWith('/events'));
+    const heartbeatCalls = seen.filter((entry) => entry.url.endsWith('/heartbeat'));
+    expect(eventCalls).toHaveLength(2);
+    expect(heartbeatCalls.some((entry) => (entry.body as any).concurrency?.some((sample: any) => sample.step === 'create'))).toBe(true);
+    expect(eventCalls[0].body).toMatchObject({
       type: 'task_results',
       attemptId: '00000000-0000-4000-8000-000000000003',
       sequenceNumber: 0,
       isFinal: false,
     });
-    expect((seen[1].body as any).records).toHaveLength(2);
-    expect((seen[1].body as any).records[0].data).toMatchObject({ sandboxId: 'sbx_10' });
-    expect((seen[1].body as any).records[0].steps).toMatchObject([
+    expect((eventCalls[0].body as any).records).toHaveLength(2);
+    expect((eventCalls[0].body as any).records[0].data).toMatchObject({ sandboxId: 'sbx_10' });
+    expect((eventCalls[0].body as any).records[0].steps).toMatchObject([
       { name: 'create', status: 'success' },
       { name: 'exec.first-command', status: 'success' },
     ]);
-    expect((seen[1].body as any).records[0].steps[0].latencyMs).toEqual(expect.any(Number));
-    expect((seen[2].body as any).records).toHaveLength(1);
+    expect((eventCalls[0].body as any).records[0].steps[0].latencyMs).toEqual(expect.any(Number));
+    expect((eventCalls[1].body as any).records).toHaveLength(1);
     expect(seen.at(-1)).toMatchObject({ method: 'POST' });
     expect(seen.at(-1)?.url).toContain('/complete');
   });
@@ -178,6 +181,54 @@ describe('createBenchmarkClient', () => {
       { name: 'create', status: 'success' },
       { name: 'exec.first-command', status: 'success' },
     ]);
+  });
+
+  it('waits for platform step readiness before running a step body', async () => {
+    const order: string[] = [];
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 }, targetConcurrency: 1 }) });
+      if (url.endsWith('/progress')) {
+        order.push('progress');
+        return jsonResponse({
+          run: { id: '00000000-0000-4000-8000-000000000001', status: 'running', totalTasks: 1, workerCount: 1 },
+          freshnessWindowSeconds: 15,
+          generatedAt: new Date().toISOString(),
+          participants: [{
+            id: 'participant_1',
+            slug: 'e2b',
+            totalTasks: 1,
+            workerCount: 1,
+            concurrency: [{ step: 'pause', active: 1, target: 1, ready: true, freshWorkerCount: 1 }],
+          }],
+        });
+      }
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await defineWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      client,
+      task: defineTask('pause-task', [
+        defineStep('pause', { waitForReady: true, readyPollIntervalMs: 1 }, () => {
+          order.push('step');
+        }),
+      ]),
+    }).run();
+
+    expect(order).toEqual(['progress', 'step']);
+    expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).currentStep === 'pause')).toBe(true);
+    expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).concurrency?.[0]?.target === 1)).toBe(true);
   });
 
   it('creates workers from a reusable bench definition', async () => {

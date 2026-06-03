@@ -56,6 +56,8 @@ export interface BenchmarkRunWorker {
   taskIndexEnd: number;
   targetConcurrency: number;
   status: string;
+  currentStep?: string | null;
+  concurrency?: WorkerConcurrencySample[];
 }
 
 export interface BenchmarkWorkerAttempt {
@@ -157,10 +159,55 @@ export interface TaskResultsResponse {
   queueMessageId?: string;
 }
 
+export interface WorkerConcurrencySample {
+  step: string;
+  active: number;
+  target: number;
+}
+
+export interface WorkerHeartbeatInput {
+  attemptId: string;
+  progressDone?: number;
+  progressInFlight?: number;
+  progressErrors?: number;
+  progressTotal?: number;
+  currentStep?: string | null;
+  concurrency?: WorkerConcurrencySample[];
+}
+
+export interface RunProgressConcurrency {
+  step: string;
+  active: number;
+  target: number;
+  ready: boolean;
+  freshWorkerCount: number;
+}
+
+export interface RunProgressParticipant {
+  id: string;
+  slug: string;
+  provider?: string | null;
+  totalTasks: number;
+  workerCount: number;
+  concurrency: RunProgressConcurrency[];
+}
+
+export interface RunProgress {
+  run: {
+    id: string;
+    status: string;
+    totalTasks: number;
+    workerCount: number;
+  };
+  freshnessWindowSeconds: number;
+  generatedAt: string;
+  participants: RunProgressParticipant[];
+}
+
 export interface RunWorkerContext {
   assignment: BenchmarkAssignment;
   taskIndex: number;
-  step<T>(name: string, fn: () => Promise<T> | T): Promise<T>;
+  step<T>(name: string, fn: () => Promise<T> | T, options?: DefineStepOptions): Promise<T>;
 }
 
 export interface StepContext<TState extends Record<string, unknown> = Record<string, unknown>> {
@@ -169,8 +216,22 @@ export interface StepContext<TState extends Record<string, unknown> = Record<str
   state: TState;
 }
 
+export interface DefineStepOptions {
+  /** Report this step as active in heartbeat concurrency samples. Defaults to true. */
+  reportConcurrency?: boolean;
+  /** Per-worker target for this step. Defaults to worker concurrency/assignment target. */
+  targetConcurrency?: number;
+  /** Wait until the platform reports this participant/step as ready before running the step body. */
+  waitForReady?: boolean;
+  /** Poll interval while waiting for readiness. Defaults to 1000ms. */
+  readyPollIntervalMs?: number;
+  /** Maximum time to wait for readiness. Defaults to no timeout. */
+  readyTimeoutMs?: number;
+}
+
 export interface DefinedStep<TState extends Record<string, unknown> = Record<string, unknown>> {
   name: string;
+  options?: DefineStepOptions;
   fn: (context: StepContext<TState>) => Promise<JsonObject | void> | JsonObject | void;
 }
 
@@ -196,6 +257,7 @@ export interface RunWorkerOptions {
   concurrency?: number;
   batchSize?: number;
   heartbeatIntervalMs?: number;
+  readyPollIntervalMs?: number;
   onResult?: (record: TaskResultRecord) => void;
   task: WorkerTask;
 }
@@ -204,6 +266,7 @@ export interface WorkerDefaults {
   concurrency?: number;
   batchSize?: number;
   heartbeatIntervalMs?: number;
+  readyPollIntervalMs?: number;
 }
 
 export interface DefineWorkerOptions extends WorkerDefaults {
@@ -264,6 +327,7 @@ export interface BenchmarkClient {
     runId: string,
     participantSlug: string,
   ): Promise<BenchmarkRunWorker[]>;
+  getRunProgress(benchmarkSlug: string, runId: string): Promise<RunProgress>;
   claimWorker(
     benchmarkSlug: string,
     runId: string,
@@ -271,7 +335,7 @@ export interface BenchmarkClient {
     input?: ClaimWorkerInput,
   ): Promise<BenchmarkAssignment | null>;
   sendTaskResults(input: SendTaskResultsInput): Promise<TaskResultsResponse>;
-  heartbeatWorker(benchmarkSlug: string, runId: string, workerId: string, attemptId: string): Promise<{
+  heartbeatWorker(benchmarkSlug: string, runId: string, workerId: string, input: WorkerHeartbeatInput): Promise<{
     worker: BenchmarkRunWorker;
     attempt: BenchmarkWorkerAttempt;
   }>;

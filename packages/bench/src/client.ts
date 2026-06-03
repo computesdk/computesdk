@@ -12,6 +12,7 @@ import type {
   ClaimWorkerInput,
   CreateRunInput,
   DefineBenchOptions,
+  DefineStepOptions,
   DefinedStep,
   DefinedTask,
   DefineWorkerOptions,
@@ -23,13 +24,17 @@ import type {
   TaskStepRecord,
   TaskResultRecord,
   TaskResultsResponse,
+  RunProgress,
   UpsertBenchmarkInput,
   UpsertParticipantInput,
+  WorkerConcurrencySample,
+  WorkerHeartbeatInput,
 } from './types';
 
 const DEFAULT_BASE_URL = 'https://platform.computesdk.com/api/v1';
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
+const DEFAULT_READY_POLL_INTERVAL_MS = 1000;
 
 export class BenchmarkApiError extends Error {
   constructor(
@@ -73,6 +78,10 @@ function mergeJsonObjects(target: JsonObject, source: JsonObject | void): void {
   Object.assign(target, source);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function runWorkerTask(task: RunWorkerOptions['task'], context: RunWorkerContext): Promise<JsonObject | void> {
   if (!isDefinedTask(task)) {
     return task(context);
@@ -81,11 +90,15 @@ async function runWorkerTask(task: RunWorkerOptions['task'], context: RunWorkerC
   const state: Record<string, unknown> = {};
   const data: JsonObject = { taskName: task.name };
   for (const definedStep of task.steps) {
-    const stepData = await context.step(definedStep.name, () => definedStep.fn({
-      assignment: context.assignment,
-      taskIndex: context.taskIndex,
-      state,
-    }));
+    const stepData = await context.step(
+      definedStep.name,
+      () => definedStep.fn({
+        assignment: context.assignment,
+        taskIndex: context.taskIndex,
+        state,
+      }),
+      definedStep.options,
+    );
     mergeJsonObjects(data, stepData);
   }
 
@@ -228,6 +241,13 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return data.participant;
     },
 
+    async getRunProgress(benchmarkSlug, runId) {
+      return request<RunProgress>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/progress`,
+      );
+    },
+
     async listWorkers(benchmarkSlug, runId, participantSlug) {
       const data = await request<{ items?: BenchmarkRunWorker[]; workers?: BenchmarkRunWorker[] }>(
         'GET',
@@ -247,8 +267,9 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
     sendTaskResults,
 
-    heartbeatWorker(benchmarkSlug, runId, workerId, attemptId) {
-      return updateWorker('heartbeat', benchmarkSlug, runId, workerId, attemptId);
+    heartbeatWorker(benchmarkSlug, runId, workerId, input: WorkerHeartbeatInput) {
+      const { attemptId, ...extra } = input;
+      return updateWorker('heartbeat', benchmarkSlug, runId, workerId, attemptId, extra as JsonObject);
     },
 
     completeWorker(benchmarkSlug, runId, workerId, attemptId) {
@@ -275,9 +296,59 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       const pending: TaskResultRecord[] = [];
       const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
       const taskIndices = Array.from({ length: claimed.taskRange.count }, (_, index) => claimed.taskRange.start + index);
+      const activeByStep = new Map<string, number>();
+      const targetByStep = new Map<string, number>();
+      let doneCount = 0;
+      let errorCount = 0;
+      let inFlightCount = 0;
+
+      function concurrencySamples(): WorkerConcurrencySample[] {
+        return Array.from(activeByStep.entries())
+          .filter(([, active]) => active > 0)
+          .map(([step, active]) => ({
+            step,
+            active,
+            target: targetByStep.get(step) ?? options.concurrency ?? claimed.targetConcurrency,
+          }));
+      }
+
+      function currentStep(): string | null {
+        const sample = concurrencySamples().sort((a, b) => b.active - a.active)[0];
+        return sample?.step ?? null;
+      }
+
+      async function sendHeartbeat(): Promise<void> {
+        await client.heartbeatWorker(options.benchmarkSlug, options.runId, claimed.workerId, {
+          attemptId: claimed.attemptId,
+          progressDone: doneCount,
+          progressInFlight: inFlightCount,
+          progressErrors: errorCount,
+          progressTotal: taskIndices.length,
+          currentStep: currentStep(),
+          concurrency: concurrencySamples(),
+        });
+      }
+
+      async function waitForStepReady(stepName: string, stepOptions: DefineStepOptions): Promise<void> {
+        const startedAt = Date.now();
+        const pollInterval = stepOptions.readyPollIntervalMs ?? options.readyPollIntervalMs ?? DEFAULT_READY_POLL_INTERVAL_MS;
+
+        while (true) {
+          const progress = await client.getRunProgress(options.benchmarkSlug, options.runId);
+          const participant = progress.participants.find((item) => item.slug === options.participantSlug);
+          const step = participant?.concurrency.find((item) => item.step === stepName);
+          if (step?.ready) return;
+
+          if (typeof stepOptions.readyTimeoutMs === 'number' && Date.now() - startedAt >= stepOptions.readyTimeoutMs) {
+            throw new Error(`Timed out waiting for benchmark step "${stepName}" to become ready.`);
+          }
+
+          await sleep(pollInterval);
+        }
+      }
 
       const heartbeat = setInterval(() => {
-        void client.heartbeatWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId).catch(() => {});
+        void sendHeartbeat().catch(() => {});
       }, options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
       heartbeat.unref?.();
 
@@ -297,7 +368,10 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       }
 
       try {
+        await sendHeartbeat().catch(() => {});
+
         await mapPool(taskIndices, options.concurrency ?? claimed.targetConcurrency, async (taskIndex) => {
+          inFlightCount += 1;
           const startedAtDate = new Date();
           const startedAtMs = Date.now();
           const record: TaskResultRecord = {
@@ -307,7 +381,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           };
           const steps: TaskStepRecord[] = [];
 
-          async function step<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
+          async function step<T>(name: string, fn: () => Promise<T> | T, stepOptions: DefineStepOptions = {}): Promise<T> {
             const stepStartedAtMs = Date.now();
             const stepRecord: TaskStepRecord = {
               name,
@@ -317,7 +391,17 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
               latencyMs: 0,
             };
 
+            const shouldReportConcurrency = stepOptions.reportConcurrency ?? true;
+            if (shouldReportConcurrency) {
+              targetByStep.set(name, stepOptions.targetConcurrency ?? options.concurrency ?? claimed.targetConcurrency);
+              activeByStep.set(name, (activeByStep.get(name) ?? 0) + 1);
+              await sendHeartbeat().catch(() => {});
+            }
+
             try {
+              if (stepOptions.waitForReady) {
+                await waitForStepReady(name, stepOptions);
+              }
               return await fn();
             } catch (error) {
               stepRecord.status = 'error';
@@ -327,6 +411,16 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
               stepRecord.completedAt = new Date().toISOString();
               stepRecord.latencyMs = Date.now() - stepStartedAtMs;
               steps.push(stepRecord);
+              if (shouldReportConcurrency) {
+                const nextActive = Math.max(0, (activeByStep.get(name) ?? 0) - 1);
+                if (nextActive === 0) {
+                  activeByStep.delete(name);
+                  targetByStep.delete(name);
+                } else {
+                  activeByStep.set(name, nextActive);
+                }
+                await sendHeartbeat().catch(() => {});
+              }
             }
           }
 
@@ -341,6 +435,9 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
             record.completedAt = new Date().toISOString();
             record.latencyMs = Date.now() - startedAtMs;
             record.steps = steps.length > 0 ? steps : undefined;
+            doneCount += 1;
+            inFlightCount = Math.max(0, inFlightCount - 1);
+            if (record.status !== 'success') errorCount += 1;
           }
 
           records.push(record);
@@ -380,12 +477,18 @@ export async function runBenchmarkWorker(
 
 export function defineStep<TState extends Record<string, unknown> = Record<string, unknown>>(
   name: string,
-  fn: DefinedStep<TState>['fn'],
+  optionsOrFn: DefineStepOptions | DefinedStep<TState>['fn'],
+  maybeFn?: DefinedStep<TState>['fn'],
 ): DefinedStep<TState> {
   if (name.trim() === '') {
     throw new Error('Benchmark step name must be non-empty.');
   }
-  return { name, fn };
+  const hasOptions = typeof optionsOrFn !== 'function';
+  const fn = hasOptions ? maybeFn : optionsOrFn;
+  if (!fn) {
+    throw new Error('Benchmark step function is required.');
+  }
+  return { name, options: hasOptions ? optionsOrFn : undefined, fn };
 }
 
 export function defineTask<TState extends Record<string, unknown> = Record<string, unknown>>(
@@ -415,6 +518,7 @@ export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {
         concurrency: overrides.concurrency ?? options.concurrency,
         batchSize: overrides.batchSize ?? options.batchSize,
         heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
+        readyPollIntervalMs: overrides.readyPollIntervalMs ?? options.readyPollIntervalMs,
         task: options.task,
       });
     },
@@ -440,6 +544,7 @@ export function defineBench(options: DefineBenchOptions): BenchDefinition {
         concurrency: workerOptions.concurrency ?? options.concurrency,
         batchSize: workerOptions.batchSize ?? options.batchSize,
         heartbeatIntervalMs: workerOptions.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
+        readyPollIntervalMs: workerOptions.readyPollIntervalMs ?? options.readyPollIntervalMs,
         client: workerOptions.client ?? options.client,
         task: workerOptions.task ?? options.task,
       });
