@@ -1,8 +1,18 @@
-export { BenchmarkApiError, createBenchmarkClient, runBenchmarkShard } from './client';
+export {
+  BenchmarkApiError,
+  createBenchmarkClient,
+  defineBench,
+  defineStep,
+  defineTask,
+  defineWorker,
+  runBenchmarkShard,
+} from './client';
 export type {
+  BenchDefinition,
   BenchmarkAssignment,
   BenchmarkClient,
   BenchmarkClientConfig,
+  BenchmarkWorker,
   BenchmarkParticipant,
   BenchmarkResource,
   BenchmarkRun,
@@ -10,6 +20,10 @@ export type {
   BenchmarkShardAttempt,
   ClaimShardInput,
   CreateRunInput,
+  DefineBenchOptions,
+  DefinedStep,
+  DefinedTask,
+  DefineWorkerOptions,
   JsonObject,
   JsonValue,
   RunShardContext,
@@ -19,6 +33,8 @@ export type {
   TaskStepRecord,
   TaskResultRecord,
   TaskResultsResponse,
+  TaskFunction,
+  WorkerTask,
   UpsertBenchmarkInput,
   UpsertParticipantInput,
 } from './types';

@@ -163,6 +163,25 @@ export interface RunShardContext {
   step<T>(name: string, fn: () => Promise<T> | T): Promise<T>;
 }
 
+export interface StepContext<TState extends Record<string, unknown> = Record<string, unknown>> {
+  assignment: BenchmarkAssignment;
+  taskIndex: number;
+  state: TState;
+}
+
+export interface DefinedStep<TState extends Record<string, unknown> = Record<string, unknown>> {
+  name: string;
+  fn: (context: StepContext<TState>) => Promise<JsonObject | void> | JsonObject | void;
+}
+
+export interface DefinedTask<TState extends Record<string, unknown> = Record<string, unknown>> {
+  name: string;
+  steps: DefinedStep<TState>[];
+}
+
+export type TaskFunction = (context: RunShardContext) => Promise<JsonObject | void> | JsonObject | void;
+export type WorkerTask = DefinedTask | TaskFunction;
+
 export interface RunShardResult {
   assignment: BenchmarkAssignment | null;
   records: TaskResultRecord[];
@@ -178,7 +197,44 @@ export interface RunShardOptions {
   batchSize?: number;
   heartbeatIntervalMs?: number;
   onResult?: (record: TaskResultRecord) => void;
-  task: (context: RunShardContext) => Promise<JsonObject | void> | JsonObject | void;
+  task: WorkerTask;
+}
+
+export interface WorkerDefaults {
+  concurrency?: number;
+  batchSize?: number;
+  heartbeatIntervalMs?: number;
+}
+
+export interface DefineWorkerOptions extends WorkerDefaults {
+  benchmarkSlug: string;
+  runId: string;
+  participantSlug: string;
+  workerKind?: string;
+  workerId?: string;
+  client?: BenchmarkClient;
+  task: WorkerTask;
+}
+
+export interface BenchmarkWorker {
+  run(overrides?: Partial<WorkerDefaults>): Promise<RunShardResult>;
+}
+
+export interface DefineBenchOptions extends WorkerDefaults {
+  slug: string;
+  participantSlug?: string;
+  client?: BenchmarkClient;
+  task: WorkerTask;
+}
+
+export interface BenchDefinition {
+  slug: string;
+  task: WorkerTask;
+  defineWorker(options: Omit<DefineWorkerOptions, 'benchmarkSlug' | 'client' | 'task' | 'participantSlug'> & {
+    client?: BenchmarkClient;
+    participantSlug?: string;
+    task?: WorkerTask;
+  }): BenchmarkWorker;
 }
 
 export interface BenchmarkClient {

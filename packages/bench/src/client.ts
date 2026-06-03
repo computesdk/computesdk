@@ -1,7 +1,9 @@
 import type {
   BenchmarkAssignment,
+  BenchDefinition,
   BenchmarkClient,
   BenchmarkClientConfig,
+  BenchmarkWorker,
   BenchmarkParticipant,
   BenchmarkResource,
   BenchmarkRun,
@@ -9,8 +11,13 @@ import type {
   BenchmarkShardAttempt,
   ClaimShardInput,
   CreateRunInput,
+  DefineBenchOptions,
+  DefinedStep,
+  DefinedTask,
+  DefineWorkerOptions,
   JsonObject,
   RunShardOptions,
+  RunShardContext,
   RunShardResult,
   SendTaskResultsInput,
   TaskStepRecord,
@@ -55,6 +62,34 @@ function getErrorCode(error: unknown): string {
 function toJsonObject(value: unknown): JsonObject | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   return value as JsonObject;
+}
+
+function isDefinedTask(task: RunShardOptions['task']): task is DefinedTask {
+  return typeof task === 'object' && task !== null && Array.isArray(task.steps);
+}
+
+function mergeJsonObjects(target: JsonObject, source: JsonObject | void): void {
+  if (!source) return;
+  Object.assign(target, source);
+}
+
+async function runWorkerTask(task: RunShardOptions['task'], context: RunShardContext): Promise<JsonObject | void> {
+  if (!isDefinedTask(task)) {
+    return task(context);
+  }
+
+  const state: Record<string, unknown> = {};
+  const data: JsonObject = { taskName: task.name };
+  for (const definedStep of task.steps) {
+    const stepData = await context.step(definedStep.name, () => definedStep.fn({
+      assignment: context.assignment,
+      taskIndex: context.taskIndex,
+      state,
+    }));
+    mergeJsonObjects(data, stepData);
+  }
+
+  return data;
 }
 
 async function mapPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
@@ -296,7 +331,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           }
 
           try {
-            const data = await options.task({ assignment: claimed, taskIndex, step });
+            const data = await runWorkerTask(options.task, { assignment: claimed, taskIndex, step });
             record.data = toJsonObject(data);
           } catch (error) {
             record.status = 'error';
@@ -341,4 +376,73 @@ export async function runBenchmarkShard(
   options: RunShardOptions,
 ): Promise<RunShardResult> {
   return createBenchmarkClient(config).runShard(options);
+}
+
+export function defineStep<TState extends Record<string, unknown> = Record<string, unknown>>(
+  name: string,
+  fn: DefinedStep<TState>['fn'],
+): DefinedStep<TState> {
+  if (name.trim() === '') {
+    throw new Error('Benchmark step name must be non-empty.');
+  }
+  return { name, fn };
+}
+
+export function defineTask<TState extends Record<string, unknown> = Record<string, unknown>>(
+  name: string,
+  steps: DefinedStep<TState>[],
+): DefinedTask<TState> {
+  if (name.trim() === '') {
+    throw new Error('Benchmark task name must be non-empty.');
+  }
+  if (steps.length === 0) {
+    throw new Error('Benchmark task must define at least one step.');
+  }
+  return { name, steps };
+}
+
+export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {
+  const client = options.client ?? createBenchmarkClient();
+
+  return {
+    run(overrides = {}) {
+      return client.runShard({
+        benchmarkSlug: options.benchmarkSlug,
+        runId: options.runId,
+        participantSlug: options.participantSlug,
+        workerKind: options.workerKind,
+        workerId: options.workerId,
+        concurrency: overrides.concurrency ?? options.concurrency,
+        batchSize: overrides.batchSize ?? options.batchSize,
+        heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
+        task: options.task,
+      });
+    },
+  };
+}
+
+export function defineBench(options: DefineBenchOptions): BenchDefinition {
+  return {
+    slug: options.slug,
+    task: options.task,
+    defineWorker(workerOptions) {
+      const participantSlug = workerOptions.participantSlug ?? options.participantSlug;
+      if (!participantSlug) {
+        throw new Error('Benchmark worker participantSlug is required.');
+      }
+
+      return defineWorker({
+        benchmarkSlug: options.slug,
+        runId: workerOptions.runId,
+        participantSlug,
+        workerKind: workerOptions.workerKind,
+        workerId: workerOptions.workerId,
+        concurrency: workerOptions.concurrency ?? options.concurrency,
+        batchSize: workerOptions.batchSize ?? options.batchSize,
+        heartbeatIntervalMs: workerOptions.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
+        client: workerOptions.client ?? options.client,
+        task: workerOptions.task ?? options.task,
+      });
+    },
+  };
 }

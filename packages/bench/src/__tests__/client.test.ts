@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BenchmarkApiError, createBenchmarkClient } from '../client';
+import { BenchmarkApiError, createBenchmarkClient, defineBench, defineStep, defineTask, defineWorker } from '../client';
 import type { BenchmarkAssignment } from '../types';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -144,6 +144,66 @@ describe('createBenchmarkClient', () => {
     expect(result.records[0].steps).toMatchObject([{ name: 'create', status: 'error', errorCode: 'TypeError' }]);
     expect(seen.at(-1)?.url).toContain('/fail');
     expect(seen.at(-1)?.body).toMatchObject({ errorMessage: 'One or more tasks failed' });
+  });
+
+  it('runs a defined worker task with ordered steps', async () => {
+    const seen: Array<{ url: string; body: unknown }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.endsWith('/participants/e2b/shards/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ shard: { id: 'shard_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const task = defineTask('sandbox.lifecycle', [
+      defineStep('create', ({ state }) => {
+        state.sandboxId = 'sbx_0';
+      }),
+      defineStep('exec.first-command', ({ state }) => ({ sandboxId: String(state.sandboxId) })),
+    ]);
+    const worker = defineWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      client,
+      task,
+    });
+
+    const result = await worker.run();
+    expect(result.records[0].data).toMatchObject({ taskName: 'sandbox.lifecycle', sandboxId: 'sbx_0' });
+    expect(result.records[0].steps).toMatchObject([
+      { name: 'create', status: 'success' },
+      { name: 'exec.first-command', status: 'success' },
+    ]);
+  });
+
+  it('creates workers from a reusable bench definition', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/shards/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ shard: { id: 'shard_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const bench = defineBench({
+      slug: 'scale',
+      participantSlug: 'e2b',
+      client,
+      task: defineTask('noop', [defineStep('step', () => ({ ok: true }))]),
+    });
+
+    const result = await bench.defineWorker({
+      runId: '00000000-0000-4000-8000-000000000001',
+      concurrency: 1,
+    }).run();
+
+    expect(result.assignment?.benchmarkSlug).toBe('scale');
+    expect(result.records[0].data).toMatchObject({ taskName: 'noop', ok: true });
   });
 
   it('throws BenchmarkApiError for non-ok responses', async () => {
