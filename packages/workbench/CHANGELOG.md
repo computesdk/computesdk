@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 27.0.1
+
+### Patch Changes
+
+- Updated dependencies [1b5bebf]
+  - @computesdk/northflank@1.1.1
+
 ## 27.0.0
 
 ### Patch Changes

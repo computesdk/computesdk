@@ -1,4 +1,6 @@
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
 import { tmpdir } from 'node:os';
 import { join as joinPath, posix } from 'node:path';
 import {
@@ -82,15 +84,33 @@ function readCreateOptions(options?: CreateSandboxOptions): NorthflankCreateOpti
   return (options ?? {}) as NorthflankCreateOptions;
 }
 
+const agentOptions = {
+  keepAlive: true,
+  keepAliveMsecs: 10_000,
+  maxSockets: 1024,
+  maxFreeSockets: 512,
+  scheduling: 'lifo' as const,
+  timeout: 30_000,
+};
+
+const _httpsAgent = new https.Agent(agentOptions);
+const _httpAgent = new http.Agent(agentOptions);
+
 function buildClient(config: NorthflankConfig): ApiClient {
+  const host = config.host ?? 'https://api.northflank.com';
+  const agent = new URL(host).protocol === 'http:' ? _httpAgent : _httpsAgent;
+
   const ctx = new ApiClientInMemoryContextProvider();
   ctx.addContext({
     name: 'computesdk',
     token: config.token,
-    host: config.host ?? 'https://api.northflank.com',
+    host,
   });
   ctx.useContext('computesdk');
-  return new ApiClient(ctx, { throwErrorOnHttpErrorCode: true });
+  return new ApiClient(ctx, {
+    throwErrorOnHttpErrorCode: true,
+    agent,
+  });
 }
 
 async function execArgv(

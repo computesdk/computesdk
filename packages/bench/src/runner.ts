@@ -45,7 +45,6 @@ type BenchApi = {
   progress: (params: { done: number; inFlight: number; errors: number; total: number; extra?: Record<string, unknown> }, runId?: string) => void;
 } & ReturnType<typeof createBenchQueryClient>;
 
-const LOG_MAX_ENTRIES = 50;
 const OUTPUT_FLUSH_INTERVAL = 30000;
 const OUTPUT_READ_CHUNK_SIZE = 64 * 1024;
 
@@ -58,7 +57,7 @@ function sanitizeLogEntry(value: string): string {
 
 function finalizeLogs(logs: string[]): string[] | undefined {
   if (logs.length === 0) return undefined;
-  return logs.slice(0, LOG_MAX_ENTRIES).map(sanitizeLogEntry);
+  return logs.map(sanitizeLogEntry);
 }
 
 function formatMs(ms: number): string {
