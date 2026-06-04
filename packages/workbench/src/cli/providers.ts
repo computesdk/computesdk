@@ -355,6 +355,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/northflank');
       case 'collimate':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/collimate');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
