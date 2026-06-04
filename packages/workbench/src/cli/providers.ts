@@ -89,7 +89,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
   k8s: {},
   northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL' },
-  collimate: { apiKey: 'COLLIMATE_API_KEY', host: 'COLLIMATE_API_URL' },
+  collimate: { apiKey: 'COLLIMATE_API_KEY', serverUrl: 'COLLIMATE_API_URL' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {

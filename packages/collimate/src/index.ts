@@ -120,7 +120,12 @@ function buildCommand(
 
   if (options?.env) {
     const prefix = Object.entries(options.env)
-      .map(([k, v]) => `${k}=${escapeShellArg(v)}`)
+      .map(([k, v]) => {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+          throw new Error(`Invalid environment variable name: ${JSON.stringify(k)}`);
+        }
+        return `${k}=${escapeShellArg(v)}`;
+      })
       .join(" ");
     cmd = `${prefix} ${cmd}`;
   }
@@ -218,11 +223,11 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
         return {
           id: info.session_id,
           provider: "collimate",
-          runtime: (sandbox.templateId.includes("node") ? "node" : "python") as "node" | "python",
           status: "running" as const,
           createdAt: sandbox.createdAt,
           timeout: sandbox.timeoutMs,
           metadata: {
+            runtime: sandbox.templateId.includes("node") ? "node" : "python",
             templateId: info.template_id,
             ageSecs: info.age_secs,
             idleSecs: info.idle_secs,
@@ -231,9 +236,12 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
         };
       },
 
-      async getUrl(sandbox, options: { port: number; protocol?: string }) {
-        const protocol = options.protocol || "https";
-        return `${protocol}://${new URL(sandbox.serverUrl).host}/v1/sessions/${sandbox.sessionId}`;
+      async getUrl(_sandbox, options: { port: number; protocol?: string }) {
+        throw new Error(
+          `Collimate sandboxes are accessed through the exec API, not a per-port ` +
+            `public URL, so there is no address to expose port ${options.port} on. ` +
+            `getUrl is not supported.`,
+        );
       },
 
       getInstance(sandbox) {
@@ -252,7 +260,7 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
 
         async readFile(sandbox, path, _runCommand) {
           const resp = await sandbox.client.execSession(sandbox.sessionId, {
-            commands: [["cat", path]],
+            commands: [["cat", "--", path]],
           });
           if (resp.exit_code !== 0) {
             throw new Error(`readFile failed: ${resp.stderr}`);
@@ -262,7 +270,7 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
 
         async mkdir(sandbox, path, _runCommand) {
           const resp = await sandbox.client.execSession(sandbox.sessionId, {
-            commands: [["mkdir", "-p", path]],
+            commands: [["mkdir", "-p", "--", path]],
           });
           if (resp.exit_code !== 0) {
             throw new Error(`mkdir failed: ${resp.stderr}`);
@@ -271,7 +279,7 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
 
         async readdir(sandbox, path, _runCommand): Promise<FileEntry[]> {
           const resp = await sandbox.client.execSession(sandbox.sessionId, {
-            commands: [["ls", "-1aF", path]],
+            commands: [["ls", "-1aF", "--", path]],
           });
           if (resp.exit_code !== 0) {
             throw new Error(`readdir failed: ${resp.stderr}`);
@@ -289,14 +297,14 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
 
         async exists(sandbox, path, _runCommand) {
           const resp = await sandbox.client.execSession(sandbox.sessionId, {
-            commands: [["test", "-e", "--", path]],
+            commands: [["test", "-e", path]],
           });
           return resp.exit_code === 0;
         },
 
         async remove(sandbox, path, _runCommand) {
           const resp = await sandbox.client.execSession(sandbox.sessionId, {
-            commands: [["rm", "-rf", path]],
+            commands: [["rm", "-rf", "--", path]],
           });
           if (resp.exit_code !== 0) {
             throw new Error(`remove failed: ${resp.stderr}`);
