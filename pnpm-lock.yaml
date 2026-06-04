@@ -1690,6 +1690,9 @@ importers:
       '@computesdk/codesandbox':
         specifier: workspace:*
         version: link:../codesandbox
+      '@computesdk/collimate':
+        specifier: workspace:*
+        version: link:../collimate
       '@computesdk/daytona':
         specifier: workspace:*
         version: link:../daytona
