@@ -80,23 +80,6 @@ function isParserFailure(output: string, runtime: string): boolean {
   return false;
 }
 
-function sandboxCacheKey(sandboxConfig: any): string {
-  const image = sandboxConfig.image?.toString?.() || '';
-  const envVars = Array.isArray(sandboxConfig.envVars) ? sandboxConfig.envVars.join('\0') : '';
-  return [
-    sandboxConfig.name || '',
-    image,
-    sandboxConfig.cpu || '',
-    sandboxConfig.memory || '',
-    sandboxConfig.gpu || '',
-    sandboxConfig.keepWarmSeconds || '',
-    envVars,
-  ].join('::');
-}
-
-/** Cached Sandbox objects keyed by config fingerprint, so stubs are created once and reused. */
-const sandboxCache = new Map<string, Sandbox>();
-
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
   methods: {
@@ -150,13 +133,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxConfig.envVars = Object.entries(envs).map(([name, value]) => `${name}=${value}`);
           }
 
-          const cacheKey = sandboxCacheKey(sandboxConfig);
-          let sandbox = sandboxCache.get(cacheKey);
-          if (!sandbox) {
-            sandbox = new Sandbox(sandboxConfig);
-            sandboxCache.set(cacheKey, sandbox);
-          }
-
+          const sandbox = new Sandbox(sandboxConfig);
           const instance = await sandbox.create();
           return { sandbox: instance, sandboxId: instance.containerId };
         } catch (error) {
