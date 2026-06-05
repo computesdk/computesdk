@@ -405,6 +405,101 @@ describe('createBenchmarkClient', () => {
     });
   });
 
+  it('validates task result and heartbeat platform limits before sending', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({}));
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+
+    await expect(client.sendTaskResults({
+      benchmarkSlug: 'scale',
+      runId: 'run_1',
+      workerId: 'worker_1',
+      attemptId: 'attempt_1',
+      sequenceNumber: 0,
+      isFinal: false,
+      records: Array.from({ length: 5001 }, (_, taskIndex) => ({ taskIndex, status: 'success' })),
+    })).rejects.toThrow('5000');
+
+    await expect(client.sendTaskResults({
+      benchmarkSlug: 'scale',
+      runId: 'run_1',
+      workerId: 'worker_1',
+      attemptId: 'attempt_1',
+      sequenceNumber: 0,
+      isFinal: false,
+      records: [{
+        taskIndex: 1,
+        status: 'success',
+        steps: Array.from({ length: 101 }, (_, index) => ({ name: `step-${index}`, status: 'success' as const })),
+      }],
+    })).rejects.toThrow('100');
+
+    await expect(client.heartbeatWorker('scale', 'run_1', 'worker_1', {
+      attemptId: 'attempt_1',
+      concurrency: Array.from({ length: 21 }, (_, index) => ({ step: `step-${index}`, active: 1, target: 1 })),
+    })).rejects.toThrow('20');
+
+    await expect(client.heartbeatWorker('scale', 'run_1', 'worker_1', {
+      attemptId: 'attempt_1',
+      concurrency: [
+        { step: 'pause', active: 1, target: 1 },
+        { step: 'pause', active: 2, target: 2 },
+      ],
+    })).rejects.toThrow('unique');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('exposes documented artifact, results, release, and delete endpoints', async () => {
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/workers/worker_1/artifacts') && init?.method === 'POST') {
+        return jsonResponse({ artifactId: 'artifact_1', uploadUrl: 'https://upload.test', objectKey: 'benchmarks/bench_1/runs/run_1/artifacts/artifact_1' });
+      }
+      if (url.endsWith('/runs/run_1/artifacts') && init?.method === 'GET') {
+        return jsonResponse({ artifacts: [{ artifactId: 'artifact_1', kind: 'coordinator.log' }] });
+      }
+      if (url.endsWith('/workers/worker_1/artifacts') && init?.method === 'GET') {
+        return jsonResponse({ items: [{ artifactId: 'artifact_2', kind: 'meta.json' }] });
+      }
+      if (url.endsWith('/results') && init?.method === 'GET') {
+        return jsonResponse({ totalTasks: 1, participants: [] });
+      }
+      if (url.endsWith('/release') && init?.method === 'POST') {
+        return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      }
+      if (url.endsWith('/benchmarks/scale') && init?.method === 'DELETE') {
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+
+    await expect(client.createWorkerArtifact('scale', 'run_1', 'worker_1', {
+      attemptId: 'attempt_1',
+      kind: 'coordinator.log',
+      contentType: 'text/plain',
+    })).resolves.toMatchObject({ artifactId: 'artifact_1' });
+    await expect(client.listRunArtifacts('scale', 'run_1')).resolves.toMatchObject([{ artifactId: 'artifact_1' }]);
+    await expect(client.listWorkerArtifacts('scale', 'run_1', 'worker_1')).resolves.toMatchObject([{ artifactId: 'artifact_2' }]);
+    await expect(client.getRunResults('scale', 'run_1')).resolves.toMatchObject({ totalTasks: 1 });
+    await expect(client.releaseWorker('scale', 'run_1', 'worker_1', 'attempt_1')).resolves.toMatchObject({ worker: { id: 'worker_1' } });
+    await expect(client.deleteBenchmark('scale')).resolves.toBeUndefined();
+
+    expect(seen.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
+      'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
+      'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/artifacts',
+      'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
+      'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/results',
+      'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/release',
+      'DELETE https://platform.test/api/v1/benchmarks/scale',
+    ]);
+  });
+
   it('creates workers from a reusable bench definition', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

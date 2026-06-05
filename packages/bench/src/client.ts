@@ -1,5 +1,6 @@
 import type {
   BenchmarkAssignment,
+  BenchmarkArtifact,
   BenchDefinition,
   BenchmarkClient,
   BenchmarkClientConfig,
@@ -9,6 +10,8 @@ import type {
   BenchmarkRun,
   BenchmarkRunWorker,
   BenchmarkWorkerAttempt,
+  CreateWorkerArtifactInput,
+  CreateWorkerArtifactResponse,
   ClaimWorkerInput,
   CreateRunInput,
   DefineBenchOptions,
@@ -26,6 +29,7 @@ import type {
   TaskResultRecord,
   TaskResultsResponse,
   RunProgress,
+  RunResults,
   UpdateBenchmarkInput,
   UpdateParticipantInput,
   UpdateRunInput,
@@ -40,6 +44,9 @@ const DEFAULT_BASE_URL = 'https://platform.computesdk.com/api/v1';
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
 const DEFAULT_READY_POLL_INTERVAL_MS = 1000;
+const MAX_TASK_RESULT_RECORDS = 5000;
+const MAX_TASK_RECORD_STEPS = 100;
+const MAX_HEARTBEAT_CONCURRENCY_SAMPLES = 20;
 
 export class BenchmarkApiError extends Error {
   constructor(
@@ -72,6 +79,37 @@ function getErrorCode(error: unknown): string {
 function toJsonObject(value: unknown): JsonObject | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   return value as JsonObject;
+}
+
+function validateTaskResults(input: SendTaskResultsInput): void {
+  if (input.records.length > MAX_TASK_RESULT_RECORDS) {
+    throw new Error(`Benchmark task result batches are limited to ${MAX_TASK_RESULT_RECORDS} records.`);
+  }
+
+  for (const record of input.records) {
+    if ((record.steps?.length ?? 0) > MAX_TASK_RECORD_STEPS) {
+      throw new Error(`Benchmark task result records are limited to ${MAX_TASK_RECORD_STEPS} steps.`);
+    }
+  }
+}
+
+function validateHeartbeat(input: WorkerHeartbeatInput): void {
+  const concurrency = input.concurrency ?? [];
+  if (concurrency.length > MAX_HEARTBEAT_CONCURRENCY_SAMPLES) {
+    throw new Error(`Benchmark heartbeat concurrency is limited to ${MAX_HEARTBEAT_CONCURRENCY_SAMPLES} samples.`);
+  }
+
+  const steps = new Set<string>();
+  for (const sample of concurrency) {
+    if (steps.has(sample.step)) {
+      throw new Error(`Benchmark heartbeat concurrency step values must be unique per heartbeat.`);
+    }
+    steps.add(sample.step);
+  }
+}
+
+function normalizeArtifacts(data: { items?: BenchmarkArtifact[]; artifacts?: BenchmarkArtifact[] }): BenchmarkArtifact[] {
+  return data.items ?? data.artifacts ?? [];
 }
 
 function isDefinedTask(task: RunWorkerOptions['task']): task is DefinedTask {
@@ -158,6 +196,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
     if (input.records.length === 0) {
       return {};
     }
+    validateTaskResults(input);
 
     return request<TaskResultsResponse>(
       'POST',
@@ -173,7 +212,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
   }
 
   async function updateWorkerLifecycle(
-    action: 'heartbeat' | 'complete' | 'fail',
+    action: 'heartbeat' | 'complete' | 'fail' | 'release',
     benchmarkSlug: string,
     runId: string,
     workerId: string,
@@ -201,6 +240,10 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
     async updateBenchmark(slug, input: UpdateBenchmarkInput) {
       const data = await request<{ benchmark: BenchmarkResource }>('PATCH', `/benchmarks/${encodePath(slug)}`, input as unknown as JsonObject);
       return data.benchmark;
+    },
+
+    async deleteBenchmark(slug) {
+      await request<Record<string, never>>('DELETE', `/benchmarks/${encodePath(slug)}`);
     },
 
     async listBenchmarks() {
@@ -321,12 +364,17 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
     sendTaskResults,
 
-    heartbeatWorker(benchmarkSlug, runId, workerId, input: WorkerHeartbeatInput) {
+    async heartbeatWorker(benchmarkSlug, runId, workerId, input: WorkerHeartbeatInput) {
+      validateHeartbeat(input);
       const { attemptId, ...extra } = input;
       if (extra.currentStep == null) {
         delete extra.currentStep;
       }
       return updateWorkerLifecycle('heartbeat', benchmarkSlug, runId, workerId, attemptId, extra as JsonObject);
+    },
+
+    releaseWorker(benchmarkSlug, runId, workerId, attemptId) {
+      return updateWorkerLifecycle('release', benchmarkSlug, runId, workerId, attemptId);
     },
 
     completeWorker(benchmarkSlug, runId, workerId, attemptId) {
@@ -338,6 +386,37 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         errorCode: getErrorCode(error),
         errorMessage: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
       });
+    },
+
+    async createWorkerArtifact(benchmarkSlug, runId, workerId, input: CreateWorkerArtifactInput) {
+      return request<CreateWorkerArtifactResponse>(
+        'POST',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/workers/${encodePath(workerId)}/artifacts`,
+        input as unknown as JsonObject,
+      );
+    },
+
+    async listRunArtifacts(benchmarkSlug, runId) {
+      const data = await request<{ items?: BenchmarkArtifact[]; artifacts?: BenchmarkArtifact[] }>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/artifacts`,
+      );
+      return normalizeArtifacts(data);
+    },
+
+    async listWorkerArtifacts(benchmarkSlug, runId, workerId) {
+      const data = await request<{ items?: BenchmarkArtifact[]; artifacts?: BenchmarkArtifact[] }>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/workers/${encodePath(workerId)}/artifacts`,
+      );
+      return normalizeArtifacts(data);
+    },
+
+    async getRunResults(benchmarkSlug, runId) {
+      return request<RunResults>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/results`,
+      );
     },
 
     async runWorker(options: RunWorkerOptions): Promise<RunWorkerResult> {

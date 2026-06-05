@@ -173,9 +173,9 @@ export interface TaskResultRecord {
 export interface TaskStepRecord {
   name: string;
   status: 'success' | 'error';
-  startedAt: string;
-  completedAt: string;
-  latencyMs: number;
+  startedAt?: string;
+  completedAt?: string;
+  latencyMs?: number;
   errorCode?: string | null;
   data?: JsonObject;
 }
@@ -191,9 +191,49 @@ export interface SendTaskResultsInput {
 }
 
 export interface TaskResultsResponse {
+  accepted?: number;
+  eventBatchId?: string;
+  queued?: boolean;
   eventBatch?: unknown;
   duplicate?: boolean;
   queueMessageId?: string;
+}
+
+export interface CreateWorkerArtifactInput {
+  attemptId: string;
+  kind: string;
+  contentType?: string;
+  name?: string;
+  metadata?: JsonObject;
+}
+
+export interface BenchmarkArtifact {
+  id?: string;
+  artifactId?: string;
+  benchmarkId?: string;
+  runId?: string;
+  participantId?: string;
+  participantSlug?: string;
+  workerId?: string;
+  attemptId?: string;
+  kind: string;
+  name?: string | null;
+  contentType?: string | null;
+  objectKey?: string;
+  uploadUrl?: string;
+  metadata?: JsonObject;
+  createdAt?: string;
+}
+
+export interface CreateWorkerArtifactResponse {
+  artifact?: BenchmarkArtifact;
+  artifactId?: string;
+  uploadUrl?: string;
+  objectKey?: string;
+}
+
+export interface RunResults {
+  [key: string]: JsonValue | undefined;
 }
 
 export interface WorkerConcurrencySample {
@@ -378,6 +418,7 @@ export interface BenchDefinition {
 export interface BenchmarkClient {
   upsertBenchmark(slug: string, input: UpsertBenchmarkInput): Promise<BenchmarkResource>;
   updateBenchmark(slug: string, input: UpdateBenchmarkInput): Promise<BenchmarkResource>;
+  deleteBenchmark(slug: string): Promise<void>;
   getBenchmark(slug: string): Promise<BenchmarkResource>;
   listBenchmarks(): Promise<BenchmarkResource[]>;
   createRun(benchmarkSlug: string, input: CreateRunInput): Promise<{
@@ -430,6 +471,10 @@ export interface BenchmarkClient {
     participantSlug: string,
     input?: ClaimWorkerInput,
   ): Promise<BenchmarkAssignment | null>;
+  releaseWorker(benchmarkSlug: string, runId: string, workerId: string, attemptId: string): Promise<{
+    worker: BenchmarkRunWorker;
+    attempt: BenchmarkWorkerAttempt;
+  }>;
   sendTaskResults(input: SendTaskResultsInput): Promise<TaskResultsResponse>;
   heartbeatWorker(benchmarkSlug: string, runId: string, workerId: string, input: WorkerHeartbeatInput): Promise<{
     worker: BenchmarkRunWorker;
@@ -446,5 +491,14 @@ export interface BenchmarkClient {
     attemptId: string,
     error?: unknown,
   ): Promise<{ worker: BenchmarkRunWorker; attempt: BenchmarkWorkerAttempt }>;
+  createWorkerArtifact(
+    benchmarkSlug: string,
+    runId: string,
+    workerId: string,
+    input: CreateWorkerArtifactInput,
+  ): Promise<CreateWorkerArtifactResponse>;
+  listRunArtifacts(benchmarkSlug: string, runId: string): Promise<BenchmarkArtifact[]>;
+  listWorkerArtifacts(benchmarkSlug: string, runId: string, workerId: string): Promise<BenchmarkArtifact[]>;
+  getRunResults(benchmarkSlug: string, runId: string): Promise<RunResults>;
   runWorker(options: RunWorkerOptions): Promise<RunWorkerResult>;
 }
