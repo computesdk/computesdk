@@ -78,10 +78,46 @@ function isParserFailure(output: string, runtime: string): boolean {
   return false;
 }
 
+<<<<<<< Updated upstream
+=======
+/**
+ * Build a cache key from the sandbox config that affects stub identity.
+ * Sandboxes with the same name, image, and resource config share a stub.
+ */
+function sandboxCacheKey(name: string, sandboxConfig: any): string {
+  const image = sandboxConfig.image?.toString?.() || '';
+  return `${name}::${image}::${sandboxConfig.cpu || ''}::${sandboxConfig.memory || ''}::${sandboxConfig.gpu || ''}`;
+}
+
+/** Cached Sandbox objects keyed by config fingerprint, so stubs are created once and reused. */
+const sandboxCache = new Map<string, Sandbox>();
+
+/**
+ * Create a Beam provider instance using the factory pattern
+ *
+ * Beam provides containerized sandbox environments with:
+ * - Process management (exec, runCode)
+ * - Filesystem access
+ * - Dynamic port exposure
+ * - Snapshot and image creation capabilities
+ */
+>>>>>>> Stashed changes
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
   methods: {
     sandbox: {
+<<<<<<< Updated upstream
+=======
+      /**
+       * Create a new Beam sandbox
+       *
+       * Uses Sandbox class from @beamcloud/beam-js to provision a container.
+       * The underlying Sandbox object (and its stub/app registration) is cached
+       * so that only the first call pays the cost of image build, file sync,
+       * and stub creation. Subsequent calls reuse the existing stubId and go
+       * straight to pod creation.
+       */
+>>>>>>> Stashed changes
       create: async (config: BeamConfig, options?: CreateSandboxOptions) => {
         configureBeamOpts(config);
 
@@ -111,10 +147,14 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             ...providerOptions
           } = options || {};
 
+<<<<<<< Updated upstream
           const optRuntime = (options as any)?.runtime as string | undefined;
+=======
+          const sandboxName = name || 'computesdk-sandbox';
+>>>>>>> Stashed changes
 
           const sandboxConfig: any = {
-            name: name || `computesdk-${Date.now()}`,
+            name: sandboxName,
             keepWarmSeconds: 300,
             ...providerOptions,
           };
@@ -130,7 +170,13 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxConfig.envVars = Object.entries(envs).map(([name, value]) => `${name}=${value}`);
           }
 
-          const sandbox = new Sandbox(sandboxConfig);
+          const cacheKey = sandboxCacheKey(sandboxName, sandboxConfig);
+          let sandbox = sandboxCache.get(cacheKey);
+          if (!sandbox) {
+            sandbox = new Sandbox(sandboxConfig);
+            sandboxCache.set(cacheKey, sandbox);
+          }
+
           const instance = await sandbox.create();
           return { sandbox: instance, sandboxId: instance.containerId };
         } catch (error) {
