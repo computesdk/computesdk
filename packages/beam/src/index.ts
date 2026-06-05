@@ -9,11 +9,13 @@
 import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
+  CodeResult,
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
+  Runtime,
 } from 'computesdk';
 
 type RunCommandFn = (sandbox: SandboxInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
@@ -78,46 +80,27 @@ function isParserFailure(output: string, runtime: string): boolean {
   return false;
 }
 
-<<<<<<< Updated upstream
-=======
-/**
- * Build a cache key from the sandbox config that affects stub identity.
- * Sandboxes with the same name, image, and resource config share a stub.
- */
-function sandboxCacheKey(name: string, sandboxConfig: any): string {
+function sandboxCacheKey(sandboxConfig: any): string {
   const image = sandboxConfig.image?.toString?.() || '';
-  return `${name}::${image}::${sandboxConfig.cpu || ''}::${sandboxConfig.memory || ''}::${sandboxConfig.gpu || ''}`;
+  const envVars = Array.isArray(sandboxConfig.envVars) ? sandboxConfig.envVars.join('\0') : '';
+  return [
+    sandboxConfig.name || '',
+    image,
+    sandboxConfig.cpu || '',
+    sandboxConfig.memory || '',
+    sandboxConfig.gpu || '',
+    sandboxConfig.keepWarmSeconds || '',
+    envVars,
+  ].join('::');
 }
 
 /** Cached Sandbox objects keyed by config fingerprint, so stubs are created once and reused. */
 const sandboxCache = new Map<string, Sandbox>();
 
-/**
- * Create a Beam provider instance using the factory pattern
- *
- * Beam provides containerized sandbox environments with:
- * - Process management (exec, runCode)
- * - Filesystem access
- * - Dynamic port exposure
- * - Snapshot and image creation capabilities
- */
->>>>>>> Stashed changes
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
   methods: {
     sandbox: {
-<<<<<<< Updated upstream
-=======
-      /**
-       * Create a new Beam sandbox
-       *
-       * Uses Sandbox class from @beamcloud/beam-js to provision a container.
-       * The underlying Sandbox object (and its stub/app registration) is cached
-       * so that only the first call pays the cost of image build, file sync,
-       * and stub creation. Subsequent calls reuse the existing stubId and go
-       * straight to pod creation.
-       */
->>>>>>> Stashed changes
       create: async (config: BeamConfig, options?: CreateSandboxOptions) => {
         configureBeamOpts(config);
 
@@ -147,11 +130,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             ...providerOptions
           } = options || {};
 
-<<<<<<< Updated upstream
-          const optRuntime = (options as any)?.runtime as string | undefined;
-=======
+          const optRuntime = (options as any)?.runtime as Runtime | undefined;
           const sandboxName = name || 'computesdk-sandbox';
->>>>>>> Stashed changes
 
           const sandboxConfig: any = {
             name: sandboxName,
@@ -170,7 +150,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxConfig.envVars = Object.entries(envs).map(([name, value]) => `${name}=${value}`);
           }
 
-          const cacheKey = sandboxCacheKey(sandboxName, sandboxConfig);
+          const cacheKey = sandboxCacheKey(sandboxConfig);
           let sandbox = sandboxCache.get(cacheKey);
           if (!sandbox) {
             sandbox = new Sandbox(sandboxConfig);
@@ -211,6 +191,57 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         } catch { /* Sandbox might already be destroyed */ }
       },
 
+      runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
+        const effectiveRuntime = runtime || (
+          code.includes('print(') ||
+          code.includes('import ') ||
+          code.includes('def ') ||
+          code.includes('sys.') ||
+          code.includes('json.') ||
+          code.includes('__') ||
+          code.includes('f"') ||
+          code.includes("f'") ||
+          code.includes('raise ')
+            ? 'python'
+            : 'node'
+        );
+
+        try {
+          const command = effectiveRuntime === 'python'
+            ? ['python3', '-c', code]
+            : ['node', '-e', code];
+
+          const proc = await sandbox.exec(command);
+          await proc.wait();
+          const [stdoutStr, stderrStr] = await Promise.all([proc.stdout.read(), proc.stderr.read()]);
+          const output = stderrStr
+            ? `${stdoutStr}${stdoutStr && stderrStr ? '\n' : ''}${stderrStr}`
+            : stdoutStr;
+          const combinedOutput = `${stdoutStr || ''} ${stderrStr || ''}`;
+
+          if (proc.exitCode !== 0 && isParserFailure(combinedOutput, effectiveRuntime)) {
+            throw new Error(`Syntax error: ${(stderrStr || stdoutStr || '').trim()}`);
+          }
+
+          if (proc.exitCode !== 0 && !stdoutStr && !stderrStr) {
+            throw new Error(`Code execution failed with exit code ${proc.exitCode}`);
+          }
+
+          return {
+            output,
+            exitCode: proc.exitCode,
+            language: effectiveRuntime,
+          };
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('Syntax error')) {
+            throw error;
+          }
+          throw new Error(
+            `Beam execution failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
       runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
@@ -232,7 +263,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
-        let runtime = 'python';
+        let runtime: Runtime = 'python';
         const runtimeHint = sandbox as SandboxInstance & { runtime?: unknown; image?: unknown; imageName?: unknown };
         if (typeof runtimeHint.runtime === 'string') {
           const lower = runtimeHint.runtime.toLowerCase();
@@ -250,6 +281,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         return {
           id: sandbox.containerId,
           provider: 'beam',
+          runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
