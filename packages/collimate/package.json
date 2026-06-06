@@ -1,23 +1,21 @@
 {
-  "name": "@computesdk/bench",
-  "version": "0.1.6",
-  "type": "module",
-  "description": "Tinybench-style benchmarking toolkit for ComputeSDK benchmark spans",
-  "author": "Garrison",
+  "name": "@computesdk/collimate",
+  "version": "0.1.0",
+  "description": "Collimate provider for ComputeSDK",
+  "author": "Collimate <hello@collimate.ai>",
   "license": "MIT",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     }
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
@@ -26,32 +24,32 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run src/__tests__/integration.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
+  },
   "keywords": [
     "computesdk",
-    "benchmark",
-    "observability",
-    "tinybench"
+    "collimate",
+    "sandbox",
+    "code-execution",
+    "compute",
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/bench"
+    "directory": "packages/collimate"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://collimate.ai",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "dependencies": {
-    "nanoid": "^5.1.6"
-  },
   "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",

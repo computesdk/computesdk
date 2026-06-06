@@ -1,5 +1,11 @@
 # @computesdk/bench
 
+## 0.1.6
+
+### Patch Changes
+
+- ba01c4f: Remove the benchmark span log entry cap so all `ctx.log()` entries are included on span events (with existing sanitization).
+
 ## 0.1.5
 
 ### Patch Changes

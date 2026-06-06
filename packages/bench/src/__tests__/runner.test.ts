@@ -119,6 +119,27 @@ describe('createBench', () => {
     expect(spans[0].logs[2]).not.toContain('[truncated]');
   });
 
+  it('includes all logged entries on spans', async () => {
+    const events: BenchEvent[] = [];
+    const bench = createBench({
+      label: 'log-count-test',
+      onEvent: (event) => events.push(event),
+    });
+
+    bench.add('log-count-task', async (ctx) => {
+      for (let i = 0; i < 75; i += 1) {
+        ctx.log('entry', i);
+      }
+    });
+
+    await bench.run({ iterations: 1, warmup: 0 });
+
+    const spans = events.filter((e) => e.event === 'benchmark.span') as any[];
+    expect(spans).toHaveLength(1);
+    expect(spans[0].logs).toHaveLength(75);
+    expect(spans[0].logs[74]).toBe('entry 74');
+  });
+
   it('defaults ingest endpoint to platform and supports baseUrl override', async () => {
     const fetchMock = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('fetch', fetchMock);
