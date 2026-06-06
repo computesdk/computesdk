@@ -1,12 +1,5 @@
 # @computesdk/tensorlake
 
-## 0.1.7
-
-### Patch Changes
-
-- Updated dependencies [2835c0d]
-  - tensorlake@0.5.31
-
 ## 0.1.6
 
 ### Patch Changes
