@@ -1506,8 +1506,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       tensorlake:
-        specifier: 0.5.7
-        version: 0.5.7(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: 0.5.31
+        version: 0.5.31(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -7602,8 +7602,8 @@ packages:
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
 
-  tensorlake@0.5.7:
-    resolution: {integrity: sha512-wtJ16m2wdN3IsZXRDOP5EgmWIIgsvria6CFVAOOcsbfiupnSxkHP9hjW+0m+T5dPPi1kRblAnMxIPz8A6HNu0w==}
+  tensorlake@0.5.31:
+    resolution: {integrity: sha512-uZrbQmT77VDig6mLnkfxIoETKug4AN5a1VKIULN5b/PeaVhU0NkNJvjgh88JkJPGLjMFabS7u+bC7xNyXfjnEw==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -14950,7 +14950,7 @@ snapshots:
 
   pyodide@0.28.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -15649,7 +15649,7 @@ snapshots:
       - bare-abort-controller
     optional: true
 
-  tensorlake@0.5.7(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  tensorlake@0.5.31(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       undici: 8.2.0
       ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
