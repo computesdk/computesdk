@@ -255,10 +255,6 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return data.benchmark;
     },
 
-    async deleteBenchmark(slug) {
-      await request<Record<string, never>>('DELETE', `/benchmarks/${encodePath(slug)}`);
-    },
-
     async listBenchmarks() {
       const data = await request<{ items?: BenchmarkResource[]; benchmarks?: BenchmarkResource[] }>('GET', '/benchmarks');
       return data.items ?? data.benchmarks ?? [];

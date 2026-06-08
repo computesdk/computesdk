@@ -418,7 +418,6 @@ export interface BenchDefinition {
 export interface BenchmarkClient {
   upsertBenchmark(slug: string, input: UpsertBenchmarkInput): Promise<BenchmarkResource>;
   updateBenchmark(slug: string, input: UpdateBenchmarkInput): Promise<BenchmarkResource>;
-  deleteBenchmark(slug: string): Promise<void>;
   getBenchmark(slug: string): Promise<BenchmarkResource>;
   listBenchmarks(): Promise<BenchmarkResource[]>;
   createRun(benchmarkSlug: string, input: CreateRunInput): Promise<{

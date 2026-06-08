@@ -143,7 +143,7 @@ describeIntegration('benchmark orchestrator integration', () => {
       }
       throw error;
     } finally {
-      await client.deleteBenchmark(slug).catch(() => {});
+      await client.updateBenchmark(slug, { status: 'archived' }).catch(() => {});
     }
   }, 90_000);
 });
