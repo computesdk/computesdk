@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createBenchmarkClient } from '../client';
 
-const shouldRun = process.env.COMPUTESDK_BENCH_INTEGRATION === '1' && !!process.env.COMPUTESDK_API_KEY;
+const shouldRun = !!process.env.COMPUTESDK_API_KEY;
 const describeIntegration = shouldRun ? describe : describe.skip;
 
 describeIntegration('benchmark orchestrator integration', () => {
