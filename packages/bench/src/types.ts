@@ -4,7 +4,7 @@ export type JsonObject = { [key: string]: JsonValue };
 export interface BenchmarkClientConfig {
   /** API base URL. Defaults to https://platform.computesdk.com/api/v1. */
   baseUrl?: string;
-  /** Bearer token. Defaults to process.env.COMPUTESDK_API_KEY. */
+  /** Bearer token. Defaults to process.env.COMPUTESDK_ADMIN_API_KEY, then process.env.COMPUTESDK_API_KEY. */
   apiKey?: string;
   /** Custom fetch implementation, mostly useful for tests. */
   fetch?: typeof fetch;

@@ -68,7 +68,7 @@ function encodePath(value: string): string {
 }
 
 function getApiKey(input?: string): string | undefined {
-  return input ?? (typeof process !== 'undefined' ? process.env.COMPUTESDK_API_KEY : undefined);
+  return input ?? (typeof process !== 'undefined' ? process.env.COMPUTESDK_ADMIN_API_KEY ?? process.env.COMPUTESDK_API_KEY : undefined);
 }
 
 function getErrorCode(error: unknown): string {

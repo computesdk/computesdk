@@ -85,7 +85,7 @@ await worker.run();
 import { createBenchmarkClient } from '@computesdk/bench';
 
 const client = createBenchmarkClient({
-  apiKey: process.env.COMPUTESDK_API_KEY,
+  apiKey: process.env.COMPUTESDK_ADMIN_API_KEY,
 });
 
 await client.upsertBenchmark('scale', {
