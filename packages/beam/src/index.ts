@@ -112,7 +112,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           } = options || {};
 
           const optRuntime = (options as any)?.runtime as string | undefined;
-          const sandboxName = name || 'computesdk-sandbox';
+          const runtime = optRuntime || 'node';
+          const sandboxName = name || `computesdk-${runtime}-sandbox`;
 
           const sandboxConfig: any = {
             name: sandboxName,
@@ -123,7 +124,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           const timeout = optTimeout ?? config.timeout;
           if (timeout) sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
 
-          if (optRuntime === 'node') {
+          if (runtime === 'node') {
             sandboxConfig.image = Image.fromRegistry('node:20-slim');
           }
 
