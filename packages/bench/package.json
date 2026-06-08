@@ -26,7 +26,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run src/__tests__/integration.test.ts",
+    "test:integration": "COMPUTESDK_BENCH_INTEGRATION=1 vitest run src/__tests__/integration.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
