@@ -103,7 +103,7 @@ const result = await sandbox.runCommand('cat data.txt | grep "error" | wc -l');
 - Streaming callbacks cannot be combined with `background: true` — doing so throws
 - Available on all sandbox instances regardless of provider
 
-### Streaming output with `onStdout` / `onStderr`
+### Streaming with `onStdout` / `onStderr`
 
 By default `runCommand` buffers all output and only resolves once the command
 finishes. Pass `onStdout` and/or `onStderr` to receive output **incrementally** as the
