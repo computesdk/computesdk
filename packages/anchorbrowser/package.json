@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/anchorbrowser",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Anchor Browser provider for ComputeSDK - cloud browser sessions with stealth mode, proxies, profiles, and session recording",
   "author": "Garrison",
   "license": "MIT",

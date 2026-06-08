@@ -1,5 +1,25 @@
 # @computesdk/tensorlake
 
+## 0.1.8
+
+### Patch Changes
+
+- a60152c: Update the Tensorlake SDK dependency to 0.5.33.
+
+## 0.1.7
+
+### Patch Changes
+
+- f4af9af: Update the Tensorlake SDK dependency to 0.5.31.
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
 ## 0.1.5
 
 ### Patch Changes

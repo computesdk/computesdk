@@ -23,6 +23,20 @@ function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePor
   return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
 }
 
+async function loadImage(client: ModalClient, app: App, sourceId: string | undefined): Promise<Image> {
+  let image: Image;
+  if (sourceId) {
+    try {
+      image = await client.images.fromId(sourceId);
+    } catch {
+      image = client.images.fromRegistry(sourceId);
+    }
+  } else {
+    image = client.images.fromRegistry(DEFAULT_IMAGE);
+  }
+  return image.build(app);
+}
+
 
 export interface ModalConfig {
   tokenId?: string;
@@ -32,6 +46,12 @@ export interface ModalConfig {
   ports?: number[];
   daemonSsePort?: number | false;
   appName?: string;
+  scalableSandboxes?: boolean;
+}
+
+export interface ModalCreateSandboxOptions extends CreateSandboxOptions {
+  daemonSsePort?: number | false;
+  scalableSandboxes?: boolean;
 }
 
 /**
@@ -41,6 +61,7 @@ export interface ModalConfig {
 interface ModalInternalConfig extends ModalConfig {
   _client: ModalClient;
   _appPromise: Promise<App>;
+  _imageCache: Map<string, Promise<Image>>;
 }
 
 
@@ -59,6 +80,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           const app = await config._appPromise;
 
+          const modalOptions = (options ?? {}) as ModalCreateSandboxOptions;
           const {
             timeout: optTimeout,
             envs,
@@ -70,26 +92,27 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             namespace: _namespace,
             directory: _directory,
             ports: optPorts,
+            daemonSsePort: optDaemonSsePort,
+            scalableSandboxes: optScalableSandboxes,
             ...providerOptions
-          } = options || {};
+          } = modalOptions;
 
-          let image: Image;
           const sourceId = snapshotId || templateId;
-          if (sourceId) {
-            try {
-              image = await client.images.fromId(sourceId);
-            } catch {
-              image = client.images.fromRegistry(sourceId);
-            }
-          } else {
-            image = client.images.fromRegistry(DEFAULT_IMAGE);
+          const cacheKey = sourceId ?? DEFAULT_IMAGE;
+          let promise = config._imageCache.get(cacheKey);
+          if (!promise) {
+            promise = loadImage(client, app, sourceId).catch((err) => {
+              config._imageCache.delete(cacheKey);
+              throw err;
+            });
+            config._imageCache.set(cacheKey, promise);
           }
+          const image = await promise;
 
           const sandboxOptions: SandboxCreateParams = {
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
 
-          const optDaemonSsePort = (options as any)?.daemonSsePort as number | false | undefined;
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;
 
@@ -99,7 +122,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (envs && Object.keys(envs).length > 0) sandboxOptions.env = envs;
           if (name) sandboxOptions.name = name;
 
-          const sandbox = await client.sandboxes.create(app, image, sandboxOptions);
+          const useScalableSandboxes = optScalableSandboxes ?? config.scalableSandboxes ?? false;
+          const sandbox = useScalableSandboxes
+            ? await client.sandboxes.experimentalCreate(app, image, sandboxOptions)
+            : await client.sandboxes.create(app, image, sandboxOptions);
           const sandboxId = sandbox.sandboxId;
 
           return { sandbox: { sandbox, sandboxId }, sandboxId };
@@ -148,8 +174,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           
           const process = await modalSandbox.sandbox.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe' });
-          const [stdout, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [stdout, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           return { stdout: stdout || '', stderr: stderr || '', exitCode: exitCode || 0, durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
@@ -200,8 +225,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           } catch (error) {
             try {
               const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-              const [content, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-              const exitCode = await process.wait();
+              const [content, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
               if (exitCode !== 0) throw new Error(`cat failed: ${stderr}`);
               return content.trim();
             } catch {
@@ -219,14 +243,12 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         },
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           if (exitCode !== 0) throw new Error(`mkdir failed: ${stderr}`);
         },
         readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
           const process = await modalSandbox.sandbox.exec(['ls', '-la', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [output, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [output, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           if (exitCode !== 0) throw new Error(`ls failed: ${stderr}`);
           const lines = output.split('\n').slice(1);
           return lines.filter((l: string) => l.trim()).map((line: string) => {
@@ -244,8 +266,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         },
         remove: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           const process = await modalSandbox.sandbox.exec(['rm', '-rf', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr] = await Promise.all([process.stdout.readText(), process.stderr.readText()]);
-          const exitCode = await process.wait();
+          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           if (exitCode !== 0) throw new Error(`rm failed: ${stderr}`);
         }
       },
@@ -283,5 +304,6 @@ export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
     appName,
     _client: client,
     _appPromise: appPromise,
+    _imageCache: new Map(),
   });
 }
