@@ -1506,8 +1506,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       tensorlake:
-        specifier: 0.5.31
-        version: 0.5.31(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: 0.5.33
+        version: 0.5.33(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -7602,8 +7602,8 @@ packages:
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
 
-  tensorlake@0.5.31:
-    resolution: {integrity: sha512-uZrbQmT77VDig6mLnkfxIoETKug4AN5a1VKIULN5b/PeaVhU0NkNJvjgh88JkJPGLjMFabS7u+bC7xNyXfjnEw==}
+  tensorlake@0.5.33:
+    resolution: {integrity: sha512-9TX/hKkEL7w6tbZy/yKAJ522Fps9kMkGcoCKibb4XT7OANmwdS3A5GLLsq4ufkVeSxQjaswnmVUoghzFzF1XtQ==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -7857,8 +7857,8 @@ packages:
     resolution: {integrity: sha512-3O9Tf67pGhgOv9jM35AbhkXAKi13f3oy3aE4CSgr+TckGeY+/iu97ZXN+J7DpHPzLbVApFd1IFhcnBjREYXYcg==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.2.0:
-    resolution: {integrity: sha512-Z+4Hx9GE26Lh9Upwfnc8C7SsrpBPGaM/Gm6kMFtiG7c+5IvQKlXi/t+9x9DrrCh29cww5TSP9YdVaBcnLDs5fQ==}
+  undici@8.3.0:
+    resolution: {integrity: sha512-TkUDgb6tl7KOGZ+7e8E3d2FYgUQgF6z5YypqjWmixVQSQERFcVrVg0ySADm2LVLRh5ljAaHTCR5Fmz3Q34rB7Q==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.14:
@@ -15649,9 +15649,9 @@ snapshots:
       - bare-abort-controller
     optional: true
 
-  tensorlake@0.5.31(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  tensorlake@0.5.33(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      undici: 8.2.0
+      undici: 8.3.0
       ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
@@ -15911,7 +15911,7 @@ snapshots:
 
   undici@7.26.0: {}
 
-  undici@8.2.0: {}
+  undici@8.3.0: {}
 
   unenv@2.0.0-rc.14:
     dependencies:
