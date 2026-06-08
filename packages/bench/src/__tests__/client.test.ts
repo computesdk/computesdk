@@ -213,6 +213,8 @@ describe('createBenchmarkClient', () => {
     ]);
     expect((eventCalls[0].body as any).records[0].steps[0].latencyMs).toEqual(expect.any(Number));
     expect((eventCalls[1].body as any).records).toHaveLength(1);
+    expect(eventCalls.map((entry) => (entry.body as any).sequenceNumber)).toEqual([0, 1]);
+    expect(eventCalls.map((entry) => (entry.body as any).isFinal)).toEqual([false, true]);
     expect(seen.at(-1)).toMatchObject({ method: 'POST' });
     expect(seen.at(-1)?.url).toContain('/complete');
   });
@@ -235,10 +237,34 @@ describe('createBenchmarkClient', () => {
       progressTotal: 1,
       currentStep: null,
       concurrency: [],
-    } as any);
+    });
 
     expect(seen[0].body).not.toHaveProperty('currentStep');
     expect(seen[0].body).toMatchObject({ attemptId: 'attempt_1', concurrency: [] });
+  });
+
+  it('validates worker execution settings before processing tasks', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ targetConcurrency: 0 }) });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await expect(client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task: async () => undefined,
+    })).rejects.toThrow('concurrency');
+    await expect(client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      concurrency: 1,
+      batchSize: 5001,
+      task: async () => undefined,
+    })).rejects.toThrow('batchSize');
   });
 
   it('fails the worker when any task fails', async () => {
@@ -305,6 +331,13 @@ describe('createBenchmarkClient', () => {
       { name: 'create', status: 'success' },
       { name: 'exec.first-command', status: 'success' },
     ]);
+  });
+
+  it('rejects duplicate defined task step names', () => {
+    expect(() => defineTask('duplicate-steps', [
+      defineStep('pause', () => undefined),
+      defineStep('pause', () => undefined),
+    ])).toThrow('unique');
   });
 
   it('waits for platform step readiness before running a step body', async () => {

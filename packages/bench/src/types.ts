@@ -248,7 +248,7 @@ export interface WorkerHeartbeatInput {
   progressInFlight?: number;
   progressErrors?: number;
   progressTotal?: number;
-  currentStep?: string;
+  currentStep?: string | null;
   concurrency?: WorkerConcurrencySample[];
 }
 

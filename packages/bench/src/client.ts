@@ -108,6 +108,19 @@ function validateHeartbeat(input: WorkerHeartbeatInput): void {
   }
 }
 
+function validatePositiveInteger(name: string, value: number): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Benchmark ${name} must be a positive integer.`);
+  }
+}
+
+function validateBatchSize(value: number): void {
+  validatePositiveInteger('batchSize', value);
+  if (value > MAX_TASK_RESULT_RECORDS) {
+    throw new Error(`Benchmark batchSize must be at most ${MAX_TASK_RESULT_RECORDS}.`);
+  }
+}
+
 function normalizeArtifacts(data: { items?: BenchmarkArtifact[]; artifacts?: BenchmarkArtifact[] }): BenchmarkArtifact[] {
   return data.items ?? data.artifacts ?? [];
 }
@@ -420,6 +433,9 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
     },
 
     async runWorker(options: RunWorkerOptions): Promise<RunWorkerResult> {
+      if (options.concurrency !== undefined) validatePositiveInteger('concurrency', options.concurrency);
+      if (options.batchSize !== undefined) validateBatchSize(options.batchSize);
+
       const assignment = await client.claimWorker(options.benchmarkSlug, options.runId, options.participantSlug, {
         processKind: options.processKind,
         processKey: options.processKey,
@@ -431,12 +447,15 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       const records: TaskResultRecord[] = [];
       const pending: TaskResultRecord[] = [];
       const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
+      const workerConcurrency = options.concurrency ?? claimed.targetConcurrency;
+      validatePositiveInteger('concurrency', workerConcurrency);
       const taskIndices = Array.from({ length: claimed.taskRange.count }, (_, index) => claimed.taskRange.start + index);
       const activeByStep = new Map<string, number>();
       const targetByStep = new Map<string, number>();
       let doneCount = 0;
       let errorCount = 0;
       let inFlightCount = 0;
+      let flushChain = Promise.resolve();
 
       function concurrencySamples(): WorkerConcurrencySample[] {
         return Array.from(activeByStep.entries())
@@ -444,7 +463,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           .map(([step, active]) => ({
             step,
             active,
-            target: targetByStep.get(step) ?? options.concurrency ?? claimed.targetConcurrency,
+            target: targetByStep.get(step) ?? workerConcurrency,
           }));
       }
 
@@ -463,6 +482,24 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           progressTotal: taskIndices.length,
           ...(step ? { currentStep: step } : {}),
           concurrency: concurrencySamples(),
+        });
+      }
+
+      let heartbeatInFlight: Promise<void> | null = null;
+      let heartbeatRequested = false;
+
+      function requestHeartbeat(): void {
+        heartbeatRequested = true;
+        if (heartbeatInFlight) return;
+
+        heartbeatInFlight = (async () => {
+          while (heartbeatRequested) {
+            heartbeatRequested = false;
+            await sendHeartbeat().catch(() => {});
+          }
+        })().finally(() => {
+          heartbeatInFlight = null;
+          if (heartbeatRequested) requestHeartbeat();
         });
       }
 
@@ -490,24 +527,28 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       heartbeat.unref?.();
 
       async function flush(isFinal: boolean): Promise<void> {
-        if (pending.length === 0) return;
-        const batch = pending.splice(0, pending.length);
-        await sendTaskResults({
-          benchmarkSlug: options.benchmarkSlug,
-          runId: options.runId,
-          workerId: claimed.workerId,
-          attemptId: claimed.attemptId,
-          sequenceNumber,
-          isFinal,
-          records: batch,
+        flushChain = flushChain.then(async () => {
+          while (pending.length >= batchSize || (isFinal && pending.length > 0)) {
+            const batch = pending.splice(0, batchSize);
+            await sendTaskResults({
+              benchmarkSlug: options.benchmarkSlug,
+              runId: options.runId,
+              workerId: claimed.workerId,
+              attemptId: claimed.attemptId,
+              sequenceNumber,
+              isFinal: isFinal && pending.length === 0,
+              records: batch,
+            });
+            sequenceNumber += 1;
+          }
         });
-        sequenceNumber += 1;
+        await flushChain;
       }
 
       try {
         await sendHeartbeat().catch(() => {});
 
-        await mapPool(taskIndices, options.concurrency ?? claimed.targetConcurrency, async (taskIndex) => {
+        await mapPool(taskIndices, workerConcurrency, async (taskIndex) => {
           inFlightCount += 1;
           const startedAtDate = new Date();
           const startedAtMs = Date.now();
@@ -530,9 +571,11 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
             const shouldReportConcurrency = stepOptions.reportConcurrency ?? true;
             if (shouldReportConcurrency) {
-              targetByStep.set(name, stepOptions.concurrency ?? options.concurrency ?? claimed.targetConcurrency);
+              const stepConcurrency = stepOptions.concurrency ?? workerConcurrency;
+              validatePositiveInteger(`step "${name}" concurrency`, stepConcurrency);
+              targetByStep.set(name, stepConcurrency);
               activeByStep.set(name, (activeByStep.get(name) ?? 0) + 1);
-              await sendHeartbeat().catch(() => {});
+              requestHeartbeat();
             }
 
             try {
@@ -556,7 +599,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
                 } else {
                   activeByStep.set(name, nextActive);
                 }
-                await sendHeartbeat().catch(() => {});
+                requestHeartbeat();
               }
             }
           }
@@ -637,6 +680,13 @@ export function defineTask<TState extends Record<string, unknown> = Record<strin
   }
   if (steps.length === 0) {
     throw new Error('Benchmark task must define at least one step.');
+  }
+  const names = new Set<string>();
+  for (const step of steps) {
+    if (names.has(step.name)) {
+      throw new Error(`Benchmark task step names must be unique. Duplicate step: "${step.name}".`);
+    }
+    names.add(step.name);
   }
   return { name, steps };
 }
