@@ -9,13 +9,11 @@
 import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
-  Runtime,
 } from 'computesdk';
 
 type RunCommandFn = (sandbox: SandboxInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
@@ -113,7 +111,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             ...providerOptions
           } = options || {};
 
-          const optRuntime = (options as any)?.runtime as Runtime | undefined;
+          const optRuntime = (options as any)?.runtime as string | undefined;
           const sandboxName = name || 'computesdk-sandbox';
 
           const sandboxConfig: any = {
@@ -168,57 +166,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         } catch { /* Sandbox might already be destroyed */ }
       },
 
-      runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const effectiveRuntime = runtime || (
-          code.includes('print(') ||
-          code.includes('import ') ||
-          code.includes('def ') ||
-          code.includes('sys.') ||
-          code.includes('json.') ||
-          code.includes('__') ||
-          code.includes('f"') ||
-          code.includes("f'") ||
-          code.includes('raise ')
-            ? 'python'
-            : 'node'
-        );
-
-        try {
-          const command = effectiveRuntime === 'python'
-            ? ['python3', '-c', code]
-            : ['node', '-e', code];
-
-          const proc = await sandbox.exec(command);
-          await proc.wait();
-          const [stdoutStr, stderrStr] = await Promise.all([proc.stdout.read(), proc.stderr.read()]);
-          const output = stderrStr
-            ? `${stdoutStr}${stdoutStr && stderrStr ? '\n' : ''}${stderrStr}`
-            : stdoutStr;
-          const combinedOutput = `${stdoutStr || ''} ${stderrStr || ''}`;
-
-          if (proc.exitCode !== 0 && isParserFailure(combinedOutput, effectiveRuntime)) {
-            throw new Error(`Syntax error: ${(stderrStr || stdoutStr || '').trim()}`);
-          }
-
-          if (proc.exitCode !== 0 && !stdoutStr && !stderrStr) {
-            throw new Error(`Code execution failed with exit code ${proc.exitCode}`);
-          }
-
-          return {
-            output,
-            exitCode: proc.exitCode,
-            language: effectiveRuntime,
-          };
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `Beam execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
-
       runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
@@ -240,7 +187,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
-        let runtime: Runtime = 'python';
+        let runtime = 'python';
         const runtimeHint = sandbox as SandboxInstance & { runtime?: unknown; image?: unknown; imageName?: unknown };
         if (typeof runtimeHint.runtime === 'string') {
           const lower = runtimeHint.runtime.toLowerCase();
@@ -258,7 +205,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         return {
           id: sandbox.containerId,
           provider: 'beam',
-          runtime,
           status: 'running',
           createdAt: new Date(),
           timeout: 300000,
