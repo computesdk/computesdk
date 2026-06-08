@@ -7,6 +7,7 @@ export type {
   BenchMetricEvent,
   BenchProgressEvent,
   BenchCaptureOutputConfig,
+  BenchRawStorageConfig,
   BenchShardConfig,
   BenchConfig,
   BenchRunOptions,

@@ -8,6 +8,15 @@ export interface BenchCaptureOutputConfig {
   flushInterval?: number;
 }
 
+export interface BenchRawStorageConfig {
+  /** Enable local raw-event spooling to disk */
+  enabled?: boolean;
+  /** Base directory for raw output (default: ~/.benchmark) */
+  dir?: string;
+  /** Rotate part files after this many bytes (default: 16MB) */
+  maxPartBytes?: number;
+}
+
 export interface BenchShardConfig {
   /** Zero-based shard index for this process */
   index: number;
@@ -32,6 +41,8 @@ export interface BenchConfig {
   onEvent?: (event: BenchEvent) => void;
   /** Capture process/coordinator output from a log file */
   captureOutput?: BenchCaptureOutputConfig;
+  /** Write full-fidelity benchmark events to local chunked files */
+  rawStorage?: BenchRawStorageConfig;
 }
 
 export interface BenchRunOptions {
