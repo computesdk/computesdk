@@ -5,7 +5,7 @@ const shouldRun = process.env.COMPUTESDK_BENCH_INTEGRATION === '1' && !!process.
 const describeIntegration = shouldRun ? describe : describe.skip;
 
 describeIntegration('benchmark orchestrator integration', () => {
-  it('runs a worker through the platform orchestrator flow', async () => {
+  it('smokes the live platform orchestrator API contract', async () => {
     const baseUrl = process.env.COMPUTESDK_BENCH_BASE_URL;
     const slug = `sdk-integration-${Date.now()}`;
     const participantSlug = 'just-bash';
@@ -17,37 +17,79 @@ describeIntegration('benchmark orchestrator integration', () => {
         kind: 'integration',
         config: { source: '@computesdk/bench' },
       });
+      await expect(client.getBenchmark(slug)).resolves.toMatchObject({ slug });
+      await expect(client.updateBenchmark(slug, {
+        name: 'SDK Integration Smoke Updated',
+        config: { source: '@computesdk/bench', updated: true },
+      })).resolves.toMatchObject({ slug, name: 'SDK Integration Smoke Updated' });
+      await expect(client.listBenchmarks()).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ slug }),
+      ]));
 
       const { run, participants } = await client.createRun(slug, {
         name: 'SDK integration smoke',
-        totalTasks: 2,
-        workerCount: 1,
+        totalTasks: 4,
+        workerCount: 2,
         participants: [participantSlug],
         config: { source: '@computesdk/bench' },
       });
 
       expect(run.id).toEqual(expect.any(String));
       expect(participants.some((participant) => participant.slug === participantSlug)).toBe(true);
+      await expect(client.getRun(slug, run.id)).resolves.toMatchObject({ id: run.id });
+      await expect(client.updateRun(slug, run.id, {
+        name: 'SDK integration smoke updated',
+        config: { source: '@computesdk/bench', updated: true },
+      })).resolves.toMatchObject({ id: run.id, name: 'SDK integration smoke updated' });
+      await expect(client.listRuns(slug)).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: run.id }),
+      ]));
+
+      await expect(client.listParticipants(slug, run.id)).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ slug: participantSlug }),
+      ]));
+      await expect(client.getParticipant(slug, run.id, participantSlug)).resolves.toMatchObject({ slug: participantSlug });
+      await expect(client.updateParticipant(slug, run.id, participantSlug, {
+        label: 'Just Bash Smoke',
+        config: { source: '@computesdk/bench', updated: true },
+      })).resolves.toMatchObject({ slug: participantSlug, label: 'Just Bash Smoke' });
 
       const workers = await client.planWorkers(slug, run.id, participantSlug, {
-        workerCount: 1,
+        workerCount: 2,
         targetConcurrency: 2,
       });
-      expect(workers).toHaveLength(1);
+      expect(workers).toHaveLength(2);
+      await expect(client.listWorkers(slug, run.id, participantSlug)).resolves.toHaveLength(2);
 
-      const assignment = await client.claimWorker(slug, run.id, participantSlug, {
+      const firstWorker = await client.getWorker(slug, run.id, workers[0].id);
+      expect(firstWorker).toMatchObject({ id: workers[0].id });
+      await expect(client.updateWorker(slug, run.id, workers[0].id, {
+        progressDone: 0,
+        progressInFlight: 0,
+        progressErrors: 0,
+        progressTotal: firstWorker.taskIndexEnd - firstWorker.taskIndexStart + 1,
+      })).resolves.toMatchObject({ id: workers[0].id });
+
+      const firstAssignment = await client.claimWorker(slug, run.id, participantSlug, {
         processKind: 'vitest',
-        processKey: `local-${process.pid}-${Date.now()}`,
+        processKey: `local-${process.pid}-${Date.now()}-complete`,
       });
-      expect(assignment).not.toBeNull();
-      if (!assignment) return;
+      expect(firstAssignment).not.toBeNull();
+      if (!firstAssignment) return;
 
-      await client.heartbeatWorker(slug, run.id, assignment.workerId, {
-        attemptId: assignment.attemptId,
+      const secondAssignment = await client.claimWorker(slug, run.id, participantSlug, {
+        processKind: 'vitest',
+        processKey: `local-${process.pid}-${Date.now()}-fail`,
+      });
+      expect(secondAssignment).not.toBeNull();
+      if (!secondAssignment) return;
+
+      await client.heartbeatWorker(slug, run.id, firstAssignment.workerId, {
+        attemptId: firstAssignment.attemptId,
         progressDone: 0,
         progressInFlight: 2,
         progressErrors: 0,
-        progressTotal: 2,
+        progressTotal: firstAssignment.taskRange.count,
         currentStep: 'integration.step',
         concurrency: [{ step: 'integration.step', active: 2, target: 2 }],
       });
@@ -59,13 +101,13 @@ describeIntegration('benchmark orchestrator integration', () => {
       await client.sendTaskResults({
         benchmarkSlug: slug,
         runId: run.id,
-        workerId: assignment.workerId,
-        attemptId: assignment.attemptId,
+        workerId: firstAssignment.workerId,
+        attemptId: firstAssignment.attemptId,
         sequenceNumber: 0,
         isFinal: true,
         records: [
           {
-            taskIndex: assignment.taskRange.start,
+            taskIndex: firstAssignment.taskRange.start,
             status: 'success',
             startedAt: new Date().toISOString(),
             completedAt: new Date().toISOString(),
@@ -76,13 +118,22 @@ describeIntegration('benchmark orchestrator integration', () => {
         ],
       });
 
-      await client.completeWorker(slug, run.id, assignment.workerId, assignment.attemptId);
+      await client.completeWorker(slug, run.id, firstAssignment.workerId, firstAssignment.attemptId);
+      await client.heartbeatWorker(slug, run.id, secondAssignment.workerId, {
+        attemptId: secondAssignment.attemptId,
+        progressDone: 0,
+        progressInFlight: 0,
+        progressErrors: 1,
+        progressTotal: secondAssignment.taskRange.count,
+      });
+      await client.failWorker(slug, run.id, secondAssignment.workerId, secondAssignment.attemptId, new Error('integration smoke failure path'));
 
       const finalProgress = await client.getRunProgress(slug, run.id);
       const finalParticipant = finalProgress.participants.find((item) => item.slug === participantSlug);
       expect(finalParticipant?.workers.completed).toBeGreaterThanOrEqual(1);
+      expect(finalParticipant?.workers.failed).toBeGreaterThanOrEqual(1);
     } finally {
       await client.deleteBenchmark(slug).catch(() => {});
     }
-  }, 60_000);
+  }, 90_000);
 });
