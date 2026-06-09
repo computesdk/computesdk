@@ -8,6 +8,7 @@ import type {
   Sandbox as SandboxInterface,
   CreateSandboxOptions as UniversalCreateSandboxOptions,
 } from './types/universal-sandbox';
+import { applySetup } from './apply-setup';
 
 export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
   /** Optional provider name override (must match provider.name) */
@@ -213,7 +214,10 @@ class ComputeManager {
 
   private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
-    const { provider: _providerName, ...providerOptions } = options || {};
+    const { provider: _providerName, setup, ...rest } = options || {};
+    const effectiveEnv = this.resolveEffectiveEnv(rest.envs, setup?.env);
+    const providerOptions: Omit<UniversalCreateSandboxOptions, 'setup'> =
+      effectiveEnv ? { ...rest, envs: effectiveEnv } : rest;
     const candidates = this.getCreateCandidates(preferredProviderName);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
@@ -222,6 +226,18 @@ class ComputeManager {
       try {
         const sandbox = await provider.sandbox.create(providerOptions);
         this.registerSandboxProvider(sandbox, provider);
+        if (setup) {
+          try {
+            await applySetup(
+              sandbox,
+              setup,
+              effectiveEnv ? { env: effectiveEnv } : undefined,
+            );
+          } catch (setupError) {
+            await this.cleanupAfterSetupFailure(sandbox);
+            throw setupError;
+          }
+        }
         return sandbox;
       } catch (error) {
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -235,6 +251,36 @@ class ComputeManager {
       `Failed to create sandbox across ${candidates.length} provider(s).\n` +
       errors.map((error) => `- ${error}`).join('\n')
     );
+  }
+
+  /**
+   * Merge `setup.env` with user-supplied `options.envs`, with user envs winning
+   * on conflict. Returns undefined when both sides are empty so callers can
+   * skip threading an env at all.
+   *
+   * The same merged env is used in two places: as `options.envs` for
+   * provider.sandbox.create (sandbox-level env) and as `applySetup`'s `env`
+   * override (per-command env during setup steps). Computing it once keeps
+   * those two paths from drifting.
+   */
+  private resolveEffectiveEnv(
+    userEnvs: Record<string, string> | undefined,
+    setupEnv: Record<string, string> | undefined,
+  ): Record<string, string> | undefined {
+    if (!setupEnv && !userEnvs) return undefined;
+    return { ...(setupEnv || {}), ...(userEnvs || {}) };
+  }
+
+  private async cleanupAfterSetupFailure(sandbox: SandboxInterface): Promise<void> {
+    const sandboxId = getSandboxId(sandbox);
+    try {
+      await sandbox.destroy();
+    } catch {
+      // best-effort cleanup; surface the original setup error
+    }
+    if (sandboxId) {
+      this.sandboxProviders.delete(sandboxId);
+    }
   }
 
   setConfig(config: ExplicitComputeConfig): void {
