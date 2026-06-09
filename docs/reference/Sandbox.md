@@ -101,6 +101,58 @@ const result = await sandbox.runCommand('cat data.txt | grep "error" | wc -l');
 - Streaming callbacks cannot be combined with `background: true` — doing so throws
 - Available on all sandbox instances regardless of provider
 
+### Streaming output with `onStdout` / `onStderr`
+
+By default `runCommand` buffers all output and only resolves once the command
+finishes. Pass `onStdout` and/or `onStderr` to receive output **incrementally** as the
+command runs — useful for long-running commands (installs, builds, dev servers) where
+you want to surface progress instead of waiting for completion.
+
+Both are optional callbacks with the signature `(data: string) => void`. Each fires
+once per output chunk delivered as the command streams, in order, while the command
+executes.
+
+```typescript
+// Forward live output to the local console
+const result = await sandbox.runCommand('npm install', {
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
+});
+
+// The resolved result still contains the COMPLETE output
+console.log(result.exitCode);          // 0
+console.log(result.stdout.length);     // full stdout, same as without callbacks
+```
+
+Accumulate streamed chunks yourself, e.g. to push progress to a UI:
+
+```typescript
+const lines: string[] = [];
+await sandbox.runCommand('python train.py', {
+  onStdout: (chunk) => {
+    lines.push(chunk);
+    sendToClient(chunk);   // stream to a websocket, log drain, etc.
+  },
+});
+```
+
+**Behavior:**
+
+- **The callbacks are additive, not a replacement.** The returned `CommandResult`
+  still contains the full `stdout` and `stderr` once the command finishes, regardless
+  of whether you passed callbacks.
+- **Chunk boundaries are not guaranteed.** A chunk may contain a partial line, multiple
+  lines, or a mix — do not assume one callback invocation equals one line. Buffer and
+  split on `\n` yourself if you need line-by-line handling.
+- **Incremental delivery depends on the sandbox environment.** Streaming is handled by
+  a built-in in-sandbox daemon, not by each provider — the command always runs and the
+  full output is always returned in the result. But if the environment can't stream
+  live chunks, the callbacks fall back to firing once when the command completes,
+  carrying the full output, rather than incrementally.
+- **Cannot be combined with `background: true`.** Passing streaming callbacks together
+  with `background: true` throws, since a backgrounded command returns immediately and
+  has no output to stream.
+
 <br/>
 <br/>
 
