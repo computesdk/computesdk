@@ -1,5 +1,11 @@
 # @computesdk/runloop
 
+## 1.3.52
+
+### Patch Changes
+
+- 1a3a44e: Update the Runloop API client and enable HTTP/2 for provider requests.
+
 ## 1.3.51
 
 ### Patch Changes
