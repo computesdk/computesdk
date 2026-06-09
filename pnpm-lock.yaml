@@ -1315,8 +1315,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@runloop/api-client':
-        specifier: ^1.21.0
-        version: 1.21.0
+        specifier: ^1.23.0
+        version: 1.23.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3783,8 +3783,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@runloop/api-client@1.21.0':
-    resolution: {integrity: sha512-gDPXEo5shVmLcD7LU7/B+kqmw/Y+r2ZrTRD2BHW+pBpSgRFJ9KrOdYF/bwi6QzrRuxnOaouLlFD8JQUgIdD7qg==}
+  '@runloop/api-client@1.23.0':
+    resolution: {integrity: sha512-cAuQYNHbgLeXMocQv3EOSkALl3i3JD3zVdSM7SpeMohScA5AxRvbEAtFUwRILuo6Hkg/nm/E831gBcH9Ghsi/g==}
 
   '@secure-exec/browser@0.1.1-rc.3':
     resolution: {integrity: sha512-syjym68632Yzba6Uu9tfnd2KGHTHoiOMTg3hnYRxs4t2RrTfzKm3fWOBVmOZHaZT7ECMCItXerDfYmH05tbHDg==}
@@ -10890,7 +10890,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@runloop/api-client@1.21.0':
+  '@runloop/api-client@1.23.0':
     dependencies:
       '@types/node': 18.19.123
       '@types/node-fetch': 2.6.13
@@ -10899,7 +10899,8 @@ snapshots:
       form-data-encoder: 1.7.2
       formdata-node: 4.4.1
       node-fetch: 2.7.0
-      tar: 7.5.9
+      tar: 7.5.15
+      undici: 7.26.0
       uuidv7: 1.1.0
       zod: 3.25.76
     transitivePeerDependencies:

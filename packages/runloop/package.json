@@ -28,8 +28,8 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@runloop/api-client": "^1.21.0",
     "@computesdk/provider": "workspace:*",
+    "@runloop/api-client": "^1.23.0",
     "computesdk": "workspace:*"
   },
   "keywords": [
