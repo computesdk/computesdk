@@ -4,6 +4,9 @@
   "description": "Railway Sandboxes provider for ComputeSDK - run commands in Railway-hosted sandboxes",
   "author": "ComputeSDK",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

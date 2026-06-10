@@ -29,8 +29,6 @@ export interface RailwayConfig {
   token?: string;
   /** Railway environment ID - falls back to the RAILWAY_ENVIRONMENT_ID environment variable */
   environmentId?: string;
-  /** Default execution timeout in milliseconds (used for getInfo reporting) */
-  timeout?: number;
 }
 
 /** Options accepted by the Railway SDK's create/connect/list calls. */
@@ -148,8 +146,9 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
           const sandbox = await Sandbox.connect(sandboxId, client);
           return { sandbox, sandboxId };
         } catch (error) {
+          // Only a missing sandbox maps to null; surface auth/network/config errors.
           if (error instanceof SandboxNotFoundError) return null;
-          return null;
+          throw error;
         }
       },
 
@@ -259,8 +258,10 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
             .split('\n')
             .filter((line) => line.trim() && !line.startsWith('total'))
             .map((line) => {
+              // `ls -la` columns: perms links owner group size month day time name…
+              // The name is everything from the 9th column on, so it survives spaces.
               const parts = line.trim().split(/\s+/);
-              const name = parts[parts.length - 1];
+              const name = parts.slice(8).join(' ');
               const isDirectory = line.startsWith('d');
               return {
                 name,
@@ -269,7 +270,7 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
                 modified: new Date(),
               };
             })
-            .filter((entry) => entry.name !== '.' && entry.name !== '..');
+            .filter((entry) => entry.name && entry.name !== '.' && entry.name !== '..');
         },
 
         exists: async (sandbox: RailwaySandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {

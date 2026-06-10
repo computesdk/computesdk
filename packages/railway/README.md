@@ -8,6 +8,8 @@ Railway provider for ComputeSDK - run commands in [Railway Sandboxes](https://do
 npm install @computesdk/railway
 ```
 
+> **Requires Node.js >= 22** — the underlying `railway` SDK depends on Node 22 APIs (e.g. global `WebSocket`).
+
 ## Setup
 
 1. Create a Railway API token at [railway.com/account/tokens](https://railway.com/account/tokens).
@@ -66,9 +68,10 @@ const sandbox = await sdk.sandbox.create();
 railway({
   token: '...',          // defaults to RAILWAY_API_TOKEN
   environmentId: '...',  // defaults to RAILWAY_ENVIRONMENT_ID
-  timeout: 300000,       // reported via getInfo(); milliseconds
 });
 ```
+
+Per-command execution timeouts are supported via `runCommand`'s options (`{ timeout: ms }`), which maps to Railway's `timeoutSec`.
 
 ## Supported Features
 
