@@ -81,13 +81,24 @@ function mapStatus(status: string): SandboxInfo['status'] {
   }
 }
 
+/** Valid POSIX shell environment variable name. Keys cannot be quoted in an
+ * assignment prefix, so anything outside this set is rejected rather than escaped. */
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /** Apply env/cwd/background options by composing a single shell command string. */
 function composeCommand(command: string, options?: RunCommandOptions): string {
   let fullCommand = command;
 
   if (options?.env && Object.keys(options.env).length > 0) {
     const envPrefix = Object.entries(options.env)
-      .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
+      .map(([k, v]) => {
+        if (!ENV_KEY_PATTERN.test(k)) {
+          throw new Error(
+            `Invalid environment variable name "${k}". Names must match ${ENV_KEY_PATTERN}.`
+          );
+        }
+        return `${k}="${escapeShellArg(String(v))}"`;
+      })
       .join(' ');
     fullCommand = `${envPrefix} ${fullCommand}`;
   }
