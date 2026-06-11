@@ -37,46 +37,27 @@ function shellEscape(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
-function isNodeParserFailure(output: string): boolean {
-  const hasSyntaxMarker =
-    output.includes('SyntaxError') ||
-    output.includes('Unexpected token') ||
-    output.includes('Unexpected identifier') ||
-    output.includes('Unexpected end of input') ||
-    output.includes('Invalid or unexpected token');
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? String(value);
+  }
 
-  const hasCompileContext =
-    output.includes('[eval]') ||
-    output.includes('makeContextifyScript') ||
-    output.includes('compileScript') ||
-    output.includes('wrapSafe');
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
 
-  const hasRuntimeSyntaxSignature =
-    output.includes('at JSON.parse') ||
-    output.includes('JSON.parse (<anonymous>)') ||
-    output.includes('in JSON at position');
-
-  return hasSyntaxMarker && hasCompileContext && !hasRuntimeSyntaxSignature;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
 }
 
-function isPythonParserFailure(output: string): boolean {
-  const hasSyntaxMarker =
-    output.includes('SyntaxError') ||
-    output.includes('IndentationError') ||
-    output.includes('TabError');
-
-  const hasStringFileContext = output.includes('File "<string>"');
-  const hasRuntimeTraceback = output.includes('Traceback (most recent call last)');
-
-  return hasSyntaxMarker && hasStringFileContext && !hasRuntimeTraceback;
+function sandboxCacheKey(sandboxConfig: any): string {
+  return stableStringify({
+    ...sandboxConfig,
+    image: sandboxConfig.image?.config || sandboxConfig.image,
+  });
 }
 
-function isParserFailure(output: string, runtime: string): boolean {
-  if (!output.trim()) return false;
-  if (runtime === 'node') return isNodeParserFailure(output);
-  if (runtime === 'python') return isPythonParserFailure(output);
-  return false;
-}
+const sandboxCache = new Map<string, Sandbox>();
 
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
@@ -112,9 +93,11 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           } = options || {};
 
           const optRuntime = (options as any)?.runtime as string | undefined;
+          const runtime = optRuntime || 'node';
+          const sandboxName = name || 'computesdk-sandbox';
 
           const sandboxConfig: any = {
-            name: name || `computesdk-${Date.now()}`,
+            name: sandboxName,
             keepWarmSeconds: 300,
             ...providerOptions,
           };
@@ -122,7 +105,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           const timeout = optTimeout ?? config.timeout;
           if (timeout) sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
 
-          if (optRuntime === 'node') {
+          if (runtime === 'node') {
             sandboxConfig.image = Image.fromRegistry('node:20-slim');
           }
 
@@ -130,7 +113,13 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxConfig.envVars = Object.entries(envs).map(([name, value]) => `${name}=${value}`);
           }
 
-          const sandbox = new Sandbox(sandboxConfig);
+          const cacheKey = sandboxCacheKey(sandboxConfig);
+          let sandbox = sandboxCache.get(cacheKey);
+          if (!sandbox) {
+            sandbox = new Sandbox(sandboxConfig);
+            sandboxCache.set(cacheKey, sandbox);
+          }
+
           const instance = await sandbox.create();
           return { sandbox: instance, sandboxId: instance.containerId };
         } catch (error) {
