@@ -158,6 +158,11 @@ client.heartbeatWorker(benchmarkSlug, runId, workerId, {
   concurrency: [{ step: 'pause', active: 100, target: 100 }],
 })
 client.getRunProgress(benchmarkSlug, runId)
+client.getBenchmarkResults(benchmarkSlug, { limit })
+client.getRunResults(benchmarkSlug, runId)
+client.getRunTaskResults(benchmarkSlug, runId, { bucketSize, failureLimit })
+client.getRunTimeline(benchmarkSlug, runId, { bucketMs })
+client.getRunImports(benchmarkSlug, runId)
 client.completeWorker(benchmarkSlug, runId, workerId, attemptId)
 client.failWorker(benchmarkSlug, runId, workerId, attemptId, error)
 client.runWorker(options)

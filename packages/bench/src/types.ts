@@ -232,8 +232,176 @@ export interface CreateWorkerArtifactResponse {
   objectKey?: string;
 }
 
-export interface RunResults {
-  [key: string]: JsonValue | undefined;
+export interface BenchmarkResultLatencySummary {
+  min: number | null;
+  avg: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+  max: number | null;
+}
+
+export interface BenchmarkResultSummary {
+  taskCount: number;
+  successCount: number;
+  errorCount: number;
+  otherCount: number;
+  latencyCount: number;
+  successRate: number;
+  latencyMs: BenchmarkResultLatencySummary;
+  firstStartedAt: string | null;
+  lastCompletedAt: string | null;
+}
+
+export interface BenchmarkParticipantResultSummary extends BenchmarkResultSummary {
+  participantSlug: string;
+  provider: string | null;
+}
+
+export interface BenchmarkStepResultSummary {
+  participantSlug: string;
+  provider: string | null;
+  stepName: string;
+  stepCount: number;
+  successCount: number;
+  errorCount: number;
+  otherCount: number;
+  latencyCount: number;
+  successRate: number;
+  latencyMs: BenchmarkResultLatencySummary;
+}
+
+export interface BenchmarkResultsOverviewInput {
+  limit?: number;
+}
+
+export interface BenchmarkResultsOverviewRun {
+  run: BenchmarkRun;
+  participants: Array<BenchmarkParticipantResultSummary & { runId: string }>;
+}
+
+export interface BenchmarkResultsOverview {
+  benchmark: Pick<BenchmarkResource, 'id' | 'slug' | 'name' | 'kind'>;
+  generatedAt: string;
+  items: BenchmarkResultsOverviewRun[];
+}
+
+export interface BenchmarkRunResults {
+  benchmark: Pick<BenchmarkResource, 'id' | 'slug' | 'name' | 'kind'>;
+  run: Pick<BenchmarkRun, 'id' | 'status' | 'totalTasks' | 'workerCount'>;
+  generatedAt: string;
+  overall: BenchmarkResultSummary;
+  participants: BenchmarkParticipantResultSummary[];
+  steps: BenchmarkStepResultSummary[];
+}
+
+export interface BenchmarkRunTaskResultsInput {
+  bucketSize?: number;
+  failureLimit?: number;
+}
+
+export interface BenchmarkTaskBucket {
+  participantSlug: string;
+  provider: string | null;
+  bucketStart: number;
+  bucketEnd: number;
+  taskIndexMidpoint: number;
+  taskCount: number;
+  successCount: number;
+  errorCount: number;
+  latencyMs: Pick<BenchmarkResultLatencySummary, 'p50' | 'p95' | 'max'>;
+}
+
+export interface BenchmarkFailurePoint {
+  participantSlug: string;
+  provider: string | null;
+  taskIndex: number;
+  errorCode: string | null;
+}
+
+export interface BenchmarkRunTaskResults {
+  run: { id: string };
+  generatedAt: string;
+  bucketSize: number;
+  buckets: BenchmarkTaskBucket[];
+  failures: BenchmarkFailurePoint[];
+}
+
+export interface BenchmarkRunTimelineInput {
+  bucketMs?: number;
+}
+
+export interface BenchmarkEventRateBucket {
+  participantSlug: string;
+  provider: string | null;
+  tMs: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+}
+
+export interface BenchmarkConcurrencyPoint {
+  participantSlug: string;
+  provider: string | null;
+  workerId: string;
+  recordedAt: string;
+  tMs: number;
+  step: string;
+  active: number;
+  target: number;
+}
+
+export interface BenchmarkRunTimeline {
+  run: { id: string };
+  generatedAt: string;
+  eventRate: {
+    bucketMs: number;
+    buckets: BenchmarkEventRateBucket[];
+  };
+  concurrency: {
+    firstRecordedAt: string | null;
+    heartbeatCount: number;
+    points: BenchmarkConcurrencyPoint[];
+  };
+}
+
+export interface BenchmarkRunImportsSummary {
+  eventBatches: number;
+  persisted: number;
+  queued: number;
+  failed: number;
+  imports: {
+    pending: number;
+    importing: number;
+    imported: number;
+    failed: number;
+    missing: number;
+  };
+}
+
+export interface BenchmarkRunImportItem {
+  eventBatchId: string;
+  batchType: string;
+  sequenceNumber: number;
+  batchStatus: string;
+  eventCount: number;
+  objectKey: string | null;
+  batchErrorMessage: string | null;
+  createdAt: string;
+  persistedAt: string | null;
+  sink: string | null;
+  importStatus: string | null;
+  importAttempts: number | null;
+  importedAt: string | null;
+  failedAt: string | null;
+  importErrorMessage: string | null;
+}
+
+export interface BenchmarkRunImports {
+  run: { id: string };
+  generatedAt: string;
+  summary: BenchmarkRunImportsSummary;
+  items: BenchmarkRunImportItem[];
 }
 
 export interface WorkerConcurrencySample {
@@ -498,6 +666,18 @@ export interface BenchmarkClient {
   ): Promise<CreateWorkerArtifactResponse>;
   listRunArtifacts(benchmarkSlug: string, runId: string): Promise<BenchmarkArtifact[]>;
   listWorkerArtifacts(benchmarkSlug: string, runId: string, workerId: string): Promise<BenchmarkArtifact[]>;
-  getRunResults(benchmarkSlug: string, runId: string): Promise<RunResults>;
+  getBenchmarkResults(benchmarkSlug: string, input?: BenchmarkResultsOverviewInput): Promise<BenchmarkResultsOverview>;
+  getRunResults(benchmarkSlug: string, runId: string): Promise<BenchmarkRunResults>;
+  getRunTaskResults(
+    benchmarkSlug: string,
+    runId: string,
+    input?: BenchmarkRunTaskResultsInput,
+  ): Promise<BenchmarkRunTaskResults>;
+  getRunTimeline(
+    benchmarkSlug: string,
+    runId: string,
+    input?: BenchmarkRunTimelineInput,
+  ): Promise<BenchmarkRunTimeline>;
+  getRunImports(benchmarkSlug: string, runId: string): Promise<BenchmarkRunImports>;
   runWorker(options: RunWorkerOptions): Promise<RunWorkerResult>;
 }

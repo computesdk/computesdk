@@ -482,7 +482,7 @@ describe('createBenchmarkClient', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('exposes documented artifact, results, and release endpoints', async () => {
+  it('exposes documented artifact, result, and release endpoints', async () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -498,8 +498,20 @@ describe('createBenchmarkClient', () => {
       if (url.endsWith('/workers/worker_1/artifacts') && init?.method === 'GET') {
         return jsonResponse({ items: [{ artifactId: 'artifact_2', kind: 'meta.json' }] });
       }
-      if (url.endsWith('/results') && init?.method === 'GET') {
-        return jsonResponse({ totalTasks: 1, participants: [] });
+      if (url.endsWith('/benchmarks/scale/results?limit=5') && init?.method === 'GET') {
+        return jsonResponse({ benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale' }, generatedAt: new Date().toISOString(), items: [] });
+      }
+      if (url.endsWith('/runs/run_1/results') && init?.method === 'GET') {
+        return jsonResponse({ benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale' }, run: { id: 'run_1', status: 'completed', totalTasks: 1, workerCount: 1 }, generatedAt: new Date().toISOString(), overall: { taskCount: 1 }, participants: [], steps: [] });
+      }
+      if (url.endsWith('/runs/run_1/results/tasks?bucketSize=10&failureLimit=2') && init?.method === 'GET') {
+        return jsonResponse({ run: { id: 'run_1' }, generatedAt: new Date().toISOString(), bucketSize: 10, buckets: [], failures: [] });
+      }
+      if (url.endsWith('/runs/run_1/results/timeline?bucketMs=1000') && init?.method === 'GET') {
+        return jsonResponse({ run: { id: 'run_1' }, generatedAt: new Date().toISOString(), eventRate: { bucketMs: 1000, buckets: [] }, concurrency: { firstRecordedAt: null, heartbeatCount: 0, points: [] } });
+      }
+      if (url.endsWith('/runs/run_1/results/imports') && init?.method === 'GET') {
+        return jsonResponse({ run: { id: 'run_1' }, generatedAt: new Date().toISOString(), summary: { eventBatches: 0, persisted: 0, queued: 0, failed: 0, imports: { pending: 0, importing: 0, imported: 0, failed: 0, missing: 0 } }, items: [] });
       }
       if (url.endsWith('/release') && init?.method === 'POST') {
         return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
@@ -516,14 +528,22 @@ describe('createBenchmarkClient', () => {
     })).resolves.toMatchObject({ artifactId: 'artifact_1' });
     await expect(client.listRunArtifacts('scale', 'run_1')).resolves.toMatchObject([{ artifactId: 'artifact_1' }]);
     await expect(client.listWorkerArtifacts('scale', 'run_1', 'worker_1')).resolves.toMatchObject([{ artifactId: 'artifact_2' }]);
-    await expect(client.getRunResults('scale', 'run_1')).resolves.toMatchObject({ totalTasks: 1 });
+    await expect(client.getBenchmarkResults('scale', { limit: 5 })).resolves.toMatchObject({ benchmark: { slug: 'scale' }, items: [] });
+    await expect(client.getRunResults('scale', 'run_1')).resolves.toMatchObject({ run: { id: 'run_1' }, participants: [], steps: [] });
+    await expect(client.getRunTaskResults('scale', 'run_1', { bucketSize: 10, failureLimit: 2 })).resolves.toMatchObject({ bucketSize: 10, buckets: [], failures: [] });
+    await expect(client.getRunTimeline('scale', 'run_1', { bucketMs: 1000 })).resolves.toMatchObject({ eventRate: { bucketMs: 1000 }, concurrency: { points: [] } });
+    await expect(client.getRunImports('scale', 'run_1')).resolves.toMatchObject({ summary: { eventBatches: 0 }, items: [] });
     await expect(client.releaseWorker('scale', 'run_1', 'worker_1', 'attempt_1')).resolves.toMatchObject({ worker: { id: 'worker_1' } });
 
     expect(seen.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
       'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/artifacts',
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
+      'GET https://platform.test/api/v1/benchmarks/scale/results?limit=5',
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/results',
+      'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/results/tasks?bucketSize=10&failureLimit=2',
+      'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/results/timeline?bucketMs=1000',
+      'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/results/imports',
       'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/release',
     ]);
   });

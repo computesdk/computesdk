@@ -136,6 +136,30 @@ describeIntegration('benchmark orchestrator integration', () => {
       const finalParticipant = finalProgress.participants.find((item) => item.slug === participantSlug);
       expect(finalParticipant?.workers.completed).toBeGreaterThanOrEqual(1);
       expect(finalParticipant?.workers.failed).toBeGreaterThanOrEqual(1);
+
+      const overviewResults = await client.getBenchmarkResults(slug, { limit: 5 });
+      expect(overviewResults.benchmark.slug).toBe(slug);
+      expect(Array.isArray(overviewResults.items)).toBe(true);
+
+      const runResults = await client.getRunResults(slug, run.id);
+      expect(runResults.run.id).toBe(run.id);
+      expect(Array.isArray(runResults.participants)).toBe(true);
+      expect(Array.isArray(runResults.steps)).toBe(true);
+
+      const taskResults = await client.getRunTaskResults(slug, run.id, { bucketSize: 10, failureLimit: 10 });
+      expect(taskResults.run.id).toBe(run.id);
+      expect(Array.isArray(taskResults.buckets)).toBe(true);
+      expect(Array.isArray(taskResults.failures)).toBe(true);
+
+      const timeline = await client.getRunTimeline(slug, run.id, { bucketMs: 1000 });
+      expect(timeline.run.id).toBe(run.id);
+      expect(Array.isArray(timeline.eventRate.buckets)).toBe(true);
+      expect(Array.isArray(timeline.concurrency.points)).toBe(true);
+
+      const imports = await client.getRunImports(slug, run.id);
+      expect(imports.run.id).toBe(run.id);
+      expect(imports.summary.eventBatches).toBeGreaterThanOrEqual(0);
+      expect(Array.isArray(imports.items)).toBe(true);
     } catch (error) {
       if (isInvalidApiKeyError(error)) {
         console.warn('Skipping bench orchestrator smoke - COMPUTESDK_ADMIN_API_KEY is invalid for the platform API.');

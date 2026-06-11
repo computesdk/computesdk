@@ -8,6 +8,14 @@ import type {
   BenchmarkParticipant,
   BenchmarkResource,
   BenchmarkRun,
+  BenchmarkResultsOverview,
+  BenchmarkResultsOverviewInput,
+  BenchmarkRunImports,
+  BenchmarkRunResults,
+  BenchmarkRunTaskResults,
+  BenchmarkRunTaskResultsInput,
+  BenchmarkRunTimeline,
+  BenchmarkRunTimelineInput,
   BenchmarkRunWorker,
   BenchmarkWorkerAttempt,
   CreateWorkerArtifactInput,
@@ -29,7 +37,6 @@ import type {
   TaskResultRecord,
   TaskResultsResponse,
   RunProgress,
-  RunResults,
   UpdateBenchmarkInput,
   UpdateParticipantInput,
   UpdateRunInput,
@@ -65,6 +72,15 @@ function trimTrailingSlash(value: string): string {
 
 function encodePath(value: string): string {
   return encodeURIComponent(value);
+}
+
+function queryString(input: Record<string, number | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  const value = params.toString();
+  return value ? `?${value}` : '';
 }
 
 function getApiKey(input?: string): string | undefined {
@@ -421,10 +437,38 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       return normalizeArtifacts(data);
     },
 
+    async getBenchmarkResults(benchmarkSlug, input: BenchmarkResultsOverviewInput = {}) {
+      return request<BenchmarkResultsOverview>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/results${queryString({ limit: input.limit })}`,
+      );
+    },
+
     async getRunResults(benchmarkSlug, runId) {
-      return request<RunResults>(
+      return request<BenchmarkRunResults>(
         'GET',
         `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/results`,
+      );
+    },
+
+    async getRunTaskResults(benchmarkSlug, runId, input: BenchmarkRunTaskResultsInput = {}) {
+      return request<BenchmarkRunTaskResults>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/results/tasks${queryString({ bucketSize: input.bucketSize, failureLimit: input.failureLimit })}`,
+      );
+    },
+
+    async getRunTimeline(benchmarkSlug, runId, input: BenchmarkRunTimelineInput = {}) {
+      return request<BenchmarkRunTimeline>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/results/timeline${queryString({ bucketMs: input.bucketMs })}`,
+      );
+    },
+
+    async getRunImports(benchmarkSlug, runId) {
+      return request<BenchmarkRunImports>(
+        'GET',
+        `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/results/imports`,
       );
     },
 
