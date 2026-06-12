@@ -1,8 +1,8 @@
 {
   "name": "@computesdk/bench",
-  "version": "0.1.6",
+  "version": "0.1.8",
   "type": "module",
-  "description": "Tinybench-style benchmarking toolkit for ComputeSDK benchmark spans",
+  "description": "Client and worker helpers for the ComputeSDK benchmark orchestrator",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.cjs",
@@ -26,6 +26,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
+    "test:capabilities": "vitest run src/__tests__/capabilities.test.ts",
     "test:integration": "vitest run src/__tests__/integration.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
@@ -34,7 +35,7 @@
     "computesdk",
     "benchmark",
     "observability",
-    "tinybench"
+    "orchestrator"
   ],
   "repository": {
     "type": "git",
@@ -48,9 +49,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {
-    "nanoid": "^5.1.6"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
