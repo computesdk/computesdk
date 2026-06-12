@@ -76,7 +76,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
 | **Railway** | `RAILWAY_API_TOKEN`, `RAILWAY_ENVIRONMENT_ID` | Ephemeral command execution sandboxes |
-| **Tenki** | `TENKI_API_KEY` | MicroVM sandboxes with native filesystem and preview URLs |
+| **Tenki** | `TENKI_API_KEY` or `TENKI_AUTH_TOKEN` | MicroVM sandboxes with native filesystem and preview URLs |
 
 ## Configuration
 

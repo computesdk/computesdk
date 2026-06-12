@@ -68,7 +68,7 @@ function resolveApiKey(config: TenkiConfig): string {
       "Missing API key for Tenki.\n\n" +
         "Create one at https://app.tenki.cloud (workspace settings > API Keys)\n" +
         'Then pass it: tenki({ apiKey: "tk_..." })\n' +
-        "Or set TENKI_API_KEY in your environment.",
+        "Or set TENKI_API_KEY (or TENKI_AUTH_TOKEN) in your environment.",
     );
   }
   return apiKey;
