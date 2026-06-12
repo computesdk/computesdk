@@ -75,9 +75,11 @@ describeCapabilities('benchmark orchestrator capabilities', () => {
       });
       const artifactId = artifact.artifactId ?? (artifact.artifact ? artifactIdOf(artifact.artifact) : undefined);
       const uploadUrl = artifact.uploadUrl ?? artifact.artifact?.uploadUrl;
+      const uploadUrlExpiresAt = artifact.uploadUrlExpiresAt ?? artifact.artifact?.uploadUrlExpiresAt;
       expect(artifactId).toEqual(expect.any(String));
       expect(artifact.objectKey ?? artifact.artifact?.objectKey).toEqual(expect.any(String));
       expect(uploadUrl).toEqual(expect.any(String));
+      expect(uploadUrlExpiresAt).toEqual(expect.any(String));
 
       const uploadResponse = await fetch(uploadUrl!, {
         method: 'PUT',

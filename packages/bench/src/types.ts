@@ -221,6 +221,7 @@ export interface BenchmarkArtifact {
   contentType?: string | null;
   objectKey?: string;
   uploadUrl?: string;
+  uploadUrlExpiresAt?: string;
   metadata?: JsonObject;
   createdAt?: string;
 }
@@ -229,6 +230,7 @@ export interface CreateWorkerArtifactResponse {
   artifact?: BenchmarkArtifact;
   artifactId?: string;
   uploadUrl?: string;
+  uploadUrlExpiresAt?: string;
   objectKey?: string;
 }
 
