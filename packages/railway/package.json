@@ -1,9 +1,12 @@
 {
-  "name": "@computesdk/tensorlake",
-  "version": "0.1.8",
-  "description": "Tensorlake provider for ComputeSDK - stateful MicroVM sandboxes for agentic applications and LLM-generated code execution",
-  "author": "Garrison",
+  "name": "@computesdk/railway",
+  "version": "2.0.0",
+  "description": "Railway Sandboxes provider for ComputeSDK - run commands in Railway-hosted sandboxes",
+  "author": "ComputeSDK",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -30,36 +33,34 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "tensorlake": "0.5.33"
-  },
-  "devDependencies": {
-    "@computesdk/test-utils": "workspace:*",
-    "@types/node": "^20.19.39",
-    "@vitest/coverage-v8": "^1.6.1",
-    "eslint": "^8.57.1",
-    "rimraf": "^5.0.10",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^1.6.1"
+    "railway": "^3.1.1"
   },
   "keywords": [
     "computesdk",
-    "tensorlake",
+    "railway",
     "sandbox",
-    "microvm",
     "code-execution",
-    "agentic",
     "cloud",
     "compute",
     "provider"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/computesdk/computesdk.git",
-    "directory": "packages/tensorlake"
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/railway"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   }
 }

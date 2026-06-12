@@ -1,5 +1,19 @@
 # @computesdk/example-basic
 
+## 0.4.88
+
+### Patch Changes
+
+- Updated dependencies [52a02aa]
+  - @computesdk/blaxel@1.6.16
+
+## 0.4.87
+
+### Patch Changes
+
+- Updated dependencies [1a3a44e]
+  - @computesdk/runloop@1.3.52
+
 ## 0.4.86
 
 ### Patch Changes
