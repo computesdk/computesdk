@@ -8,6 +8,22 @@ function isInvalidApiKeyError(error: unknown): boolean {
   return error instanceof BenchmarkApiError && error.status === 401 && error.body.includes('Invalid API key');
 }
 
+function isOptionalCapabilityMissing(error: unknown): boolean {
+  return error instanceof BenchmarkApiError && [404, 405, 501].includes(error.status);
+}
+
+async function optionalCapability<T>(name: string, fn: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (isOptionalCapabilityMissing(error)) {
+      console.warn(`Skipping optional bench orchestrator capability "${name}" - endpoint is not available.`);
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 describeIntegration('benchmark orchestrator integration', () => {
   it('smokes the live platform orchestrator API contract', async () => {
     const baseUrl = process.env.COMPUTESDK_BENCH_BASE_URL;
@@ -32,8 +48,8 @@ describeIntegration('benchmark orchestrator integration', () => {
 
       const { run, participants } = await client.createRun(slug, {
         name: 'SDK integration smoke',
-        totalTasks: 4,
-        workerCount: 2,
+        totalTasks: 6,
+        workerCount: 3,
         participants: [participantSlug],
         config: { source: '@computesdk/bench' },
       });
@@ -59,11 +75,11 @@ describeIntegration('benchmark orchestrator integration', () => {
       })).resolves.toMatchObject({ slug: participantSlug, label: 'Just Bash Smoke' });
 
       const workers = await client.planWorkers(slug, run.id, participantSlug, {
-        workerCount: 2,
+        workerCount: 3,
         targetConcurrency: 2,
       });
-      expect(workers).toHaveLength(2);
-      await expect(client.listWorkers(slug, run.id, participantSlug)).resolves.toHaveLength(2);
+      expect(workers).toHaveLength(3);
+      await expect(client.listWorkers(slug, run.id, participantSlug)).resolves.toHaveLength(3);
 
       const firstWorker = await client.getWorker(slug, run.id, workers[0].id);
       expect(firstWorker).toMatchObject({ id: workers[0].id });
@@ -88,6 +104,13 @@ describeIntegration('benchmark orchestrator integration', () => {
       expect(secondAssignment).not.toBeNull();
       if (!secondAssignment) return;
 
+      const releaseAssignment = await client.claimWorker(slug, run.id, participantSlug, {
+        processKind: 'vitest',
+        processKey: `local-${process.pid}-${Date.now()}-release`,
+      });
+      expect(releaseAssignment).not.toBeNull();
+      if (!releaseAssignment) return;
+
       await client.heartbeatWorker(slug, run.id, firstAssignment.workerId, {
         attemptId: firstAssignment.attemptId,
         progressDone: 0,
@@ -101,6 +124,20 @@ describeIntegration('benchmark orchestrator integration', () => {
       const progress = await client.getRunProgress(slug, run.id);
       const participant = progress.participants.find((item) => item.slug === participantSlug);
       expect(participant?.concurrency.some((item) => item.step === 'integration.step')).toBe(true);
+
+      const artifact = await optionalCapability('worker artifacts create', () => client.createWorkerArtifact(slug, run.id, firstAssignment.workerId, {
+        attemptId: firstAssignment.attemptId,
+        kind: 'meta.json',
+        contentType: 'application/json',
+        metadata: { source: '@computesdk/bench' },
+      }));
+      if (artifact) expect(artifact.artifactId ?? artifact.artifact?.artifactId ?? artifact.artifact?.id).toEqual(expect.any(String));
+
+      const runArtifacts = await optionalCapability('run artifacts list', () => client.listRunArtifacts(slug, run.id));
+      if (runArtifacts) expect(Array.isArray(runArtifacts)).toBe(true);
+
+      const workerArtifacts = await optionalCapability('worker artifacts list', () => client.listWorkerArtifacts(slug, run.id, firstAssignment.workerId));
+      if (workerArtifacts) expect(Array.isArray(workerArtifacts)).toBe(true);
 
       await client.sendTaskResults({
         benchmarkSlug: slug,
@@ -132,6 +169,13 @@ describeIntegration('benchmark orchestrator integration', () => {
       });
       await client.failWorker(slug, run.id, secondAssignment.workerId, secondAssignment.attemptId, new Error('integration smoke failure path'));
 
+      const releaseResult = await optionalCapability('worker release', () => client.releaseWorker(slug, run.id, releaseAssignment.workerId, releaseAssignment.attemptId));
+      if (releaseResult) {
+        expect(releaseResult.worker.id).toBe(releaseAssignment.workerId);
+      } else {
+        await client.failWorker(slug, run.id, releaseAssignment.workerId, releaseAssignment.attemptId, new Error('integration smoke release fallback'));
+      }
+
       const finalProgress = await client.getRunProgress(slug, run.id);
       const finalParticipant = finalProgress.participants.find((item) => item.slug === participantSlug);
       expect(finalParticipant?.workers.completed).toBeGreaterThanOrEqual(1);
@@ -155,6 +199,8 @@ describeIntegration('benchmark orchestrator integration', () => {
       expect(timeline.run.id).toBe(run.id);
       expect(Array.isArray(timeline.eventRate.buckets)).toBe(true);
       expect(Array.isArray(timeline.concurrency.points)).toBe(true);
+      expect(timeline.concurrency.heartbeatCount).toBeGreaterThanOrEqual(1);
+      expect(timeline.concurrency.points.some((point) => point.step === 'integration.step')).toBe(true);
 
       const imports = await client.getRunImports(slug, run.id);
       expect(imports.run.id).toBe(run.id);
