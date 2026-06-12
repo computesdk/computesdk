@@ -492,6 +492,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       const taskIndices = Array.from({ length: claimed.taskRange.count }, (_, index) => claimed.taskRange.start + index);
       const activeByStep = new Map<string, number>();
       const targetByStep = new Map<string, number>();
+      const readyWaitByStep = new Map<string, Promise<void>>();
       let doneCount = 0;
       let errorCount = 0;
       let inFlightCount = 0;
@@ -504,16 +505,14 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
             step,
             active,
             target: targetByStep.get(step) ?? workerConcurrency,
-          }));
-      }
-
-      function currentStep(): string | null {
-        const sample = concurrencySamples().sort((a, b) => b.active - a.active)[0];
-        return sample?.step ?? null;
+          }))
+          .sort((a, b) => b.active - a.active)
+          .slice(0, MAX_HEARTBEAT_CONCURRENCY_SAMPLES);
       }
 
       async function sendHeartbeat(): Promise<void> {
-        const step = currentStep();
+        const concurrency = concurrencySamples();
+        const step = concurrency[0]?.step ?? null;
         await client.heartbeatWorker(options.benchmarkSlug, options.runId, claimed.workerId, {
           attemptId: claimed.attemptId,
           progressDone: doneCount,
@@ -521,7 +520,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           progressErrors: errorCount,
           progressTotal: taskIndices.length,
           ...(step ? { currentStep: step } : {}),
-          concurrency: concurrencySamples(),
+          concurrency,
         });
       }
 
@@ -543,7 +542,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         });
       }
 
-      async function waitForStepReady(stepName: string, stepOptions: DefineStepOptions): Promise<void> {
+      async function pollStepReady(stepName: string, stepOptions: DefineStepOptions): Promise<void> {
         const startedAt = Date.now();
         const pollInterval = stepOptions.readyPollIntervalMs ?? options.readyPollIntervalMs ?? DEFAULT_READY_POLL_INTERVAL_MS;
 
@@ -561,8 +560,19 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         }
       }
 
+      async function waitForStepReady(stepName: string, stepOptions: DefineStepOptions): Promise<void> {
+        const existing = readyWaitByStep.get(stepName);
+        if (existing) return existing;
+
+        const wait = pollStepReady(stepName, stepOptions).finally(() => {
+          if (readyWaitByStep.get(stepName) === wait) readyWaitByStep.delete(stepName);
+        });
+        readyWaitByStep.set(stepName, wait);
+        return wait;
+      }
+
       const heartbeat = setInterval(() => {
-        void sendHeartbeat().catch(() => {});
+        requestHeartbeat();
       }, options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
       heartbeat.unref?.();
 
