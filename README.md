@@ -76,6 +76,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
 | **Railway** | `RAILWAY_API_TOKEN`, `RAILWAY_ENVIRONMENT_ID` | Ephemeral command execution sandboxes |
+| **Tenki** | `TENKI_API_KEY` or `TENKI_AUTH_TOKEN` | MicroVM sandboxes with native filesystem and preview URLs |
 
 ## Configuration
 
@@ -265,6 +266,7 @@ npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
 npm install @computesdk/tensorlake # Tensorlake provider
 npm install @computesdk/railway    # Railway provider
+npm install @computesdk/tenki      # Tenki provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
 ```
 
@@ -284,6 +286,7 @@ See individual provider READMEs for details:
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
 - **[@computesdk/railway](./packages/railway)** - Ephemeral command-execution sandboxes on Railway, with shell-based filesystem
+- **[@computesdk/tenki](./packages/tenki)** - Tenki Cloud microVM sandboxes with native filesystem and public preview URLs
 - **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
 
 ## Building Custom Providers
