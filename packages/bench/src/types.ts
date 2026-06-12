@@ -275,7 +275,7 @@ export interface BenchmarkResultsOverviewInput {
   limit?: number;
 }
 
-export type BenchmarkAnalyticsReadiness = 'ready' | 'pending' | 'unavailable' | 'failed';
+export type BenchmarkAnalyticsReadiness = 'ready' | 'partial' | 'pending' | 'unavailable' | 'failed';
 
 export interface BenchmarkRunAnalyticsSummary {
   status: BenchmarkAnalyticsReadiness;
