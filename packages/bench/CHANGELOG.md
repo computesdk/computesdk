@@ -1,5 +1,12 @@
 # @computesdk/bench
 
+## 0.1.7
+
+### Patch Changes
+
+- 1e06afb: Align the benchmark client with the platform orchestrator contract, including validation limits and artifact/result helpers.
+- 1e06afb: Replace the legacy local benchmark runner with a client for the platform benchmark orchestrator APIs.
+
 ## 0.1.6
 
 ### Patch Changes
