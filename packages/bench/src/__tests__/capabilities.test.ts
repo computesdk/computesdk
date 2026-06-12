@@ -35,6 +35,7 @@ describeCapabilities('benchmark orchestrator capabilities', () => {
     const baseUrl = process.env.COMPUTESDK_BENCH_BASE_URL;
     const slug = `sdk-capabilities-${Date.now()}`;
     const participantSlug = 'just-bash';
+    const artifactName = 'sdk-capability-smoke-meta.json';
     const client = createBenchmarkClient({ baseUrl });
 
     try {
@@ -68,18 +69,30 @@ describeCapabilities('benchmark orchestrator capabilities', () => {
       const artifact = await client.createWorkerArtifact(slug, run.id, assignment.workerId, {
         attemptId: assignment.attemptId,
         kind: 'meta.json',
+        name: artifactName,
         contentType: 'application/json',
         metadata: { source: '@computesdk/bench', capabilitySmoke: true },
       });
       const artifactId = artifact.artifactId ?? (artifact.artifact ? artifactIdOf(artifact.artifact) : undefined);
+      const uploadUrl = artifact.uploadUrl ?? artifact.artifact?.uploadUrl;
       expect(artifactId).toEqual(expect.any(String));
       expect(artifact.objectKey ?? artifact.artifact?.objectKey).toEqual(expect.any(String));
+      expect(uploadUrl).toEqual(expect.any(String));
+
+      const uploadResponse = await fetch(uploadUrl!, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ source: '@computesdk/bench', capabilitySmoke: true, runId: run.id }),
+      });
+      expect(uploadResponse.ok, await uploadResponse.text()).toBe(true);
 
       const runArtifacts = await client.listRunArtifacts(slug, run.id);
       expect(runArtifacts.some((item) => artifactIdOf(item) === artifactId)).toBe(true);
+      expect(runArtifacts.some((item) => artifactIdOf(item) === artifactId && item.name === artifactName)).toBe(true);
 
       const workerArtifacts = await client.listWorkerArtifacts(slug, run.id, assignment.workerId);
       expect(workerArtifacts.some((item) => artifactIdOf(item) === artifactId)).toBe(true);
+      expect(workerArtifacts.some((item) => artifactIdOf(item) === artifactId && item.name === artifactName)).toBe(true);
 
       const releaseResult = await probeOptionalCapability('worker release', () => client.releaseWorker(slug, run.id, assignment.workerId, assignment.attemptId));
       if (releaseResult) {
