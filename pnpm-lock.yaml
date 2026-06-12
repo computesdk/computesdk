@@ -270,8 +270,8 @@ importers:
   packages/blaxel:
     dependencies:
       '@blaxel/core':
-        specifier: ^0.2.75
-        version: 0.2.75(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.2.89
+        version: 0.2.89(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -1309,14 +1309,51 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/railway:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+      railway:
+        specifier: ^3.1.1
+        version: 3.1.1
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/runloop:
     dependencies:
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
       '@runloop/api-client':
-        specifier: ^1.21.0
-        version: 1.21.0
+        specifier: ^1.23.0
+        version: 1.23.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -1506,8 +1543,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       tensorlake:
-        specifier: 0.5.31
-        version: 0.5.31(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: 0.5.33
+        version: 0.5.33(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2126,8 +2163,8 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@blaxel/core@0.2.75':
-    resolution: {integrity: sha512-EvRVFEqMn8wZ0iJaUhRvqquU4vSfYcUrsmm9mIbCpY36C1wh9C2qBuPZlPRmEf8O+VAfVD6gr1VXYNXofZq5BA==}
+  '@blaxel/core@0.2.89':
+    resolution: {integrity: sha512-2lWvXqpJ+tFqIroHvDahrlKnu0dSlleE4kQihX9xrULVVlMGqIPjOWDFs56YU3FMSd0yviG9P+wjqBWVV1vXGQ==}
     engines: {node: '>=18'}
 
   '@borewit/text-codec@0.2.1':
@@ -2991,6 +3028,11 @@ packages:
   '@freestyle-sh/with-type-run-code@0.2.8':
     resolution: {integrity: sha512-xvtZRlWJWS5a+q6iLEY1T1dy8z2PIT3y1q81fm+jxR9rj4V+a71QvueYyOmfZgrq1oigvbDQx1F6R04DMnxTPA==}
 
+  '@graphql-typed-document-node/core@3.2.0':
+    resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
+    peerDependencies:
+      graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
+
   '@grpc/grpc-js@1.13.4':
     resolution: {integrity: sha512-GsFaMXCkMqkKIvwCQjCrwH+GHbPKBjhwo/8ZuUkWHqbI73Kky9I+pQltrlT0+MWpedCoosda53lgjYfyEPgxBg==}
     engines: {node: '>=12.10.0'}
@@ -3783,8 +3825,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@runloop/api-client@1.21.0':
-    resolution: {integrity: sha512-gDPXEo5shVmLcD7LU7/B+kqmw/Y+r2ZrTRD2BHW+pBpSgRFJ9KrOdYF/bwi6QzrRuxnOaouLlFD8JQUgIdD7qg==}
+  '@runloop/api-client@1.23.0':
+    resolution: {integrity: sha512-cAuQYNHbgLeXMocQv3EOSkALl3i3JD3zVdSM7SpeMohScA5AxRvbEAtFUwRILuo6Hkg/nm/E831gBcH9Ghsi/g==}
 
   '@secure-exec/browser@0.1.1-rc.3':
     resolution: {integrity: sha512-syjym68632Yzba6Uu9tfnd2KGHTHoiOMTg3hnYRxs4t2RrTfzKm3fWOBVmOZHaZT7ECMCItXerDfYmH05tbHDg==}
@@ -5852,6 +5894,10 @@ packages:
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
 
+  graphql@16.14.2:
+    resolution: {integrity: sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA==}
+    engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
+
   handlebars@4.7.8:
     resolution: {integrity: sha512-vafaFqs8MZkRrSX7sFVUdo3ap/eNiLnb4IakshzvP56X5Nr1iGKAIqdX6tMlm6HcNRIkr6AxO5jFEoJzzpT8aQ==}
     engines: {node: '>=0.4.7'}
@@ -7074,6 +7120,11 @@ packages:
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
 
+  railway@3.1.1:
+    resolution: {integrity: sha512-Oy2F5oIey8KXFJwlka618J/pX0Qi+0kGvfH88eaJNb8C5O0Ba9CcVxguanN6MZEI1sXGMfFp2i3GKvNXQDoM2Q==}
+    engines: {node: '>=22'}
+    hasBin: true
+
   randombytes@2.1.0:
     resolution: {integrity: sha512-vYl3iOX+4CKUWuxGi9Ukhie6fsqXqS9FE2Zaic4tNFD2N2QQaXOMFbuKK4QmDHC0JO6B1Zp41J0LpT0oR68amQ==}
 
@@ -7602,8 +7653,8 @@ packages:
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
 
-  tensorlake@0.5.31:
-    resolution: {integrity: sha512-uZrbQmT77VDig6mLnkfxIoETKug4AN5a1VKIULN5b/PeaVhU0NkNJvjgh88JkJPGLjMFabS7u+bC7xNyXfjnEw==}
+  tensorlake@0.5.33:
+    resolution: {integrity: sha512-9TX/hKkEL7w6tbZy/yKAJ522Fps9kMkGcoCKibb4XT7OANmwdS3A5GLLsq4ufkVeSxQjaswnmVUoghzFzF1XtQ==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -7857,8 +7908,8 @@ packages:
     resolution: {integrity: sha512-3O9Tf67pGhgOv9jM35AbhkXAKi13f3oy3aE4CSgr+TckGeY+/iu97ZXN+J7DpHPzLbVApFd1IFhcnBjREYXYcg==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.2.0:
-    resolution: {integrity: sha512-Z+4Hx9GE26Lh9Upwfnc8C7SsrpBPGaM/Gm6kMFtiG7c+5IvQKlXi/t+9x9DrrCh29cww5TSP9YdVaBcnLDs5fQ==}
+  undici@8.3.0:
+    resolution: {integrity: sha512-TkUDgb6tl7KOGZ+7e8E3d2FYgUQgF6z5YypqjWmixVQSQERFcVrVg0ySADm2LVLRh5ljAaHTCR5Fmz3Q34rB7Q==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.14:
@@ -9219,7 +9270,7 @@ snapshots:
       - debug
       - utf-8-validate
 
-  '@blaxel/core@0.2.75(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@blaxel/core@0.2.89(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
       '@modelcontextprotocol/sdk': 1.26.0(zod@3.25.76)
@@ -9938,6 +9989,10 @@ snapshots:
   '@freestyle-sh/with-type-run-code@0.2.8':
     dependencies:
       freestyle-sandboxes: 0.1.34
+
+  '@graphql-typed-document-node/core@3.2.0(graphql@16.14.2)':
+    dependencies:
+      graphql: 16.14.2
 
   '@grpc/grpc-js@1.13.4':
     dependencies:
@@ -10890,7 +10945,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@runloop/api-client@1.21.0':
+  '@runloop/api-client@1.23.0':
     dependencies:
       '@types/node': 18.19.123
       '@types/node-fetch': 2.6.13
@@ -10899,7 +10954,8 @@ snapshots:
       form-data-encoder: 1.7.2
       formdata-node: 4.4.1
       node-fetch: 2.7.0
-      tar: 7.5.9
+      tar: 7.5.15
+      undici: 7.26.0
       uuidv7: 1.1.0
       zod: 3.25.76
     transitivePeerDependencies:
@@ -13706,6 +13762,8 @@ snapshots:
 
   graphemer@1.4.0: {}
 
+  graphql@16.14.2: {}
+
   handlebars@4.7.8:
     dependencies:
       minimist: 1.2.8
@@ -14969,6 +15027,12 @@ snapshots:
 
   queue-microtask@1.2.3: {}
 
+  railway@3.1.1:
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.2)
+      graphql: 16.14.2
+      tsx: 4.20.3
+
   randombytes@2.1.0:
     dependencies:
       safe-buffer: 5.2.1
@@ -15649,9 +15713,9 @@ snapshots:
       - bare-abort-controller
     optional: true
 
-  tensorlake@0.5.31(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  tensorlake@0.5.33(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      undici: 8.2.0
+      undici: 8.3.0
       ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
@@ -15911,7 +15975,7 @@ snapshots:
 
   undici@7.26.0: {}
 
-  undici@8.2.0: {}
+  undici@8.3.0: {}
 
   unenv@2.0.0-rc.14:
     dependencies:

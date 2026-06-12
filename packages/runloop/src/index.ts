@@ -65,6 +65,7 @@ function getRunloopClient(config: RunloopConfig): RunloopSDK {
 
   const client = new RunloopSDK({
     bearerToken: apiKey,
+    http2: true,
   });
   clientCache.set(config, client);
   return client;
