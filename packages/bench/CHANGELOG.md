@@ -1,5 +1,11 @@
 # @computesdk/bench
 
+## 0.1.8
+
+### Patch Changes
+
+- b703742: Release benchmark worker heartbeat coalescing fixes and artifact upload response typing.
+
 ## 0.1.7
 
 ### Patch Changes
