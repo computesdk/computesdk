@@ -1,9 +1,12 @@
 {
-  "name": "@computesdk/blaxel",
-  "version": "1.6.16",
-  "description": "Blaxel provider for ComputeSDK - lightweight cloud sandboxes for code execution",
+  "name": "@computesdk/railway",
+  "version": "2.0.0",
+  "description": "Railway Sandboxes provider for ComputeSDK - run commands in Railway-hosted sandboxes",
   "author": "ComputeSDK",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -28,24 +31,23 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@blaxel/core": "^0.2.89",
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "railway": "^3.1.1"
   },
   "keywords": [
     "computesdk",
-    "blaxel",
+    "railway",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "provider",
-    "containers"
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/blaxel"
+    "directory": "packages/railway"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {
