@@ -240,10 +240,6 @@ importers:
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
   packages/bench:
-    dependencies:
-      nanoid:
-        specifier: ^5.1.6
-        version: 5.1.9
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
