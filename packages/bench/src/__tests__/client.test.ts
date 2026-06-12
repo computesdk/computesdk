@@ -355,7 +355,10 @@ describe('createBenchmarkClient', () => {
       }
       if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
       if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
-      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/heartbeat')) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      }
       throw new Error(`unexpected request: ${url}`);
     });
 
@@ -375,6 +378,64 @@ describe('createBenchmarkClient', () => {
     expect(order).toEqual(['progress', 'step']);
     expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).currentStep === 'pause')).toBe(true);
     expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).concurrency?.[0]?.target === 1)).toBe(true);
+  });
+
+  it('deduplicates readiness polling across concurrent tasks for the same step', async () => {
+    const order: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 4, count: 5 }, targetConcurrency: 5 }) });
+      if (url.endsWith('/progress')) {
+        order.push('progress');
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return jsonResponse(progressResponse());
+      }
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task: defineTask('dedupe-readiness', [
+        defineStep('pause', { readiness: 'poll', readyPollIntervalMs: 1 }, () => undefined),
+      ]),
+    });
+
+    expect(order).toEqual(['progress']);
+  });
+
+  it('caps heartbeat concurrency samples to the platform limit', async () => {
+    const seen: Array<{ url: string; body: unknown }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 }, targetConcurrency: 1 }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task: async ({ taskIndex, step }) => {
+        await Promise.all(Array.from({ length: 25 }, (_, index) => (
+          step(`step-${index}`, () => new Promise((resolve) => setTimeout(resolve, 5)))
+        )));
+      },
+    });
+
+    const heartbeat = seen.find((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).concurrency?.length === 20);
+    expect((heartbeat?.body as any).concurrency).toHaveLength(20);
+    expect((heartbeat?.body as any).currentStep).toBe('step-0');
   });
 
   it('only polls progress for explicitly polled steps', async () => {
