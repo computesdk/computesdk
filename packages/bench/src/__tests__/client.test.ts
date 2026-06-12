@@ -434,6 +434,7 @@ describe('createBenchmarkClient', () => {
     });
 
     const heartbeat = seen.find((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).concurrency?.length === 20);
+    expect(heartbeat).toBeDefined();
     expect((heartbeat?.body as any).concurrency).toHaveLength(20);
     expect((heartbeat?.body as any).currentStep).toBe('step-0');
   });

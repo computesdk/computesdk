@@ -510,13 +510,9 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           .slice(0, MAX_HEARTBEAT_CONCURRENCY_SAMPLES);
       }
 
-      function currentStep(): string | null {
-        const sample = concurrencySamples()[0];
-        return sample?.step ?? null;
-      }
-
       async function sendHeartbeat(): Promise<void> {
-        const step = currentStep();
+        const concurrency = concurrencySamples();
+        const step = concurrency[0]?.step ?? null;
         await client.heartbeatWorker(options.benchmarkSlug, options.runId, claimed.workerId, {
           attemptId: claimed.attemptId,
           progressDone: doneCount,
@@ -524,7 +520,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           progressErrors: errorCount,
           progressTotal: taskIndices.length,
           ...(step ? { currentStep: step } : {}),
-          concurrency: concurrencySamples(),
+          concurrency,
         });
       }
 
