@@ -499,7 +499,16 @@ describe('createBenchmarkClient', () => {
         return jsonResponse({ items: [{ artifactId: 'artifact_2', kind: 'meta.json' }] });
       }
       if (url.endsWith('/benchmarks/scale/results?limit=5') && init?.method === 'GET') {
-        return jsonResponse({ benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale' }, generatedAt: new Date().toISOString(), items: [] });
+        return jsonResponse({
+          benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale' },
+          generatedAt: new Date().toISOString(),
+          analytics: { status: 'unavailable', query: 'unavailable', error: 'Timeout error.' },
+          items: [{
+            run: { id: 'run_1' },
+            analytics: { status: 'pending', eventBatches: 1, persisted: 0, queued: 1, failed: 0, imports: { pending: 0, importing: 0, imported: 0, failed: 0, missing: 1 } },
+            participants: [],
+          }],
+        });
       }
       if (url.endsWith('/runs/run_1/results') && init?.method === 'GET') {
         return jsonResponse({ benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale' }, run: { id: 'run_1', status: 'completed', totalTasks: 1, workerCount: 1 }, generatedAt: new Date().toISOString(), overall: { taskCount: 1 }, participants: [], steps: [] });
@@ -528,7 +537,11 @@ describe('createBenchmarkClient', () => {
     })).resolves.toMatchObject({ artifactId: 'artifact_1' });
     await expect(client.listRunArtifacts('scale', 'run_1')).resolves.toMatchObject([{ artifactId: 'artifact_1' }]);
     await expect(client.listWorkerArtifacts('scale', 'run_1', 'worker_1')).resolves.toMatchObject([{ artifactId: 'artifact_2' }]);
-    await expect(client.getBenchmarkResults('scale', { limit: 5 })).resolves.toMatchObject({ benchmark: { slug: 'scale' }, items: [] });
+    await expect(client.getBenchmarkResults('scale', { limit: 5 })).resolves.toMatchObject({
+      benchmark: { slug: 'scale' },
+      analytics: { status: 'unavailable', query: 'unavailable' },
+      items: [{ analytics: { status: 'pending' }, participants: [] }],
+    });
     await expect(client.getRunResults('scale', 'run_1')).resolves.toMatchObject({ run: { id: 'run_1' }, participants: [], steps: [] });
     await expect(client.getRunTaskResults('scale', 'run_1', { bucketSize: 10, failureLimit: 2 })).resolves.toMatchObject({ bucketSize: 10, buckets: [], failures: [] });
     await expect(client.getRunTimeline('scale', 'run_1', { bucketMs: 1000 })).resolves.toMatchObject({ eventRate: { bucketMs: 1000 }, concurrency: { points: [] } });

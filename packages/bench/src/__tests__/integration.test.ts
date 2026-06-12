@@ -139,7 +139,12 @@ describeIntegration('benchmark orchestrator integration', () => {
 
       const overviewResults = await client.getBenchmarkResults(slug, { limit: 5 });
       expect(overviewResults.benchmark.slug).toBe(slug);
+      expect(['ready', 'pending', 'unavailable', 'failed']).toContain(overviewResults.analytics.status);
+      expect(['available', 'unavailable']).toContain(overviewResults.analytics.query);
       expect(Array.isArray(overviewResults.items)).toBe(true);
+      for (const item of overviewResults.items) {
+        expect(['ready', 'pending', 'unavailable', 'failed']).toContain(item.analytics.status);
+      }
 
       const runResults = await client.getRunResults(slug, run.id);
       expect(runResults.run.id).toBe(run.id);

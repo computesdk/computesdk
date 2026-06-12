@@ -275,14 +275,39 @@ export interface BenchmarkResultsOverviewInput {
   limit?: number;
 }
 
+export type BenchmarkAnalyticsReadiness = 'ready' | 'pending' | 'unavailable' | 'failed';
+
+export interface BenchmarkRunAnalyticsSummary {
+  status: BenchmarkAnalyticsReadiness;
+  eventBatches: number;
+  persisted: number;
+  queued: number;
+  failed: number;
+  imports: {
+    pending: number;
+    importing: number;
+    imported: number;
+    failed: number;
+    missing: number;
+  };
+}
+
+export interface BenchmarkResultsOverviewAnalytics {
+  status: BenchmarkAnalyticsReadiness;
+  query: 'available' | 'unavailable';
+  error?: string;
+}
+
 export interface BenchmarkResultsOverviewRun {
   run: BenchmarkRun;
+  analytics: BenchmarkRunAnalyticsSummary;
   participants: Array<BenchmarkParticipantResultSummary & { runId: string }>;
 }
 
 export interface BenchmarkResultsOverview {
   benchmark: Pick<BenchmarkResource, 'id' | 'slug' | 'name' | 'kind'>;
   generatedAt: string;
+  analytics: BenchmarkResultsOverviewAnalytics;
   items: BenchmarkResultsOverviewRun[];
 }
 
