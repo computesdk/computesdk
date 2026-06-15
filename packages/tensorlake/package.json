@@ -30,7 +30,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "tensorlake": "0.5.33"
+    "tensorlake": "0.5.40"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",

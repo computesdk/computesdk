@@ -1539,8 +1539,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       tensorlake:
-        specifier: 0.5.33
-        version: 0.5.33(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: 0.5.40
+        version: 0.5.40(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -7649,8 +7649,8 @@ packages:
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
 
-  tensorlake@0.5.33:
-    resolution: {integrity: sha512-9TX/hKkEL7w6tbZy/yKAJ522Fps9kMkGcoCKibb4XT7OANmwdS3A5GLLsq4ufkVeSxQjaswnmVUoghzFzF1XtQ==}
+  tensorlake@0.5.40:
+    resolution: {integrity: sha512-ljmSDBfwOhzWDhag5lc5YfIEj0mfAt8n0eZG1lyfXv8xUaNtIQXv5WlzVc2vm0c11mU74hbY8v7g31ic3qwOSA==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -15709,7 +15709,7 @@ snapshots:
       - bare-abort-controller
     optional: true
 
-  tensorlake@0.5.33(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  tensorlake@0.5.40(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       undici: 8.3.0
       ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
