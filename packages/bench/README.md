@@ -196,6 +196,39 @@ client.failWorker(benchmarkSlug, runId, workerId, attemptId, error)
 client.runWorker(options)
 ```
 
+For custom coordinators that do not fit `defineWorker`, use the best-effort reporter wrapper:
+
+```ts
+const reporter = await BenchmarkReporter.claim({
+  benchmarkSlug: 'scale',
+  runId,
+  participantSlug: 'e2b',
+  processKind: 'container',
+  processKey: instanceId,
+});
+
+reporter?.setProgress({ done, inFlight, errors });
+reporter?.recordResult(record);
+await reporter?.waitForStepReady({ step: 'ready.barrier', timeoutMs: 15 * 60_000 });
+await reporter?.uploadArtifact({
+  kind: 'log',
+  name: 'coordinator.log',
+  contentType: 'text/plain; charset=utf-8',
+  body: logText,
+});
+await reporter?.finish(false);
+```
+
+`BenchmarkReporter` swallows platform telemetry failures for claim, heartbeat, result flushing, artifact upload, and finish calls. Benchmark work can continue even when reporting is temporarily unavailable.
+
+For coordinator health artifacts, sample system metrics:
+
+```ts
+const metrics = createSystemMetricsCollector();
+const samples = [metrics.sample()];
+metrics.stop();
+```
+
 `client.getRunProgress(...)` returns a run summary plus per-participant worker, task, and concurrency progress:
 
 ```ts

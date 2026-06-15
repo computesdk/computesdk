@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BenchmarkApiError, createBenchmarkClient, defineBench, defineStep, defineTask, defineWorker } from '../client';
+import { createSystemMetricsCollector } from '../metrics';
+import { BenchmarkReporter } from '../reporter';
 import type { BenchmarkAssignment } from '../types';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -711,6 +713,58 @@ describe('createBenchmarkClient', () => {
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/results/imports',
       'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/release',
     ]);
+  });
+
+  it('reports custom coordinator progress, barriers, artifacts, and finish best-effort', async () => {
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 5, end: 7, count: 2 }, targetConcurrency: 2 }) });
+      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/progress')) return jsonResponse(progressResponse());
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/workers/00000000-0000-4000-8000-000000000002/artifacts')) return jsonResponse({ artifactId: 'artifact_1', uploadUrl: 'https://upload.test' });
+      if (url === 'https://upload.test') return new Response(null, { status: 200 });
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const reporter = await BenchmarkReporter.claim({
+      baseUrl: 'https://platform.test/api/v1',
+      fetch: fetchMock as typeof fetch,
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      batchSize: 1,
+    });
+
+    expect(reporter).not.toBeNull();
+    if (!reporter) return;
+
+    reporter.setProgress({ done: 0, inFlight: 1, errors: 0 });
+    reporter.recordResult({ taskIndex: 5, status: 'success', latencyMs: 1 });
+    await reporter.waitForStepReady({ step: 'pause', timeoutMs: 100, pollIntervalMs: 1 });
+    await expect(reporter.uploadArtifact({ kind: 'log', name: 'coordinator.log', body: 'log\n' })).resolves.toMatchObject({ artifactId: 'artifact_1' });
+    await reporter.finish(false);
+
+    expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).currentStep === 'pause')).toBe(true);
+    expect(seen.some((entry) => entry.url.endsWith('/events') && (entry.body as any).records?.[0]?.taskIndex === 5)).toBe(true);
+    expect(seen.some((entry) => entry.url === 'https://upload.test' && entry.method === 'PUT')).toBe(true);
+    expect(seen.at(-1)?.url).toContain('/complete');
+  });
+
+  it('samples system metrics for coordinator artifacts', () => {
+    const collector = createSystemMetricsCollector();
+    const sample = collector.sample();
+    collector.stop();
+
+    expect(sample.ts).toEqual(expect.any(String));
+    expect(sample.uptimeMs).toEqual(expect.any(Number));
+    expect(sample.memRssMb).toBeGreaterThan(0);
+    expect(sample.eventLoopP99Ms).toEqual(expect.any(Number));
   });
 
   it('creates workers from a reusable bench definition', async () => {

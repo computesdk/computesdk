@@ -7,6 +7,8 @@ export {
   defineWorker,
   runBenchmarkWorker,
 } from './client';
+export { BenchmarkReporter, claimBenchmarkReporter } from './reporter';
+export { createSystemMetricsCollector } from './metrics';
 export type {
   BenchDefinition,
   BenchmarkAssignment,
@@ -78,4 +80,17 @@ export type {
   WorkerTask,
   UpsertBenchmarkInput,
   UpsertParticipantInput,
+  UploadWorkerArtifactInput,
 } from './types';
+export type {
+  BenchmarkReporterArtifactInput,
+  BenchmarkReporterBarrierInput,
+  BenchmarkReporterBarrierResult,
+  BenchmarkReporterConfig,
+  BenchmarkReporterHeartbeatInput,
+  BenchmarkReporterProgress,
+} from './reporter';
+export type {
+  BenchmarkSystemMetricsCollector,
+  BenchmarkSystemMetricsSample,
+} from './metrics';
