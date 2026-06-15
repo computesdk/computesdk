@@ -24,6 +24,7 @@ import type {
   CreateRunInput,
   DefineBenchOptions,
   DefineStepOptions,
+  DefineTaskOptions,
   DefinedStep,
   DefinedTask,
   DefineWorkerOptions,
@@ -161,17 +162,25 @@ async function runWorkerTask(task: RunWorkerOptions['task'], context: RunWorkerC
 
   const state: Record<string, unknown> = {};
   const data: JsonObject = { taskName: task.name };
-  for (const definedStep of task.steps) {
-    const stepData = await context.step(
-      definedStep.name,
-      () => definedStep.fn({
-        assignment: context.assignment,
-        taskIndex: context.taskIndex,
-        state,
-      }),
-      definedStep.options,
-    );
-    mergeJsonObjects(data, stepData);
+  try {
+    for (const definedStep of task.steps) {
+      const stepData = await context.step(
+        definedStep.name,
+        () => definedStep.fn({
+          assignment: context.assignment,
+          taskIndex: context.taskIndex,
+          state,
+        }),
+        definedStep.options,
+      );
+      mergeJsonObjects(data, stepData);
+    }
+  } finally {
+    await task.options?.cleanup?.({
+      assignment: context.assignment,
+      taskIndex: context.taskIndex,
+      state,
+    });
   }
 
   return data;
@@ -724,6 +733,7 @@ export function defineStep<TState extends Record<string, unknown> = Record<strin
 export function defineTask<TState extends Record<string, unknown> = Record<string, unknown>>(
   name: string,
   steps: DefinedStep<TState>[],
+  options?: DefineTaskOptions<TState>,
 ): DefinedTask<TState> {
   if (name.trim() === '') {
     throw new Error('Benchmark task name must be non-empty.');
@@ -738,7 +748,7 @@ export function defineTask<TState extends Record<string, unknown> = Record<strin
     }
     names.add(step.name);
   }
-  return { name, steps };
+  return { name, steps, options };
 }
 
 export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {

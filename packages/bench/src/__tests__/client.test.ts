@@ -333,6 +333,75 @@ describe('createBenchmarkClient', () => {
     ]);
   });
 
+  it('runs defined task cleanup after a step fails', async () => {
+    const cleaned: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/fail')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const task = defineTask('sandbox.lifecycle', [
+      defineStep('create', ({ state }) => {
+        state.sandboxId = 'sbx_0';
+      }),
+      defineStep('exec.first-command', () => {
+        throw new TypeError('command failed');
+      }),
+    ], {
+      cleanup: ({ state }) => {
+        cleaned.push(String(state.sandboxId));
+      },
+    });
+
+    const result = await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task,
+    });
+
+    expect(cleaned).toEqual(['sbx_0']);
+    expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'TypeError' });
+    expect(result.records[0].steps).toMatchObject([
+      { name: 'create', status: 'success' },
+      { name: 'exec.first-command', status: 'error', errorCode: 'TypeError' },
+    ]);
+  });
+
+  it('fails a defined task when cleanup fails after successful steps', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/fail')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const task = defineTask('cleanup-failure', [
+      defineStep('create', () => ({ sandboxId: 'sbx_0' })),
+    ], {
+      cleanup: () => {
+        throw new Error('destroy failed');
+      },
+    });
+
+    const result = await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task,
+    });
+
+    expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'Error' });
+    expect(result.records[0].data).toMatchObject({ errorMessage: 'destroy failed' });
+    expect(result.records[0].steps).toMatchObject([{ name: 'create', status: 'success' }]);
+  });
+
   it('rejects duplicate defined task step names', () => {
     expect(() => defineTask('duplicate-steps', [
       defineStep('pause', () => undefined),

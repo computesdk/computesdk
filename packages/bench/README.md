@@ -131,6 +131,27 @@ Step functions receive:
 
 If a step returns a JSON object, it is merged into the task result `data` object. Defined tasks also include `taskName` in `data`.
 
+`defineTask(name, steps, options)` supports task cleanup:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `cleanup` | `(context) => Promise<void> \| void` | Runs after the task finishes, whether steps succeeded or failed. Use shared `state` to tear down resources created by earlier steps. |
+
+```ts
+defineTask('sandbox.lifecycle', [
+  defineStep('create', async ({ state }) => {
+    state.sandbox = await compute.sandbox.create();
+  }),
+  defineStep('exec', async ({ state }) => {
+    await state.sandbox.runCommand('node -v');
+  }),
+], {
+  cleanup: async ({ state }) => {
+    await state.sandbox?.destroy?.();
+  },
+});
+```
+
 `defineStep(name, options, fn)` supports step-level progress coordination:
 
 | Option | Type | Description |

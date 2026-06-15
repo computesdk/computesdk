@@ -526,6 +526,8 @@ export interface StepContext<TState extends Record<string, unknown> = Record<str
   state: TState;
 }
 
+export type CleanupContext<TState extends Record<string, unknown> = Record<string, unknown>> = StepContext<TState>;
+
 export interface DefineStepOptions {
   /** Report this step as active in heartbeat concurrency samples. Defaults to true. */
   reportConcurrency?: boolean;
@@ -545,9 +547,18 @@ export interface DefinedStep<TState extends Record<string, unknown> = Record<str
   fn: (context: StepContext<TState>) => Promise<JsonObject | void> | JsonObject | void;
 }
 
+export interface DefineTaskOptions<TState extends Record<string, unknown> = Record<string, unknown>> {
+  /**
+   * Runs after the task finishes, whether it succeeded or failed.
+   * Use this to tear down resources stored in task state.
+   */
+  cleanup?: (context: CleanupContext<TState>) => Promise<void> | void;
+}
+
 export interface DefinedTask<TState extends Record<string, unknown> = Record<string, unknown>> {
   name: string;
   steps: DefinedStep<TState>[];
+  options?: DefineTaskOptions<TState>;
 }
 
 export type TaskFunction = (context: RunWorkerContext) => Promise<JsonObject | void> | JsonObject | void;
