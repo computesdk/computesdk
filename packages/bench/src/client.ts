@@ -48,8 +48,9 @@ import type {
 } from './types';
 
 const DEFAULT_BASE_URL = 'https://platform.computesdk.com/api/v1';
-const DEFAULT_BATCH_SIZE = 100;
+const DEFAULT_BATCH_SIZE = 1000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
+const DEFAULT_FLUSH_INTERVAL_MS = 30_000;
 const DEFAULT_READY_POLL_INTERVAL_MS = 1000;
 const MAX_TASK_RESULT_RECORDS = 5000;
 const MAX_TASK_RECORD_STEPS = 100;
@@ -475,6 +476,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
     async runWorker(options: RunWorkerOptions): Promise<RunWorkerResult> {
       if (options.concurrency !== undefined) validatePositiveInteger('concurrency', options.concurrency);
       if (options.batchSize !== undefined) validateBatchSize(options.batchSize);
+      if (options.flushIntervalMs !== undefined) validatePositiveInteger('flushIntervalMs', options.flushIntervalMs);
 
       const assignment = await client.claimWorker(options.benchmarkSlug, options.runId, options.participantSlug, {
         processKind: options.processKind,
@@ -576,9 +578,10 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       }, options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
       heartbeat.unref?.();
 
-      async function flush(isFinal: boolean): Promise<void> {
+      async function flush(isFinal: boolean, force = false): Promise<void> {
         flushChain = flushChain.then(async () => {
-          while (pending.length >= batchSize || (isFinal && pending.length > 0)) {
+          if (force && doneCount >= taskIndices.length) return;
+          while (pending.length >= batchSize || ((isFinal || force) && pending.length > 0)) {
             const batch = pending.splice(0, batchSize);
             await sendTaskResults({
               benchmarkSlug: options.benchmarkSlug,
@@ -594,6 +597,11 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         });
         await flushChain;
       }
+
+      const resultFlush = setInterval(() => {
+        if (doneCount < taskIndices.length) void flush(false, true).catch(() => {});
+      }, options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS);
+      resultFlush.unref?.();
 
       try {
         await sendHeartbeat().catch(() => {});
@@ -691,6 +699,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         throw error;
       } finally {
         clearInterval(heartbeat);
+        clearInterval(resultFlush);
       }
     },
   };
@@ -754,6 +763,7 @@ export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {
         processKey: options.processKey,
         concurrency: overrides.concurrency ?? options.concurrency,
         batchSize: overrides.batchSize ?? options.batchSize,
+        flushIntervalMs: overrides.flushIntervalMs ?? options.flushIntervalMs,
         heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
         readyPollIntervalMs: overrides.readyPollIntervalMs ?? options.readyPollIntervalMs,
         task: options.task,
@@ -780,6 +790,7 @@ export function defineBench(options: DefineBenchOptions): BenchDefinition {
         processKey: workerOptions.processKey,
         concurrency: workerOptions.concurrency ?? options.concurrency,
         batchSize: workerOptions.batchSize ?? options.batchSize,
+        flushIntervalMs: workerOptions.flushIntervalMs ?? options.flushIntervalMs,
         heartbeatIntervalMs: workerOptions.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
         readyPollIntervalMs: workerOptions.readyPollIntervalMs ?? options.readyPollIntervalMs,
         client: workerOptions.client ?? options.client,

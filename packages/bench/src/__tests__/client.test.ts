@@ -219,6 +219,63 @@ describe('createBenchmarkClient', () => {
     expect(seen.at(-1)?.url).toContain('/complete');
   });
 
+  it('uses 1000 task results as the default worker batch size', async () => {
+    const seen: Array<{ url: string; body: unknown }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 1000, count: 1001 }, targetConcurrency: 25 }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task: async () => undefined,
+    });
+
+    const eventCalls = seen.filter((entry) => entry.url.endsWith('/events'));
+    expect(eventCalls).toHaveLength(2);
+    expect((eventCalls[0].body as any).records).toHaveLength(1000);
+    expect((eventCalls[1].body as any).records).toHaveLength(1);
+    expect(eventCalls.map((entry) => (entry.body as any).isFinal)).toEqual([false, true]);
+  });
+
+  it('flushes partial task result batches on the safety interval', async () => {
+    const seen: Array<{ url: string; body: unknown }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 1, count: 2 }, targetConcurrency: 1 }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      batchSize: 1000,
+      flushIntervalMs: 1,
+      task: async ({ taskIndex }) => {
+        if (taskIndex === 1) await new Promise((resolve) => setTimeout(resolve, 20));
+      },
+    });
+
+    const eventCalls = seen.filter((entry) => entry.url.endsWith('/events'));
+    expect(eventCalls).toHaveLength(2);
+    expect((eventCalls[0].body as any).records).toHaveLength(1);
+    expect((eventCalls[0].body as any).isFinal).toBe(false);
+    expect((eventCalls[1].body as any).records).toHaveLength(1);
+    expect((eventCalls[1].body as any).isFinal).toBe(true);
+  });
+
   it('omits currentStep from idle progress heartbeats', async () => {
     const seen: Array<{ url: string; body: unknown }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -265,6 +322,14 @@ describe('createBenchmarkClient', () => {
       batchSize: 5001,
       task: async () => undefined,
     })).rejects.toThrow('batchSize');
+    await expect(client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      concurrency: 1,
+      flushIntervalMs: 0,
+      task: async () => undefined,
+    })).rejects.toThrow('flushIntervalMs');
   });
 
   it('fails the worker when any task fails', async () => {
