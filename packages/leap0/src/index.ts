@@ -105,7 +105,12 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
         try {
           let fullCommand = command;
           if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
+            const envPrefix = Object.entries(options.env).map(([k, v]) => {
+              if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) {
+                throw new Error(`Invalid environment variable name: ${k}`);
+              }
+              return `${k}="${escapeShellArg(String(v))}"`;
+            }).join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
