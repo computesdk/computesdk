@@ -633,10 +633,10 @@ describe('createBenchmarkClient', () => {
         return jsonResponse({
           benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale' },
           generatedAt: new Date().toISOString(),
-          analytics: { status: 'unavailable', query: 'unavailable', error: 'Timeout error.' },
+          analytics: { status: 'complete', query: 'unavailable', error: 'Timeout error.' },
           items: [{
             run: { id: 'run_1' },
-            analytics: { status: 'pending', eventBatches: 1, persisted: 0, queued: 1, failed: 0, imports: { pending: 0, importing: 0, imported: 0, failed: 0, missing: 1 } },
+            analytics: { status: 'complete', eventBatches: 1, persisted: 1, queued: 0, failed: 0, imports: { pending: 0, importing: 0, imported: 1, failed: 0, missing: 0 } },
             participants: [],
           }],
         });
@@ -670,8 +670,8 @@ describe('createBenchmarkClient', () => {
     await expect(client.listWorkerArtifacts('scale', 'run_1', 'worker_1')).resolves.toMatchObject([{ artifactId: 'artifact_2' }]);
     await expect(client.getBenchmarkResults('scale', { limit: 5 })).resolves.toMatchObject({
       benchmark: { slug: 'scale' },
-      analytics: { status: 'unavailable', query: 'unavailable' },
-      items: [{ analytics: { status: 'pending' }, participants: [] }],
+      analytics: { status: 'complete', query: 'unavailable' },
+      items: [{ analytics: { status: 'complete' }, participants: [] }],
     });
     await expect(client.getRunResults('scale', 'run_1')).resolves.toMatchObject({ run: { id: 'run_1' }, participants: [], steps: [] });
     await expect(client.getRunTaskResults('scale', 'run_1', { bucketSize: 10, failureLimit: 2 })).resolves.toMatchObject({ bucketSize: 10, buckets: [], failures: [] });
