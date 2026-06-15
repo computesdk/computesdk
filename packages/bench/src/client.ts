@@ -44,6 +44,7 @@ import type {
   UpdateWorkerInput,
   UpsertBenchmarkInput,
   UpsertParticipantInput,
+  UploadWorkerArtifactInput,
   WorkerConcurrencySample,
   WorkerHeartbeatInput,
 } from './types';
@@ -140,6 +141,15 @@ function validateBatchSize(value: number): void {
 
 function normalizeArtifacts(data: { items?: BenchmarkArtifact[]; artifacts?: BenchmarkArtifact[] }): BenchmarkArtifact[] {
   return data.items ?? data.artifacts ?? [];
+}
+
+function bodySizeBytes(body: UploadWorkerArtifactInput['body']): number | undefined {
+  if (typeof body === 'string') return new TextEncoder().encode(body).byteLength;
+  if (body instanceof Blob) return body.size;
+  if (body instanceof ArrayBuffer) return body.byteLength;
+  if (ArrayBuffer.isView(body)) return body.byteLength;
+  if (body instanceof URLSearchParams) return new TextEncoder().encode(body.toString()).byteLength;
+  return undefined;
 }
 
 function isDefinedTask(task: RunWorkerOptions['task']): task is DefinedTask {
@@ -428,6 +438,36 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         `/benchmarks/${encodePath(benchmarkSlug)}/runs/${encodePath(runId)}/workers/${encodePath(workerId)}/artifacts`,
         input as unknown as JsonObject,
       );
+    },
+
+    async uploadWorkerArtifact(benchmarkSlug, runId, workerId, input: UploadWorkerArtifactInput) {
+      const sizeBytes = bodySizeBytes(input.body);
+      const artifactInput: CreateWorkerArtifactInput = {
+        attemptId: input.attemptId,
+        kind: input.kind,
+        contentType: input.contentType,
+        name: input.name,
+        metadata: sizeBytes === undefined ? input.metadata : { ...input.metadata, sizeBytes },
+      };
+      const response = await client.createWorkerArtifact(benchmarkSlug, runId, workerId, artifactInput);
+      const uploadUrl = response.uploadUrl ?? response.artifact?.uploadUrl;
+      if (!uploadUrl) {
+        throw new Error('Benchmark artifact upload URL is missing.');
+      }
+      const uploadResponse = await doFetch(uploadUrl, {
+        method: 'PUT',
+        headers: input.contentType ? { 'Content-Type': input.contentType } : undefined,
+        body: input.body,
+      });
+      if (!uploadResponse.ok) {
+        const errorBody = await uploadResponse.text().catch(() => '');
+        throw new BenchmarkApiError(
+          `Benchmark artifact upload failed with ${uploadResponse.status}`,
+          uploadResponse.status,
+          errorBody,
+        );
+      }
+      return response;
     },
 
     async listRunArtifacts(benchmarkSlug, runId) {

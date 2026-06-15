@@ -90,7 +90,13 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const headers = init?.headers && !Array.isArray(init.headers) && !(init.headers instanceof Headers)
+        ? init.headers as Record<string, string>
+        : {};
+      const contentType = headers['Content-Type'] ?? headers['content-type'];
+      const body = init?.body && contentType === 'application/json'
+        ? JSON.parse(String(init.body))
+        : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/benchmarks/scale/runs') && init?.method === 'POST') {
@@ -124,7 +130,9 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const body = init?.body && url.startsWith('https://platform.test/')
+        ? JSON.parse(String(init.body))
+        : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/benchmarks/scale') && init?.method === 'PATCH') {
@@ -166,7 +174,7 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/participants/e2b/workers/claim')) {
@@ -617,11 +625,14 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/workers/worker_1/artifacts') && init?.method === 'POST') {
         return jsonResponse({ artifactId: 'artifact_1', uploadUrl: 'https://upload.test', objectKey: 'benchmarks/bench_1/runs/run_1/artifacts/artifact_1' });
+      }
+      if (url === 'https://upload.test' && init?.method === 'PUT') {
+        return new Response(null, { status: 200 });
       }
       if (url.endsWith('/runs/run_1/artifacts') && init?.method === 'GET') {
         return jsonResponse({ artifacts: [{ artifactId: 'artifact_1', kind: 'coordinator.log' }] });
@@ -666,6 +677,14 @@ describe('createBenchmarkClient', () => {
       kind: 'coordinator.log',
       contentType: 'text/plain',
     })).resolves.toMatchObject({ artifactId: 'artifact_1' });
+    await expect(client.uploadWorkerArtifact('scale', 'run_1', 'worker_1', {
+      attemptId: 'attempt_1',
+      kind: 'log',
+      name: 'coordinator.log',
+      contentType: 'text/plain; charset=utf-8',
+      body: 'hello log\n',
+    })).resolves.toMatchObject({ artifactId: 'artifact_1' });
+    expect((seen[1].body as any).metadata).toMatchObject({ sizeBytes: 10 });
     await expect(client.listRunArtifacts('scale', 'run_1')).resolves.toMatchObject([{ artifactId: 'artifact_1' }]);
     await expect(client.listWorkerArtifacts('scale', 'run_1', 'worker_1')).resolves.toMatchObject([{ artifactId: 'artifact_2' }]);
     await expect(client.getBenchmarkResults('scale', { limit: 5 })).resolves.toMatchObject({
@@ -681,6 +700,8 @@ describe('createBenchmarkClient', () => {
 
     expect(seen.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
       'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
+      'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
+      'PUT https://upload.test',
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/artifacts',
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
       'GET https://platform.test/api/v1/benchmarks/scale/results?limit=5',

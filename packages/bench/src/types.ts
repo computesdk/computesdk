@@ -207,6 +207,10 @@ export interface CreateWorkerArtifactInput {
   metadata?: JsonObject;
 }
 
+export interface UploadWorkerArtifactInput extends CreateWorkerArtifactInput {
+  body: BodyInit;
+}
+
 export interface BenchmarkArtifact {
   id?: string;
   artifactId?: string;
@@ -701,6 +705,12 @@ export interface BenchmarkClient {
     runId: string,
     workerId: string,
     input: CreateWorkerArtifactInput,
+  ): Promise<CreateWorkerArtifactResponse>;
+  uploadWorkerArtifact(
+    benchmarkSlug: string,
+    runId: string,
+    workerId: string,
+    input: UploadWorkerArtifactInput,
   ): Promise<CreateWorkerArtifactResponse>;
   listRunArtifacts(benchmarkSlug: string, runId: string): Promise<BenchmarkArtifact[]>;
   listWorkerArtifacts(benchmarkSlug: string, runId: string, workerId: string): Promise<BenchmarkArtifact[]>;

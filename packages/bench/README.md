@@ -173,6 +173,13 @@ client.getWorker(benchmarkSlug, runId, workerId)
 client.updateWorker(benchmarkSlug, runId, workerId, input)
 client.claimWorker(benchmarkSlug, runId, participantSlug, { processKind, processKey })
 client.sendTaskResults({ benchmarkSlug, runId, workerId, attemptId, sequenceNumber, isFinal, records })
+client.uploadWorkerArtifact(benchmarkSlug, runId, workerId, {
+  attemptId,
+  kind: 'log',
+  name: 'coordinator.log',
+  contentType: 'text/plain; charset=utf-8',
+  body: logText,
+})
 client.heartbeatWorker(benchmarkSlug, runId, workerId, {
   attemptId,
   currentStep: 'pause',
