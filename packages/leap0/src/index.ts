@@ -4,14 +4,19 @@
 
 import { Leap0Client } from 'leap0';
 import type { Sandbox as Leap0Sandbox } from 'leap0';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface Leap0Config {
+  /** Leap0 API key - if not provided, will use LEAP0_API_KEY environment variable */
   apiKey?: string;
+  /** Base URL for the Leap0 API (default: https://api.leap0.dev) */
   baseUrl?: string;
+  /** Sandbox domain for URL generation (default: sandbox.leap0.dev) */
   sandboxDomain?: string;
+  /** Client timeout in seconds */
   timeout?: number;
+  /** Default template name to use when creating sandboxes (e.g. 'system/debian:bookworm') */
   template?: string;
 }
 
@@ -38,10 +43,21 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
     sandbox: {
       create: async (config: Leap0Config, options?: CreateSandboxOptions) => {
         const client = createLeap0Client(config);
+
+        const {
+          timeout: _timeout, envs, templateId, snapshotId,
+          name: _name, metadata: _metadata, namespace: _namespace, directory: _directory,
+          ...providerOptions
+        } = options || {};
+
+        // Map universal templateId/snapshotId to Leap0's templateName, with config.template as fallback
+        const templateName = templateId || snapshotId || config.template;
+
         const sandbox = await client.sandboxes.create({
-          templateName: config.template,
-          timeout: options?.timeout ? Math.ceil(options.timeout / 60000) : undefined,
-          envVars: options?.envs,
+          templateName,
+          timeout: _timeout ? Math.ceil(_timeout / 60000) : undefined,
+          envVars: envs,
+          ...providerOptions,
         });
         sandboxToClient.set(sandbox.id, client);
         return { sandbox, sandboxId: sandbox.id };
@@ -87,9 +103,15 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
       runCommand: async (sandbox: Leap0Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
-          const execParams: { command: string; cwd?: string; env?: Record<string, string>; timeout?: number } = { command };
-          if (options?.cwd) execParams.cwd = options.cwd;
-          if (options?.env && Object.keys(options.env).length > 0) execParams.env = options.env;
+          let fullCommand = command;
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
+            fullCommand = `${envPrefix} ${fullCommand}`;
+          }
+          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+
+          const execParams: { command: string; timeout?: number } = { command: fullCommand };
           if (options?.timeout) execParams.timeout = Math.ceil(options.timeout / 1000);
           const result = await sandbox.process.execute(execParams);
           return { stdout: result.stdout || '', stderr: result.stderr || '', exitCode: result.exitCode, durationMs: Date.now() - startTime };
@@ -112,7 +134,16 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
         if (!client) {
           throw new Error(`Cannot get URL for sandbox ${sandbox.id}: no active Leap0 client`);
         }
-        return client.sandboxes.invokeUrl(sandbox.id, '/', urlOptions.port);
+        const protocol = urlOptions.protocol || 'https';
+        if (protocol === 'wss' || protocol === 'ws') {
+          return client.sandboxes.websocketUrl(sandbox.id, '/', urlOptions.port);
+        }
+        const url = client.sandboxes.invokeUrl(sandbox.id, '/', urlOptions.port);
+        // Replace the protocol if it differs from the default https
+        if (protocol !== 'https') {
+          return url.replace(/^https?:\/\//, `${protocol}://`);
+        }
+        return url;
       },
 
       filesystem: {

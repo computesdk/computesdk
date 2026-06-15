@@ -6,4 +6,5 @@ runProviderTestSuite({
   provider: leap0({}),
   supportsFilesystem: true,
   skipIntegration: !process.env.LEAP0_API_KEY,
+  ports: [3000, 8080],
 });

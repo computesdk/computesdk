@@ -25,11 +25,15 @@ import { leap0 } from '@computesdk/leap0';
 
 const compute = leap0({
   apiKey: process.env.LEAP0_API_KEY,
+  template: 'system/debian:bookworm',
 });
 
-// Create sandbox
-const sandbox = await compute.sandbox.create({
-  template: 'system/debian:bookworm',
+// Create sandbox (uses the default template from config)
+const sandbox = await compute.sandbox.create();
+
+// Or override the template at create time via templateId
+const sandbox2 = await compute.sandbox.create({
+  templateId: 'system/code-interpreter:v0.1.0',
 });
 
 // Run a command
@@ -56,5 +60,7 @@ interface Leap0Config {
   sandboxDomain?: string;
   /** Client timeout in seconds */
   timeout?: number;
+  /** Default template name to use when creating sandboxes (e.g. 'system/debian:bookworm') */
+  template?: string;
 }
 ```
