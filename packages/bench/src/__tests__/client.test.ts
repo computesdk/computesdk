@@ -788,6 +788,42 @@ describe('createBenchmarkClient', () => {
     expect(seen.at(-1)?.url).toContain('/complete');
   });
 
+  it('keeps reporter result batches queued when send fails', async () => {
+    const sentSequences: number[] = [];
+    let sendAttempts = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
+
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 5, end: 7, count: 2 }, targetConcurrency: 2 }) });
+      if (url.endsWith('/events')) {
+        sendAttempts += 1;
+        sentSequences.push((body as any).sequenceNumber);
+        if (sendAttempts === 1) return new Response('temporary failure', { status: 503 });
+        return jsonResponse({ eventBatch: { id: `batch_${sendAttempts}` } }, 202);
+      }
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const reporter = await BenchmarkReporter.claim({
+      baseUrl: 'https://platform.test/api/v1',
+      fetch: fetchMock as typeof fetch,
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      batchSize: 1,
+    });
+
+    expect(reporter).not.toBeNull();
+    if (!reporter) return;
+
+    reporter.recordResult({ taskIndex: 5, status: 'success', latencyMs: 1 });
+    await reporter.finish(false);
+
+    expect(sentSequences).toEqual([0, 0]);
+  });
+
   it('samples system metrics for coordinator artifacts', () => {
     const collector = createSystemMetricsCollector();
     const sample = collector.sample();

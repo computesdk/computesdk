@@ -175,16 +175,21 @@ export class BenchmarkReporter {
   flush(isFinal = false): Promise<void> {
     this.flushChain = this.flushChain.then(async () => {
       while (this.pending.length >= this.cfg.batchSize || (isFinal && this.pending.length > 0)) {
-        const batch = this.pending.splice(0, this.cfg.batchSize);
-        await this.client.sendTaskResults({
-          benchmarkSlug: this.cfg.benchmarkSlug,
-          runId: this.cfg.runId,
-          workerId: this.assignment.workerId,
-          attemptId: this.assignment.attemptId,
-          sequenceNumber: this.sequenceNumber,
-          isFinal: isFinal && this.pending.length === 0,
-          records: batch,
-        }).catch(() => {});
+        const batch = this.pending.slice(0, this.cfg.batchSize);
+        try {
+          await this.client.sendTaskResults({
+            benchmarkSlug: this.cfg.benchmarkSlug,
+            runId: this.cfg.runId,
+            workerId: this.assignment.workerId,
+            attemptId: this.assignment.attemptId,
+            sequenceNumber: this.sequenceNumber,
+            isFinal: isFinal && batch.length === this.pending.length,
+            records: batch,
+          });
+        } catch {
+          break;
+        }
+        this.pending.splice(0, batch.length);
         this.sequenceNumber += 1;
       }
     });
