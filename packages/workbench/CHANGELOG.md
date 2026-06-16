@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 27.0.4
+
+### Patch Changes
+
+- Updated dependencies [de20947]
+  - @computesdk/runloop@1.3.53
+
 ## 27.0.3
 
 ### Patch Changes
