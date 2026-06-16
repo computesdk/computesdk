@@ -96,7 +96,15 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
 
         if (options?.env && Object.keys(options.env).length > 0) {
           const prefix = Object.entries(options.env)
-            .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
+            .map(([k, v]) => {
+              // Env var names are POSIX identifiers; reject anything else so a
+              // malicious key (e.g. `x; rm -rf /`, `$(...)`) can't break out of
+              // the assignment and inject a command. Values are escaped below.
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+                throw new Error(`Invalid environment variable name: ${JSON.stringify(k)}`)
+              }
+              return `${k}="${escapeShellArg(String(v))}"`
+            })
             .join(' ')
           fullCommand = `${prefix} ${fullCommand}`
         }
