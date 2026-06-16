@@ -34,7 +34,7 @@ await sandbox.destroy();
 | Field | Env fallback | Notes |
 |---|---|---|
 | `apiKey` | `CREATEOS_SANDBOX_API_KEY` | Required. createos-sandbox API key. |
-| `baseUrl` | `CREATEOS_SANDBOX_BASE_URL` | Control-plane URL. |
+| `baseUrl` | `CREATEOS_SANDBOX_BASE_URL` | Control-plane URL. Optional; defaults to the production control plane. |
 | `shape` | — | Default VM shape (e.g. `s-1vcpu-1gb`). |
 | `rootfs` | — | Default rootfs catalog name / template. |
 | `timeout` | — | Reported `getInfo().timeout` (ms). Informational. |

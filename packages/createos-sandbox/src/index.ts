@@ -32,7 +32,6 @@
 import { CreateosSandboxClient, CreateosSandboxNotFoundError, Sandbox } from "@nodeops-createos/sandbox";
 import type {
   CreateSandboxRequest,
-  CreateosSandboxClientOptions,
   ForkSandboxRequest,
   SandboxStatus,
   Shape,
@@ -86,7 +85,8 @@ const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export interface CreateosConfig {
   /** createos-sandbox API key. Falls back to the CREATEOS_SANDBOX_API_KEY env var. */
   apiKey?: string;
-  /** Control-plane base URL. Falls back to the CREATEOS_SANDBOX_BASE_URL env var. */
+  /** Control-plane base URL. Falls back to the CREATEOS_SANDBOX_BASE_URL env
+   *  var, then the production control plane. */
   baseUrl?: string;
   /** Default shape when create options pin neither `shape` nor cpus/memoryMb. */
   shape?: string;
@@ -120,6 +120,10 @@ export interface CreateosCreateOptions extends CreateSandboxOptions {
   egress?: string[];
 }
 
+/** Production control-plane base URL, used when neither `config.baseUrl` nor
+ *  the CREATEOS_SANDBOX_BASE_URL env var is set. */
+const DEFAULT_BASE_URL = "https://api.sb.createos.sh";
+
 function env(key: string): string | undefined {
   return typeof process !== "undefined" ? process.env?.[key] : undefined;
 }
@@ -132,10 +136,11 @@ function resolveClient(config: CreateosConfig): CreateosSandboxClient {
         "CREATEOS_SANDBOX_API_KEY environment variable.",
     );
   }
-  const baseUrl = config.baseUrl ?? env("CREATEOS_SANDBOX_BASE_URL");
-  const opts: CreateosSandboxClientOptions = { apiKey };
-  if (baseUrl) opts.baseUrl = baseUrl;
-  return new CreateosSandboxClient(opts);
+  // Precedence: explicit config > env var > production default. A blank value
+  // is treated as unset so the next source applies.
+  const baseUrl =
+    config.baseUrl?.trim() || env("CREATEOS_SANDBOX_BASE_URL")?.trim() || DEFAULT_BASE_URL;
+  return new CreateosSandboxClient({ apiKey, baseUrl });
 }
 
 /** True only for a genuine "resource does not exist" (404). Everything else —
