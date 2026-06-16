@@ -655,6 +655,21 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         await flushChain;
       }
 
+      async function runFinishHook(status: 'success' | 'error'): Promise<void> {
+        await options.onFinish?.({
+          assignment: claimed,
+          records,
+          status,
+          client,
+          uploadArtifact(input) {
+            return client.uploadWorkerArtifact(options.benchmarkSlug, options.runId, claimed.workerId, {
+              ...input,
+              attemptId: claimed.attemptId,
+            });
+          },
+        });
+      }
+
       try {
         await sendHeartbeat().catch(() => {});
 
@@ -738,7 +753,14 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
         await flush(true);
 
-        if (records.some((record) => record.status !== 'success')) {
+        const hasErrors = records.some((record) => record.status !== 'success');
+        try {
+          await runFinishHook(hasErrors ? 'error' : 'success');
+        } catch (error) {
+          if (!hasErrors) throw error;
+        }
+
+        if (hasErrors) {
           await client.failWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId, new Error('One or more tasks failed'));
         } else {
           await client.completeWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId);
@@ -747,6 +769,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         return { assignment: claimed, records };
       } catch (error) {
         await flush(true).catch(() => {});
+        await runFinishHook('error').catch(() => {});
         await client.failWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId, error).catch(() => {});
         throw error;
       } finally {
@@ -817,6 +840,7 @@ export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {
         batchSize: overrides.batchSize ?? options.batchSize,
         heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
         readyPollIntervalMs: overrides.readyPollIntervalMs ?? options.readyPollIntervalMs,
+        onFinish: options.onFinish,
         task: options.task,
       });
     },
@@ -843,6 +867,7 @@ export function defineBench(options: DefineBenchOptions): BenchDefinition {
         batchSize: workerOptions.batchSize ?? options.batchSize,
         heartbeatIntervalMs: workerOptions.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
         readyPollIntervalMs: workerOptions.readyPollIntervalMs ?? options.readyPollIntervalMs,
+        onFinish: workerOptions.onFinish,
         client: workerOptions.client ?? options.client,
         task: workerOptions.task ?? options.task,
       });

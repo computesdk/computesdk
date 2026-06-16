@@ -524,6 +524,14 @@ export interface RunWorkerContext {
   step<T>(name: string, fn: () => Promise<T> | T, options?: DefineStepOptions): Promise<T>;
 }
 
+export interface WorkerFinishContext {
+  assignment: BenchmarkAssignment;
+  records: TaskResultRecord[];
+  status: 'success' | 'error';
+  client: BenchmarkClient;
+  uploadArtifact(input: Omit<UploadWorkerArtifactInput, 'attemptId'>): Promise<CreateWorkerArtifactResponse>;
+}
+
 export interface StepContext<TState extends Record<string, unknown> = Record<string, unknown>> {
   assignment: BenchmarkAssignment;
   taskIndex: number;
@@ -584,6 +592,8 @@ export interface RunWorkerOptions {
   heartbeatIntervalMs?: number;
   readyPollIntervalMs?: number;
   onResult?: (record: TaskResultRecord) => void;
+  /** Runs once after final result flush and before worker completion/failure is reported. */
+  onFinish?: (context: WorkerFinishContext) => Promise<void> | void;
   task: WorkerTask;
 }
 
@@ -601,6 +611,7 @@ export interface DefineWorkerOptions extends WorkerDefaults {
   processKind?: string;
   processKey?: string;
   client?: BenchmarkClient;
+  onFinish?: RunWorkerOptions['onFinish'];
   task: WorkerTask;
 }
 

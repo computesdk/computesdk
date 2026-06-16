@@ -225,6 +225,25 @@ await reporter?.finish(false);
 
 `BenchmarkReporter` swallows platform telemetry failures for claim, heartbeat, result flushing, artifact upload, and finish calls. Benchmark work can continue even when reporting is temporarily unavailable.
 
+For `defineWorker` / `runWorker`, use `onFinish` to upload worker-level logs once, after final task results are flushed and before the worker attempt is completed or failed:
+
+```ts
+defineWorker({
+  benchmarkSlug: 'scale',
+  runId,
+  participantSlug: 'e2b',
+  task,
+  onFinish: async ({ uploadArtifact }) => {
+    await uploadArtifact({
+      kind: 'log',
+      name: 'coordinator.log',
+      contentType: 'text/plain; charset=utf-8',
+      body: logText,
+    });
+  },
+});
+```
+
 For coordinator health artifacts, sample system metrics:
 
 ```ts

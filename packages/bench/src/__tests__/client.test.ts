@@ -799,6 +799,37 @@ describe('createBenchmarkClient', () => {
     expect(sample.eventLoopP99Ms).toEqual(expect.any(Number));
   });
 
+  it('runs worker finish hooks before completing the worker', async () => {
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/workers/00000000-0000-4000-8000-000000000002/artifacts')) return jsonResponse({ artifactId: 'artifact_1', uploadUrl: 'https://upload.test' });
+      if (url === 'https://upload.test') return new Response(null, { status: 200 });
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task: () => ({ ok: true }),
+      onFinish: async ({ status, uploadArtifact }) => {
+        expect(status).toBe('success');
+        await uploadArtifact({ kind: 'log', name: 'worker.log', body: 'worker log\n' });
+      },
+    });
+
+    const urls = seen.map((entry) => `${entry.method} ${entry.url}`);
+    expect(urls.indexOf('PUT https://upload.test')).toBeLessThan(urls.findIndex((url) => url.includes('/complete')));
+  });
+
   it('creates workers from a reusable bench definition', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

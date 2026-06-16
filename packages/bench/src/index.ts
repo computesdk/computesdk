@@ -76,6 +76,7 @@ export type {
   UpdateRunInput,
   UpdateWorkerInput,
   WorkerConcurrencySample,
+  WorkerFinishContext,
   WorkerHeartbeatInput,
   WorkerTask,
   UpsertBenchmarkInput,
