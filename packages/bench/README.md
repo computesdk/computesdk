@@ -138,11 +138,15 @@ If a step returns a JSON object, it is merged into the task result `data` object
 | `cleanup` | `(context) => Promise<void> \| void` | Runs after the task finishes, whether steps succeeded or failed. Use shared `state` to tear down resources created by earlier steps. |
 
 ```ts
-defineTask('sandbox.lifecycle', [
-  defineStep('create', async ({ state }) => {
+type SandboxState = {
+  sandbox?: Awaited<ReturnType<typeof compute.sandbox.create>>;
+};
+
+defineTask<SandboxState>('sandbox.lifecycle', [
+  defineStep<SandboxState>('create', async ({ state }) => {
     state.sandbox = await compute.sandbox.create();
   }),
-  defineStep('exec', async ({ state }) => {
+  defineStep<SandboxState>('exec', async ({ state }) => {
     await state.sandbox.runCommand('node -v');
   }),
 ], {

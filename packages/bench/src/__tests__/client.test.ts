@@ -382,6 +382,38 @@ describe('createBenchmarkClient', () => {
     ]);
   });
 
+  it('preserves the step error when cleanup also fails', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/fail')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const task = defineTask('cleanup-after-step-failure', [
+      defineStep('create', () => {
+        throw new TypeError('create failed');
+      }),
+    ], {
+      cleanup: () => {
+        throw new Error('destroy failed');
+      },
+    });
+
+    const result = await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task,
+    });
+
+    expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'TypeError' });
+    expect(result.records[0].data).toMatchObject({ errorMessage: 'create failed' });
+    expect(result.records[0].steps).toMatchObject([{ name: 'create', status: 'error', errorCode: 'TypeError' }]);
+  });
+
   it('fails a defined task when cleanup fails after successful steps', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

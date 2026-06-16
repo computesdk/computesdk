@@ -185,13 +185,24 @@ async function runWorkerTask(task: RunWorkerOptions['task'], context: RunWorkerC
       );
       mergeJsonObjects(data, stepData);
     }
-  } finally {
-    await task.options?.cleanup?.({
-      assignment: context.assignment,
-      taskIndex: context.taskIndex,
-      state,
-    });
+  } catch (error) {
+    try {
+      await task.options?.cleanup?.({
+        assignment: context.assignment,
+        taskIndex: context.taskIndex,
+        state,
+      });
+    } catch {
+      // Preserve the task failure as the primary benchmark error.
+    }
+    throw error;
   }
+
+  await task.options?.cleanup?.({
+    assignment: context.assignment,
+    taskIndex: context.taskIndex,
+    state,
+  });
 
   return data;
 }
