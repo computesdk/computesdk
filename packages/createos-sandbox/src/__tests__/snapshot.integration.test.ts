@@ -63,11 +63,4 @@ describe.skipIf(!live)("createos snapshot / fork (live)", () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain("forked-alive");
   }, 240_000);
-
-  // Guards the @nodeops-createos/sandbox paginated-envelope fix: template.list must not throw or
-  // return [] against the control plane's { data, pagination } list shape.
-  it("template.list returns an array against the paginated list endpoint", async () => {
-    const templates = await provider.template!.list();
-    expect(Array.isArray(templates)).toBe(true);
-  }, 30_000);
 });

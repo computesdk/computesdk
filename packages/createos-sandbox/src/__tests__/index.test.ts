@@ -9,7 +9,6 @@ import {
   pickShape,
   toCreateRequest,
   toForkRequest,
-  toTemplateCreateRequest,
 } from "../index.js";
 
 // Deliberately unsorted, to prove selection sorts the live catalog rather than
@@ -72,10 +71,10 @@ describe("buildScript", () => {
     expect(buildScript("echo hi")).toBe("echo hi");
   });
   it("prepends a cd for cwd", () => {
-    expect(buildScript("ls", { cwd: "/app" })).toBe("cd /app && ls");
+    expect(buildScript("ls", { cwd: "/app" })).toBe("cd '/app' && ls");
   });
   it("exports per-command env (synthesised, since the server drops exec env)", () => {
-    expect(buildScript("node x.js", { env: { FOO: "bar" } })).toBe("export FOO=bar; node x.js");
+    expect(buildScript("node x.js", { env: { FOO: "bar" } })).toBe("export FOO='bar'; node x.js");
   });
   it("wraps background commands in nohup", () => {
     expect(buildScript("server", { background: true })).toContain("nohup sh -c");
@@ -94,9 +93,11 @@ describe("buildScript", () => {
       env: { PORT: "8080" },
       background: true,
     });
-    expect(script).toContain("nohup sh -c");
-    expect(script).toContain("cd /app &&");
-    expect(script).toContain("export PORT=8080");
+    // Background wraps the fully-composed (env + cwd + command) script in one
+    // `nohup sh -c '<quoted>'` token, so its inner single quotes are escaped.
+    expect(script).toBe(
+      `nohup sh -c 'export PORT='\\''8080'\\''; cd '\\''/app'\\'' && serve' > /dev/null 2>&1 &`,
+    );
   });
   it("rejects malicious env keys instead of emitting raw shell", () => {
     for (const bad of ["x; rm -rf /", "FOO=bar", "a b", "1FOO", "$(touch pwn)", ""]) {
@@ -104,7 +105,12 @@ describe("buildScript", () => {
     }
   });
   it("accepts valid POSIX env keys", () => {
-    expect(buildScript("run", { env: { _A1: "v", FOO_BAR: "x" } })).toContain("export _A1=v");
+    expect(buildScript("run", { env: { _A1: "v", FOO_BAR: "x" } })).toContain("export _A1='v'");
+  });
+  it("keeps shell metacharacters in cwd/env inside one quoted token (no injection)", () => {
+    // A `;`/space-laden value must not split the command or inject `rm`.
+    expect(buildScript("ls", { cwd: "/tmp/a b; rm -rf /" })).toBe("cd '/tmp/a b; rm -rf /' && ls");
+    expect(buildScript("run", { env: { K: "v; rm -rf /" } })).toBe("export K='v; rm -rf /'; run");
   });
 });
 
@@ -177,22 +183,12 @@ describe("toForkRequest", () => {
   });
 });
 
-describe("toTemplateCreateRequest", () => {
-  it("throws without a dockerfile", () => {
-    expect(() => toTemplateCreateRequest({ name: "t" })).toThrow(/require a Dockerfile/);
-  });
-  it("maps name, dockerfile, base", () => {
-    const r = toTemplateCreateRequest({ name: "t", dockerfile: "FROM x", base: "b" });
-    expect(r).toEqual({ name: "t", dockerfile: "FROM x", base: "b" });
-  });
-});
-
 describe("createosSandbox provider", () => {
-  it("builds a provider exposing sandbox, snapshot and template managers", () => {
+  it("builds a provider exposing sandbox and snapshot managers, no template", () => {
     const provider = createosSandbox({ apiKey: "test-key" });
     expect(provider.name).toBe("createos-sandbox");
     expect(provider.sandbox).toBeDefined();
     expect(provider.snapshot).toBeDefined();
-    expect(provider.template).toBeDefined();
+    expect(provider.template).toBeUndefined();
   });
 });

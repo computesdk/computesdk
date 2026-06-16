@@ -6,10 +6,12 @@
  * SDK used across the CreateOS tooling.
  *
  * Design notes:
- *  - `TSandbox` is the native `@nodeops-createos/sandbox` `Sandbox` handle (not a wrapper),
- *    so `getInstance()` hands callers the full stateful API
- *    (pause / resume / fork / disks / networks / bandwidth) that ComputeSDK's
- *    core surface does not model.
+ *  - `TSandbox` is the native `@nodeops-createos/sandbox` `Sandbox` handle, so
+ *    `getInstance()` hands callers the full stateful API (pause / resume / fork /
+ *    disks / networks / bandwidth) that ComputeSDK's core surface does not model.
+ *    The resolving config is associated with each handle via a `WeakMap`
+ *    side-channel (`sandboxConfig`), so `getInfo` can honour `config` (e.g.
+ *    `timeout`) and its error policy without wrapping or mutating the handle.
  *  - createos-sandbox sizes VMs from a fixed *shape* catalog rather than free-form
  *    cpu/mem, so create() maps ComputeSDK's `cpus`/`memoryMb` onto the nearest
  *    shape and honours an explicit provider-specific `shape` override.
@@ -34,24 +36,39 @@ import type {
   ForkSandboxRequest,
   SandboxStatus,
   Shape,
-  TemplateCreateRequest,
-  TemplateView,
 } from "@nodeops-createos/sandbox";
-import { sleep } from "@nodeops-createos/sandbox";
-import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import { defineProvider } from "@computesdk/provider";
 import type {
   CommandResult,
   CreateSandboxOptions,
   CreateSnapshotOptions,
-  CreateTemplateOptions,
   FileEntry,
   ListSnapshotsOptions,
-  ListTemplatesOptions,
   RunCommandOptions,
   SandboxInfo,
 } from "@computesdk/provider";
 
 const PROVIDER_NAME = "createos-sandbox";
+
+/** Provider state carried as ComputeSDK's `TSandbox`: the native handle plus
+ *  the resolving config. Threading `config` keeps per-sandbox methods able to
+ *  honour their own settings (e.g. `getInfo().timeout`) and error policy.
+ *  `getInstance()` unwraps to `sandbox`, so the native escape hatch is intact. */
+/** Per-sandbox config side-channel: associates the resolving config with each
+ *  native handle without mutating it or wrapping `TSandbox` — so `getInstance()`
+ *  still returns the bare native handle (the escape hatch other providers honour),
+ *  while `getInfo` can still reach `config` (e.g. `timeout`). Keyed weakly, so an
+ *  entry is collected with its sandbox. */
+const sandboxConfig = new WeakMap<Sandbox, CreateosConfig>();
+
+/** Quote a value into one complete, self-contained shell token. Unlike the
+ *  framework's `escapeShellArg` (which only neutralises metacharacters *inside*
+ *  surrounding double quotes), this wraps in single quotes so the token is safe
+ *  to splice unquoted — spaces, `;`, `&`, `|`, globs and the rest cannot split
+ *  the command or inject syntax. Embedded single quotes are closed/escaped/reopened. */
+function shellQuote(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
 
 /** The framework-supplied command runner handed to filesystem callbacks. */
 type CommandRunner = (
@@ -105,14 +122,6 @@ export interface CreateosCreateOptions extends CreateSandboxOptions {
   sshPubkeys?: string[];
   /** Egress allow-list. */
   egress?: string[];
-}
-
-/** ComputeSDK template options plus createos-specific build inputs. */
-export interface CreateosTemplateOptions extends CreateTemplateOptions {
-  /** Dockerfile source for the build. Required by the control plane. */
-  dockerfile?: string;
-  /** Optional base image override. */
-  base?: string;
 }
 
 function env(key: string): string | undefined {
@@ -240,26 +249,12 @@ export function toCreateRequest(
   return req;
 }
 
-/** Pure map: ComputeSDK template options → createos-sandbox template build request.
- *  Throws when no Dockerfile is supplied (the control plane requires one). */
-export function toTemplateCreateRequest(opts: CreateosTemplateOptions): TemplateCreateRequest {
-  if (!opts.dockerfile) {
-    throw new Error(
-      "CreateOS templates require a Dockerfile. Pass `dockerfile` in the " +
-        "template create options.",
-    );
-  }
-  const req: TemplateCreateRequest = { name: opts.name, dockerfile: opts.dockerfile };
-  if (opts.base) req.base = opts.base;
-  return req;
-}
-
 /** Wrap a command so per-call cwd/env/background work despite the server dropping
  *  exec env. Env *keys* are validated before being spliced into `export` —
- *  values are shell-escaped, but a malformed key would otherwise be raw shell. */
+ *  values are shell-quoted, but a malformed key would otherwise be raw shell. */
 export function buildScript(command: string, options?: RunCommandOptions): string {
   let script = command;
-  if (options?.cwd) script = `cd ${escapeShellArg(options.cwd)} && ${script}`;
+  if (options?.cwd) script = `cd ${shellQuote(options.cwd)} && ${script}`;
   if (options?.env && Object.keys(options.env).length > 0) {
     const exports = Object.entries(options.env)
       .map(([k, v]) => {
@@ -269,13 +264,13 @@ export function buildScript(command: string, options?: RunCommandOptions): strin
               `must match ${ENV_KEY_RE.source}.`,
           );
         }
-        return `export ${k}=${escapeShellArg(String(v))}`;
+        return `export ${k}=${shellQuote(String(v))}`;
       })
       .join("; ");
     script = `${exports}; ${script}`;
   }
   if (options?.background) {
-    script = `nohup sh -c ${escapeShellArg(script)} > /dev/null 2>&1 &`;
+    script = `nohup sh -c ${shellQuote(script)} > /dev/null 2>&1 &`;
   }
   return script;
 }
@@ -298,16 +293,6 @@ export function parseLsOutput(stdout: string): FileEntry[] {
   return entries;
 }
 
-/** Poll a template build to a terminal state (ready/failed). ~10 min cap. */
-async function pollTemplate(client: CreateosSandboxClient, id: string): Promise<TemplateView> {
-  let tpl = await client.templates.get(id);
-  for (let i = 0; i < 120 && tpl.status !== "ready" && tpl.status !== "failed"; i++) {
-    await sleep(5000);
-    tpl = await client.templates.get(id);
-  }
-  return tpl;
-}
-
 export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
   name: PROVIDER_NAME,
   methods: {
@@ -323,12 +308,14 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           // Surface lifecycle failures: a fork that never reaches "running"
           // (or hits a terminal state) must not be reported as success.
           await forked.waitUntilRunning();
+          sandboxConfig.set(forked, config);
           return { sandbox: forked, sandboxId: forked.id };
         }
 
         const shape = await resolveShape(client, opts, config);
         const rootfs = opts.image ?? opts.runtime ?? config.rootfs;
         const sandbox = await client.createSandbox(toCreateRequest(opts, shape, rootfs));
+        sandboxConfig.set(sandbox, config);
         return { sandbox, sandboxId: sandbox.id };
       },
 
@@ -336,6 +323,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const client = resolveClient(config);
         try {
           const sandbox = await client.getSandbox(sandboxId);
+          sandboxConfig.set(sandbox, config);
           return { sandbox, sandboxId: sandbox.id };
         } catch (e) {
           if (isNotFound(e)) return null;
@@ -347,7 +335,10 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const client = resolveClient(config);
         // No catch: a failed list is a broken boundary, not an empty account.
         const sandboxes = await client.listSandboxes({ limit: 100 });
-        return sandboxes.map((sandbox) => ({ sandbox, sandboxId: sandbox.id }));
+        return sandboxes.map((sandbox) => {
+          sandboxConfig.set(sandbox, config);
+          return { sandbox, sandboxId: sandbox.id };
+        });
       },
 
       destroy: async (config: CreateosConfig, sandboxId: string) => {
@@ -383,14 +374,16 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       },
 
       getInfo: async (sandbox: Sandbox): Promise<SandboxInfo> => {
-        await sandbox.refresh().catch(() => undefined);
+        // Refresh failures propagate (no swallow): a getInfo that cannot reach
+        // the control plane must surface that rather than return stale data.
+        await sandbox.refresh();
         const v = sandbox.data;
         return {
           id: v.id,
           provider: PROVIDER_NAME,
           status: mapStatus(v.status),
           createdAt: new Date(v.created_at),
-          timeout: 0,
+          timeout: sandboxConfig.get(sandbox)?.timeout ?? 0,
           metadata: {
             createosStatus: v.status,
             shape: v.shape,
@@ -407,7 +400,8 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         return sandbox.previewUrl(options.port, { scheme });
       },
 
-      // Escape hatch: native @nodeops-createos/sandbox handle (pause/resume/fork/disks/...).
+      // Escape hatch: the bare native @nodeops-createos/sandbox handle
+      // (pause/resume/fork/disks/...).
       getInstance: (sandbox: Sandbox): Sandbox => sandbox,
 
       filesystem: {
@@ -419,20 +413,20 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           await sandbox.files.upload(path, content);
         },
         mkdir: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const r = await runCommand(sandbox, `mkdir -p ${escapeShellArg(path)}`);
+          const r = await runCommand(sandbox, `mkdir -p ${shellQuote(path)}`);
           if (r.exitCode !== 0) throw new Error(`mkdir ${path} failed: ${r.stderr}`);
         },
         readdir: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
-          const r = await runCommand(sandbox, `ls -lA --time-style=+%s ${escapeShellArg(path)}`);
+          const r = await runCommand(sandbox, `ls -lA --time-style=+%s ${shellQuote(path)}`);
           if (r.exitCode !== 0) throw new Error(`readdir ${path} failed: ${r.stderr}`);
           return parseLsOutput(r.stdout);
         },
         exists: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
-          const r = await runCommand(sandbox, `test -e ${escapeShellArg(path)}`);
+          const r = await runCommand(sandbox, `test -e ${shellQuote(path)}`);
           return r.exitCode === 0;
         },
         remove: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const r = await runCommand(sandbox, `rm -rf ${escapeShellArg(path)}`);
+          const r = await runCommand(sandbox, `rm -rf ${shellQuote(path)}`);
           if (r.exitCode !== 0) throw new Error(`remove ${path} failed: ${r.stderr}`);
         },
       },
@@ -476,30 +470,6 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         try {
           const sandbox = await client.getSandbox(snapshotId);
           await sandbox.destroy();
-        } catch (e) {
-          if (isNotFound(e)) return; // already gone
-          throw e;
-        }
-      },
-    },
-
-    template: {
-      create: async (config: CreateosConfig, options: CreateTemplateOptions) => {
-        const client = resolveClient(config);
-        const request = toTemplateCreateRequest(options as CreateosTemplateOptions);
-        const created = await client.templates.create(request);
-        // The build runs asynchronously in a k8s job; poll to a terminal state.
-        return pollTemplate(client, created.id);
-      },
-      list: async (config: CreateosConfig, options?: ListTemplatesOptions) => {
-        const client = resolveClient(config);
-        const all = await client.templates.list();
-        return options?.limit ? all.slice(0, options.limit) : all;
-      },
-      delete: async (config: CreateosConfig, templateId: string) => {
-        const client = resolveClient(config);
-        try {
-          await client.templates.delete(templateId);
         } catch (e) {
           if (isNotFound(e)) return; // already gone
           throw e;

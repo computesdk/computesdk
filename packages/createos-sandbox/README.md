@@ -59,7 +59,12 @@ control plane validates it; `0`/omitted = the shape's default disk).
 | `filesystem.readFile` / `writeFile` | `GET/PUT /v1/sandboxes/:id/files` |
 | `filesystem.mkdir` / `readdir` / `exists` / `remove` | synthesised via `runCommand` |
 | `snapshot.create` / `list` / `delete` | `pause` / list paused / `destroy` |
-| `template.create` / `list` / `delete` | `/v1/templates` (async build) |
+
+Template builds (`/v1/templates`) are **not** exposed through the ComputeSDK
+provider surface — ComputeSDK's public `Provider` type can't carry the
+createos-specific `dockerfile` create option type-safely. Build templates with
+the native `@nodeops-createos/sandbox` client (`client.templates.create`)
+directly.
 
 ### Native escape hatch
 
