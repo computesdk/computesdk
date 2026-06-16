@@ -50,9 +50,9 @@ type FsRunCommand = (sandbox: Sandbox, command: string, options?: RunCommandOpti
 
 export interface IsorunSnapshot {
   id: string
-  runId?: string
-  sizeBytes: number
-  createdAt: string
+  provider: string
+  createdAt: Date
+  metadata?: Record<string, unknown>
 }
 
 export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({
@@ -138,8 +138,10 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
 
       getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) => {
         const url = sandbox.url(options.port)
-        if (options.protocol && options.protocol !== 'http' && options.protocol !== 'https') {
-          return url.replace(/^https?:\/\//, `${options.protocol}://`)
+        if (options.protocol) {
+          const u = new URL(url)
+          u.protocol = `${options.protocol}:`
+          return u.toString()
         }
         return url
       },
@@ -199,9 +201,9 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         const snap = await sandbox.snapshot()
         return {
           id: snap.id,
-          runId: snap.runId,
-          sizeBytes: snap.sizeBytes,
-          createdAt: snap.createdAt,
+          provider: 'isorun',
+          createdAt: new Date(snap.createdAt),
+          metadata: { runId: snap.runId, sizeBytes: snap.sizeBytes },
         }
       },
 
@@ -209,9 +211,9 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         const entries = await getClient(config).listSnapshots()
         return entries.map(e => ({
           id: e.id,
-          runId: e.runId,
-          sizeBytes: e.sizeBytes,
-          createdAt: e.createdAt,
+          provider: 'isorun',
+          createdAt: new Date(e.createdAt),
+          metadata: { runId: e.runId, sizeBytes: e.sizeBytes },
         }))
       },
 

@@ -40,7 +40,7 @@ await sandbox.destroy()
 // Execute commands
 const cmd = await sandbox.runCommand('echo hello', { env: { FOO: 'bar' }, cwd: '/tmp' })
 
-// Filesystem (native API, not shell hacks)
+// Filesystem
 await sandbox.filesystem.writeFile('/app/data.json', JSON.stringify({ key: 'value' }))
 const data = await sandbox.filesystem.readFile('/app/data.json')
 const entries = await sandbox.filesystem.readdir('/app')
