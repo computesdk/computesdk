@@ -161,14 +161,16 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
             sandboxId: _sandboxId, namespace: _namespace, directory: _directory, ...providerOptions
           } = options || {};
 
-          // Thread apiKey + domain + apiUrl into the create call alongside any
-          // per-call provider options.
+          // Per-call provider options are spread FIRST so the resolved
+          // connection parameters (apiKey/domain/apiUrl) and the explicit
+          // create fields below cannot be overridden by a caller passing e.g.
+          // `apiKey`/`domain`/`apiUrl` through options.
           const createOpts: Record<string, any> = {
+            ...providerOptions,
             ...connectOpts(config),
             timeoutMs: timeout,
             envs,
             metadata,
-            ...providerOptions,
           };
 
           const templateOrSnapshot = templateId || snapshotId;
