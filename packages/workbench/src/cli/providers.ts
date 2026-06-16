@@ -60,10 +60,14 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   k8s: [[]],
   northflank: [['NORTHFLANK_TOKEN', 'NORTHFLANK_PROJECT_ID']],
   collimate: [['COLLIMATE_API_KEY']],
-  lelantos: [['LELANTOS_API_KEY']],
+  // The lelantos provider falls back LELANTOS_API_KEY → E2B_API_KEY, so either
+  // key alone counts as configured.
+  lelantos: [['LELANTOS_API_KEY'], ['E2B_API_KEY']],
 };
 
-const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
+// Each config key maps to an env var name, or — when a provider accepts
+// fallbacks — an ordered list of env var names tried first-match-wins.
+const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | readonly string[]>> = {
   e2b: { apiKey: 'E2B_API_KEY' },
   daytona: { apiKey: 'DAYTONA_API_KEY' },
   modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
@@ -92,15 +96,22 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   k8s: {},
   northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL' },
   collimate: { apiKey: 'COLLIMATE_API_KEY', serverUrl: 'COLLIMATE_API_URL' },
-  lelantos: { apiKey: 'LELANTOS_API_KEY', domain: 'LELANTOS_DOMAIN', apiUrl: 'LELANTOS_API_URL' },
+  lelantos: {
+    apiKey: ['LELANTOS_API_KEY', 'E2B_API_KEY'],
+    domain: ['LELANTOS_DOMAIN', 'E2B_DOMAIN'],
+    apiUrl: ['LELANTOS_API_URL', 'E2B_API_URL'],
+  },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
   const map = PROVIDER_ENV_MAP[provider] || {};
   const config: Record<string, string> = {};
   for (const [configKey, envVar] of Object.entries(map)) {
-    const value = process.env?.[envVar];
-    if (value) config[configKey] = value;
+    const candidates = Array.isArray(envVar) ? envVar : [envVar];
+    for (const name of candidates) {
+      const value = process.env?.[name];
+      if (value) { config[configKey] = value; break; }
+    }
   }
   return config;
 }

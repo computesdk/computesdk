@@ -3,8 +3,11 @@ import { lelantos } from '../index';
 
 // The integration leg runs only when LELANTOS_API_KEY is set, and threads
 // `domain` (LELANTOS_DOMAIN, default 'lelantos.ai') into every e2b call so the
-// suite hits the Lelantos control plane — NOT api.e2b.app. In mock mode
-// (no key) the provider object is still exercised against the full interface.
+// suite hits the Lelantos control plane — NOT api.e2b.app. Without a key,
+// skipIntegration is true: the suite swaps in its own internal mock sandbox, so
+// it verifies the provider is constructible and shaped correctly, but does NOT
+// exercise the Lelantos provider's real create/runCommand/filesystem code — that
+// is only covered when an API key is present and the integration leg runs.
 runProviderTestSuite({
   name: 'lelantos',
   provider: lelantos({

@@ -225,7 +225,17 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
 
         let fullCommand = command;
         if (options?.env && Object.keys(options.env).length > 0) {
-          const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
+          const envPrefix = Object.entries(options.env).map(([k, v]) => {
+            // Env var NAMES are interpolated raw into the shell command, so an
+            // attacker-controlled key (e.g. `FOO; rm -rf /`) would inject and
+            // run inside the sandbox. Names that aren't POSIX shell identifiers
+            // can't be exported by the shell anyway, so reject them outright.
+            // Values are still shell-escaped below.
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) {
+              throw new Error(`Invalid environment variable name: ${JSON.stringify(k)}. Names must match /^[a-zA-Z_][a-zA-Z0-9_]*$/.`);
+            }
+            return `${k}="${escapeShellArg(String(v))}"`;
+          }).join(' ');
           fullCommand = `${envPrefix} ${fullCommand}`;
         }
         if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
@@ -318,6 +328,12 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
                 const r = snapshotResult as { snapshotId?: string; id?: string; templateId?: string };
                 return r.snapshotId || r.id || r.templateId;
               })();
+          // The provider contract requires a non-empty `id`. If the e2b SDK
+          // returned an unexpected snapshot shape, fail loudly rather than
+          // handing downstream consumers `{ id: undefined }`.
+          if (!snapshotId) {
+            throw new Error(`Lelantos createSnapshot() returned no snapshot ID (got ${JSON.stringify(snapshotResult)}).`);
+          }
           return { id: snapshotId, provider: 'lelantos', createdAt: new Date(), metadata: { name: options?.name } };
         } catch (error) {
           throw new Error(`Failed to create Lelantos snapshot: ${error instanceof Error ? error.message : String(error)}`);
