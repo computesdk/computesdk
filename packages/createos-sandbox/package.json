@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/createos-sandbox",
   "version": "0.1.0",
-  "description": "CreateOS provider for ComputeSDK — NodeOps Firecracker microVM sandboxes with pause/resume/fork snapshots",
+  "description": "CreateOS provider for ComputeSDK — NodeOps VM sandboxes with pause/resume/fork snapshots",
   "author": "NodeOps Inc.",
   "license": "MIT",
   "engines": {
@@ -39,8 +39,6 @@
     "computesdk",
     "createos",
     "createos-sandbox",
-    "firecracker",
-    "microvm",
     "nodeops",
     "provider",
     "sandbox",

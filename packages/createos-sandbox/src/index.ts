@@ -1,7 +1,7 @@
 /**
  * CreateOS Sandbox Provider for ComputeSDK
  *
- * Firecracker microVM sandboxes backed by the NodeOps createos-sandbox control plane.
+ * VM sandboxes backed by the NodeOps createos-sandbox control plane.
  * Thin adapter over the official `@nodeops-createos/sandbox` npm package — the same
  * SDK used across the CreateOS tooling.
  *
@@ -50,10 +50,6 @@ import type {
 
 const PROVIDER_NAME = "createos-sandbox";
 
-/** Provider state carried as ComputeSDK's `TSandbox`: the native handle plus
- *  the resolving config. Threading `config` keeps per-sandbox methods able to
- *  honour their own settings (e.g. `getInfo().timeout`) and error policy.
- *  `getInstance()` unwraps to `sandbox`, so the native escape hatch is intact. */
 /** Per-sandbox config side-channel: associates the resolving config with each
  *  native handle without mutating it or wrapping `TSandbox` — so `getInstance()`
  *  still returns the bare native handle (the escape hatch other providers honour),

@@ -1,7 +1,7 @@
 # @computesdk/createos-sandbox
 
 [ComputeSDK](https://github.com/computesdk/computesdk) provider for **CreateOS** —
-NodeOps' createos-sandbox Firecracker microVM sandbox service. Thin adapter over the
+NodeOps' createos-sandbox VM sandbox service. Thin adapter over the
 official [`@nodeops-createos/sandbox`](https://www.npmjs.com/package/@nodeops-createos/sandbox).
 
 ## Install
