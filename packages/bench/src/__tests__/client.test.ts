@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BenchmarkApiError, createBenchmarkClient, defineBench, defineStep, defineTask, defineWorker } from '../client';
+import { createSystemMetricsCollector } from '../metrics';
+import { BenchmarkReporter } from '../reporter';
 import type { BenchmarkAssignment } from '../types';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -90,7 +92,13 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const headers = init?.headers && !Array.isArray(init.headers) && !(init.headers instanceof Headers)
+        ? init.headers as Record<string, string>
+        : {};
+      const contentType = headers['Content-Type'] ?? headers['content-type'];
+      const body = init?.body && contentType === 'application/json'
+        ? JSON.parse(String(init.body))
+        : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/benchmarks/scale/runs') && init?.method === 'POST') {
@@ -124,7 +132,9 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const body = init?.body && url.startsWith('https://platform.test/')
+        ? JSON.parse(String(init.body))
+        : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/benchmarks/scale') && init?.method === 'PATCH') {
@@ -166,7 +176,7 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/participants/e2b/workers/claim')) {
@@ -331,6 +341,107 @@ describe('createBenchmarkClient', () => {
       { name: 'create', status: 'success' },
       { name: 'exec.first-command', status: 'success' },
     ]);
+  });
+
+  it('runs defined task cleanup after a step fails', async () => {
+    const cleaned: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/fail')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const task = defineTask('sandbox.lifecycle', [
+      defineStep('create', ({ state }) => {
+        state.sandboxId = 'sbx_0';
+      }),
+      defineStep('exec.first-command', () => {
+        throw new TypeError('command failed');
+      }),
+    ], {
+      cleanup: ({ state }) => {
+        cleaned.push(String(state.sandboxId));
+      },
+    });
+
+    const result = await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task,
+    });
+
+    expect(cleaned).toEqual(['sbx_0']);
+    expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'TypeError' });
+    expect(result.records[0].steps).toMatchObject([
+      { name: 'create', status: 'success' },
+      { name: 'exec.first-command', status: 'error', errorCode: 'TypeError' },
+    ]);
+  });
+
+  it('preserves the step error when cleanup also fails', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/fail')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const task = defineTask('cleanup-after-step-failure', [
+      defineStep('create', () => {
+        throw new TypeError('create failed');
+      }),
+    ], {
+      cleanup: () => {
+        throw new Error('destroy failed');
+      },
+    });
+
+    const result = await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task,
+    });
+
+    expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'TypeError' });
+    expect(result.records[0].data).toMatchObject({ errorMessage: 'create failed' });
+    expect(result.records[0].steps).toMatchObject([{ name: 'create', status: 'error', errorCode: 'TypeError' }]);
+  });
+
+  it('fails a defined task when cleanup fails after successful steps', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/fail')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    const task = defineTask('cleanup-failure', [
+      defineStep('create', () => ({ sandboxId: 'sbx_0' })),
+    ], {
+      cleanup: () => {
+        throw new Error('destroy failed');
+      },
+    });
+
+    const result = await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task,
+    });
+
+    expect(result.records[0]).toMatchObject({ status: 'error', errorCode: 'Error' });
+    expect(result.records[0].data).toMatchObject({ errorMessage: 'destroy failed' });
+    expect(result.records[0].steps).toMatchObject([{ name: 'create', status: 'success' }]);
   });
 
   it('rejects duplicate defined task step names', () => {
@@ -548,11 +659,14 @@ describe('createBenchmarkClient', () => {
     const seen: Array<{ url: string; body: unknown; method?: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
       seen.push({ url, body, method: init?.method });
 
       if (url.endsWith('/workers/worker_1/artifacts') && init?.method === 'POST') {
         return jsonResponse({ artifactId: 'artifact_1', uploadUrl: 'https://upload.test', objectKey: 'benchmarks/bench_1/runs/run_1/artifacts/artifact_1' });
+      }
+      if (url === 'https://upload.test' && init?.method === 'PUT') {
+        return new Response(null, { status: 200 });
       }
       if (url.endsWith('/runs/run_1/artifacts') && init?.method === 'GET') {
         return jsonResponse({ artifacts: [{ artifactId: 'artifact_1', kind: 'coordinator.log' }] });
@@ -564,10 +678,10 @@ describe('createBenchmarkClient', () => {
         return jsonResponse({
           benchmark: { id: 'bench_1', slug: 'scale', name: 'Scale' },
           generatedAt: new Date().toISOString(),
-          analytics: { status: 'unavailable', query: 'unavailable', error: 'Timeout error.' },
+          analytics: { status: 'complete', query: 'unavailable', error: 'Timeout error.' },
           items: [{
             run: { id: 'run_1' },
-            analytics: { status: 'pending', eventBatches: 1, persisted: 0, queued: 1, failed: 0, imports: { pending: 0, importing: 0, imported: 0, failed: 0, missing: 1 } },
+            analytics: { status: 'complete', eventBatches: 1, persisted: 1, queued: 0, failed: 0, imports: { pending: 0, importing: 0, imported: 1, failed: 0, missing: 0 } },
             participants: [],
           }],
         });
@@ -597,12 +711,20 @@ describe('createBenchmarkClient', () => {
       kind: 'coordinator.log',
       contentType: 'text/plain',
     })).resolves.toMatchObject({ artifactId: 'artifact_1' });
+    await expect(client.uploadWorkerArtifact('scale', 'run_1', 'worker_1', {
+      attemptId: 'attempt_1',
+      kind: 'log',
+      name: 'coordinator.log',
+      contentType: 'text/plain; charset=utf-8',
+      body: 'hello log\n',
+    })).resolves.toMatchObject({ artifactId: 'artifact_1' });
+    expect((seen[1].body as any).metadata).toMatchObject({ sizeBytes: 10 });
     await expect(client.listRunArtifacts('scale', 'run_1')).resolves.toMatchObject([{ artifactId: 'artifact_1' }]);
     await expect(client.listWorkerArtifacts('scale', 'run_1', 'worker_1')).resolves.toMatchObject([{ artifactId: 'artifact_2' }]);
     await expect(client.getBenchmarkResults('scale', { limit: 5 })).resolves.toMatchObject({
       benchmark: { slug: 'scale' },
-      analytics: { status: 'unavailable', query: 'unavailable' },
-      items: [{ analytics: { status: 'pending' }, participants: [] }],
+      analytics: { status: 'complete', query: 'unavailable' },
+      items: [{ analytics: { status: 'complete' }, participants: [] }],
     });
     await expect(client.getRunResults('scale', 'run_1')).resolves.toMatchObject({ run: { id: 'run_1' }, participants: [], steps: [] });
     await expect(client.getRunTaskResults('scale', 'run_1', { bucketSize: 10, failureLimit: 2 })).resolves.toMatchObject({ bucketSize: 10, buckets: [], failures: [] });
@@ -612,6 +734,8 @@ describe('createBenchmarkClient', () => {
 
     expect(seen.map((entry) => `${entry.method} ${entry.url}`)).toEqual([
       'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
+      'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
+      'PUT https://upload.test',
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/artifacts',
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/artifacts',
       'GET https://platform.test/api/v1/benchmarks/scale/results?limit=5',
@@ -621,6 +745,125 @@ describe('createBenchmarkClient', () => {
       'GET https://platform.test/api/v1/benchmarks/scale/runs/run_1/results/imports',
       'POST https://platform.test/api/v1/benchmarks/scale/runs/run_1/workers/worker_1/release',
     ]);
+  });
+
+  it('reports custom coordinator progress, barriers, artifacts, and finish best-effort', async () => {
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 5, end: 7, count: 2 }, targetConcurrency: 2 }) });
+      if (url.endsWith('/heartbeat')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      if (url.endsWith('/progress')) return jsonResponse(progressResponse());
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/workers/00000000-0000-4000-8000-000000000002/artifacts')) return jsonResponse({ artifactId: 'artifact_1', uploadUrl: 'https://upload.test' });
+      if (url === 'https://upload.test') return new Response(null, { status: 200 });
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const reporter = await BenchmarkReporter.claim({
+      baseUrl: 'https://platform.test/api/v1',
+      fetch: fetchMock as typeof fetch,
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      batchSize: 1,
+    });
+
+    expect(reporter).not.toBeNull();
+    if (!reporter) return;
+
+    reporter.setProgress({ done: 0, inFlight: 1, errors: 0 });
+    reporter.recordResult({ taskIndex: 5, status: 'success', latencyMs: 1 });
+    await reporter.waitForStepReady({ step: 'pause', timeoutMs: 100, pollIntervalMs: 1 });
+    await expect(reporter.uploadArtifact({ kind: 'log', name: 'coordinator.log', body: 'log\n' })).resolves.toMatchObject({ artifactId: 'artifact_1' });
+    await reporter.finish(false);
+
+    expect(seen.some((entry) => entry.url.endsWith('/heartbeat') && (entry.body as any).currentStep === 'pause')).toBe(true);
+    expect(seen.some((entry) => entry.url.endsWith('/events') && (entry.body as any).records?.[0]?.taskIndex === 5)).toBe(true);
+    expect(seen.some((entry) => entry.url === 'https://upload.test' && entry.method === 'PUT')).toBe(true);
+    expect(seen.at(-1)?.url).toContain('/complete');
+  });
+
+  it('keeps reporter result batches queued when send fails', async () => {
+    const sentSequences: number[] = [];
+    let sendAttempts = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
+
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 5, end: 7, count: 2 }, targetConcurrency: 2 }) });
+      if (url.endsWith('/events')) {
+        sendAttempts += 1;
+        sentSequences.push((body as any).sequenceNumber);
+        if (sendAttempts === 1) return new Response('temporary failure', { status: 503 });
+        return jsonResponse({ eventBatch: { id: `batch_${sendAttempts}` } }, 202);
+      }
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const reporter = await BenchmarkReporter.claim({
+      baseUrl: 'https://platform.test/api/v1',
+      fetch: fetchMock as typeof fetch,
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      batchSize: 1,
+    });
+
+    expect(reporter).not.toBeNull();
+    if (!reporter) return;
+
+    reporter.recordResult({ taskIndex: 5, status: 'success', latencyMs: 1 });
+    await reporter.finish(false);
+
+    expect(sentSequences).toEqual([0, 0]);
+  });
+
+  it('samples system metrics for coordinator artifacts', () => {
+    const collector = createSystemMetricsCollector();
+    const sample = collector.sample();
+    collector.stop();
+
+    expect(sample.ts).toEqual(expect.any(String));
+    expect(sample.uptimeMs).toEqual(expect.any(Number));
+    expect(sample.memRssMb).toBeGreaterThan(0);
+    expect(sample.eventLoopP99Ms).toEqual(expect.any(Number));
+  });
+
+  it('runs worker finish hooks before completing the worker', async () => {
+    const seen: Array<{ url: string; body: unknown; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body && url.startsWith('https://platform.test/') ? JSON.parse(String(init.body)) : init?.body;
+      seen.push({ url, body, method: init?.method });
+
+      if (url.endsWith('/participants/e2b/workers/claim')) return jsonResponse({ assignment: assignment({ taskRange: { start: 0, end: 0, count: 1 } }) });
+      if (url.endsWith('/events')) return jsonResponse({ eventBatch: { id: 'batch_1' } }, 202);
+      if (url.endsWith('/workers/00000000-0000-4000-8000-000000000002/artifacts')) return jsonResponse({ artifactId: 'artifact_1', uploadUrl: 'https://upload.test' });
+      if (url === 'https://upload.test') return new Response(null, { status: 200 });
+      if (url.endsWith('/complete')) return jsonResponse({ worker: { id: 'worker_1' }, attempt: { id: 'attempt_1' } });
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const client = createBenchmarkClient({ baseUrl: 'https://platform.test/api/v1', fetch: fetchMock as typeof fetch });
+    await client.runWorker({
+      benchmarkSlug: 'scale',
+      runId: '00000000-0000-4000-8000-000000000001',
+      participantSlug: 'e2b',
+      task: () => ({ ok: true }),
+      onFinish: async ({ status, uploadArtifact }) => {
+        expect(status).toBe('success');
+        await uploadArtifact({ kind: 'log', name: 'worker.log', body: 'worker log\n' });
+      },
+    });
+
+    const urls = seen.map((entry) => `${entry.method} ${entry.url}`);
+    expect(urls.indexOf('PUT https://upload.test')).toBeLessThan(urls.findIndex((url) => url.includes('/complete')));
   });
 
   it('creates workers from a reusable bench definition', async () => {
