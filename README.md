@@ -75,6 +75,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_SECRET` | Edge computing |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
+| **Railway** | `RAILWAY_API_TOKEN`, `RAILWAY_ENVIRONMENT_ID` | Ephemeral command execution sandboxes |
 
 ## Configuration
 
@@ -263,6 +264,7 @@ npm install @computesdk/modal      # Modal provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
 npm install @computesdk/tensorlake # Tensorlake provider
+npm install @computesdk/railway    # Railway provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
 ```
 
@@ -281,6 +283,7 @@ See individual provider READMEs for details:
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
+- **[@computesdk/railway](./packages/railway)** - Ephemeral command-execution sandboxes on Railway, with shell-based filesystem
 - **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
 
 ## Building Custom Providers

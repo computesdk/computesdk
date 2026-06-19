@@ -1,23 +1,24 @@
 {
-  "name": "@computesdk/bench",
-  "version": "0.1.8",
-  "type": "module",
-  "description": "Client and worker helpers for the ComputeSDK benchmark orchestrator",
-  "author": "Garrison",
+  "name": "@computesdk/railway",
+  "version": "2.0.0",
+  "description": "Railway Sandboxes provider for ComputeSDK - run commands in Railway-hosted sandboxes",
+  "author": "ComputeSDK",
   "license": "MIT",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     }
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
@@ -26,31 +27,34 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
-    "test:capabilities": "vitest run src/__tests__/capabilities.test.ts",
-    "test:integration": "vitest run src/__tests__/integration.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*",
+    "railway": "^3.1.1"
+  },
   "keywords": [
     "computesdk",
-    "benchmark",
-    "observability",
-    "orchestrator"
+    "railway",
+    "sandbox",
+    "code-execution",
+    "cloud",
+    "compute",
+    "provider"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/bench"
+    "directory": "packages/railway"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "dependencies": {},
   "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
