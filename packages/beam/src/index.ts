@@ -38,6 +38,10 @@ function shellEscape(arg: string): string {
 }
 
 function stableStringify(value: unknown): string {
+  if (typeof value === 'bigint') {
+    return `${value.toString()}n`;
+  }
+
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value) ?? String(value);
   }
@@ -50,14 +54,49 @@ function stableStringify(value: unknown): string {
   return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
 }
 
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
 function sandboxCacheKey(sandboxConfig: any): string {
   return stableStringify({
     ...sandboxConfig,
     image: sandboxConfig.image?.config || sandboxConfig.image,
+    __beamAuth: {
+      token: beamOpts.token ? hashString(beamOpts.token) : '',
+      workspaceId: beamOpts.workspaceId || '',
+      gatewayUrl: beamOpts.gatewayUrl || '',
+    },
   });
 }
 
+const MAX_SANDBOX_CACHE_ENTRIES = 32;
 const sandboxCache = new Map<string, Sandbox>();
+
+function getCachedSandbox(cacheKey: string, sandboxConfig: any): Sandbox {
+  const cachedSandbox = sandboxCache.get(cacheKey);
+  if (cachedSandbox) {
+    sandboxCache.delete(cacheKey);
+    sandboxCache.set(cacheKey, cachedSandbox);
+    return cachedSandbox;
+  }
+
+  const sandbox = new Sandbox(sandboxConfig);
+  sandboxCache.set(cacheKey, sandbox);
+
+  while (sandboxCache.size > MAX_SANDBOX_CACHE_ENTRIES) {
+    const oldestKey = sandboxCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    sandboxCache.delete(oldestKey);
+  }
+
+  return sandbox;
+}
 
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
@@ -77,6 +116,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             `Missing Beam workspace ID. Provide 'workspaceId' in config or set BEAM_WORKSPACE_ID environment variable.`
           );
         }
+
+        let cacheKey: string | undefined;
 
         try {
           const {
@@ -105,24 +146,20 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           const timeout = optTimeout ?? config.timeout;
           if (timeout) sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
 
-          if (runtime === 'node') {
+          if (runtime === 'node' && !sandboxConfig.image) {
             sandboxConfig.image = Image.fromRegistry('node:20-slim');
           }
 
           if (envs) {
-            sandboxConfig.envVars = Object.entries(envs).map(([name, value]) => `${name}=${value}`);
+            sandboxConfig.env = envs;
           }
 
-          const cacheKey = sandboxCacheKey(sandboxConfig);
-          let sandbox = sandboxCache.get(cacheKey);
-          if (!sandbox) {
-            sandbox = new Sandbox(sandboxConfig);
-            sandboxCache.set(cacheKey, sandbox);
-          }
-
+          cacheKey = sandboxCacheKey(sandboxConfig);
+          const sandbox = getCachedSandbox(cacheKey, sandboxConfig);
           const instance = await sandbox.create();
           return { sandbox: instance, sandboxId: instance.containerId };
         } catch (error) {
+          if (cacheKey) sandboxCache.delete(cacheKey);
           if (error instanceof Error && (error.message.includes('unauthorized') || error.message.includes('401'))) {
             throw new Error(
               `Beam authentication failed. Please check your BEAM_TOKEN environment variable. Get your token from https://app.beam.cloud`
