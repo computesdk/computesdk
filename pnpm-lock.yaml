@@ -1576,7 +1576,7 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@superserve/sdk':
-        specifier: ^0.7.3
+        specifier: ^0.7.6
         version: 0.7.6
       computesdk:
         specifier: workspace:*

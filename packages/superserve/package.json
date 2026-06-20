@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@superserve/sdk": "^0.7.3",
+    "@superserve/sdk": "^0.7.6",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },

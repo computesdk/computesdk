@@ -42,6 +42,9 @@ function resolveApiKey(config: SuperserveConfig): string {
 }
 
 function resolveBaseUrl(config: SuperserveConfig): string | undefined {
+  // Returns undefined when unset on purpose: the SDK then applies its own
+  // resolution (SUPERSERVE_BASE_URL env var, then its https://api.superserve.ai
+  // default), so we don't duplicate that constant and risk it drifting.
   return config.baseUrl || process.env.SUPERSERVE_BASE_URL || undefined;
 }
 
@@ -156,7 +159,10 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         try {
           let fullCommand = command;
           if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+            // Run the whole command under `sh -c` so the trailing `&` backgrounds
+            // the entire command (not just its last statement), and escape it so
+            // the user's command can't break out of the nohup wrapper.
+            fullCommand = `nohup sh -c "${escapeShellArg(fullCommand)}" > /dev/null 2>&1 &`;
           }
           const result = await sandbox.commands.run(fullCommand, {
             cwd: options?.cwd,
