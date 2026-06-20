@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.89
+
+### Patch Changes
+
+- Updated dependencies [de20947]
+  - @computesdk/runloop@1.3.53
+
 ## 0.4.88
 
 ### Patch Changes
