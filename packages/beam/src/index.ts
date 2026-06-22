@@ -37,45 +37,65 @@ function shellEscape(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
-function isNodeParserFailure(output: string): boolean {
-  const hasSyntaxMarker =
-    output.includes('SyntaxError') ||
-    output.includes('Unexpected token') ||
-    output.includes('Unexpected identifier') ||
-    output.includes('Unexpected end of input') ||
-    output.includes('Invalid or unexpected token');
+function stableStringify(value: unknown): string {
+  if (typeof value === 'bigint') {
+    return `${value.toString()}n`;
+  }
 
-  const hasCompileContext =
-    output.includes('[eval]') ||
-    output.includes('makeContextifyScript') ||
-    output.includes('compileScript') ||
-    output.includes('wrapSafe');
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? String(value);
+  }
 
-  const hasRuntimeSyntaxSignature =
-    output.includes('at JSON.parse') ||
-    output.includes('JSON.parse (<anonymous>)') ||
-    output.includes('in JSON at position');
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
 
-  return hasSyntaxMarker && hasCompileContext && !hasRuntimeSyntaxSignature;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
 }
 
-function isPythonParserFailure(output: string): boolean {
-  const hasSyntaxMarker =
-    output.includes('SyntaxError') ||
-    output.includes('IndentationError') ||
-    output.includes('TabError');
-
-  const hasStringFileContext = output.includes('File "<string>"');
-  const hasRuntimeTraceback = output.includes('Traceback (most recent call last)');
-
-  return hasSyntaxMarker && hasStringFileContext && !hasRuntimeTraceback;
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
 }
 
-function isParserFailure(output: string, runtime: string): boolean {
-  if (!output.trim()) return false;
-  if (runtime === 'node') return isNodeParserFailure(output);
-  if (runtime === 'python') return isPythonParserFailure(output);
-  return false;
+function sandboxCacheKey(sandboxConfig: any): string {
+  return stableStringify({
+    ...sandboxConfig,
+    image: sandboxConfig.image?.config || sandboxConfig.image,
+    __beamAuth: {
+      token: beamOpts.token ? hashString(beamOpts.token) : '',
+      workspaceId: beamOpts.workspaceId || '',
+      gatewayUrl: beamOpts.gatewayUrl || '',
+    },
+  });
+}
+
+const MAX_SANDBOX_CACHE_ENTRIES = 32;
+const sandboxCache = new Map<string, Sandbox>();
+
+function getCachedSandbox(cacheKey: string, sandboxConfig: any): Sandbox {
+  const cachedSandbox = sandboxCache.get(cacheKey);
+  if (cachedSandbox) {
+    sandboxCache.delete(cacheKey);
+    sandboxCache.set(cacheKey, cachedSandbox);
+    return cachedSandbox;
+  }
+
+  const sandbox = new Sandbox(sandboxConfig);
+  sandboxCache.set(cacheKey, sandbox);
+
+  while (sandboxCache.size > MAX_SANDBOX_CACHE_ENTRIES) {
+    const oldestKey = sandboxCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    sandboxCache.delete(oldestKey);
+  }
+
+  return sandbox;
 }
 
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
@@ -97,6 +117,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           );
         }
 
+        let cacheKey: string | undefined;
+
         try {
           const {
             timeout: optTimeout,
@@ -112,9 +134,11 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           } = options || {};
 
           const optRuntime = (options as any)?.runtime as string | undefined;
+          const runtime = optRuntime || 'node';
+          const sandboxName = name || 'computesdk-sandbox';
 
           const sandboxConfig: any = {
-            name: name || `computesdk-${Date.now()}`,
+            name: sandboxName,
             keepWarmSeconds: 300,
             ...providerOptions,
           };
@@ -122,18 +146,20 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           const timeout = optTimeout ?? config.timeout;
           if (timeout) sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
 
-          if (optRuntime === 'node') {
+          if (runtime === 'node' && !sandboxConfig.image) {
             sandboxConfig.image = Image.fromRegistry('node:20-slim');
           }
 
           if (envs) {
-            sandboxConfig.envVars = Object.entries(envs).map(([name, value]) => `${name}=${value}`);
+            sandboxConfig.env = envs;
           }
 
-          const sandbox = new Sandbox(sandboxConfig);
+          cacheKey = sandboxCacheKey(sandboxConfig);
+          const sandbox = getCachedSandbox(cacheKey, sandboxConfig);
           const instance = await sandbox.create();
           return { sandbox: instance, sandboxId: instance.containerId };
         } catch (error) {
+          if (cacheKey) sandboxCache.delete(cacheKey);
           if (error instanceof Error && (error.message.includes('unauthorized') || error.message.includes('401'))) {
             throw new Error(
               `Beam authentication failed. Please check your BEAM_TOKEN environment variable. Get your token from https://app.beam.cloud`
