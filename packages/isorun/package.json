@@ -1,9 +1,12 @@
 {
-  "name": "@computesdk/declaw",
-  "version": "0.2.7",
-  "description": "Declaw provider for ComputeSDK - secure sandboxes with PII scanning, prompt-injection defense, and network egress filtering",
-  "author": "Declaw <hello@declaw.ai>",
+  "name": "@computesdk/isorun",
+  "version": "0.1.0",
+  "description": "Isorun provider for ComputeSDK — isolated Linux VM sandboxes for running untrusted and AI-generated code",
+  "author": "Isorun <hello@isorun.ai>",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -27,31 +30,31 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
-  "dependencies": {
-    "@declaw/sdk": "^1.2.3",
-    "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
-  },
   "keywords": [
     "computesdk",
-    "declaw",
+    "isorun",
     "sandbox",
-    "security",
-    "pii",
-    "prompt-injection",
-    "guardrails",
+    "isolation",
+    "code-interpreter",
+    "code-execution",
+    "cloud",
     "compute",
     "provider",
-    "firecracker"
+    "ai-agent"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/declaw"
+    "directory": "packages/isorun"
   },
-  "homepage": "https://declaw.ai",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "dependencies": {
+    "isorun": "^1.0.0",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
