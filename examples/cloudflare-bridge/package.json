@@ -1,0 +1,18 @@
+{
+  "name": "@computesdk/example-cloudflare-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ComputeSDK Cloudflare bridge endpoint client example",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@computesdk/cloudflare": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "dotenv": "^17.2.1",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
