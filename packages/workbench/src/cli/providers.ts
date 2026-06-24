@@ -14,6 +14,7 @@ const SHARED_PROVIDER_NAMES = [
   'cloudflare',
   'beam',
   'just-bash',
+  'cloud-run',
   'codesandbox',
   'blaxel',
   'namespace',
@@ -45,6 +46,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
     ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
     ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
   ],
+  'cloud-run': [[]],
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
   'just-bash': [[]],
   codesandbox: [['CSB_API_KEY']],
@@ -77,6 +79,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
     sandboxUrl: 'CLOUDFLARE_SANDBOX_URL',
     sandboxSecret: 'CLOUDFLARE_SANDBOX_SECRET',
   },
+  'cloud-run': { sandboxUrl: 'CLOUD_RUN_SANDBOX_URL', sandboxSecret: 'CLOUD_RUN_SANDBOX_SECRET', gatewayAuthToken: 'CLOUD_RUN_AUTH_TOKEN', sandboxBinary: 'CLOUD_RUN_SANDBOX_BINARY' },
   beam: { token: 'BEAM_TOKEN', workspaceId: 'BEAM_WORKSPACE_ID' },
   'just-bash': {},
   codesandbox: { apiKey: 'CSB_API_KEY' },
@@ -326,6 +329,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'cloudflare':
         // @ts-ignore - @cloudflare/sandbox types may not be available
         return await import('@computesdk/cloudflare');
+      case 'cloud-run':
+        return await import('@computesdk/cloud-run');
       case 'beam':
         return await import('@computesdk/beam');
       case 'just-bash':
