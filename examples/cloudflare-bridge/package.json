@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-cloudflare-bridge",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "ComputeSDK Cloudflare bridge endpoint client example",
   "scripts": {
