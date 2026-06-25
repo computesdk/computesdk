@@ -299,10 +299,6 @@ async function bridgeExec(
   return { ...parsed, durationMs: Date.now() - startTime };
 }
 
-function shellEscape(s: string): string {
-  return s.replace(/["$`\\!]/g, '\\$&');
-}
-
 function processExecution(execution: any, detectedRuntime: string): CodeResult {
   const stdoutParts: string[] = [];
   const stderrParts: string[] = [];
@@ -565,7 +561,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           if (cfSandbox.remote) {
             result = await bridgeExec(cfSandbox, `ls -la ${shellQuote(path)}`, { cwd: '/workspace' });
           } else {
-            result = await cfSandbox.sandbox.exec(`ls -la "${shellEscape(path)}"`, { cwd: '/' });
+            result = await cfSandbox.sandbox.exec(`ls -la ${shellQuote(path)}`, { cwd: '/' });
           }
           if (result.exitCode !== 0) throw new Error(`Directory listing failed: ${result.stderr}`);
           return parseLsOutput(result.stdout);

@@ -465,6 +465,32 @@ describe('Standardized Test Suite', () => {
     }
   });
 
+  it('shell-quotes filesystem paths containing metacharacters', async () => {
+    if (skipIntegration) {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(bridgeCreateResponse())
+        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 0 }) }]));
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
+        const created = await remoteProvider.sandbox.create();
+        const maliciousPath = '/workspace/$(touch pwned)`whoami`\\!';
+        await created.filesystem.mkdir(maliciousPath);
+
+        const requestInit = fetchMock.mock.calls[1]?.[1];
+        const body = JSON.parse(requestInit?.body as string) as { argv: string[] };
+        const command = body.argv[body.argv.length - 1];
+        // Path must be wrapped in single quotes so metacharacters are inert.
+        expect(command).toContain("mkdir -p '/workspace/$(touch pwned)`whoami`\\!'");
+        expect(command).not.toContain('"');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+  });
+
   it('handles bridge tunnel urls with and without protocol', async () => {
     if (skipIntegration) {
       const fetchMock = vi.fn()
