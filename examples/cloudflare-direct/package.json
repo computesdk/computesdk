@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-cloudflare-direct",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "ComputeSDK Cloudflare direct mode warm pool Worker example",
   "scripts": {
