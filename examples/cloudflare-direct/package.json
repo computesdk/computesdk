@@ -1,0 +1,20 @@
+{
+  "name": "@computesdk/example-cloudflare-direct",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ComputeSDK Cloudflare direct mode warm pool Worker example",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/sandbox": "^0.12.1",
+    "@computesdk/cloudflare": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20250826.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^4.43.0"
+  }
+}
