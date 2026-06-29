@@ -501,6 +501,28 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   }
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw makeAbortError();
+  }
+}
+
+function makeAbortError(): Error {
+  const error = new Error('The operation was aborted.');
+  (error as any).name = 'AbortError';
+  return error;
+}
+
+function abortPromise(signal?: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal?.aborted) {
+      reject(makeAbortError());
+      return;
+    }
+    signal?.addEventListener('abort', () => reject(makeAbortError()), { once: true });
+  });
+}
+
 /**
  * Auto-generated Sandbox Manager implementation
  */
@@ -513,7 +535,26 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   ) {}
 
   async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
-    const result = await this.methods.create(this.config, options);
+    throwIfAborted(options?.signal);
+
+    const signal = options?.signal;
+    const createPromise = this.methods.create(this.config, options);
+
+    // If the provider promise resolves after abort, clean up the orphaned sandbox
+    createPromise.then(
+      (result) => {
+        if (signal?.aborted) {
+          this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+        }
+      },
+      () => {}
+    );
+
+    const result = await Promise.race([createPromise, abortPromise(signal)]);
+
+    if (signal?.aborted) {
+      throw makeAbortError();
+    }
 
     return new GeneratedSandbox<TSandbox>(
       result.sandbox,
