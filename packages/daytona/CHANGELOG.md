@@ -1,5 +1,11 @@
 # @computesdk/daytona
 
+## 1.7.31
+
+### Patch Changes
+
+- f89e63e: Upgrade `@daytonaio/sdk` to `^0.192.0` and migrate off the deprecated offset-based sandbox pagination (the `page` param and `/api/sandbox/paginated` endpoint, retired by Daytona on 2026-07-02). `sandbox.list()` now consumes the auto-paginating async iterator returned by `daytona.list()`, and the snapshot/template methods use the renamed `daytona.snapshot` accessor.
+
 ## 1.7.30
 
 ### Patch Changes

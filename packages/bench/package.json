@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/bench",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "type": "module",
   "description": "Client and worker helpers for the ComputeSDK benchmark orchestrator",
   "author": "Garrison",

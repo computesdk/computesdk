@@ -1,5 +1,14 @@
 # @computesdk/example-basic
 
+## 0.4.90
+
+### Patch Changes
+
+- Updated dependencies [f89e63e]
+- Updated dependencies [3fb1171]
+  - @computesdk/daytona@1.7.31
+  - @computesdk/superserve@0.2.0
+
 ## 0.4.89
 
 ### Patch Changes
