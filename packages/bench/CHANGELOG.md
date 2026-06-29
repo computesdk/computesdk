@@ -1,5 +1,24 @@
 # @computesdk/bench
 
+## 0.1.8
+
+### Patch Changes
+
+- b703742: Release benchmark worker heartbeat coalescing fixes and artifact upload response typing.
+
+## 0.1.7
+
+### Patch Changes
+
+- 1e06afb: Align the benchmark client with the platform orchestrator contract, including validation limits and artifact/result helpers.
+- 1e06afb: Replace the legacy local benchmark runner with a client for the platform benchmark orchestrator APIs.
+
+## 0.1.6
+
+### Patch Changes
+
+- ba01c4f: Remove the benchmark span log entry cap so all `ctx.log()` entries are included on span events (with existing sanitization).
+
 ## 0.1.5
 
 ### Patch Changes

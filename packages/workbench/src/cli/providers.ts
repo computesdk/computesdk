@@ -19,6 +19,7 @@ const SHARED_PROVIDER_NAMES = [
   'namespace',
   'hopx',
   'declaw',
+  'isorun',
   'sprites',
   'agentuity',
   'freestyle',
@@ -26,6 +27,7 @@ const SHARED_PROVIDER_NAMES = [
   'upstash',
   'k8s',
   'northflank',
+  'collimate',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -50,6 +52,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
   declaw: [['DECLAW_API_KEY']],
+  isorun: [['ISORUN_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
   freestyle: [['FREESTYLE_API_KEY']],
@@ -57,6 +60,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   upstash: [['UPSTASH_BOX_API_KEY']],
   k8s: [[]],
   northflank: [['NORTHFLANK_TOKEN', 'NORTHFLANK_PROJECT_ID']],
+  collimate: [['COLLIMATE_API_KEY']],
 };
 
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
@@ -80,6 +84,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
   hopx: { apiKey: 'HOPX_API_KEY' },
   declaw: { apiKey: 'DECLAW_API_KEY' },
+  isorun: { apiKey: 'ISORUN_API_KEY' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
   freestyle: { apiKey: 'FREESTYLE_API_KEY' },
@@ -87,6 +92,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
   k8s: {},
   northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL' },
+  collimate: { apiKey: 'COLLIMATE_API_KEY', serverUrl: 'COLLIMATE_API_URL' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
@@ -335,6 +341,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/hopx');
       case 'declaw':
         return await import('@computesdk/declaw');
+      case 'isorun':
+        return await import('@computesdk/isorun');
       case 'sprites':
         return await import('@computesdk/sprites');
       case 'agentuity':
@@ -351,6 +359,9 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'northflank':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/northflank');
+      case 'collimate':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/collimate');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }
