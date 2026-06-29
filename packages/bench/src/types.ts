@@ -589,6 +589,7 @@ export interface RunWorkerOptions {
   processKey?: string;
   concurrency?: number;
   batchSize?: number;
+  flushIntervalMs?: number;
   heartbeatIntervalMs?: number;
   readyPollIntervalMs?: number;
   onResult?: (record: TaskResultRecord) => void;
@@ -600,6 +601,7 @@ export interface RunWorkerOptions {
 export interface WorkerDefaults {
   concurrency?: number;
   batchSize?: number;
+  flushIntervalMs?: number;
   heartbeatIntervalMs?: number;
   readyPollIntervalMs?: number;
 }
