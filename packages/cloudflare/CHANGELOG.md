@@ -1,5 +1,15 @@
 # @computesdk/cloudflare
 
+## 1.6.13
+
+### Patch Changes
+
+- 3e2c625: Update the Cloudflare provider remote mode to use the official Cloudflare Sandbox bridge API. New remote deployments no longer require a ComputeSDK-specific gateway Worker; deploy Cloudflare's reference bridge Worker and configure `sandboxUrl` with `sandboxApiKey`. The previous `sandboxSecret` option remains as a deprecated alias for `sandboxApiKey`.
+
+  Direct mode can now opt in to the official bridge WarmPool by passing `warmPool: { binding, target, refreshInterval }` alongside `sandboxBinding`.
+
+- 3e2c625: Fix shell injection risk in the Cloudflare provider's `readdir` direct mode by quoting filesystem paths with `shellQuote` (single-quote based) instead of the insufficient double-quote `shellEscape`. Paths containing `# @computesdk/cloudflare, backticks, or backslashes are now treated as inert literals.
+
 ## 1.6.12
 
 ### Patch Changes
