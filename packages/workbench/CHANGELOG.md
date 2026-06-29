@@ -1,5 +1,20 @@
 # @computesdk/workbench
 
+## 27.0.5
+
+### Patch Changes
+
+- Updated dependencies [3e2c625]
+- Updated dependencies [3e2c625]
+  - @computesdk/cloudflare@1.6.13
+
+## 27.0.4
+
+### Patch Changes
+
+- Updated dependencies [de20947]
+  - @computesdk/runloop@1.3.53
+
 ## 27.0.3
 
 ### Patch Changes

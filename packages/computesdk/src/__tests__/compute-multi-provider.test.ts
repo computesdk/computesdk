@@ -245,6 +245,40 @@ describe('compute multi-provider', () => {
     await expect(sdk.sandbox.create({ provider: 'modal' })).rejects.toThrow(/is not configured/);
   });
 
+  it('passes AbortSignal through to provider sandbox.create', async () => {
+    const createSpy = vi.fn(async (options?: any) => {
+      if (options?.signal?.aborted) {
+        const err = new Error('The operation was aborted.') as any;
+        err.name = 'AbortError';
+        throw err;
+      }
+      return makeSandbox('e2b-signal', 'e2b');
+    });
+    const e2b = makeProvider('e2b', { create: createSpy });
+    const sdk = compute({ provider: e2b });
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(sdk.sandbox.create({ signal: controller.signal })).rejects.toThrow('The operation was aborted.');
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }));
+  });
+
+  it('rethrows AbortError immediately instead of falling back to next provider', async () => {
+    const e2bCreate = vi.fn(async () => {
+      const err = new Error('The operation was aborted.') as any;
+      err.name = 'AbortError';
+      throw err;
+    });
+    const e2b = makeProvider('e2b', { create: e2bCreate });
+    const modalCreate = vi.fn(async () => makeSandbox('modal-sbx', 'modal'));
+    const modal = makeProvider('modal', { create: modalCreate });
+
+    const sdk = compute({ providers: [e2b, modal] });
+    await expect(sdk.sandbox.create()).rejects.toThrow('The operation was aborted.');
+    expect(modalCreate).not.toHaveBeenCalled();
+  });
+
   it('creates snapshots using snapshot-capable providers without mutating round-robin create order', async () => {
     const e2bCreate = vi.fn(async () => makeSandbox('e2b-sbx', 'e2b'));
     const e2b = makeProvider('e2b', { create: e2bCreate });

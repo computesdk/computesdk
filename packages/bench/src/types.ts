@@ -207,6 +207,10 @@ export interface CreateWorkerArtifactInput {
   metadata?: JsonObject;
 }
 
+export interface UploadWorkerArtifactInput extends CreateWorkerArtifactInput {
+  body: BodyInit;
+}
+
 export interface BenchmarkArtifact {
   id?: string;
   artifactId?: string;
@@ -277,7 +281,7 @@ export interface BenchmarkResultsOverviewInput {
   limit?: number;
 }
 
-export type BenchmarkAnalyticsReadiness = 'ready' | 'partial' | 'pending' | 'unavailable' | 'failed';
+export type BenchmarkAnalyticsReadiness = 'ready' | 'complete' | 'partial' | 'pending' | 'unavailable' | 'failed';
 
 export interface BenchmarkRunAnalyticsSummary {
   status: BenchmarkAnalyticsReadiness;
@@ -520,11 +524,21 @@ export interface RunWorkerContext {
   step<T>(name: string, fn: () => Promise<T> | T, options?: DefineStepOptions): Promise<T>;
 }
 
+export interface WorkerFinishContext {
+  assignment: BenchmarkAssignment;
+  records: TaskResultRecord[];
+  status: 'success' | 'error';
+  client: BenchmarkClient;
+  uploadArtifact(input: Omit<UploadWorkerArtifactInput, 'attemptId'>): Promise<CreateWorkerArtifactResponse>;
+}
+
 export interface StepContext<TState extends Record<string, unknown> = Record<string, unknown>> {
   assignment: BenchmarkAssignment;
   taskIndex: number;
   state: TState;
 }
+
+export type CleanupContext<TState extends Record<string, unknown> = Record<string, unknown>> = StepContext<TState>;
 
 export interface DefineStepOptions {
   /** Report this step as active in heartbeat concurrency samples. Defaults to true. */
@@ -545,9 +559,18 @@ export interface DefinedStep<TState extends Record<string, unknown> = Record<str
   fn: (context: StepContext<TState>) => Promise<JsonObject | void> | JsonObject | void;
 }
 
+export interface DefineTaskOptions<TState extends Record<string, unknown> = Record<string, unknown>> {
+  /**
+   * Runs after the task finishes, whether it succeeded or failed.
+   * Use this to tear down resources stored in task state.
+   */
+  cleanup?: (context: CleanupContext<TState>) => Promise<void> | void;
+}
+
 export interface DefinedTask<TState extends Record<string, unknown> = Record<string, unknown>> {
   name: string;
   steps: DefinedStep<TState>[];
+  options?: DefineTaskOptions<TState>;
 }
 
 export type TaskFunction = (context: RunWorkerContext) => Promise<JsonObject | void> | JsonObject | void;
@@ -570,6 +593,8 @@ export interface RunWorkerOptions {
   heartbeatIntervalMs?: number;
   readyPollIntervalMs?: number;
   onResult?: (record: TaskResultRecord) => void;
+  /** Runs once after final result flush and before worker completion/failure is reported. */
+  onFinish?: (context: WorkerFinishContext) => Promise<void> | void;
   task: WorkerTask;
 }
 
@@ -588,6 +613,7 @@ export interface DefineWorkerOptions extends WorkerDefaults {
   processKind?: string;
   processKey?: string;
   client?: BenchmarkClient;
+  onFinish?: RunWorkerOptions['onFinish'];
   task: WorkerTask;
 }
 
@@ -692,6 +718,12 @@ export interface BenchmarkClient {
     runId: string,
     workerId: string,
     input: CreateWorkerArtifactInput,
+  ): Promise<CreateWorkerArtifactResponse>;
+  uploadWorkerArtifact(
+    benchmarkSlug: string,
+    runId: string,
+    workerId: string,
+    input: UploadWorkerArtifactInput,
   ): Promise<CreateWorkerArtifactResponse>;
   listRunArtifacts(benchmarkSlug: string, runId: string): Promise<BenchmarkArtifact[]>;
   listWorkerArtifacts(benchmarkSlug: string, runId: string, workerId: string): Promise<BenchmarkArtifact[]>;
