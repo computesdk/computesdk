@@ -258,6 +258,43 @@ jobs:
         echo "Running computesdk integration test for $TEST_PROVIDER..."
         pnpm --filter computesdk test compute-provider-integration
 
+  bench-orchestrator-capabilities:
+    runs-on: namespace-profile-default
+    needs: test
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+
+    - name: Build bench package
+      run: pnpm --filter @computesdk/bench run build
+
+    - name: Run bench orchestrator capabilities smoke
+      env:
+        COMPUTESDK_ADMIN_API_KEY: ${{ secrets.COMPUTESDK_ADMIN_API_KEY }}
+        COMPUTESDK_BENCH_BASE_URL: https://platform.computesdk.com/api/v1
+      run: |
+        if [ -z "$COMPUTESDK_ADMIN_API_KEY" ]; then
+          echo "Skipping bench orchestrator capabilities smoke - missing COMPUTESDK_ADMIN_API_KEY"
+          exit 0
+        fi
+
+        pnpm --filter @computesdk/bench run test:capabilities
+
   k8s-integration-tests:
     runs-on: ubuntu-latest
     needs: test

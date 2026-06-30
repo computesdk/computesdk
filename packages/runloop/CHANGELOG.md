@@ -1,5 +1,11 @@
 # @computesdk/runloop
 
+## 1.3.53
+
+### Patch Changes
+
+- de20947: Require the Runloop API client 1.24 release line.
+
 ## 1.3.52
 
 ### Patch Changes

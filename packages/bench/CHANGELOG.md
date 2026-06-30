@@ -1,5 +1,24 @@
 # @computesdk/bench
 
+## 0.1.9
+
+### Patch Changes
+
+- 4d35182: Increase default task result event batches to 1,000 records and add timed partial flushing for benchmark workers.
+
+## 0.1.8
+
+### Patch Changes
+
+- b703742: Release benchmark worker heartbeat coalescing fixes and artifact upload response typing.
+
+## 0.1.7
+
+### Patch Changes
+
+- 1e06afb: Align the benchmark client with the platform orchestrator contract, including validation limits and artifact/result helpers.
+- 1e06afb: Replace the legacy local benchmark runner with a client for the platform benchmark orchestrator APIs.
+
 ## 0.1.6
 
 ### Patch Changes

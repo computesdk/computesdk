@@ -421,6 +421,132 @@ describe('Factory', () => {
       expect(fetchMock).toHaveBeenCalledWith('https://derived.mock.dev/events?token=tok', expect.any(Object))
     })
 
+    it('should throw AbortError when signal is already aborted before create', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-abort', status: 'running' },
+          sandboxId: 'test-abort'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 1
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-abort',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-abort-3000.mock.dev')
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const controller = new AbortController()
+      controller.abort()
+
+      await expect(provider.sandbox.create({ signal: controller.signal })).rejects.toThrow('The operation was aborted.')
+      expect(methods.create).not.toHaveBeenCalled()
+    })
+
+    it('should destroy sandbox and throw AbortError when signal aborts during create', async () => {
+      const methods = {
+        create: vi.fn().mockImplementation(async () => {
+          // Simulate creation completing after abort
+          return {
+            sandbox: { id: 'test-orphan', status: 'running' },
+            sandboxId: 'test-orphan'
+          }
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 1
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-orphan',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-orphan-3000.mock.dev')
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const controller = new AbortController()
+      const createPromise = provider.sandbox.create({ signal: controller.signal })
+      controller.abort()
+
+      await expect(createPromise).rejects.toThrow('The operation was aborted.')
+      expect(methods.create).toHaveBeenCalled()
+      expect(methods.destroy).toHaveBeenCalledWith({ apiKey: 'test-key' }, 'test-orphan')
+    })
+
+    it('should reject immediately when abort fires during slow create and clean up the sandbox', async () => {
+      let resolveCreate: (value: any) => void
+      const createPromise = new Promise<any>((resolve) => {
+        resolveCreate = resolve
+      })
+      const methods = {
+        create: vi.fn().mockReturnValue(createPromise),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          durationMs: 1
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-slow',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-slow-3000.mock.dev')
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const controller = new AbortController()
+      const promise = provider.sandbox.create({ signal: controller.signal })
+
+      controller.abort()
+      await expect(promise).rejects.toThrow('The operation was aborted.')
+      expect(methods.create).toHaveBeenCalled()
+
+      // Resolve the provider promise after abort — cleanup should still run
+      resolveCreate!({ sandbox: { id: 'test-slow' }, sandboxId: 'test-slow' })
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(methods.destroy).toHaveBeenCalledWith({ apiKey: 'test-key' }, 'test-slow')
+    })
+
     it('should stream daemon stdout and stderr when daemon SSE is available', async () => {
       const methods = {
         create: vi.fn().mockResolvedValue({

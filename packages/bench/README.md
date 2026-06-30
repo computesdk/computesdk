@@ -1,8 +1,8 @@
 # @computesdk/bench
 
-Tinybench-style benchmarking toolkit for ComputeSDK.
+Client and worker helpers for the ComputeSDK benchmark orchestrator.
 
-`@computesdk/bench` runs warmups + measured iterations across named pipeline steps and emits structured benchmark events.
+This package talks to the platform-owned benchmark/run/participant/worker API. It does not mint canonical run, worker, attempt, event, or task IDs. Workers claim platform-assigned work, execute task indexes in their assigned range, and send `task_results` batches back to the platform.
 
 ## Installation
 
@@ -10,171 +10,284 @@ Tinybench-style benchmarking toolkit for ComputeSDK.
 npm install @computesdk/bench
 ```
 
-## Quick Start
+## Define A Worker
 
 ```ts
-import { createBench } from '@computesdk/bench';
+import { defineStep, defineTask, defineWorker } from '@computesdk/bench';
 import { compute } from 'computesdk';
 
-const bench = createBench({
-  label: 'sandbox-lifecycle',
-  batch: 'burst-100k-e2b',
-  shard: { index: 0, count: 100 },
-  captureOutput: { file: '/root/run.log' },
-});
-
-const sandboxes: Array<{ sandboxId: string; runCommand: (cmd: string) => Promise<unknown>; destroy: () => Promise<void> } | undefined> = [];
-
-bench
-  .add('create', async (ctx) => {
-    ctx.log('booting sandbox...');
-    sandboxes[ctx.iteration] = await compute.sandbox.create();
-  })
-  .add('exec', async (ctx) => {
-    await sandboxes[ctx.iteration]?.runCommand('node -v');
-  }, { concurrency: 100 })
-  .add('destroy', async (ctx) => {
-    await sandboxes[ctx.iteration]?.destroy();
-  }, { runOnFailed: true });
-
-const result = await bench.run({
-  iterations: 25,
-  warmup: 3,
-  mode: 'concurrent',
+const worker = defineWorker({
+  benchmarkSlug: 'scale',
+  runId: process.env.BENCHMARK_RUN_ID!,
+  participantSlug: 'e2b',
+  processKind: 'container',
+  processKey: process.env.HOSTNAME,
   concurrency: 100,
-  provider: 'e2b',
+  task: defineTask('sandbox.lifecycle', [
+    defineStep('create', async ({ assignment, state }) => {
+      state.sandbox = await compute.sandbox.create({
+        provider: assignment.provider ?? 'e2b',
+      });
+    }),
+    defineStep('readiness', async ({ state }) => {
+      await (state.sandbox as any).runCommand('true');
+    }),
+    defineStep('exec.first-command', async ({ state }) => {
+      await (state.sandbox as any).runCommand('node -v');
+    }),
+    defineStep('pause', { readiness: 'poll' }, async () => {
+      // Every worker reports active pause concurrency and waits here until
+      // the platform reports the participant's pause step is ready.
+    }),
+    defineStep('destroy', async ({ state }) => {
+      await (state.sandbox as any).destroy();
+    }),
+  ]),
 });
 
-for (const task of result.tasks) {
-  console.log(`${task.taskName}: p95=${task.stats.p95Ms}ms`);
-}
+await worker.run();
 ```
 
-## Scale Lifecycle Pattern
+`worker.run()` claims the next pending platform assignment for the participant. If no work is available, it returns `{ assignment: null, records: [] }`.
 
-For scale/lifecycle benchmarks, model each lifecycle phase as a step and let
-`iterations` represent unit count.
+Task results are flushed to the platform in batches of 1,000 records by default. Set `batchSize` to tune this per worker; the SDK validates the platform limit of 5,000 records per batch. Workers also flush partial batches every 30 seconds by default via `flushIntervalMs`, and always flush pending records during final completion or shutdown.
+
+## Reuse A Bench Definition
 
 ```ts
-import { createBench } from '@computesdk/bench';
-import { compute } from 'computesdk';
+import { defineBench, defineStep, defineTask } from '@computesdk/bench';
 
-const bench = createBench({ label: 'scale.e2b' });
-const sandboxes: Array<any | undefined> = [];
+const lifecycleTask = defineTask('sandbox.lifecycle', [
+  defineStep('create', async ({ state }) => {
+    state.sandboxId = 'sandbox_123';
+  }),
+  defineStep('exec.first-command', async ({ state }) => ({
+    sandboxId: String(state.sandboxId),
+  })),
+]);
 
-bench
-  .add('create', async (ctx) => {
-    sandboxes[ctx.iteration] = await compute.sandbox.create();
-  }, { concurrency: 100 })
-  .add('exec.initial', async (ctx) => {
-    await sandboxes[ctx.iteration]?.runCommand('node -v');
-  }, { concurrency: 100 })
-  .add('exec.concurrent', async (ctx) => {
-    await sandboxes[ctx.iteration]?.runCommand('node -v');
-  }, { concurrency: 100 })
-  .add('destroy', async (ctx) => {
-    await sandboxes[ctx.iteration]?.destroy();
-  }, { runOnFailed: true, concurrency: 100 });
-
-await bench.run({
-  mode: 'concurrent',
-  iterations: 100,
+const bench = defineBench({
+  slug: 'scale',
+  participantSlug: 'e2b',
   concurrency: 100,
-  warmup: 0,
+  task: lifecycleTask,
 });
+
+const worker = bench.defineWorker({
+  runId: process.env.BENCHMARK_RUN_ID!,
+  processKey: process.env.HOSTNAME,
+});
+
+await worker.run();
 ```
 
-This gives step-level timing (`create`, `exec.initial`, `exec.concurrent`,
-`destroy`) where each step's `Runs` naturally maps to unit count.
+## Create A Platform Run
+
+```ts
+import { createBenchmarkClient } from '@computesdk/bench';
+
+const client = createBenchmarkClient({
+  apiKey: process.env.COMPUTESDK_ADMIN_API_KEY,
+});
+
+await client.upsertBenchmark('scale', {
+  name: 'Scale',
+  kind: 'scale',
+  config: { timeoutMs: 120_000 },
+});
+
+const { run } = await client.createRun('scale', {
+  name: '10k smoke',
+  totalTasks: 10_000,
+  workerCount: 20,
+  participants: ['e2b', 'modal'],
+  config: { timeoutMs: 120_000 },
+});
+
+await client.planWorkers('scale', run.id, 'e2b');
+await client.planWorkers('scale', run.id, 'modal');
+
+console.log(run.id);
+```
+
+Workers must be planned before `worker.run()` can claim assignments.
 
 ## API
 
-### `createBench(config)`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `label` | `string` | Human-readable run label |
-| `baseUrl` | `string?` | Optional base URL for ingest/query APIs. Defaults to `https://platform.computesdk.com/api/v1` |
-| `apiKey` | `string?` | Optional bearer token used for ingest/query requests. Defaults to `process.env.COMPUTESDK_API_KEY` |
-| `batch` | `string?` | Shared logical batch id for multi-process/sharded runs |
-| `shard` | `{ index: number; count: number }?` | Shard metadata for this process. `index` is zero-based |
-| `onEvent` | `function?` | Local debug hook called with every emitted event |
-| `captureOutput` | `{ file: string; flushInterval?: number }?` | Tail a process log file and emit `benchmark.output` events. `flushInterval` is milliseconds and defaults to `30000` |
-
-Returns `{ add, run, emit, progress, ...query }`.
-
-### `bench.add(taskName, fn, options?)`
-
-Register a named pipeline step. `fn` receives a `BenchContext`.
-`add()` is chainable.
-
-`options`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `concurrency` | `number?` | Per-step concurrency cap (used in concurrent mode) |
-| `runOnFailed` | `boolean?` | Run this step for iterations that failed earlier steps (useful for cleanup) |
-
-`BenchContext`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `ctx.iteration` | `number` | Current iteration index within the current phase (0-based) |
-| `ctx.phase` | `'warmup' \| 'measured'` | Current phase |
-| `ctx.taskName` | `string` | Name of the current task |
-| `ctx.log(...args)` | `function` | Attach a log message to this iteration's benchmark span |
-
-### `bench.run(options?)`
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `iterations` | `25` | Measured iterations per task |
-| `warmup` | `3` | Warmup iterations before measuring |
-| `mode` | `'sequential'` | Run iterations sequentially or concurrently |
-| `concurrency` | `iterations` | In concurrent mode, max in-flight iterations |
-| `provider` | — | Provider name tag applied to all spans |
-| `throwOnError` | `true` | Re-throw the first error encountered |
-
-Returns a `BenchSuiteResult`:
+### Definition Helpers
 
 ```ts
+defineStep(name, fn)
+defineTask(name, steps)
+defineWorker(options)
+defineBench(options)
+```
+
+Step functions receive:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `assignment` | `BenchmarkAssignment` | Platform-owned assignment for this worker |
+| `taskIndex` | `number` | Deterministic task index within the benchmark run |
+| `state` | `Record<string, unknown>` | Mutable per-task state shared across steps |
+
+If a step returns a JSON object, it is merged into the task result `data` object. Defined tasks also include `taskName` in `data`.
+
+`defineTask(name, steps, options)` supports task cleanup:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `cleanup` | `(context) => Promise<void> \| void` | Runs after the task finishes, whether steps succeeded or failed. Use shared `state` to tear down resources created by earlier steps. |
+
+```ts
+type SandboxState = {
+  sandbox?: Awaited<ReturnType<typeof compute.sandbox.create>>;
+};
+
+defineTask<SandboxState>('sandbox.lifecycle', [
+  defineStep<SandboxState>('create', async ({ state }) => {
+    state.sandbox = await compute.sandbox.create();
+  }),
+  defineStep<SandboxState>('exec', async ({ state }) => {
+    await state.sandbox.runCommand('node -v');
+  }),
+], {
+  cleanup: async ({ state }) => {
+    await state.sandbox?.destroy?.();
+  },
+});
+```
+
+`defineStep(name, options, fn)` supports step-level progress coordination:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `reportConcurrency` | `boolean?` | Include active count for this step in worker heartbeats. Defaults to `true` |
+| `concurrency` | `number?` | Per-worker target for this step. Defaults to worker concurrency/assignment target |
+| `readiness` | `'poll' \| 'internal'?` | Readiness coordination mode. Defaults to `'internal'`. Use `'poll'` for platform-coordinated barrier steps |
+| `readyPollIntervalMs` | `number?` | Poll interval while waiting. Defaults to `1000` |
+| `readyTimeoutMs` | `number?` | Maximum readiness wait time |
+
+### Low-Level Client
+
+```ts
+client.updateBenchmark(benchmarkSlug, input)
+client.updateRun(benchmarkSlug, runId, input)
+client.updateParticipant(benchmarkSlug, runId, participantSlug, input)
+client.planWorkers(benchmarkSlug, runId, participantSlug)
+client.getWorker(benchmarkSlug, runId, workerId)
+client.updateWorker(benchmarkSlug, runId, workerId, input)
+client.claimWorker(benchmarkSlug, runId, participantSlug, { processKind, processKey })
+client.sendTaskResults({ benchmarkSlug, runId, workerId, attemptId, sequenceNumber, isFinal, records })
+client.uploadWorkerArtifact(benchmarkSlug, runId, workerId, {
+  attemptId,
+  kind: 'log',
+  name: 'coordinator.log',
+  contentType: 'text/plain; charset=utf-8',
+  body: logText,
+})
+client.heartbeatWorker(benchmarkSlug, runId, workerId, {
+  attemptId,
+  currentStep: 'pause',
+  concurrency: [{ step: 'pause', active: 100, target: 100 }],
+})
+client.getRunProgress(benchmarkSlug, runId)
+client.getBenchmarkResults(benchmarkSlug, { limit })
+client.getRunResults(benchmarkSlug, runId)
+client.getRunTaskResults(benchmarkSlug, runId, { bucketSize, failureLimit })
+client.getRunTimeline(benchmarkSlug, runId, { bucketMs })
+client.getRunImports(benchmarkSlug, runId)
+client.completeWorker(benchmarkSlug, runId, workerId, attemptId)
+client.failWorker(benchmarkSlug, runId, workerId, attemptId, error)
+client.runWorker(options)
+```
+
+For custom coordinators that do not fit `defineWorker`, use the best-effort reporter wrapper:
+
+```ts
+const reporter = await BenchmarkReporter.claim({
+  benchmarkSlug: 'scale',
+  runId,
+  participantSlug: 'e2b',
+  processKind: 'container',
+  processKey: instanceId,
+});
+
+reporter?.setProgress({ done, inFlight, errors });
+reporter?.recordResult(record);
+await reporter?.waitForStepReady({ step: 'ready.barrier', timeoutMs: 15 * 60_000 });
+await reporter?.uploadArtifact({
+  kind: 'log',
+  name: 'coordinator.log',
+  contentType: 'text/plain; charset=utf-8',
+  body: logText,
+});
+await reporter?.finish(false);
+```
+
+`BenchmarkReporter` swallows platform telemetry failures for claim, heartbeat, result flushing, artifact upload, and finish calls. Benchmark work can continue even when reporting is temporarily unavailable.
+
+For `defineWorker` / `runWorker`, use `onFinish` to upload worker-level logs once, after final task results are flushed and before the worker attempt is completed or failed:
+
+```ts
+defineWorker({
+  benchmarkSlug: 'scale',
+  runId,
+  participantSlug: 'e2b',
+  task,
+  onFinish: async ({ uploadArtifact }) => {
+    await uploadArtifact({
+      kind: 'log',
+      name: 'coordinator.log',
+      contentType: 'text/plain; charset=utf-8',
+      body: logText,
+    });
+  },
+});
+```
+
+For coordinator health artifacts, sample system metrics:
+
+```ts
+const metrics = createSystemMetricsCollector();
+const samples = [metrics.sample()];
+metrics.stop();
+```
+
+`client.getRunProgress(...)` returns a run summary plus per-participant worker, task, and concurrency progress:
+
+```ts
+const progress = await client.getRunProgress('scale', runId);
+
+console.log(progress.summary.status);
+console.log(progress.summary.participants);
+
+const participant = progress.participants.find((item) => item.slug === 'e2b');
+console.log(participant?.status);
+console.log(participant?.workers);
+console.log(participant?.tasks.completionRatio);
+console.log(participant?.concurrency.find((item) => item.step === 'pause')?.ready);
+```
+
+Most workers should use `defineWorker(...).run()`.
+
+## Task Result Shape
+
+```json
 {
-  label: string;
-  runId: string;
-  tasks: Array<{
-    taskName: string;
-    successes: number;
-    failures: number;
-    stats: { count, minMs, meanMs, medianMs, p95Ms, maxMs };
-  }>;
+  "taskIndex": 0,
+  "status": "success",
+  "startedAt": "2026-06-03T00:00:00.000Z",
+  "completedAt": "2026-06-03T00:00:01.000Z",
+  "latencyMs": 1000,
+  "steps": [
+    { "name": "create", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 700 },
+    { "name": "exec.first-command", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 120 },
+    { "name": "destroy", "status": "success", "startedAt": "...", "completedAt": "...", "latencyMs": 180 }
+  ],
+  "data": {
+    "taskName": "sandbox.lifecycle",
+    "sandboxId": "..."
+  }
 }
 ```
-
-## Event Hierarchy
-
-Each `bench.run()` emits:
-
-```
-benchmark.run    — once per run (label, tasks, provider, iterations, warmup)
-  benchmark.span — once per iteration per task (timing, status, logs)
-  benchmark.output — captured process output lines when captureOutput is configured
-```
-
-Execution semantics:
-
-- Steps run in declaration order.
-- In concurrent mode, each step runs across eligible iterations up to the step concurrency cap.
-- Failures in one iteration do not block peer iterations in the same step.
-- Later steps skip failed iterations unless that step sets `runOnFailed: true`.
-
-All span and output events carry `runId` plus `label` so results can be grouped per run.
-For sharded runs, set the same `batch` on each process and unique `shard.index` values so the API can aggregate multiple `runId`s into one logical benchmark.
-
-## Notes
-
-- Network upload uses `${baseUrl}/events` (`baseUrl` defaults to `https://platform.computesdk.com/api/v1`).
-- For ingest auth, clients send a token via `apiKey` (Bearer auth header) and the server validates the API key.
-- Network uploads are batched in the background with one in-flight request, and API failures do not fail the benchmark.
-- `ctx.log()` messages are attached to span events and redacted.
-- `captureOutput.file` tails from the beginning of the file, flushes periodically, and flushes once more when the run exits.
-- This package does not capture env vars or payload content.
