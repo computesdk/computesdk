@@ -28,6 +28,7 @@ const SHARED_PROVIDER_NAMES = [
   'k8s',
   'northflank',
   'collimate',
+  'tenki',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -61,6 +62,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   k8s: [[]],
   northflank: [['NORTHFLANK_TOKEN', 'NORTHFLANK_PROJECT_ID']],
   collimate: [['COLLIMATE_API_KEY']],
+  tenki: [['TENKI_API_KEY'], ['TENKI_AUTH_TOKEN']],
 };
 
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
@@ -93,6 +95,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   k8s: {},
   northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL' },
   collimate: { apiKey: 'COLLIMATE_API_KEY', serverUrl: 'COLLIMATE_API_URL' },
+  tenki: { apiKey: 'TENKI_API_KEY', baseUrl: 'TENKI_API_URL', workspaceId: 'TENKI_WORKSPACE_ID', projectId: 'TENKI_PROJECT_ID' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
@@ -362,6 +365,9 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'collimate':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/collimate');
+      case 'tenki':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/tenki');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }
