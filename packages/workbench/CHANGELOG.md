@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 27.0.6
+
+### Patch Changes
+
+- Updated dependencies [f89e63e]
+  - @computesdk/daytona@1.7.31
+
 ## 27.0.5
 
 ### Patch Changes

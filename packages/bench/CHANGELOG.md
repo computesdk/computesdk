@@ -1,5 +1,11 @@
 # @computesdk/bench
 
+## 0.1.9
+
+### Patch Changes
+
+- 4d35182: Increase default task result event batches to 1,000 records and add timed partial flushing for benchmark workers.
+
 ## 0.1.8
 
 ### Patch Changes

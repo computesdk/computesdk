@@ -50,6 +50,8 @@ await worker.run();
 
 `worker.run()` claims the next pending platform assignment for the participant. If no work is available, it returns `{ assignment: null, records: [] }`.
 
+Task results are flushed to the platform in batches of 1,000 records by default. Set `batchSize` to tune this per worker; the SDK validates the platform limit of 5,000 records per batch. Workers also flush partial batches every 30 seconds by default via `flushIntervalMs`, and always flush pending records during final completion or shutdown.
+
 ## Reuse A Bench Definition
 
 ```ts
