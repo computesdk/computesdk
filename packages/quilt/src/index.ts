@@ -355,6 +355,17 @@ async function pollOperation(
   throw new Error(`Timed out waiting for Quilt operation ${operationId}.`);
 }
 
+function requireOperationId(
+  envelope: { operation_id?: string } | null,
+  context: string
+): string {
+  const operationId = envelope?.operation_id;
+  if (!operationId) {
+    throw new Error(`Quilt ${context} did not return an operation_id.`);
+  }
+  return operationId;
+}
+
 async function getContainerById(
   config: QuiltResolvedConfig,
   sandboxId: string
@@ -489,7 +500,7 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
 
           const operation = await pollOperation(
             resolved,
-            cloneEnvelope?.operation_id ?? '',
+            requireOperationId(cloneEnvelope, 'snapshot clone'),
             requestedTimeout ?? resolved.timeout
           );
           const containerId = resolveContainerResultId(operation);
@@ -804,7 +815,11 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
           { includeTenantHeader: true }
         );
 
-        const operation = await pollOperation(resolved, envelope?.operation_id ?? '', resolved.timeout);
+        const operation = await pollOperation(
+          resolved,
+          requireOperationId(envelope, 'snapshot create'),
+          resolved.timeout
+        );
         const snapshotId = resolveSnapshotResultId(operation);
         if (!snapshotId) {
           throw new Error(`Quilt snapshot create completed without a snapshot ID.`);

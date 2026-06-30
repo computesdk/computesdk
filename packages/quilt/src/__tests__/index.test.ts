@@ -155,4 +155,21 @@ describe('quilt provider unit behavior', () => {
     const headers = new Headers(init.headers);
     expect(headers.get('X-Tenant-Id')).toBe('tenant_123');
   });
+
+  it('fails clearly when snapshot create returns no operation id', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({}), {
+        status: 202,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const provider = quilt({});
+
+    await expect(
+      provider.snapshot!.create('ctr_123', {
+        name: 'baseline',
+      })
+    ).rejects.toThrow('Quilt snapshot create did not return an operation_id.');
+  });
 });
