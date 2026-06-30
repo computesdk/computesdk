@@ -77,7 +77,9 @@
     "@computesdk/upstash": "workspace:*",
     "@computesdk/k8s": "workspace:*",
     "@computesdk/northflank": "workspace:*",
-    "@computesdk/collimate": "workspace:*"
+    "@computesdk/collimate": "workspace:*",
+    "@computesdk/lelantos": "workspace:*",
+    "@computesdk/tenki": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
@@ -144,6 +146,12 @@
       "optional": true
     },
     "@computesdk/collimate": {
+      "optional": true
+    },
+    "@computesdk/lelantos": {
+      "optional": true
+    },
+    "@computesdk/tenki": {
       "optional": true
     }
   },
