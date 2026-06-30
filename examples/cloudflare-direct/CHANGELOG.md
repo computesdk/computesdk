@@ -1,0 +1,9 @@
+# @computesdk/example-cloudflare-direct
+
+## 0.0.1
+
+### Patch Changes
+
+- Updated dependencies [3e2c625]
+- Updated dependencies [3e2c625]
+  - @computesdk/cloudflare@1.6.13

@@ -1,5 +1,21 @@
 # @computesdk/example-basic
 
+## 0.4.90
+
+### Patch Changes
+
+- Updated dependencies [f89e63e]
+- Updated dependencies [3fb1171]
+  - @computesdk/daytona@1.7.31
+  - @computesdk/superserve@0.2.0
+
+## 0.4.89
+
+### Patch Changes
+
+- Updated dependencies [de20947]
+  - @computesdk/runloop@1.3.53
+
 ## 0.4.88
 
 ### Patch Changes

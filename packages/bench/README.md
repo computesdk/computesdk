@@ -50,6 +50,8 @@ await worker.run();
 
 `worker.run()` claims the next pending platform assignment for the participant. If no work is available, it returns `{ assignment: null, records: [] }`.
 
+Task results are flushed to the platform in batches of 1,000 records by default. Set `batchSize` to tune this per worker; the SDK validates the platform limit of 5,000 records per batch. Workers also flush partial batches every 30 seconds by default via `flushIntervalMs`, and always flush pending records during final completion or shutdown.
+
 ## Reuse A Bench Definition
 
 ```ts
@@ -131,6 +133,31 @@ Step functions receive:
 
 If a step returns a JSON object, it is merged into the task result `data` object. Defined tasks also include `taskName` in `data`.
 
+`defineTask(name, steps, options)` supports task cleanup:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `cleanup` | `(context) => Promise<void> \| void` | Runs after the task finishes, whether steps succeeded or failed. Use shared `state` to tear down resources created by earlier steps. |
+
+```ts
+type SandboxState = {
+  sandbox?: Awaited<ReturnType<typeof compute.sandbox.create>>;
+};
+
+defineTask<SandboxState>('sandbox.lifecycle', [
+  defineStep<SandboxState>('create', async ({ state }) => {
+    state.sandbox = await compute.sandbox.create();
+  }),
+  defineStep<SandboxState>('exec', async ({ state }) => {
+    await state.sandbox.runCommand('node -v');
+  }),
+], {
+  cleanup: async ({ state }) => {
+    await state.sandbox?.destroy?.();
+  },
+});
+```
+
 `defineStep(name, options, fn)` supports step-level progress coordination:
 
 | Option | Type | Description |
@@ -152,6 +179,13 @@ client.getWorker(benchmarkSlug, runId, workerId)
 client.updateWorker(benchmarkSlug, runId, workerId, input)
 client.claimWorker(benchmarkSlug, runId, participantSlug, { processKind, processKey })
 client.sendTaskResults({ benchmarkSlug, runId, workerId, attemptId, sequenceNumber, isFinal, records })
+client.uploadWorkerArtifact(benchmarkSlug, runId, workerId, {
+  attemptId,
+  kind: 'log',
+  name: 'coordinator.log',
+  contentType: 'text/plain; charset=utf-8',
+  body: logText,
+})
 client.heartbeatWorker(benchmarkSlug, runId, workerId, {
   attemptId,
   currentStep: 'pause',
@@ -166,6 +200,58 @@ client.getRunImports(benchmarkSlug, runId)
 client.completeWorker(benchmarkSlug, runId, workerId, attemptId)
 client.failWorker(benchmarkSlug, runId, workerId, attemptId, error)
 client.runWorker(options)
+```
+
+For custom coordinators that do not fit `defineWorker`, use the best-effort reporter wrapper:
+
+```ts
+const reporter = await BenchmarkReporter.claim({
+  benchmarkSlug: 'scale',
+  runId,
+  participantSlug: 'e2b',
+  processKind: 'container',
+  processKey: instanceId,
+});
+
+reporter?.setProgress({ done, inFlight, errors });
+reporter?.recordResult(record);
+await reporter?.waitForStepReady({ step: 'ready.barrier', timeoutMs: 15 * 60_000 });
+await reporter?.uploadArtifact({
+  kind: 'log',
+  name: 'coordinator.log',
+  contentType: 'text/plain; charset=utf-8',
+  body: logText,
+});
+await reporter?.finish(false);
+```
+
+`BenchmarkReporter` swallows platform telemetry failures for claim, heartbeat, result flushing, artifact upload, and finish calls. Benchmark work can continue even when reporting is temporarily unavailable.
+
+For `defineWorker` / `runWorker`, use `onFinish` to upload worker-level logs once, after final task results are flushed and before the worker attempt is completed or failed:
+
+```ts
+defineWorker({
+  benchmarkSlug: 'scale',
+  runId,
+  participantSlug: 'e2b',
+  task,
+  onFinish: async ({ uploadArtifact }) => {
+    await uploadArtifact({
+      kind: 'log',
+      name: 'coordinator.log',
+      contentType: 'text/plain; charset=utf-8',
+      body: logText,
+    });
+  },
+});
+```
+
+For coordinator health artifacts, sample system metrics:
+
+```ts
+const metrics = createSystemMetricsCollector();
+const samples = [metrics.sample()];
+metrics.stop();
 ```
 
 `client.getRunProgress(...)` returns a run summary plus per-participant worker, task, and concurrency progress:
