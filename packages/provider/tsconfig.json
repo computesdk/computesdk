@@ -2,13 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": ".",
-    "paths": {
-      "computesdk": ["../computesdk/dist/index.d.ts"],
-      "daemond": ["../daemond/dist/index.d.ts"],
-      "@computesdk/cmd": ["../cmd/dist/index.d.ts"]
-    }
+    "rootDir": "./src"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
