@@ -19,7 +19,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc --emitDeclarationOnly --project tsconfig.json --outDir dist",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",

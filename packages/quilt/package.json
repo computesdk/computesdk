@@ -1,9 +1,12 @@
 {
-  "name": "@computesdk/provider",
-  "version": "2.1.3",
-  "description": "Provider framework for ComputeSDK - define custom sandbox providers",
-  "author": "Garrison",
+  "name": "@computesdk/quilt",
+  "version": "1.0.0",
+  "description": "Quilt provider for ComputeSDK - tenant-scoped Linux sandboxes with exec, published services, and snapshots",
+  "author": "ComputeSDK",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -15,8 +18,7 @@
     }
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
     "build": "tsup && tsc --emitDeclarationOnly --project tsconfig.json --outDir dist",
@@ -28,28 +30,30 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
+  },
   "keywords": [
     "computesdk",
-    "provider",
-    "framework",
+    "quilt",
     "sandbox",
+    "containers",
     "cloud",
-    "compute"
+    "compute",
+    "provider"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git"
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/quilt"
   },
-  "homepage": "https://www.computesdk.com/",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
-  "dependencies": {
-    "@computesdk/cmd": "workspace:*",
-    "computesdk": "workspace:*",
-    "daemond": "workspace:*"
-  },
   "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
