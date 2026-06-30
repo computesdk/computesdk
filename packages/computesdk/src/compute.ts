@@ -224,6 +224,10 @@ class ComputeManager {
         this.registerSandboxProvider(sandbox, provider);
         return sandbox;
       } catch (error) {
+        // AbortErrors should not be treated as provider failures; rethrow immediately
+        if (error instanceof Error && (error as any).name === 'AbortError') {
+          throw error;
+        }
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         if (!canFallback) {
           throw error;

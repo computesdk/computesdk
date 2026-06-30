@@ -24,6 +24,7 @@ import type {
   CreateRunInput,
   DefineBenchOptions,
   DefineStepOptions,
+  DefineTaskOptions,
   DefinedStep,
   DefinedTask,
   DefineWorkerOptions,
@@ -43,13 +44,15 @@ import type {
   UpdateWorkerInput,
   UpsertBenchmarkInput,
   UpsertParticipantInput,
+  UploadWorkerArtifactInput,
   WorkerConcurrencySample,
   WorkerHeartbeatInput,
 } from './types';
 
 const DEFAULT_BASE_URL = 'https://platform.computesdk.com/api/v1';
-const DEFAULT_BATCH_SIZE = 100;
+const DEFAULT_BATCH_SIZE = 1000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
+const DEFAULT_FLUSH_INTERVAL_MS = 30_000;
 const DEFAULT_READY_POLL_INTERVAL_MS = 1000;
 const MAX_TASK_RESULT_RECORDS = 5000;
 const MAX_TASK_RECORD_STEPS = 100;
@@ -141,6 +144,15 @@ function normalizeArtifacts(data: { items?: BenchmarkArtifact[]; artifacts?: Ben
   return data.items ?? data.artifacts ?? [];
 }
 
+function bodySizeBytes(body: UploadWorkerArtifactInput['body']): number | undefined {
+  if (typeof body === 'string') return new TextEncoder().encode(body).byteLength;
+  if (body instanceof Blob) return body.size;
+  if (body instanceof ArrayBuffer) return body.byteLength;
+  if (ArrayBuffer.isView(body)) return body.byteLength;
+  if (body instanceof URLSearchParams) return new TextEncoder().encode(body.toString()).byteLength;
+  return undefined;
+}
+
 function isDefinedTask(task: RunWorkerOptions['task']): task is DefinedTask {
   return typeof task === 'object' && task !== null && Array.isArray(task.steps);
 }
@@ -161,18 +173,37 @@ async function runWorkerTask(task: RunWorkerOptions['task'], context: RunWorkerC
 
   const state: Record<string, unknown> = {};
   const data: JsonObject = { taskName: task.name };
-  for (const definedStep of task.steps) {
-    const stepData = await context.step(
-      definedStep.name,
-      () => definedStep.fn({
+  try {
+    for (const definedStep of task.steps) {
+      const stepData = await context.step(
+        definedStep.name,
+        () => definedStep.fn({
+          assignment: context.assignment,
+          taskIndex: context.taskIndex,
+          state,
+        }),
+        definedStep.options,
+      );
+      mergeJsonObjects(data, stepData);
+    }
+  } catch (error) {
+    try {
+      await task.options?.cleanup?.({
         assignment: context.assignment,
         taskIndex: context.taskIndex,
         state,
-      }),
-      definedStep.options,
-    );
-    mergeJsonObjects(data, stepData);
+      });
+    } catch {
+      // Preserve the task failure as the primary benchmark error.
+    }
+    throw error;
   }
+
+  await task.options?.cleanup?.({
+    assignment: context.assignment,
+    taskIndex: context.taskIndex,
+    state,
+  });
 
   return data;
 }
@@ -421,6 +452,36 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       );
     },
 
+    async uploadWorkerArtifact(benchmarkSlug, runId, workerId, input: UploadWorkerArtifactInput) {
+      const sizeBytes = bodySizeBytes(input.body);
+      const artifactInput: CreateWorkerArtifactInput = {
+        attemptId: input.attemptId,
+        kind: input.kind,
+        contentType: input.contentType,
+        name: input.name,
+        metadata: sizeBytes === undefined ? input.metadata : { ...input.metadata, sizeBytes },
+      };
+      const response = await client.createWorkerArtifact(benchmarkSlug, runId, workerId, artifactInput);
+      const uploadUrl = response.uploadUrl ?? response.artifact?.uploadUrl;
+      if (!uploadUrl) {
+        throw new Error('Benchmark artifact upload URL is missing.');
+      }
+      const uploadResponse = await doFetch(uploadUrl, {
+        method: 'PUT',
+        headers: input.contentType ? { 'Content-Type': input.contentType } : undefined,
+        body: input.body,
+      });
+      if (!uploadResponse.ok) {
+        const errorBody = await uploadResponse.text().catch(() => '');
+        throw new BenchmarkApiError(
+          `Benchmark artifact upload failed with ${uploadResponse.status}`,
+          uploadResponse.status,
+          errorBody,
+        );
+      }
+      return response;
+    },
+
     async listRunArtifacts(benchmarkSlug, runId) {
       const data = await request<{ items?: BenchmarkArtifact[]; artifacts?: BenchmarkArtifact[] }>(
         'GET',
@@ -475,6 +536,7 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
     async runWorker(options: RunWorkerOptions): Promise<RunWorkerResult> {
       if (options.concurrency !== undefined) validatePositiveInteger('concurrency', options.concurrency);
       if (options.batchSize !== undefined) validateBatchSize(options.batchSize);
+      if (options.flushIntervalMs !== undefined) validatePositiveInteger('flushIntervalMs', options.flushIntervalMs);
 
       const assignment = await client.claimWorker(options.benchmarkSlug, options.runId, options.participantSlug, {
         processKind: options.processKind,
@@ -576,9 +638,10 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
       }, options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
       heartbeat.unref?.();
 
-      async function flush(isFinal: boolean): Promise<void> {
+      async function flush(isFinal: boolean, force = false): Promise<void> {
         flushChain = flushChain.then(async () => {
-          while (pending.length >= batchSize || (isFinal && pending.length > 0)) {
+          if (force && doneCount >= taskIndices.length) return;
+          while (pending.length >= batchSize || ((isFinal || force) && pending.length > 0)) {
             const batch = pending.splice(0, batchSize);
             await sendTaskResults({
               benchmarkSlug: options.benchmarkSlug,
@@ -593,6 +656,26 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
           }
         });
         await flushChain;
+      }
+
+      const resultFlush = setInterval(() => {
+        if (doneCount < taskIndices.length) void flush(false, true).catch(() => {});
+      }, options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS);
+      resultFlush.unref?.();
+
+      async function runFinishHook(status: 'success' | 'error'): Promise<void> {
+        await options.onFinish?.({
+          assignment: claimed,
+          records,
+          status,
+          client,
+          uploadArtifact(input) {
+            return client.uploadWorkerArtifact(options.benchmarkSlug, options.runId, claimed.workerId, {
+              ...input,
+              attemptId: claimed.attemptId,
+            });
+          },
+        });
       }
 
       try {
@@ -678,7 +761,14 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
 
         await flush(true);
 
-        if (records.some((record) => record.status !== 'success')) {
+        const hasErrors = records.some((record) => record.status !== 'success');
+        try {
+          await runFinishHook(hasErrors ? 'error' : 'success');
+        } catch (error) {
+          if (!hasErrors) throw error;
+        }
+
+        if (hasErrors) {
           await client.failWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId, new Error('One or more tasks failed'));
         } else {
           await client.completeWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId);
@@ -687,10 +777,12 @@ export function createBenchmarkClient(config: BenchmarkClientConfig = {}): Bench
         return { assignment: claimed, records };
       } catch (error) {
         await flush(true).catch(() => {});
+        await runFinishHook('error').catch(() => {});
         await client.failWorker(options.benchmarkSlug, options.runId, claimed.workerId, claimed.attemptId, error).catch(() => {});
         throw error;
       } finally {
         clearInterval(heartbeat);
+        clearInterval(resultFlush);
       }
     },
   };
@@ -724,6 +816,7 @@ export function defineStep<TState extends Record<string, unknown> = Record<strin
 export function defineTask<TState extends Record<string, unknown> = Record<string, unknown>>(
   name: string,
   steps: DefinedStep<TState>[],
+  options?: DefineTaskOptions<TState>,
 ): DefinedTask<TState> {
   if (name.trim() === '') {
     throw new Error('Benchmark task name must be non-empty.');
@@ -738,7 +831,7 @@ export function defineTask<TState extends Record<string, unknown> = Record<strin
     }
     names.add(step.name);
   }
-  return { name, steps };
+  return { name, steps, options };
 }
 
 export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {
@@ -754,8 +847,10 @@ export function defineWorker(options: DefineWorkerOptions): BenchmarkWorker {
         processKey: options.processKey,
         concurrency: overrides.concurrency ?? options.concurrency,
         batchSize: overrides.batchSize ?? options.batchSize,
+        flushIntervalMs: overrides.flushIntervalMs ?? options.flushIntervalMs,
         heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
         readyPollIntervalMs: overrides.readyPollIntervalMs ?? options.readyPollIntervalMs,
+        onFinish: options.onFinish,
         task: options.task,
       });
     },
@@ -780,8 +875,10 @@ export function defineBench(options: DefineBenchOptions): BenchDefinition {
         processKey: workerOptions.processKey,
         concurrency: workerOptions.concurrency ?? options.concurrency,
         batchSize: workerOptions.batchSize ?? options.batchSize,
+        flushIntervalMs: workerOptions.flushIntervalMs ?? options.flushIntervalMs,
         heartbeatIntervalMs: workerOptions.heartbeatIntervalMs ?? options.heartbeatIntervalMs,
         readyPollIntervalMs: workerOptions.readyPollIntervalMs ?? options.readyPollIntervalMs,
+        onFinish: workerOptions.onFinish,
         client: workerOptions.client ?? options.client,
         task: workerOptions.task ?? options.task,
       });
