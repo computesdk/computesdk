@@ -87,6 +87,114 @@ agentcore({
 | `credentials` | `AwsCredentialIdentity \| AwsCredentialIdentityProvider` | Explicit credentials. Omit to use the default chain. |
 | `sessionTimeoutSeconds` | `number` | Session idle timeout in seconds (max 28800 / 8h). Default 900. Overridden by the per-`create` `timeout` (ms). |
 
+## API Reference
+
+### Command Execution
+
+```typescript
+// Run a shell command
+const result = await sandbox.runCommand('echo "Hello" && ls -la');
+console.log(result.stdout, result.stderr, result.exitCode);
+
+// Run Python
+const py = await sandbox.runCommand('python3 -c "print(2 + 2)"');
+
+// Run a multi-line script via heredoc
+const script = await sandbox.runCommand(`python3 - <<'PY'
+import json
+print(json.dumps({"ok": True}))
+PY`);
+
+// Pass environment variables and a working directory
+await sandbox.runCommand('printenv TOKEN', { env: { TOKEN: 'abc' }, cwd: '/tmp' });
+
+// Install packages
+await sandbox.runCommand('pip install requests');
+```
+
+`runCommand` never throws for command failures — a non-zero exit is returned in `exitCode`, with `stdout`/`stderr` captured separately.
+
+### Filesystem Operations
+
+```typescript
+await sandbox.filesystem.writeFile('/tmp/hello.py', 'print("Hello World")');
+const content = await sandbox.filesystem.readFile('/tmp/hello.py');
+await sandbox.filesystem.mkdir('/tmp/data');
+const files = await sandbox.filesystem.readdir('/tmp');      // FileEntry[]
+const exists = await sandbox.filesystem.exists('/tmp/hello.py');
+await sandbox.filesystem.remove('/tmp/hello.py');
+```
+
+Filesystem calls operate on text (UTF-8). To move binary data, fetch it inside the
+sandbox (`runCommand('curl -sL URL -o /tmp/file')`) or base64 it over `runCommand`.
+
+### Sandbox Management
+
+```typescript
+const info = await sandbox.getInfo();          // { id, provider, status, createdAt, timeout, metadata }
+const existing = await provider.sandbox.getById(sandbox.sandboxId);  // or null if terminated
+const all = await provider.sandbox.list();     // READY sessions
+await sandbox.destroy();
+```
+
+## Error Handling
+
+`create` translates common AWS failures into actionable messages:
+
+```typescript
+try {
+  const sandbox = await compute.sandbox.create();
+} catch (err) {
+  // e.g. "Missing AWS region for AgentCore. Pass it: agentcore({ region: 'us-west-2' }) ..."
+  // or   "AWS authentication failed for AgentCore. Check your credentials ..."
+  // or   "Access denied ... Ensure your IAM principal allows bedrock-agentcore:*CodeInterpreter* ..."
+  console.error(err.message);
+}
+```
+
+- `runCommand` returns `exitCode: 127` with the error on `stderr` if the invocation itself fails (e.g. the session expired) — it does not throw.
+- Filesystem operations throw on failure (e.g. reading a missing file).
+
+## Examples
+
+### Data processing
+
+```typescript
+const sandbox = await compute.sandbox.create();
+
+await sandbox.filesystem.writeFile('/tmp/data.csv', 'value\n10\n20\n30\n');
+const result = await sandbox.runCommand(`python3 - <<'PY'
+import csv, json
+with open('/tmp/data.csv') as f:
+    values = [int(r['value']) for r in csv.DictReader(f)]
+print(json.dumps({'count': len(values), 'sum': sum(values), 'mean': sum(values)/len(values)}))
+PY`);
+console.log(JSON.parse(result.stdout)); // { count: 3, sum: 60, mean: 20 }
+
+await sandbox.destroy();
+```
+
+### As an AI agent tool
+
+The universal `Sandbox` interface maps cleanly onto agent-framework tools — wrap each
+method in a tool and hand them to your agent (works with any agent SDK):
+
+```typescript
+import { tool } from '@strands-agents/sdk';
+import { z } from 'zod';
+
+const runCommand = tool({
+  name: 'run_command',
+  description: 'Run a shell command in the sandbox.',
+  inputSchema: z.object({ command: z.string() }),
+  callback: async ({ command }) => {
+    const r = await sandbox.runCommand(command);
+    return { stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode };
+  },
+});
+// ...similarly wrap writeFile / readFile / readdir, then: new Agent({ tools: [...] })
+```
+
 ## Supported runtimes
 
 The managed `aws.codeinterpreter.v1` interpreter ships with Python and a standard Linux shell, so any language runtime available in that environment can be driven via `runCommand`.
