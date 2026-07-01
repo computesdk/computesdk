@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/tenki",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tenki Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH",
   "author": "Tenki Cloud <support@tenki.cloud>",
   "license": "MIT",
