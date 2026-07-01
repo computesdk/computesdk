@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/quilt",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Quilt provider for ComputeSDK - tenant-scoped Linux sandboxes with exec, published services, and snapshots",
   "author": "ComputeSDK",
   "license": "MIT",
