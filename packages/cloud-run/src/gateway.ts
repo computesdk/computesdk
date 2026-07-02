@@ -8,12 +8,9 @@
 import { spawn } from 'node:child_process'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 
 const SANDBOX_BINARY = process.env.CLOUD_RUN_SANDBOX_BINARY ?? '/usr/local/gcp/bin/sandbox'
 const SANDBOX_SECRET = process.env.SANDBOX_SECRET ?? process.env.CLOUD_RUN_SANDBOX_SECRET
-const PERSIST_ROOT = process.env.CLOUD_RUN_SANDBOX_PERSIST_ROOT ?? '/tmp/computesdk-cloud-run-sandboxes'
 const DEFAULT_TIMEOUT_MS = 300_000
 
 type Json = Record<string, any>
@@ -88,10 +85,7 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
   const sandboxId = validateSandboxId(body.sandboxId || `cloud-run-${randomUUID()}`)
 
   if (pathname === '/v1/sandbox/create') {
-    const args = ['run', sandboxId, '--detach']
-    const persistDir = join(PERSIST_ROOT, sandboxId)
-    mkdirSync(persistDir, { recursive: true })
-    args.push('--persist-dir', persistDir, '--write')
+    const args = ['run', sandboxId, '--detach', '--write']
     if (body.workdir) args.push('--workdir', String(body.workdir))
     for (const [key, value] of Object.entries(body.env ?? {})) {
       validateEnvName(key)
@@ -110,7 +104,6 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
       detached: true,
     })
     child.unref()
-    rmSync(join(PERSIST_ROOT, sandboxId), { recursive: true, force: true })
     return { success: true }
   }
 
