@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 28.0.2
+
+### Patch Changes
+
+- Updated dependencies [44de339]
+  - @computesdk/lelantos@0.2.1
+
 ## 28.0.1
 
 ### Patch Changes
