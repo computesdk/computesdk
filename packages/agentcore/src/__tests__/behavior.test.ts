@@ -109,4 +109,19 @@ describeFn('agentcore behavior', () => {
     const final = await sb.filesystem.readFile('/tmp/concurrent.txt');
     expect(candidates).toContain(final); // one writer wins intact; no interleave
   }, 120000);
+
+  it('bounds a runaway command with the timeout option', async () => {
+    const sb = await getSandbox();
+    const result = await sb.runCommand('sleep 30', { timeout: 1000 });
+    expect(result.exitCode).toBe(124); // killed by `timeout`, not run to completion
+  }, 60000);
+
+  it('runs a backgrounded command in the requested cwd', async () => {
+    // Regression: nohup must wrap the whole `cd X && cmd`, not split on &&.
+    const sb = await getSandbox();
+    await sb.filesystem.mkdir('/tmp/bgcwd');
+    await sb.runCommand('echo DATA > out.txt && sleep 1', { cwd: '/tmp/bgcwd', background: true });
+    await new Promise((r) => setTimeout(r, 2500));
+    expect(await sb.filesystem.readFile('/tmp/bgcwd/out.txt')).toBe('DATA\n');
+  }, 60000);
 });

@@ -54,10 +54,13 @@ export function buildCommand(command: string, options?: RunCommandOptions): stri
     full = `${envPrefix} ${full}`;
   }
   if (options?.cwd) full = `cd ${sq(options.cwd)} && ${full}`;
-  // Background: detach so the call returns immediately with exit code 0. Note that
-  // AgentCore tears down the process tree when the invocation returns, so a
-  // backgrounded job does not survive past this call (see README limitations).
-  if (options?.background) full = `nohup ${full} > /dev/null 2>&1 &`;
+  // Bound the command's runtime with the `timeout` coreutil (exit 124 on timeout).
+  if (options?.timeout) full = `timeout ${Math.ceil(options.timeout / 1000)} sh -c ${sq(full)}`;
+  // Background: detach so the call returns immediately with exit code 0. Wrap the
+  // whole composed command in `sh -c` so nohup/& apply to all of it, not just the
+  // first `&&` clause. Note AgentCore tears down the process tree when the
+  // invocation returns, so a backgrounded job does not survive (see README).
+  if (options?.background) full = `nohup sh -c ${sq(full)} > /dev/null 2>&1 &`;
   return full;
 }
 

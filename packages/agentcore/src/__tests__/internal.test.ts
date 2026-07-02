@@ -77,8 +77,20 @@ describe('buildCommand', () => {
     expect(() => buildCommand('x', { env: { 'A\nB': '1' } })).toThrow(/Invalid environment variable name/);
   });
 
-  it('wraps background commands with nohup and detaches', () => {
-    expect(buildCommand('server', { background: true })).toBe('nohup server > /dev/null 2>&1 &');
+  it('wraps background commands in sh -c so nohup covers the whole command', () => {
+    expect(buildCommand('server', { background: true })).toBe("nohup sh -c 'server' > /dev/null 2>&1 &");
+  });
+
+  it('keeps cwd inside the backgrounded unit (nohup must not split on &&)', () => {
+    // Regression: `nohup cd X && cmd &` runs cmd in the wrong dir / not at all.
+    expect(buildCommand('run', { cwd: '/app', background: true })).toBe(
+      "nohup sh -c 'cd '\\''/app'\\'' && run' > /dev/null 2>&1 &",
+    );
+  });
+
+  it('bounds runtime with the timeout coreutil (ms -> seconds, rounded up)', () => {
+    expect(buildCommand('slow', { timeout: 5000 })).toBe("timeout 5 sh -c 'slow'");
+    expect(buildCommand('slow', { timeout: 1500 })).toBe("timeout 2 sh -c 'slow'");
   });
 });
 
