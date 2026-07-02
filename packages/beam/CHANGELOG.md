@@ -1,5 +1,11 @@
 # @computesdk/beam
 
+## 0.2.0
+
+### Minor Changes
+
+- 9c72917: Updates to the Beam provider.
+
 ## 0.1.14
 
 ### Patch Changes
