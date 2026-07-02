@@ -1,5 +1,11 @@
 # @computesdk/cloud-run
 
+## 0.1.2
+
+### Patch Changes
+
+- 96a248a: Use writable Cloud Run sandbox sessions in the gateway, fix bundled gateway resolution for setup, and add a credentialed smoke test.
+
 ## 0.1.1
 
 ### Patch Changes

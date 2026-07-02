@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 29.0.1
+
+### Patch Changes
+
+- Updated dependencies [96a248a]
+  - @computesdk/cloud-run@0.1.2
+
 ## 29.0.0
 
 ### Patch Changes
