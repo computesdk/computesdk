@@ -27,6 +27,13 @@ function validateEnvName(name: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`Invalid environment variable name: ${JSON.stringify(name)}`)
 }
 
+// Sandbox IDs are used as filesystem path components (persist dir) and as CLI args,
+// so restrict them to a strict allow-list to prevent path traversal (e.g. `../../etc`).
+function validateSandboxId(sandboxId: string): string {
+  if (!/^[A-Za-z0-9_-]+$/.test(sandboxId)) throw Object.assign(new Error(`Invalid sandboxId: ${JSON.stringify(sandboxId)}`), { status: 400 })
+  return sandboxId
+}
+
 function shellEscape(arg: string): string {
   return arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
 }
@@ -78,7 +85,7 @@ async function execCommand(sandboxId: string, command: string, body: Json = {}) 
 }
 
 async function handle(pathname: string, body: Json): Promise<unknown> {
-  const sandboxId = body.sandboxId || `cloud-run-${randomUUID()}`
+  const sandboxId = validateSandboxId(body.sandboxId || `cloud-run-${randomUUID()}`)
 
   if (pathname === '/v1/sandbox/create') {
     const args = ['run', sandboxId, '--detach']
