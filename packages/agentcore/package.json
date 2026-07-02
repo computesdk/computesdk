@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/agentcore",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AWS Bedrock AgentCore Code Interpreter provider for ComputeSDK - secure, session-based code execution sandboxes",
   "author": "ComputeSDK",
   "license": "MIT",
