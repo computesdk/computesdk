@@ -30,7 +30,8 @@
   "dependencies": {
     "computesdk": "workspace:*",
     "@computesdk/provider": "workspace:*",
-    "@aws-sdk/client-bedrock-agentcore": "^3.1076.0"
+    "@aws-sdk/client-bedrock-agentcore": "^3.1076.0",
+    "@aws-sdk/types": "^3.973.15"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
