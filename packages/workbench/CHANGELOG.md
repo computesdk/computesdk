@@ -1,5 +1,13 @@
 # @computesdk/workbench
 
+## 28.0.1
+
+### Patch Changes
+
+- ec1be06: Add a Google Cloud Run Sandboxes provider and register it in the workbench provider list.
+- Updated dependencies [ec1be06]
+  - @computesdk/cloud-run@0.1.1
+
 ## 28.0.0
 
 ### Patch Changes
