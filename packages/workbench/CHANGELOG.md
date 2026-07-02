@@ -1,5 +1,143 @@
 # @computesdk/workbench
 
+## 28.0.2
+
+### Patch Changes
+
+- Updated dependencies [44de339]
+  - @computesdk/lelantos@0.2.1
+
+## 28.0.1
+
+### Patch Changes
+
+- ec1be06: Add a Google Cloud Run Sandboxes provider and register it in the workbench provider list.
+- Updated dependencies [ec1be06]
+  - @computesdk/cloud-run@0.1.1
+
+## 28.0.0
+
+### Patch Changes
+
+- b144c15: Workbench now honors the Lelantos provider's `E2B_API_KEY` / `E2B_DOMAIN` / `E2B_API_URL` fallback. Previously only `LELANTOS_*` was recognized, so a user who had configured Lelantos via the `E2B_*` variables (which the provider itself accepts) saw it reported as unconfigured and got no auto-config from the environment.
+- Updated dependencies [b144c15]
+- Updated dependencies [1ffe0e3]
+  - @computesdk/lelantos@0.2.0
+  - @computesdk/tenki@0.1.1
+
+## 27.0.6
+
+### Patch Changes
+
+- Updated dependencies [f89e63e]
+  - @computesdk/daytona@1.7.31
+
+## 27.0.5
+
+### Patch Changes
+
+- Updated dependencies [3e2c625]
+- Updated dependencies [3e2c625]
+  - @computesdk/cloudflare@1.6.13
+
+## 27.0.4
+
+### Patch Changes
+
+- Updated dependencies [de20947]
+  - @computesdk/runloop@1.3.53
+
+## 27.0.3
+
+### Patch Changes
+
+- Updated dependencies [52a02aa]
+  - @computesdk/blaxel@1.6.16
+
+## 27.0.2
+
+### Patch Changes
+
+- Updated dependencies [1a3a44e]
+  - @computesdk/runloop@1.3.52
+
+## 27.0.1
+
+### Patch Changes
+
+- Updated dependencies [1b5bebf]
+  - @computesdk/northflank@1.1.1
+
+## 27.0.0
+
+### Patch Changes
+
+- Updated dependencies [ab81945]
+  - @computesdk/northflank@1.1.0
+
+## 26.0.4
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/agentuity@0.0.11
+  - @computesdk/beam@0.1.14
+  - @computesdk/blaxel@1.6.15
+  - @computesdk/cloudflare@1.6.12
+  - @computesdk/codesandbox@1.5.50
+  - @computesdk/daytona@1.7.30
+  - @computesdk/declaw@0.2.7
+  - @computesdk/e2b@1.7.51
+  - @computesdk/freestyle@0.1.10
+  - @computesdk/hopx@0.2.26
+  - @computesdk/just-bash@0.4.14
+  - @computesdk/k8s@0.2.3
+  - @computesdk/modal@1.9.3
+  - @computesdk/namespace@1.6.12
+  - @computesdk/provider@2.1.3
+  - @computesdk/runloop@1.3.51
+  - @computesdk/secure-exec@0.1.10
+  - @computesdk/sprites@0.1.13
+  - @computesdk/upstash@0.3.6
+  - @computesdk/vercel@1.7.30
+
+## 26.0.3
+
+### Patch Changes
+
+- Updated dependencies [5812a55]
+  - @computesdk/modal@1.9.2
+
+## 26.0.2
+
+### Patch Changes
+
+- Updated dependencies [0470843]
+  - @computesdk/e2b@1.7.50
+
+## 26.0.1
+
+### Patch Changes
+
+- Updated dependencies [d1a81bb]
+  - @computesdk/modal@1.9.1
+
+## 26.0.0
+
+### Patch Changes
+
+- Updated dependencies [f1d87cb]
+- Updated dependencies [f4941b9]
+  - @computesdk/modal@1.9.0
+
+## 25.0.3
+
+### Patch Changes
+
+- Updated dependencies [5b1046f]
+  - @computesdk/runloop@1.3.50
+
 ## 25.0.2
 
 ### Patch Changes

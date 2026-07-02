@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/declaw",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Declaw provider for ComputeSDK - secure sandboxes with PII scanning, prompt-injection defense, and network egress filtering",
   "author": "Declaw <hello@declaw.ai>",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@declaw/sdk": "^1.1.7",
+    "@declaw/sdk": "^1.2.3",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },

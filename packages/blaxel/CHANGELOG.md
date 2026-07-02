@@ -1,5 +1,19 @@
 # @computesdk/blaxel
 
+## 1.6.16
+
+### Patch Changes
+
+- 52a02aa: Update @blaxel/core to 0.2.89.
+
+## 1.6.15
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
 ## 1.6.14
 
 ### Patch Changes

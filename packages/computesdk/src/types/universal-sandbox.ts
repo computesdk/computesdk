@@ -136,6 +136,8 @@ export interface CreateSandboxOptions {
   name?: string;
   namespace?: string;
   directory?: string;
+  /** AbortSignal for cancelling sandbox creation and cleaning up orphaned sandboxes */
+  signal?: AbortSignal;
   // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
 }

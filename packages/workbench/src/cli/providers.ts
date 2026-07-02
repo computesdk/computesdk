@@ -14,17 +14,23 @@ const SHARED_PROVIDER_NAMES = [
   'cloudflare',
   'beam',
   'just-bash',
+  'cloud-run',
   'codesandbox',
   'blaxel',
   'namespace',
   'hopx',
   'declaw',
+  'isorun',
   'sprites',
   'agentuity',
   'freestyle',
   'secure-exec',
   'upstash',
   'k8s',
+  'northflank',
+  'collimate',
+  'lelantos',
+  'tenki',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -42,6 +48,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
     ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
     ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
   ],
+  'cloud-run': [[]],
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
   'just-bash': [[]],
   codesandbox: [['CSB_API_KEY']],
@@ -49,15 +56,24 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
   declaw: [['DECLAW_API_KEY']],
+  isorun: [['ISORUN_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
   freestyle: [['FREESTYLE_API_KEY']],
   'secure-exec': [[]],
   upstash: [['UPSTASH_BOX_API_KEY']],
   k8s: [[]],
+  northflank: [['NORTHFLANK_TOKEN', 'NORTHFLANK_PROJECT_ID']],
+  collimate: [['COLLIMATE_API_KEY']],
+  // The lelantos provider falls back LELANTOS_API_KEY → E2B_API_KEY, so either
+  // key alone counts as configured.
+  lelantos: [['LELANTOS_API_KEY'], ['E2B_API_KEY']],
+  tenki: [['TENKI_API_KEY'], ['TENKI_AUTH_TOKEN']],
 };
 
-const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
+// Each config key maps to an env var name, or — when a provider accepts
+// fallbacks — an ordered list of env var names tried first-match-wins.
+const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | readonly string[]>> = {
   e2b: { apiKey: 'E2B_API_KEY' },
   daytona: { apiKey: 'DAYTONA_API_KEY' },
   modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
@@ -71,6 +87,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
     sandboxUrl: 'CLOUDFLARE_SANDBOX_URL',
     sandboxSecret: 'CLOUDFLARE_SANDBOX_SECRET',
   },
+  'cloud-run': { sandboxUrl: 'CLOUD_RUN_SANDBOX_URL', sandboxSecret: 'CLOUD_RUN_SANDBOX_SECRET', gatewayAuthToken: 'CLOUD_RUN_AUTH_TOKEN', sandboxBinary: 'CLOUD_RUN_SANDBOX_BINARY' },
   beam: { token: 'BEAM_TOKEN', workspaceId: 'BEAM_WORKSPACE_ID' },
   'just-bash': {},
   codesandbox: { apiKey: 'CSB_API_KEY' },
@@ -78,20 +95,32 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string>> = {
   namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
   hopx: { apiKey: 'HOPX_API_KEY' },
   declaw: { apiKey: 'DECLAW_API_KEY' },
+  isorun: { apiKey: 'ISORUN_API_KEY' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
   freestyle: { apiKey: 'FREESTYLE_API_KEY' },
   'secure-exec': {},
   upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
   k8s: {},
+  northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL' },
+  collimate: { apiKey: 'COLLIMATE_API_KEY', serverUrl: 'COLLIMATE_API_URL' },
+  lelantos: {
+    apiKey: ['LELANTOS_API_KEY', 'E2B_API_KEY'],
+    domain: ['LELANTOS_DOMAIN', 'E2B_DOMAIN'],
+    apiUrl: ['LELANTOS_API_URL', 'E2B_API_URL'],
+  },
+  tenki: { apiKey: 'TENKI_API_KEY', baseUrl: 'TENKI_API_URL', workspaceId: 'TENKI_WORKSPACE_ID', projectId: 'TENKI_PROJECT_ID' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
   const map = PROVIDER_ENV_MAP[provider] || {};
   const config: Record<string, string> = {};
   for (const [configKey, envVar] of Object.entries(map)) {
-    const value = process.env?.[envVar];
-    if (value) config[configKey] = value;
+    const candidates = Array.isArray(envVar) ? envVar : [envVar];
+    for (const name of candidates) {
+      const value = process.env?.[name];
+      if (value) { config[configKey] = value; break; }
+    }
   }
   return config;
 }
@@ -317,6 +346,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'cloudflare':
         // @ts-ignore - @cloudflare/sandbox types may not be available
         return await import('@computesdk/cloudflare');
+      case 'cloud-run':
+        return await import('@computesdk/cloud-run');
       case 'beam':
         return await import('@computesdk/beam');
       case 'just-bash':
@@ -332,6 +363,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/hopx');
       case 'declaw':
         return await import('@computesdk/declaw');
+      case 'isorun':
+        return await import('@computesdk/isorun');
       case 'sprites':
         return await import('@computesdk/sprites');
       case 'agentuity':
@@ -345,6 +378,18 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'k8s':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/k8s');
+      case 'northflank':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/northflank');
+      case 'collimate':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/collimate');
+      case 'lelantos':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/lelantos');
+      case 'tenki':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/tenki');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }

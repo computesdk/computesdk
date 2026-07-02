@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/k8s",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Kubernetes provider for ComputeSDK - run sandboxes as pods",
   "author": "Garrison",
   "license": "MIT",

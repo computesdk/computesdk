@@ -176,7 +176,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           const sandbox = await E2BSandbox.connect(sandboxId, { apiKey });
           const snapshotSandbox = sandbox as SnapshotCapableE2BSandbox;
           const snapshotResult = await snapshotSandbox.createSnapshot({ name: options?.name });
-          const snapshotId = typeof snapshotResult === 'string' ? snapshotResult : snapshotResult.id || snapshotResult.templateId;
+          const snapshotId = snapshotResult.snapshotId;
           return { id: snapshotId, provider: 'e2b', createdAt: new Date(), metadata: { name: options?.name } };
         } catch (error) {
           throw new Error(`Failed to create E2B snapshot: ${error instanceof Error ? error.message : String(error)}`);

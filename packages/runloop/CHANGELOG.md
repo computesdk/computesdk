@@ -1,5 +1,31 @@
 # @computesdk/runloop
 
+## 1.3.53
+
+### Patch Changes
+
+- de20947: Require the Runloop API client 1.24 release line.
+
+## 1.3.52
+
+### Patch Changes
+
+- 1a3a44e: Update the Runloop API client and enable HTTP/2 for provider requests.
+
+## 1.3.51
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 1.3.50
+
+### Patch Changes
+
+- 5b1046f: Reduce Runloop provider round trips by reusing the SDK client, using long-poll waits, and enabling optimistic command completion.
+
 ## 1.3.49
 
 ### Patch Changes

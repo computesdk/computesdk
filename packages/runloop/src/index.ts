@@ -23,6 +23,8 @@ import type {
 type RunloopSnapshot = Runloop.DevboxSnapshotView;
 type RunloopTemplate = Runloop.BlueprintView;
 type RunloopSandbox = Runloop.DevboxView & { client: RunloopSDK };
+type RunloopCreateWaitOptions = Parameters<RunloopSDK["api"]["devboxes"]["createAndAwaitRunning"]>[1];
+type RunloopExecuteWaitOptions = Parameters<RunloopSDK["api"]["devboxes"]["executeAndAwaitCompletion"]>[2];
 
 type CommandRunner = (
   sandbox: RunloopSandbox,
@@ -38,6 +40,44 @@ export interface RunloopConfig {
   apiKey?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+}
+
+const clientCache = new WeakMap<RunloopConfig, RunloopSDK>();
+
+function resolveApiKey(config: RunloopConfig): string {
+  return (
+    config.apiKey ||
+    (typeof process !== "undefined" && process.env?.RUNLOOP_API_KEY) ||
+    ""
+  );
+}
+
+function getRunloopClient(config: RunloopConfig): RunloopSDK {
+  const apiKey = resolveApiKey(config);
+  if (!apiKey) {
+    throw new Error(
+      `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`
+    );
+  }
+
+  const cached = clientCache.get(config);
+  if (cached) return cached;
+
+  const client = new RunloopSDK({
+    bearerToken: apiKey,
+    http2: true,
+  });
+  clientCache.set(config, client);
+  return client;
+}
+
+function longPollOptions<TOptions>(timeoutMs?: number): TOptions | undefined {
+  return timeoutMs ? ({ longPoll: { timeoutMs } } as TOptions) : undefined;
+}
+
+function optimisticTimeoutSeconds(timeoutMs?: number): number {
+  if (!timeoutMs) return 25;
+  return Math.max(1, Math.min(25, Math.ceil(timeoutMs / 1000)));
 }
 
 /**
@@ -99,23 +139,10 @@ export const runloop = defineProvider<
   methods: {
     sandbox: {
       create: async (config: RunloopConfig, options?: CreateSandboxOptions) => {
-        const apiKey =
-          config.apiKey ||
-          (typeof process !== "undefined" && process.env?.RUNLOOP_API_KEY) ||
-          "";
-
-        if (!apiKey) {
-          throw new Error(
-            `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`
-          );
-        }
-
         const timeout = config.timeout;
 
         try {
-          const client = new RunloopSDK({
-            bearerToken: apiKey,
-          });
+          const client = getRunloopClient(config);
 
           const {
             timeout: optTimeout,
@@ -125,6 +152,7 @@ export const runloop = defineProvider<
             templateId,
             snapshotId,
             sandboxId: optSandboxId,
+            ports: _ports,
             namespace: _namespace,
             directory: _directory,
             ...providerOptions
@@ -159,6 +187,7 @@ export const runloop = defineProvider<
 
           const dbx = await client.api.devboxes.createAndAwaitRunning(
             devboxParams,
+            longPollOptions<RunloopCreateWaitOptions>(effectiveTimeout),
           );
 
           const runloopSandbox: RunloopSandbox = {
@@ -178,10 +207,8 @@ export const runloop = defineProvider<
       },
 
       getById: async (config: RunloopConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
         try {
-          const client = new RunloopSDK({ bearerToken: apiKey });
+          const client = getRunloopClient(config);
           const devbox = await client.api.devboxes.retrieve(sandboxId);
           return {
             sandbox: { ...devbox, client } as RunloopSandbox,
@@ -193,10 +220,8 @@ export const runloop = defineProvider<
       },
 
       list: async (config: RunloopConfig) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
         try {
-          const client = new RunloopSDK({ bearerToken: apiKey });
+          const client = getRunloopClient(config);
           const response = await client.api.devboxes.list();
           const devboxes = response.devboxes || [];
 
@@ -210,10 +235,8 @@ export const runloop = defineProvider<
       },
 
       destroy: async (config: RunloopConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
         try {
-          const client = new RunloopSDK({ bearerToken: apiKey });
+          const client = getRunloopClient(config);
           await client.api.devboxes.shutdown(sandboxId);
         } catch {
           // Devbox might already be destroyed or doesn't exist
@@ -250,7 +273,8 @@ export const runloop = defineProvider<
           const executionResult =
             await client.api.devboxes.executeAndAwaitCompletion(devbox.id, {
               command: fullCommand,
-            });
+              optimistic_timeout: optimisticTimeoutSeconds(options?.timeout),
+            }, longPollOptions<RunloopExecuteWaitOptions>(options?.timeout));
 
           return {
             stdout: executionResult.stdout || "",
@@ -307,9 +331,9 @@ export const runloop = defineProvider<
 
       filesystem: {
         readFile: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
-          const result = await runCommand(sandbox, `cat "${path}"`);
+          const result = await runCommand(sandbox, `test -f "${path}" && base64 < "${path}" | tr -d '\\n'`);
           if (result.exitCode !== 0) throw new Error(`File not found or unreadable: ${result.stderr}`);
-          return result.stdout;
+          return Buffer.from(result.stdout, 'base64').toString('utf8');
         },
 
         writeFile: async (sandbox: RunloopSandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
@@ -360,16 +384,12 @@ export const runloop = defineProvider<
 
     template: {
       create: async (config: RunloopConfig, options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-        if (!apiKey) throw new Error("Missing Runloop API key for blueprint template creation");
-        const client = new RunloopSDK({ bearerToken: apiKey });
+        const client = getRunloopClient(config);
         return client.api.blueprints.create(options);
       },
 
       list: async (config: RunloopConfig, options?: { limit?: number }) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-        if (!apiKey) throw new Error("Missing Runloop API key for listing blueprint templates");
-        const client = new RunloopSDK({ bearerToken: apiKey });
+        const client = getRunloopClient(config);
         const listParams: any = {};
         if (options?.limit) listParams.limit = options.limit;
         const response = await client.api.blueprints.list(listParams);
@@ -377,18 +397,14 @@ export const runloop = defineProvider<
       },
 
       delete: async (config: RunloopConfig, blueprintId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-        if (!apiKey) throw new Error("Missing Runloop API key for blueprint template deletion");
-        const client = new RunloopSDK({ bearerToken: apiKey });
+        const client = getRunloopClient(config);
         await client.api.blueprints.delete(blueprintId);
       },
     },
 
     snapshot: {
       create: async (config: RunloopConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-        if (!apiKey) throw new Error("Missing Runloop API key for snapshot creation");
-        const client = new RunloopSDK({ bearerToken: apiKey });
+        const client = getRunloopClient(config);
         const snapshotParams: any = {};
         if (options?.name) snapshotParams.name = options.name;
         if (options?.metadata) snapshotParams.metadata = options.metadata;
@@ -396,9 +412,7 @@ export const runloop = defineProvider<
       },
 
       list: async (config: RunloopConfig, options?: ListSnapshotsOptions) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-        if (!apiKey) throw new Error("Missing Runloop API key for listing snapshots");
-        const client = new RunloopSDK({ bearerToken: apiKey });
+        const client = getRunloopClient(config);
         const listParams: any = {};
         if (options?.limit) listParams.limit = options.limit;
         const response = await client.api.devboxes.listDiskSnapshots(listParams);
@@ -406,9 +420,7 @@ export const runloop = defineProvider<
       },
 
       delete: async (config: RunloopConfig, snapshotId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-        if (!apiKey) throw new Error("Missing Runloop API key for snapshot deletion");
-        const client = new RunloopSDK({ bearerToken: apiKey });
+        const client = getRunloopClient(config);
         await client.api.devboxes.deleteDiskSnapshot(snapshotId);
       },
     },
