@@ -38,7 +38,9 @@ export type {
 export {
   daemonSeedScript,
   daemonSeedScriptCommand,
+  daemonSeedScriptJobReadCommand,
   parseSeedInvocationOutput,
+  parseSeedJobStatusOutput,
 } from 'daemond';
 export type {
   SeedScriptConfig,
@@ -48,6 +50,7 @@ export type {
   SeedDaemonInfo,
   SeedHealthPayload,
   SeedEventFilter,
+  SeedJobStatus,
 } from 'daemond';
 
 // Works as both callable `compute({...}).sandbox.create()` and singleton

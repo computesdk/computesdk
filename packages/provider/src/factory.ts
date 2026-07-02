@@ -367,68 +367,67 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     command: string,
     options?: RunCommandOptions
   ): Promise<CommandResult> {
-    if (options?.onStdout || options?.onStderr) {
-      if (options.background) {
-        throw new Error('runCommand with streaming callbacks does not support background mode.');
-      }
+    const isStreaming = !!(options?.onStdout || options?.onStderr);
+    const isBackground = options?.background === true;
 
-      const forwardedOptions: RunCommandOptions = { ...options };
-      delete forwardedOptions.onStdout;
-      delete forwardedOptions.onStderr;
+    if (!isStreaming && !isBackground) {
+      // Pass command and options directly to provider - no preprocessing.
+      // Provider is responsible for handling cwd, env, etc.
+      return await this.methods.runCommand(this.sandbox, command, options);
+    }
 
-      if (!this.daemonStreamState) {
-        const bootstrapPayload: SeedCommandInput = {
-          command: 'sh',
-          args: ['-lc', 'true'],
-          cwd: options.cwd,
-          env: options.env,
-          timeoutMs: options.timeout,
-          requestId: createDaemonRequestId(),
-        };
-        const bootstrapCommand = daemonSeedScriptCommand(
-          { ssePort: DEFAULT_DAEMON_SSE_PORT },
-          bootstrapPayload
-        );
-        const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
-        const bootstrapInvocation = parseSeedInvocationOutput(bootstrapResult.stdout);
-        this.daemonStreamState = {
-          token: bootstrapInvocation.token,
-          rawSseUrl: bootstrapInvocation.daemon.sseUrl,
-        };
-      }
+    // Both streaming and background paths go through the daemon.
+    const forwardedOptions: RunCommandOptions = { ...options };
+    delete forwardedOptions.onStdout;
+    delete forwardedOptions.onStderr;
 
-      const daemonPayload: SeedCommandInput = {
+    // Bootstrap daemon if not yet connected.
+    if (!this.daemonStreamState) {
+      const bootstrapPayload: SeedCommandInput = {
         command: 'sh',
-        args: ['-lc', command],
-        cwd: options.cwd,
-        env: options.env,
-        timeoutMs: options.timeout,
+        args: ['-lc', 'true'],
+        cwd: options?.cwd,
+        env: options?.env,
+        timeoutMs: options?.timeout,
         requestId: createDaemonRequestId(),
       };
-
-      const daemonCommand = daemonSeedScriptCommand(
+      const bootstrapCommand = daemonSeedScriptCommand(
         { ssePort: DEFAULT_DAEMON_SSE_PORT },
-        daemonPayload
+        bootstrapPayload
       );
-
-      const requestIdFilter: { current?: string } = { current: daemonPayload.requestId };
-      let streamStdout = '';
-      let streamStderr = '';
-
-      const streamController = new AbortController();
-      let streamPromise: Promise<void> | undefined;
-      let streamFinalized = false;
-      const finalizeStream = async () => {
-        if (streamFinalized) return;
-        streamFinalized = true;
-        streamController.abort();
-        if (streamPromise) {
-          await streamPromise;
-        }
+      const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
+      const bootstrapInvocation = parseSeedInvocationOutput(bootstrapResult.stdout);
+      this.daemonStreamState = {
+        token: bootstrapInvocation.token,
+        rawSseUrl: bootstrapInvocation.daemon.sseUrl,
       };
+    }
 
-      if ((options.onStdout || options.onStderr) && this.daemonStreamState?.rawSseUrl) {
-        streamPromise = this.resolveDaemonSseUrl(
+    const daemonPayload: SeedCommandInput = {
+      command: 'sh',
+      args: ['-lc', command],
+      cwd: options?.cwd,
+      env: options?.env,
+      timeoutMs: options?.timeout,
+      requestId: createDaemonRequestId(),
+      background: isBackground || undefined,
+    };
+
+    const daemonCommand = daemonSeedScriptCommand(
+      { ssePort: DEFAULT_DAEMON_SSE_PORT },
+      daemonPayload
+    );
+
+    const requestIdFilter: { current?: string } = { current: daemonPayload.requestId };
+
+    // ─── Background mode ───────────────────────────────────────────────────────
+    // Spawn the job in the background and return immediately with the jobId.
+    // If streaming callbacks were provided, wire up the SSE stream as a
+    // fire-and-forget so callers still receive live output chunks.
+    if (isBackground) {
+      if (isStreaming && this.daemonStreamState.rawSseUrl) {
+        const bgStreamController = new AbortController();
+        this.resolveDaemonSseUrl(
           this.daemonStreamState.rawSseUrl,
           this.daemonStreamState.token
         )
@@ -436,51 +435,100 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
             sseUrl,
             requestIdFilter,
             {
-              onStdout: options.onStdout,
-              onStderr: options.onStderr,
-              markStdout: (chunk?: string) => {
-                if (chunk) streamStdout += chunk;
-              },
-              markStderr: (chunk?: string) => {
-                if (chunk) streamStderr += chunk;
-              },
+              onStdout: options?.onStdout,
+              onStderr: options?.onStderr,
+              markStdout: () => {},
+              markStderr: () => {},
             },
-            streamController.signal
+            bgStreamController.signal
           ))
-          .then(() => undefined)
-          .catch(() => undefined);
+          .catch(() => {});
+        // The stream is intentionally not awaited or aborted here — it will
+        // naturally drain as the background process produces output.
+        void bgStreamController;
       }
-      try {
-        const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
-        const invocation = parseSeedInvocationOutput(daemonResult.stdout);
-        this.daemonStreamState = {
-          token: invocation.token,
-          rawSseUrl: invocation.daemon.sseUrl,
-        };
 
-        await finalizeStream();
+      const startResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
+      const invocation = parseSeedInvocationOutput(startResult.stdout);
+      this.daemonStreamState = {
+        token: invocation.token,
+        rawSseUrl: invocation.daemon.sseUrl,
+      };
 
-        if (options.onStdout) {
-          emitMissingOutput(streamStdout, invocation.command.stdout, options.onStdout);
-        }
-        if (options.onStderr) {
-          emitMissingOutput(streamStderr, invocation.command.stderr, options.onStderr);
-        }
-
-        return {
-          stdout: invocation.command.stdout,
-          stderr: invocation.command.stderr,
-          exitCode: invocation.command.exitCode ?? -1,
-          durationMs: daemonResult.durationMs,
-        };
-      } finally {
-        await finalizeStream();
-      }
+      return {
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+        durationMs: startResult.durationMs,
+        jobId: invocation.command.jobId,
+      };
     }
 
-    // Pass command and options directly to provider - no preprocessing
-    // Provider is responsible for handling cwd, env, background, etc.
-    return await this.methods.runCommand(this.sandbox, command, options);
+    // ─── Foreground streaming mode ─────────────────────────────────────────────
+    let streamStdout = '';
+    let streamStderr = '';
+
+    const streamController = new AbortController();
+    let streamPromise: Promise<void> | undefined;
+    let streamFinalized = false;
+    const finalizeStream = async () => {
+      if (streamFinalized) return;
+      streamFinalized = true;
+      streamController.abort();
+      if (streamPromise) {
+        await streamPromise;
+      }
+    };
+
+    if (this.daemonStreamState.rawSseUrl) {
+      streamPromise = this.resolveDaemonSseUrl(
+        this.daemonStreamState.rawSseUrl,
+        this.daemonStreamState.token
+      )
+        .then((sseUrl) => streamDaemonEvents(
+          sseUrl,
+          requestIdFilter,
+          {
+            onStdout: options?.onStdout,
+            onStderr: options?.onStderr,
+            markStdout: (chunk?: string) => {
+              if (chunk) streamStdout += chunk;
+            },
+            markStderr: (chunk?: string) => {
+              if (chunk) streamStderr += chunk;
+            },
+          },
+          streamController.signal
+        ))
+        .then(() => undefined)
+        .catch(() => undefined);
+    }
+    try {
+      const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
+      const invocation = parseSeedInvocationOutput(daemonResult.stdout);
+      this.daemonStreamState = {
+        token: invocation.token,
+        rawSseUrl: invocation.daemon.sseUrl,
+      };
+
+      await finalizeStream();
+
+      if (options?.onStdout) {
+        emitMissingOutput(streamStdout, invocation.command.stdout, options.onStdout);
+      }
+      if (options?.onStderr) {
+        emitMissingOutput(streamStderr, invocation.command.stderr, options.onStderr);
+      }
+
+      return {
+        stdout: invocation.command.stdout,
+        stderr: invocation.command.stderr,
+        exitCode: invocation.command.exitCode ?? -1,
+        durationMs: daemonResult.durationMs,
+      };
+    } finally {
+      await finalizeStream();
+    }
   }
 
   async getInfo(): Promise<SandboxInfo> {

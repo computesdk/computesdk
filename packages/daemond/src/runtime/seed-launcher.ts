@@ -31,6 +31,16 @@ interface Subscriber {
   };
 }
 
+/** In-memory record for a background job. */
+interface JobEntry {
+  pid: number | null;
+  running: boolean;
+  exitCode: number | null;
+  signal: string | null;
+  stdout: string;
+  stderr: string;
+}
+
 function writeLine(conn: net.Socket, value: unknown): void {
   try {
     if (!conn.destroyed) conn.write(`${JSON.stringify(value)}\n`);
@@ -55,6 +65,18 @@ const config = loadConfig();
 const startedAt = now();
 const subscribers = new Set<Subscriber>();
 const sseClients = new Set<http.ServerResponse>();
+
+/** Maximum bytes retained per stream in the background job ring buffer. */
+const MAX_JOB_OUTPUT_BYTES = 256 * 1024;
+
+/** Registry of all background jobs started by this daemon instance. */
+const jobRegistry = new Map<string, JobEntry>();
+
+/** Trim a string to at most `maxBytes` characters, keeping the tail. */
+function trimToMaxBytes(str: string, maxBytes: number): string {
+  if (str.length <= maxBytes) return str;
+  return str.slice(str.length - maxBytes);
+}
 
 function publish(event: Record<string, unknown>): void {
   const payload = {
@@ -124,6 +146,7 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
   const args = Array.isArray(payload.args) ? payload.args.map((value) => String(value)) : [];
   const cwd = typeof payload.cwd === "string" && payload.cwd.length > 0 ? payload.cwd : process.cwd();
   const shell = payload.shell === true;
+  const isBackground = payload.background === true;
   const timeoutMs = Number.isFinite(payload.timeoutMs) ? Math.max(1, Number(payload.timeoutMs)) : 60_000;
   const extraEnv = sanitizeEnvInput(payload.env);
 
@@ -150,9 +173,84 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
     requestId,
     command,
     args,
+    background: isBackground,
     ts: now(),
   });
 
+  // ─── Background mode ─────────────────────────────────────────────────────
+  // Spawn the child detached so it can outlive the connection (and the daemon
+  // itself if needed). Output is captured into a ring buffer that callers can
+  // read with the `job_read` message type.
+  if (isBackground) {
+    const child = spawn(command, args, {
+      cwd,
+      shell,
+      env: {
+        ...process.env,
+        ...extraEnv,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+    child.unref();
+
+    const entry: JobEntry = {
+      pid: child.pid ?? null,
+      running: true,
+      exitCode: null,
+      signal: null,
+      stdout: "",
+      stderr: "",
+    };
+    jobRegistry.set(requestId, entry);
+
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      const text = String(chunk);
+      entry.stdout = trimToMaxBytes(entry.stdout + text, MAX_JOB_OUTPUT_BYTES);
+      publish({ channel: "daemon", type: "command.stdout", requestId, chunk: text, ts: now() });
+    });
+
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      const text = String(chunk);
+      entry.stderr = trimToMaxBytes(entry.stderr + text, MAX_JOB_OUTPUT_BYTES);
+      publish({ channel: "daemon", type: "command.stderr", requestId, chunk: text, ts: now() });
+    });
+
+    child.once("error", (err: Error) => {
+      const text = String(err);
+      entry.stderr = trimToMaxBytes(entry.stderr + text, MAX_JOB_OUTPUT_BYTES);
+      entry.running = false;
+      entry.exitCode = 1;
+      entry.signal = null;
+      publish({ channel: "daemon", type: "command.exit", requestId, exitCode: 1, signal: null, ts: now() });
+    });
+
+    child.once("close", (exitCode: number | null, signal: NodeJS.Signals | null) => {
+      entry.running = false;
+      entry.exitCode = exitCode;
+      entry.signal = signal;
+      publish({ channel: "daemon", type: "command.exit", requestId, exitCode, signal, ts: now() });
+    });
+
+    // Respond immediately — the job runs independently in the background.
+    writeLine(conn, {
+      id: makeId(),
+      type: "exec_result",
+      replyTo: requestId,
+      ts: now(),
+      payload: {
+        exitCode: null,
+        signal: null,
+        stdout: "",
+        stderr: "",
+        combined: "",
+        jobId: requestId,
+      },
+    });
+    return;
+  }
+
+  // ─── Foreground mode ─────────────────────────────────────────────────────
   const child = spawn(command, args, {
     cwd,
     shell,
@@ -243,6 +341,54 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
 
   child.once("close", (exitCode, signal) => {
     finish(exitCode, signal);
+  });
+}
+
+/**
+ * Handle a `job_read` message — return the current ring-buffer contents and
+ * status for the given background job.
+ */
+function handleJobRead(msg: WireMessage, conn: net.Socket): void {
+  const replyId = msg.id || makeId();
+  const jobId = String(msg.payload?.jobId ?? "");
+
+  if (!jobId) {
+    writeLine(conn, {
+      id: makeId(),
+      type: "error",
+      replyTo: replyId,
+      ts: now(),
+      payload: { message: "job_read: jobId is required" },
+    });
+    return;
+  }
+
+  const entry = jobRegistry.get(jobId);
+  if (!entry) {
+    writeLine(conn, {
+      id: makeId(),
+      type: "error",
+      replyTo: replyId,
+      ts: now(),
+      payload: { message: `job_read: job not found: ${jobId}` },
+    });
+    return;
+  }
+
+  writeLine(conn, {
+    id: makeId(),
+    type: "job_status",
+    replyTo: replyId,
+    ts: now(),
+    payload: {
+      jobId,
+      pid: entry.pid,
+      running: entry.running,
+      exitCode: entry.exitCode,
+      signal: entry.signal,
+      stdout: entry.stdout,
+      stderr: entry.stderr,
+    },
   });
 }
 
@@ -422,6 +568,11 @@ async function main(): Promise<void> {
 
         if (msg.type === "exec") {
           handleExec({ ...msg, id }, conn);
+          continue;
+        }
+
+        if (msg.type === "job_read") {
+          handleJobRead({ ...msg, id }, conn);
           continue;
         }
 

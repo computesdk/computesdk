@@ -13,6 +13,13 @@ export interface SeedCommandInput {
   shell?: boolean;
   timeoutMs?: number;
   requestId?: string;
+  /**
+   * When true, the command is launched in the background inside the daemon.
+   * The daemon spawns the process detached, captures output in a ring buffer,
+   * and responds immediately with a `jobId`. Use `daemonSeedScriptJobReadCommand`
+   * to poll the buffered output and status.
+   */
+  background?: boolean;
 }
 
 export interface SeedCommandResult {
@@ -21,6 +28,11 @@ export interface SeedCommandResult {
   stdout: string;
   stderr: string;
   combined: string;
+  /**
+   * Present when `background: true` was passed. Use this with
+   * `daemonSeedScriptJobReadCommand` to read buffered output from the daemon.
+   */
+  jobId?: string;
 }
 
 export interface SeedDaemonInfo {
@@ -46,4 +58,17 @@ export interface SeedHealthPayload {
 export interface SeedEventFilter {
   channel?: string;
   type?: string;
+}
+
+/**
+ * Status of a background job returned by `daemonSeedScriptJobReadCommand`.
+ */
+export interface SeedJobStatus {
+  jobId: string;
+  pid: number | null;
+  running: boolean;
+  exitCode: number | null;
+  signal: string | null;
+  stdout: string;
+  stderr: string;
 }
