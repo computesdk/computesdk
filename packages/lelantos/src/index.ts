@@ -3,15 +3,19 @@
  *
  * Forked from @computesdk/e2b. Lelantos is an E2B-API-compatible Firecracker
  * microVM sandbox platform (EU-native, Hetzner bare-metal), so it wraps the same
- * `e2b` npm SDK — but pointed at a lelantos control plane via `domain` / `apiUrl`,
- * and without the `e2b_` key prefix check (lelantos issues `lel_…` keys, and the
- * underlying e2b SDK does NOT validate the key format).
+ * `e2b` npm SDK — but pointed at a lelantos control plane via `domain` / `apiUrl`.
  *
- * Two things make this distinct from stock @computesdk/e2b:
+ * Three things make this distinct from stock @computesdk/e2b:
  *   1. Dual-key resolution: LELANTOS_API_KEY → E2B_API_KEY, accepts lel_/e2b_.
+ *      Native `lel_<hex>` keys are re-prefixed to their `e2b_<hex>` alias before
+ *      reaching the e2b SDK, which validates the key format client-side
+ *      (`^e2b_[0-9a-f]+$`) since v2.27; the lelantos control plane canonicalizes
+ *      the alias back, so both forms resolve to the same stored key.
  *   2. `domain` / `apiUrl` are threaded into EVERY e2b SDK call (create/connect/
  *      list/kill/snapshot/template) — stock @computesdk/e2b only forwards them to
  *      `create`, leaving lifecycle calls pointed at api.e2b.app.
+ *   3. `domain` defaults to `lelantos.ai`, so the provider works out of the box
+ *      without any environment configuration beyond the API key.
  */
 
 import { Sandbox as E2BSandbox, CommandExitError } from 'e2b';
@@ -79,15 +83,17 @@ type E2BSandboxStatics = typeof E2BSandbox & {
 export interface LelantosConfig {
   /**
    * Lelantos API key. Accepts the `lel_…` form OR the `e2b_…` form of a
-   * lelantos key. If not provided, falls back to the `LELANTOS_API_KEY`
-   * environment variable, then `E2B_API_KEY`.
+   * lelantos key (a native `lel_<hex>` key is transparently presented to the
+   * e2b SDK as its `e2b_<hex>` alias). If not provided, falls back to the
+   * `LELANTOS_API_KEY` environment variable, then `E2B_API_KEY`.
    */
   apiKey?: string;
   /**
    * Lelantos control-plane + sandbox domain, e.g. `'lelantos.ai'`. The e2b SDK
    * derives the control-plane URL as `https://api.${domain}` and the sandbox
    * preview host as `{port}-{sandboxId}.${domain}`. If not provided, falls back
-   * to the `LELANTOS_DOMAIN` then `E2B_DOMAIN` environment variable.
+   * to the `LELANTOS_DOMAIN` then `E2B_DOMAIN` environment variable, then
+   * defaults to `'lelantos.ai'`.
    */
   domain?: string;
   /**
@@ -103,14 +109,36 @@ export interface LelantosConfig {
 const env = (key: string): string | undefined =>
   (typeof process !== 'undefined' ? process.env?.[key] : undefined) || undefined;
 
-/** Resolve the API key, falling back LELANTOS_API_KEY → E2B_API_KEY. */
-function resolveApiKey(config: LelantosConfig): string {
-  return config.apiKey || env('LELANTOS_API_KEY') || env('E2B_API_KEY') || '';
+/**
+ * Lelantos API keys are `lel_` + lowercase hex. The e2b SDK validates the key
+ * format CLIENT-SIDE (`^e2b_[0-9a-f]+$`) since v2.27 — before any request is
+ * made — so the native `lel_` form must be re-prefixed to its `e2b_` alias
+ * here. The lelantos control plane canonicalizes `e2b_<body>` back to
+ * `lel_<body>` (body unchanged) when verifying, so both forms resolve to the
+ * same stored key. Keys that don't match the strict `lel_<hex>` shape are
+ * passed through unchanged.
+ */
+const LEL_KEY_PATTERN = /^lel_([0-9a-f]+)$/;
+function normalizeApiKey(key: string): string {
+  const match = LEL_KEY_PATTERN.exec(key);
+  return match ? `e2b_${match[1]}` : key;
 }
 
-/** Resolve the domain, falling back LELANTOS_DOMAIN → E2B_DOMAIN. */
-function resolveDomain(config: LelantosConfig): string | undefined {
-  return config.domain || env('LELANTOS_DOMAIN') || env('E2B_DOMAIN');
+/** Resolve the API key, falling back LELANTOS_API_KEY → E2B_API_KEY. */
+function resolveApiKey(config: LelantosConfig): string {
+  return normalizeApiKey(config.apiKey || env('LELANTOS_API_KEY') || env('E2B_API_KEY') || '');
+}
+
+/** The control-plane + sandbox domain used when none is configured. */
+const DEFAULT_DOMAIN = 'lelantos.ai';
+
+/**
+ * Resolve the domain, falling back LELANTOS_DOMAIN → E2B_DOMAIN →
+ * `'lelantos.ai'`. Without the default, the e2b SDK would silently fall back
+ * to its own api.e2b.app and every call would fail authentication.
+ */
+function resolveDomain(config: LelantosConfig): string {
+  return config.domain || env('LELANTOS_DOMAIN') || env('E2B_DOMAIN') || DEFAULT_DOMAIN;
 }
 
 /** Resolve the explicit control-plane URL, falling back LELANTOS_API_URL → E2B_API_URL. */
@@ -147,8 +175,8 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
 
         // NOTE: stock @computesdk/e2b throws here unless the key starts with
         // 'e2b_'. Lelantos issues 'lel_…' keys (and accepts the 'e2b_…' form of
-        // a lelantos key), and the underlying e2b SDK does NOT validate the key
-        // format — so the prefix check is intentionally dropped.
+        // a lelantos key) — resolveApiKey already re-prefixed the native lel_
+        // form to its e2b_ alias, so no prefix check is needed here.
 
         const timeout = options?.timeout ?? config.timeout ?? 300000;
 
