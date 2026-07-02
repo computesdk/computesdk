@@ -1,5 +1,30 @@
 # @computesdk/workbench
 
+## 28.0.0
+
+### Patch Changes
+
+- b144c15: Workbench now honors the Lelantos provider's `E2B_API_KEY` / `E2B_DOMAIN` / `E2B_API_URL` fallback. Previously only `LELANTOS_*` was recognized, so a user who had configured Lelantos via the `E2B_*` variables (which the provider itself accepts) saw it reported as unconfigured and got no auto-config from the environment.
+- Updated dependencies [b144c15]
+- Updated dependencies [1ffe0e3]
+  - @computesdk/lelantos@0.2.0
+  - @computesdk/tenki@0.1.1
+
+## 27.0.6
+
+### Patch Changes
+
+- Updated dependencies [f89e63e]
+  - @computesdk/daytona@1.7.31
+
+## 27.0.5
+
+### Patch Changes
+
+- Updated dependencies [3e2c625]
+- Updated dependencies [3e2c625]
+  - @computesdk/cloudflare@1.6.13
+
 ## 27.0.4
 
 ### Patch Changes
