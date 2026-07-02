@@ -1,7 +1,7 @@
 /** ComputeSDK Cloud Run setup CLI. */
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync, copyFileSync, existsSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, copyFileSync, existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
@@ -60,7 +60,7 @@ async function setup() {
   }
 
   const secret = randomBytes(32).toString('hex')
-  const distDir = dirname(resolve(process.argv[1] ?? 'dist/setup.mjs'))
+  const distDir = dirname(realpathSync(resolve(process.argv[1] ?? 'dist/setup.mjs')))
   const gatewayPath = join(distDir, 'gateway.mjs')
   const tmpDir = mkdtempSync(join(tmpdir(), 'computesdk-cloud-run-'))
   const image = `gcr.io/${projectId}/${serviceName}:latest`

@@ -33,7 +33,7 @@ The setup command uses `gcloud` to:
 - Generate a bearer token for gateway authentication.
 - Print the runtime environment variables.
 
-The gateway creates each sandbox with a per-session `--persist-dir` under `/tmp/computesdk-cloud-run-sandboxes` so standard ComputeSDK filesystem helpers can write files.
+The gateway creates a persistent sandbox session for each ComputeSDK sandbox. Filesystem state is preserved for the lifetime of that session and removed when the sandbox is destroyed.
 
 Add the printed values to your app environment:
 
@@ -125,7 +125,7 @@ await sandbox.destroy()
 
 ## Notes
 
-Filesystem writes require Cloud Run sandbox write configuration, such as `write: true` with a writable mount or a `persistDir`/`overlayDir`.
+Filesystem writes are preserved for the lifetime of a ComputeSDK sandbox session. They are not durable after `destroy()` unless your Cloud Run sandbox CLI supports host-backed persistence such as `--persist-dir`.
 
 `getUrl()` is not supported because the current Cloud Run sandbox CLI does not expose per-sandbox ports.
 
