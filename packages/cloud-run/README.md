@@ -30,6 +30,7 @@ The setup command uses `gcloud` to:
 
 - Build a small ComputeSDK gateway container.
 - Deploy it to Cloud Run with `--sandbox-launcher` and `--no-cpu-throttling`.
+- Allow unauthenticated Cloud Run invocation with `--allow-unauthenticated`.
 - Generate a bearer token for gateway authentication.
 - Print the runtime environment variables.
 
@@ -47,6 +48,13 @@ Prerequisites:
 - Your GCP project is allow-listed for Cloud Run Sandboxes.
 - `gcloud` is installed, up to date, and authenticated.
 - Cloud Build and Cloud Run APIs are enabled for the project.
+- Your organization policy allows public Cloud Run invokers, or callers must provide `CLOUD_RUN_AUTH_TOKEN`.
+
+### Public Gateway Access
+
+The remote gateway is designed to be public at the Cloud Run layer and protected by `CLOUD_RUN_SANDBOX_SECRET` for sandbox operations. Public Cloud Run access avoids requiring each SDK caller to mint a Google identity token.
+
+The setup command passes `--allow-unauthenticated`. If your organization blocks public IAM members with `constraints/iam.allowedPolicyMemberDomains`, the deploy can succeed with an IAM warning but the service will still require Cloud Run IAM auth. In that case, either allow `allUsers` as `roles/run.invoker` for this gateway service or set `CLOUD_RUN_AUTH_TOKEN` to a Google-signed identity token for the gateway URL.
 
 ## Manual Direct Deploy
 
