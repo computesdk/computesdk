@@ -19,7 +19,7 @@ npm install @computesdk/lelantos
 export LELANTOS_API_KEY=lel_your_api_key_here
 ```
 
-Lelantos issues `lel_…` keys. The provider also accepts the `e2b_…` form of a Lelantos key and does not enforce a key prefix.
+Lelantos issues `lel_…` keys. The provider accepts both the `lel_…` and `e2b_…` forms of a Lelantos key: a native `lel_<hex>` key is transparently presented to the underlying e2b SDK as its `e2b_<hex>` alias (the e2b SDK validates the key prefix client-side since v2.27), and the Lelantos control plane resolves both forms to the same key.
 
 ## Quick Start
 
