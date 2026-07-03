@@ -181,7 +181,7 @@ export const browseruse = defineBrowserProvider<BrowserUseSession, BrowserUseCon
         return {
           session,
           sessionId: session.id,
-          connectUrl: session.cdpUrl,
+          connectUrl: session.cdpUrl.replace(/^https:/, 'wss:'),
           status: mapStatus(session.status),
         };
       },
@@ -194,7 +194,7 @@ export const browseruse = defineBrowserProvider<BrowserUseSession, BrowserUseCon
           return {
             session,
             sessionId: session.id,
-            connectUrl: session.cdpUrl,
+            connectUrl: session.cdpUrl.replace(/^https:/, 'wss:'),
             status: mapStatus(session.status),
           };
         } catch {
@@ -208,7 +208,7 @@ export const browseruse = defineBrowserProvider<BrowserUseSession, BrowserUseCon
         return response.items.map((s) => ({
           session: s,
           sessionId: s.id,
-          connectUrl: s.cdpUrl ?? undefined,
+          connectUrl: s.cdpUrl?.replace(/^https:/, 'wss:'),
           status: mapStatus(s.status),
         }));
       },
@@ -227,7 +227,7 @@ export const browseruse = defineBrowserProvider<BrowserUseSession, BrowserUseCon
             `(status: ${session.status}). The session may already be stopped.`
           );
         }
-        return session.cdpUrl;
+        return session.cdpUrl.replace(/^https:/, 'wss:');
       },
     },
 
