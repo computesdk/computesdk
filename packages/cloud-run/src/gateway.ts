@@ -84,6 +84,20 @@ async function execCommand(sandboxId: string, command: string, body: Json = {}) 
 async function handle(pathname: string, body: Json): Promise<unknown> {
   const sandboxId = validateSandboxId(body.sandboxId || `cloud-run-${randomUUID()}`)
 
+  if (pathname === '/v1/sandbox/do') {
+    if (!body.command) throw new Error('Missing required field: command')
+    const args = ['do']
+    if (body.workdir) args.push('--workdir', String(body.workdir))
+    for (const [key, value] of Object.entries(body.env ?? {})) {
+      validateEnvName(key)
+      args.push('-e', `${key}=${String(value)}`)
+    }
+    args.push('--', '/bin/sh', '-c', String(body.command))
+    const result = await runSandbox(args, body.timeout)
+    if (result.exitCode !== 0) throw new Error(result.stderr || `Failed sandbox do: exit code ${result.exitCode}`)
+    return { sandboxId: `do-${randomUUID()}`, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr }
+  }
+
   if (pathname === '/v1/sandbox/create') {
     const args = ['run', sandboxId, '--detach', '--write']
     if (body.workdir) args.push('--workdir', String(body.workdir))
