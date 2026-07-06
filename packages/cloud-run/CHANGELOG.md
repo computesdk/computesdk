@@ -1,5 +1,11 @@
 # @computesdk/cloud-run
 
+## 0.1.3
+
+### Patch Changes
+
+- f2e71b2: Document that the remote Cloud Run gateway is intended to be publicly invokable and protected by the gateway secret.
+
 ## 0.1.2
 
 ### Patch Changes
