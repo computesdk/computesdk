@@ -22,6 +22,10 @@ Set your GCP project and region, then run the setup command:
 ```bash
 export CLOUD_RUN_PROJECT_ID="your-gcp-project"
 export CLOUD_RUN_REGION="us-central1"
+# Optional defaults: one large gateway instance
+export CLOUD_RUN_MAX_INSTANCES="1"
+export CLOUD_RUN_CPU="8"
+export CLOUD_RUN_MEMORY="32Gi"
 
 npx @computesdk/cloud-run
 ```
@@ -31,6 +35,7 @@ The setup command uses `gcloud` to:
 - Build a small ComputeSDK gateway container.
 - Deploy it to Cloud Run with `--sandbox-launcher` and `--no-cpu-throttling`.
 - Allow unauthenticated Cloud Run invocation with `--allow-unauthenticated`.
+- Set `--max-instances=1`, `--cpu=8`, and `--memory=32Gi` by default.
 - Create or reuse a Cloud Storage bucket for per-sandbox filesystem state.
 - Generate a bearer token for gateway authentication.
 - Print the runtime environment variables.

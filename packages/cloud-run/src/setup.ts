@@ -41,6 +41,9 @@ async function setup() {
   const region = process.env.CLOUD_RUN_REGION ?? process.env.GOOGLE_CLOUD_LOCATION ?? process.env.REGION
   const serviceName = process.env.CLOUD_RUN_SERVICE_NAME ?? 'computesdk-sandbox'
   const stateBucket = process.env.CLOUD_RUN_SANDBOX_STATE_BUCKET ?? `${projectId}-${serviceName}-state`
+  const maxInstances = process.env.CLOUD_RUN_MAX_INSTANCES ?? '1'
+  const cpu = process.env.CLOUD_RUN_CPU ?? '8'
+  const memory = process.env.CLOUD_RUN_MEMORY ?? '32Gi'
 
   console.log('\n  ComputeSDK Cloud Run Setup\n')
 
@@ -105,6 +108,9 @@ async function setup() {
       '--sandbox-launcher',
       '--allow-unauthenticated',
       '--no-cpu-throttling',
+      '--cpu', cpu,
+      '--memory', memory,
+      '--max-instances', maxInstances,
       '--set-env-vars', `SANDBOX_SECRET=${secret},CLOUD_RUN_SANDBOX_STATE_BUCKET=${stateBucket}`,
     ], { stdio: 'inherit' })
 
