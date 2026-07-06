@@ -31,16 +31,18 @@ The setup command uses `gcloud` to:
 - Build a small ComputeSDK gateway container.
 - Deploy it to Cloud Run with `--sandbox-launcher` and `--no-cpu-throttling`.
 - Allow unauthenticated Cloud Run invocation with `--allow-unauthenticated`.
+- Create or reuse a Cloud Storage bucket for per-sandbox filesystem state.
 - Generate a bearer token for gateway authentication.
 - Print the runtime environment variables.
 
-The gateway creates a persistent sandbox session for each ComputeSDK sandbox. Filesystem state is preserved for the lifetime of that session and removed when the sandbox is destroyed.
+The gateway runs each command with `sandbox do --sync-tar`. Filesystem state is preserved between commands through a per-sandbox tar archive in Cloud Storage, and removed when the sandbox is destroyed. Running processes are not preserved between commands.
 
 Add the printed values to your app environment:
 
 ```bash
 CLOUD_RUN_SANDBOX_URL=https://computesdk-sandbox-...run.app
 CLOUD_RUN_SANDBOX_SECRET=...
+CLOUD_RUN_SANDBOX_STATE_BUCKET=your-gcp-project-computesdk-sandbox-state
 ```
 
 Prerequisites:
@@ -49,6 +51,7 @@ Prerequisites:
 - `gcloud` is installed, up to date, and authenticated.
 - Cloud Build and Cloud Run APIs are enabled for the project.
 - Your organization policy allows public Cloud Run invokers, or callers must provide `CLOUD_RUN_AUTH_TOKEN`.
+- The deployed Cloud Run service account can read, write, and delete objects in the state bucket.
 
 ### Public Gateway Access
 
@@ -117,6 +120,7 @@ await sandbox.destroy()
 | `sandboxSecret` | `CLOUD_RUN_SANDBOX_SECRET` | | Bearer token for deployed gateway service |
 | `gatewayAuthToken` | `CLOUD_RUN_AUTH_TOKEN` | | Optional Google identity token when Cloud Run IAM auth is enabled |
 | `sandboxBinary` | `CLOUD_RUN_SANDBOX_BINARY` | `/usr/local/gcp/bin/sandbox` | Path to the Cloud Run sandbox CLI |
+| Gateway state bucket | `CLOUD_RUN_SANDBOX_STATE_BUCKET` | | Cloud Storage bucket used by the gateway for synced filesystem state |
 | `mode` | | CLI default | Sandbox CLI mode, `local` or `container` |
 | `allowEgress` | | `false` | Allow sandbox network egress |
 | `rootfs` | | `/` | Root filesystem exposed to sandboxes |
@@ -133,7 +137,7 @@ await sandbox.destroy()
 
 ## Notes
 
-Filesystem writes are preserved for the lifetime of a ComputeSDK sandbox session. They are not durable after `destroy()` unless your Cloud Run sandbox CLI supports host-backed persistence such as `--persist-dir`.
+Filesystem writes are preserved through `sandbox do --sync-tar` and Cloud Storage state. Process state is not preserved: background commands, daemons, and open ports do not survive between `runCommand()` calls.
 
 `getUrl()` is not supported because the current Cloud Run sandbox CLI does not expose per-sandbox ports.
 

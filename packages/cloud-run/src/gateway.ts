@@ -8,12 +8,21 @@
 import { spawn } from 'node:child_process'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 const SANDBOX_BINARY = process.env.CLOUD_RUN_SANDBOX_BINARY ?? '/usr/local/gcp/bin/sandbox'
 const SANDBOX_SECRET = process.env.SANDBOX_SECRET ?? process.env.CLOUD_RUN_SANDBOX_SECRET
+const STATE_BUCKET = process.env.CLOUD_RUN_SANDBOX_STATE_BUCKET
+const LOCAL_STATE_ROOT = process.env.CLOUD_RUN_SANDBOX_STATE_ROOT ?? join(tmpdir(), 'computesdk-cloud-run-state')
 const DEFAULT_TIMEOUT_MS = 300_000
 
 type Json = Record<string, any>
+type TokenState = { accessToken: string; expiresAt: number }
+
+let tokenState: TokenState | undefined
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -66,6 +75,69 @@ async function runSandbox(args: string[], timeout = DEFAULT_TIMEOUT_MS): Promise
   })
 }
 
+function stateObjectName(sandboxId: string): string {
+  return `sandboxes/${sandboxId}.tar`
+}
+
+function statePath(sandboxId: string): string {
+  return join(LOCAL_STATE_ROOT, `${sandboxId}.tar`)
+}
+
+async function getAccessToken(): Promise<string> {
+  if (tokenState && tokenState.expiresAt > Date.now() + 60_000) return tokenState.accessToken
+  const response = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', {
+    headers: { 'Metadata-Flavor': 'Google' },
+  })
+  if (!response.ok) throw new Error(`Failed to get metadata access token: ${response.status}`)
+  const data = await response.json() as { access_token: string; expires_in: number }
+  tokenState = { accessToken: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 }
+  return tokenState.accessToken
+}
+
+async function gcsRequest(path: string, init: RequestInit = {}): Promise<Response> {
+  const accessToken = await getAccessToken()
+  return fetch(`https://storage.googleapis.com${path}`, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+}
+
+async function prepareState(sandboxId: string): Promise<string> {
+  await mkdir(LOCAL_STATE_ROOT, { recursive: true })
+  const path = statePath(sandboxId)
+  if (!STATE_BUCKET) return path
+
+  const objectName = encodeURIComponent(stateObjectName(sandboxId))
+  const response = await gcsRequest(`/storage/v1/b/${STATE_BUCKET}/o/${objectName}?alt=media`)
+  if (response.status === 404) return path
+  if (!response.ok) throw new Error(`Failed to download Cloud Run sandbox state: ${response.status}`)
+  await writeFile(path, Buffer.from(await response.arrayBuffer()))
+  return path
+}
+
+async function persistState(sandboxId: string, path: string): Promise<void> {
+  if (!STATE_BUCKET || !existsSync(path)) return
+  const objectName = encodeURIComponent(stateObjectName(sandboxId))
+  const content = await readFile(path)
+  const response = await gcsRequest(`/upload/storage/v1/b/${STATE_BUCKET}/o?uploadType=media&name=${objectName}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-tar' },
+    body: content,
+  })
+  if (!response.ok) throw new Error(`Failed to upload Cloud Run sandbox state: ${response.status}`)
+}
+
+async function removeState(sandboxId: string): Promise<void> {
+  await rm(statePath(sandboxId), { force: true })
+  if (!STATE_BUCKET) return
+  const objectName = encodeURIComponent(stateObjectName(sandboxId))
+  const response = await gcsRequest(`/storage/v1/b/${STATE_BUCKET}/o/${objectName}`, { method: 'DELETE' })
+  if (!response.ok && response.status !== 404) throw new Error(`Failed to delete Cloud Run sandbox state: ${response.status}`)
+}
+
 function pushExecArgs(args: string[], body: Json): void {
   if (body.cwd) args.push('--workdir', String(body.cwd))
   for (const [key, value] of Object.entries(body.env ?? {})) {
@@ -75,35 +147,27 @@ function pushExecArgs(args: string[], body: Json): void {
 }
 
 async function execCommand(sandboxId: string, command: string, body: Json = {}) {
-  const args = ['exec', sandboxId]
+  const stateTar = await prepareState(sandboxId)
+  const args = ['do', '--sandbox-name', sandboxId, '--sync-tar', stateTar, '--write']
   pushExecArgs(args, body)
   args.push('--', '/bin/sh', '-c', command)
-  return runSandbox(args, body.timeout)
+  const result = await runSandbox(args, body.timeout)
+  await persistState(sandboxId, stateTar)
+  return result
 }
 
 async function handle(pathname: string, body: Json): Promise<unknown> {
   const sandboxId = validateSandboxId(body.sandboxId || `cloud-run-${randomUUID()}`)
 
   if (pathname === '/v1/sandbox/create') {
-    const args = ['run', sandboxId, '--detach', '--write']
-    if (body.workdir) args.push('--workdir', String(body.workdir))
-    for (const [key, value] of Object.entries(body.env ?? {})) {
-      validateEnvName(key)
-      args.push('-e', `${key}=${String(value)}`)
-    }
-    const result = await runSandbox(args, body.timeout)
-    if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to create Cloud Run sandbox ${sandboxId}`)
-    return { sandboxId, status: 'running' }
+    await prepareState(sandboxId)
+    return { sandboxId, status: 'running', mode: 'sync-tar' }
   }
 
   if (!body.sandboxId) throw new Error('Missing sandboxId')
 
   if (pathname === '/v1/sandbox/destroy') {
-    const child = spawn(SANDBOX_BINARY, ['delete', sandboxId, '--force', '--stdin=false', '--stdout=false', '--stderr=false'], {
-      stdio: 'ignore',
-      detached: true,
-    })
-    child.unref()
+    await removeState(sandboxId)
     return { success: true }
   }
 

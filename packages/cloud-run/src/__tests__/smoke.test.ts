@@ -6,7 +6,7 @@ const sandboxSecret = process.env.CLOUD_RUN_SANDBOX_SECRET
 const hasGatewayCredentials = !!(sandboxUrl && sandboxSecret)
 
 describe.runIf(hasGatewayCredentials)('cloudRun credentialed smoke test', () => {
-  it('creates a remote sandbox, runs node, and destroys it', async () => {
+  it('creates a remote sandbox, runs node, syncs files, and destroys it', async () => {
     const compute = cloudRun({
       sandboxUrl,
       sandboxSecret,
@@ -20,6 +20,9 @@ describe.runIf(hasGatewayCredentials)('cloudRun credentialed smoke test', () => 
       expect(nodeVersion.exitCode).toBe(0)
       expect(nodeVersion.stderr).toBe('')
       expect(nodeVersion.stdout.trim()).toMatch(/^v\d+\.\d+\.\d+$/)
+
+      await sandbox.filesystem.writeFile('/tmp/computesdk-smoke/hello.txt', 'hello from sync tar')
+      await expect(sandbox.filesystem.readFile('/tmp/computesdk-smoke/hello.txt')).resolves.toBe('hello from sync tar')
     } finally {
       await sandbox.destroy()
     }

@@ -40,6 +40,7 @@ async function setup() {
   const projectId = process.env.CLOUD_RUN_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT ?? process.env.PROJECT_ID
   const region = process.env.CLOUD_RUN_REGION ?? process.env.GOOGLE_CLOUD_LOCATION ?? process.env.REGION
   const serviceName = process.env.CLOUD_RUN_SERVICE_NAME ?? 'computesdk-sandbox'
+  const stateBucket = process.env.CLOUD_RUN_SANDBOX_STATE_BUCKET ?? `${projectId}-${serviceName}-state`
 
   console.log('\n  ComputeSDK Cloud Run Setup\n')
 
@@ -80,6 +81,21 @@ async function setup() {
     console.log(`  Building gateway image ${image}...`)
     run('gcloud', ['builds', 'submit', '--tag', image, '--project', projectId], { cwd: tmpDir, stdio: 'inherit' })
 
+    console.log(`  Ensuring state bucket gs://${stateBucket}...`)
+    try {
+      run('gcloud', ['storage', 'buckets', 'describe', `gs://${stateBucket}`, '--project', projectId])
+    } catch {
+      run('gcloud', ['storage', 'buckets', 'create', `gs://${stateBucket}`, '--project', projectId, '--location', region, '--uniform-bucket-level-access'], { stdio: 'inherit' })
+    }
+
+    const projectNumber = run('gcloud', ['projects', 'describe', projectId, '--format', 'value(projectNumber)']).trim()
+    const serviceAccount = `${projectNumber}-compute@developer.gserviceaccount.com`
+    try {
+      run('gcloud', ['storage', 'buckets', 'add-iam-policy-binding', `gs://${stateBucket}`, '--member', `serviceAccount:${serviceAccount}`, '--role', 'roles/storage.objectAdmin', '--project', projectId], { stdio: 'inherit' })
+    } catch (error) {
+      console.warn(`  Warning: failed to grant ${serviceAccount} access to gs://${stateBucket}. Ensure it has roles/storage.objectAdmin before using the gateway.`)
+    }
+
     console.log(`  Deploying ${serviceName} with --sandbox-launcher...`)
     run('gcloud', [
       'beta', 'run', 'deploy', serviceName,
@@ -89,7 +105,7 @@ async function setup() {
       '--sandbox-launcher',
       '--allow-unauthenticated',
       '--no-cpu-throttling',
-      '--set-env-vars', `SANDBOX_SECRET=${secret}`,
+      '--set-env-vars', `SANDBOX_SECRET=${secret},CLOUD_RUN_SANDBOX_STATE_BUCKET=${stateBucket}`,
     ], { stdio: 'inherit' })
 
     const serviceUrl = run('gcloud', [
@@ -102,6 +118,7 @@ async function setup() {
     console.log('\n  Setup complete! Add these to your .env:\n')
     console.log(`  CLOUD_RUN_SANDBOX_URL=${serviceUrl}`)
     console.log(`  CLOUD_RUN_SANDBOX_SECRET=${secret}`)
+    console.log(`  CLOUD_RUN_SANDBOX_STATE_BUCKET=${stateBucket}`)
     console.log('')
   } finally {
     rmSync(tmpDir, { recursive: true, force: true })
