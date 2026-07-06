@@ -260,11 +260,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         }
         if (isRemote(config)) {
           const sandboxId = options?.name ?? `cloud-run-${randomUUID()}`
-          const response = await gatewayRequest(config, '/v1/sandbox/create', {
-            sandboxId,
-            timeout: options?.timeout,
-          })
-          const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
+          const sandbox = { id: sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
           activeSandboxes.set(sandbox.id, sandbox)
           return { sandbox, sandboxId: sandbox.id }
         }
