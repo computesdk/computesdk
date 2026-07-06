@@ -75,7 +75,7 @@ function pushExecArgs(args: string[], body: Json): void {
 }
 
 async function execCommand(sandboxId: string, command: string, body: Json = {}) {
-  const args = ['do', sandboxId, '--write']
+  const args = ['do', '--write']
   pushExecArgs(args, body)
   args.push('--', '/bin/sh', '-c', command)
   return runSandbox(args, body.timeout)

@@ -266,7 +266,7 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
     }
   }
 
-  const args = [...buildBaseArgs(sandbox.config), 'do', sandbox.id]
+  const args = [...buildBaseArgs(sandbox.config), 'do']
   pushRunArgs(args, sandbox.config, options?.env, options?.cwd)
   args.push(...(sandbox.config.runArgs ?? []))
   args.push('--', '/bin/sh', '-c', withShellOptions(command, options))
