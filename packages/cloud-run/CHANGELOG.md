@@ -1,5 +1,11 @@
 # @computesdk/cloud-run
 
+## 0.1.4
+
+### Patch Changes
+
+- 90764f1: Use `sandbox do` for Cloud Run command execution instead of detached `run` sessions and `exec`.
+
 ## 0.1.3
 
 ### Patch Changes
