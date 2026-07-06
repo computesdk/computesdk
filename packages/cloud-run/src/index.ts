@@ -214,38 +214,6 @@ function withShellOptions(command: string, options?: RunCommandOptions): string 
 
 async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
   const start = Date.now()
-
-  if (sandbox.config.persistDir === undefined && sandbox.config.overlayDir === undefined) {
-    if (sandbox.remote) {
-      try {
-        const result = await gatewayRequest(sandbox.config, '/v1/sandbox/do', {
-          command: withShellOptions(command, options),
-          cwd: options?.cwd,
-          env: options?.env,
-          timeout: options?.timeout,
-        })
-        return {
-          stdout: result.stdout || '',
-          stderr: result.stderr || '',
-          exitCode: result.exitCode ?? 0,
-          durationMs: Date.now() - start,
-        }
-      } catch (error) {
-        return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - start }
-      }
-    }
-
-    const args = [...buildBaseArgs(sandbox.config), 'do']
-    pushExecArgs(args, sandbox.config, options?.env, options?.cwd)
-    args.push('--', '/bin/sh', '-c', withShellOptions(command, options))
-    const result = await runSandboxCli(sandbox.config, args, {
-      timeout: options?.timeout,
-      onStdout: options?.onStdout,
-      onStderr: options?.onStderr,
-    })
-    return { ...result, durationMs: Date.now() - start }
-  }
-
   if (sandbox.remote) {
     try {
       const result = await gatewayRequest(sandbox.config, '/v1/sandbox/exec', {
