@@ -75,7 +75,7 @@ function pushExecArgs(args: string[], body: Json): void {
 }
 
 async function execCommand(sandboxId: string, command: string, body: Json = {}) {
-  const args = ['exec', sandboxId]
+  const args = ['do', sandboxId, '--write']
   pushExecArgs(args, body)
   args.push('--', '/bin/sh', '-c', command)
   return runSandbox(args, body.timeout)
@@ -85,25 +85,12 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
   const sandboxId = validateSandboxId(body.sandboxId || `cloud-run-${randomUUID()}`)
 
   if (pathname === '/v1/sandbox/create') {
-    const args = ['run', sandboxId, '--detach', '--write']
-    if (body.workdir) args.push('--workdir', String(body.workdir))
-    for (const [key, value] of Object.entries(body.env ?? {})) {
-      validateEnvName(key)
-      args.push('-e', `${key}=${String(value)}`)
-    }
-    const result = await runSandbox(args, body.timeout)
-    if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to create Cloud Run sandbox ${sandboxId}`)
     return { sandboxId, status: 'running' }
   }
 
   if (!body.sandboxId) throw new Error('Missing sandboxId')
 
   if (pathname === '/v1/sandbox/destroy') {
-    const child = spawn(SANDBOX_BINARY, ['delete', sandboxId, '--force', '--stdin=false', '--stdout=false', '--stderr=false'], {
-      stdio: 'ignore',
-      detached: true,
-    })
-    child.unref()
     return { success: true }
   }
 
