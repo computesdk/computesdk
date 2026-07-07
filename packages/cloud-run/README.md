@@ -30,6 +30,7 @@ The setup command uses `gcloud` to:
 
 - Build a small ComputeSDK gateway container.
 - Deploy it to Cloud Run with `--sandbox-launcher` and `--no-cpu-throttling`.
+- Configure the gateway for low-latency sandbox execution with 1 CPU, 2Gi memory, concurrency 1, session affinity, CPU boost, and 100 min/max instances.
 - Allow unauthenticated Cloud Run invocation with `--allow-unauthenticated`.
 - Generate a bearer token for gateway authentication.
 - Print the runtime environment variables.

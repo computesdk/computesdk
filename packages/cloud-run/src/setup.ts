@@ -88,6 +88,13 @@ async function setup() {
       '--project', projectId,
       '--sandbox-launcher',
       '--allow-unauthenticated',
+      '--cpu', '1',
+      '--memory', '2Gi',
+      '--concurrency', '1',
+      '--min-instances', '100',
+      '--max-instances', '100',
+      '--session-affinity',
+      '--cpu-boost',
       '--no-cpu-throttling',
       '--set-env-vars', `SANDBOX_SECRET=${secret}`,
     ], { stdio: 'inherit' })
