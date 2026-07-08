@@ -143,13 +143,13 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): SessionCreate
   }
 
   // Stealth wraps a few related flags. We toggle humanizeInteractions as the
-  // most user-visible knob; advanced users can override via options pass-through.
-  if (options.stealth) {
-    params.stealthConfig = { humanizeInteractions: true };
+  // most user-visible knob and preserve explicit false values.
+  if (options.stealth !== undefined) {
+    params.stealthConfig = { humanizeInteractions: options.stealth };
   }
 
-  if (options.proxies === true) {
-    params.useProxy = true;
+  if (typeof options.proxies === 'boolean') {
+    params.useProxy = options.proxies;
   } else if (Array.isArray(options.proxies) && options.proxies.length > 0) {
     applyProxy(params, options.proxies[0]!);
   }

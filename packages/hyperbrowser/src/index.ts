@@ -106,8 +106,8 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): CreateSession
   // Hyperbrowser only accepts a session timeout in minutes
   if (options.timeout !== undefined) params.timeoutMinutes = Math.max(1, Math.ceil(options.timeout / 60));
 
-  if (options.proxies === true) {
-    params.useProxy = true;
+  if (typeof options.proxies === 'boolean') {
+    params.useProxy = options.proxies;
   } else if (Array.isArray(options.proxies) && options.proxies.length > 0) {
     applyProxy(params, options.proxies[0]!);
   }
