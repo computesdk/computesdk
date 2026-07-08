@@ -177,6 +177,7 @@ function pushExecArgs(args: string[], config: CloudRunConfig, env?: Record<strin
 function sandboxRequestBody(config: CloudRunConfig, body: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     ...body,
+    executionMode: getExecutionMode(config),
     allowEgress: config.allowEgress,
     rootfs: config.rootfs,
     template: config.template,
@@ -391,7 +392,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
 
       filesystem: {
         readFile: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<string> => {
-          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readFile', { sandboxId: sandbox.id, path })
+          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
           const escapedPath = escapeShellArg(path)
           const r = await runCommand(sandbox, `if [ -f "${escapedPath}" ]; then base64 "${escapedPath}" | tr -d '\\n'; else exit 1; fi`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `File not found: ${path}`)
@@ -399,7 +400,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         },
         writeFile: async (sandbox: CloudRunSandbox, path: string, content: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
-            await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', { sandboxId: sandbox.id, path, content })
+            await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path, content }))
             return
           }
           const escapedPath = escapeShellArg(path)
@@ -409,14 +410,14 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         },
         mkdir: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
-            await gatewayRequest(sandbox.config, '/v1/sandbox/mkdir', { sandboxId: sandbox.id, path })
+            await gatewayRequest(sandbox.config, '/v1/sandbox/mkdir', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
             return
           }
           const r = await runCommand(sandbox, `mkdir -p "${escapeShellArg(path)}"`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `Failed to create directory: ${path}`)
         },
         readdir: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<FileEntry[]> => {
-          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readdir', { sandboxId: sandbox.id, path })
+          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readdir', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
           const r = await runCommand(sandbox, `ls -la "${escapeShellArg(path)}"`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot read directory: ${path}`)
           const entries: FileEntry[] = []
@@ -431,13 +432,13 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
           return entries
         },
         exists: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<boolean> => {
-          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/exists', { sandboxId: sandbox.id, path })
+          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/exists', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
           const r = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`)
           return r.exitCode === 0
         },
         remove: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
-            await gatewayRequest(sandbox.config, '/v1/sandbox/remove', { sandboxId: sandbox.id, path })
+            await gatewayRequest(sandbox.config, '/v1/sandbox/remove', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
             return
           }
           const r = await runCommand(sandbox, `rm -rf "${escapeShellArg(path)}"`)

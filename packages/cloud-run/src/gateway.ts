@@ -109,6 +109,12 @@ async function execCommand(sandboxId: string, command: string, body: Json = {}) 
   return runSandbox(args, body.timeout)
 }
 
+async function fsCommand(sandboxId: string, command: string, body: Json = {}) {
+  return body.executionMode === 'stateful'
+    ? execCommand(sandboxId, command, body)
+    : doCommand(command, body)
+}
+
 async function handle(pathname: string, body: Json): Promise<unknown> {
   const sandboxId = validateSandboxId(body.sandboxId || `cloud-run-${randomUUID()}`)
 
@@ -147,7 +153,7 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
   if (pathname === '/v1/sandbox/readFile') {
     if (!body.path) throw new Error('Missing required field: path')
     const path = shellEscape(String(body.path))
-    const result = await doCommand(`if [ -f "${path}" ]; then base64 "${path}" | tr -d '\\n'; else exit 1; fi`)
+    const result = await fsCommand(sandboxId, `if [ -f "${path}" ]; then base64 "${path}" | tr -d '\\n'; else exit 1; fi`, body)
     if (result.exitCode !== 0) throw new Error(result.stderr || `File not found: ${body.path}`)
     return Buffer.from(result.stdout, 'base64').toString('utf8')
   }
@@ -157,21 +163,21 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
     if (body.content === undefined) throw new Error('Missing required field: content')
     const path = shellEscape(String(body.path))
     const b64 = Buffer.from(String(body.content), 'utf8').toString('base64')
-    const result = await doCommand(`mkdir -p "$(dirname "${path}")" && printf '%s' '${b64}' | base64 -d > "${path}"`)
+    const result = await fsCommand(sandboxId, `mkdir -p "$(dirname "${path}")" && printf '%s' '${b64}' | base64 -d > "${path}"`, body)
     if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
     return { success: true }
   }
 
   if (pathname === '/v1/sandbox/mkdir') {
     const path = shellEscape(String(body.path))
-    const result = await doCommand(`mkdir -p "${path}"`)
+    const result = await fsCommand(sandboxId, `mkdir -p "${path}"`, body)
     if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to create directory: ${body.path}`)
     return { success: true }
   }
 
   if (pathname === '/v1/sandbox/readdir') {
     const path = shellEscape(String(body.path))
-    const result = await doCommand(`ls -la "${path}"`)
+    const result = await fsCommand(sandboxId, `ls -la "${path}"`, body)
     if (result.exitCode !== 0) throw new Error(result.stderr || `Cannot read directory: ${body.path}`)
     return result.stdout.split('\n').flatMap(line => {
       if (!line.trim() || line.startsWith('total ')) return []
@@ -185,13 +191,13 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
 
   if (pathname === '/v1/sandbox/exists') {
     const path = shellEscape(String(body.path))
-    const result = await doCommand(`test -e "${path}"`)
+    const result = await fsCommand(sandboxId, `test -e "${path}"`, body)
     return result.exitCode === 0
   }
 
   if (pathname === '/v1/sandbox/remove') {
     const path = shellEscape(String(body.path))
-    const result = await doCommand(`rm -rf "${path}"`)
+    const result = await fsCommand(sandboxId, `rm -rf "${path}"`, body)
     if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to remove: ${body.path}`)
     return { success: true }
   }
