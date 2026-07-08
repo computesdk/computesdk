@@ -119,7 +119,7 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
         command: string,
         options?: RunCommandOptions,
       ): Promise<CommandResult> => {
-        const startTime = Date.now();
+        const startTime = performance.now();
         const { stdout, stderr, onStdio } = captureStdio();
         let fullCommand = command;
         if (options?.env && Object.keys(options.env).length > 0) {
@@ -141,9 +141,9 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
             `,
             { onStdio },
           );
-          return { stdout: stdout.join('\n'), stderr: stderr.join('\n'), exitCode: result.code, durationMs: Date.now() - startTime };
+          return { stdout: stdout.join('\n'), stderr: stderr.join('\n'), exitCode: result.code, durationMs: Math.round(performance.now() - startTime) };
         } catch (error) {
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
+          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Math.round(performance.now() - startTime) };
         }
       },
 

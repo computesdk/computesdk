@@ -177,7 +177,7 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
   }
 
   const spinner = new Spinner(`Creating sandbox with ${providerName}...`).start();
-  const startTime = Date.now();
+  const startTime = performance.now();
   
   try {
     // Get or create compute instance
@@ -185,12 +185,12 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
     
     // Create sandbox
     const result = await compute.sandbox.create();
-    const duration = Date.now() - startTime;
+    const duration = Math.round(performance.now() - startTime);
     
     setSandbox(state, result, providerName);
     spinner.succeed(`Sandbox ready ${c.dim(`(${formatDuration(duration)})`)}`);
   } catch (error) {
-    const duration = Date.now() - startTime;
+    const duration = Math.round(performance.now() - startTime);
     spinner.fail(`Failed to create sandbox ${c.dim(`(${formatDuration(duration)})`)}`);
     
     // Better error message if provider package not installed
@@ -254,7 +254,7 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
   await ensureSandbox(state);
   
   const sandbox = getCurrentSandbox(state);
-  const startTime = Date.now();
+  const startTime = performance.now();
   
   logCommand(command);
   
@@ -262,7 +262,7 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
     // Use escapeArgs to properly join and escape command array with spaces/special chars
     const commandString = escapeArgs(command);
     const result = await sandbox.runCommand(commandString);
-    const duration = Date.now() - startTime;
+    const duration = Math.round(performance.now() - startTime);
     
     // Print output directly
     if (result.stdout) {
@@ -283,7 +283,7 @@ export async function runCommand(state: WorkbenchState, command: string[]): Prom
     }
     return undefined;
   } catch (error) {
-    const duration = Date.now() - startTime;
+    const duration = Math.round(performance.now() - startTime);
     logError(`Failed ${c.dim(`(${formatDuration(duration)})`)} - ${error instanceof Error ? error.message : String(error)}`);
 
     // Clear stale sandbox on connection/auth errors so next command creates fresh
