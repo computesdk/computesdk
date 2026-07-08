@@ -1,10 +1,10 @@
 # Table of contents
 
-* [getting-started](README.md)
+* [Getting Started](README.md)
   * [Introduction](getting-started/introduction.md)
   * [Installation](getting-started/installation.md)
   * [Quick Start](getting-started/quick-start.md)
-* [providers](providers/README.md)
+* [Providers](providers/README.md)
   * [AWS Bedrock AgentCore](providers/agentcore.md)
   * [Agentuity](providers/agentuity.md)
   * [Archil](providers/archil.md)
@@ -25,7 +25,7 @@
   * [Tensorlake](providers/tensorlake.md)
   * [Upstash](providers/upstash.md)
   * [Vercel](providers/vercel.md)
-* [reference](reference/README.md)
+* [API Reference](reference/README.md)
   * [Sandbox (interface)](reference/Sandbox.md)
   * [compute](reference/compute.md)
   * [compute.sandbox](reference/compute.sandbox.md)
