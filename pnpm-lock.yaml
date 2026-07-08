@@ -1161,6 +1161,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/lightning:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@lightningai/sdk':
+        specifier: ^2026.6.25
+        version: 2026.6.25
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/modal:
     dependencies:
       '@computesdk/provider':
@@ -3663,6 +3700,10 @@ packages:
   '@kubernetes/client-node@1.4.0':
     resolution: {integrity: sha512-Zge3YvF7DJi264dU1b3wb/GmzR99JhUpqTvp+VGHfwZT+g7EOOYNScDJNZwXy9cszyIGPIs0VHr+kk8e95qqrA==}
 
+  '@lightningai/sdk@2026.6.25':
+    resolution: {integrity: sha512-QZubyQh+0BqlMPr8W+QFRuZKeqoDkkQZBDSg8zaVQWqRA0Z39OJCZjVxbWiIJNEjNKOwQ5FpbuwK82DU8ny0bQ==}
+    engines: {node: '>=22.0.0'}
+
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
 
@@ -4518,6 +4559,7 @@ packages:
 
   '@superserve/sdk@0.7.6':
     resolution: {integrity: sha512-ovJG1hIoOolhMeKUl/j0y8awaexvHFTjYjkk7/HnrN5olpqeHDyLQT++6SJmnL3/94XFd2g2DPvc8VWABlOBqw==}
+
   '@tigrisdata/storage@3.6.0':
     resolution: {integrity: sha512-l+FHRAA903MOZ/PFBlz6S73YwlJ1Fs+D5/gTPiI2/NtiyIsqj3eNRGDYB+DszT75NIxKWCRoyNornUM+7qXkVw==}
 
@@ -10306,6 +10348,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@lightningai/sdk@2026.6.25':
+    dependencies:
+      axios: 1.18.1
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
   '@manypkg/find-root@1.1.0':
     dependencies:
       '@babel/runtime': 7.27.6
@@ -11436,6 +11485,7 @@ snapshots:
   '@speed-highlight/core@1.2.17': {}
 
   '@superserve/sdk@0.7.6': {}
+
   '@tigrisdata/storage@3.6.0':
     dependencies:
       '@aws-crypto/sha256-js': 5.2.0
