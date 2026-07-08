@@ -28,7 +28,7 @@ npm install computesdk @computesdk/e2b @computesdk/modal
 
 ## Provider Credentials
 
-Each provider reads its own environment variables. See the [installation guide](../installation.md) for the full list or the individual provider reference pages under `/docs/providers`.
+Each provider reads its own environment variables. See the [installation guide](../getting-started/installation.md) for the full list or the individual provider reference pages under `/docs/providers`.
 
 ```bash
 # Example: E2B
