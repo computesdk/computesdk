@@ -28,6 +28,8 @@ export interface CloudRunMount {
   dst: string
 }
 
+export type CloudRunExecutionMode = 'ephemeral' | 'stateful'
+
 export interface CloudRunConfig {
   /** URL of the deployed Cloud Run gateway service for remote mode. */
   sandboxUrl?: string
@@ -35,6 +37,8 @@ export interface CloudRunConfig {
   sandboxSecret?: string
   /** Optional Google-signed identity token for Cloud Run services that require IAM auth. */
   gatewayAuthToken?: string
+  /** Execution mode. Ephemeral uses `sandbox do`; stateful uses `sandbox run`, `exec`, and `delete`. Defaults to ephemeral. */
+  executionMode?: CloudRunExecutionMode
   /** Path to the Cloud Run sandbox binary. Defaults to CLOUD_RUN_SANDBOX_BINARY or /usr/local/gcp/bin/sandbox. */
   sandboxBinary?: string
   /** Sandbox CLI mode. Cloud Run's CLI defaults this to local. */
@@ -43,7 +47,7 @@ export interface CloudRunConfig {
   allowEgress?: boolean
   /** Root filesystem to expose to sandboxes. Defaults to /. */
   rootfs?: string
-  /** Working directory for newly-created persistent sandbox sessions. */
+  /** Working directory for sandboxed commands or newly-created stateful sessions. */
   workdir?: string
   /** Container template name for Cloud Run multi-container services. */
   template?: string
@@ -55,12 +59,14 @@ export interface CloudRunConfig {
   write?: boolean
   /** Bind mounts to attach to the sandbox. */
   mounts?: CloudRunMount[]
-  /** Environment variables applied when the persistent sandbox starts. */
+  /** Environment variables applied to sandboxed commands or newly-created stateful sessions. */
   env?: Record<string, string>
   /** Extra args passed before the sandbox subcommand, e.g. global debug flags. */
   globalArgs?: string[]
-  /** Extra args passed to `sandbox do`. */
+  /** Extra args passed to `sandbox do` and `sandbox run`. */
   runArgs?: string[]
+  /** Extra args passed to `sandbox exec` in stateful mode. */
+  execArgs?: string[]
 }
 
 export interface CloudRunSandbox {
@@ -84,6 +90,10 @@ function getBinary(config: CloudRunConfig): string {
 
 function isRemote(config: CloudRunConfig): boolean {
   return !!(config.sandboxUrl && config.sandboxSecret)
+}
+
+function getExecutionMode(config: CloudRunConfig): CloudRunExecutionMode {
+  return config.executionMode ?? 'ephemeral'
 }
 
 async function gatewayRequest(config: CloudRunConfig, path: string, body: Record<string, unknown> = {}): Promise<any> {
@@ -154,6 +164,30 @@ function pushRunArgs(args: string[], config: CloudRunConfig, env?: Record<string
   }
 }
 
+function pushExecArgs(args: string[], config: CloudRunConfig, env?: Record<string, string>, workdir?: string): void {
+  if (workdir ?? config.workdir) args.push('--workdir', workdir ?? config.workdir!)
+  for (const [key, value] of Object.entries({ ...config.env, ...env })) {
+    validateEnvName(key)
+    args.push('-e', `${key}=${value}`)
+  }
+  args.push(...(config.execArgs ?? []))
+}
+
+function sandboxRequestBody(config: CloudRunConfig, body: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...body,
+    allowEgress: config.allowEgress,
+    rootfs: config.rootfs,
+    template: config.template,
+    persistDir: config.persistDir,
+    overlayDir: config.overlayDir,
+    write: config.write,
+    mounts: config.mounts,
+    runArgs: config.runArgs,
+    execArgs: config.execArgs,
+  }
+}
+
 function buildBaseArgs(config: CloudRunConfig): string[] {
   const args = [...(config.globalArgs ?? [])]
   if (config.mode) args.push('--mode', config.mode)
@@ -216,13 +250,14 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
   const start = Date.now()
   if (sandbox.remote) {
     try {
-      const result = await gatewayRequest(sandbox.config, '/v1/sandbox/exec', {
+      const executionMode = getExecutionMode(sandbox.config)
+      const result = await gatewayRequest(sandbox.config, executionMode === 'stateful' ? '/v1/sandbox/exec' : '/v1/sandbox/do', sandboxRequestBody(sandbox.config, {
         sandboxId: sandbox.id,
         command: withShellOptions(command, options),
         cwd: options?.cwd ?? sandbox.config.workdir,
         env: { ...sandbox.config.env, ...options?.env },
         timeout: options?.timeout,
-      })
+      }))
       return {
         stdout: result.stdout || '',
         stderr: result.stderr || '',
@@ -234,9 +269,15 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
     }
   }
 
-  const args = [...buildBaseArgs(sandbox.config), 'do']
-  pushRunArgs(args, sandbox.config, options?.env, options?.cwd)
-  args.push(...(sandbox.config.runArgs ?? []))
+  const executionMode = getExecutionMode(sandbox.config)
+  const args = [...buildBaseArgs(sandbox.config), executionMode === 'stateful' ? 'exec' : 'do']
+  if (executionMode === 'stateful') {
+    args.push(sandbox.id)
+    pushExecArgs(args, sandbox.config, options?.env, options?.cwd)
+  } else {
+    pushRunArgs(args, sandbox.config, options?.env, options?.cwd)
+    args.push(...(sandbox.config.runArgs ?? []))
+  }
   args.push('--', '/bin/sh', '-c', withShellOptions(command, options))
   const result = await runSandboxCli(sandbox.config, args, {
     timeout: options?.timeout,
@@ -260,6 +301,17 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         }
         if (isRemote(config)) {
           const sandboxId = options?.name ?? `cloud-run-${randomUUID()}`
+          if (getExecutionMode(sandboxConfig) === 'stateful') {
+            const response = await gatewayRequest(config, '/v1/sandbox/create', sandboxRequestBody(sandboxConfig, {
+              sandboxId,
+              env: sandboxConfig.env,
+              workdir: sandboxConfig.workdir,
+              timeout: options?.timeout,
+            }))
+            const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
+            activeSandboxes.set(sandbox.id, sandbox)
+            return { sandbox, sandboxId: sandbox.id }
+          }
           const sandbox = { id: sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
           activeSandboxes.set(sandbox.id, sandbox)
           return { sandbox, sandboxId: sandbox.id }
@@ -267,6 +319,15 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
 
         await assertSandboxBinary(sandboxConfig)
         const sandboxId = options?.name ?? `cloud-run-${randomUUID()}`
+        if (getExecutionMode(sandboxConfig) === 'stateful') {
+          const args = [...buildBaseArgs(sandboxConfig), 'run', sandboxId, '--detach']
+          pushRunArgs(args, sandboxConfig, options?.envs, options?.directory)
+          args.push(...(sandboxConfig.runArgs ?? []))
+          const result = await runSandboxCli(sandboxConfig, args, { timeout: options?.timeout })
+          if (result.exitCode !== 0) {
+            throw new Error(result.stderr || `Failed to create Cloud Run sandbox ${sandboxId}`)
+          }
+        }
         const sandbox = { id: sandboxId, createdAt: new Date(), config: sandboxConfig, remote: false }
         activeSandboxes.set(sandboxId, sandbox)
         return { sandbox, sandboxId }
@@ -289,13 +350,18 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
       destroy: async (config: CloudRunConfig, sandboxId: string) => {
         if (isRemote(config)) {
           try {
-            await gatewayRequest(config, '/v1/sandbox/destroy', { sandboxId })
+            if (getExecutionMode(config) === 'stateful') await gatewayRequest(config, '/v1/sandbox/destroy', { sandboxId })
           } finally {
             activeSandboxes.delete(sandboxId)
           }
           return
         }
-
+        if (getExecutionMode(config) === 'stateful') {
+          const result = await runSandboxCli(config, [...buildBaseArgs(config), 'delete', sandboxId, '--force', '--stdin=false', '--stdout=false', '--stderr=false'], { timeout: 30_000 })
+          if (result.exitCode !== 0 && result.exitCode !== 124 && !/not found|does not exist/i.test(result.stderr)) {
+            throw new Error(result.stderr || `Failed to delete Cloud Run sandbox ${sandboxId}`)
+          }
+        }
         activeSandboxes.delete(sandboxId)
       },
 
@@ -309,6 +375,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         timeout: DEFAULT_TIMEOUT_MS,
         metadata: {
           remote: sandbox.remote,
+          executionMode: getExecutionMode(sandbox.config),
           mode: sandbox.config.mode ?? 'local',
           allowEgress: sandbox.config.allowEgress ?? false,
           rootfs: sandbox.config.rootfs ?? '/',

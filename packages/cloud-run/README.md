@@ -35,7 +35,7 @@ The setup command uses `gcloud` to:
 - Generate a bearer token for gateway authentication.
 - Print the runtime environment variables.
 
-The gateway executes each ComputeSDK command with `sandbox do`. The ComputeSDK sandbox object is a logical handle used to carry configuration such as environment variables and working directory between calls.
+By default, the gateway executes each ComputeSDK command with `sandbox do`. The ComputeSDK sandbox object is a logical handle used to carry configuration such as environment variables and working directory between calls. Set `executionMode: 'stateful'` to use `sandbox run`, `sandbox exec`, and `sandbox delete` for persistent sandbox sessions.
 
 Add the printed values to your app environment:
 
@@ -90,6 +90,25 @@ console.log(result.stdout)
 await sandbox.destroy()
 ```
 
+### Stateful Execution
+
+```typescript
+import { cloudRun } from '@computesdk/cloud-run'
+
+const compute = cloudRun({
+  sandboxUrl: process.env.CLOUD_RUN_SANDBOX_URL,
+  sandboxSecret: process.env.CLOUD_RUN_SANDBOX_SECRET,
+  executionMode: 'stateful',
+  write: true,
+})
+
+const sandbox = await compute.sandbox.create()
+await sandbox.runCommand('echo hello > /tmp/hello.txt')
+const result = await sandbox.runCommand('cat /tmp/hello.txt')
+console.log(result.stdout)
+await sandbox.destroy()
+```
+
 ## Direct Usage
 
 ```typescript
@@ -117,6 +136,7 @@ await sandbox.destroy()
 | `sandboxUrl` | `CLOUD_RUN_SANDBOX_URL` | | URL of deployed gateway service for remote mode |
 | `sandboxSecret` | `CLOUD_RUN_SANDBOX_SECRET` | | Bearer token for deployed gateway service |
 | `gatewayAuthToken` | `CLOUD_RUN_AUTH_TOKEN` | | Optional Google identity token when Cloud Run IAM auth is enabled |
+| `executionMode` | | `ephemeral` | Use `ephemeral` for `sandbox do` or `stateful` for `sandbox run`/`exec`/`delete` |
 | `sandboxBinary` | `CLOUD_RUN_SANDBOX_BINARY` | `/usr/local/gcp/bin/sandbox` | Path to the Cloud Run sandbox CLI |
 | `mode` | | CLI default | Sandbox CLI mode, `local` or `container` |
 | `allowEgress` | | `false` | Allow sandbox network egress |
@@ -129,11 +149,12 @@ await sandbox.destroy()
 | `mounts` | | `[]` | Bind mounts passed to `--mount` |
 | `env` | | `{}` | Environment variables for new sandbox sessions |
 | `globalArgs` | | `[]` | Extra CLI global args |
-| `runArgs` | | `[]` | Extra args for `sandbox do` |
+| `runArgs` | | `[]` | Extra args for `sandbox do` and `sandbox run` |
+| `execArgs` | | `[]` | Extra args for `sandbox exec` in stateful mode |
 
 ## Notes
 
-Commands are executed with `sandbox do` rather than a detached persistent session. Filesystem writes are only preserved when your Cloud Run sandbox CLI configuration supports host-backed persistence such as `--persist-dir`.
+Commands use ephemeral `sandbox do` execution by default. Filesystem writes are only preserved when your Cloud Run sandbox CLI configuration supports host-backed persistence such as `--persist-dir`. Use `executionMode: 'stateful'` when you need a detached sandbox session created with `sandbox run` and reused with `sandbox exec`.
 
 `getUrl()` is not supported because the current Cloud Run sandbox CLI does not expose per-sandbox ports.
 
