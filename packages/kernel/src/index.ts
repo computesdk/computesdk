@@ -70,7 +70,7 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions) {
   if (options.stealth !== undefined) params.stealth = options.stealth;
   if (options.timeout !== undefined) params.timeout_seconds = options.timeout;
   if (options.proxies !== undefined) {
-    warnOnce('proxies', 'Kernel create-browser supports only a provider proxy_id, which BrowserSessionCreateOptions cannot express.');
+    warnOnce('proxies', 'Kernel create-browser supports only a provider proxy_id, which CreateBrowserSessionOptions cannot express.');
   }
 
   // Viewport
