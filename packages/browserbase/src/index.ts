@@ -76,8 +76,8 @@ function mapSessionOptions(config: BrowserbaseConfig, options?: CreateBrowserSes
   if (options.userMetadata) params.userMetadata = options.userMetadata;
 
   // Proxy configuration
-  if (options.proxies === true) {
-    params.proxies = true;
+  if (typeof options.proxies === 'boolean') {
+    params.proxies = options.proxies;
   } else if (Array.isArray(options.proxies)) {
     params.proxies = options.proxies.map((p: any) => {
       if (p.type === 'custom' && p.server) {
