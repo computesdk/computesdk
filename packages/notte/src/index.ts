@@ -70,6 +70,13 @@ function createClient(config: NotteConfig) {
   return buildNotteClient({ baseUrl, token: apiKey });
 }
 
+const warnedUnsupported = new Set<string>();
+function warnOnce(field: string, reason: string) {
+  if (warnedUnsupported.has(field)) return;
+  warnedUnsupported.add(field);
+  console.warn(`[@computesdk/notte] '${field}' is ignored: ${reason}`);
+}
+
 /**
  * Map a single ComputeSDK `ProxyConfig` onto a Notte proxy entry.
  *
@@ -147,6 +154,10 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): ApiSessionSta
   // Timeout — ComputeSDK uses seconds, Notte uses minutes (round up to >=1)
   if (options.timeout !== undefined) {
     body.max_duration_minutes = Math.max(1, Math.ceil(options.timeout / 60));
+  }
+
+  if (options.stealth !== undefined) {
+    warnOnce('stealth', 'Notte does not expose a per-session stealth toggle.');
   }
 
   // Proxies — `boolean` toggles Notte's default proxy pool; `ProxyConfig[]`

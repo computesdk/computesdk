@@ -159,8 +159,8 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): SessionCreate
     session.tags = Object.entries(options.userMetadata).map(([k, v]) => `${k}:${v}`);
   }
 
-  if (options.proxies === true) {
-    session.proxy = { active: true, type: 'anchor_proxy' };
+  if (typeof options.proxies === 'boolean') {
+    session.proxy = { active: options.proxies, type: 'anchor_proxy' };
   } else if (Array.isArray(options.proxies) && options.proxies.length > 0) {
     session.proxy = buildProxyParams(options.proxies[0]!);
   }

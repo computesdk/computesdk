@@ -20,6 +20,13 @@ import type {
 
 import type { BrowserCreateResponse } from '@onkernel/sdk/resources/browsers';
 
+const warnedUnsupported = new Set<string>();
+function warnOnce(field: string, reason: string) {
+  if (warnedUnsupported.has(field)) return;
+  warnedUnsupported.add(field);
+  console.warn(`[@computesdk/kernel] '${field}' is ignored: ${reason}`);
+}
+
 /**
  * Kernel-specific configuration options
  */
@@ -62,6 +69,9 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions) {
 
   if (options.stealth !== undefined) params.stealth = options.stealth;
   if (options.timeout !== undefined) params.timeout_seconds = options.timeout;
+  if (options.proxies !== undefined) {
+    warnOnce('proxies', 'Kernel create-browser supports only a provider proxy_id, which BrowserSessionCreateOptions cannot express.');
+  }
 
   // Viewport
   if (options.viewport) {

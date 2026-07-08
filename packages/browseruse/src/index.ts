@@ -60,6 +60,13 @@ function createClient(config: BrowserUseConfig): BrowserUse {
   return new BrowserUse({ apiKey, baseUrl, timeout, maxRetries });
 }
 
+const warnedUnsupported = new Set<string>();
+function warnOnce(field: string, reason: string) {
+  if (warnedUnsupported.has(field)) return;
+  warnedUnsupported.add(field);
+  console.warn(`[@computesdk/browseruse] '${field}' is ignored: ${reason}`);
+}
+
 /**
  * Apply a single ProxyConfig entry to the create-browser request.
  * Browser Use supports residential proxies via country code, or custom HTTP/SOCKS5
@@ -117,8 +124,12 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): Partial<Creat
   // Browser Use accepts session timeout in minutes (default 60, max 240)
   if (options.timeout !== undefined) params.timeout = Math.max(1, Math.ceil(options.timeout / 60));
 
-  // Stealth is enabled by default on Browser Use and not configurable per request.
-  // We accept the option for parity with other providers but it is a no-op.
+  // Browser Use does not expose a per-session stealth toggle. Its browser
+  // sessions are stealth-oriented by default, so `stealth: false` cannot be
+  // honored by this adapter.
+  if (options.stealth !== undefined) {
+    warnOnce('stealth', 'Browser Use does not expose a per-session stealth toggle.');
+  }
 
   if (options.proxies === false) {
     // Explicit opt-out: disable proxy.
