@@ -1,9 +1,8 @@
 # Table of contents
 
-* [Getting Started](README.md)
-  * [Introduction](getting-started/introduction.md)
-  * [Installation](getting-started/installation.md)
-  * [Quick Start](getting-started/quick-start.md)
+* [Introduction](README.md)
+* [Installation](installation.md)
+* [Quick Start](quick-start.md)
 * [Providers](providers/README.md)
   * [AWS Bedrock AgentCore](providers/agentcore.md)
   * [Agentuity](providers/agentuity.md)
