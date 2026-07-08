@@ -208,6 +208,7 @@ try {
 - **Node.js 22+** is required by the underlying `@lightningai/sdk`.
 - **Port URLs**: `getUrl(port)` returns Lightning's public HTTPS URL for a port (e.g. `https://8080-<sandbox-id>-s.cloudspaces.litng.ai`). The port must be declared via `ports` at create time, otherwise `getUrl` throws.
 - **Combined output**: stdout and stderr are returned as a single combined stream on `result.stdout`.
+- **Credentials & concurrency**: the Lightning SDK stores auth in process-global state, so this provider serializes the brief credential switch between provider instances that use *different* API keys. Operations sharing the same key run fully concurrently; only a switch to a different key waits for in-flight same-key operations to drain. Using one API key per process incurs no serialization.
 
 ## Support
 
