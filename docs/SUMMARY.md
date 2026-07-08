@@ -1,9 +1,8 @@
 # Table of contents
 
-* [LLM Documentation Files](README.md)
-* [getting-started](getting-started/README.md)
-  * [Installation](getting-started/installation.md)
+* [getting-started](README.md)
   * [Introduction](getting-started/introduction.md)
+  * [Installation](getting-started/installation.md)
   * [Quick Start](getting-started/quick-start.md)
 * [providers](providers/README.md)
   * [AWS Bedrock AgentCore](providers/agentcore.md)
@@ -30,3 +29,4 @@
   * [Sandbox (interface)](reference/Sandbox.md)
   * [compute](reference/compute.md)
   * [compute.sandbox](reference/compute.sandbox.md)
+* [LLM Documentation Files](<README (1).md>)
