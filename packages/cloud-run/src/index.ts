@@ -9,6 +9,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { access } from 'node:fs/promises'
+import { performance } from 'node:perf_hooks'
 import { defineProvider, escapeShellArg } from '@computesdk/provider'
 import type {
   CommandResult,
@@ -247,7 +248,7 @@ function withShellOptions(command: string, options?: RunCommandOptions): string 
 }
 
 async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
-  const start = Date.now()
+  const start = performance.now()
   if (sandbox.remote) {
     try {
       const executionMode = getExecutionMode(sandbox.config)
@@ -262,10 +263,10 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
         stdout: result.stdout || '',
         stderr: result.stderr || '',
         exitCode: result.exitCode ?? 0,
-        durationMs: Date.now() - start,
+        durationMs: Math.round(performance.now() - start),
       }
     } catch (error) {
-      return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - start }
+      return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Math.round(performance.now() - start) }
     }
   }
 
@@ -284,7 +285,7 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
     onStdout: options?.onStdout,
     onStderr: options?.onStderr,
   })
-  return { ...result, durationMs: Date.now() - start }
+  return { ...result, durationMs: Math.round(performance.now() - start) }
 }
 
 type FsRunCommand = (sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
