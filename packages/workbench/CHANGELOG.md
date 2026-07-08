@@ -1,5 +1,58 @@
 # @computesdk/workbench
 
+## 29.0.3
+
+### Patch Changes
+
+- Updated dependencies [90764f1]
+  - @computesdk/cloud-run@0.1.4
+
+## 29.0.2
+
+### Patch Changes
+
+- Updated dependencies [f2e71b2]
+  - @computesdk/cloud-run@0.1.3
+
+## 29.0.1
+
+### Patch Changes
+
+- Updated dependencies [96a248a]
+  - @computesdk/cloud-run@0.1.2
+
+## 29.0.0
+
+### Patch Changes
+
+- Updated dependencies [9c72917]
+  - @computesdk/beam@0.2.0
+
+## 28.0.2
+
+### Patch Changes
+
+- Updated dependencies [44de339]
+  - @computesdk/lelantos@0.2.1
+
+## 28.0.1
+
+### Patch Changes
+
+- ec1be06: Add a Google Cloud Run Sandboxes provider and register it in the workbench provider list.
+- Updated dependencies [ec1be06]
+  - @computesdk/cloud-run@0.1.1
+
+## 28.0.0
+
+### Patch Changes
+
+- b144c15: Workbench now honors the Lelantos provider's `E2B_API_KEY` / `E2B_DOMAIN` / `E2B_API_URL` fallback. Previously only `LELANTOS_*` was recognized, so a user who had configured Lelantos via the `E2B_*` variables (which the provider itself accepts) saw it reported as unconfigured and got no auto-config from the environment.
+- Updated dependencies [b144c15]
+- Updated dependencies [1ffe0e3]
+  - @computesdk/lelantos@0.2.0
+  - @computesdk/tenki@0.1.1
+
 ## 27.0.6
 
 ### Patch Changes

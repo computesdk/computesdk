@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/workbench",
-  "version": "27.0.6",
+  "version": "29.0.3",
   "description": "Interactive REPL for testing ComputeSDK sandbox operations",
   "author": "Garrison",
   "license": "MIT",
@@ -58,6 +58,7 @@
   "peerDependencies": {
     "@computesdk/blaxel": "workspace:*",
     "@computesdk/cloudflare": "workspace:*",
+    "@computesdk/cloud-run": "workspace:*",
     "@computesdk/codesandbox": "workspace:*",
     "@computesdk/daytona": "workspace:*",
     "@computesdk/e2b": "workspace:*",
@@ -77,7 +78,9 @@
     "@computesdk/upstash": "workspace:*",
     "@computesdk/k8s": "workspace:*",
     "@computesdk/northflank": "workspace:*",
-    "@computesdk/collimate": "workspace:*"
+    "@computesdk/collimate": "workspace:*",
+    "@computesdk/lelantos": "workspace:*",
+    "@computesdk/tenki": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
@@ -96,6 +99,9 @@
       "optional": true
     },
     "@computesdk/cloudflare": {
+      "optional": true
+    },
+    "@computesdk/cloud-run": {
       "optional": true
     },
     "@computesdk/codesandbox": {
@@ -144,6 +150,12 @@
       "optional": true
     },
     "@computesdk/collimate": {
+      "optional": true
+    },
+    "@computesdk/lelantos": {
+      "optional": true
+    },
+    "@computesdk/tenki": {
       "optional": true
     }
   },
