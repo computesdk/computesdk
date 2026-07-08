@@ -28,9 +28,7 @@ describe('kernel option mapping', () => {
     expect(sdk.create).toHaveBeenCalledWith({
       stealth: false,
       viewport: { width: 1920, height: 1080 },
-    });
-    expect(warn).toHaveBeenCalledWith("[@computesdk/kernel] 'proxies' is ignored: Kernel create-browser supports only a provider proxy_id, which BrowserSessionCreateOptions cannot express.");
-
+    expect(warn).toHaveBeenCalledWith("[@computesdk/kernel] 'proxies' is ignored: Kernel create-browser supports only a provider proxy_id, which CreateBrowserSessionOptions cannot express.");
     warn.mockRestore();
   });
 });
