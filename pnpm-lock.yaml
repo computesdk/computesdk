@@ -1352,8 +1352,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@lightningai/sdk':
-        specifier: ^2026.6.25
-        version: 2026.7.3
+        specifier: 2026.7.0-7.post1
+        version: 2026.7.0-7.post1
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4028,8 +4028,8 @@ packages:
   '@kubernetes/client-node@1.4.0':
     resolution: {integrity: sha512-Zge3YvF7DJi264dU1b3wb/GmzR99JhUpqTvp+VGHfwZT+g7EOOYNScDJNZwXy9cszyIGPIs0VHr+kk8e95qqrA==}
 
-  '@lightningai/sdk@2026.7.3':
-    resolution: {integrity: sha512-CRkLjfpEhftoan4c7JiBEq4IdmmSw210z0N2o71ucaaP593HQWVIEQhLMmbytH19qtiNIsFt/WSO5X+gBMT+nQ==}
+  '@lightningai/sdk@2026.7.0-7.post1':
+    resolution: {integrity: sha512-yzvgKp5bDV2GA4HJ6nb+fwYX39KoQyCbTM3tJ0u2PXoAdw4vkrT7BajvDpEXrZAnhX/PYxTtLMmN+Jz2FkPNjg==}
     engines: {node: '>=22.0.0'}
 
   '@manypkg/find-root@1.1.0':
@@ -10893,7 +10893,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@lightningai/sdk@2026.7.3':
+  '@lightningai/sdk@2026.7.0-7.post1':
     dependencies:
       axios: 1.18.1
     transitivePeerDependencies:

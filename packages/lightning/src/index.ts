@@ -31,10 +31,14 @@ interface LightningNativeSandbox {
   readonly name: string;
   readonly status: string;
   readonly ports: string[];
+  /** Public HTTPS URLs for the sandbox's exposed ports, keyed by port number. */
+  readonly portUrls: Record<string, string>;
   readonly instanceType: string;
   readonly runtime: string;
   readonly timeout: number;
   readonly createdAt: Date;
+  /** Return the public URL for one of the sandbox's exposed ports; throws if the port was not declared at create time. */
+  getPortUrl(port: number | string): string;
   runCommand(opts: { cmd: string; args?: string[]; cwd?: string; env?: Record<string, string>; detached?: boolean }): Promise<{ output: string; exitCode: number | null }>;
   writeFile(params: { path: string; content: string }): Promise<void>;
   readFile(params: { path: string }): Promise<string | null>;
@@ -248,14 +252,18 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
           instanceType: sandbox.instanceType,
           runtime: sandbox.runtime,
           ports: sandbox.ports,
+          portUrls: sandbox.portUrls,
         },
       }),
 
-      getUrl: async (_sandbox: LightningNativeSandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        throw new Error(
-          `Lightning AI does not support generating public port URLs through the SDK. ` +
-            `Ports declared at create time are reachable from inside the sandbox at http://127.0.0.1:${options.port}.`
-        );
+      getUrl: async (sandbox: LightningNativeSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        // Lightning returns a public HTTPS URL per port declared at create time
+        // (e.g. https://8080-<sandbox-id>-s.cloudspaces.litng.ai). `getPortUrl`
+        // throws a helpful error when the port was not exposed.
+        const url = sandbox.getPortUrl(options.port);
+        // Honor a caller-requested scheme (e.g. `wss` for websockets) while
+        // keeping Lightning's proxy host; default to the SDK's https URL.
+        return options.protocol ? url.replace(/^[a-z]+:\/\//i, `${options.protocol}://`) : url;
       },
 
       filesystem: {

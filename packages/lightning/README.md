@@ -89,7 +89,7 @@ interface LightningConfig {
 - ✅ **Command Execution** - Run shell commands inside the sandbox
 - ✅ **Filesystem Operations** - Read/write files, directories, and listing via the Lightning SDK
 - ✅ **Sandbox Lifecycle** - Create, reconnect by id, list, and destroy sandboxes
-- ❌ **Port URLs** - Lightning does not expose public port URLs through the SDK (`getUrl` throws)
+- ✅ **Port URLs** - `getUrl(port)` returns the public HTTPS URL for any port declared at create time
 
 ## API Reference
 
@@ -178,7 +178,7 @@ try {
 ## Limitations
 
 - **Node.js 22+** is required by the underlying `@lightningai/sdk`.
-- **Port URLs**: `getUrl` is not supported - Lightning has no public port-URL API. Ports declared at create time are reachable inside the sandbox at `http://127.0.0.1:<port>`.
+- **Port URLs**: `getUrl(port)` returns Lightning's public HTTPS URL for a port (e.g. `https://8080-<sandbox-id>-s.cloudspaces.litng.ai`). The port must be declared via `ports` at create time, otherwise `getUrl` throws.
 - **Combined output**: stdout and stderr are returned as a single combined stream on `result.stdout`.
 
 ## Support

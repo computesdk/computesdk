@@ -39,7 +39,7 @@
   ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@lightningai/sdk": "^2026.6.25",
+    "@lightningai/sdk": "2026.7.0-7.post1",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
