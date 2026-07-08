@@ -80,6 +80,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Lelantos** | `LELANTOS_API_KEY` | EU-native Firecracker microVMs, code execution, preview URLs |
 | **Tenki** | `TENKI_API_KEY` or `TENKI_AUTH_TOKEN` | MicroVM sandboxes with native filesystem and preview URLs |
 | **AgentCore** | AWS credential chain (`AWS_REGION`, profile, or SSO) | Managed AWS code-execution sandboxes |
+| **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
 
 ## Configuration
 
@@ -273,6 +274,7 @@ npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/lelantos   # Lelantos provider
 npm install @computesdk/tenki      # Tenki provider
 npm install @computesdk/agentcore  # AWS Bedrock AgentCore provider
+npm install @computesdk/lightning  # Lightning AI provider
 npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
 ```
 
@@ -296,6 +298,7 @@ See individual provider READMEs for details:
 - **[@computesdk/lelantos](./packages/lelantos)** - EU-native Firecracker microVM sandboxes (E2B-API-compatible), with snapshot/template support
 - **[@computesdk/tenki](./packages/tenki)** - Tenki Cloud microVM sandboxes with native filesystem and public preview URLs
 - **[@computesdk/agentcore](./packages/agentcore)** - Managed AWS Bedrock AgentCore Code Interpreter sandboxes, authenticated via the standard AWS credential chain
+- **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
 - **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
 
 ## Building Custom Providers
