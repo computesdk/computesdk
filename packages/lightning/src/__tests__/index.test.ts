@@ -11,5 +11,5 @@ runProviderTestSuite({
   // Declare ports at create time so real sandboxes get public port URLs the
   // getUrl coverage (single port + custom protocol) can resolve.
   ports: [8080, 3000],
-  skipIntegration: !process.env.LIGHTNING_API_KEY,
+  skipIntegration: !(process.env.LIGHTNING_SANDBOX_API_KEY || process.env.LIGHTNING_API_KEY),
 });

@@ -3,7 +3,7 @@
  *
  * These drive the real provider code (create -> getUrl / getInfo) against a
  * mocked `@lightningai/sdk`, so they run without a live LIGHTNING_API_KEY and
- * verify the `getPortUrl` wiring added in SDK 2026.7.0-7.post1.
+ * verify the `getPortUrl` wiring (shipped in `@lightningai/sdk` 2026.7.8).
  */
 
 import { describe, it, expect, vi } from 'vitest';
