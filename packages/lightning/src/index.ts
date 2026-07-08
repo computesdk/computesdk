@@ -12,7 +12,7 @@
 
 import { defineProvider } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /** Default instance type used when none is supplied via config. */
 const DEFAULT_INSTANCE_TYPE = 'cpu-1';
@@ -23,6 +23,37 @@ interface LightningFileStat {
   size: number;
   mtime: Date;
   mode: string;
+}
+
+/** Minimal view of the `@lightningai/sdk` `SnapshotData` we rely on. */
+interface LightningSnapshotData {
+  id: string;
+  /** `saving` | `ready` | `failed`; only `ready` snapshots are restorable. */
+  status: string;
+  sizeBytes: number;
+  sourceSandboxId: string;
+  sourceSandboxName: string;
+  runtime: string;
+  /** `true` for control-plane auto-snapshots; `false` for user snapshots. */
+  auto: boolean;
+  createdAt: Date;
+  expiresAt: Date | null;
+}
+
+/** ComputeSDK-normalized snapshot returned by the snapshot method group. */
+export interface LightningSnapshot {
+  id: string;
+  provider: 'lightning';
+  createdAt: Date;
+  metadata: {
+    status: string;
+    sizeBytes: number;
+    sourceSandboxId: string;
+    sourceSandboxName: string;
+    runtime: string;
+    auto: boolean;
+    expiresAt: Date | null;
+  };
 }
 
 /** Native Lightning sandbox instance surface we depend on. */
@@ -39,6 +70,8 @@ interface LightningNativeSandbox {
   readonly createdAt: Date;
   /** Return the public URL for one of the sandbox's exposed ports; throws if the port was not declared at create time. */
   getPortUrl(port: number | string): string;
+  /** Capture a filesystem snapshot of this sandbox (waits for `ready` by default). */
+  createSnapshot(params?: { excludes?: string[]; expiration?: number; wait?: boolean; waitTimeoutMs?: number }): Promise<LightningSnapshotData>;
   runCommand(opts: { cmd: string; args?: string[]; cwd?: string; env?: Record<string, string>; detached?: boolean }): Promise<{ output: string; exitCode: number | null }>;
   writeFile(params: { path: string; content: string }): Promise<void>;
   readFile(params: { path: string }): Promise<string | null>;
@@ -58,6 +91,9 @@ interface LightningSandboxStatic {
   create(params: Record<string, unknown>): Promise<LightningNativeSandbox>;
   get(params: { sandboxId: string }): Promise<LightningNativeSandbox>;
   list(params?: { pageToken?: string; limit?: number }): Promise<{ sandboxes: LightningNativeSandbox[] }>;
+  listSnapshots(params?: { name?: string; pageToken?: string; limit?: number; sortOrder?: 'asc' | 'desc' }): Promise<{ snapshots: LightningSnapshotData[] }>;
+  getSnapshot(snapshotId: string): Promise<LightningSnapshotData>;
+  deleteSnapshot(snapshotId: string): Promise<void>;
 }
 
 let _SandboxClass: LightningSandboxStatic | null = null;
@@ -121,6 +157,24 @@ function mapStatus(status: string): SandboxInfo['status'] {
   if (s.includes('fail') || s.includes('error')) return 'error';
   if (s.includes('stop') || s.includes('pause') || s.includes('terminat') || s.includes('delet')) return 'stopped';
   return 'running';
+}
+
+/** Normalize a Lightning `SnapshotData` onto the ComputeSDK snapshot shape. */
+function toSnapshot(snap: LightningSnapshotData): LightningSnapshot {
+  return {
+    id: snap.id,
+    provider: 'lightning',
+    createdAt: snap.createdAt instanceof Date ? snap.createdAt : new Date(snap.createdAt ?? Date.now()),
+    metadata: {
+      status: snap.status,
+      sizeBytes: snap.sizeBytes ?? 0,
+      sourceSandboxId: snap.sourceSandboxId,
+      sourceSandboxName: snap.sourceSandboxName,
+      runtime: snap.runtime,
+      auto: snap.auto ?? false,
+      expiresAt: snap.expiresAt ?? null,
+    },
+  };
 }
 
 export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({
@@ -306,6 +360,47 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
       },
 
       getInstance: (sandbox: LightningNativeSandbox): LightningNativeSandbox => sandbox,
+    },
+
+    snapshot: {
+      // Capture a filesystem snapshot of an existing sandbox. Lightning snapshots
+      // are unnamed, so `options.name`/`options.metadata` are accepted for API
+      // parity but not persisted. Restore via `snapshotId` on sandbox create.
+      create: async (config: LightningConfig, sandboxId: string, _options?: CreateSnapshotOptions): Promise<LightningSnapshot> => {
+        const Sandbox = await configured(config);
+        const sandbox = await Sandbox.get({ sandboxId });
+        try {
+          const snapshot = await sandbox.createSnapshot();
+          return toSnapshot(snapshot);
+        } catch (error) {
+          throw new Error(
+            `Failed to create Lightning snapshot for sandbox '${sandboxId}': ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      list: async (config: LightningConfig, options?: ListSnapshotsOptions): Promise<LightningSnapshot[]> => {
+        try {
+          const Sandbox = await configured(config);
+          const { snapshots } = await Sandbox.listSnapshots(options?.limit ? { limit: options.limit } : undefined);
+          // Lightning's list API has no sandbox filter, so narrow client-side.
+          const filtered = options?.sandboxId
+            ? snapshots.filter((snap) => snap.sourceSandboxId === options.sandboxId)
+            : snapshots;
+          return filtered.map(toSnapshot);
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: LightningConfig, snapshotId: string): Promise<void> => {
+        try {
+          const Sandbox = await configured(config);
+          await Sandbox.deleteSnapshot(snapshotId);
+        } catch {
+          /* Snapshot may already be deleted - ignore. */
+        }
+      },
     },
   },
 });

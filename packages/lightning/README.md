@@ -90,6 +90,34 @@ interface LightningConfig {
 - ✅ **Filesystem Operations** - Read/write files, directories, and listing via the Lightning SDK
 - ✅ **Sandbox Lifecycle** - Create, reconnect by id, list, and destroy sandboxes
 - ✅ **Port URLs** - `getUrl(port)` returns the public HTTPS URL for any port declared at create time
+- ✅ **Snapshots** - Capture, list, delete, and restore filesystem snapshots via `compute.snapshot.*`
+
+## Snapshots
+
+Capture a sandbox's filesystem, list/delete snapshots, and boot a new sandbox from one:
+
+```typescript
+import { compute } from 'computesdk';
+import { lightning } from '@computesdk/lightning';
+
+compute.setConfig({ provider: lightning() });
+
+const sandbox = await compute.sandbox.create();
+
+// Capture (waits until the snapshot is `ready`)
+const snapshot = await compute.snapshot.create(sandbox.sandboxId);
+
+// List (optionally scoped to a source sandbox)
+const snapshots = await compute.snapshot.list({ sandboxId: sandbox.sandboxId });
+
+// Restore into a fresh sandbox
+const restored = await compute.sandbox.create({ snapshotId: snapshot.id });
+
+// Delete
+await compute.snapshot.delete(snapshot.id);
+```
+
+> Lightning snapshots are unnamed, so `CreateSnapshotOptions.name` / `metadata` are accepted for API parity but not persisted. `/tmp` (and other platform defaults) are excluded from snapshots — persist data under `$HOME` to have it survive a restore.
 
 ## API Reference
 
