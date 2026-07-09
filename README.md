@@ -67,19 +67,26 @@ Install provider packages and pass instances into `compute.setConfig`:
 
 | Provider | Environment Variables | Use Cases |
 |----------|----------------------|-----------|
-| **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
-| **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
-| **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
-| **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
-| **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions |
-| **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_SECRET` | Edge computing |
+| **Archil** | `ARCHIL_API_KEY` | Disk-attached command execution |
+| **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
+| **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
+| **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
+| **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_API_KEY` | Edge computing |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
-| **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
-| **Railway** | `RAILWAY_API_TOKEN`, `RAILWAY_ENVIRONMENT_ID` | Ephemeral command execution sandboxes |
 | **CreateOS** | `CREATEOS_SANDBOX_API_KEY`, `CREATEOS_SANDBOX_BASE_URL` | VM sandboxes with pause/resume/fork snapshots |
-| **Lelantos** | `LELANTOS_API_KEY` | EU-native Firecracker microVMs, code execution, preview URLs |
-| **Tenki** | `TENKI_API_KEY` or `TENKI_AUTH_TOKEN` | MicroVM sandboxes with native filesystem and preview URLs |
-| **AgentCore** | AWS credential chain (`AWS_REGION`, profile, or SSO) | Managed AWS code-execution sandboxes |
+| **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
+| **Declaw** | `DECLAW_API_KEY` | Isolated cloud sandboxes |
+| **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
+| **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
+| **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
+| **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
+| **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
+| **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
+| **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
+| **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
+| **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
+| **Upstash** | `UPSTASH_BOX_API_KEY` | Ephemeral and persistent sandboxes |
+| **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions |
 
 ## Configuration
 
@@ -263,17 +270,26 @@ await sandbox.destroy();
 Install the provider packages you need and pass their instances into `compute.setConfig`:
 
 ```bash
-npm install @computesdk/e2b        # E2B provider
-npm install @computesdk/modal      # Modal provider
-npm install @computesdk/daytona    # Daytona provider
-npm install @computesdk/vercel     # Vercel provider
-npm install @computesdk/tensorlake # Tensorlake provider
-npm install @computesdk/railway    # Railway provider
+npm install @computesdk/archil           # Archil provider
+npm install @computesdk/beam             # Beam provider
+npm install @computesdk/blaxel           # Blaxel provider
+npm install @computesdk/cloud-run        # Google Cloud Run provider
+npm install @computesdk/cloudflare       # Cloudflare provider
+npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
-npm install @computesdk/lelantos   # Lelantos provider
-npm install @computesdk/tenki      # Tenki provider
-npm install @computesdk/agentcore  # AWS Bedrock AgentCore provider
-npm install @computesdk/just-bash  # Local bash sandbox (no auth needed)
+npm install @computesdk/daytona          # Daytona provider
+npm install @computesdk/declaw           # Declaw provider
+npm install @computesdk/e2b              # E2B provider
+npm install @computesdk/hopx             # HopX provider
+npm install @computesdk/isorun           # Isorun provider
+npm install @computesdk/lightning        # Lightning AI provider
+npm install @computesdk/modal            # Modal provider
+npm install @computesdk/northflank       # Northflank provider
+npm install @computesdk/runloop          # Runloop provider
+npm install @computesdk/superserve       # Superserve provider
+npm install @computesdk/tensorlake       # Tensorlake provider
+npm install @computesdk/upstash          # Upstash provider
+npm install @computesdk/vercel           # Vercel provider
 ```
 
 You can also use a provider's callable form directly, bypassing `compute.setConfig`:
@@ -286,17 +302,26 @@ const sandbox = await e2bCompute.sandbox.create();
 ```
 
 See individual provider READMEs for details:
-- **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
-- **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
-- **[@computesdk/daytona](./packages/daytona)** - Development workspaces
-- **[@computesdk/vercel](./packages/vercel)** - Serverless functions
-- **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
-- **[@computesdk/railway](./packages/railway)** - Ephemeral command-execution sandboxes on Railway, with shell-based filesystem
+- **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
+- **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
+- **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
+- **[@computesdk/cloud-run](./packages/cloud-run)** - Google Cloud Run sandboxes
+- **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
+- **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
-- **[@computesdk/lelantos](./packages/lelantos)** - EU-native Firecracker microVM sandboxes (E2B-API-compatible), with snapshot/template support
-- **[@computesdk/tenki](./packages/tenki)** - Tenki Cloud microVM sandboxes with native filesystem and public preview URLs
-- **[@computesdk/agentcore](./packages/agentcore)** - Managed AWS Bedrock AgentCore Code Interpreter sandboxes, authenticated via the standard AWS credential chain
-- **[@computesdk/just-bash](./packages/just-bash)** - Local bash sandbox with virtual filesystem (no auth required)
+- **[@computesdk/daytona](./packages/daytona)** - Development workspaces
+- **[@computesdk/declaw](./packages/declaw)** - Isolated cloud sandboxes
+- **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
+- **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
+- **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
+- **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
+- **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
+- **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
+- **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
+- **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
+- **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
+- **[@computesdk/upstash](./packages/upstash)** - Ephemeral and persistent sandboxes
+- **[@computesdk/vercel](./packages/vercel)** - Serverless functions
 
 ## Building Custom Providers
 

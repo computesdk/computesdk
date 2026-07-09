@@ -51,5 +51,16 @@ interface VercelConfig {
   projectId?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Ports to expose on the sandbox */
+  ports?: number[];
+  /** Port for the daemon SSE channel (defaults to 38989); set false to disable */
+  daemonSsePort?: number | false;
 }
 ```
+
+### Authentication
+
+When no credentials are provided in config (no `token`, `teamId`, or `projectId`), the provider
+falls back to OIDC authentication using the `VERCEL_OIDC_TOKEN` environment variable. Run
+`vercel env pull` to populate `VERCEL_OIDC_TOKEN` in your `.env` file. This is an alternative
+to the token-based authentication shown above.

@@ -43,6 +43,8 @@ interface CodesandboxConfig {
   apiKey?: string;
   /** Template to use for new sandboxes */
   templateId?: string;
+  /** Default runtime environment, e.g. 'node', 'python' */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }

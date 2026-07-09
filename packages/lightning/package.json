@@ -1,15 +1,12 @@
 {
-  "name": "@computesdk/cloud-run",
-  "version": "0.1.5",
-  "description": "Google Cloud Run Sandboxes provider for ComputeSDK",
-  "author": "Garrison",
+  "name": "@computesdk/lightning",
+  "version": "1.0.1",
+  "description": "Lightning AI provider for ComputeSDK - cloud sandboxes for code execution, command running, and filesystem access",
+  "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "computesdk-cloud-run": "./dist/setup.mjs"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -18,8 +15,7 @@
     }
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
@@ -31,8 +27,19 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
+  "keywords": [
+    "computesdk",
+    "lightning",
+    "lightning-ai",
+    "sandbox",
+    "code-execution",
+    "cloud",
+    "compute",
+    "provider"
+  ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
+    "@lightningai/sdk": "^2026.7.8",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
@@ -45,19 +52,10 @@
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   },
-  "keywords": [
-    "computesdk",
-    "cloud-run",
-    "google-cloud",
-    "sandbox",
-    "code-execution",
-    "provider",
-    "ai-agent"
-  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/cloud-run"
+    "directory": "packages/lightning"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {

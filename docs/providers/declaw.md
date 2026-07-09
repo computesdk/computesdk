@@ -47,12 +47,16 @@ await sandbox.destroy();
 interface DeclawConfig {
   /** Declaw API key - if not provided, will use DECLAW_API_KEY env var */
   apiKey?: string;
-  /** API domain - if not provided, will use DECLAW_DOMAIN env var (default: api.declaw.ai) */
+  /** API domain - if not provided, will use DECLAW_DOMAIN env var */
   domain?: string;
   /** Default create-time timeout in milliseconds (default: 300000) */
   timeout?: number;
 }
 ```
+
+When `domain` is not set (and `DECLAW_DOMAIN` is not set), the provider passes `undefined` to the
+underlying `@declaw/sdk`. The effective default of `api.declaw.ai` is applied by `@declaw/sdk`, not
+by this provider.
 
 ## Templates
 
