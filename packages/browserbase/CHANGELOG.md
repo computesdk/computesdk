@@ -1,5 +1,11 @@
 # @computesdk/browserbase
 
+## 0.3.9
+
+### Patch Changes
+
+- 328da85: Preserve explicit `stealth: false` and `proxies: false` browser session options where provider APIs support them, and warn once when a provider cannot honor the option.
+
 ## 0.3.8
 
 ### Patch Changes

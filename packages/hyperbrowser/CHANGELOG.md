@@ -1,5 +1,11 @@
 # @computesdk/hyperbrowser
 
+## 0.2.6
+
+### Patch Changes
+
+- 328da85: Preserve explicit `stealth: false` and `proxies: false` browser session options where provider APIs support them, and warn once when a provider cannot honor the option.
+
 ## 0.2.5
 
 ### Patch Changes
