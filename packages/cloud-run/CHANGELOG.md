@@ -1,5 +1,11 @@
 # @computesdk/cloud-run
 
+## 0.1.5
+
+### Patch Changes
+
+- 1267b65: Configure the Cloud Run gateway setup command with benchmark-ready CPU, memory, concurrency, scaling, session affinity, and CPU boost settings.
+
 ## 0.1.4
 
 ### Patch Changes
