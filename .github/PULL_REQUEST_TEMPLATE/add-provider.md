@@ -36,6 +36,7 @@ Replace the placeholders below and tick the boxes as you go.
 - [ ] `pnpm --filter @computesdk/<name> run typecheck` passes
 - [ ] `pnpm --filter @computesdk/<name> run lint` passes
 - [ ] Root `README.md` "Supported Providers" table updated (and install list if applicable)
+- [ ] Docs page added/updated at `docs/providers/<name>.md` (see existing pages for the expected structure)
 - [ ] Changeset added (`patch`)
 
 ### Notes for reviewers
