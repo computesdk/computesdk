@@ -23,6 +23,18 @@ CLOUD_RUN_AUTH_TOKEN=your_identity_token
 
 Remote mode is selected automatically when both `sandboxUrl` and `sandboxSecret` are set; otherwise the provider runs in direct mode.
 
+Cloud Run supports two execution modes:
+
+- **Ephemeral mode** (default) — `create()` creates a local logical handle only, `runCommand()` uses `sandbox do`, and `destroy()` removes local bookkeeping only.
+- **Stateful mode** — set `executionMode: 'stateful'` to have `create()` call `sandbox run <id> --detach`, `runCommand()` call `sandbox exec <id>`, and `destroy()` call `sandbox delete <id>`.
+
+| SDK method | Ephemeral mode (default) | Stateful mode |
+| --- | --- | --- |
+| `create()` | Local logical handle only | `sandbox run <id> --detach` |
+| `runCommand()` | `sandbox do -- /bin/sh -c <command>` | `sandbox exec <id> -- /bin/sh -c <command>` |
+| `destroy()` | Local bookkeeping only | `sandbox delete <id>` |
+| `filesystem` | Per-operation `sandbox do` | Per-operation `sandbox exec <id>` |
+
 ## Usage
 
 ```typescript
@@ -54,6 +66,8 @@ interface CloudRunConfig {
   sandboxSecret?: string;
   /** Optional Google-signed identity token for Cloud Run services that require IAM auth. */
   gatewayAuthToken?: string;
+  /** Execution mode. Ephemeral uses `sandbox do`; stateful uses `sandbox run`, `exec`, and `delete`. Defaults to ephemeral. */
+  executionMode?: 'ephemeral' | 'stateful';
   /** Path to the Cloud Run sandbox binary. Defaults to CLOUD_RUN_SANDBOX_BINARY or /usr/local/gcp/bin/sandbox. */
   sandboxBinary?: string;
   /** Sandbox CLI mode. Cloud Run's CLI defaults this to local. */
@@ -62,7 +76,7 @@ interface CloudRunConfig {
   allowEgress?: boolean;
   /** Root filesystem to expose to sandboxes. Defaults to /. */
   rootfs?: string;
-  /** Working directory for newly-created persistent sandbox sessions. */
+  /** Working directory for sandboxed commands or newly-created stateful sessions. */
   workdir?: string;
   /** Container template name for Cloud Run multi-container services. */
   template?: string;
@@ -74,12 +88,14 @@ interface CloudRunConfig {
   write?: boolean;
   /** Bind mounts to attach to the sandbox. */
   mounts?: CloudRunMount[];
-  /** Environment variables applied when the persistent sandbox starts. */
+  /** Environment variables applied to sandboxed commands or newly-created stateful sessions. */
   env?: Record<string, string>;
   /** Extra args passed before the sandbox subcommand, e.g. global debug flags. */
   globalArgs?: string[];
-  /** Extra args passed to `sandbox do`. */
+  /** Extra args passed to `sandbox do` and `sandbox run`. */
   runArgs?: string[];
+  /** Extra args passed to `sandbox exec` in stateful mode. */
+  execArgs?: string[];
 }
 
 interface CloudRunMount {
@@ -93,14 +109,14 @@ interface CloudRunMount {
 
 | Method | Supported | Notes |
 | --- | --- | --- |
-| `create` | ✅ | Direct mode verifies the sandbox binary exists; remote mode registers a gateway-backed handle. |
+| `create` | ✅ | Ephemeral mode creates a logical handle; stateful mode starts a detached sandbox with `sandbox run`. |
 | `getById` | ✅ | Remote mode checks the gateway `/v1/sandbox/info` endpoint. |
 | `list` | ✅ | Returns sandboxes tracked in-process. |
-| `destroy` | ✅ | Remote mode calls the gateway; direct mode drops the in-process handle. |
-| `runCommand` | ✅ | Direct mode spawns the `sandbox do` CLI; remote mode posts to the gateway exec endpoint. |
+| `destroy` | ✅ | Ephemeral mode drops the handle; stateful mode deletes the detached sandbox. |
+| `runCommand` | ✅ | Uses `sandbox do` in ephemeral mode and `sandbox exec` in stateful mode. |
 | `getInfo` | ✅ | |
 | `getUrl` | ❌ | Throws — Cloud Run Sandboxes do not expose per-sandbox ports through the sandbox CLI. |
-| `filesystem` | ✅ | Direct mode implements FS via shell commands; remote mode uses dedicated gateway endpoints. |
+| `filesystem` | ✅ | Uses `sandbox do` in ephemeral mode and `sandbox exec` in stateful mode. |
 
 ### Notes
 

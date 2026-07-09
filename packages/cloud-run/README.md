@@ -37,6 +37,15 @@ The setup command uses `gcloud` to:
 
 By default, the gateway executes each ComputeSDK command with `sandbox do`. The ComputeSDK sandbox object is a logical handle used to carry configuration such as environment variables and working directory between calls. Set `executionMode: 'stateful'` to use `sandbox run`, `sandbox exec`, and `sandbox delete` for persistent sandbox sessions.
 
+Execution mode controls how SDK methods map to the Cloud Run sandbox CLI:
+
+| SDK method | Ephemeral mode (default) | Stateful mode |
+|---|---|---|
+| `create()` | Creates a local logical handle only | Calls `sandbox run <id> --detach` |
+| `runCommand()` | Calls `sandbox do -- /bin/sh -c <command>` | Calls `sandbox exec <id> -- /bin/sh -c <command>` |
+| `destroy()` | Removes local bookkeeping only | Calls `sandbox delete <id>` |
+| `filesystem` | Runs each operation with `sandbox do` | Runs each operation with `sandbox exec <id>` |
+
 Add the printed values to your app environment:
 
 ```bash
