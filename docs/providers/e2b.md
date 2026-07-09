@@ -15,6 +15,8 @@ Add your E2B credentials to a `.env` file:
 E2B_API_KEY=your_e2b_api_key
 ```
 
+> **Note:** E2B API keys must start with `e2b_`. The provider throws an error if the key is in any other format.
+
 
 ## Usage
 

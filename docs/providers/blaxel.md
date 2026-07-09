@@ -51,14 +51,16 @@ interface BlaxelConfig {
   image?: string;
   /** Default region for sandbox deployment */
   region?: string;
-  /** Default memory allocation in MB (default: 4096) */
+  /** Default memory allocation in MB */
   memory?: number;
+  /** Default ports to expose on the sandbox */
+  ports?: number[];
 }
 ```
 
 ### Default Images
 
-The provider automatically selects images based on the configured runtime:
-- **Python:** `blaxel/prod-py-app:latest`
-- **Node.js:** `blaxel/prod-ts-app:latest`
-- **Default:** `blaxel/prod-base:latest`
+The provider automatically selects images based on the runtime specified at creation time:
+- **Python:** `blaxel/py-app:latest`
+- **Node.js:** `blaxel/ts-app:latest`
+- **Default:** `blaxel/base-image:latest`

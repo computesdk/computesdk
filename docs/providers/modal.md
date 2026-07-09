@@ -52,6 +52,12 @@ interface ModalConfig {
   environment?: string;
   /** Ports to expose (unencrypted by default) */
   ports?: number[];
+  /** Port for the daemon SSE channel (defaults to 38989); set false to disable */
+  daemonSsePort?: number | false;
+  /** Modal app name (default: 'computesdk-modal') */
+  appName?: string;
+  /** Use Modal's experimental scalable sandboxes API */
+  scalableSandboxes?: boolean;
 }
 ```
 

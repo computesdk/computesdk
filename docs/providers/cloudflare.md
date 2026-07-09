@@ -10,43 +10,40 @@ npm install @computesdk/cloudflare
 
 ## Setup
 
-Before using the Cloudflare provider, you need to deploy a gateway Worker to your Cloudflare account. This only needs to be done once.
+To use the Cloudflare provider in remote mode, you connect to Cloudflare's official Sandbox bridge Worker. This only needs to be deployed once.
 
-### Step 1: Set Cloudflare credentials
-
-Add your Cloudflare credentials to a `.env` file or export them in your shell:
-
-```bash
-CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
-CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
-```
-
-Your API token needs the following permissions:
-- Workers Scripts: Read & Edit
-- Workers KV Storage: Read & Edit
-- Account Settings: Read
-- Workers Tail: Read
-
-Get your API token at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens).
-
-### Step 2: Deploy the gateway Worker
-
-Run the setup command to deploy the gateway Worker:
+You can print these setup instructions at any time by running:
 
 ```bash
 npx @computesdk/cloudflare
 ```
 
-> **Note:** Docker must be installed for the setup command to build the sandbox container image.
+> **Note:** This command only prints instructions — it does not deploy anything and does not require Docker.
 
-The setup command will output two values:
+### Step 1: Deploy the official bridge Worker
 
+Deploy Cloudflare's official Sandbox bridge Worker by following the guide at [developers.cloudflare.com/sandbox/bridge](https://developers.cloudflare.com/sandbox/bridge/).
+
+### Step 2: Set the bridge Worker's API key secret
+
+From your bridge Worker project, set the `SANDBOX_API_KEY` secret:
+
+```bash
+npx wrangler secret put SANDBOX_API_KEY
 ```
-CLOUDFLARE_SANDBOX_URL=https://computesdk-sandbox.<subdomain>.workers.dev
-CLOUDFLARE_SANDBOX_SECRET=<generated-secret>
+
+### Step 3: Configure your app
+
+Add the bridge URL and the same API key to your `.env` file:
+
+```bash
+CLOUDFLARE_SANDBOX_URL=https://<your-bridge-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 ```
 
-Add these to your `.env` file. These are the only env vars needed at runtime.
+These are the only env vars needed at runtime.
+
+> **Warm pool:** Warm pool support is configured on the bridge Worker. Set `WARM_POOL_TARGET` to a positive value (for example `WARM_POOL_TARGET=10`) to keep sandboxes warm.
 
 ## Usage
 
@@ -55,7 +52,7 @@ import { cloudflare } from '@computesdk/cloudflare';
 
 const compute = cloudflare({
   sandboxUrl: process.env.CLOUDFLARE_SANDBOX_URL,
-  sandboxSecret: process.env.CLOUDFLARE_SANDBOX_SECRET,
+  sandboxApiKey: process.env.CLOUDFLARE_SANDBOX_API_KEY,
 });
 
 // Create sandbox
@@ -102,7 +99,7 @@ Pass environment variables at the provider level:
 ```typescript
 const compute = cloudflare({
   sandboxUrl: process.env.CLOUDFLARE_SANDBOX_URL,
-  sandboxSecret: process.env.CLOUDFLARE_SANDBOX_SECRET,
+  sandboxApiKey: process.env.CLOUDFLARE_SANDBOX_API_KEY,
   envVars: {
     API_KEY: 'your-api-key',
     DATABASE_URL: 'postgresql://localhost:5432/mydb',
@@ -122,16 +119,32 @@ const sandbox = await compute.sandbox.create({
 
 ```typescript
 interface CloudflareConfig {
-  /** URL of the deployed gateway Worker */
+  /** URL of the deployed bridge Worker (remote mode) */
   sandboxUrl?: string;
-  /** Shared secret for authenticating with the gateway Worker */
+  /** API key for authenticating with the bridge Worker */
+  sandboxApiKey?: string;
+  /** @deprecated Use sandboxApiKey instead. */
   sandboxSecret?: string;
   /** Durable Object binding (direct mode only - see below) */
   sandboxBinding?: any;
+  /** Warm pool configuration (direct mode only) */
+  warmPool?: {
+    binding: any;
+    target?: number;
+    refreshInterval?: number;
+    poolName?: string;
+  };
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Default runtime environment */
+  runtime?: string;
   /** Environment variables to pass to sandbox */
   envVars?: Record<string, string>;
+  /** Options forwarded to the underlying @cloudflare/sandbox SDK (direct mode) */
+  sandboxOptions?: {
+    sleepAfter?: string | number;
+    keepAlive?: boolean;
+  };
 }
 ```
 
