@@ -1,7 +1,12 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # HopX
 
 HopX provider for ComputeSDK
-
 
 ## Installation & Setup
 
@@ -14,7 +19,6 @@ Add your HopX credentials to a `.env` file:
 ```bash
 HOPX_API_KEY=your_hopx_api_key
 ```
-
 
 ## Usage
 
@@ -35,7 +39,6 @@ console.log(result.stdout); // "Hello from HopX!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

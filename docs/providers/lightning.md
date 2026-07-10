@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Lightning
 
 Lightning AI provider for ComputeSDK — create and manage [Lightning AI](https://lightning.ai/) cloud sandboxes: run shell commands, read/write files, and manage the sandbox lifecycle.
@@ -65,22 +71,22 @@ interface LightningConfig {
 
 ### Supported Operations
 
-| Method       | Supported | Notes                                                                             |
-| ------------ | --------- | --------------------------------------------------------------------------------- |
-| `create`     | ✅        | Honors `instanceType`, `runtime`, `ports`, `spot`, `persistent`, `timeout`; boot from a `snapshotId`. |
-| `getById`    | ✅        | Reconnects by id.                                                                 |
-| `list`       | ✅        |                                                                                   |
-| `destroy`    | ✅        |                                                                                   |
-| `runCommand` | ✅        | Supports `cwd`, `env`, `background`. Combined stdout/stderr surfaced on `stdout` (`stderr` left empty). |
-| `getInfo`    | ✅        |                                                                                   |
-| `getUrl`     | ✅        | Returns the public HTTPS URL for a port; the port must be declared via `ports` at create time, otherwise it throws. |
-| `filesystem` | ✅        | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove`.                  |
-| `snapshot`   | ✅        | `compute.snapshot.create` / `list` / `delete`, and restore via `snapshotId` on create. |
+| Method       | Supported | Notes                                                                                                               |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Honors `instanceType`, `runtime`, `ports`, `spot`, `persistent`, `timeout`; boot from a `snapshotId`.               |
+| `getById`    | ✅         | Reconnects by id.                                                                                                   |
+| `list`       | ✅         |                                                                                                                     |
+| `destroy`    | ✅         |                                                                                                                     |
+| `runCommand` | ✅         | Supports `cwd`, `env`, `background`. Combined stdout/stderr surfaced on `stdout` (`stderr` left empty).             |
+| `getInfo`    | ✅         |                                                                                                                     |
+| `getUrl`     | ✅         | Returns the public HTTPS URL for a port; the port must be declared via `ports` at create time, otherwise it throws. |
+| `filesystem` | ✅         | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove`.                                                    |
+| `snapshot`   | ✅         | `compute.snapshot.create` / `list` / `delete`, and restore via `snapshotId` on create.                              |
 
 ### Notes
 
-- **Node.js 22+** is required by the underlying `@lightningai/sdk`.
-- **Combined output** — stdout and stderr are returned as a single combined stream on `result.stdout`.
-- **Snapshots** — Lightning snapshots are unnamed, so `CreateSnapshotOptions.name` / `metadata` are accepted for parity but not persisted. `/tmp` and other platform defaults are excluded from snapshots — persist data under `$HOME` to survive a restore.
-- **Credentials & concurrency** — the SDK stores auth in process-global state, so the provider serializes the brief credential switch between provider instances using *different* API keys. Same-key operations run fully concurrently.
-- Drop down to the native SDK sandbox via `sandbox.getInstance()`.
+* **Node.js 22+** is required by the underlying `@lightningai/sdk`.
+* **Combined output** — stdout and stderr are returned as a single combined stream on `result.stdout`.
+* **Snapshots** — Lightning snapshots are unnamed, so `CreateSnapshotOptions.name` / `metadata` are accepted for parity but not persisted. `/tmp` and other platform defaults are excluded from snapshots — persist data under `$HOME` to survive a restore.
+* **Credentials & concurrency** — the SDK stores auth in process-global state, so the provider serializes the brief credential switch between provider instances using _different_ API keys. Same-key operations run fully concurrently.
+* Drop down to the native SDK sandbox via `sandbox.getInstance()`.

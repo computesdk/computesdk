@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Cloudflare
 
 Cloudflare provider for ComputeSDK - Execute code in secure, isolated sandboxes on Cloudflare's edge network.
@@ -150,6 +156,6 @@ interface CloudflareConfig {
 
 ## Limitations
 
-- Resource limits apply based on your Cloudflare plan
-- Some system calls may be restricted in the container environment
-- Listing all sandboxes is not supported — use `getById` to reconnect to a specific sandbox
+* Resource limits apply based on your Cloudflare plan
+* Some system calls may be restricted in the container environment
+* Listing all sandboxes is not supported — use `getById` to reconnect to a specific sandbox

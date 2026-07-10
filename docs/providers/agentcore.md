@@ -1,9 +1,8 @@
 # AWS Bedrock AgentCore
 
-[AWS Bedrock AgentCore Code Interpreter](https://docs.aws.amazon.com/bedrock-agentcore/) provider for ComputeSDK - secure, fully-managed, session-based sandboxes for running code and shell commands, with no infrastructure to provision.
+[AWS Bedrock AgentCore Code Interpreter](https://docs.aws.amazon.com/bedrock-agentcore/) provider for [ComputeSDK](../) — secure, fully-managed, session-based sandboxes for running code and shell commands, with no infrastructure to provision.
 
-A ComputeSDK sandbox maps onto an AgentCore Code Interpreter session.
-
+A ComputeSDK sandbox maps onto an AgentCore Code Interpreter session. See [compute.sandbox](../reference/compute.sandbox.md) for lifecycle methods and [Sandbox (interface)](../reference/Sandbox.md) for command, filesystem, and URL behavior.
 
 ## Installation & Setup
 
@@ -24,7 +23,6 @@ bedrock-agentcore:StopCodeInterpreterSession
 bedrock-agentcore:GetCodeInterpreterSession
 bedrock-agentcore:ListCodeInterpreterSessions
 ```
-
 
 ## Usage
 
@@ -88,11 +86,18 @@ interface AgentCoreConfig {
 }
 ```
 
-
 ## Limitations
 
-- **No preview URLs / ports.** AgentCore Code Interpreter has no inbound network endpoint, so `getUrl()` throws.
-- **No interactive PTY.** Commands are request/response.
-- **Sessions expire.** A session auto-terminates after its idle timeout; create a new sandbox afterward.
-- **Filesystem persists, shell environment does not.** Files survive across `runCommand` calls, but each command runs in a fresh shell — `cd`, `export`, and shell variables do not carry over. Chain them in one command or use the `cwd`/`env` options.
-- **Background commands don't outlive the call.** `{ background: true }` returns immediately, but AgentCore terminates the process tree when the invocation ends, so the job is killed rather than left running.
+* **No preview URLs / ports.** AgentCore Code Interpreter has no inbound network endpoint, so `getUrl()` throws.
+* **No interactive PTY.** Commands are request/response.
+* **Sessions expire.** A session auto-terminates after its idle timeout; create a new sandbox afterward.
+* **Filesystem persists, shell environment does not.** Files survive across `runCommand` calls, but each command runs in a fresh shell — `cd`, `export`, and shell variables do not carry over. Chain them in one command or use the `cwd`/`env` options.
+* **Background commands don't outlive the call.** `{ background: true }` returns immediately, but AgentCore terminates the process tree when the invocation ends, so the job is killed rather than left running.
+
+## Related topics
+
+Compare this provider with other options on [Providers](./).
+
+* Use [Quick Start](../getting-started/quick-start.md) for the shared sandbox model and cleanup patterns.
+* Use [compute.sandbox](../reference/compute.sandbox.md) for `create()`, timeout, reconnect, and destroy flows.
+* Use [Sandbox (interface)](../reference/Sandbox.md) for `runCommand()`, `filesystem`, and `getUrl()` details.

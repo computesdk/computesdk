@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Vercel
 
 Vercel provider for ComputeSDK - Execute code in globally distributed serverless environments.
@@ -38,7 +44,6 @@ console.log(result.stdout); // "Hello from Vercel!"
 await sandbox.destroy();
 ```
 
-
 ### Configuration Options
 
 ```typescript
@@ -60,7 +65,4 @@ interface VercelConfig {
 
 ### Authentication
 
-When no credentials are provided in config (no `token`, `teamId`, or `projectId`), the provider
-falls back to OIDC authentication using the `VERCEL_OIDC_TOKEN` environment variable. Run
-`vercel env pull` to populate `VERCEL_OIDC_TOKEN` in your `.env` file. This is an alternative
-to the token-based authentication shown above.
+When no credentials are provided in config (no `token`, `teamId`, or `projectId`), the provider falls back to OIDC authentication using the `VERCEL_OIDC_TOKEN` environment variable. Run `vercel env pull` to populate `VERCEL_OIDC_TOKEN` in your `.env` file. This is an alternative to the token-based authentication shown above.

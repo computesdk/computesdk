@@ -1,7 +1,12 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # E2B
 
 E2B provider for ComputeSDK
-
 
 ## Installation & Setup
 
@@ -16,7 +21,6 @@ E2B_API_KEY=your_e2b_api_key
 ```
 
 > **Note:** E2B API keys must start with `e2b_`. The provider throws an error if the key is in any other format.
-
 
 ## Usage
 
@@ -37,7 +41,6 @@ console.log(result.stdout); // "Hello from E2B!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Northflank
 
 Northflank provider for ComputeSDK — each sandbox is a deployment service in your Northflank project. Commands run in the container via Northflank's exec API; ports are exposed through the service's public DNS.
@@ -76,18 +82,18 @@ interface NorthflankConfig {
 
 ### Supported Operations
 
-| Method | Supported | Notes |
-| --- | --- | --- |
-| `create` | ✅ | Creates a Northflank deployment service kept alive by a long-running command. |
-| `getById` | ✅ | Only returns services whose name starts with `servicePrefix` (ComputeSDK-managed). |
-| `list` | ✅ | Lists ComputeSDK-managed services in the project (paginated). |
-| `destroy` | ✅ | Deletes the service; a no-op if it no longer exists. |
-| `runCommand` | ✅ | Runs via Northflank's exec API. The first exec retries until the pod is ready. |
-| `getInfo` | ✅ | |
-| `getUrl` | ✅ | Exposes the port publicly and returns its Northflank DNS. Only HTTP / HTTP/2 ports can get a public URL; TCP/UDP throws. |
-| `filesystem` | ✅ | `readFile`/`writeFile` use Northflank's file-copy API; other ops run as shell commands. |
+| Method       | Supported | Notes                                                                                                                    |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `create`     | ✅         | Creates a Northflank deployment service kept alive by a long-running command.                                            |
+| `getById`    | ✅         | Only returns services whose name starts with `servicePrefix` (ComputeSDK-managed).                                       |
+| `list`       | ✅         | Lists ComputeSDK-managed services in the project (paginated).                                                            |
+| `destroy`    | ✅         | Deletes the service; a no-op if it no longer exists.                                                                     |
+| `runCommand` | ✅         | Runs via Northflank's exec API. The first exec retries until the pod is ready.                                           |
+| `getInfo`    | ✅         |                                                                                                                          |
+| `getUrl`     | ✅         | Exposes the port publicly and returns its Northflank DNS. Only HTTP / HTTP/2 ports can get a public URL; TCP/UDP throws. |
+| `filesystem` | ✅         | `readFile`/`writeFile` use Northflank's file-copy API; other ops run as shell commands.                                  |
 
 ### Notes
 
-- `token` and `projectId` are required — the provider does not read them from the environment automatically, so pass `process.env.NORTHFLANK_TOKEN` / `process.env.NORTHFLANK_PROJECT_ID` yourself.
-- Background commands (`runCommand(cmd, { background: true })`) are launched with `nohup` and redirected to `/tmp/computesdk-bg.log`.
+* `token` and `projectId` are required — the provider does not read them from the environment automatically, so pass `process.env.NORTHFLANK_TOKEN` / `process.env.NORTHFLANK_PROJECT_ID` yourself.
+* Background commands (`runCommand(cmd, { background: true })`) are launched with `nohup` and redirected to `/tmp/computesdk-bg.log`.

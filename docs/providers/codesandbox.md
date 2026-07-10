@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # CodeSandbox
 
 CodeSandbox provider for ComputeSDK - Execute code in CodeSandbox development environments.
@@ -13,7 +19,6 @@ Add your CodeSandbox credentials to a `.env` file:
 ```bash
 CSB_API_KEY=your_codesandbox_api_key
 ```
-
 
 ## Usage
 

@@ -1,7 +1,12 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Blaxel
 
 Blaxel provider for ComputeSDK
-
 
 ## Installation & Setup
 
@@ -15,7 +20,6 @@ Add your Blaxel credentials to a `.env` file:
 BL_API_KEY=your_blaxel_api_key
 BL_WORKSPACE=your_blaxel_workspace
 ```
-
 
 ## Usage
 
@@ -37,7 +41,6 @@ console.log(result.stdout); // "Hello from Blaxel!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 
@@ -61,6 +64,7 @@ interface BlaxelConfig {
 ### Default Images
 
 The provider automatically selects images based on the runtime specified at creation time:
-- **Python:** `blaxel/py-app:latest`
-- **Node.js:** `blaxel/ts-app:latest`
-- **Default:** `blaxel/base-image:latest`
+
+* **Python:** `blaxel/py-app:latest`
+* **Node.js:** `blaxel/ts-app:latest`
+* **Default:** `blaxel/base-image:latest`

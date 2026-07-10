@@ -18,7 +18,7 @@
   * [Cloudflare](providers/cloudflare.md)
   * [CodeSandbox](providers/codesandbox.md)
   * [Collimate](providers/collimate.md)
-  * [CreateOS Sandbox](providers/createos-sandbox.md)
+  * [CreateOS](providers/createos-sandbox.md)
   * [Daytona](providers/daytona.md)
   * [Declaw](providers/declaw.md)
   * [Docker](providers/docker.md)

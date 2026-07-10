@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Isorun
 
 Isorun provider for ComputeSDK — isolated Linux VM sandboxes for running untrusted and AI-generated code, billed by the second.
@@ -45,19 +51,19 @@ interface IsorunConfig {
 
 ### Supported Operations
 
-| Method       | Supported | Notes                                                                         |
-| ------------ | --------- | ----------------------------------------------------------------------------- |
-| `create`     | ✅        | Defaults to the `node` runtime (`node:22`); pass `runtime: 'python'` for `python:3.12-slim`. Accepts `image`, `vcpus`, `memMiB`, `diskMiB`, and `timeout`. |
-| `getById`    | ✅        |                                                                               |
-| `list`       | ✅        |                                                                               |
-| `destroy`    | ✅        |                                                                               |
-| `runCommand` | ✅        | Supports `env`, `cwd`, and `background` options.                              |
-| `getInfo`    | ✅        |                                                                               |
-| `getUrl`     | ✅        | Returns the sandbox URL for a given port; honors a custom `protocol`.        |
-| `filesystem` | ✅        | `readFile` / `writeFile` are native; `mkdir`, `readdir`, `exists`, `remove` run via shell commands. |
-| `snapshot`   | ✅        | `compute.snapshot.create` / `list` / `delete`.                               |
+| Method       | Supported | Notes                                                                                                                                                      |
+| ------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Defaults to the `node` runtime (`node:22`); pass `runtime: 'python'` for `python:3.12-slim`. Accepts `image`, `vcpus`, `memMiB`, `diskMiB`, and `timeout`. |
+| `getById`    | ✅         |                                                                                                                                                            |
+| `list`       | ✅         |                                                                                                                                                            |
+| `destroy`    | ✅         |                                                                                                                                                            |
+| `runCommand` | ✅         | Supports `env`, `cwd`, and `background` options.                                                                                                           |
+| `getInfo`    | ✅         |                                                                                                                                                            |
+| `getUrl`     | ✅         | Returns the sandbox URL for a given port; honors a custom `protocol`.                                                                                      |
+| `filesystem` | ✅         | `readFile` / `writeFile` are native; `mkdir`, `readdir`, `exists`, `remove` run via shell commands.                                                        |
+| `snapshot`   | ✅         | `compute.snapshot.create` / `list` / `delete`.                                                                                                             |
 
 ### Notes
 
-- The default command/sandbox timeout is 300000 ms (5 minutes).
-- The `isorun` SDK exposes extra capabilities without ComputeSDK slots — `fork(n)`, `hibernate()` / `resume()`, and `setTimeout(seconds)`. Reach the raw instance via `compute.sandbox.getInstance(sandbox)`.
+* The default command/sandbox timeout is 300000 ms (5 minutes).
+* The `isorun` SDK exposes extra capabilities without ComputeSDK slots — `fork(n)`, `hibernate()` / `resume()`, and `setTimeout(seconds)`. Reach the raw instance via `compute.sandbox.getInstance(sandbox)`.

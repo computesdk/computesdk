@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Daytona
 
 Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
@@ -13,7 +19,6 @@ Add your Daytona credentials to a `.env` file:
 ```bash
 DAYTONA_API_KEY=your_daytona_api_key
 ```
-
 
 ## Usage
 

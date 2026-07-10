@@ -1,7 +1,12 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Modal
 
 Modal provider for ComputeSDK - Execute code with GPU support for machine learning workloads.
-
 
 ## Installation & Setup
 
@@ -15,7 +20,6 @@ Add your Modal credentials to a `.env` file:
 MODAL_TOKEN_ID=your_modal_token_id
 MODAL_TOKEN_SECRET=your_modal_token_secret
 ```
-
 
 ## Usage
 

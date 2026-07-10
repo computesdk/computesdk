@@ -1,7 +1,12 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Beam
 
 Beam provider for ComputeSDK
-
 
 ## Installation & Setup
 
@@ -15,7 +20,6 @@ Add your Beam credentials to a `.env` file:
 BEAM_TOKEN=your_beam_token
 BEAM_WORKSPACE_ID=your_beam_workspace_id
 ```
-
 
 ## Usage
 
@@ -37,7 +41,6 @@ console.log(result.stdout); // "Hello from Beam!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

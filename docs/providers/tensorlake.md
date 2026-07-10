@@ -1,3 +1,9 @@
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Tensorlake
 
 Tensorlake provider for ComputeSDK - Stateful MicroVM sandboxes for agentic applications and LLM-generated code execution.

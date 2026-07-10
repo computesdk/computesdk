@@ -1,4 +1,10 @@
-# CreateOS Sandbox
+---
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
+# CreateOS
 
 CreateOS provider for ComputeSDK — NodeOps VM sandboxes with pause/resume/fork snapshots. A thin adapter over the official `@nodeops-createos/sandbox` package.
 
@@ -55,29 +61,29 @@ interface CreateosConfig {
 
 ### Supported Operations
 
-| Method | Supported | Notes |
-| --- | --- | --- |
-| `create` | ✅ | Sizes the VM from a fixed shape catalog; maps `cpus`/`memoryMb` onto the nearest shape. A `snapshotId` forks a paused sandbox into a fresh one. |
-| `getById` | ✅ | Returns `null` on a genuine 404; other errors propagate. |
-| `list` | ✅ | Lists up to 100 sandboxes. |
-| `destroy` | ✅ | Idempotent — a 404 is treated as already gone. |
-| `runCommand` | ✅ | Runs via `sh -c`; per-command `cwd`/`env`/`background` are synthesised into an inline script. |
-| `getInfo` | ✅ | Refreshes the handle from the control plane. |
-| `getUrl` | ✅ | Returns a preview URL via `sandbox.previewUrl(port)` (defaults to `https`). |
-| `filesystem` | ✅ | `readFile`/`writeFile` use the native file upload/download API; other ops use shell commands. |
-| `snapshot` | ✅ | See notes below. |
+| Method       | Supported | Notes                                                                                                                                           |
+| ------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Sizes the VM from a fixed shape catalog; maps `cpus`/`memoryMb` onto the nearest shape. A `snapshotId` forks a paused sandbox into a fresh one. |
+| `getById`    | ✅         | Returns `null` on a genuine 404; other errors propagate.                                                                                        |
+| `list`       | ✅         | Lists up to 100 sandboxes.                                                                                                                      |
+| `destroy`    | ✅         | Idempotent — a 404 is treated as already gone.                                                                                                  |
+| `runCommand` | ✅         | Runs via `sh -c`; per-command `cwd`/`env`/`background` are synthesised into an inline script.                                                   |
+| `getInfo`    | ✅         | Refreshes the handle from the control plane.                                                                                                    |
+| `getUrl`     | ✅         | Returns a preview URL via `sandbox.previewUrl(port)` (defaults to `https`).                                                                     |
+| `filesystem` | ✅         | `readFile`/`writeFile` use the native file upload/download API; other ops use shell commands.                                                   |
+| `snapshot`   | ✅         | See notes below.                                                                                                                                |
 
 ### Snapshots
 
 CreateOS has no decoupled snapshot object — **pausing IS the snapshot**, and the paused sandbox id is the snapshot id:
 
-- `snapshot.create` pauses the sandbox (the source VM stops) and returns the sandbox id as the snapshot id.
-- `snapshot.list` returns all paused sandboxes.
-- `snapshot.delete` destroys the paused sandbox.
-- `create({ snapshotId })` forks the paused bundle into a fresh running sandbox.
+* `snapshot.create` pauses the sandbox (the source VM stops) and returns the sandbox id as the snapshot id.
+* `snapshot.list` returns all paused sandboxes.
+* `snapshot.delete` destroys the paused sandbox.
+* `create({ snapshotId })` forks the paused bundle into a fresh running sandbox.
 
 ### Notes
 
-- Requires Node.js >= 22.
-- `getInstance()` returns the bare native `@nodeops-createos/sandbox` handle, exposing the full stateful API (pause / resume / fork / disks / networks / bandwidth) that ComputeSDK's core surface does not model.
-- `timeout` is informational only — it is reported by `getInfo()` but does not enforce an execution limit.
+* Requires Node.js >= 22.
+* `getInstance()` returns the bare native `@nodeops-createos/sandbox` handle, exposing the full stateful API (pause / resume / fork / disks / networks / bandwidth) that ComputeSDK's core surface does not model.
+* `timeout` is informational only — it is reported by `getInfo()` but does not enforce an execution limit.
