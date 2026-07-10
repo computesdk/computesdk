@@ -27,6 +27,8 @@ tags:
 
 # Superserve
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/superserve/" %}
+
 Superserve provides sandbox infrastructure to run code in isolated cloud environments powered by Firecracker MicroVMs.
 
 ## Installation & Setup

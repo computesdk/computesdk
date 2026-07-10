@@ -27,6 +27,8 @@ tags:
 
 # Northflank
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/northflank/" %}
+
 Northflank provider for ComputeSDK — each sandbox is a deployment service in your Northflank project. Commands run in the container via Northflank's exec API; ports are exposed through the service's public DNS.
 
 ## Installation & Setup

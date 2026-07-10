@@ -20,9 +20,6 @@ layout:
     visible: true
   actions:
     visible: true
-tags:
-  - tag: benchmarked
-    primary: true
 ---
 
 # Tenki

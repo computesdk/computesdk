@@ -27,6 +27,8 @@ tags:
 
 # CreateOS
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/createos/" %}
+
 CreateOS provider for ComputeSDK — NodeOps VM sandboxes with pause/resume/fork snapshots. A thin adapter over the official `@nodeops-createos/sandbox` package.
 
 ## Installation & Setup

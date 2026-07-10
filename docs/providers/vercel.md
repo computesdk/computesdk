@@ -27,6 +27,8 @@ tags:
 
 # Vercel
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/vercel/" %}
+
 Vercel provider for ComputeSDK - Execute code in globally distributed serverless environments.
 
 ## Installation & Setup

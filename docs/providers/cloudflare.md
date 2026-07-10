@@ -27,6 +27,8 @@ tags:
 
 # Cloudflare
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/cloudflare/" %}
+
 Cloudflare provider for ComputeSDK - Execute code in secure, isolated sandboxes on Cloudflare's edge network.
 
 ## Installation

@@ -27,6 +27,8 @@ tags:
 
 # Runloop
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/runloop/" %}
+
 Runloop provider for ComputeSDK
 
 ## Installation & Setup

@@ -27,6 +27,8 @@ tags:
 
 # E2B
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/e2b/" %}
+
 E2B provider for ComputeSDK
 
 ## Installation & Setup

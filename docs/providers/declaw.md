@@ -28,6 +28,8 @@ tags:
 
 # Declaw
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/declaw/" %}
+
 Declaw provider for ComputeSDK
 
 Declaw runs Firecracker microVMs with a built-in security stack: PII scanning, prompt-injection defense, TLS-intercepting egress proxy, and per-sandbox network policies.

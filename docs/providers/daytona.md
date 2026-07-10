@@ -27,6 +27,8 @@ tags:
 
 # Daytona
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/daytona/" %}
+
 Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
 
 ## Installation & Setup

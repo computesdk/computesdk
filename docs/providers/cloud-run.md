@@ -28,6 +28,8 @@ tags:
 
 # Cloud Run
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/cloud-run/" %}
+
 Use the Google Cloud Run sandbox provider for ComputeSDK to run isolated commands and filesystem operations inside Cloud Run. Choose remote mode for a deployed gateway, or direct mode for in-container sandbox CLI control.
 
 ## Install and set up the Cloud Run provider

@@ -29,6 +29,8 @@ tags:
 
 Blaxel provider for ComputeSDK
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/blaxel/" %}
+
 ## Installation & Setup
 
 ```bash

@@ -27,6 +27,8 @@ tags:
 
 # Isorun
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/isorun/" %}
+
 Isorun provider for ComputeSDK — isolated Linux VM sandboxes for running untrusted and AI-generated code, billed by the second.
 
 ## Installation & Setup

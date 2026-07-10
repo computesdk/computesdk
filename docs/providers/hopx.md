@@ -27,6 +27,8 @@ tags:
 
 # HopX
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/hopx/" %}
+
 HopX provider for ComputeSDK
 
 ## Installation & Setup

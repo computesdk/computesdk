@@ -28,6 +28,8 @@ tags:
 
 # Beam
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/beam/" %}
+
 Beam provider for ComputeSDK
 
 ## Installation & Setup

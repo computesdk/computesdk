@@ -27,6 +27,8 @@ tags:
 
 # Tensorlake
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/tensorlake/" %}
+
 Tensorlake provider for ComputeSDK - Stateful MicroVM sandboxes for agentic applications and LLM-generated code execution.
 
 ## Installation & Setup

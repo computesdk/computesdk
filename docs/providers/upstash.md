@@ -27,6 +27,8 @@ tags:
 
 # Upstash
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/upstash/" %}
+
 Upstash provider for ComputeSDK
 
 ## Installation & Setup

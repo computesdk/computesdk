@@ -27,6 +27,8 @@ tags:
 
 # CodeSandbox
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/codesandbox/" %}
+
 CodeSandbox provider for ComputeSDK - Execute code in CodeSandbox development environments.
 
 ## Installation & Setup

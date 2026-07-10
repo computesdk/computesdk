@@ -27,6 +27,8 @@ tags:
 
 # Modal
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/modal/" %}
+
 Modal provider for ComputeSDK - Execute code with GPU support for machine learning workloads.
 
 ## Installation & Setup

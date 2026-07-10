@@ -28,6 +28,8 @@ tags:
 
 # Lightning
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/lightning/" %}
+
 Lightning AI provider for ComputeSDK — create and manage [Lightning AI](https://lightning.ai/) cloud sandboxes: run shell commands, read/write files, and manage the sandbox lifecycle.
 
 ## Installation & Setup
