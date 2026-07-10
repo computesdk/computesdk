@@ -1,7 +1,25 @@
 ---
 description: >-
   Install and use the AWS Bedrock AgentCore provider for ComputeSDK with AWS
-  credentials, regional config, session-based sandboxes, and known limitations.
+  credentials, regional config, and session-based sandboxes.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 ---
 
 # AWS Bedrock AgentCore

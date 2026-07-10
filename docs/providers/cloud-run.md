@@ -1,7 +1,8 @@
 ---
 description: >-
-  Use the Cloud Run provider for ComputeSDK in remote or direct mode, with
-  ephemeral or stateful sandboxes, gateway auth, and sandbox CLI configuration.
+  Use the Google Cloud Run provider for ComputeSDK to run sandboxed commands in
+  remote or direct mode, with ephemeral or stateful sandboxes, gateway auth, and
+  sandbox CLI configuration.
 layout:
   width: default
   title:
@@ -27,15 +28,15 @@ tags:
 
 # Cloud Run
 
-Google Cloud Run Sandboxes provider for ComputeSDK.
+Use the Google Cloud Run sandbox provider for ComputeSDK to run isolated commands and filesystem operations inside Cloud Run. Choose remote mode for a deployed gateway, or direct mode for in-container sandbox CLI control.
 
-## Installation & Setup
+## Install and set up the Cloud Run provider
 
 ```bash
 npm install @computesdk/cloud-run
 ```
 
-The provider works in two modes:
+The Google Cloud Run provider works in two modes:
 
 * **Remote mode** — connect to a deployed Cloud Run gateway service. Set both `CLOUD_RUN_SANDBOX_URL` and `CLOUD_RUN_SANDBOX_SECRET`:
 
@@ -50,7 +51,7 @@ CLOUD_RUN_AUTH_TOKEN=your_identity_token
 
 Remote mode is selected automatically when both `sandboxUrl` and `sandboxSecret` are set; otherwise the provider runs in direct mode.
 
-Cloud Run supports two execution modes:
+Cloud Run supports two execution modes for sandbox sessions:
 
 * **Ephemeral mode** (default) — `create()` creates a local logical handle only, `runCommand()` uses `sandbox do`, and `destroy()` removes local bookkeeping only.
 * **Stateful mode** — set `executionMode: 'stateful'` to have `create()` call `sandbox run <id> --detach`, `runCommand()` call `sandbox exec <id>`, and `destroy()` call `sandbox delete <id>`.
@@ -62,7 +63,7 @@ Cloud Run supports two execution modes:
 | `destroy()`    | Local bookkeeping only               | `sandbox delete <id>`                       |
 | `filesystem`   | Per-operation `sandbox do`           | Per-operation `sandbox exec <id>`           |
 
-## Usage
+## Use the Cloud Run provider
 
 ```typescript
 import { cloudRun } from '@computesdk/cloud-run';
@@ -83,7 +84,7 @@ console.log(result.stdout); // "Hello from Cloud Run!"
 await sandbox.destroy();
 ```
 
-### Configuration Options
+### Cloud Run configuration options
 
 ```typescript
 interface CloudRunConfig {
@@ -132,7 +133,7 @@ interface CloudRunMount {
 }
 ```
 
-### Supported Operations
+### Supported ComputeSDK operations
 
 | Method       | Supported | Notes                                                                                                |
 | ------------ | --------- | ---------------------------------------------------------------------------------------------------- |
@@ -145,7 +146,7 @@ interface CloudRunMount {
 | `getUrl`     | ❌         | Throws — Cloud Run Sandboxes do not expose per-sandbox ports through the sandbox CLI.                |
 | `filesystem` | ✅         | Uses `sandbox do` in ephemeral mode and `sandbox exec` in stateful mode.                             |
 
-### Notes
+### Cloud Run notes and limitations
 
 * Default command timeout is 300,000 ms (5 minutes).
 * Direct mode requires the service to be deployed with `gcloud beta run deploy --sandbox-launcher`, or the sandbox binary check will fail.
