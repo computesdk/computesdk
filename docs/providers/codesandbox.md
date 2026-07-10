@@ -1,4 +1,33 @@
+---
+description: >-
+  Install and use the CodeSandbox provider for ComputeSDK to create sandboxes
+  and run commands in CodeSandbox environments.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # CodeSandbox
+
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/codesandbox/" %}
 
 CodeSandbox provider for ComputeSDK - Execute code in CodeSandbox development environments.
 
@@ -13,7 +42,6 @@ Add your CodeSandbox credentials to a `.env` file:
 ```bash
 CSB_API_KEY=your_codesandbox_api_key
 ```
-
 
 ## Usage
 
@@ -43,6 +71,8 @@ interface CodesandboxConfig {
   apiKey?: string;
   /** Template to use for new sandboxes */
   templateId?: string;
+  /** Default runtime environment, e.g. 'node', 'python' */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }

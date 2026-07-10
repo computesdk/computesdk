@@ -1,7 +1,35 @@
+---
+description: >-
+  Use Archil with ComputeSDK to run commands against an existing disk with API
+  key auth, region config, and exec-only container sessions.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Archil
 
-Archil provider for ComputeSDK
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/archil/" %}
 
+Archil provider for ComputeSDK
 
 ## Installation & Setup
 
@@ -16,7 +44,6 @@ ARCHIL_API_KEY=your_archil_api_key
 ARCHIL_REGION=aws-us-east-1
 ARCHIL_DISK_ID=your_archil_disk_id
 ```
-
 
 ## Usage
 
@@ -44,7 +71,6 @@ console.log(result.stdout); // "hello"
 await sandbox.destroy();
 ```
 
-
 ### Configuration Options
 
 ```typescript
@@ -60,20 +86,20 @@ interface ArchilConfig {
 
 ### Supported Operations
 
-| Method        | Supported | Notes                                                                 |
-| ------------- | --------- | --------------------------------------------------------------------- |
-| `create`      | ✅        | Resolves an existing disk from top-level `diskId`.                    |
-| `getById`     | ✅        | Requires the disk id.                                                 |
-| `list`        | ✅        | Lists all disks visible to the API key.                               |
-| `destroy`     | no-op     | Disk lifecycle is managed by Archil.                                  |
-| `runCommand`  | ✅        | Calls Archil's HTTP `exec` endpoint and waits for completion.         |
-| `getInfo`     | ✅        |                                                                       |
-| `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose.    |
-| `filesystem`  | ✅        | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.).        |
+| Method       | Supported | Notes                                                              |
+| ------------ | --------- | ------------------------------------------------------------------ |
+| `create`     | ✅         | Resolves an existing disk from top-level `diskId`.                 |
+| `getById`    | ✅         | Requires the disk id.                                              |
+| `list`       | ✅         | Lists all disks visible to the API key.                            |
+| `destroy`    | no-op     | Disk lifecycle is managed by Archil.                               |
+| `runCommand` | ✅         | Calls Archil's HTTP `exec` endpoint and waits for completion.      |
+| `getInfo`    | ✅         |                                                                    |
+| `getUrl`     | ❌         | Each exec runs in a fresh ephemeral container — no port to expose. |
+| `filesystem` | ✅         | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.).     |
 
 ### Limitations
 
-- Each `exec` call provisions a fresh container — no persistent state between calls beyond what is written to the disk.
-- Responses are truncated to ~5 MB by the Archil control plane.
-- `getUrl` is not supported — each exec runs in a fresh ephemeral container, so there is no long-lived process to expose a port on.
-- Filesystem operations are implemented as shell commands, so each call costs one HTTP round trip.
+* Each `exec` call provisions a fresh container — no persistent state between calls beyond what is written to the disk.
+* Responses are truncated to \~5 MB by the Archil control plane.
+* `getUrl` is not supported — each exec runs in a fresh ephemeral container, so there is no long-lived process to expose a port on.
+* Filesystem operations are implemented as shell commands, so each call costs one HTTP round trip.

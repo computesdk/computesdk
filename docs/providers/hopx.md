@@ -1,7 +1,35 @@
+---
+description: >-
+  Set up the HopX provider for ComputeSDK, configure your API key, and create
+  sandboxes to run commands.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # HopX
 
-HopX provider for ComputeSDK
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/hopx/" %}
 
+HopX provider for ComputeSDK
 
 ## Installation & Setup
 
@@ -14,7 +42,6 @@ Add your HopX credentials to a `.env` file:
 ```bash
 HOPX_API_KEY=your_hopx_api_key
 ```
-
 
 ## Usage
 
@@ -35,7 +62,6 @@ console.log(result.stdout); // "Hello from HopX!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

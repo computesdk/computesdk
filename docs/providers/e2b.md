@@ -1,7 +1,35 @@
+---
+description: >-
+  Set up the E2B provider for ComputeSDK, configure your API key, and create
+  sandboxes to run commands.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # E2B
 
-E2B provider for ComputeSDK
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/e2b/" %}
 
+E2B provider for ComputeSDK
 
 ## Installation & Setup
 
@@ -15,6 +43,7 @@ Add your E2B credentials to a `.env` file:
 E2B_API_KEY=your_e2b_api_key
 ```
 
+> **Note:** E2B API keys must start with `e2b_`. The provider throws an error if the key is in any other format.
 
 ## Usage
 
@@ -35,7 +64,6 @@ console.log(result.stdout); // "Hello from E2B!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

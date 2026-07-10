@@ -1,4 +1,33 @@
+---
+description: >-
+  Tensorlake provider for ComputeSDK - Stateful MicroVM sandboxes for agentic
+  applications and LLM-generated code execution.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Tensorlake
+
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/tensorlake/" %}
 
 Tensorlake provider for ComputeSDK - Stateful MicroVM sandboxes for agentic applications and LLM-generated code execution.
 

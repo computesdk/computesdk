@@ -1,7 +1,36 @@
+---
+description: >-
+  Use Beam with ComputeSDK to create sandboxes with token and workspace
+  authentication, then run commands with configurable gateway and timeout
+  settings.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Beam
 
-Beam provider for ComputeSDK
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/beam/" %}
 
+Beam provider for ComputeSDK
 
 ## Installation & Setup
 
@@ -15,7 +44,6 @@ Add your Beam credentials to a `.env` file:
 BEAM_TOKEN=your_beam_token
 BEAM_WORKSPACE_ID=your_beam_workspace_id
 ```
-
 
 ## Usage
 
@@ -37,7 +65,6 @@ console.log(result.stdout); // "Hello from Beam!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

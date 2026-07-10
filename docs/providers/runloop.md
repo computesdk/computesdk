@@ -1,7 +1,35 @@
+---
+description: >-
+  Set up the Runloop provider for ComputeSDK, configure your API key, and create
+  sandboxes to run commands.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Runloop
 
-Runloop provider for ComputeSDK
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/runloop/" %}
 
+Runloop provider for ComputeSDK
 
 ## Installation & Setup
 
@@ -14,7 +42,6 @@ Add your Runloop credentials to a `.env` file:
 ```bash
 RUNLOOP_API_KEY=your_runloop_api_key
 ```
-
 
 ## Usage
 
@@ -35,7 +62,6 @@ console.log(result.stdout); // "Hello from Runloop!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

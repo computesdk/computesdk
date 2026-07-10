@@ -1,4 +1,33 @@
+---
+description: >-
+  Install and use the Daytona provider for ComputeSDK to create sandboxes and
+  run commands in Daytona development workspaces.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Daytona
+
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/daytona/" %}
 
 Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
 
@@ -13,7 +42,6 @@ Add your Daytona credentials to a `.env` file:
 ```bash
 DAYTONA_API_KEY=your_daytona_api_key
 ```
-
 
 ## Usage
 

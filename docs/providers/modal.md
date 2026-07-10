@@ -1,7 +1,35 @@
+---
+description: >-
+  Set up the Modal provider for ComputeSDK, configure your credentials, and
+  create sandboxes to run commands with optional GPU support.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Modal
 
-Modal provider for ComputeSDK - Execute code with GPU support for machine learning workloads.
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/modal/" %}
 
+Modal provider for ComputeSDK - Execute code with GPU support for machine learning workloads.
 
 ## Installation & Setup
 
@@ -15,7 +43,6 @@ Add your Modal credentials to a `.env` file:
 MODAL_TOKEN_ID=your_modal_token_id
 MODAL_TOKEN_SECRET=your_modal_token_secret
 ```
-
 
 ## Usage
 
@@ -52,6 +79,12 @@ interface ModalConfig {
   environment?: string;
   /** Ports to expose (unencrypted by default) */
   ports?: number[];
+  /** Port for the daemon SSE channel (defaults to 38989); set false to disable */
+  daemonSsePort?: number | false;
+  /** Modal app name (default: 'computesdk-modal') */
+  appName?: string;
+  /** Use Modal's experimental scalable sandboxes API */
+  scalableSandboxes?: boolean;
 }
 ```
 

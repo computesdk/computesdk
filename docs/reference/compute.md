@@ -39,7 +39,7 @@ MODAL_TOKEN_ID=your_modal_token_id
 MODAL_TOKEN_SECRET=your_modal_token_secret
 ```
 
----
+***
 
 ## Direct Provider Mode
 
@@ -57,13 +57,14 @@ await sandbox.destroy();
 ```
 
 **Notes:**
-- Every provider factory (`e2b`, `modal`, `vercel`, `daytona`, etc.) returns an object with the same shape.
-- Swapping providers is usually a one-line change: replace the import and factory call.
-- No core `computesdk` import is required in this mode.
 
-<br/>
+* Every provider factory (`e2b`, `modal`, `vercel`, `daytona`, etc.) returns an object with the same shape.
+* Swapping providers is usually a one-line change: replace the import and factory call.
+* No core `computesdk` import is required in this mode.
 
----
+<br>
+
+***
 
 ## Core `compute` Mode
 
@@ -131,9 +132,9 @@ const scoped = compute({
 const sandbox = await scoped.sandbox.create();
 ```
 
-<br/>
+<br>
 
----
+***
 
 ## `compute.setConfig(config)`
 
@@ -141,11 +142,11 @@ Configure the module-level `compute` singleton.
 
 **Parameters:**
 
-- `config` (ExplicitComputeConfig, required):
-  - `provider` (DirectProvider, optional) — single primary provider
-  - `providers` (DirectProvider[], optional) — ordered list of providers
-  - `providerStrategy` (`'priority' | 'round-robin'`, optional) — default `'priority'`
-  - `fallbackOnError` (boolean, optional) — default `true`
+* `config` (ExplicitComputeConfig, required):
+  * `provider` (DirectProvider, optional) — single primary provider
+  * `providers` (DirectProvider\[], optional) — ordered list of providers
+  * `providerStrategy` (`'priority' | 'round-robin'`, optional) — default `'priority'`
+  * `fallbackOnError` (boolean, optional) — default `true`
 
 At least one of `provider` or `providers` must be supplied. When both are provided, `provider` is treated as the first provider, and duplicates (by `.name`) are removed from `providers`.
 
@@ -201,12 +202,13 @@ compute.setConfig({
 ```
 
 **Notes:**
-- Re-calling `setConfig` replaces the prior configuration and resets internal routing state (round-robin cursor, sandbox-to-provider affinity cache).
-- Providers are deduplicated by their `name` property, so the same provider registered twice is only called once.
 
-<br/>
+* Re-calling `setConfig` replaces the prior configuration and resets internal routing state (round-robin cursor, sandbox-to-provider affinity cache).
+* Providers are deduplicated by their `name` property, so the same provider registered twice is only called once.
 
----
+<br>
+
+***
 
 ## Provider Selection Strategies
 
@@ -246,16 +248,16 @@ await compute.sandbox.create(); // e2b
 
 Failover via `fallbackOnError` still applies: if the round-robin pick fails, the next provider is tried.
 
-<br/>
+<br>
 
----
+***
 
 ## `fallbackOnError`
 
 Controls whether `create` tries the next provider after a failure.
 
-- `true` (default) — on failure, move to the next candidate and keep going until one succeeds or all fail
-- `false` — the first failure throws immediately
+* `true` (default) — on failure, move to the next candidate and keep going until one succeeds or all fail
+* `false` — the first failure throws immediately
 
 ```typescript
 compute.setConfig({
@@ -268,12 +270,13 @@ await compute.sandbox.create();
 ```
 
 **Notes:**
-- When a caller specifies `{ provider: 'modal' }` explicitly, `fallbackOnError` is ignored for that call — the target provider is the only one tried.
-- Failover only applies to `create`. Operations on an existing sandbox (`destroy`, snapshot work) use provider affinity instead — see below.
 
-<br/>
+* When a caller specifies `{ provider: 'modal' }` explicitly, `fallbackOnError` is ignored for that call — the target provider is the only one tried.
+* Failover only applies to `create`. Operations on an existing sandbox (`destroy`, snapshot work) use provider affinity instead — see below.
 
----
+<br>
+
+***
 
 ## Per-Call Provider Override
 
@@ -289,58 +292,59 @@ const snap = await compute.snapshot.create(sandboxId, { provider: 'e2b' });
 
 The override must match a configured provider's `.name` exactly. If not, a descriptive error is thrown listing the configured providers.
 
-<br/>
+<br>
 
----
+***
 
 ## Provider Affinity
 
 For sandboxes created through `compute`, the owning provider is tracked internally. Operations that act on an existing sandbox prefer the owning provider first:
 
-- `compute.sandbox.destroy(sandboxId)`
-- `compute.sandbox.getById(sandboxId)`
-- `compute.snapshot.create(sandboxId, options)`
-- `compute.snapshot.delete(snapshotId)`
+* `compute.sandbox.destroy(sandboxId)`
+* `compute.sandbox.getById(sandboxId)`
+* `compute.snapshot.create(sandboxId, options)`
+* `compute.snapshot.delete(snapshotId)`
 
 Affinity is **preferred, not exclusive**: if the owning provider fails, ComputeSDK falls through to the other configured providers.
 
 **Caveats:**
-- Affinity is kept in an in-memory map that is reset every time `setConfig` is called.
-- Sandbox IDs minted outside the current `compute` instance (e.g., from a different process, or fetched via raw SDK) have no recorded affinity — every configured provider is probed.
-- This means, in long-running processes, the happy path is one call to the owning provider; in fresh processes with only a stored ID, expect a probe across providers.
 
-<br/>
+* Affinity is kept in an in-memory map that is reset every time `setConfig` is called.
+* Sandbox IDs minted outside the current `compute` instance (e.g., from a different process, or fetched via raw SDK) have no recorded affinity — every configured provider is probed.
+* This means, in long-running processes, the happy path is one call to the owning provider; in fresh processes with only a stored ID, expect a probe across providers.
 
----
+<br>
+
+***
 
 ## `compute.sandbox.*`
 
-The full sandbox API is documented in [compute.sandbox](./computesandbox/). Summary of available methods:
+The full sandbox API is documented in [compute.sandbox](computesandbox/). Summary of available methods:
 
-| Method | Purpose |
-|--------|---------|
-| `create(options?)` | Provision a new sandbox |
-| `getById(sandboxId)` | Reconnect to an existing sandbox |
-| `list()` | List active sandboxes (aggregated across providers in multi-provider mode) |
-| `destroy(sandboxId)` | Tear down a sandbox |
+| Method               | Purpose                                                                    |
+| -------------------- | -------------------------------------------------------------------------- |
+| `create(options?)`   | Provision a new sandbox                                                    |
+| `getById(sandboxId)` | Reconnect to an existing sandbox                                           |
+| `list()`             | List active sandboxes (aggregated across providers in multi-provider mode) |
+| `destroy(sandboxId)` | Tear down a sandbox                                                        |
 
-All of these accept a `provider` override where applicable. See [Sandbox](./sandbox/) for the instance methods (`runCommand`, `filesystem.*`).
+All of these accept a `provider` override where applicable. See [Sandbox](sandbox/) for the instance methods (`runCommand`, `filesystem.*`).
 
 > **Reserved methods.** The TypeScript surface also declares `compute.sandbox.find`, `compute.sandbox.findOrCreate`, and `compute.sandbox.extendTimeout`. These are reserved for a future gateway / named-sandbox mode and are not implemented by the currently shipped provider packages — calling them today throws `Provider 'X' does not support …`. Don't rely on them in direct-mode code.
 
-<br/>
+<br>
 
----
+***
 
 ## `compute.snapshot.*`
 
 Available when at least one configured provider supports snapshots.
 
-| Method | Purpose |
-|--------|---------|
-| `create(sandboxId, options?)` | Capture a snapshot of a running sandbox |
-| `list()` | List snapshots across providers that support listing |
-| `delete(snapshotId)` | Delete a snapshot |
+| Method                        | Purpose                                              |
+| ----------------------------- | ---------------------------------------------------- |
+| `create(sandboxId, options?)` | Capture a snapshot of a running sandbox              |
+| `list()`                      | List snapshots across providers that support listing |
+| `delete(snapshotId)`          | Delete a snapshot                                    |
 
 ```typescript
 const sandbox = await compute.sandbox.create();
@@ -354,13 +358,14 @@ await compute.snapshot.delete(snap.id);
 ```
 
 **Notes:**
-- `create` routes to the sandbox's owning provider first; otherwise tries any snapshot-capable provider.
-- `delete` tracks the owning provider of each snapshot so deletes land on the right platform.
-- If no configured provider supports snapshots, calls throw a descriptive error.
 
-<br/>
+* `create` routes to the sandbox's owning provider first; otherwise tries any snapshot-capable provider.
+* `delete` tracks the owning provider of each snapshot so deletes land on the right platform.
+* If no configured provider supports snapshots, calls throw a descriptive error.
 
----
+<br>
+
+***
 
 ## Error Handling
 
@@ -380,13 +385,13 @@ try {
 
 Common error cases:
 
-- **No provider configured** — Call `compute.setConfig({ provider: ... })` or `compute.setConfig({ providers: [...] })` before any sandbox call.
-- **`provider: 'foo'` override with no matching provider** — The error lists the configured provider names.
-- **All providers failed** — The message includes one line per provider with its failure reason.
+* **No provider configured** — Call `compute.setConfig({ provider: ... })` or `compute.setConfig({ providers: [...] })` before any sandbox call.
+* **`provider: 'foo'` override with no matching provider** — The error lists the configured provider names.
+* **All providers failed** — The message includes one line per provider with its failure reason.
 
-<br/>
+<br>
 
----
+***
 
 ## End-to-End Example
 
@@ -429,14 +434,14 @@ async function runUserCode(userId: string, code: string) {
 }
 ```
 
-<br/>
+<br>
 
----
+***
 
 ## Related
 
-- [compute.sandbox](./computesandbox/) — sandbox lifecycle methods
-- [Sandbox](./sandbox/) — sandbox instance methods (code, commands, filesystem, terminal)
-- [Introduction](../getting-started/introduction/) — high-level overview
-- [Installation](../getting-started/installation/) — provider setup and credentials
-- [Quick Start](../getting-started/quick-start/) — minimal end-to-end walkthrough
+* [compute.sandbox](computesandbox/) — sandbox lifecycle methods
+* [Sandbox](sandbox/) — sandbox instance methods (code, commands, filesystem, terminal)
+* [Introduction](../getting-started/introduction/) — high-level overview
+* [Installation](../getting-started/installation/) — provider setup and credentials
+* [Quick Start](../getting-started/quick-start/) — minimal end-to-end walkthrough

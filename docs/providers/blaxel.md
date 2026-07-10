@@ -1,7 +1,35 @@
+---
+description: >-
+  Use Blaxel with ComputeSDK to create sandboxes with API key and workspace
+  authentication, and configure image, region, memory, and exposed ports.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Blaxel
 
 Blaxel provider for ComputeSDK
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/blaxel/" %}
 
 ## Installation & Setup
 
@@ -15,7 +43,6 @@ Add your Blaxel credentials to a `.env` file:
 BL_API_KEY=your_blaxel_api_key
 BL_WORKSPACE=your_blaxel_workspace
 ```
-
 
 ## Usage
 
@@ -38,7 +65,6 @@ console.log(result.stdout); // "Hello from Blaxel!"
 await sandbox.destroy();
 ```
 
-
 ### Configuration Options
 
 ```typescript
@@ -51,14 +77,17 @@ interface BlaxelConfig {
   image?: string;
   /** Default region for sandbox deployment */
   region?: string;
-  /** Default memory allocation in MB (default: 4096) */
+  /** Default memory allocation in MB */
   memory?: number;
+  /** Default ports to expose on the sandbox */
+  ports?: number[];
 }
 ```
 
 ### Default Images
 
-The provider automatically selects images based on the configured runtime:
-- **Python:** `blaxel/prod-py-app:latest`
-- **Node.js:** `blaxel/prod-ts-app:latest`
-- **Default:** `blaxel/prod-base:latest`
+The provider automatically selects images based on the runtime specified at creation time:
+
+* **Python:** `blaxel/py-app:latest`
+* **Node.js:** `blaxel/ts-app:latest`
+* **Default:** `blaxel/base-image:latest`

@@ -1,7 +1,30 @@
+---
+description: >-
+  Leap0 provider for ComputeSDK - enterprise-grade cloud sandboxes for AI agents
+  with full filesystem, git, process, and desktop support.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Leap0
 
 [Leap0](https://leap0.dev) provider for ComputeSDK - enterprise-grade cloud sandboxes for AI agents with full filesystem, git, process, and desktop support.
-
 
 ## Installation & Setup
 
@@ -16,7 +39,6 @@ LEAP0_API_KEY=your_leap0_api_key
 ```
 
 Get your API key at [app.leap0.dev](https://app.leap0.dev/login).
-
 
 ## Usage
 
