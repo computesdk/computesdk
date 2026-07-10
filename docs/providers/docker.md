@@ -1,3 +1,27 @@
+---
+description: >-
+  Docker provider for ComputeSDK — local containerized sandboxes (Python or
+  Node.js) for development and testing.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Docker
 
 Docker provider for ComputeSDK — local containerized sandboxes (Python or Node.js) for development and testing.
@@ -68,19 +92,19 @@ The provider ships sensible defaults (`defaultDockerConfig`) that are merged wit
 
 ### Supported Operations
 
-| Method | Supported | Notes |
-| --- | --- | --- |
-| `create` | ✅ | Only `'python'` or `'node'` runtimes are supported; any other value throws. Pulls the image (per `pullPolicy`) and starts a keep-alive container. |
-| `getById` | ✅ | Resolves a container by id; returns `null` if it does not exist. |
-| `list` | ✅ | Lists containers labeled `com.computesdk.sandbox`. |
-| `destroy` | ✅ | Stops and force-removes the container. |
-| `runCommand` | ✅ | Executes via `docker exec` (`/bin/sh -c`). |
-| `getInfo` | ✅ | |
-| `getUrl` | ✅ | Builds a URL from the container's published port bindings, or falls back to the container IP. Requires the port to be exposed via `container.ports`. |
-| `filesystem` | ✅ | Implemented via shell commands inside the container. |
+| Method       | Supported | Notes                                                                                                                                                |
+| ------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Only `'python'` or `'node'` runtimes are supported; any other value throws. Pulls the image (per `pullPolicy`) and starts a keep-alive container.    |
+| `getById`    | ✅         | Resolves a container by id; returns `null` if it does not exist.                                                                                     |
+| `list`       | ✅         | Lists containers labeled `com.computesdk.sandbox`.                                                                                                   |
+| `destroy`    | ✅         | Stops and force-removes the container.                                                                                                               |
+| `runCommand` | ✅         | Executes via `docker exec` (`/bin/sh -c`).                                                                                                           |
+| `getInfo`    | ✅         |                                                                                                                                                      |
+| `getUrl`     | ✅         | Builds a URL from the container's published port bindings, or falls back to the container IP. Requires the port to be exposed via `container.ports`. |
+| `filesystem` | ✅         | Implemented via shell commands inside the container.                                                                                                 |
 
 ### Notes
 
-- Runtime is limited to `'python'` (default `python:3.11-slim`) or `'node'` (default `node:20-alpine`). Passing any other runtime throws.
-- Containers are launched with a keep-alive command so they stay running for exec, filesystem, and background use.
-- `getUrl` reads published port bindings; set `container.ports` in the config to expose a port on the host.
+* Runtime is limited to `'python'` (default `python:3.11-slim`) or `'node'` (default `node:20-alpine`). Passing any other runtime throws.
+* Containers are launched with a keep-alive command so they stay running for exec, filesystem, and background use.
+* `getUrl` reads published port bindings; set `container.ports` in the config to expose a port on the host.

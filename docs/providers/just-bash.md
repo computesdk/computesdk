@@ -1,4 +1,29 @@
-# just-bash
+---
+description: >-
+  just-bash provider for ComputeSDK — local sandboxed bash execution with a
+  virtual filesystem. No external services, containers, or authentication
+  required.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
+# Just Bash
 
 just-bash provider for ComputeSDK — local sandboxed bash execution with a virtual filesystem. No external services, containers, or authentication required.
 
@@ -51,20 +76,20 @@ interface JustBashConfig {
 
 ### Supported Operations
 
-| Method       | Supported | Notes                                                                        |
-| ------------ | --------- | ---------------------------------------------------------------------------- |
-| `create`     | ✅        | Creates an in-process sandbox; `runtime: 'python'` also enables Python.      |
-| `getById`    | ✅        | Looks up sandboxes tracked in the current process.                           |
-| `list`       | ✅        |                                                                              |
-| `destroy`    | ✅        | Removes the sandbox from the in-process registry.                            |
-| `runCommand` | ✅        | Supports `env` and `cwd`. 60+ built-in commands (jq, awk, sed, grep, etc.).  |
-| `getInfo`    | ✅        |                                                                              |
-| `getUrl`     | ❌        | Throws — just-bash is a local sandbox with no network capabilities.          |
-| `filesystem` | ✅        | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove`.             |
+| Method       | Supported | Notes                                                                       |
+| ------------ | --------- | --------------------------------------------------------------------------- |
+| `create`     | ✅         | Creates an in-process sandbox; `runtime: 'python'` also enables Python.     |
+| `getById`    | ✅         | Looks up sandboxes tracked in the current process.                          |
+| `list`       | ✅         |                                                                             |
+| `destroy`    | ✅         | Removes the sandbox from the in-process registry.                           |
+| `runCommand` | ✅         | Supports `env` and `cwd`. 60+ built-in commands (jq, awk, sed, grep, etc.). |
+| `getInfo`    | ✅         |                                                                             |
+| `getUrl`     | ❌         | Throws — just-bash is a local sandbox with no network capabilities.         |
+| `filesystem` | ✅         | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove`.            |
 
 ### Notes
 
-- **Local, no network** — no API keys, containers, or external services. Ideal for tests, CI, AI-agent tooling, and offline use.
-- **In-memory by default** — files do not persist across process restarts unless you supply an `OverlayFs`, `ReadWriteFs`, or `MountableFs` backend via `fs`.
-- **Not real processes** — commands are interpreted in TypeScript, not executed as OS processes; there is no real Node.js runtime.
-- **Python via pyodide** — requires `python: true` and runs a WebAssembly-based interpreter.
+* **Local, no network** — no API keys, containers, or external services. Ideal for tests, CI, AI-agent tooling, and offline use.
+* **In-memory by default** — files do not persist across process restarts unless you supply an `OverlayFs`, `ReadWriteFs`, or `MountableFs` backend via `fs`.
+* **Not real processes** — commands are interpreted in TypeScript, not executed as OS processes; there is no real Node.js runtime.
+* **Python via pyodide** — requires `python: true` and runs a WebAssembly-based interpreter.

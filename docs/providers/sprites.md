@@ -1,7 +1,30 @@
+---
+description: >-
+  Set up the Sprites provider for ComputeSDK, configure your token, and create
+  cloud sandboxes to run commands and expose apps.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Sprites
 
 Sprites provider for ComputeSDK - cloud sandboxes powered by Sprites
-
 
 ## Installation & Setup
 
@@ -14,7 +37,6 @@ Add your Sprites credentials to a `.env` file:
 ```bash
 SPRITES_TOKEN=your_sprites_token
 ```
-
 
 ## Usage
 
@@ -36,7 +58,6 @@ console.log(result.stdout); // "Hello from Sprites!"
 await sandbox.destroy();
 ```
 
-
 ### Configuration Options
 
 ```typescript
@@ -52,13 +73,13 @@ interface SpritesConfig {
 
 ### Supported Operations
 
-| Method       | Supported | Notes                                                                    |
-| ------------ | --------- | ------------------------------------------------------------------------ |
-| `create`     | ✅        | Provisions a new Sprite via `POST /sprites`.                             |
-| `getById`    | ✅        | Looks up a Sprite by name.                                              |
-| `list`       | ✅        | Lists all Sprites for the token.                                        |
-| `destroy`    | ✅        | Deletes the Sprite.                                                     |
-| `runCommand` | ✅        | Executes commands over the `bash` exec endpoint; supports `cwd`/`env`.  |
-| `getInfo`    | ✅        |                                                                          |
-| `getUrl`     | ✅        | Returns the Sprite's public URL (Sprites are created with public auth). |
-| `filesystem` | ✅        | Native `read`, `write`, `mkdir`, `readdir`, `exists`, `remove`.         |
+| Method       | Supported | Notes                                                                   |
+| ------------ | --------- | ----------------------------------------------------------------------- |
+| `create`     | ✅         | Provisions a new Sprite via `POST /sprites`.                            |
+| `getById`    | ✅         | Looks up a Sprite by name.                                              |
+| `list`       | ✅         | Lists all Sprites for the token.                                        |
+| `destroy`    | ✅         | Deletes the Sprite.                                                     |
+| `runCommand` | ✅         | Executes commands over the `bash` exec endpoint; supports `cwd`/`env`.  |
+| `getInfo`    | ✅         |                                                                         |
+| `getUrl`     | ✅         | Returns the Sprite's public URL (Sprites are created with public auth). |
+| `filesystem` | ✅         | Native `read`, `write`, `mkdir`, `readdir`, `exists`, `remove`.         |

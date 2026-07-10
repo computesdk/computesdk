@@ -1,4 +1,26 @@
 ---
+description: >-
+  Declaw runs Firecracker microVMs with a built-in security stack: PII scanning,
+  prompt-injection defense, TLS-intercepting egress proxy, and per-sandbox
+  network policies.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

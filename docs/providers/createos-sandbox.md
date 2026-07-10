@@ -1,4 +1,25 @@
 ---
+description: >-
+  CreateOS provider for ComputeSDK — NodeOps VM sandboxes with pause/resume/fork
+  snapshots. A thin adapter over the official @nodeops-createos/sandbox package.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

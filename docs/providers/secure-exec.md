@@ -1,4 +1,29 @@
-# Secure-Exec
+---
+description: >-
+  Secure execution provider for ComputeSDK — a local, isolated sandbox using
+  secure-exec's V8 isolates, with an in-memory filesystem. No remote service or
+  credentials required.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
+# Secure Exec
 
 Secure execution provider for ComputeSDK — a local, isolated sandbox using [secure-exec](https://www.npmjs.com/package/secure-exec)'s V8 isolates, with an in-memory filesystem. No remote service or credentials required.
 
@@ -48,18 +73,18 @@ interface SecureExecConfig {
 
 ### Supported Operations
 
-| Method | Supported | Notes |
-| --- | --- | --- |
-| `create` | ✅ | Spins up a local V8 isolate with an in-memory filesystem rooted at `/workspace`. |
-| `getById` | ❌ | Always returns `null` — sandboxes are in-process and not addressable across calls. |
-| `list` | ❌ | Always returns an empty array. |
-| `destroy` | no-op | Nothing to tear down remotely. |
-| `runCommand` | ✅ | Executes shell commands inside the isolate via `spawnSync`. |
-| `getInfo` | ✅ | Reports `metadata: { local: true }`. |
-| `getUrl` | ❌ | Throws — `getUrl is not supported by secure-exec provider.` |
-| `filesystem` | ✅ | Backed by secure-exec's in-memory filesystem (not shell-based). |
+| Method       | Supported | Notes                                                                              |
+| ------------ | --------- | ---------------------------------------------------------------------------------- |
+| `create`     | ✅         | Spins up a local V8 isolate with an in-memory filesystem rooted at `/workspace`.   |
+| `getById`    | ❌         | Always returns `null` — sandboxes are in-process and not addressable across calls. |
+| `list`       | ❌         | Always returns an empty array.                                                     |
+| `destroy`    | no-op     | Nothing to tear down remotely.                                                     |
+| `runCommand` | ✅         | Executes shell commands inside the isolate via `spawnSync`.                        |
+| `getInfo`    | ✅         | Reports `metadata: { local: true }`.                                               |
+| `getUrl`     | ❌         | Throws — `getUrl is not supported by secure-exec provider.`                        |
+| `filesystem` | ✅         | Backed by secure-exec's in-memory filesystem (not shell-based).                    |
 
 ### Notes
 
-- This provider is **local-only**: sandboxes live in the current Node process, so `getById` and `list` do not return anything and `destroy` is a no-op.
-- Commands sandboxed code may spawn can be restricted with `allowedCommands`; by default all commands are allowed.
+* This provider is **local-only**: sandboxes live in the current Node process, so `getById` and `list` do not return anything and `destroy` is a no-op.
+* Commands sandboxed code may spawn can be restricted with `allowedCommands`; by default all commands are allowed.

@@ -1,4 +1,25 @@
 ---
+description: >-
+  Isorun provider for ComputeSDK — isolated Linux VM sandboxes for running
+  untrusted and AI-generated code, billed by the second.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

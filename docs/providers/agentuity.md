@@ -2,6 +2,24 @@
 description: >-
   Use Agentuity with ComputeSDK to create sandboxes, authenticate with an SDK
   key, and configure runtime, region, and timeout settings.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 ---
 
 # Agentuity

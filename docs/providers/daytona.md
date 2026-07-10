@@ -1,4 +1,25 @@
 ---
+description: >-
+  Install and use the Daytona provider for ComputeSDK to create sandboxes and
+  run commands in Daytona development workspaces.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

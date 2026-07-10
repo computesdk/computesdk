@@ -1,3 +1,27 @@
+---
+description: >-
+  Lelantos provider for ComputeSDK — execute code in secure, EU-native
+  Firecracker microVM sandboxes.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Lelantos
 
 Lelantos provider for ComputeSDK — execute code in secure, EU-native [Firecracker](https://firecracker-microvm.github.io/) microVM sandboxes. Lelantos is an E2B-API-compatible platform running on Hetzner bare-metal in the EU, so this provider wraps the same `e2b` npm SDK pointed at the Lelantos control plane.
@@ -72,21 +96,21 @@ interface LelantosConfig {
 
 ### Supported Operations
 
-| Method       | Supported | Notes                                                                              |
-| ------------ | --------- | ---------------------------------------------------------------------------------- |
-| `create`     | ✅        | Boot from a `templateId` / `snapshotId` when supplied.                             |
-| `getById`    | ✅        | Reconnects to a running sandbox by id.                                             |
-| `list`       | ✅        |                                                                                    |
-| `destroy`    | ✅        |                                                                                    |
-| `runCommand` | ✅        | Supports `env`, `cwd`, `background`. Real non-zero exit codes are returned, not thrown. Transient infra errors are retried with backoff. |
-| `getInfo`    | ✅        |                                                                                    |
-| `getUrl`     | ✅        | Returns `https://{port}-{sandboxId}.{domain}` for the given port.                  |
-| `filesystem` | ✅        | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove` (native e2b files).|
-| `snapshot`   | ✅        | `compute.snapshot.create` snapshots a running sandbox; `list` / `delete` map to templates. |
-| `template`   | partial   | `list` / `delete` supported; `create` throws — build via the E2B template protocol / CLI or `snapshot.create()`. |
+| Method       | Supported | Notes                                                                                                                                    |
+| ------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Boot from a `templateId` / `snapshotId` when supplied.                                                                                   |
+| `getById`    | ✅         | Reconnects to a running sandbox by id.                                                                                                   |
+| `list`       | ✅         |                                                                                                                                          |
+| `destroy`    | ✅         |                                                                                                                                          |
+| `runCommand` | ✅         | Supports `env`, `cwd`, `background`. Real non-zero exit codes are returned, not thrown. Transient infra errors are retried with backoff. |
+| `getInfo`    | ✅         |                                                                                                                                          |
+| `getUrl`     | ✅         | Returns `https://{port}-{sandboxId}.{domain}` for the given port.                                                                        |
+| `filesystem` | ✅         | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove` (native e2b files).                                                      |
+| `snapshot`   | ✅         | `compute.snapshot.create` snapshots a running sandbox; `list` / `delete` map to templates.                                               |
+| `template`   | partial   | `list` / `delete` supported; `create` throws — build via the E2B template protocol / CLI or `snapshot.create()`.                         |
 
 ### Notes
 
-- Because the wire protocol is E2B-compatible, `domain` / `apiUrl` are threaded into **every** SDK call (create, connect, list, kill, snapshot, template) so lifecycle operations stay on Lelantos rather than falling back to `api.e2b.app`.
-- Sandboxes run in the EU (single-region today).
-- Point at a self-hosted or staging slot by setting `domain` (and optionally `apiUrl`).
+* Because the wire protocol is E2B-compatible, `domain` / `apiUrl` are threaded into **every** SDK call (create, connect, list, kill, snapshot, template) so lifecycle operations stay on Lelantos rather than falling back to `api.e2b.app`.
+* Sandboxes run in the EU (single-region today).
+* Point at a self-hosted or staging slot by setting `domain` (and optionally `apiUrl`).

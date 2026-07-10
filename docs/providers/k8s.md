@@ -1,3 +1,27 @@
+---
+description: >-
+  Kubernetes provider for ComputeSDK — run each sandbox as a Pod in your cluster
+  and execute commands via pods/exec.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Kubernetes
 
 Kubernetes provider for ComputeSDK — run each sandbox as a Pod in your cluster and execute commands via `pods/exec`.
@@ -14,11 +38,11 @@ The provider uses your current kubeconfig context by default. It calls `loadFrom
 
 The identity used by your kubeconfig needs the following RBAC in the target namespace:
 
-| Resource | Verbs |
-|---|---|
-| `pods` | `create`, `get`, `list`, `delete` |
-| `pods/exec` | `create` |
-| `services` | `delete` |
+| Resource    | Verbs                             |
+| ----------- | --------------------------------- |
+| `pods`      | `create`, `get`, `list`, `delete` |
+| `pods/exec` | `create`                          |
+| `services`  | `delete`                          |
 
 `services: delete` is required because `destroy` opportunistically cleans up a Service named `<pod-name>-svc` (in case one was created out-of-band to back `getUrl`). The provider never creates Services itself.
 
@@ -51,11 +75,11 @@ Sandbox IDs are namespace-prefixed: `<namespace>/<podName>` (e.g. `default/compu
 
 Each sandbox is a single Pod with one container:
 
-- **Pod name**: `<podNamePrefix>-<up to 8 random base36 chars>` (default prefix `computesdk-sbx`).
-- **Container name**: `sandbox` — use this with `kubectl exec` (e.g. `kubectl exec -it -c sandbox <pod> -- /bin/sh`).
-- **Labels**: `computesdk.io/managed=true`, `computesdk.io/runtime=<node|python>`, `computesdk.io/sandbox-id=<pod-name>`.
-- **Annotations**: any `metadata` you pass to `create()` is stored as `computesdk.io/meta-<key>`. Non-string values are JSON-stringified.
-- **Restart policy**: `Never`. Pods are one-shot; recreate the sandbox if the container dies.
+* **Pod name**: `<podNamePrefix>-<up to 8 random base36 chars>` (default prefix `computesdk-sbx`).
+* **Container name**: `sandbox` — use this with `kubectl exec` (e.g. `kubectl exec -it -c sandbox <pod> -- /bin/sh`).
+* **Labels**: `computesdk.io/managed=true`, `computesdk.io/runtime=<node|python>`, `computesdk.io/sandbox-id=<pod-name>`.
+* **Annotations**: any `metadata` you pass to `create()` is stored as `computesdk.io/meta-<key>`. Non-string values are JSON-stringified.
+* **Restart policy**: `Never`. Pods are one-shot; recreate the sandbox if the container dies.
 
 `compute.sandbox.list()` returns Pods in the configured `namespace` that match `computesdk.io/managed=true`. Sandboxes in other namespaces are not returned.
 
@@ -95,12 +119,12 @@ These are set on the Pod's container spec and available to every command in the 
 
 `getUrl` is template-based in this MVP — set `urlTemplate` to construct routable URLs through your own ingress, gateway, or DNS pattern. The provider substitutes these placeholders:
 
-| Placeholder | Value |
-|---|---|
-| `{protocol}` | From the `protocol` option (default `http`) |
-| `{service}` | `<pod-name>-svc` |
-| `{namespace}` | Pod namespace |
-| `{port}` | From the `port` option |
+| Placeholder   | Value                                       |
+| ------------- | ------------------------------------------- |
+| `{protocol}`  | From the `protocol` option (default `http`) |
+| `{service}`   | `<pod-name>-svc`                            |
+| `{namespace}` | Pod namespace                               |
+| `{port}`      | From the `port` option                      |
 
 ```typescript
 const compute = k8s({
@@ -140,6 +164,7 @@ interface K8sConfig {
 ```
 
 Kubeconfig loading precedence:
+
 1. `kubeConfigRaw`
 2. `KUBECONFIG_B64` (base64-encoded kubeconfig)
 3. `kubeConfigPath`
@@ -147,8 +172,8 @@ Kubeconfig loading precedence:
 
 ## Limitations
 
-- Filesystem methods are not implemented in this MVP — use `runCommand` with `cat`, `tee`, etc. to read and write files.
-- The provider never creates Kubernetes Services. `getUrl` is purely template-based — set `urlTemplate` to match your existing routing setup (ingress, gateway, or DNS).
-- Pod resource requests and limits are fixed (250m / 256Mi requests, 1 CPU / 1Gi limits). Set `image` if you need a different runtime; CPU/memory are not yet configurable.
-- Pods use `restartPolicy: Never`. If the container exits, the sandbox is gone — create a new one.
-- `compute.sandbox.list()` only scans the namespace configured on the provider; it does not enumerate across namespaces.
+* Filesystem methods are not implemented in this MVP — use `runCommand` with `cat`, `tee`, etc. to read and write files.
+* The provider never creates Kubernetes Services. `getUrl` is purely template-based — set `urlTemplate` to match your existing routing setup (ingress, gateway, or DNS).
+* Pod resource requests and limits are fixed (250m / 256Mi requests, 1 CPU / 1Gi limits). Set `image` if you need a different runtime; CPU/memory are not yet configurable.
+* Pods use `restartPolicy: Never`. If the container exits, the sandbox is gone — create a new one.
+* `compute.sandbox.list()` only scans the namespace configured on the provider; it does not enumerate across namespaces.

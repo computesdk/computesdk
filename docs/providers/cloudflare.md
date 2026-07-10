@@ -1,4 +1,25 @@
 ---
+description: >-
+  Install, configure, and use the Cloudflare provider for ComputeSDK to run
+  sandboxes on Cloudflare's edge network.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

@@ -1,4 +1,25 @@
 ---
+description: >-
+  Set up the Vercel provider for ComputeSDK, configure project credentials or
+  OIDC auth, and create sandboxes to run commands.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

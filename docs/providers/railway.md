@@ -1,3 +1,27 @@
+---
+description: >-
+  Railway provider for ComputeSDK — run commands in Railway Sandboxes, ephemeral
+  compute environments backed by the Railway platform.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Railway
 
 Railway provider for ComputeSDK — run commands in [Railway Sandboxes](https://docs.railway.com/sandboxes), ephemeral compute environments backed by the Railway platform.
@@ -53,17 +77,17 @@ interface RailwayConfig {
 
 ### Supported Operations
 
-| Method | Supported | Notes |
-| --- | --- | --- |
-| `create` | ✅ | Creates a Railway sandbox. Honors `envs`, `idleTimeoutMinutes`, and `networkIsolation` create options. |
-| `getById` | ✅ | Returns `null` when the sandbox is not found. |
-| `list` | ✅ | Connects to each listed sandbox; unreachable ones are dropped. |
-| `destroy` | ✅ | Best-effort; ignores already-destroyed / unreachable sandboxes. |
-| `runCommand` | ✅ | Runs via Railway's `sandbox.exec`. A signal-terminated command reports exit code `-1`. |
-| `getInfo` | ✅ | |
-| `getUrl` | ❌ | Throws — Railway sandboxes cannot expose ports / public URLs. Use sandbox-to-sandbox networking within a Railway environment instead. |
-| `filesystem` | ✅ | Implemented over the shell (`base64`, `ls -la`, `mkdir -p`, `rm -rf`, etc.). |
+| Method       | Supported | Notes                                                                                                                                 |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Creates a Railway sandbox. Honors `envs`, `idleTimeoutMinutes`, and `networkIsolation` create options.                                |
+| `getById`    | ✅         | Returns `null` when the sandbox is not found.                                                                                         |
+| `list`       | ✅         | Connects to each listed sandbox; unreachable ones are dropped.                                                                        |
+| `destroy`    | ✅         | Best-effort; ignores already-destroyed / unreachable sandboxes.                                                                       |
+| `runCommand` | ✅         | Runs via Railway's `sandbox.exec`. A signal-terminated command reports exit code `-1`.                                                |
+| `getInfo`    | ✅         |                                                                                                                                       |
+| `getUrl`     | ❌         | Throws — Railway sandboxes cannot expose ports / public URLs. Use sandbox-to-sandbox networking within a Railway environment instead. |
+| `filesystem` | ✅         | Implemented over the shell (`base64`, `ls -la`, `mkdir -p`, `rm -rf`, etc.).                                                          |
 
 ### Notes
 
-- Railway has no dedicated filesystem or port-exposure API, so `getUrl` throws and filesystem operations are shell-backed.
+* Railway has no dedicated filesystem or port-exposure API, so `getUrl` throws and filesystem operations are shell-backed.

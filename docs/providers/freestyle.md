@@ -1,7 +1,30 @@
+---
+description: >-
+  Set up the Freestyle provider for ComputeSDK, configure your API key, and
+  create sandboxes to run commands.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Freestyle
 
 Freestyle provider for ComputeSDK
-
 
 ## Installation & Setup
 
@@ -14,7 +37,6 @@ Add your Freestyle credentials to a `.env` file:
 ```bash
 FREESTYLE_API_KEY=your_freestyle_api_key
 ```
-
 
 ## Usage
 
@@ -35,7 +57,6 @@ console.log(result.stdout); // "Hello from Freestyle!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

@@ -2,6 +2,24 @@
 description: >-
   Use Blaxel with ComputeSDK to create sandboxes with API key and workspace
   authentication, and configure image, region, memory, and exposed ports.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

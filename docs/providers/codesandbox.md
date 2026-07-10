@@ -1,4 +1,25 @@
 ---
+description: >-
+  Install and use the CodeSandbox provider for ComputeSDK to create sandboxes
+  and run commands in CodeSandbox environments.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

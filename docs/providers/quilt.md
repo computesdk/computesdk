@@ -1,3 +1,28 @@
+---
+description: >-
+  Quilt provider for ComputeSDK — tenant-scoped Linux sandboxes with exec,
+  published HTTP/WebSocket services, shell-backed filesystem operations, and
+  snapshots.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Quilt
 
 Quilt provider for ComputeSDK — tenant-scoped Linux sandboxes with exec, published HTTP/WebSocket services, shell-backed filesystem operations, and snapshots.
@@ -67,19 +92,19 @@ interface QuiltConfig {
 
 ### Supported Operations
 
-| Method | Supported | Notes |
-| --- | --- | --- |
-| `create` | ✅ | Creates a container; pass `snapshotId` in create options to clone from a snapshot instead. |
-| `getById` | ✅ | Returns `null` for a missing container. |
-| `list` | ✅ | Lists tenant containers (paginated). |
-| `destroy` | ✅ | Deletes the container; a no-op if it no longer exists. |
-| `runCommand` | ✅ | Synchronous exec via Quilt's `/exec` API. A timed-out command reports exit code `124`. |
-| `getInfo` | ✅ | |
-| `getUrl` | ✅ | Creates (or reuses) a published service. Supports `http`/`https` and `ws`/`wss` protocols. |
-| `filesystem` | ✅ | Implemented over exec (`base64`, `ls -la`, `mkdir -p`, `rm -rf`, etc.). |
-| `snapshot.create` / `list` / `delete` | ✅ | Requires `tenantId`. Snapshots are created crash-consistent with volumes excluded. |
+| Method                                | Supported | Notes                                                                                      |
+| ------------------------------------- | --------- | ------------------------------------------------------------------------------------------ |
+| `create`                              | ✅         | Creates a container; pass `snapshotId` in create options to clone from a snapshot instead. |
+| `getById`                             | ✅         | Returns `null` for a missing container.                                                    |
+| `list`                                | ✅         | Lists tenant containers (paginated).                                                       |
+| `destroy`                             | ✅         | Deletes the container; a no-op if it no longer exists.                                     |
+| `runCommand`                          | ✅         | Synchronous exec via Quilt's `/exec` API. A timed-out command reports exit code `124`.     |
+| `getInfo`                             | ✅         |                                                                                            |
+| `getUrl`                              | ✅         | Creates (or reuses) a published service. Supports `http`/`https` and `ws`/`wss` protocols. |
+| `filesystem`                          | ✅         | Implemented over exec (`base64`, `ls -la`, `mkdir -p`, `rm -rf`, etc.).                    |
+| `snapshot.create` / `list` / `delete` | ✅         | Requires `tenantId`. Snapshots are created crash-consistent with volumes excluded.         |
 
 ### Notes
 
-- A base URL and at least one credential (`apiKey` or `accessToken`) are required; the provider throws a descriptive error if either is missing.
-- Snapshot operations (and cloning via `create({ snapshotId })`) require `tenantId`, sent as the `X-Tenant-Id` header.
+* A base URL and at least one credential (`apiKey` or `accessToken`) are required; the provider throws a descriptive error if either is missing.
+* Snapshot operations (and cloning via `create({ snapshotId })`) require `tenantId`, sent as the `X-Tenant-Id` header.

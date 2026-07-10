@@ -1,4 +1,25 @@
 ---
+description: >-
+  Set up the Upstash provider for ComputeSDK, configure your API key, and create
+  default or ephemeral boxes to run commands.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 tags:
   - tag: benchmarked
     primary: true

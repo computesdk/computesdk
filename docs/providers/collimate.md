@@ -1,3 +1,27 @@
+---
+description: >-
+  Install and use the Collimate provider for ComputeSDK, including the required
+  template ID for creating and running sandboxes.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Collimate
 
 Collimate provider for ComputeSDK.
@@ -56,18 +80,18 @@ interface CollimateConfig {
 
 ### Supported Operations
 
-| Method | Supported | Notes |
-| --- | --- | --- |
-| `create` | ✅ | Requires a `templateId` from config or create options. |
-| `getById` | ✅ | Returns `null` when the session no longer exists. |
-| `list` | ✅ | Lists sessions visible to the API key. |
-| `destroy` | ✅ | Deletes the session. |
-| `runCommand` | ✅ | Executes via the Collimate exec API (`bash -lc`). |
-| `getInfo` | ✅ | |
-| `getUrl` | ❌ | Throws — sandboxes are accessed through the exec API, not a per-port public URL. |
-| `filesystem` | ✅ | Implemented against the exec API (`writeFile` uploads file specs; reads/dirs use shell commands). |
+| Method       | Supported | Notes                                                                                             |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Requires a `templateId` from config or create options.                                            |
+| `getById`    | ✅         | Returns `null` when the session no longer exists.                                                 |
+| `list`       | ✅         | Lists sessions visible to the API key.                                                            |
+| `destroy`    | ✅         | Deletes the session.                                                                              |
+| `runCommand` | ✅         | Executes via the Collimate exec API (`bash -lc`).                                                 |
+| `getInfo`    | ✅         |                                                                                                   |
+| `getUrl`     | ❌         | Throws — sandboxes are accessed through the exec API, not a per-port public URL.                  |
+| `filesystem` | ✅         | Implemented against the exec API (`writeFile` uploads file specs; reads/dirs use shell commands). |
 
 ### Notes
 
-- `timeout` is expressed in **seconds** (default 900) and is converted to milliseconds internally.
-- `getUrl` is not supported and throws for the requested port.
+* `timeout` is expressed in **seconds** (default 900) and is converted to milliseconds internally.
+* `getUrl` is not supported and throws for the requested port.
