@@ -16,9 +16,13 @@ Create a new compute sandbox instance.
 
 - `options` (CreateSandboxOptions, optional): Configuration options for sandbox creation
   - `timeout` (number, optional): Sandbox execution timeout in milliseconds
-  - `templateId` (string, optional): Provider-specific template or image identifier
+  - `templateId` (string, optional): Provider-agnostic template or image identifier to boot from
+  - `snapshotId` (string, optional): Snapshot ID to restore from; each provider maps this to its native concept (E2B template, Daytona snapshot, Modal image, etc.)
   - `metadata` (Record<string, any>, optional): Custom metadata to attach to the sandbox
   - `envs` (Record<string, string>, optional): Environment variables to set in the sandbox
+  - `signal` (AbortSignal, optional): Cancels sandbox creation and cleans up an orphaned sandbox if the signal aborts
+  - `name`, `namespace`, `directory` (string, optional): Provider-specific naming/placement hints
+  - Additional provider-specific properties are passed through (e.g. `domain` for E2B)
 
 **Returns:** `Promise<Sandbox>` - New sandbox instance ready for code execution and commands
 
@@ -32,10 +36,16 @@ Create a new compute sandbox instance.
 **CreateSandboxOptions interface:**
 ```typescript
 {
-  timeout?: number;               // Execution timeout in milliseconds
-  templateId?: string;            // Provider template/image identifier
-  metadata?: Record<string, any>; // Custom metadata
-  envs?: Record<string, string>;  // Environment variables
+  timeout?: number;                // Execution timeout in milliseconds
+  templateId?: string;             // Provider template/image identifier
+  snapshotId?: string;             // Snapshot to restore from
+  metadata?: Record<string, any>;  // Custom metadata
+  envs?: Record<string, string>;   // Environment variables
+  signal?: AbortSignal;            // Cancel creation / clean up orphaned sandbox
+  name?: string;                   // Provider-specific name
+  namespace?: string;              // Provider-specific namespace
+  directory?: string;              // Provider-specific working directory
+  [key: string]: any;              // Provider-specific properties
 }
 ```
 

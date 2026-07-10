@@ -278,7 +278,7 @@ try {
 
 **Notes:**
 - Returns a publicly accessible URL that routes to the specified port in your sandbox
-- URL construction is instantaneous (no network calls) - the URL is available immediately
+- Whether a network call is needed depends on the provider — some construct the URL synchronously from the sandbox host (e.g. E2B), while others resolve it via an API call (e.g. Modal tunnels, Daytona preview links). Always `await` the result
 - The service must be running on the specified port for the URL to be accessible
 
 <br/>
