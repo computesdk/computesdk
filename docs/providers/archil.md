@@ -27,6 +27,8 @@ tags:
 
 # Archil
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/archil/" %}
+
 Archil provider for ComputeSDK
 
 ## Installation & Setup
