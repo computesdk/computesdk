@@ -1,4 +1,7 @@
 ---
+description: >-
+  Use Archil with ComputeSDK to run commands against an existing disk with API
+  key auth, region config, and exec-only container sessions.
 tags:
   - tag: benchmarked
     primary: true

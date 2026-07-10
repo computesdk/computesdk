@@ -1,4 +1,7 @@
 ---
+description: >-
+  Use the Cloud Run provider for ComputeSDK in remote or direct mode, with
+  ephemeral or stateful sandboxes, gateway auth, and sandbox CLI configuration.
 tags:
   - tag: benchmarked
     primary: true

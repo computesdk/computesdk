@@ -1,7 +1,12 @@
+---
+description: >-
+  Use Agentuity with ComputeSDK to create sandboxes, authenticate with an SDK
+  key, and configure runtime, region, and timeout settings.
+---
+
 # Agentuity
 
 Agentuity provider for ComputeSDK
-
 
 ## Installation & Setup
 
@@ -14,7 +19,6 @@ Add your Agentuity credentials to a `.env` file:
 ```bash
 AGENTUITY_SDK_KEY=your_agentuity_sdk_key
 ```
-
 
 ## Usage
 
@@ -35,7 +39,6 @@ console.log(result.stdout); // "Hello from Agentuity!"
 // Clean up
 await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 

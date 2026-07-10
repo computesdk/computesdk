@@ -1,3 +1,9 @@
+---
+description: >-
+  Install and use the AWS Bedrock AgentCore provider for ComputeSDK with AWS
+  credentials, regional config, session-based sandboxes, and known limitations.
+---
+
 # AWS Bedrock AgentCore
 
 [AWS Bedrock AgentCore Code Interpreter](https://docs.aws.amazon.com/bedrock-agentcore/) provider for [ComputeSDK](../) — secure, fully-managed, session-based sandboxes for running code and shell commands, with no infrastructure to provision.
