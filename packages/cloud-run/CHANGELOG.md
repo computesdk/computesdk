@@ -1,5 +1,11 @@
 # @computesdk/cloud-run
 
+## 0.1.6
+
+### Patch Changes
+
+- 028d47f: Add an explicit Cloud Run execution mode option with ephemeral `sandbox do` execution as the default and opt-in stateful `sandbox run`/`exec`/`delete` sessions.
+
 ## 0.1.5
 
 ### Patch Changes
