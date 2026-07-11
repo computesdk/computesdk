@@ -10,7 +10,7 @@
 import { Sandbox, SandboxNotFoundError } from 'railway';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, RunCommandOptions, SandboxInfo } from '@computesdk/provider';
+import type { CommandResult, RunCommandOptions, SandboxInfo, CreateTemplateOptions } from '@computesdk/provider';
 import type { CreateSandboxOptions, FileEntry } from 'computesdk';
 
 type RailwaySandbox = Sandbox;
@@ -285,6 +285,150 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
       },
 
       getInstance: (sandbox: RailwaySandbox): RailwaySandbox => sandbox,
+    },
+
+    template: {
+      create: async (config: RailwayConfig, options: CreateTemplateOptions) => {
+        const client = resolveClientOptions(config);
+
+        // Mode 1: Capture from running sandbox
+        // Railway supports checkpointing running sandboxes via sandbox.checkpoint(name).
+        if (options.from) {
+          try {
+            const sandbox = await Sandbox.connect(options.from, client);
+            const checkpoint = await sandbox.checkpoint(options.name);
+            return {
+              id: checkpoint.id,
+              provider: 'railway',
+              name: checkpoint.key,
+              createdAt: new Date(checkpoint.createdAt),
+              status: 'active' as const,
+              metadata: {
+                ...options.metadata,
+                source: 'capture',
+                sandboxId: options.from,
+                checkpointId: checkpoint.id,
+              },
+            };
+          } catch (error) {
+            throw new Error(
+              `Failed to capture Railway template from sandbox: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+
+        // Mode 2: Build from spec using Sandbox.template() builder.
+        // Railway's template builder creates immutable base recipes from shell
+        // commands, apt packages, env vars, and workdir — not from raw
+        // Dockerfiles. We translate Dockerfile instructions where possible.
+        try {
+          let template = Sandbox.template();
+
+          if (options.dockerfile) {
+            const lines = options.dockerfile
+              .split('\n')
+              .map((l) => l.trim())
+              .filter((l) => l && !l.startsWith('#'));
+
+            const collectedEnv: Record<string, string> = {};
+
+            for (const line of lines) {
+              if (/^FROM\s+/i.test(line)) {
+                // Railway's template builder does not support custom base
+                // images (FROM). The base is Railway's default; FROM is
+                // acknowledged but cannot be applied.
+                continue;
+              } else if (/^RUN\s+/i.test(line)) {
+                template = template.run(line.replace(/^RUN\s+/i, '').trim());
+              } else if (/^ENV\s+/i.test(line)) {
+                const envPart = line.replace(/^ENV\s+/i, '').trim();
+                // ENV supports both KEY=VALUE and KEY VALUE syntax
+                const eqMatch = envPart.match(/^(\S+)=(.*)$/);
+                if (eqMatch) {
+                  collectedEnv[eqMatch[1]] = eqMatch[2].replace(/^["']|["']$/g, '');
+                } else {
+                  const parts = envPart.split(/\s+/);
+                  if (parts.length >= 2) {
+                    collectedEnv[parts[0]] = parts.slice(1).join(' ');
+                  }
+                }
+              } else if (/^WORKDIR\s+/i.test(line)) {
+                template = template.workdir(line.replace(/^WORKDIR\s+/i, '').trim());
+              }
+              // COPY, ADD, EXPOSE, CMD, ENTRYPOINT etc. are not supported by
+              // Railway's template builder and are silently skipped.
+            }
+
+            if (Object.keys(collectedEnv).length > 0) {
+              template = template.withEnv(collectedEnv);
+            }
+          }
+
+          // Apply envs from options (layered over any Dockerfile-parsed env)
+          if (options.envs) {
+            template = template.withEnv(options.envs);
+          }
+
+          // Apply start command as a build step
+          if (options.startCommand) {
+            template = template.run(options.startCommand);
+          }
+
+          // Build the template
+          const builtTemplate = await template.build({
+            token: client.token,
+            environmentId: client.environmentId,
+          });
+
+          return {
+            id: options.name,
+            provider: 'railway',
+            name: options.name,
+            createdAt: new Date(),
+            status: 'active' as const,
+            metadata: {
+              ...options.metadata,
+              source: 'build',
+              template: builtTemplate,
+            },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create Railway template: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      list: async (config: RailwayConfig) => {
+        const client = resolveClientOptions(config);
+        try {
+          const checkpoints = await Sandbox.checkpoints(client);
+          return checkpoints.map((cp) => ({
+            id: cp.id,
+            provider: 'railway',
+            name: cp.key,
+            createdAt: new Date(cp.createdAt),
+            status: 'active' as const,
+            metadata: {
+              checkpointId: cp.id,
+              environmentId: cp.environmentId,
+            },
+          }));
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: RailwayConfig, templateId: string) => {
+        const client = resolveClientOptions(config);
+        try {
+          await Sandbox.deleteCheckpoint(templateId, client);
+        } catch (error) {
+          throw new Error(
+            `Failed to delete Railway template: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
     },
   },
 });

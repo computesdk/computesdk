@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -349,6 +349,45 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       getInstance: (sandbox: NamespaceSandbox): NamespaceSandbox => sandbox,
-    }
+    },
+
+    template: {
+      create: async (_config: NamespaceConfig, options: CreateTemplateOptions) => {
+        // Mode 1: Capture from running sandbox
+        if (options.from) {
+          throw new Error(
+            'Namespace does not support capturing templates from running sandboxes. ' +
+              'Namespace instances do not have a snapshot or checkpoint API. ' +
+              'To create a custom base image, build it locally and upload with ' +
+              '`nsc base-image upload`, then reference it via the `image` option ' +
+              'when creating a sandbox.'
+          );
+        }
+
+        // Mode 2: Build from spec
+        // Namespace supports custom base images via its container registry, but
+        // building and uploading images is only available through the `nsc` CLI
+        // (`nsc base-image upload`), not through the HTTP API used here.
+        throw new Error(
+          'Namespace does not support building templates from spec via the HTTP API. ' +
+            'To create a custom base image, build it locally and upload with ' +
+            '`nsc base-image upload <image-name>`, then reference it via the `image` ' +
+            'option when creating a sandbox (e.g. namespace({ ... }).sandbox.create({ image: "my-image" })).'
+        );
+      },
+
+      list: async (_config: NamespaceConfig) => {
+        // Namespace's HTTP API does not expose a registry image listing endpoint.
+        // Use `nsc base-image list` via the CLI to list available base images.
+        return [];
+      },
+
+      delete: async (_config: NamespaceConfig, _templateId: string) => {
+        throw new Error(
+          'Namespace does not support deleting registry images via the HTTP API. ' +
+            'Use the `nsc` CLI to manage base images: `nsc base-image delete <image-name>`.'
+        );
+      },
+    },
   }
 });

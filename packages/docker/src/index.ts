@@ -5,8 +5,10 @@ import type {
   CommandResult,
   RunCommandOptions,
   CreateSandboxOptions,
+  CreateTemplateOptions,
   SandboxInfo,
   FileEntry,
+  TemplateInfo,
 } from '@computesdk/provider';
 
 import { defaultDockerConfig } from './types/types';
@@ -303,6 +305,110 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
       },
 
       getInstance: (handle: DockerSandboxHandle): DockerSandboxHandle => handle,
+    },
+
+    template: {
+      create: async (config: DockerConfig, options: CreateTemplateOptions): Promise<TemplateInfo> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        const tag = 'latest';
+
+        // Mode 1: Capture from sandbox
+        if (options.from) {
+          const container = docker.getContainer(options.from);
+          const result = await container.commit({ repo: options.name, tag } as any);
+          const imageId = (result as any)?.Id ?? `${options.name}:${tag}`;
+          return {
+            id: imageId,
+            provider: PROVIDER,
+            name: options.name,
+            createdAt: new Date(),
+            metadata: {
+              ...options.metadata,
+              source: 'capture',
+              from: options.from,
+              tag,
+            },
+          };
+        }
+
+        // Mode 2: Build from spec
+        let context: string | NodeJS.ReadableStream;
+        if (options.dockerfile) {
+          context = options.dockerfile;
+        } else if (options.baseImage) {
+          // Build a minimal Dockerfile that FROM the base image
+          const fromLine = `FROM ${options.baseImage}\n`;
+          const envLines = options.envs
+            ? Object.entries(options.envs).map(([k, v]) => `ENV ${k}=${v}`).join('\n') + '\n'
+            : '';
+          const cmdLine = options.startCommand
+            ? `CMD ${JSON.stringify(options.startCommand)}\n`
+            : '';
+          context = fromLine + envLines + cmdLine;
+        } else {
+          throw new Error('Docker template create requires either `from`, `dockerfile`, or `baseImage`.');
+        }
+
+        const buildOpts: Record<string, any> = { t: `${options.name}:${tag}` };
+        if (options.cpuCount) buildOpts.cpushares = options.cpuCount;
+        if (options.memoryMB) buildOpts.memory = options.memoryMB * 1024 * 1024;
+
+        const stream = await docker.buildImage(context as any, buildOpts as any);
+        await new Promise<void>((resolve, reject) => {
+          (docker as any).modem.followProgress(stream, (err: any) => (err ? reject(err) : resolve()));
+        });
+
+        const images = (await (docker.listImages as any)({ filters: { reference: [`${options.name}:${tag}`] } })) as Array<{ Id: string }>;
+        const imageId = images[0]?.Id ?? `${options.name}:${tag}`;
+        return {
+          id: imageId,
+          provider: PROVIDER,
+          name: options.name,
+          createdAt: new Date(),
+          metadata: {
+            ...options.metadata,
+            source: 'build',
+            tag,
+            baseImage: options.baseImage,
+          },
+        };
+      },
+
+      list: async (config: DockerConfig): Promise<TemplateInfo[]> => {
+        const docker = new Docker((config || defaultDockerConfig).connection as any);
+        try {
+          const images = await docker.listImages();
+          return images.map(img => {
+            const repoTags = img.RepoTags || [];
+            const primaryTag = repoTags[0] || img.Id;
+            const name = primaryTag.includes(':') ? primaryTag.split(':')[0] : primaryTag;
+            return {
+              id: img.Id,
+              provider: PROVIDER,
+              name,
+              createdAt: img.Created ? new Date(img.Created * 1000) : new Date(),
+              metadata: {
+                repoTags,
+                size: img.Size,
+                virtualSize: img.VirtualSize,
+              },
+            };
+          });
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: DockerConfig, templateId: string): Promise<void> => {
+        const docker = new Docker((config || defaultDockerConfig).connection as any);
+        try {
+          const image = docker.getImage(templateId);
+          await image.remove({ force: true } as any);
+        } catch {
+          // Ignore if already removed or not found
+        }
+      },
     },
   },
 });

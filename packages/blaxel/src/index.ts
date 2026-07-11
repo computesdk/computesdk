@@ -4,10 +4,10 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance, initialize } from '@blaxel/core';
+import { SandboxInstance, ImageInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -420,23 +420,82 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			}
 		},
 
-		// Templates in Blaxel are pre-configured images
+		// Templates in Blaxel are built via the ImageInstance builder API and deployed as sandboxes
 		template: {
-			create: async (_config: BlaxelConfig, _options: { name: string }) => {
-				throw new Error(
-					`Blaxel templates must be created via the Blaxel dashboard or CLI. Use image in sandbox.create() to specify a base image.`
-				);
+			create: async (config: BlaxelConfig, options: CreateTemplateOptions) => {
+				try {
+					initializeBlaxel(config);
+
+					// Mode 1: Capture from running sandbox - not supported by Blaxel
+					if (options.from) {
+						throw new Error(
+							`Blaxel does not support capture-from-sandbox for templates. Use the ImageInstance builder instead (provide dockerfile and/or baseImage).`
+						);
+					}
+
+					// Mode 2: Build from spec (Dockerfile content or base image)
+					const baseImage = options.baseImage || 'ubuntu:22.04';
+					let image = ImageInstance.fromRegistry(baseImage);
+
+					// If dockerfile content is provided, run it as shell commands
+					if (options.dockerfile) {
+						const commands = options.dockerfile
+							.split('\n')
+							.map(line => line.trim())
+							.filter(line => line.length > 0 && !line.startsWith('#'));
+						if (commands.length > 0) {
+							image = image.runCommands(...commands);
+						}
+					}
+
+					// Set environment variables
+					if (options.envs && Object.keys(options.envs).length > 0) {
+						image = image.env(options.envs);
+					}
+
+					// Set start command as entrypoint if provided
+					if (options.startCommand) {
+						image = image.entrypoint(options.startCommand);
+					}
+
+					// Build and deploy the image as a sandbox
+					const buildOptions: { name: string; memory?: number } = { name: options.name };
+					if (options.memoryMB) {
+						buildOptions.memory = options.memoryMB;
+					}
+
+					const sandbox = await image.build(buildOptions as any);
+
+					return {
+						id: (sandbox as any)?.metadata?.name || options.name,
+						provider: 'blaxel',
+						name: options.name,
+						createdAt: new Date(),
+						status: 'active' as const,
+						metadata: {
+							...options.metadata,
+							source: 'build',
+							baseImage,
+							sandboxName: (sandbox as any)?.metadata?.name,
+						},
+					};
+				} catch (error) {
+					throw new Error(
+						`Failed to create Blaxel template: ${error instanceof Error ? error.message : String(error)}`
+					);
+				}
 			},
 
 			list: async (_config: BlaxelConfig) => {
-				throw new Error(
-					`Blaxel provider does not support listing templates via API. Use the dashboard to manage templates.`
-				);
+				// @blaxel/core does not expose an image/template listing API
+				return [];
 			},
 
 			delete: async (_config: BlaxelConfig, _templateId: string) => {
+				// @blaxel/core does not expose an image/template delete API via ImageInstance.
+				// Templates are deployed as sandboxes; use sandbox.destroy() to remove them.
 				throw new Error(
-					`Blaxel templates must be deleted via the Blaxel dashboard or CLI.`
+					`Blaxel does not support deleting templates via the ImageInstance API. Templates are deployed as sandboxes - use sandbox.destroy() or the Blaxel dashboard/CLI to remove the sandbox.`
 				);
 			}
 		}

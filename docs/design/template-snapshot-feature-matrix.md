@@ -2,21 +2,108 @@
 
 ## Background
 
-ComputeSDK currently has two separate optional resource managers on the `Provider` interface:
+ComputeSDK now has a unified `template` primitive that collapses the previous separate `template` and `snapshot` managers into one. `compute.template` is exposed on the compute singleton with `create`, `list`, and `delete` methods.
 
-- `ProviderTemplateManager` — `create`, `list`, `delete` for templates
-- `ProviderSnapshotManager` — `create`, `list`, `delete` for snapshots
-
-Across the three primary providers (E2B, Modal, Daytona), templates and snapshots are the **same concept**: a built, reusable artifact that you spawn compute instances from. E2B calls them "templates," Modal calls them "images," Daytona calls them "snapshots." The current codebase demonstrates this duplication — E2B and Daytona's `template.list`/`delete` and `snapshot.list`/`delete` call the exact same native APIs.
-
-**Proposal:** Unify `template` and `snapshot` into a single `template` primitive. `template.create()` accepts a discriminated union:
-
+`template.create()` accepts a discriminated union:
 - `{ dockerfile, baseImage, name }` — build from spec
 - `{ from: sandboxId, name }` — capture from a running instance (what was "snapshot")
 
-This document tracks the current state of each provider and what work is needed.
+The old `compute.snapshot` API remains for backwards compatibility.
+
+This document tracks the implementation status of each provider after the deep audit.
 
 ---
+
+## Implementation Status (Post-Audit)
+
+### Tier 1: Build-from-spec + Capture-from-sandbox
+
+Both modes implemented and working.
+
+| Provider | Build from spec | Capture from sandbox | Native API |
+|---|---|---|---|
+| **E2B** | `Template().fromDockerfile().build()` | `sandbox.createSnapshot()` | Template builder + snapshot |
+| **Modal** | `images.fromRegistry().dockerfileCommands().build()` | `sandbox.snapshotFilesystem()` | Image service + filesystem snapshot |
+| **Daytona** | `Image.base().dockerfileCommands()` + `snapshot.create()` | `snapshot.create({ workspaceId })` | Image class + snapshot service |
+| **Docker** | `docker.buildImage()` from Dockerfile | `container.commit()` | dockerode build + commit |
+| **Runloop** | `blueprints.create({ dockerfile })` | `devboxes.snapshotDisk()` | Blueprint + disk snapshot |
+| **Blaxel** | `ImageInstance.fromRegistry().aptInstall().build()` | Not supported (throws) | ImageInstance builder API |
+| **Lelantos** | E2B-compatible `Template.build()` | E2B-compatible `createSnapshot()` | E2B SDK (forked) |
+| **Railway** | `Sandbox.template()` builder | `sandbox.checkpoint()` | Template builder + checkpoints |
+
+### Tier 2: Capture-from-sandbox only
+
+Can snapshot a running instance but cannot build from a Dockerfile spec.
+
+| Provider | Capture mechanism | Notes |
+|---|---|---|
+| **CodeSandbox** | `sandbox.hibernate()` | Hibernate/resume is the snapshot mechanism |
+| **CreateOS** | `sandbox.pause()` + `fork()` | Paused sandbox IS the template |
+| **Lightning** | `sandbox.createSnapshot()` | Full snapshot lifecycle |
+| **Tensorlake** | `sandbox.checkpoint()` | Memory + filesystem checkpoint types |
+| **Isorun** | `sandbox.snapshot()` | Full snapshot lifecycle |
+| **Quilt** | `POST /api/containers/{id}/snapshot` | Operation-polling snapshot |
+| **Vercel** | `sandbox.snapshot()` | Filesystem snapshot |
+| **Upstash** | `box.snapshot()` | Snapshot + `Box.fromSnapshot()` restore |
+| **Tenki** | `client.createSnapshotAndWait()` | Pause/resume/snapshot |
+| **Freestyle** | `client.vms.snapshot()` | VM snapshot (used internally for provisioning) |
+| **Agentuity** | `POST /sandbox/{id}/snapshot` | REST API snapshot |
+
+### Tier 3: Build-from-spec only
+
+Can build images/templates from a Dockerfile but cannot capture a running instance.
+
+| Provider | Build mechanism | Notes |
+|---|---|---|
+| **HopX** | `Template.createTemplate()` + `Template.build()` | Full template builder |
+| **Beam** | `Image.fromRegistry().build()` | Image build API |
+| **Superserve** | `Template.create()` with build spec | Template with `from` + `steps` |
+| **Leap0** | `TemplatesClient.create()` | Full template + snapshot clients |
+| **Declaw** | CLI-based (SDK partial) | `sandbox.createSnapshot()` for capture |
+
+### Tier 4: CLI-only or limited support
+
+Platform supports templates/images but only via CLI, not programmatically exposed through ComputeSDK.
+
+| Provider | Platform capability | ComputeSDK status | Notes |
+|---|---|---|---|
+| **Namespace** | Container registry, `nsc base-image upload`, Docker buildx | Throws with CLI guidance | API doesn't expose image build/upload |
+| **Cloud Run** | Cloud Build, container templates | Pass-through `config.template` string | No template CRUD via API |
+| **Northflank** | Build service from Dockerfile | Not implemented | Build via Northflank dashboard/CLI |
+| **K8s** | Container images, volume snapshots | Not implemented | Images serve as templates |
+| **Cloudflare** | Custom Dockerfile support | Not implemented | Build-time Dockerfile, no runtime API |
+| **Collimate** | Template ID required at create time | Pass-through string | No template CRUD |
+
+### Not applicable
+
+No snapshot or template concept exists on the platform.
+
+| Provider | Reason |
+|---|---|
+| **AgentCore** | Ephemeral code interpreter sessions |
+| **Archil** | Exec-only with disk mount, no snapshot |
+| **Just-Bash** | Local bash execution, in-memory filesystem |
+| **Secure-Exec** | Local V8 isolates, no image concept |
+
+---
+
+## Summary
+
+**27 providers** now have template blocks implemented (up from 20 in the initial pass):
+
+- 8 with both build-from-spec and capture-from-sandbox
+- 11 with capture-from-sandbox only
+- 5 with build-from-spec only
+- 3 with CLI-only guidance (throws with instructions)
+
+**7 providers** where template/snapshot does not apply or is not yet exposed.
+
+## Next Steps
+
+1. **Investigate Cloudflare, Northflank, K8s** for programmatic image build APIs that could be wired up
+2. **Benchmark**: Add a `template-benchmark.ts` to the benchmarks repo measuring build time, capture time, and spawn-from-template TTI
+3. **Deprecate `compute.snapshot`**: Once `compute.template.create({ from: sandboxId })` is widely adopted, remove `compute.snapshot` from the singleton
+4. **Documentation**: Update README and ADD-PROVIDER.md with the unified template API guide
 
 ## Legend
 
