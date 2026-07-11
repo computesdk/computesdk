@@ -2,6 +2,7 @@ import { Freestyle, VmSpec, type Vm } from "freestyle-sandboxes";
 import { VmNodeJs } from "@freestyle-sh/with-nodejs";
 import { VmPython } from "@freestyle-sh/with-python";
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import type { CreateTemplateOptions } from "@computesdk/provider";
 
 export type { Freestyle as FreestyleSandbox } from "freestyle-sandboxes";
 
@@ -173,6 +174,51 @@ export const freestyle = defineProvider<FreestyleSandboxHandle, FreestyleConfig>
         },
         exists: async (handle, path) => handle.vm.fs.exists(path),
         remove: async (handle, path) => { await handle.vm.fs.remove(path, true); },
+      },
+    },
+
+    template: {
+      create: async (config: FreestyleConfig, options: CreateTemplateOptions) => {
+        const resolved = resolveConfig(config);
+        const client = new Freestyle({ apiKey: resolved.apiKey });
+
+        if (options.from) {
+          // Capture from running VM
+          const vmId = options.from.replace(/^freestyle-vm-/, '');
+          try {
+            const result = await (client.vms as any).snapshot({ vmId });
+            const snapshotId = result?.snapshotId || result?.id || String(result);
+            return {
+              id: snapshotId,
+              provider: 'freestyle',
+              name: options.name,
+              createdAt: new Date(),
+              metadata: { ...options.metadata, source: 'capture', vmId },
+            };
+          } catch (error) {
+            throw new Error(`Failed to create Freestyle template: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        throw new Error('Freestyle does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.');
+      },
+      list: async (config: FreestyleConfig) => {
+        const resolved = resolveConfig(config);
+        const client = new Freestyle({ apiKey: resolved.apiKey });
+        try {
+          const result = await (client.vms.snapshots as any).list?.();
+          const snapshots = result?.snapshots || result || [];
+          return (Array.isArray(snapshots) ? snapshots : []).map((s: Record<string, any>) => ({
+            id: s.snapshotId || s.id || 'unknown',
+            provider: 'freestyle',
+            name: s.name || s.snapshotId || 'unnamed',
+            createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
+            metadata: s,
+          }));
+        } catch { return []; }
+      },
+      delete: async (_config: FreestyleConfig, _templateId: string) => {
+        // Freestyle doesn't expose snapshot deletion in the SDK
       },
     },
   },

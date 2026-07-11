@@ -22,6 +22,7 @@ import type {
     FileEntry,
     RunCommandOptions,
 } from 'computesdk';
+import type { CreateTemplateOptions } from '@computesdk/provider';
 
 type RunCommandFn = (sandbox: AgentuityHandle, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
 
@@ -650,6 +651,57 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
             },
 
             getInstance: (sandbox: AgentuityHandle): AgentuityHandle => sandbox,
+        },
+
+        template: {
+            create: async (config: AgentuityConfig, options: CreateTemplateOptions) => {
+                if (!options.from) {
+                    throw new Error('Agentuity does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.');
+                }
+
+                const handle = {
+                    config,
+                    sandboxId: options.from,
+                } as unknown as AgentuityHandle;
+
+                try {
+                    const res = await agentuityFetch(handle, 'POST', `/sandbox/${options.from}/snapshot`, {
+                        name: options.name,
+                        ...(options.metadata ? { metadata: options.metadata } : {}),
+                    });
+                    if (!res.ok) {
+                        const text = await res.text().catch(() => '');
+                        throw new Error(`Agentuity: failed to create snapshot (${res.status}): ${text}`);
+                    }
+                    const result = unwrapResponse<{ snapshotId: string }>(await res.json());
+                    return {
+                        id: result.snapshotId,
+                        provider: 'agentuity',
+                        name: options.name,
+                        createdAt: new Date(),
+                        metadata: { ...options.metadata, source: 'capture', sandboxId: options.from },
+                    };
+                } catch (error) {
+                    throw new Error(`Failed to create Agentuity template: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            },
+            list: async (_config: AgentuityConfig) => {
+                // Agentuity doesn't have a snapshot listing API
+                return [];
+            },
+            delete: async (config: AgentuityConfig, templateId: string) => {
+                const handle = {
+                    config,
+                    sandboxId: '',
+                } as unknown as AgentuityHandle;
+                try {
+                    const res = await agentuityFetch(handle, 'DELETE', `/sandbox/snapshot/${templateId}`);
+                    if (!res.ok) {
+                        const text = await res.text().catch(() => '');
+                        throw new Error(`Agentuity: failed to delete snapshot (${res.status}): ${text}`);
+                    }
+                } catch { /* ignore */ }
+            },
         },
     },
 });
