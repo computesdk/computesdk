@@ -23,8 +23,8 @@ This doc proposes a unified design that fixes all three. Since there is zero ext
 - One authoring API with two levels of complexity: `bench()` for micro-benchmarks, `defineTask()`/`defineStep()` for multi-phase workloads. Both coexist in the same `*.bench.ts` files.
 - One execution path: the SDK's `runWorker()` handles concurrency, heartbeats, and flushing for both local and remote runs. The CLI does not reimplement worker logic.
 - One CLI: `bench` discovers files, loads entries, runs them locally or on the platform. No fork-and-reimplement.
-- Remote execution that actually runs remotely: bench files ship to the platform, the platform builds and runs them in sandboxes. No local Docker required for the default path.
-- The scale coordinator pattern in `computesdk/benchmarks/src/scale/sdk-coordinator.ts` is the reference implementation for what `--remote` should look like.
+- Remote execution that actually runs remotely: bench files ship to the first-party benchmark runner platform, which builds and runs them on its own compute. No local Docker required for the default path.
+- The scale coordinator pattern in `computesdk/benchmarks/src/scale/sdk-coordinator.ts` is the reference implementation for what `--platform` should look like.
 
 ## Authoring API
 
@@ -134,11 +134,13 @@ bench --platform
 bench --platform --total 500 --workers 4 --concurrency 10
 ```
 
-Renamed from `--remote` to `--platform` to accurately describe what it does: orchestrate the run on the ComputeSDK platform.
+Renamed from `--remote` to `--platform` to accurately describe what it does: ship benchmarks to the first-party benchmark runner platform for execution.
+
+The first-party benchmark runner platform is a hosted service that owns the entire benchmark lifecycle: receive files, build, run workers, aggregate, report. It has its own compute infrastructure (VMs/containers) for building and running benchmarks. It is not a ComputeSDK sandbox — ComputeSDK is a framework that connects to external sandbox providers (E2B, Modal, etc.). The benchmark platform is a separate product with its own compute capacity, purpose-built for running `*.bench.ts` workloads.
 
 1. CLI discovers and loads bench files (same as local).
-2. CLI ships the bench files + `package.json` + lockfile to the platform (see Remote Execution below).
-3. Platform builds the project on its own compute infrastructure (install deps, compile TS). Note: ComputeSDK is a framework that connects to sandbox providers (E2B, Modal, etc.), not a sandbox provider itself. The platform uses its own VM capacity — the same infrastructure it already uses to launch scale test workers.
+2. CLI ships the bench files + `package.json` + lockfile to the platform.
+3. Platform builds the project on its compute infrastructure (install deps, compile TS).
 4. Platform creates a benchmark run, plans workers, and spawns worker VMs from the build output.
 5. Each worker VM loads the bench files, claims a task range from the platform, and executes entries through the SDK's `runWorker()`:
    - Real concurrency via `mapPool(taskIndices, concurrency, ...)`
@@ -148,7 +150,23 @@ Renamed from `--remote` to `--platform` to accurately describe what it does: orc
 6. CLI polls progress and prints a TUI until all workers finish.
 7. Platform aggregates results; CLI prints final summary.
 
-The key change: the CLI does NOT fork local processes. It ships files to the platform, and the platform runs workers on its own VMs. The SDK's `runWorker()` is the single execution path for remote work.
+The key change: the CLI does NOT fork local processes. It ships files to the platform, and the platform runs workers on its own compute. The SDK's `runWorker()` is the single execution path for remote work. The CLI is a thin client: discover, ship, poll, report.
+
+### The first-party benchmark runner platform
+
+The `--platform` mode assumes a first-party benchmark runner platform — a hosted service that owns the entire benchmark lifecycle:
+
+1. **Receive** bench files + `package.json` from the CLI
+2. **Build** the project (install deps, compile TS) on its own compute
+3. **Run** worker VMs from the build output, each claiming tasks and executing entries
+4. **Aggregate** results across workers
+5. **Report** progress and final summary back to the CLI
+
+This is a separate product from ComputeSDK itself. ComputeSDK is a framework that connects to external sandbox providers (E2B, Modal, Vercel, etc.). The benchmark runner platform is a first-party service with its own compute infrastructure, purpose-built for running `*.bench.ts` workloads at scale.
+
+The existing `platform.computesdk.com` API (benchmark/run/worker coordination, result aggregation, artifact storage) is the foundation. The first-party runner adds build capability and managed worker execution on top of that coordination layer.
+
+The scale test infrastructure in `computesdk/benchmarks/src/scale` is the prototype: `start.ts` creates runs, launches VMs, and each VM runs a coordinator that claims work. The first-party platform productizes this flow — the CLI replaces `start.ts`, and the platform handles VM launch and coordination internally.
 
 ## Remote Execution: Ship Files vs Docker Image
 
@@ -164,15 +182,17 @@ Should `--platform` build a Docker image locally and push it, or should it ship 
 bench --platform
 ```
 
-The CLI packages the bench files, `package.json`, and lockfile, then uploads them to the platform. The platform builds the project on its own compute infrastructure (VM capacity it already uses for scale test workers) and spawns worker VMs from the build output.
+The CLI packages the bench files, `package.json`, and lockfile, then uploads them to the first-party benchmark runner platform. The platform builds the project on its own compute and spawns worker VMs from the build output.
+
+This is the natural fit for a first-party benchmark runner platform. If the platform's job is to run benchmarks, it should be able to build them too. The CLI is a thin client: package files, ship, poll for results.
 
 Why this is the right default:
 
 1. **No local Docker required.** The vitest mental model is "run a command, it works." Asking users to install Docker, authenticate to a registry, and wait for image builds breaks that.
 
-2. **Iteration speed.** Shipping TS files + installing deps on a platform VM is much faster than build -> push -> pull -> run, especially with cached `node_modules` layers on the platform.
+2. **Iteration speed.** Shipping TS files + installing deps on the platform is much faster than build -> push -> pull -> run, especially with cached `node_modules` on the platform side.
 
-3. **The platform already has compute capacity.** It launches VMs for scale tests today. The ship-files path reuses that infrastructure with a "build from source" step instead of a pre-built Docker image. No new infrastructure needed — just a new API endpoint.
+3. **The platform owns the lifecycle.** A first-party benchmark runner platform should handle building, running, and reporting as a unified pipeline. Ship-files makes the platform responsible for the build step, which is where it belongs — the platform controls the build environment, can cache builds across runs, and can reproduce builds.
 
 4. **The scale test is the exception, not the rule.** The existing `benchmarks/src/scale` Dockerfile exists because scale testing needs specific system-level access (provider SDKs, API keys, `/proc` access for metrics). Simple `bench()` micro-benchmarks just need Node.js and `npm install`. The default should optimize for the common case.
 
@@ -189,7 +209,7 @@ This mirrors the existing `benchmarks/src/scale` flow: build the image in CI, pu
 ### Platform build flow (ship-files path)
 
 ```
-CLI                          Platform API                    Build/Worker VMs
+CLI                          Benchmark Runner Platform           Compute
  |                               |                              |
  |  POST /benchmarks/:slug       |                              |
  |  POST /runs (totalTasks)      |                              |
@@ -210,7 +230,7 @@ CLI                          Platform API                    Build/Worker VMs
  |  <--- final summary ---------+                              |
 ```
 
-The `POST /runs/:id/build` endpoint is new. It tells the platform to take the uploaded artifact (bench files + package.json), build it on a VM, and spawn worker VMs from the result. This keeps the build logic on the platform side, where it can be cached, shared across workers, and reproduced.
+The `POST /runs/:id/build` endpoint is new. It tells the benchmark runner platform to take the uploaded artifact (bench files + package.json), build it on its compute, and spawn worker VMs from the result. The platform owns the build environment, can cache builds across runs, and can reproduce builds — this is a first-party capability of the benchmark runner, not a bolt-on.
 
 ### What about the existing scale coordinator?
 
@@ -225,7 +245,7 @@ Over time, `start.ts` can be replaced by `bench --platform --image` + a `benchma
 ```
 bench [run] [files...]     Run benchmarks (default subcommand)
 bench list [files...]      List discovered benchmarks without running
-bench --platform [files..] Run on the ComputeSDK platform
+bench --platform [files..] Run on the benchmark runner platform
 ```
 
 ### Flags
@@ -241,9 +261,9 @@ Local flags:
 
 Platform flags:
 ```
---platform               Run on the ComputeSDK platform
+--platform               Run on the benchmark runner platform
 --total <n>              Replications per benchmark function (default 100)
---workers <n>            Worker sandboxes to spawn (default 1)
+--workers <n>            Worker VMs to spawn (default 1)
 --concurrency <n>        Parallel task slots per worker (default 1)
 --participant <slug>     Participant identifier (default bench-cli)
 --slug <slug>            Benchmark slug (default derived from filename)
@@ -470,7 +490,7 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 
 ## Open Questions
 
-1. **Platform build endpoint.** Does the platform API already have a way to upload and build source files on a VM, or does `POST /runs/:id/build` need to be added? The existing `createWorkerArtifact` / `uploadWorkerArtifact` endpoints upload artifacts, but there is no "build from source" endpoint.
+1. **Platform build endpoint.** Does the benchmark runner platform already have a way to upload and build source files, or does `POST /runs/:id/build` need to be added? The existing `createWorkerArtifact` / `uploadWorkerArtifact` endpoints upload artifacts, but there is no "build from source" endpoint.
 
 2. **Worker VM base image.** When the platform builds bench files and spawns worker VMs, what base image do the workers use? A Node.js image with the bench CLI pre-installed? Or does the build step produce a self-contained bundle?
 
