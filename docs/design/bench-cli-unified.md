@@ -130,27 +130,28 @@ The local runner is the existing `runner.ts` from PR #636, extended to handle `d
 ### Remote mode (`--platform`)
 
 ```
-bench --platform
-bench --platform --total 500 --workers 4 --concurrency 10
+bench --platform --image ghcr.io/computesdk/scale-coordinator:latest
+bench --platform --image my-image --total 500 --workers 4 --concurrency 10
 ```
 
 Renamed from `--remote` to `--platform` to accurately describe what it does: ship benchmarks to the first-party benchmark runner platform for execution.
 
-The first-party benchmark runner platform is a hosted service that owns the entire benchmark lifecycle: receive files, build, run workers, aggregate, report. It has its own compute infrastructure (VMs/containers) for building and running benchmarks. It is not a ComputeSDK sandbox — ComputeSDK is a framework that connects to external sandbox providers (E2B, Modal, etc.). The benchmark platform is a separate product with its own compute capacity, purpose-built for running `*.bench.ts` workloads.
+The first-party benchmark runner platform is a hosted service that owns the entire benchmark lifecycle: receive work, run workers, aggregate, report. It has its own compute infrastructure (VMs/containers) for running benchmarks. It is not a ComputeSDK sandbox — ComputeSDK is a framework that connects to external sandbox providers (E2B, Modal, etc.). The benchmark platform is a separate product with its own compute capacity, purpose-built for running `*.bench.ts` workloads.
 
-1. CLI discovers and loads bench files (same as local).
-2. CLI ships the bench files + `package.json` + lockfile to the platform.
-3. Platform builds the project on its compute infrastructure (install deps, compile TS).
-4. Platform creates a benchmark run, plans workers, and spawns worker VMs from the build output.
-5. Each worker VM loads the bench files, claims a task range from the platform, and executes entries through the SDK's `runWorker()`:
+The initial release uses the Docker image path (the same pattern as `benchmarks/src/scale`): the user builds a Docker image containing the bench files + deps, the platform launches worker VMs from that image, each VM runs a coordinator that claims work and executes entries. A future release will add ship-files capability so users can skip the Docker build step.
+
+1. CLI discovers and loads bench files (same as local) — or the Docker image contains them.
+2. CLI creates a benchmark run on the platform, plans workers, and provides the image reference.
+3. Platform launches worker VMs from the image.
+4. Each worker VM loads the bench files, claims a task range from the platform, and executes entries through the SDK's `runWorker()`:
    - Real concurrency via `mapPool(taskIndices, concurrency, ...)`
    - Automatic heartbeats
    - Batched result flushing
    - Step-level concurrency barriers (`waitForStepReady`)
-6. CLI polls progress and prints a TUI until all workers finish.
-7. Platform aggregates results; CLI prints final summary.
+5. CLI polls progress and prints a TUI until all workers finish.
+6. Platform aggregates results; CLI prints final summary.
 
-The key change: the CLI does NOT fork local processes. It ships files to the platform, and the platform runs workers on its own compute. The SDK's `runWorker()` is the single execution path for remote work. The CLI is a thin client: discover, ship, poll, report.
+The key change: the CLI does NOT fork local processes. The platform runs workers on its own compute. The SDK's `runWorker()` is the single execution path for remote work. The CLI replaces `start.ts` from the scale test repo.
 
 ### The first-party benchmark runner platform
 
@@ -174,37 +175,46 @@ The scale test infrastructure in `computesdk/benchmarks/src/scale` is the protot
 
 Should `--platform` build a Docker image locally and push it, or should it ship source files to the platform and let the platform build and run them?
 
-### Recommendation: ship files by default, Docker image as opt-in
+### Recommendation: phased — Docker image first, ship files as future enhancement
 
-**Default path: ship files to the platform.**
+The best bang-for-buck is to ship the two things that already work:
 
-```
-bench --platform
-```
+1. **Local execution** — `bench` runs benchmarks on your machine (no platform dependency)
+2. **Platform execution via Docker image** — `bench --platform --image <image>` uses the existing pattern from `benchmarks/src/scale`: build a Docker image in CI, the platform launches worker VMs from that image, each VM runs a coordinator that claims work and executes entries
 
-The CLI packages the bench files, `package.json`, and lockfile, then uploads them to the first-party benchmark runner platform. The platform builds the project on its own compute and spawns worker VMs from the build output.
+This requires zero new platform infrastructure. The Docker image + VM launch + coordinator pattern is already proven in the scale test repo. The CLI just replaces `start.ts` as the entry point.
 
-This is the natural fit for a first-party benchmark runner platform. If the platform's job is to run benchmarks, it should be able to build them too. The CLI is a thin client: package files, ship, poll for results.
+Ship-files (platform builds from source) is a future enhancement that requires a new `POST /runs/:id/build` endpoint and build capability on the platform. It is the better long-term UX, but it is not needed for the initial release.
 
-Why this is the right default:
-
-1. **No local Docker required.** The vitest mental model is "run a command, it works." Asking users to install Docker, authenticate to a registry, and wait for image builds breaks that.
-
-2. **Iteration speed.** Shipping TS files + installing deps on the platform is much faster than build -> push -> pull -> run, especially with cached `node_modules` on the platform side.
-
-3. **The platform owns the lifecycle.** A first-party benchmark runner platform should handle building, running, and reporting as a unified pipeline. Ship-files makes the platform responsible for the build step, which is where it belongs — the platform controls the build environment, can cache builds across runs, and can reproduce builds.
-
-4. **The scale test is the exception, not the rule.** The existing `benchmarks/src/scale` Dockerfile exists because scale testing needs specific system-level access (provider SDKs, API keys, `/proc` access for metrics). Simple `bench()` micro-benchmarks just need Node.js and `npm install`. The default should optimize for the common case.
-
-**Opt-in path: pre-built Docker image.**
+**Phase 1: Docker image (initial release)**
 
 ```
 bench --platform --image ghcr.io/computesdk/scale-coordinator:latest
 ```
 
-For workloads that need system-level dependencies, custom runtimes, or specific provider SDKs, users can provide a pre-built image. The platform launches worker containers from that image. The image's entrypoint should be `bench-worker` (or a user-specified command that calls `runWorker`).
+The user (or CI) builds a Docker image containing the bench files + deps + the bench CLI. The platform launches worker VMs from that image. Each VM runs `bench-worker` (or a user-specified entrypoint), claims a task range, and executes entries through the SDK's `runWorker()`.
 
-This mirrors the existing `benchmarks/src/scale` flow: build the image in CI, push to a registry, point the CLI at it.
+This is exactly how `benchmarks/src/scale` works today:
+- `Dockerfile` bundles the coordinator + deps
+- `start.ts` creates the run, plans workers, launches VMs with the image
+- Each VM runs the coordinator which claims a worker and executes tasks
+
+The CLI replaces `start.ts`. The Docker image, VM launch, and coordinator pattern stay the same.
+
+**Phase 2: Ship files (future enhancement)**
+
+```
+bench --platform
+```
+
+The CLI packages bench files + `package.json` + lockfile and uploads them to the platform. The platform builds the project on its own compute and spawns worker VMs from the build output. No local Docker required.
+
+This requires:
+- New `POST /runs/:id/build` endpoint on the platform
+- Build capability (VM that installs deps, compiles TS, produces a runnable bundle)
+- Build caching across runs
+
+This is the better long-term UX (no Docker, faster iteration, vitest-like "just run it" experience), but it is net-new platform infrastructure. It should be designed after the Docker image path is shipping and proven.
 
 ### Platform build flow (ship-files path)
 
@@ -474,19 +484,28 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 - Passes `defineTask()` entries through with full step graph
 - Uses existing `mapPool` for concurrency, existing heartbeat/flush infrastructure
 
-### Phase 4: Add `--platform` mode to the CLI
+### Phase 4: Add `--platform --image` mode to the CLI (Docker image path)
 
-- CLI ships files to platform (new `POST /runs/:id/build` endpoint)
-- Platform builds on a VM, spawns worker VMs from build output
+- CLI accepts `--image <image>` pointing to a pre-built Docker image
+- CLI creates benchmark run on the platform, plans workers
+- Platform launches worker VMs from the image (existing infrastructure)
 - Worker VMs call `runBenchWorker()` with the loaded entries
 - CLI polls progress, prints TUI
-- Add `--image` flag for pre-built Docker image path
+- This replaces `start.ts` from `benchmarks/src/scale` — zero new platform infrastructure
 
-### Phase 5: Migrate scale tests
+### Phase 5: Migrate scale tests to the CLI
 
 - Replace `benchmarks/src/scale/sdk-coordinator.ts` with a `scale.bench.ts` file using `defineTask`/`defineStep`
 - Replace `start.ts` with `bench --platform --image`
 - The scale coordinator's step graph (worker.ready -> create -> exec.initial -> sandbox.live -> exec.final -> destroy) maps directly to `defineStep` calls
+
+### Phase 6: Ship-files platform build (future enhancement)
+
+- New `POST /runs/:id/build` endpoint on the platform
+- CLI ships bench files + package.json + lockfile without requiring a Docker image
+- Platform builds on its compute, spawns worker VMs from build output
+- `bench --platform` (without `--image`) becomes the simple default
+- Requires build capability, caching, and reproducible build environments on the platform side
 
 ## Open Questions
 
