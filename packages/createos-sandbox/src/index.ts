@@ -41,6 +41,7 @@ import type {
   CommandResult,
   CreateSandboxOptions,
   CreateSnapshotOptions,
+  CreateTemplateOptions,
   FileEntry,
   ListSnapshotsOptions,
   RunCommandOptions,
@@ -470,6 +471,56 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const client = resolveClient(config);
         try {
           const sandbox = await client.getSandbox(snapshotId);
+          await sandbox.destroy();
+        } catch (e) {
+          if (isNotFound(e)) return; // already gone
+          throw e;
+        }
+      },
+    },
+
+    template: {
+      create: async (
+        config: CreateosConfig,
+        options: CreateTemplateOptions,
+      ) => {
+        if (!options.from) {
+          throw new Error(`CreateOS does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
+        }
+        const client = resolveClient(config);
+        const sandbox = await client.getSandbox(options.from);
+        // createos-sandbox has no decoupled snapshot object: pausing IS the snapshot,
+        // and the paused sandbox id is the snapshot id. This stops the source VM.
+        await sandbox.pause();
+        await sandbox.waitUntilPaused();
+        return {
+          id: options.from,
+          provider: PROVIDER_NAME,
+          name: options.name,
+          createdAt: new Date(),
+          metadata: { ...options.metadata, source: "capture", sandboxId: options.from },
+        };
+      },
+
+      list: async (config: CreateosConfig) => {
+        const client = resolveClient(config);
+        // The typed status filter excludes "paused", so list all and filter.
+        const all = await client.listSandboxes({ limit: 500 });
+        return all
+          .filter((s) => s.status === "paused")
+          .map((s) => ({
+            id: s.id,
+            provider: PROVIDER_NAME,
+            name: s.data.name || "unnamed",
+            createdAt: new Date(s.data.paused_at ?? s.data.created_at),
+            metadata: {},
+          }));
+      },
+
+      delete: async (config: CreateosConfig, templateId: string) => {
+        const client = resolveClient(config);
+        try {
+          const sandbox = await client.getSandbox(templateId);
           await sandbox.destroy();
         } catch (e) {
           if (isNotFound(e)) return; // already gone

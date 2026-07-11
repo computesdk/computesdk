@@ -2,10 +2,10 @@
  * E2B Provider - Factory-based Implementation
  */
 
-import { Sandbox as E2BSandbox } from 'e2b';
+import { Sandbox as E2BSandbox, Template as E2BTemplate, waitForTimeout } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 type E2BFileEntry = {
@@ -202,14 +202,72 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
     },
 
     template: {
-      create: async (_config: E2BConfig, _options: { name: string }) => {
-        throw new Error('To create a template in E2B, create a snapshot from a running sandbox using snapshot.create(), or use the E2B CLI to build from a Dockerfile.');
+      create: async (config: E2BConfig, options: CreateTemplateOptions) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.E2B_API_KEY) || '';
+
+        if (!apiKey) {
+          throw new Error(`Missing E2B API key. Provide 'apiKey' in config or set E2B_API_KEY environment variable.`);
+        }
+
+        try {
+          // Mode 1: Capture from running sandbox
+          if (options.from) {
+            const sandbox = await E2BSandbox.connect(options.from, { apiKey });
+            const snapshotSandbox = sandbox as SnapshotCapableE2BSandbox;
+            const snapshotResult = await snapshotSandbox.createSnapshot({ name: options.name });
+            const snapshotId = (snapshotResult as { snapshotId?: string }).snapshotId || String(snapshotResult);
+            return {
+              id: snapshotId,
+              provider: 'e2b',
+              name: options.name,
+              createdAt: new Date(),
+              metadata: { ...options.metadata, source: 'capture', sandboxId: options.from },
+            };
+          }
+
+          // Mode 2: Build from spec (Dockerfile or base image)
+          const template = E2BTemplate()
+            .fromDockerfile(options.dockerfile || '');
+
+          if (options.envs && Object.keys(options.envs).length > 0) {
+            template.setEnvs(options.envs);
+          }
+
+          if (options.startCommand) {
+            template.setStartCmd(options.startCommand, waitForTimeout(5000));
+          }
+
+          const buildOpts: Record<string, any> = { apiKey };
+          if (options.cpuCount) buildOpts.cpuCount = options.cpuCount;
+          if (options.memoryMB) buildOpts.memoryMB = options.memoryMB;
+
+          const buildInfo = await E2BTemplate.build(template, options.name, buildOpts);
+
+          return {
+            id: (buildInfo as { templateId?: string }).templateId || options.name,
+            provider: 'e2b',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: 'build', buildInfo },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create E2B template: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
       list: async (config: E2BConfig) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
         try {
           const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') return await e2bStatic.listTemplates({ apiKey });
+          if (typeof e2bStatic.listTemplates === 'function') {
+            const templates = await e2bStatic.listTemplates({ apiKey });
+            return (templates as Array<Record<string, any>>).map((t) => ({
+              id: t.templateId || t.id || t.alias || String(t),
+              provider: 'e2b',
+              name: t.templateId || t.alias || t.name || 'unnamed',
+              createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+              metadata: t,
+            }));
+          }
           return [];
         } catch { return []; }
       },

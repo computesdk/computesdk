@@ -18,10 +18,10 @@
  *      without any environment configuration beyond the API key.
  */
 
-import { Sandbox as E2BSandbox, CommandExitError } from 'e2b';
+import { Sandbox as E2BSandbox, Template as E2BTemplate, CommandExitError, waitForTimeout } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 
@@ -389,13 +389,79 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
     },
 
     template: {
-      create: async (_config: LelantosConfig, _options: { name: string }) => {
-        throw new Error('To create a template in Lelantos, create a snapshot from a running sandbox using snapshot.create(), or use the E2B-compatible template build protocol / CLI to build from a Dockerfile.');
+      create: async (config: LelantosConfig, options: CreateTemplateOptions) => {
+        const apiKey = resolveApiKey(config);
+
+        if (!apiKey) {
+          throw new Error(`Missing Lelantos API key. Provide 'apiKey' in config or set LELANTOS_API_KEY (or E2B_API_KEY) environment variable.`);
+        }
+
+        try {
+          // Mode 1: Capture from running sandbox
+          if (options.from) {
+            const sandbox = await E2BSandbox.connect(options.from, connectOpts(config));
+            const snapshotSandbox = sandbox as SnapshotCapableE2BSandbox;
+            const snapshotResult = await snapshotSandbox.createSnapshot({ name: options.name });
+            const snapshotId = typeof snapshotResult === 'string'
+              ? snapshotResult
+              : (() => {
+                  const r = snapshotResult as { snapshotId?: string; id?: string; templateId?: string };
+                  return r.snapshotId || r.id || r.templateId;
+                })();
+            if (!snapshotId) {
+              throw new Error(`Lelantos createSnapshot() returned no template ID (got ${JSON.stringify(snapshotResult)}).`);
+            }
+            return {
+              id: snapshotId,
+              provider: 'lelantos',
+              name: options.name,
+              createdAt: new Date(),
+              metadata: { ...options.metadata, source: 'capture', sandboxId: options.from },
+            };
+          }
+
+          // Mode 2: Build from spec (Dockerfile or base image)
+          const dockerfile = options.dockerfile || (options.baseImage ? `FROM ${options.baseImage}` : '');
+          const template = E2BTemplate().fromDockerfile(dockerfile);
+
+          if (options.envs && Object.keys(options.envs).length > 0) {
+            template.setEnvs(options.envs);
+          }
+
+          if (options.startCommand) {
+            template.setStartCmd(options.startCommand, waitForTimeout(5000));
+          }
+
+          const buildOpts: Record<string, any> = { ...connectOpts(config) };
+          if (options.cpuCount) buildOpts.cpuCount = options.cpuCount;
+          if (options.memoryMB) buildOpts.memoryMB = options.memoryMB;
+
+          const buildInfo = await E2BTemplate.build(template, options.name, buildOpts);
+
+          return {
+            id: (buildInfo as { templateId?: string }).templateId || options.name,
+            provider: 'lelantos',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: 'build', buildInfo },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Lelantos template: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
       list: async (config: LelantosConfig) => {
         try {
           const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') return await e2bStatic.listTemplates(connectOpts(config));
+          if (typeof e2bStatic.listTemplates === 'function') {
+            const templates = await e2bStatic.listTemplates(connectOpts(config));
+            return (templates as Array<Record<string, any>>).map((t) => ({
+              id: t.templateId || t.id || t.alias || String(t),
+              provider: 'lelantos',
+              name: t.templateId || t.alias || t.name || 'unnamed',
+              createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+              metadata: t,
+            }));
+          }
           return [];
         } catch { return []; }
       },

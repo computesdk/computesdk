@@ -13,6 +13,7 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
+  CreateTemplateOptions,
 } from '@computesdk/provider';
 
 export interface DeclawConfig {
@@ -174,6 +175,89 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         },
         exists: async (sandbox: DeclawSandbox, path: string): Promise<boolean> => (sandbox as any).files.exists(path),
         remove: async (sandbox: DeclawSandbox, path: string): Promise<void> => { await (sandbox as any).files.remove(path); },
+      },
+    },
+
+    template: {
+      create: async (config: DeclawConfig, options: CreateTemplateOptions) => {
+        // Capture mode: snapshot a running sandbox
+        if (options.from) {
+          const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+          const domain = config.domain || process.env.DECLAW_DOMAIN;
+          try {
+            const sandbox = await DeclawSandbox.connect(options.from, { apiKey, domain });
+            const snapshot = await sandbox.createSnapshot();
+            return {
+              id: snapshot.snapshotId,
+              provider: 'declaw',
+              name: options.name,
+              createdAt: snapshot.createdAt || new Date(),
+              metadata: { ...options.metadata, source: 'capture', sandboxId: options.from, snapshot },
+            };
+          } catch (error) {
+            throw new Error(`Failed to capture Declaw template: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        // Build mode: not supported natively (CLI only)
+        throw new Error(
+          'Declaw does not support building templates from spec natively. ' +
+            'Use capture mode (pass `from` with a sandbox ID) or build via the Declaw CLI.',
+        );
+      },
+
+      list: async (config: DeclawConfig) => {
+        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const domain = config.domain || process.env.DECLAW_DOMAIN;
+        try {
+          const result = await DeclawSandbox.list({ apiKey, domain });
+          const infos = Array.isArray(result) ? result : result?.sandboxes ?? [];
+          const templates: Array<{ id: string; provider: string; name: string; createdAt: Date; metadata: Record<string, any> }> = [];
+          for (const info of infos) {
+            const sandboxId = (info as any).sandboxId ?? (info as any).sandbox_id;
+            if (!sandboxId) continue;
+            try {
+              const sandbox = await DeclawSandbox.connect(sandboxId, { apiKey, domain });
+              const snapshots = await sandbox.listSnapshots();
+              for (const snap of snapshots) {
+                templates.push({
+                  id: snap.snapshotId,
+                  provider: 'declaw',
+                  name: snap.snapshotId,
+                  createdAt: new Date(snap.createdAt),
+                  metadata: { sandboxId: snap.sandboxId, source: snap.source, snapshot: snap },
+                });
+              }
+            } catch { /* skip sandbox */ }
+          }
+          return templates;
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: DeclawConfig, templateId: string) => {
+        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const domain = config.domain || process.env.DECLAW_DOMAIN;
+        try {
+          const result = await DeclawSandbox.list({ apiKey, domain });
+          const infos = Array.isArray(result) ? result : result?.sandboxes ?? [];
+          for (const info of infos) {
+            const sandboxId = (info as any).sandboxId ?? (info as any).sandbox_id;
+            if (!sandboxId) continue;
+            try {
+              const sandbox = await DeclawSandbox.connect(sandboxId, { apiKey, domain });
+              const snapshots = await sandbox.listSnapshots();
+              const match = snapshots.find((s) => s.snapshotId === templateId);
+              if (match) {
+                await sandbox.deleteSnapshot(templateId);
+                return;
+              }
+            } catch { /* try next sandbox */ }
+          }
+        } catch {
+          /* already deleted or not found */
+        }
       },
     },
   },

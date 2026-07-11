@@ -13,6 +13,7 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider'
 import type {
   CommandResult,
   CreateSandboxOptions,
+  CreateTemplateOptions,
   FileEntry,
   RunCommandOptions,
   SandboxInfo,
@@ -51,11 +52,12 @@ type FsRunCommand = (sandbox: Sandbox, command: string, options?: RunCommandOpti
 export interface IsorunSnapshot {
   id: string
   provider: string
+  name?: string
   createdAt: Date
   metadata?: Record<string, unknown>
 }
 
-export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({
+export const isorun = defineProvider<Sandbox, ConfigWithClient, IsorunSnapshot, IsorunSnapshot>({
   name: 'isorun',
   methods: {
     sandbox: {
@@ -221,6 +223,40 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         try {
           await getClient(config).deleteSnapshot(snapshotId)
         } catch { /* idempotent: snapshot may already be gone */ }
+      },
+    },
+
+    template: {
+      create: async (config: ConfigWithClient, options: CreateTemplateOptions): Promise<IsorunSnapshot> => {
+        if (!options.from) {
+          throw new Error(`Isorun does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`)
+        }
+        const sandbox = await getClient(config).get(options.from)
+        if (!sandbox) throw new Error(`Sandbox not found: ${options.from}`)
+        const snap = await sandbox.snapshot()
+        return {
+          id: snap.id,
+          provider: 'isorun',
+          name: options.name,
+          createdAt: new Date(snap.createdAt),
+          metadata: { ...options.metadata, source: 'capture', sandboxId: options.from, runId: snap.runId, sizeBytes: snap.sizeBytes },
+        }
+      },
+
+      list: async (config: ConfigWithClient): Promise<IsorunSnapshot[]> => {
+        const entries = await getClient(config).listSnapshots()
+        return entries.map(e => ({
+          id: e.id,
+          provider: 'isorun',
+          createdAt: new Date(e.createdAt),
+          metadata: { runId: e.runId, sizeBytes: e.sizeBytes },
+        }))
+      },
+
+      delete: async (config: ConfigWithClient, templateId: string): Promise<void> => {
+        try {
+          await getClient(config).deleteSnapshot(templateId)
+        } catch { /* idempotent */ }
       },
     },
   },

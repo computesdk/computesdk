@@ -12,6 +12,7 @@ import { defineProvider } from "@computesdk/provider";
 import type {
   CodeResult,
   CommandResult,
+  CreateTemplateOptions,
   SandboxInfo as ComputeSandboxInfo,
   CreateSandboxOptions,
   FileEntry,
@@ -384,6 +385,63 @@ export const tensorlake = defineProvider<
         try {
           const { apiKey, apiUrl } = resolveAuth(config);
           await Sandbox.deleteSnapshot(snapshotId, { apiKey, apiUrl });
+        } catch {
+          // Ignore
+        }
+      },
+    },
+
+    template: {
+      create: async (
+        config: TensorlakeConfig,
+        options: CreateTemplateOptions,
+      ) => {
+        if (!options.from) {
+          throw new Error(`Tensorlake does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
+        }
+        const { apiKey, apiUrl } = resolveAuth(config);
+        try {
+          const sandbox = await Sandbox.connect({ sandboxId: options.from, apiKey, apiUrl });
+          const result = await sandbox.checkpoint();
+
+          if (!result) {
+            throw new Error(
+              `Failed to create template for sandbox '${options.from}': checkpoint() did not return a snapshot result.`,
+            );
+          }
+
+          return {
+            id: result.snapshotId,
+            provider: "tensorlake",
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: "capture", sandboxId: options.from },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Tensorlake template: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+
+      list: async (config: TensorlakeConfig) => {
+        try {
+          const { apiKey, apiUrl } = resolveAuth(config);
+          const snapshots = await Sandbox.listSnapshots({ apiKey, apiUrl });
+          return (snapshots as Array<Record<string, any>>).map((s) => ({
+            id: s.snapshotId || s.id || String(s),
+            provider: "tensorlake",
+            name: s.name || "unnamed",
+            createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
+            metadata: s,
+          }));
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: TensorlakeConfig, templateId: string) => {
+        try {
+          const { apiKey, apiUrl } = resolveAuth(config);
+          await Sandbox.deleteSnapshot(templateId, { apiKey, apiUrl });
         } catch {
           // Ignore
         }

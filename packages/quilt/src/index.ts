@@ -4,6 +4,7 @@ import type {
   CommandResult,
   CreateSandboxOptions,
   CreateSnapshotOptions,
+  CreateTemplateOptions,
   FileEntry,
   ListSnapshotsOptions,
   RunCommandOptions,
@@ -453,7 +454,15 @@ async function createPublishedService(
   return created;
 }
 
-export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snapshot>({
+export interface QuiltTemplate {
+  id: string;
+  provider: string;
+  name: string;
+  createdAt: Date;
+  metadata?: Record<string, any>;
+}
+
+export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, QuiltTemplate, Snapshot>({
   name: PROVIDER,
   methods: {
     sandbox: {
@@ -858,6 +867,98 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
         await requestNoContent(
           resolved,
           `/api/snapshots/${encodeURIComponent(snapshotId)}`,
+          { method: 'DELETE' },
+          { includeTenantHeader: true, allow404: true }
+        );
+      },
+    },
+
+    template: {
+      create: async (
+        config: QuiltConfig,
+        options: CreateTemplateOptions
+      ): Promise<QuiltTemplate> => {
+        if (!options.from) {
+          throw new Error(`Quilt does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
+        }
+        const resolved = resolveConfig(config);
+        const envelope = await requestJson<{ operation_id: string }>(
+          resolved,
+          `/api/containers/${encodeURIComponent(options.from)}/snapshot`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              consistency_mode: 'crash-consistent',
+              network_mode: 'reset',
+              volume_mode: 'exclude',
+              labels: {
+                ...(options.metadata ? stringifyRecord(options.metadata) : {}),
+                ...(options.name ? { 'computesdk:name': options.name } : {}),
+              },
+            }),
+          },
+          { includeTenantHeader: true }
+        );
+
+        const operation = await pollOperation(
+          resolved,
+          requireOperationId(envelope, 'template create'),
+          resolved.timeout
+        );
+        const snapshotId = resolveSnapshotResultId(operation);
+        if (!snapshotId) {
+          throw new Error(`Quilt template create completed without a snapshot ID.`);
+        }
+        const snapshot = await requestJson<QuiltSnapshotRecord>(
+          resolved,
+          `/api/snapshots/${encodeURIComponent(snapshotId)}`,
+          undefined,
+          { includeTenantHeader: true }
+        );
+
+        if (!snapshot) {
+          throw new Error(`Quilt template ${snapshotId} was not found after creation.`);
+        }
+
+        return {
+          id: snapshot.snapshot_id,
+          provider: PROVIDER,
+          name: options.name,
+          createdAt: parseDate(snapshot.created_at),
+          metadata: { source: 'capture', sandboxId: options.from, sourceContainerId: snapshot.source_container_id, pinned: snapshot.pinned ?? false, labels: snapshot.labels ?? {} },
+        };
+      },
+
+      list: async (config: QuiltConfig): Promise<QuiltTemplate[]> => {
+        const resolved = resolveConfig(config);
+        const response = await requestJson<{ snapshots: QuiltSnapshotRecord[] }>(
+          resolved,
+          `/api/snapshots`,
+          undefined,
+          { includeTenantHeader: true }
+        );
+        return (response?.snapshots ?? []).map((snapshot) => ({
+          id: snapshot.snapshot_id,
+          provider: PROVIDER,
+          name: snapshot.labels?.['computesdk:name'] || 'unnamed',
+          createdAt: parseDate(snapshot.created_at),
+          metadata: {
+            sourceContainerId: snapshot.source_container_id,
+            pinned: snapshot.pinned ?? false,
+            labels: snapshot.labels ?? {},
+            expiresAt: snapshot.expires_at ?? null,
+          },
+        }));
+      },
+
+      delete: async (config: QuiltConfig, templateId: string): Promise<void> => {
+        const resolved = resolveConfig(config);
+        await requestNoContent(
+          resolved,
+          `/api/snapshots/${encodeURIComponent(templateId)}`,
           { method: 'DELETE' },
           { includeTenantHeader: true, allow404: true }
         );

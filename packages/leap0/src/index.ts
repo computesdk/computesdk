@@ -5,7 +5,7 @@
 import { Leap0Client } from 'leap0';
 import type { Sandbox as Leap0Sandbox } from 'leap0';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from 'computesdk';
 
 export interface Leap0Config {
   /** Leap0 API key - if not provided, will use LEAP0_API_KEY environment variable */
@@ -182,6 +182,81 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
       },
 
       getInstance: (sandbox: Leap0Sandbox): Leap0Sandbox => sandbox,
+    },
+
+    template: {
+      create: async (config: Leap0Config, options: CreateTemplateOptions) => {
+        const client = createLeap0Client(config);
+
+        try {
+          // Mode 1: Capture from a running sandbox
+          if (options.from) {
+            const snapshot = await client.sandboxes.createSnapshot(options.from, {
+              name: options.name,
+            });
+            return {
+              id: snapshot.id,
+              provider: 'leap0',
+              name: options.name,
+              createdAt: new Date(snapshot.createdAt),
+              metadata: { ...options.metadata, source: 'capture', sandboxId: options.from, templateId: snapshot.templateId, snapshot },
+            };
+          }
+
+          // Mode 2: Build from spec (base image as container image URI)
+          const uri = options.baseImage || (options.dockerfile
+            ? (options.dockerfile.split('\n').find((l) => l.toUpperCase().startsWith('FROM ')) || '').replace(/^FROM\s+/i, '').trim() || 'ubuntu:22.04'
+            : 'ubuntu:22.04');
+
+          if (!uri) {
+            throw new Error('Leap0 template build requires a baseImage or dockerfile with a FROM instruction.');
+          }
+
+          const template = await client.templates.create({
+            name: options.name,
+            uri,
+          });
+          return {
+            id: template.id,
+            provider: 'leap0',
+            name: options.name,
+            createdAt: new Date(template.createdAt),
+            metadata: { ...options.metadata, source: 'build', digest: template.digest, template },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Leap0 template: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+
+      list: async (config: Leap0Config) => {
+        const client = createLeap0Client(config);
+        try {
+          const response = await client.snapshots.list();
+          const items = (response as any).items || response || [];
+          return (Array.isArray(items) ? items : []).map((s: Record<string, any>) => ({
+            id: s.id || s.name || 'unknown',
+            provider: 'leap0',
+            name: s.name || s.id || 'unnamed',
+            createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
+            metadata: s,
+          }));
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: Leap0Config, templateId: string) => {
+        const client = createLeap0Client(config);
+        try {
+          await client.snapshots.delete(templateId);
+        } catch {
+          try {
+            await client.templates.delete(templateId);
+          } catch {
+            /* already deleted */
+          }
+        }
+      },
     },
   },
 });

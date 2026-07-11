@@ -12,7 +12,7 @@
 
 import { defineProvider } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 /** Default instance type used when none is supplied via config. */
 const DEFAULT_INSTANCE_TYPE = 'cpu-1';
@@ -285,6 +285,26 @@ function toSnapshot(snap: LightningSnapshotData): LightningSnapshot {
   };
 }
 
+/** ComputeSDK-normalized template returned by the template method group. */
+export interface LightningTemplate {
+  id: string;
+  provider: 'lightning';
+  name: string;
+  createdAt: Date;
+  metadata: {
+    status: string;
+    sizeBytes: number;
+    sourceSandboxId: string;
+    sourceSandboxName: string;
+    runtime: string;
+    auto: boolean;
+    expiresAt: Date | null;
+    source?: string;
+    sandboxId?: string;
+    [key: string]: unknown;
+  };
+}
+
 export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({
   name: 'lightning',
   methods: {
@@ -513,6 +533,58 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
           await withSandbox(config, (Sandbox) => Sandbox.deleteSnapshot(snapshotId));
         } catch {
           /* Snapshot may already be deleted - ignore. */
+        }
+      },
+    },
+
+    template: {
+      create: async (config: LightningConfig, options: CreateTemplateOptions): Promise<LightningTemplate> => {
+        if (!options.from) {
+          throw new Error(`Lightning does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
+        }
+        try {
+          const snapshot = await withSandbox(config, async (Sandbox) => {
+            const sandbox = await Sandbox.get({ sandboxId: options.from! });
+            return sandbox.createSnapshot();
+          });
+          const normalized = toSnapshot(snapshot);
+          return {
+            id: normalized.id,
+            provider: 'lightning',
+            name: options.name,
+            createdAt: normalized.createdAt,
+            metadata: { ...normalized.metadata, ...options.metadata, source: 'capture', sandboxId: options.from },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create Lightning template for sandbox '${options.from}': ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      list: async (config: LightningConfig): Promise<LightningTemplate[]> => {
+        try {
+          const { snapshots } = await withSandbox(config, (Sandbox) => Sandbox.listSnapshots());
+          return snapshots.map((snap) => {
+            const normalized = toSnapshot(snap);
+            return {
+              id: normalized.id,
+              provider: 'lightning',
+              name: normalized.metadata.sourceSandboxName || 'unnamed',
+              createdAt: normalized.createdAt,
+              metadata: normalized.metadata,
+            };
+          });
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: LightningConfig, templateId: string): Promise<void> => {
+        try {
+          await withSandbox(config, (Sandbox) => Sandbox.deleteSnapshot(templateId));
+        } catch {
+          /* Template may already be deleted - ignore. */
         }
       },
     },

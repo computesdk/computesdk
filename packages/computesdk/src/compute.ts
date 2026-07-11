@@ -21,6 +21,46 @@ export interface CreateSnapshotOptions {
   provider?: string;
 }
 
+export interface CreateTemplateOptions {
+  /** Name of the template */
+  name: string;
+  /** Optional description */
+  description?: string;
+  /** Optional metadata for the template */
+  metadata?: Record<string, any>;
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+
+  // Build-from-spec mode
+  /** Dockerfile content (raw string) to build the template from */
+  dockerfile?: string;
+  /** Base image to use (e.g. "python:3.12"). Ignored if `dockerfile` is provided. */
+  baseImage?: string;
+  /** Local directory path containing files referenced by COPY/ADD in the Dockerfile */
+  contextDir?: string;
+  /** Environment variables to set in the template */
+  envs?: Record<string, string>;
+  /** Start command to run during template build (captured in the snapshot) */
+  startCommand?: string;
+  /** CPU count for the build */
+  cpuCount?: number;
+  /** Memory in MB for the build */
+  memoryMB?: number;
+
+  // Capture-from-sandbox mode
+  /** Sandbox ID to capture a template from (creates a snapshot of the running instance) */
+  from?: string;
+}
+
+export interface TemplateResult {
+  id: string;
+  provider: string;
+  name: string;
+  createdAt: Date;
+  status?: string;
+  metadata?: Record<string, any>;
+}
+
 interface ProviderSandboxManager {
   create(options?: CreateSandboxOptions): Promise<SandboxInterface>;
   getById(sandboxId: string): Promise<SandboxInterface | null>;
@@ -34,10 +74,17 @@ interface ProviderSnapshotManager {
   delete(snapshotId: string): Promise<void>;
 }
 
+interface ProviderTemplateManager {
+  create(options: CreateTemplateOptions): Promise<{ id: string; provider?: string; name?: string; createdAt?: Date | string; status?: string; metadata?: Record<string, any> }>;
+  list?(options?: { limit?: number }): Promise<Array<{ id: string; provider?: string; name?: string; createdAt?: Date | string; status?: string; metadata?: Record<string, any> }>>;
+  delete(templateId: string): Promise<void>;
+}
+
 export interface DirectProvider {
   readonly name?: string;
   readonly sandbox: ProviderSandboxManager;
   readonly snapshot?: ProviderSnapshotManager;
+  readonly template?: ProviderTemplateManager;
 }
 
 /**
@@ -135,6 +182,7 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private sandboxProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
+  private templateProviders = new Map<string, DirectProvider>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
       throw new Error(
@@ -211,6 +259,31 @@ class ComputeManager {
     return providers;
   }
 
+  private getTemplateCreateCandidates(options: CreateTemplateOptions): DirectProvider[] {
+    const preferredProviderName = options.provider;
+    if (preferredProviderName) {
+      return [this.getProviderByName(preferredProviderName)];
+    }
+
+    // If capturing from a sandbox, prefer the provider that owns that sandbox
+    if (options.from) {
+      const known = this.sandboxProviders.get(options.from);
+      const providers = this.getProviders().filter((p) => !!p.template);
+      if (known && known.template) {
+        return [known, ...providers.filter((p) => p !== known)];
+      }
+    }
+
+    return this.getProviders().filter((p) => !!p.template);
+  }
+
+  private getTemplateDeleteCandidates(templateId: string): DirectProvider[] {
+    const known = this.templateProviders.get(templateId);
+    const providers = this.getProviders().filter((p) => !!p.template);
+    if (!known) return providers;
+    return [known, ...providers.filter((p) => p !== known)];
+  }
+
   private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
     const { provider: _providerName, ...providerOptions } = options || {};
@@ -248,6 +321,7 @@ class ComputeManager {
     this.roundRobinCursor = 0;
     this.sandboxProviders.clear();
     this.snapshotProviders.clear();
+    this.templateProviders.clear();
   }
 
   sandbox = {
@@ -373,6 +447,100 @@ class ComputeManager {
 
       throw new Error(
         `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+  };
+
+  template = {
+    create: async (options: CreateTemplateOptions): Promise<TemplateResult> => {
+      const { provider: _providerName, ...providerOptions } = options;
+      const candidates = this.getTemplateCreateCandidates(options);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.template) {
+          errors.push(`${getProviderLabel(provider, index)}: templates not supported`);
+          continue;
+        }
+
+        try {
+          const template = await provider.template.create(providerOptions);
+          if (template.id) {
+            this.templateProviders.set(template.id, provider);
+          }
+          return {
+            id: template.id,
+            provider: template.provider || provider.name || `provider-${index + 1}`,
+            name: template.name || options.name,
+            createdAt: template.createdAt ? new Date(template.createdAt) : new Date(),
+            status: template.status,
+            metadata: template.metadata,
+          };
+        } catch (error) {
+          if (error instanceof Error && (error as any).name === 'AbortError') {
+            throw error;
+          }
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to create template across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+
+    list: async (options?: { limit?: number; provider?: string }): Promise<TemplateResult[]> => {
+      const templates: TemplateResult[] = [];
+      const providers = options?.provider
+        ? [this.getProviderByName(options.provider)]
+        : this.getProviders();
+
+      for (const provider of providers) {
+        if (!provider.template?.list) continue;
+        try {
+          const listed = await provider.template.list({ limit: options?.limit });
+          for (const t of listed) {
+            if (t.id) {
+              this.templateProviders.set(t.id, provider);
+            }
+            templates.push({
+              id: t.id,
+              provider: t.provider || provider.name || 'unknown',
+              name: t.name || 'unnamed',
+              createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+              status: t.status,
+              metadata: t.metadata,
+            });
+          }
+        } catch {
+          // provider may not support listing
+        }
+      }
+
+      return templates;
+    },
+
+    delete: async (templateId: string, options?: { provider?: string }): Promise<void> => {
+      const candidates = options?.provider
+        ? [this.getProviderByName(options.provider)]
+        : this.getTemplateDeleteCandidates(templateId);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.template) continue;
+        try {
+          await provider.template.delete(templateId);
+          this.templateProviders.delete(templateId);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to delete template "${templateId}" across ${candidates.length} provider(s).\n` +
         errors.map((error) => `- ${error}`).join('\n')
       );
     },

@@ -6,7 +6,7 @@ import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 type HibernateCapableSandbox = CodesandboxSandbox & { hibernate: () => Promise<void>; };
 
@@ -184,11 +184,34 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
     },
 
     template: {
-      create: async (_config: CodesandboxConfig, _options: { name: string }) => {
-        throw new Error(`CodeSandbox templates must be created via the dashboard.`);
+      create: async (config: CodesandboxConfig, options: CreateTemplateOptions) => {
+        if (!options.from) {
+          throw new Error(`CodeSandbox does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
+        }
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
+        if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
+        const sdk = new CodeSandbox(apiKey);
+        try {
+          const sandbox = await sdk.sandboxes.resume(options.from);
+          await (sandbox as HibernateCapableSandbox).hibernate();
+          return {
+            id: sandbox.id,
+            provider: 'codesandbox',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: 'capture', sandboxId: options.from, bootupType: sandbox.bootupType },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create CodeSandbox template: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
       list: async (_config: CodesandboxConfig) => { throw new Error(`CodeSandbox provider does not support listing templates via API.`); },
-      delete: async (_config: CodesandboxConfig, _templateId: string) => { throw new Error(`CodeSandbox templates must be deleted via the dashboard.`); }
+      delete: async (config: CodesandboxConfig, templateId: string) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
+        if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
+        const sdk = new CodeSandbox(apiKey);
+        try { await sdk.sandboxes.shutdown(templateId); } catch { /* ignore */ }
+      }
     }
   }
 });
