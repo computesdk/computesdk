@@ -136,160 +136,122 @@ bench --platform --image my-image --total 500 --workers 4 --concurrency 10
 
 Renamed from `--remote` to `--platform` to accurately describe what it does: ship benchmarks to the first-party benchmark runner platform for execution.
 
-The first-party benchmark runner platform is a hosted service that owns the entire benchmark lifecycle: receive work, build, run workers, aggregate, report. It uses Namespace for compute (image building, VM launch, logs) but the CLI never talks to Namespace directly — everything routes through the platform. Users only need ComputeSDK platform credentials.
-
-The initial release uses the Docker image path (the same pattern as `benchmarks/src/scale`): the user provides a pre-built image (or the platform builds one from files), the platform launches worker VMs via Namespace, each VM runs a coordinator that claims work and executes entries.
+The CLI uses ComputeSDK providers directly for execution. The platform is optional (historical storage only).
 
 1. CLI discovers and loads bench files (same as local) — or uses a pre-built `--image`.
-2. CLI calls `POST /runs` on the ComputeSDK platform with bench files (or image ref) + config.
-3. Platform builds the image via Namespace `ImageService` (if files were provided, not a pre-built image).
-4. Platform launches worker VMs via Namespace `ComputeService.CreateInstance` — one instance per worker, each running a container from the image with env vars for platform connection.
-5. Each worker VM claims a task range from the platform, executes entries through the SDK's `runWorker()` (real concurrency, heartbeats, batched flushing, step barriers), and reports results back to the platform.
-6. CLI polls `GET /runs/:id` — platform returns `phase` (building -> running -> completed) and progress.
-7. When complete, CLI calls `GET /runs/:id/results` for aggregated results and prints summary.
+2. CLI builds image via `provider.image.build()` (if files provided, not `--image`).
+3. CLI divides tasks among N workers (static range assignment).
+4. CLI launches N worker sandboxes via `provider.sandbox.create()`, each with env vars for its task range.
+5. Each worker loads bench files, executes its task range through `runBenchWorker()` (real concurrency, step barriers), and streams results back to the CLI.
+6. CLI collects results, aggregates, prints TUI/JSON.
+7. CLI destroys sandboxes via `provider.sandbox.destroy()`.
+8. (Optional) CLI pushes results to the platform for historical storage.
 
-The CLI does three API calls. The platform handles all Namespace interaction (build, launch, monitor, destroy). Users only need ComputeSDK platform credentials.
+### The first-party benchmark runner platform (optional)
 
-### The first-party benchmark runner platform
+The `--platform` mode uses ComputeSDK providers directly for execution. The ComputeSDK platform (`platform.computesdk.com`) is optional — it provides historical storage and a web UI, but is not required for running benchmarks.
 
-The `--platform` mode uses two layers:
+1. **ComputeSDK providers** (Namespace, E2B, Modal, etc.) — compute: build images, launch worker sandboxes, stream logs, destroy. The CLI talks to providers directly through ComputeSDK's provider abstraction.
 
-1. **ComputeSDK platform** (`platform.computesdk.com`) — benchmark coordination: create runs, plan workers, task claiming, result aggregation, progress tracking, historical runs. This is the existing API (`BenchmarkClient`, `BenchmarkReporter`).
+2. **ComputeSDK platform** (optional) — historical run storage, result aggregation across runs, web UI, trend tracking. The CLI can optionally push results here after a run completes.
 
-2. **Namespace** (first ComputeSDK provider for benchmarks) — compute infrastructure: build images, launch worker VMs, stream logs, collect metrics, destroy VMs. The platform (not the CLI) talks to Namespace through ComputeSDK's provider abstraction. Other providers (E2B, Modal, etc.) can be added by implementing the provider interface.
-   - `ImageService` — build Docker images from blueprints ([docs](https://buf.build/namespace/cloud/docs/main%3Anamespace.cloud.image.v1beta))
-   - `ComputeService` — create/monitor/destroy micro-VM instances with containers ([docs](https://buf.build/namespace/cloud/docs/main%3Anamespace.cloud.compute.v1beta))
-   - `ObservabilityService` — stream/fetch instance logs
+This means:
+- `bench --platform` works without any platform API — just a ComputeSDK provider
+- `bench --platform --store` (optional) pushes results to the platform for history
+- The platform does not need to know about image building, VM launch, or worker coordination
 
-This is a clean separation: ComputeSDK providers = compute, ComputeSDK platform = orchestration + coordination. The CLI only talks to the platform. The platform uses ComputeSDK's provider abstraction, making it multi-provider — Namespace is the first implementation.
+### Architecture: CLI orchestrates directly via ComputeSDK providers
 
-ComputeSDK itself is a framework that connects to external sandbox providers (E2B, Modal, etc.). The benchmark runner is a separate system that uses Namespace for its compute — it does not use ComputeSDK sandboxes.
-
-The scale test infrastructure in `computesdk/benchmarks/src/scale` is the prototype: `start.ts` creates runs, launches Namespace VMs, and each VM runs a coordinator that claims work. The CLI replaces `start.ts` — it creates the run on the ComputeSDK platform, builds the image via Namespace ImageService, launches worker VMs via Namespace ComputeService, and polls the ComputeSDK platform for progress.
-
-### Architecture
-
-The CLI talks only to the ComputeSDK platform. The platform handles all Namespace interaction internally. Users never need Namespace credentials.
+If the CLI uses ComputeSDK's provider abstraction directly, the platform is not needed in the execution path. The CLI is the orchestrator. This eliminates an entire layer of complexity.
 
 ```
-CLI -----> ComputeSDK Platform -----> ComputeSDK Providers
-           (benchmark runner)         (Namespace, E2B, Modal, ...)
-              |                           |
-              |  POST /runs (files)       |
-              |  -> build image           |
-              |     via provider          |
-              |     image.build()         |
-              |  -> launch workers        |
-              |     via provider          |
-              |     sandbox.create()      |
-              |  -> workers claim tasks   |
-              |     and report results    |
-              |     back to platform      |
-              |  -> destroy VMs           |
-              |     via provider          |
-              |     sandbox.destroy()     |
-              |                           |
-              |  GET /runs/:id            |
-              |  <- status + progress     |
-              |  GET /runs/:id/results    |
-              |  <- aggregated results    |
+CLI -----> ComputeSDK Providers (Namespace, E2B, Modal, ...)
+  |
+  |  provider.image.build()    -> build Docker image
+  |  provider.sandbox.create() -> launch N worker sandboxes
+  |  (each worker gets a task range via env vars)
+  |
+  |  workers execute, stream results back to CLI
+  |  provider.sandbox.destroy() -> clean up
+  |
+  |  CLI aggregates results, prints TUI/JSON
+  |
+  v
+ (optional) ComputeSDK Platform
+   -> store results for historical comparison
+   -> web UI for viewing runs
+   -> NOT required for execution
 ```
 
-The platform uses ComputeSDK's provider abstraction for compute, making it multi-provider from the start. Namespace is the first provider implementation; E2B, Modal, and others can be added by implementing the provider interface.
+The CLI does everything `start.ts` does today, but as a CLI using ComputeSDK providers:
+1. Load bench files, compute entry count and total tasks
+2. Divide tasks among N workers (static assignment — each worker gets a range)
+3. Build image via `provider.image.build()` (if files provided, not `--image`)
+4. Launch N worker sandboxes via `provider.sandbox.create()`, each with env vars for its task range
+5. Workers execute their range, stream results back (stdout/IPC)
+6. CLI collects, aggregates, prints
+7. CLI destroys sandboxes via `provider.sandbox.destroy()`
 
-The platform productizes what `start.ts` does today: build images, launch VMs, coordinate workers, aggregate results, clean up. The CLI is a thin client with three API calls.
+No platform API calls for execution. The platform is optional — only for storing results if you want historical comparisons or a web UI.
 
-### Multi-provider: platform uses ComputeSDK for compute
+### What the platform is still good for (optional)
 
-The platform needs two compute operations:
+- Historical run storage (past results, trend tracking, regression detection)
+- Web UI for viewing runs across a team
+- Cross-run comparisons and analytics
+- Long-running scale tests where the CLI might crash (platform holds the state)
 
-1. **Image build** — build a Docker image from a Dockerfile or source files
-2. **Image run** — launch a VM/container from an image, run a command, collect output
+For CI and local use, the CLI-only path is sufficient. The platform is an opt-in storage layer, not a required execution layer.
 
-These are not unique to Namespace. Every compute provider can do them:
-- Namespace: `ImageService.Build` + `ComputeService.CreateInstance`
-- E2B: sandbox from image + run commands
-- Modal: image build + container run
-- AWS/GCP/Azure: container build services + VM/container run
-- Local Docker: `docker build` + `docker run`
+### Worker coordination without the platform
 
-If the platform uses ComputeSDK's provider abstraction, it becomes multi-provider from day one. Namespace is the first implementation; adding another provider means implementing the interface, not writing platform-specific code. This is also the right way to dogfood ComputeSDK — the benchmark platform is a ComputeSDK application.
+Currently, the SDK's `runWorker()` claims tasks from the platform API. Without the platform, the CLI assigns task ranges directly:
 
-This requires extending the ComputeSDK provider interface with image build:
+- CLI computes `totalTasks = entryCount * total`
+- CLI divides `totalTasks` among N workers: worker 0 gets tasks 0..K-1, worker 1 gets K..2K-1, etc.
+- Each worker receives its range via env vars (`BENCH_TASK_START`, `BENCH_TASK_COUNT`)
+- Workers execute their range and stream results back to the CLI
 
-```ts
-interface Provider {
-  // Existing
-  sandbox: {
-    create(options: { image: string; env?: Record<string, string>; ... }): Promise<Sandbox>;
-    // sandbox.runCommand() and sandbox.destroy() already exist
-  };
+This is simpler than dynamic claiming (no claim/release lifecycle, no platform round-trips). The tradeoff is no dynamic rebalancing — if one worker is slow, others can't steal its work. For benchmark workloads (uniform per-task cost), this is fine. For scale tests with variable per-task latency, dynamic claiming via the platform may still be valuable.
 
-  // New: image build capability
-  image?: {
-    build(options: {
-      dockerfile?: string;        // Dockerfile content
-      context?: Uint8Array;       // build context (tarball or zip)
-      aptPackages?: string[];     // alternative: APT-based build (no Dockerfile)
-      tag?: string;               // optional name/tag for the image
-    }): Promise<{
-      imageRef: string;           // reference to use in sandbox.create()
-    }>;
-  };
-}
-```
+Step readiness barriers (`waitForStepReady`) need rethinking without the platform. Options:
+- CLI-orchestrated barriers: CLI waits for all workers to report step completion before signaling them to proceed
+- Provider-level coordination: use provider networking (e.g., shared volumes, message queues) for barriers
+- Platform-assisted barriers: use the platform only for barrier coordination, not for task claiming
 
-`sandbox.create()` already covers "image run" — it launches a sandbox from an image reference. The missing piece is `image.build()`.
+This is an open question — see Open Questions below.
 
-Not every provider will support `image.build()` initially. The platform can fall back to requiring a pre-built image (`--image` mode) for providers that don't support building. This is a graceful degradation: `bench --platform` (build from files) works with providers that support `image.build()`; `bench --platform --image <ref>` works with any provider.
+### Platform API shape (optional, for storage only)
 
-### Platform API shape (minimal)
+If the platform is used for historical storage, it just needs:
 
-The platform needs just three new endpoints (or extensions to existing ones):
+1. `POST /runs/:id/results` — store results from a completed run (CLI pushes after aggregation)
+2. `GET /runs` — list past runs
+3. `GET /runs/:id/results` — fetch past results for comparison
 
-1. `POST /benchmarks/:slug/runs` — create a run. Request body includes:
-   - Bench files (multipart upload or zip) — or `image` field for pre-built image mode
-   - Config: `total`, `workers`, `concurrency`, `participant`, env vars/secrets
-   - Platform handles: build image via ComputeSDK provider (if files provided), launch worker sandboxes via provider, workers claim and execute tasks
-   - Returns: `{ runId, status: "building" | "running" }`
-
-2. `GET /runs/:id` — get run state. Returns:
-   - `phase`: `"building" | "running" | "completed" | "failed"`
-   - `progress`: task counts (done, total, errors) — already exists as `getRunProgress`
-   - `workers`: VM status per worker
-   - This is an extension of the existing `getRun` / `getRunProgress` endpoints, adding `phase` and `buildStatus`
-
-3. `GET /runs/:id/results` — get aggregated results. Already exists as `getRunResults` / `getRunTaskResults`.
-
-Optional:
-4. `POST /runs/:id/stop` — stop the run early (destroy worker VMs, mark run as failed). Already exists as `updateRun` with `status: "failed"`.
-
-That is the entire API surface. The CLI does:
-```
-POST /runs (with files or image)
-poll GET /runs/:id until phase=completed
-GET /runs/:id/results
-```
-
-Three calls. Everything else is the platform's job.
+The platform does NOT need endpoints for building, launching, or coordinating workers. Those happen in the CLI via ComputeSDK providers.
 
 ## Remote Execution: Ship Files vs Docker Image
 
-### The question
+### Two modes, both via ComputeSDK providers
 
-Should `--platform` build a Docker image locally and push it, or should it ship source files to the platform and let the platform build and run them?
+**Mode 1: Pre-built image**
 
-### Recommendation: unified approach using Namespace ImageService
+```
+bench --platform --image my-registry/bench:latest --provider namespace
+```
 
-Namespace provides an `ImageService` API ([docs](https://buf.build/namespace/cloud/docs/main%3Anamespace.cloud.image.v1beta)) that builds Docker images asynchronously from a blueprint spec. This bridges the gap between ship-files and Docker images — the CLI can ship a Dockerfile + bench files to Namespace, Namespace builds the image, and the CLI gets back an `image_ref` to launch workers. No local Docker required.
+CLI launches worker sandboxes directly from the image via `provider.sandbox.create()`. Works with any provider. User (or CI) builds the image beforehand.
 
-The flow:
+**Mode 2: Build from files (default)**
 
-1. CLI packages bench files + `package.json` + lockfile
-2. CLI generates a Dockerfile (or uses a user-provided one) that bundles the bench files + deps + bench CLI
-3. CLI calls Namespace `CreateBlueprint` with the Dockerfile content as the spec
-4. CLI calls `Build` to trigger an asynchronous build
-5. CLI polls `FetchBlueprint` until `State = STATE_READY`
+```
+bench --platform --provider namespace
+```
+
+CLI calls `provider.image.build()` with a generated Dockerfile + bench files. Provider builds the image. CLI gets `imageRef` back. CLI launches workers from that image. No local Docker required — the provider builds on its infrastructure.
+
+This requires `image.build()` on the provider (see Multi-provider section). Providers that don't support it fall back to Mode 1.
 6. CLI gets the `image_ref` from the build response
 7. Platform launches worker VMs from that `image_ref` (via Namespace instance API)
 8. Each worker VM runs `bench-worker`, claims a task range, executes entries through `runWorker()`
@@ -304,65 +266,41 @@ This is the best of both worlds:
 
 **Mode 1: Pre-built image (user provides image)**
 
-```
-bench --platform --image ghcr.io/computesdk/scale-coordinator:latest
-```
-
-User (or CI) has already built and pushed an image. CLI skips the build step and launches workers directly. This is the existing `benchmarks/src/scale` pattern — `start.ts` replaced by the CLI.
-
-**Mode 2: CLI builds via Namespace (default)**
+### Execution flow (CLI orchestrates directly)
 
 ```
-bench --platform
+CLI                     ComputeSDK Provider (Namespace/E2B/Modal)
+  |                              |
+  |  image.build(dockerfile)     |
+  |  --------------------------->|
+  |  <-- imageRef ---------------|  (skip if --image provided)
+  |                              |
+  |  sandbox.create(imageRef, env: {TASK_START, TASK_COUNT, ...}) x N
+  |  --------------------------->|
+  |  <-- sandboxes launched -----|
+  |                              |
+  |  (each worker:               |
+  |    load bench files          |
+  |    execute task range        |
+  |    stream results to CLI)    |
+  |                              |
+  |  <-- results stream back ----|
+  |                              |
+  |  sandbox.destroy() x N       |
+  |  --------------------------->|
+  |                              |
+  |  (CLI aggregates, prints)    |
+  |                              |
+  |  (optional) POST results --> ComputeSDK Platform (historical storage)
 ```
 
-CLI packages bench files, generates a default Dockerfile (or uses a user-provided `Dockerfile.bench`), and calls Namespace's `ImageService` to build the image. No local Docker needed. Blueprint caching means rebuilds only happen when the Dockerfile or bench files change.
+The CLI is the orchestrator. No platform in the execution path. The provider handles all compute (build, launch, destroy). Workers stream results back to the CLI, which aggregates and prints.
 
-**Mode 3: APT-based image (lightweight)**
+For `--image` mode, skip the `image.build()` step — the user provides the image reference directly.
 
-For benchmarks that just need Node.js + a few system packages, the CLI can use Namespace's `AptBasedImage` spec instead of a full Dockerfile. This is faster to build and simpler to configure.
+### Blueprint/image caching
 
-### Build flow (all routed through the platform)
-
-```
-CLI                      ComputeSDK Platform                    Namespace
- |                            |                                    |
- |  POST /runs (files)        |                                    |
- |  ------------------------->|                                    |
- |                            |  CreateBlueprint + Build           |
- |                            |  --------------------------------->|
- |                            |  FetchBlueprint (poll)             |
- |                            |  <--- STATE_READY + image_ref -----|
- |                            |                                    |
- |                            |  CreateInstance (per worker)       |
- |                            |  --------------------------------->|
- |                            |  <--- instances launched ----------|
- |                            |                                    |
- |                            |  (workers claim tasks from        |
- |                            |   platform, execute, report)      |
- |                            |                                    |
- |  GET /runs/:id             |                                    |
- |  <--- phase=building ------|                                    |
- |  GET /runs/:id             |                                    |
- |  <--- phase=running --------|                                    |
- |  GET /runs/:id             |                                    |
- |  <--- phase=completed ------|                                    |
- |                            |                                    |
- |  GET /runs/:id/results     |                                    |
- |  <--- aggregated results --|                                    |
- |                            |  DestroyInstance (cleanup)         |
- |                            |  --------------------------------->|
-```
-
-The CLI never talks to Namespace. The platform is the sole orchestrator:
-- Receives files from CLI
-- Builds image via Namespace ImageService
-- Launches worker VMs via Namespace ComputeService
-- Workers claim tasks from the platform and report results back
-- Platform destroys VMs via Namespace ComputeService when done
-- Platform returns aggregated results to CLI
-
-The platform productizes `start.ts` from `benchmarks/src/scale`. The same logic (create run, build image, launch VMs, coordinate, aggregate, destroy) becomes a hosted service instead of a script.
+If the provider supports `image.build()`, the CLI can hash the Dockerfile + bench file contents and cache the built image. On subsequent runs with the same content, skip the build. This gives fast iteration without manual image management. The caching mechanism is provider-specific (Namespace uses blueprints, other providers may use tags or digests).
 
 ### Blueprint caching strategy
 
@@ -616,20 +554,22 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 - Passes `defineTask()` entries through with full step graph
 - Uses existing `mapPool` for concurrency, existing heartbeat/flush infrastructure
 
-### Phase 4: Add `--platform --image` mode to the CLI (pre-built image)
+### Phase 4: Add `--platform --image` mode to the CLI (pre-built image, CLI orchestrates)
 
-- CLI accepts `--image <image>` pointing to a pre-built Docker image
-- CLI calls `POST /runs` on the platform with the image ref + config
-- Platform launches worker sandboxes from the image via ComputeSDK provider (Namespace first)
-- Worker sandboxes call `runBenchWorker()` with the loaded entries
-- CLI polls `GET /runs/:id`, prints TUI
-- This replaces `start.ts` from `benchmarks/src/scale` — zero new infrastructure
+- CLI accepts `--image <image>` and `--provider <name>` flags
+- CLI divides tasks among N workers (static range assignment)
+- CLI launches N worker sandboxes via `provider.sandbox.create()` with the image
+- Each worker executes its range via `runBenchWorker()`, streams results back to CLI
+- CLI aggregates results, prints TUI, destroys sandboxes
+- No platform API needed — CLI orchestrates directly via ComputeSDK provider
+- This replaces `start.ts` from `benchmarks/src/scale`
 
 ### Phase 5: Migrate scale tests to the CLI
 
 - Replace `benchmarks/src/scale/sdk-coordinator.ts` with a `scale.bench.ts` file using `defineTask`/`defineStep`
-- Replace `start.ts` with `bench --platform --image`
+- Replace `start.ts` with `bench --platform --image --provider namespace`
 - The scale coordinator's step graph (worker.ready -> create -> exec.initial -> sandbox.live -> exec.final -> destroy) maps directly to `defineStep` calls
+- Barrier coordination: CLI orchestrates barriers (wait for all workers to report step completion before signaling proceed)
 
 ### Phase 6: Add `image.build()` to ComputeSDK provider interface
 
@@ -640,23 +580,32 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 
 ### Phase 7: Add `--platform` (build from files) to the CLI
 
-- `bench --platform` (without `--image`) ships bench files to the platform
-- Platform calls `provider.image.build()` to build the image
-- Platform launches worker sandboxes from the built image
-- Blueprint/image caching: hash Dockerfile + bench file contents, skip rebuild if cached
+- `bench --platform` (without `--image`) calls `provider.image.build()` with bench files + generated Dockerfile
+- Provider builds the image, CLI gets `imageRef` back
+- CLI launches workers from the built image (same as Phase 4)
+- Image caching: hash Dockerfile + bench file contents, skip rebuild if cached
 - No local Docker required — the provider builds on its infrastructure
 - Multi-provider: works with any ComputeSDK provider that implements `image.build()`
+
+### Phase 8: Optional platform storage (future)
+
+- `bench --platform --store` pushes results to the ComputeSDK platform after a run
+- Platform stores historical runs for trend tracking and regression detection
+- Web UI for viewing runs across a team
+- Platform is optional — not required for execution
 
 ## Open Questions
 
 1. **ComputeSDK provider interface for image build.** The current `Provider` interface has `sandbox.create()` (image run) but no `image.build()`. What should the `image.build()` signature look like? Should it support Dockerfile content, build context (tarball/zip), APT packages, or all of the above? How does build context reach the provider's builder (upload, git URL, inline)?
 
-2. **Provider capability detection.** Not all providers will support `image.build()`. Should the CLI/platform detect this at runtime and fall back to `--image` mode? Or should the API advertise capabilities per provider?
+2. **Provider capability detection.** Not all providers will support `image.build()`. Should the CLI detect this at runtime and fall back to `--image` mode? Or should the API advertise capabilities per provider?
 
-3. **Secrets management.** Scale tests need provider API keys (E2B, Modal, etc.) inside the worker sandbox. How do secrets flow from the user's environment to the platform to the worker sandbox? Secrets should not be baked into the image — they should be injected at sandbox launch time via env vars. The CLI needs a `--env` or `--secret` flag.
+3. **Secrets management.** Scale tests need provider API keys (E2B, Modal, etc.) inside the worker sandbox. How do secrets flow from the user's environment to the worker sandbox? Secrets should not be baked into the image — they should be injected at sandbox launch time via env vars. The CLI needs a `--env` or `--secret` flag.
 
-4. **Multiple files in `--platform` mode.** Local mode can run multiple files. Should `--platform` mode also support multiple files (build all into one image, run all), or should it be limited to one file per run for simplicity?
+4. **Step readiness barriers without the platform.** The scale coordinator uses `waitForStepReady` to coordinate across workers (e.g., "all workers reach create phase before any starts exec"). Without the platform as a coordination point, how do workers coordinate barriers? Options: CLI-orchestrated barriers (CLI waits for all workers to report, then signals proceed), provider-level networking (shared volumes, message queues), or use the platform only for barrier coordination. This is the main open question for the platform-less architecture.
 
-5. **Step readiness barriers.** The scale coordinator uses `waitForStepReady` to coordinate across workers (e.g., "all workers reach create phase before any starts exec"). Should the CLI expose this as a `defineStep` option, or should it be implicit? The current SDK already supports `readiness: 'poll'` on `DefineStepOptions`.
+5. **Multiple files in `--platform` mode.** Local mode can run multiple files. Should `--platform` mode also support multiple files (build all into one image, run all), or should it be limited to one file per run for simplicity?
 
-6. **Image lifecycle.** Should the platform cache built images across runs (content-addressed by file hash)? What is the retention/cleanup policy? This applies to both Namespace blueprints and any provider's image build output.
+6. **Image lifecycle.** Should the CLI cache built images across runs (content-addressed by file hash)? What is the retention/cleanup policy? This applies to both Namespace blueprints and any provider's image build output.
+
+7. **CLI crash recovery.** If the CLI crashes mid-run, worker sandboxes may be orphaned. Should the CLI register cleanup handlers (SIGTERM/SIGINT) to destroy sandboxes? Should sandboxes have a TTL so they self-destruct?
