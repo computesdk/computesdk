@@ -9,7 +9,8 @@
   "types": "./dist/index.d.ts",
   "bin": {
     "bench": "./dist/bin/bench.js",
-    "bench-ts": "./src/bin/bench-ts.ts"
+    "bench-ts": "./src/bin/bench-ts.ts",
+    "bench-worker": "./dist/bin/bench-worker.js"
   },
   "exports": {
     ".": {

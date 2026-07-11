@@ -1,7 +1,9 @@
 /**
  * Built bench CLI entry point — bundled by tsup into dist/bin/bench.js.
  */
+import process from 'node:process';
 import { runCli } from '../cli.js';
+import { runWorkerFromArgv } from '../remote-worker-entry.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -17,4 +19,8 @@ try {
 }
 
 const argv = process.argv.slice(2);
-await runCli(argv, version);
+if (argv.includes('--remote-worker') || process.env.BENCH_CLI_REMOTE_RUN_ID) {
+  await runWorkerFromArgv(argv);
+} else {
+  await runCli(argv, version);
+}

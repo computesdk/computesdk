@@ -93,3 +93,26 @@ export interface RunOptions {
   /** Bail on the first failing benchmark. */
   bail?: boolean;
 }
+
+export interface RemoteOptions {
+  /** Target benchmark slug on the platform. */
+  slug?: string;
+  /** Display name for the run. */
+  runName?: string;
+  /** Replications per registered benchmark function (default 100). */
+  total?: number;
+  /** Number of local worker processes to fork (default 1). */
+  workers?: number;
+  /** Per-worker parallel task slots (default 1). */
+  concurrency?: number;
+  /** Platform participant slug (default "bench-cli"). */
+  participant?: string;
+  /** Override the platform API key. */
+  apiKey?: string;
+  /** Override the platform base URL. */
+  baseUrl?: string;
+  /** How often the parent polls for progress (ms, default 1000). */
+  pollIntervalMs?: number;
+  /** Maximum wall-clock seconds before forcing shutdown (default 0 = no limit). */
+  timeoutSeconds?: number;
+}

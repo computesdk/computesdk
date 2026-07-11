@@ -1,5 +1,11 @@
 # @computesdk/bench-cli
 
+## 0.2.0
+
+- New `--remote` flag turns `bench run <file>` into a platform-orchestrated run via `@computesdk/bench`.
+- Parent CLI plans the run + workers, forks local `bench-worker` processes, polls progress, and prints a summary.
+- New `--slug`, `--total`, `--workers`, `--concurrency`, `--participant`, `--api-key`, `--base-url`, `--poll-interval`, `--timeout` flags.
+
 ## 0.1.0
 
 Initial release.
