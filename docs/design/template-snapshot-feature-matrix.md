@@ -55,6 +55,7 @@ Can build images/templates from a Dockerfile but cannot capture a running instan
 
 | Provider | Build mechanism | Notes |
 |---|---|---|
+| **Namespace** | ImageService `CreateBlueprint` + `Build` (Dockerfile or APT-based) | gRPC API at `global.namespaceapis.com` |
 | **HopX** | `Template.createTemplate()` + `Template.build()` | Full template builder |
 | **Beam** | `Image.fromRegistry().build()` | Image build API |
 | **Superserve** | `Template.create()` with build spec | Template with `from` + `steps` |
@@ -67,7 +68,6 @@ Platform supports templates/images but only via CLI, not programmatically expose
 
 | Provider | Platform capability | ComputeSDK status | Notes |
 |---|---|---|---|
-| **Namespace** | Container registry, `nsc base-image upload`, Docker buildx | Throws with CLI guidance | API doesn't expose image build/upload |
 | **Cloud Run** | Cloud Build, container templates | Pass-through `config.template` string | No template CRUD via API |
 | **Northflank** | Build service from Dockerfile | Not implemented | Build via Northflank dashboard/CLI |
 | **K8s** | Container images, volume snapshots | Not implemented | Images serve as templates |
@@ -93,8 +93,8 @@ No snapshot or template concept exists on the platform.
 
 - 8 with both build-from-spec and capture-from-sandbox
 - 11 with capture-from-sandbox only
-- 5 with build-from-spec only
-- 3 with CLI-only guidance (throws with instructions)
+- 6 with build-from-spec only
+- 2 with CLI-only guidance (throws with instructions)
 
 **7 providers** where template/snapshot does not apply or is not yet exposed.
 
@@ -166,7 +166,7 @@ No snapshot or template concept exists on the platform.
 | **Cloudflare** | not-implemented | not-implemented | no | no | Durable Object sandboxes, no snapshot or template concept. |
 | **K8s** | not-implemented | not-implemented | no | partial — container images | K8s pods are ephemeral. Container images serve as templates but no image management. |
 | **Railway** | not-implemented | not-implemented | no | partial — `Sandbox.template()` builder | README explicitly says templates not exposed. Builder exists in native SDK. |
-| **Namespace** | not-implemented | not-implemented | no | partial — `image_ref` at create time | No snapshot. Image is a pass-through string. |
+| **Namespace** | not-implemented | working | no | yes — ImageService gRPC API: `CreateBlueprint` (Dockerfile or APT-based), `Build`, `FetchBlueprint`, `ListBlueprints`, `RemoveBlueprint` | Implemented build-from-spec via ImageService at `global.namespaceapis.com`. No snapshot/capture. |
 | **Northflank** | not-implemented | not-implemented | no | partial — image path or internal deployment | No snapshot. Build service exists but no template CRUD. |
 | **Collimate** | not-implemented | not-implemented | no | partial — templateId required at create time | No snapshot. Template is a pass-through string, no CRUD. |
 | **AgentCore** | not-implemented | not-implemented | no | no | Ephemeral code interpreter sessions. No snapshot or template concept. |
@@ -221,7 +221,7 @@ AgentCore, Archil, Just-Bash, Secure-Exec, Cloudflare
 
 ### Providers with partial/template-as-passthrough only (low priority)
 
-Docker, Cloud Run, K8s, Railway, Namespace, Northflank, Collimate, Blaxel
+Docker, Cloud Run, K8s, Railway, Northflank, Collimate, Blaxel
 
 ---
 

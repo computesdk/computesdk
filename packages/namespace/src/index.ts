@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, CreateTemplateOptions, TemplateInfo } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -55,6 +55,24 @@ const API_ENDPOINTS = {
 const COMMAND_SERVICE = {
   RUN_COMMAND_SYNC: '/namespace.cloud.compute.v1beta.CommandService/RunCommandSync',
 };
+
+const IMAGE_SERVICE_BASE_URL = 'https://global.namespaceapis.com';
+
+const IMAGE_SERVICE_ENDPOINTS = {
+  CREATE_BLUEPRINT: '/namespace.cloud.image.v1beta.ImageService/CreateBlueprint',
+  LIST_BLUEPRINTS: '/namespace.cloud.image.v1beta.ImageService/ListBlueprints',
+  REMOVE_BLUEPRINT: '/namespace.cloud.image.v1beta.ImageService/RemoveBlueprint',
+  FETCH_BLUEPRINT: '/namespace.cloud.image.v1beta.ImageService/FetchBlueprint',
+  BUILD: '/namespace.cloud.image.v1beta.ImageService/Build',
+};
+
+const BLUEPRINT_STATE = {
+  UNKNOWN: 0,
+  READY: 1,
+  NEEDS_BUILDING: 2,
+  BUILDING: 3,
+  FAILED: 4,
+} as const;
 
 /**
  * Load bearer token from a JSON token file (e.g. from `nsc login`)
@@ -119,6 +137,47 @@ export const fetchNamespace = async (
   handleApiErrors(data);
   return data;
 };
+
+/**
+ * Poll FetchBlueprint until the build reaches a terminal state (READY or FAILED).
+ */
+async function pollBlueprintStatus(
+  token: string,
+  blueprintName: string,
+  maxWaitMs: number = 10 * 60 * 1000,
+  intervalMs: number = 5000
+): Promise<any> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const resp = await fetchNamespace(
+      token,
+      IMAGE_SERVICE_ENDPOINTS.FETCH_BLUEPRINT,
+      {
+        method: 'POST',
+        body: JSON.stringify({ blueprint_name: blueprintName }),
+      },
+      IMAGE_SERVICE_BASE_URL
+    );
+    const blueprint = resp.blueprint;
+    if (!blueprint) {
+      throw new Error(`FetchBlueprint returned no blueprint for "${blueprintName}"`);
+    }
+    const states = Object.values(blueprint.state || {}) as Array<{ state?: number; image_ref?: string }>;
+    const anyBuilding = states.some(s => s?.state === BLUEPRINT_STATE.BUILDING);
+    const anyFailed = states.some(s => s?.state === BLUEPRINT_STATE.FAILED);
+    const anyReady = states.some(s => s?.state === BLUEPRINT_STATE.READY);
+
+    if (anyFailed) {
+      const errorMsg = blueprint.status?.error || 'Build failed';
+      throw new Error(`Namespace blueprint build failed: ${errorMsg}`);
+    }
+    if (anyReady && !anyBuilding) {
+      return blueprint;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Timed out waiting for blueprint "${blueprintName}" to build`);
+}
 
 /**
  * Namespace provider
@@ -352,41 +411,170 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
     },
 
     template: {
-      create: async (_config: NamespaceConfig, options: CreateTemplateOptions) => {
+      create: async (config: NamespaceConfig, options: CreateTemplateOptions): Promise<TemplateInfo> => {
+        const { token } = await getAndValidateCredentials(config);
+
         // Mode 1: Capture from running sandbox
         if (options.from) {
           throw new Error(
             'Namespace does not support capturing templates from running sandboxes. ' +
-              'Namespace instances do not have a snapshot or checkpoint API. ' +
-              'To create a custom base image, build it locally and upload with ' +
-              '`nsc base-image upload`, then reference it via the `image` option ' +
-              'when creating a sandbox.'
+              'The ImageService API only supports building from a Dockerfile or APT-based spec. ' +
+              'To use a custom image, build it with template.create({ dockerfile }) or ' +
+              'template.create({ baseImage }), then reference it via the `image` option.'
           );
         }
 
-        // Mode 2: Build from spec
-        // Namespace supports custom base images via its container registry, but
-        // building and uploading images is only available through the `nsc` CLI
-        // (`nsc base-image upload`), not through the HTTP API used here.
-        throw new Error(
-          'Namespace does not support building templates from spec via the HTTP API. ' +
-            'To create a custom base image, build it locally and upload with ' +
-            '`nsc base-image upload <image-name>`, then reference it via the `image` ' +
-            'option when creating a sandbox (e.g. namespace({ ... }).sandbox.create({ image: "my-image" })).'
+        // Mode 2: Build from spec via ImageService API
+        let spec: Record<string, any>;
+
+        if (options.dockerfile) {
+          spec = {
+            dockerfile: {
+              content: options.dockerfile,
+            },
+          };
+        } else if (options.baseImage) {
+          // Construct a Dockerfile from the base image + envs + startCommand
+          const lines: string[] = [`FROM ${options.baseImage}`];
+          if (options.envs) {
+            for (const [k, v] of Object.entries(options.envs)) {
+              lines.push(`ENV ${k}=${v}`);
+            }
+          }
+          if (options.startCommand) {
+            lines.push(`CMD ${JSON.stringify(options.startCommand)}`);
+          }
+          spec = {
+            dockerfile: {
+              content: lines.join('\n'),
+            },
+          };
+        } else {
+          throw new Error(
+            'Namespace template.create requires either `dockerfile`, `baseImage`, or `from`. ' +
+              'Provide a Dockerfile string, a base image name, or a sandbox ID to capture from.'
+          );
+        }
+
+        // Step 1: Create the blueprint
+        const createResp = await fetchNamespace(
+          token,
+          IMAGE_SERVICE_ENDPOINTS.CREATE_BLUEPRINT,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              blueprint_name: options.name,
+              spec,
+            }),
+          },
+          IMAGE_SERVICE_BASE_URL
         );
+
+        const blueprint = createResp.blueprint;
+        if (!blueprint) {
+          throw new Error(`CreateBlueprint did not return a blueprint. Response: ${JSON.stringify(createResp)}`);
+        }
+
+        // Step 2: Trigger the build
+        await fetchNamespace(
+          token,
+          IMAGE_SERVICE_ENDPOINTS.BUILD,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              blueprint_name: options.name,
+            }),
+          },
+          IMAGE_SERVICE_BASE_URL
+        );
+
+        // Step 3: Poll until build completes
+        const builtBlueprint = await pollBlueprintStatus(token, options.name);
+
+        // Extract the image ref from the built blueprint
+        const states = Object.values(builtBlueprint.state || {}) as Array<{ image_ref?: string }>;
+        const imageRef = builtBlueprint.status?.image_ref ||
+          states.find(s => s?.image_ref)?.image_ref ||
+          options.name;
+
+        return {
+          id: builtBlueprint.id || options.name,
+          provider: 'namespace',
+          name: options.name,
+          createdAt: builtBlueprint.created_at
+            ? new Date(builtBlueprint.created_at)
+            : new Date(),
+          status: 'active',
+          metadata: {
+            ...options.metadata,
+            source: 'build',
+            imageRef,
+            blueprintId: builtBlueprint.id,
+          },
+        };
       },
 
-      list: async (_config: NamespaceConfig) => {
-        // Namespace's HTTP API does not expose a registry image listing endpoint.
-        // Use `nsc base-image list` via the CLI to list available base images.
-        return [];
+      list: async (config: NamespaceConfig): Promise<TemplateInfo[]> => {
+        const { token } = await getAndValidateCredentials(config);
+
+        try {
+          const resp = await fetchNamespace(
+            token,
+            IMAGE_SERVICE_ENDPOINTS.LIST_BLUEPRINTS,
+            {
+              method: 'POST',
+              body: JSON.stringify({}),
+            },
+            IMAGE_SERVICE_BASE_URL
+          );
+
+          const blueprints = resp.blueprints || [];
+          return blueprints.map((bp: any) => {
+            const bpStates = Object.values(bp.state || {}) as Array<{ state?: number }>;
+            const allReady = bpStates.length > 0 && bpStates.every(s => s?.state === BLUEPRINT_STATE.READY);
+            const anyFailed = bpStates.some(s => s?.state === BLUEPRINT_STATE.FAILED);
+            const anyBuilding = bpStates.some(s => s?.state === BLUEPRINT_STATE.BUILDING);
+
+            return {
+              id: bp.id || bp.name,
+              provider: 'namespace',
+              name: bp.name || 'unnamed',
+              createdAt: bp.created_at ? new Date(bp.created_at) : new Date(),
+              status: anyFailed ? 'error' as const : anyBuilding ? 'building' as const : allReady ? 'active' as const : 'inactive' as const,
+              metadata: {
+                blueprintId: bp.id,
+                imageRef: bp.status?.image_ref,
+                creatorId: bp.creator_id,
+              },
+            };
+          });
+        } catch (error) {
+          throw new Error(
+            `Failed to list Namespace blueprints: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
-      delete: async (_config: NamespaceConfig, _templateId: string) => {
-        throw new Error(
-          'Namespace does not support deleting registry images via the HTTP API. ' +
-            'Use the `nsc` CLI to manage base images: `nsc base-image delete <image-name>`.'
-        );
+      delete: async (config: NamespaceConfig, templateId: string): Promise<void> => {
+        const { token } = await getAndValidateCredentials(config);
+
+        try {
+          await fetchNamespace(
+            token,
+            IMAGE_SERVICE_ENDPOINTS.REMOVE_BLUEPRINT,
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                blueprint_name: templateId,
+              }),
+            },
+            IMAGE_SERVICE_BASE_URL
+          );
+        } catch (error) {
+          throw new Error(
+            `Failed to remove Namespace blueprint: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
     },
   }
