@@ -136,23 +136,19 @@ bench --platform --image my-image --total 500 --workers 4 --concurrency 10
 
 Renamed from `--remote` to `--platform` to accurately describe what it does: ship benchmarks to the first-party benchmark runner platform for execution.
 
-The first-party benchmark runner platform is a hosted service that owns the entire benchmark lifecycle: receive work, run workers, aggregate, report. It has its own compute infrastructure (VMs/containers) for running benchmarks. It is not a ComputeSDK sandbox — ComputeSDK is a framework that connects to external sandbox providers (E2B, Modal, etc.). The benchmark platform is a separate product with its own compute capacity, purpose-built for running `*.bench.ts` workloads.
+The first-party benchmark runner platform is a hosted service that owns the entire benchmark lifecycle: receive work, build, run workers, aggregate, report. It uses Namespace for compute (image building, VM launch, logs) but the CLI never talks to Namespace directly — everything routes through the platform. Users only need ComputeSDK platform credentials.
 
-The initial release uses the Docker image path (the same pattern as `benchmarks/src/scale`): the user builds a Docker image containing the bench files + deps, the platform launches worker VMs from that image via Namespace ComputeService, each VM runs a coordinator that claims work and executes entries. A future release will add ship-files capability so users can skip the Docker build step.
+The initial release uses the Docker image path (the same pattern as `benchmarks/src/scale`): the user provides a pre-built image (or the platform builds one from files), the platform launches worker VMs via Namespace, each VM runs a coordinator that claims work and executes entries.
 
-1. CLI discovers and loads bench files (same as local) — or the Docker image contains them.
-2. CLI creates a benchmark run on the ComputeSDK platform, plans workers.
-3. CLI launches worker VMs via Namespace `ComputeService.CreateInstance` — one instance per worker, each running a container from the image with env vars for the ComputeSDK platform connection (slug, run ID, participant, API key).
-4. Each worker VM loads the bench files, claims a task range from the ComputeSDK platform, and executes entries through the SDK's `runWorker()`:
-   - Real concurrency via `mapPool(taskIndices, concurrency, ...)`
-   - Automatic heartbeats to the ComputeSDK platform
-   - Batched result flushing to the ComputeSDK platform
-   - Step-level concurrency barriers (`waitForStepReady`)
-5. CLI polls ComputeSDK platform for progress (`getRunProgress`), streams worker logs via Namespace `ObservabilityService.StreamInstanceLogs`, prints TUI.
-6. When all workers finish, CLI destroys instances via Namespace `ComputeService.DestroyInstance`.
-7. CLI fetches final results from ComputeSDK platform, prints summary.
+1. CLI discovers and loads bench files (same as local) — or uses a pre-built `--image`.
+2. CLI calls `POST /runs` on the ComputeSDK platform with bench files (or image ref) + config.
+3. Platform builds the image via Namespace `ImageService` (if files were provided, not a pre-built image).
+4. Platform launches worker VMs via Namespace `ComputeService.CreateInstance` — one instance per worker, each running a container from the image with env vars for platform connection.
+5. Each worker VM claims a task range from the platform, executes entries through the SDK's `runWorker()` (real concurrency, heartbeats, batched flushing, step barriers), and reports results back to the platform.
+6. CLI polls `GET /runs/:id` — platform returns `phase` (building -> running -> completed) and progress.
+7. When complete, CLI calls `GET /runs/:id/results` for aggregated results and prints summary.
 
-The key change: the CLI does NOT fork local processes. The platform runs workers on its own compute. The SDK's `runWorker()` is the single execution path for remote work. The CLI replaces `start.ts` from the scale test repo.
+The CLI does three API calls. The platform handles all Namespace interaction (build, launch, monitor, destroy). Users only need ComputeSDK platform credentials.
 
 ### The first-party benchmark runner platform
 
@@ -160,12 +156,12 @@ The `--platform` mode uses two layers:
 
 1. **ComputeSDK platform** (`platform.computesdk.com`) — benchmark coordination: create runs, plan workers, task claiming, result aggregation, progress tracking, historical runs. This is the existing API (`BenchmarkClient`, `BenchmarkReporter`).
 
-2. **Namespace** (`namespaceapis.com`) — compute infrastructure: build images, launch worker VMs, stream logs, collect metrics, destroy VMs. Namespace provides three services the CLI uses:
+2. **Namespace** (`namespaceapis.com`) — compute infrastructure: build images, launch worker VMs, stream logs, collect metrics, destroy VMs. The platform (not the CLI) talks to Namespace. Three services:
    - `ImageService` — build Docker images from blueprints ([docs](https://buf.build/namespace/cloud/docs/main%3Anamespace.cloud.image.v1beta))
    - `ComputeService` — create/monitor/destroy micro-VM instances with containers ([docs](https://buf.build/namespace/cloud/docs/main%3Anamespace.cloud.compute.v1beta))
    - `ObservabilityService` — stream/fetch instance logs
 
-This is a clean separation: Namespace = compute, ComputeSDK platform = coordination. The CLI is the orchestrator that talks to both.
+This is a clean separation: Namespace = compute, ComputeSDK platform = orchestration + coordination. The CLI only talks to the platform.
 
 ComputeSDK itself is a framework that connects to external sandbox providers (E2B, Modal, etc.). The benchmark runner is a separate system that uses Namespace for its compute — it does not use ComputeSDK sandboxes.
 
@@ -173,26 +169,62 @@ The scale test infrastructure in `computesdk/benchmarks/src/scale` is the protot
 
 ### Architecture
 
+The CLI talks only to the ComputeSDK platform. The platform handles all Namespace interaction internally. Users never need Namespace credentials.
+
 ```
-                    CLI (bench --platform)
-                   /                      \
-          ComputeSDK Platform             Namespace
-     (coordination layer)             (compute layer)
-          /          \                /           \
-   create run    aggregate       ImageService    ComputeService
-   plan workers  results         (build image)   (launch VMs)
-   poll progress historical      StorageService   ObservabilityService
-                 runs             (cache volumes)  (stream logs)
-                      \              /
-                       \            /
-                   Worker VM (Namespace instance)
-                   - runs bench-worker container
-                   - claims tasks from ComputeSDK platform
-                   - executes entries via runBenchWorker()
-                   - reports results to ComputeSDK platform
+CLI -----> ComputeSDK Platform -----> Namespace
+           (benchmark runner)         (compute)
+              |                           |
+              |  POST /runs (files)       |
+              |  -> build image           |
+              |     via Namespace         |
+              |     ImageService          |
+              |  -> launch workers        |
+              |     via Namespace         |
+              |     ComputeService        |
+              |  -> workers claim tasks   |
+              |     and report results    |
+              |     back to platform      |
+              |  -> destroy VMs           |
+              |     via Namespace         |
+              |                           |
+              |  GET /runs/:id            |
+              |  <- status + progress     |
+              |  GET /runs/:id/results    |
+              |  <- aggregated results    |
 ```
 
-The worker VM is the bridge between the two layers: it runs on Namespace compute but talks to the ComputeSDK platform API for task claiming and result reporting. This is exactly what the scale test coordinator does today — it runs in a Namespace VM and calls `createBenchmarkClient()` + `runBenchmarkWorker()` to claim and report work.
+The platform productizes what `start.ts` does today: build images, launch VMs, coordinate workers, aggregate results, clean up. The CLI is a thin client with three API calls.
+
+### Platform API shape (minimal)
+
+The platform needs just three new endpoints (or extensions to existing ones):
+
+1. `POST /benchmarks/:slug/runs` — create a run. Request body includes:
+   - Bench files (multipart upload or zip) — or `image` field for pre-built image mode
+   - Config: `total`, `workers`, `concurrency`, `participant`, env vars/secrets
+   - Platform handles: build image via Namespace (if files provided), launch worker VMs via Namespace ComputeService, workers claim and execute tasks
+   - Returns: `{ runId, status: "building" | "running" }`
+
+2. `GET /runs/:id` — get run state. Returns:
+   - `phase`: `"building" | "running" | "completed" | "failed"`
+   - `progress`: task counts (done, total, errors) — already exists as `getRunProgress`
+   - `workers`: VM status per worker
+   - This is an extension of the existing `getRun` / `getRunProgress` endpoints, adding `phase` and `buildStatus`
+
+3. `GET /runs/:id/results` — get aggregated results. Already exists as `getRunResults` / `getRunTaskResults`.
+
+Optional:
+4. `POST /runs/:id/stop` — stop the run early (destroy worker VMs, mark run as failed). Already exists as `updateRun` with `status: "failed"`.
+
+That is the entire API surface. The CLI does:
+```
+POST /runs (with files or image)
+poll GET /runs/:id until phase=completed
+GET /runs/:id/results
+```
+
+Three calls. Everything else is the platform's job.
 
 ## Remote Execution: Ship Files vs Docker Image
 
@@ -243,52 +275,47 @@ CLI packages bench files, generates a default Dockerfile (or uses a user-provide
 
 For benchmarks that just need Node.js + a few system packages, the CLI can use Namespace's `AptBasedImage` spec instead of a full Dockerfile. This is faster to build and simpler to configure.
 
-### Build flow (Mode 2: CLI builds via Namespace)
+### Build flow (all routed through the platform)
 
 ```
-CLI                Namespace ImageService        Namespace ComputeService      ComputeSDK Platform
- |                         |                            |                            |
- |  CreateBlueprint(spec)  |                            |                            |
- |  Build(blueprint)       |                            |                            |
- |                         |  async build               |                            |
- |  FetchBlueprint()       |                            |                            |
- |  <--- STATE_READY ------+                            |                            |
- |  (got image_ref)        |                            |                            |
- |                         |                            |                            |
- |  (create run, plan workers) ------------------------>|                            |
- |                         |                            |  POST /benchmarks/:slug    |
- |                         |                            |  POST /runs                |
- |                         |                            |  POST /planWorkers         |
- |                         |                            |                            |
- |  CreateInstance(image_ref, env: {SLUG, RUN_ID, ...}) |                            |
- |                         |                            |  launch worker VMs         |
- |                         |                            |    from image_ref          |
- |                         |                            |                            |
- |                         |                            |  each worker VM:           |
- |                         |                            |    claimWorker() --------->|
- |                         |                            |    runBenchWorker()        |
- |                         |                            |    sendTaskResults() ----->|
- |                         |                            |    completeWorker() ------>|
- |                         |                            |                            |
- |  StreamInstanceLogs()   |                            |                            |
- |  <--- live logs --------+----------------------------+                            |
- |                         |                            |                            |
- |  getRunProgress() ----------------------------------------------------------------->|
- |  <--- progress updates -------------------------------------------------------------|
- |                         |                            |                            |
- |  DestroyInstance()      |                            |                            |
- |                         |                            |  destroy worker VMs        |
- |                         |                            |                            |
- |  getRunResults() ------------------------------------------------------------------>|
- |  <--- final summary ----------------------------------------------------------------|
+CLI                      ComputeSDK Platform                    Namespace
+ |                            |                                    |
+ |  POST /runs (files)        |                                    |
+ |  ------------------------->|                                    |
+ |                            |  CreateBlueprint + Build           |
+ |                            |  --------------------------------->|
+ |                            |  FetchBlueprint (poll)             |
+ |                            |  <--- STATE_READY + image_ref -----|
+ |                            |                                    |
+ |                            |  CreateInstance (per worker)       |
+ |                            |  --------------------------------->|
+ |                            |  <--- instances launched ----------|
+ |                            |                                    |
+ |                            |  (workers claim tasks from        |
+ |                            |   platform, execute, report)      |
+ |                            |                                    |
+ |  GET /runs/:id             |                                    |
+ |  <--- phase=building ------|                                    |
+ |  GET /runs/:id             |                                    |
+ |  <--- phase=running --------|                                    |
+ |  GET /runs/:id             |                                    |
+ |  <--- phase=completed ------|                                    |
+ |                            |                                    |
+ |  GET /runs/:id/results     |                                    |
+ |  <--- aggregated results --|                                    |
+ |                            |  DestroyInstance (cleanup)         |
+ |                            |  --------------------------------->|
 ```
 
-No `POST /runs/:id/build` endpoint needed on the ComputeSDK platform. The CLI orchestrates directly:
-- Namespace ImageService for building
-- Namespace ComputeService for launching/monitoring/destroying worker VMs
-- ComputeSDK platform for benchmark coordination (runs, task claims, results)
+The CLI never talks to Namespace. The platform is the sole orchestrator:
+- Receives files from CLI
+- Builds image via Namespace ImageService
+- Launches worker VMs via Namespace ComputeService
+- Workers claim tasks from the platform and report results back
+- Platform destroys VMs via Namespace ComputeService when done
+- Platform returns aggregated results to CLI
 
-The worker VM is the bridge: it runs on Namespace but talks to the ComputeSDK platform for task claiming and result reporting. This is the same pattern as `benchmarks/src/scale/sdk-coordinator.ts` — it runs in a Namespace VM and calls `createBenchmarkClient()` + `runBenchmarkWorker()`.
+The platform productizes `start.ts` from `benchmarks/src/scale`. The same logic (create run, build image, launch VMs, coordinate, aggregate, destroy) becomes a hosted service instead of a script.
 
 ### Blueprint caching strategy
 
