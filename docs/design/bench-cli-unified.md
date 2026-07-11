@@ -25,7 +25,7 @@ This doc proposes a unified design that fixes all three. Since there is zero ext
 - One CLI: `bench` discovers files, loads entries, runs them locally or on the platform. No fork-and-reimplement.
 - Remote execution that actually runs remotely: the CLI orchestrates via ComputeSDK providers (multi-provider from day one). No local Docker required for the default path.
 - The platform is always-on for storage/ingestion — even local runs push results. The platform handles zero execution.
-- The scale coordinator pattern in `computesdk/benchmarks/src/scale/sdk-coordinator.ts` is the reference implementation for what `--platform` should look like.
+- The scale coordinator pattern in `computesdk/benchmarks/src/scale/sdk-coordinator.ts` is the reference implementation for what remote execution should look like.
 
 ## Authoring API
 
@@ -128,16 +128,15 @@ bench run benchmarks/*.bench.ts
 
 The local runner is the existing `runner.ts` from PR #636, extended to handle `defineTask` entries in addition to `bench()` entries.
 
-### Remote mode (`--platform`)
+### Remote mode (`--provider`)
 
 ```
-bench --platform --image ghcr.io/computesdk/scale-coordinator:latest
-bench --platform --image my-image --total 500 --workers 4 --concurrency 10
+bench run --provider namespace --image ghcr.io/computesdk/scale-coordinator:latest
+bench run --provider namespace --image my-image --total 500 --workers 4 --concurrency 10
+bench run --provider e2b --workers 4
 ```
 
-Renamed from `--remote` to `--platform` to accurately describe what it does: run benchmarks on remote compute via ComputeSDK providers.
-
-The CLI uses ComputeSDK providers directly for execution. The platform handles zero execution — it is always-on for storage/ingestion only.
+The presence of `--provider` triggers remote execution. Without it, benchmarks run locally in-process. The CLI uses ComputeSDK providers directly for execution. The platform handles zero execution — it is always-on for storage/ingestion only.
 
 1. CLI discovers and loads bench files (same as local) — or uses a pre-built `--image`.
 2. CLI builds image via `compute.template.create({ dockerfile, baseImage })` (if files provided, not `--image`). This uses the unified template primitive from PR #639 — multi-provider from day one.
@@ -154,13 +153,13 @@ The platform (`platform.computesdk.com`) handles zero execution. It is the stora
 
 1. **ComputeSDK providers** (Namespace, E2B, Modal, etc.) — compute: build images via `template.create()`, launch worker sandboxes, stream logs, destroy. The CLI talks to providers directly through ComputeSDK's provider abstraction.
 
-2. **ComputeSDK platform** (always on) — run storage, result ingestion, web UI, trend tracking, regression detection. The CLI always pushes results here after a run completes, whether local or remote.
+2. **ComputeSDK platform** (always on) — run storage, result ingestion, web UI, trend tracking, regression detection. The CLI always pushes results here after a run completes, whether local or remote. Platform credentials are required — the CLI errors if they are missing.
 
 This means:
 - `bench run ./file.bench.ts` (local) — runs locally, pushes results to platform
-- `bench --platform --provider namespace` (remote) — CLI orchestrates via provider, pushes results to platform
+- `bench run --provider namespace ./file.bench.ts` (remote) — CLI orchestrates via provider, pushes results to platform
 - The platform never touches execution — no building, no launching, no worker coordination
-- The platform is NOT optional for storage — it is always on
+- Ingestion is forced — every run is stored
 
 ### Architecture: CLI orchestrates, platform stores
 
@@ -228,12 +227,12 @@ The platform does NOT need endpoints for building, launching, or coordinating wo
 
 ## Remote Execution: Ship Files vs Docker Image
 
-### Two modes, both via ComputeSDK providers
+### Two modes, both via ComputeSDK providers (`--provider` triggers remote)
 
 **Mode 1: Pre-built image**
 
 ```
-bench --platform --image my-registry/bench:latest --provider namespace
+bench run --provider namespace --image my-registry/bench:latest
 ```
 
 CLI launches worker sandboxes directly from the image via `compute.sandbox.create({ template: imageRef })`. Works with any provider. User (or CI) builds the image beforehand.
@@ -241,7 +240,7 @@ CLI launches worker sandboxes directly from the image via `compute.sandbox.creat
 **Mode 2: Build from files (default)**
 
 ```
-bench --platform --provider namespace
+bench run --provider namespace
 ```
 
 CLI calls `compute.template.create({ dockerfile, baseImage })` with a generated Dockerfile + bench files. Provider builds the image via the unified template primitive (PR #639). CLI gets `templateId` back. CLI launches workers from that template. No local Docker required — the provider builds on its infrastructure.
@@ -289,9 +288,9 @@ If the provider supports `template.create()` with build-from-spec, the CLI can h
 
 ### What about the existing scale coordinator?
 
-The existing `computesdk/benchmarks/src/scale` flow (build Docker image, push, `start.ts` launches VMs) continues to work for scale testing. The CLI's `--platform --image` path is the integration point: the scale coordinator image is built in CI, and `bench --platform --image <scale-image>` launches it through the platform API instead of the custom `start.ts` script.
+The existing `computesdk/benchmarks/src/scale` flow (build Docker image, push, `start.ts` launches VMs) continues to work for scale testing. The CLI's `--provider --image` path is the integration point: the scale coordinator image is built in CI, and `bench run --provider namespace --image <scale-image>` launches it through the CLI instead of the custom `start.ts` script.
 
-Over time, `start.ts` can be replaced by `bench --platform --image` + a `benchmarks/scale.bench.ts` file that uses `defineTask`/`defineStep`, unifying the scale test under the same CLI.
+Over time, `start.ts` can be replaced by `bench run --provider namespace --image` + a `benchmarks/scale.bench.ts` file that uses `defineTask`/`defineStep`, unifying the scale test under the same CLI.
 
 ## CLI Surface
 
@@ -300,7 +299,6 @@ Over time, `start.ts` can be replaced by `bench --platform --image` + a `benchma
 ```
 bench [run] [files...]     Run benchmarks (default subcommand)
 bench list [files...]      List discovered benchmarks without running
-bench --platform [files..] Run on the benchmark runner platform
 ```
 
 ### Flags
@@ -314,16 +312,13 @@ Local flags:
 --cwd <path>             Working directory
 ```
 
-Platform flags:
+Remote flags (presence of --provider triggers remote execution):
 ```
---platform               Run on the benchmark runner platform
+--provider <name>        Compute provider (namespace, e2b, modal, etc.)
 --total <n>              Replications per benchmark function (default 100)
---workers <n>            Worker VMs to spawn (default 1)
+--workers <n>            Worker sandboxes to spawn (default 1)
 --concurrency <n>        Parallel task slots per worker (default 1)
---participant <slug>     Participant identifier (default bench-cli)
---slug <slug>            Benchmark slug (default derived from filename)
---run-name <name>        Run display name (default derived from filename)
---image <image>          Pre-built Docker image (skips platform build)
+--image <image>          Pre-built Docker image (skips template build)
 --api-key <key>          Platform API key (default env COMPUTESDK_ADMIN_API_KEY)
 --base-url <url>         Platform base URL
 --poll-interval <ms>     Progress poll interval (default 1000)
@@ -393,7 +388,7 @@ Internally:
 - The existing `mapPool(taskIndices, concurrency, ...)` provides parallelism.
 - Results include rich metrics in `TaskResultRecord.data` (hz, meanMs, p50, stdev, rme for `bench()` entries; per-step latencies for `defineTask()` entries).
 
-This is the function the CLI calls in `--platform` mode. It replaces the current `runRemoteWorker()` in `bench-cli/src/remote-worker.ts`.
+This is the function the CLI calls in remote mode (`--provider`). It replaces the current `runRemoteWorker()` in `bench-cli/src/remote-worker.ts`.
 
 ## Package Structure
 
@@ -438,7 +433,7 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 
 `bench()` entries show ops/sec. `defineTask()` entries show per-step latencies.
 
-### Platform TUI
+### Remote TUI
 
 ```
  bench  planning  sandbox-latency on bench-cli
@@ -524,7 +519,7 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 - Extend the reporter to show per-step results
 - Extend `bench list` to show steps
 
-### Phase 3: Add `--platform` mode to the CLI (multi-provider execution)
+### Phase 3: Add remote execution to the CLI (multi-provider, `--provider` trigger)
 
 - CLI accepts `--provider <name>`, `--image <ref>`, `--workers <n>`, `--total <n>`, `--concurrency <n>` flags
 - `--image` mode: CLI launches N worker sandboxes via `compute.sandbox.create({ template: imageRef, env })`
@@ -538,13 +533,13 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 ### Phase 4: Migrate scale tests to the CLI
 
 - Replace `benchmarks/src/scale/sdk-coordinator.ts` with a `scale.bench.ts` file using `defineTask`/`defineStep`
-- Replace `start.ts` with `bench --platform --provider namespace --image <scale-image>`
+- Replace `start.ts` with `bench run --provider namespace --image <scale-image>`
 - The scale coordinator's step graph (worker.ready -> create -> exec.initial -> sandbox.live -> exec.final -> destroy) maps directly to `defineStep` calls
 - Barrier coordination: CLI orchestrates barriers (wait for all workers to report step completion before signaling proceed)
 
 ## Open Questions
 
-1. **Namespace `template.create()` implementation.** PR #639 adds the unified `template` primitive to the Provider interface, but Namespace is listed as Tier 3 ("not-implemented") in the feature matrix. Namespace needs a `template` block added that wraps `ImageService.CreateBlueprint` + `Build` for build-from-spec mode. This is the first provider implementation needed for `bench --platform --provider namespace` (build-from-files mode).
+1. **Namespace `template.create()` implementation.** PR #639 adds the unified `template` primitive to the Provider interface, but Namespace is listed as Tier 3 ("not-implemented") in the feature matrix. Namespace needs a `template` block added that wraps `ImageService.CreateBlueprint` + `Build` for build-from-spec mode. This is the first provider implementation needed for `bench run --provider namespace` (build-from-files mode).
 
 2. **Provider capability detection.** Not all providers support `template.create()` with build-from-spec. Should the CLI detect this at runtime and fall back to `--image` mode? Or should the API advertise capabilities per provider?
 
@@ -552,7 +547,7 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 
 4. **Step readiness barriers without the platform.** The scale coordinator uses `waitForStepReady` to coordinate across workers (e.g., "all workers reach create phase before any starts exec"). Without the platform as a coordination point, how do workers coordinate barriers? Options: CLI-orchestrated barriers (CLI waits for all workers to report, then signals proceed), or provider-level networking (shared volumes, message queues).
 
-5. **Multiple files in `--platform` mode.** Local mode can run multiple files. Should `--platform` mode also support multiple files (build all into one image, run all), or should it be limited to one file per run for simplicity?
+5. **Multiple files in remote mode.** Local mode can run multiple files. Should remote mode (`--provider`) also support multiple files (build all into one image, run all), or should it be limited to one file per run for simplicity?
 
 6. **Template lifecycle.** Should the CLI cache built templates across runs (content-addressed by file hash)? What is the retention/cleanup policy? This applies to all providers' template build output.
 
