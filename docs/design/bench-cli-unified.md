@@ -199,7 +199,7 @@ This is exactly how `benchmarks/src/scale` works today:
 - `start.ts` creates the run, plans workers, launches VMs with the image
 - Each VM runs the coordinator which claims a worker and executes tasks
 
-The CLI replaces `start.ts`. The Docker image, VM launch, and coordinator pattern stay the same.
+The CLI replaces `start.ts`. The Docker image, VM launch, and coordinator pattern stay the same. Namespace provides the infrastructure for all of it — registry, image building, and VM orchestration are already in place. This is a minor integration detail, not a blocker.
 
 **Phase 2: Ship files (future enhancement)**
 
@@ -488,10 +488,10 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 
 - CLI accepts `--image <image>` pointing to a pre-built Docker image
 - CLI creates benchmark run on the platform, plans workers
-- Platform launches worker VMs from the image (existing infrastructure)
+- Platform launches worker VMs from the image via Namespace (existing infrastructure — Namespace handles registry, image building, and VM launch)
 - Worker VMs call `runBenchWorker()` with the loaded entries
 - CLI polls progress, prints TUI
-- This replaces `start.ts` from `benchmarks/src/scale` — zero new platform infrastructure
+- This replaces `start.ts` from `benchmarks/src/scale` — zero new platform infrastructure, Namespace already provides registry + image build + VM orchestration
 
 ### Phase 5: Migrate scale tests to the CLI
 
