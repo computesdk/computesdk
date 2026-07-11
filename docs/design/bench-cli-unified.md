@@ -138,9 +138,9 @@ Renamed from `--remote` to `--platform` to accurately describe what it does: orc
 
 1. CLI discovers and loads bench files (same as local).
 2. CLI ships the bench files + `package.json` + lockfile to the platform (see Remote Execution below).
-3. Platform builds the project in a sandbox (install deps, compile TS).
-4. Platform creates a benchmark run, plans workers, and spawns worker sandboxes.
-5. Each worker sandbox loads the bench files, claims a task range from the platform, and executes entries through the SDK's `runWorker()`:
+3. Platform builds the project on its own compute infrastructure (install deps, compile TS). Note: ComputeSDK is a framework that connects to sandbox providers (E2B, Modal, etc.), not a sandbox provider itself. The platform uses its own VM capacity — the same infrastructure it already uses to launch scale test workers.
+4. Platform creates a benchmark run, plans workers, and spawns worker VMs from the build output.
+5. Each worker VM loads the bench files, claims a task range from the platform, and executes entries through the SDK's `runWorker()`:
    - Real concurrency via `mapPool(taskIndices, concurrency, ...)`
    - Automatic heartbeats
    - Batched result flushing
@@ -148,7 +148,7 @@ Renamed from `--remote` to `--platform` to accurately describe what it does: orc
 6. CLI polls progress and prints a TUI until all workers finish.
 7. Platform aggregates results; CLI prints final summary.
 
-The key change: the CLI does NOT fork local processes. It ships files to the platform, and the platform runs workers in sandboxes. The SDK's `runWorker()` is the single execution path for remote work.
+The key change: the CLI does NOT fork local processes. It ships files to the platform, and the platform runs workers on its own VMs. The SDK's `runWorker()` is the single execution path for remote work.
 
 ## Remote Execution: Ship Files vs Docker Image
 
@@ -164,15 +164,15 @@ Should `--platform` build a Docker image locally and push it, or should it ship 
 bench --platform
 ```
 
-The CLI packages the bench files, `package.json`, and lockfile, then uploads them to the platform. The platform builds the project in a ComputeSDK sandbox (the product running its own benchmarks) and spawns worker sandboxes from the build output.
+The CLI packages the bench files, `package.json`, and lockfile, then uploads them to the platform. The platform builds the project on its own compute infrastructure (VM capacity it already uses for scale test workers) and spawns worker VMs from the build output.
 
 Why this is the right default:
 
 1. **No local Docker required.** The vitest mental model is "run a command, it works." Asking users to install Docker, authenticate to a registry, and wait for image builds breaks that.
 
-2. **Iteration speed.** Shipping TS files + installing deps in a sandbox is much faster than build -> push -> pull -> run, especially with cached `node_modules` layers on the platform.
+2. **Iteration speed.** Shipping TS files + installing deps on a platform VM is much faster than build -> push -> pull -> run, especially with cached `node_modules` layers on the platform.
 
-3. **Dogfooding.** ComputeSDK is a sandbox execution platform. Using it to build and run its own benchmarks is the strongest possible proof of the product.
+3. **The platform already has compute capacity.** It launches VMs for scale tests today. The ship-files path reuses that infrastructure with a "build from source" step instead of a pre-built Docker image. No new infrastructure needed — just a new API endpoint.
 
 4. **The scale test is the exception, not the rule.** The existing `benchmarks/src/scale` Dockerfile exists because scale testing needs specific system-level access (provider SDKs, API keys, `/proc` access for metrics). Simple `bench()` micro-benchmarks just need Node.js and `npm install`. The default should optimize for the common case.
 
@@ -189,18 +189,18 @@ This mirrors the existing `benchmarks/src/scale` flow: build the image in CI, pu
 ### Platform build flow (ship-files path)
 
 ```
-CLI                          Platform API                    Sandbox
+CLI                          Platform API                    Build/Worker VMs
  |                               |                              |
  |  POST /benchmarks/:slug       |                              |
  |  POST /runs (totalTasks)      |                              |
  |  POST /runs/:id/artifact      |                              |
  |    (upload bench files zip)   |                              |
  |  POST /runs/:id/build         |                              |
- |                               |  create build sandbox        |
+ |                               |  launch build VM             |
  |                               |  -> install deps             |
  |                               |  -> compile TS               |
  |                               |  <- build ready              |
- |                               |  spawn worker sandboxes      |
+ |                               |  launch worker VMs           |
  |                               |    from build output         |
  |                               |                              |
  |  GET /runs/:id/progress       |                              |
@@ -210,7 +210,7 @@ CLI                          Platform API                    Sandbox
  |  <--- final summary ---------+                              |
 ```
 
-The `POST /runs/:id/build` endpoint is new. It tells the platform to take the uploaded artifact (bench files + package.json), build it in a sandbox, and spawn workers from the result. This keeps the build logic on the platform side, where it can be cached, shared across workers, and reproduced.
+The `POST /runs/:id/build` endpoint is new. It tells the platform to take the uploaded artifact (bench files + package.json), build it on a VM, and spawn worker VMs from the result. This keeps the build logic on the platform side, where it can be cached, shared across workers, and reproduced.
 
 ### What about the existing scale coordinator?
 
@@ -457,8 +457,8 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 ### Phase 4: Add `--platform` mode to the CLI
 
 - CLI ships files to platform (new `POST /runs/:id/build` endpoint)
-- Platform builds in sandbox, spawns worker sandboxes
-- Worker sandboxes call `runBenchWorker()` with the loaded entries
+- Platform builds on a VM, spawns worker VMs from build output
+- Worker VMs call `runBenchWorker()` with the loaded entries
 - CLI polls progress, prints TUI
 - Add `--image` flag for pre-built Docker image path
 
@@ -470,11 +470,11 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 
 ## Open Questions
 
-1. **Platform build endpoint.** Does the platform API already have a way to upload and build source files in a sandbox, or does `POST /runs/:id/build` need to be added? The existing `createWorkerArtifact` / `uploadWorkerArtifact` endpoints upload artifacts, but there is no "build from source" endpoint.
+1. **Platform build endpoint.** Does the platform API already have a way to upload and build source files on a VM, or does `POST /runs/:id/build` need to be added? The existing `createWorkerArtifact` / `uploadWorkerArtifact` endpoints upload artifacts, but there is no "build from source" endpoint.
 
-2. **Worker sandbox image.** When the platform builds bench files and spawns workers, what base image do the worker sandboxes use? A Node.js image with the bench CLI pre-installed? Or does the build step produce a self-contained bundle?
+2. **Worker VM base image.** When the platform builds bench files and spawns worker VMs, what base image do the workers use? A Node.js image with the bench CLI pre-installed? Or does the build step produce a self-contained bundle?
 
-3. **Secrets management.** Scale tests need provider API keys (E2B, Modal, etc.) inside the worker sandbox. How do secrets flow from the user's environment to the platform to the worker sandbox? The existing flow uses env vars set in the Docker image or VM startup script. The ship-files path needs a `--env` or `--secret` flag.
+3. **Secrets management.** Scale tests need provider API keys (E2B, Modal, etc.) inside the worker VM. How do secrets flow from the user's environment to the platform to the worker VM? The existing flow uses env vars set in the Docker image or VM startup script. The ship-files path needs a `--env` or `--secret` flag.
 
 4. **Multiple files in `--platform` mode.** Local mode can run multiple files. Should `--platform` mode also support multiple files (ship a zip, build all, run all), or should it be limited to one file per run for simplicity?
 
