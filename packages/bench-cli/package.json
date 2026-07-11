@@ -1,0 +1,76 @@
+{
+  "name": "@computesdk/bench-cli",
+  "version": "0.1.0",
+  "description": "Run TS benchmark files locally with a vitest-style DSL, on top of the @computesdk/bench SDK.",
+  "author": "ComputeSDK",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "bench": "./dist/bin/bench.js",
+    "bench-ts": "./src/bin/bench-ts.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bin/bench": "./dist/bin/bench.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "dev:ts": "tsx src/bin/bench-ts.ts",
+    "start": "node dist/bin/bench.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "computesdk",
+    "benchmark",
+    "bench",
+    "cli",
+    "performance",
+    "micro-benchmark"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/bench-cli"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@computesdk/bench": "workspace:*",
+    "commander": "^11.1.0",
+    "glob": "^10.3.10",
+    "picocolors": "^1.0.0",
+    "tsx": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
