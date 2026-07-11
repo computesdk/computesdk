@@ -175,63 +175,68 @@ The scale test infrastructure in `computesdk/benchmarks/src/scale` is the protot
 
 Should `--platform` build a Docker image locally and push it, or should it ship source files to the platform and let the platform build and run them?
 
-### Recommendation: phased — Docker image first, ship files as future enhancement
+### Recommendation: unified approach using Namespace ImageService
 
-The best bang-for-buck is to ship the two things that already work:
+Namespace provides an `ImageService` API ([docs](https://buf.build/namespace/cloud/docs/main%3Anamespace.cloud.image.v1beta)) that builds Docker images asynchronously from a blueprint spec. This bridges the gap between ship-files and Docker images — the CLI can ship a Dockerfile + bench files to Namespace, Namespace builds the image, and the CLI gets back an `image_ref` to launch workers. No local Docker required.
 
-1. **Local execution** — `bench` runs benchmarks on your machine (no platform dependency)
-2. **Platform execution via Docker image** — `bench --platform --image <image>` uses the existing pattern from `benchmarks/src/scale`: build a Docker image in CI, the platform launches worker VMs from that image, each VM runs a coordinator that claims work and executes entries
+The flow:
 
-This requires zero new platform infrastructure. The Docker image + VM launch + coordinator pattern is already proven in the scale test repo. The CLI just replaces `start.ts` as the entry point.
+1. CLI packages bench files + `package.json` + lockfile
+2. CLI generates a Dockerfile (or uses a user-provided one) that bundles the bench files + deps + bench CLI
+3. CLI calls Namespace `CreateBlueprint` with the Dockerfile content as the spec
+4. CLI calls `Build` to trigger an asynchronous build
+5. CLI polls `FetchBlueprint` until `State = STATE_READY`
+6. CLI gets the `image_ref` from the build response
+7. Platform launches worker VMs from that `image_ref` (via Namespace instance API)
+8. Each worker VM runs `bench-worker`, claims a task range, executes entries through `runWorker()`
 
-Ship-files (platform builds from source) is a future enhancement that requires a new `POST /runs/:id/build` endpoint and build capability on the platform. It is the better long-term UX, but it is not needed for the initial release.
+This is the best of both worlds:
+- **No local Docker required** — Namespace builds the image on its infrastructure
+- **Uses the proven Docker image pattern** — works with any system-level dependencies, provider SDKs, etc.
+- **Blueprint caching** — blueprints are versioned; if the Dockerfile hasn't changed, the existing image is reused without rebuilding
+- **Multi-site builds** — Namespace builds per deployment site, so workers launch from a locally-cached image
 
-**Phase 1: Docker image (initial release)**
+### Three modes
+
+**Mode 1: Pre-built image (user provides image)**
 
 ```
 bench --platform --image ghcr.io/computesdk/scale-coordinator:latest
 ```
 
-The user (or CI) builds a Docker image containing the bench files + deps + the bench CLI. The platform launches worker VMs from that image. Each VM runs `bench-worker` (or a user-specified entrypoint), claims a task range, and executes entries through the SDK's `runWorker()`.
+User (or CI) has already built and pushed an image. CLI skips the build step and launches workers directly. This is the existing `benchmarks/src/scale` pattern — `start.ts` replaced by the CLI.
 
-This is exactly how `benchmarks/src/scale` works today:
-- `Dockerfile` bundles the coordinator + deps
-- `start.ts` creates the run, plans workers, launches VMs with the image
-- Each VM runs the coordinator which claims a worker and executes tasks
-
-The CLI replaces `start.ts`. The Docker image, VM launch, and coordinator pattern stay the same. Namespace provides the infrastructure for all of it — registry, image building, and VM orchestration are already in place. This is a minor integration detail, not a blocker.
-
-**Phase 2: Ship files (future enhancement)**
+**Mode 2: CLI builds via Namespace (default)**
 
 ```
 bench --platform
 ```
 
-The CLI packages bench files + `package.json` + lockfile and uploads them to the platform. The platform builds the project on its own compute and spawns worker VMs from the build output. No local Docker required.
+CLI packages bench files, generates a default Dockerfile (or uses a user-provided `Dockerfile.bench`), and calls Namespace's `ImageService` to build the image. No local Docker needed. Blueprint caching means rebuilds only happen when the Dockerfile or bench files change.
 
-This requires:
-- New `POST /runs/:id/build` endpoint on the platform
-- Build capability (VM that installs deps, compiles TS, produces a runnable bundle)
-- Build caching across runs
+**Mode 3: APT-based image (lightweight)**
 
-This is the better long-term UX (no Docker, faster iteration, vitest-like "just run it" experience), but it is net-new platform infrastructure. It should be designed after the Docker image path is shipping and proven.
+For benchmarks that just need Node.js + a few system packages, the CLI can use Namespace's `AptBasedImage` spec instead of a full Dockerfile. This is faster to build and simpler to configure.
 
-### Platform build flow (ship-files path)
+### Build flow (Mode 2: CLI builds via Namespace)
 
 ```
-CLI                          Benchmark Runner Platform           Compute
+CLI                     Namespace ImageService          Namespace Instances
  |                               |                              |
- |  POST /benchmarks/:slug       |                              |
- |  POST /runs (totalTasks)      |                              |
- |  POST /runs/:id/artifact      |                              |
- |    (upload bench files zip)   |                              |
- |  POST /runs/:id/build         |                              |
- |                               |  launch build VM             |
- |                               |  -> install deps             |
- |                               |  -> compile TS               |
- |                               |  <- build ready              |
+ |  CreateBlueprint(spec)        |                              |
+ |  Build(blueprint)             |                              |
+ |                               |  async build                 |
+ |  FetchBlueprint()             |                              |
+ |  <--- STATE_BUILDING --------+                              |
+ |  FetchBlueprint()             |                              |
+ |  <--- STATE_READY ------------+                              |
+ |  (got image_ref)              |                              |
+ |                               |                              |
+ |  (create run on platform,     |                              |
+ |   plan workers, launch VMs    |                              |
+ |   from image_ref)             |                              |
  |                               |  launch worker VMs           |
- |                               |    from build output         |
+ |                               |    from image_ref            |
  |                               |                              |
  |  GET /runs/:id/progress       |                              |
  |  <--- progress updates ------+                              |
@@ -240,7 +245,17 @@ CLI                          Benchmark Runner Platform           Compute
  |  <--- final summary ---------+                              |
 ```
 
-The `POST /runs/:id/build` endpoint is new. It tells the benchmark runner platform to take the uploaded artifact (bench files + package.json), build it on its compute, and spawn worker VMs from the result. The platform owns the build environment, can cache builds across runs, and can reproduce builds — this is a first-party capability of the benchmark runner, not a bolt-on.
+No `POST /runs/:id/build` endpoint needed on the ComputeSDK platform — the build happens directly through Namespace's `ImageService` API. The ComputeSDK platform only needs to know the `image_ref` to launch workers. Blueprint management (create, build, poll, cache) is handled by Namespace.
+
+### Blueprint caching strategy
+
+Namespace blueprints are versioned. The CLI can hash the Dockerfile content + bench file contents and use that hash as the blueprint name. On subsequent runs:
+
+1. CLI computes the hash
+2. CLI calls `FetchBlueprint(hash)` — if it exists and `State = STATE_READY`, skip the build
+3. If not, `CreateBlueprint` + `Build`
+
+This gives fast iteration (cached builds) without requiring the user to manage image versions manually.
 
 ### What about the existing scale coordinator?
 
@@ -484,14 +499,14 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 - Passes `defineTask()` entries through with full step graph
 - Uses existing `mapPool` for concurrency, existing heartbeat/flush infrastructure
 
-### Phase 4: Add `--platform --image` mode to the CLI (Docker image path)
+### Phase 4: Add `--platform --image` mode to the CLI (pre-built image)
 
 - CLI accepts `--image <image>` pointing to a pre-built Docker image
 - CLI creates benchmark run on the platform, plans workers
-- Platform launches worker VMs from the image via Namespace (existing infrastructure — Namespace handles registry, image building, and VM launch)
+- Platform launches worker VMs from the image via Namespace
 - Worker VMs call `runBenchWorker()` with the loaded entries
 - CLI polls progress, prints TUI
-- This replaces `start.ts` from `benchmarks/src/scale` — zero new platform infrastructure, Namespace already provides registry + image build + VM orchestration
+- This replaces `start.ts` from `benchmarks/src/scale` — zero new infrastructure
 
 ### Phase 5: Migrate scale tests to the CLI
 
@@ -499,22 +514,23 @@ The CLI re-exports `defineTask`/`defineStep` from the SDK so users can import ev
 - Replace `start.ts` with `bench --platform --image`
 - The scale coordinator's step graph (worker.ready -> create -> exec.initial -> sandbox.live -> exec.final -> destroy) maps directly to `defineStep` calls
 
-### Phase 6: Ship-files platform build (future enhancement)
+### Phase 6: Add Namespace ImageService integration (CLI-built images)
 
-- New `POST /runs/:id/build` endpoint on the platform
-- CLI ships bench files + package.json + lockfile without requiring a Docker image
-- Platform builds on its compute, spawns worker VMs from build output
-- `bench --platform` (without `--image`) becomes the simple default
-- Requires build capability, caching, and reproducible build environments on the platform side
+- CLI integrates with Namespace `ImageService` API (`CreateBlueprint`, `Build`, `FetchBlueprint`)
+- `bench --platform` (without `--image`) generates a Dockerfile, ships bench files, builds via Namespace
+- Blueprint caching: hash Dockerfile + bench file contents, skip rebuild if cached and `STATE_READY`
+- Also support `AptBasedImage` spec for lightweight images (Node.js + APT packages, no Dockerfile needed)
+- No local Docker required — Namespace builds on its infrastructure
+- No new ComputeSDK platform endpoints needed — build happens through Namespace API directly
 
 ## Open Questions
 
-1. **Platform build endpoint.** Does the benchmark runner platform already have a way to upload and build source files, or does `POST /runs/:id/build` need to be added? The existing `createWorkerArtifact` / `uploadWorkerArtifact` endpoints upload artifacts, but there is no "build from source" endpoint.
+1. **Build context upload.** Namespace's `BlueprintSpec.Dockerfile` takes the Dockerfile content as a string, but the build context (bench files, `package.json`, etc.) needs to reach the builder. How does Namespace handle build context? Options: git-connected blueprint, artifact upload via a separate API, or the Dockerfile pulls files from a URL. Need to check Namespace's full API surface for build context handling.
 
-2. **Worker VM base image.** When the platform builds bench files and spawns worker VMs, what base image do the workers use? A Node.js image with the bench CLI pre-installed? Or does the build step produce a self-contained bundle?
+2. **Secrets management.** Scale tests need provider API keys (E2B, Modal, etc.) inside the worker VM. How do secrets flow from the user's environment to the platform to the worker VM? The existing flow uses env vars set in the Docker image or VM startup script. The CLI needs a `--env` or `--secret` flag. Secrets should not be baked into the Dockerfile/blueprint — they should be injected at VM launch time.
 
-3. **Secrets management.** Scale tests need provider API keys (E2B, Modal, etc.) inside the worker VM. How do secrets flow from the user's environment to the platform to the worker VM? The existing flow uses env vars set in the Docker image or VM startup script. The ship-files path needs a `--env` or `--secret` flag.
+3. **Multiple files in `--platform` mode.** Local mode can run multiple files. Should `--platform` mode also support multiple files (build all into one image, run all), or should it be limited to one file per run for simplicity?
 
-4. **Multiple files in `--platform` mode.** Local mode can run multiple files. Should `--platform` mode also support multiple files (ship a zip, build all, run all), or should it be limited to one file per run for simplicity?
+4. **Step readiness barriers.** The scale coordinator uses `waitForStepReady` to coordinate across workers (e.g., "all workers reach create phase before any starts exec"). Should the CLI expose this as a `defineStep` option, or should it be implicit? The current SDK already supports `readiness: 'poll'` on `DefineStepOptions`.
 
-5. **Step readiness barriers.** The scale coordinator uses `waitForStepReady` to coordinate across workers (e.g., "all workers reach create phase before any starts exec"). Should the CLI expose this as a `defineStep` option, or should it be implicit? The current SDK already supports `readiness: 'poll'` on `DefineStepOptions`.
+5. **Blueprint lifecycle.** Should the CLI create a new blueprint per run, or should it manage blueprints as long-lived objects (create once, rebuild when files change)? The caching strategy in the doc assumes long-lived blueprints keyed by content hash, but this needs a cleanup/retention policy.
