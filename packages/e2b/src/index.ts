@@ -19,10 +19,6 @@ type E2BSnapshotResult = string | { id?: string; templateId?: string };
 type SnapshotCapableE2BSandbox = E2BSandbox & {
   createSnapshot: (options?: { name?: string }) => Promise<E2BSnapshotResult>;
 };
-type PauseCapableE2BSandbox = E2BSandbox & {
-  pause: (options?: { keepMemory?: boolean }) => Promise<void>;
-  connect: () => Promise<E2BSandbox>;
-};
 type E2BSandboxStatics = typeof E2BSandbox & {
   listTemplates?: (options: { apiKey?: string }) => Promise<unknown[]>;
   deleteTemplate?: (snapshotId: string, options: { apiKey?: string }) => Promise<unknown>;
@@ -134,14 +130,22 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      getInfo: async (sandbox: E2BSandbox): Promise<SandboxInfo> => ({
-        id: sandbox.sandboxId || 'e2b-unknown',
-        provider: 'e2b',
-        status: 'running',
-        createdAt: new Date(),
-        timeout: 300000,
-        metadata: { e2bSessionId: sandbox.sandboxId }
-      }),
+      getInfo: async (sandbox: E2BSandbox): Promise<SandboxInfo> => {
+        const apiKey = (typeof process !== 'undefined' && process.env?.E2B_API_KEY) || '';
+        let status: 'running' | 'paused' = 'running';
+        try {
+          const info = await E2BSandbox.getInfo(sandbox.sandboxId, { apiKey });
+          status = info.state === 'paused' ? 'paused' : 'running';
+        } catch { /* fall back to running if getInfo fails */ }
+        return {
+          id: sandbox.sandboxId || 'e2b-unknown',
+          provider: 'e2b',
+          status,
+          createdAt: new Date(),
+          timeout: 300000,
+          metadata: { e2bSessionId: sandbox.sandboxId }
+        };
+      },
 
       getUrl: async (sandbox: E2BSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
@@ -170,12 +174,13 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         remove: async (sandbox: E2BSandbox, path: string): Promise<void> => { await sandbox.files.remove(path); }
       },
 
-      pause: async (sandbox: E2BSandbox, options?: PauseOptions) => {
-        await (sandbox as PauseCapableE2BSandbox).pause(options);
+      pause: async (sandbox: E2BSandbox, _options?: PauseOptions) => {
+        const apiKey = (typeof process !== 'undefined' && process.env?.E2B_API_KEY) || '';
+        await E2BSandbox.pause(sandbox.sandboxId, { apiKey });
       },
 
       resume: async (sandbox: E2BSandbox) => {
-        return await (sandbox as PauseCapableE2BSandbox).connect();
+        return await sandbox.connect();
       },
 
       getInstance: (sandbox: E2BSandbox): E2BSandbox => sandbox,
