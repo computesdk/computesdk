@@ -31,6 +31,7 @@ Both modes implemented and working.
 | **Lelantos** | E2B-compatible `Template.build()` | E2B-compatible `createSnapshot()` | E2B SDK (forked) |
 | **Railway** | `Sandbox.template()` builder | `sandbox.checkpoint()` | Template builder + checkpoints |
 | **Namespace** | ImageService `CreateBlueprint` + `Build` | `SuspendInstance` + persistent volume snapshot | ImageService (build) + StorageService (capture) |
+| **Tensorlake** | `Image().build()` / `createSandboxImage()` | `sandbox.checkpoint()` | Native image builder + memory/filesystem checkpoint |
 
 ### Tier 2: Capture-from-sandbox only
 
@@ -42,7 +43,6 @@ Can snapshot a running instance but cannot build from a Dockerfile spec.
 | **CreateOS** | `sandbox.pause()` + `fork()` | Paused sandbox IS the template |
 | **Cloudflare** | `sandbox.createBackup()` + `restoreBackup()` | Directory backup to R2 (direct mode only); no build-from-spec API |
 | **Lightning** | `sandbox.createSnapshot()` | Full snapshot lifecycle |
-| **Tensorlake** | `sandbox.checkpoint()` | Memory + filesystem checkpoint types |
 | **Isorun** | `sandbox.snapshot()` | Full snapshot lifecycle |
 | **Quilt** | `POST /api/containers/{id}/snapshot` | Operation-polling snapshot |
 | **Vercel** | `sandbox.snapshot()` | Filesystem snapshot |
@@ -91,8 +91,8 @@ No snapshot or template concept exists on the platform.
 
 **28 providers** now have template blocks implemented (up from 20 in the initial pass):
 
-- 9 with both build-from-spec and capture-from-sandbox
-- 12 with capture-from-sandbox only
+- 10 with both build-from-spec and capture-from-sandbox
+- 11 with capture-from-sandbox only
 - 5 with build-from-spec only
 - 2 with CLI-only guidance (throws with instructions)
 
@@ -146,7 +146,7 @@ No snapshot or template concept exists on the platform.
 | **CodeSandbox** | working (hibernate/resume) | throws | yes — `sandbox.hibernate()`, `sdk.sandboxes.resume()` | partial — template ID accepted at create time, no build CRUD | Implement `template.create` with capture-from-sandbox (hibernate). Build-from-spec may not be supported natively. |
 | **CreateOS** | working (pause/fork) | not-implemented | yes — `sandbox.pause()`, `sandbox.fork()` | partial — rootfs/image at create time | Implement `template.create` with capture-from-sandbox (pause). Build-from-spec via rootfs image only. |
 | **Lightning** | working | not-implemented | yes — `sandbox.createSnapshot()`, `listSnapshots()`, `deleteSnapshot()` | partial — runtime images (node24, python313), snapshotId at create | Implement `template.create` with capture-from-sandbox. Build-from-spec via runtime image selection. |
-| **Tensorlake** | working | not-implemented | yes — `sandbox.checkpoint()`, `listSnapshots()`, `deleteSnapshot()` | partial — image at create time, snapshotId at create | Implement `template.create` with capture-from-sandbox. Build-from-spec via base image. |
+| **Tensorlake** | working | working (build + capture) | yes — `sandbox.checkpoint()`, `listSnapshots()`, `deleteSnapshot()` | yes — `Image().build()` / `createSandboxImage()` (native builder registers a named sandbox image) | Capture via `checkpoint()`; build-from-spec via the native `Image` builder (Dockerfile or base image + env/run). |
 | **Isorun** | working | not-implemented | yes — `sandbox.snapshot()`, `listSnapshots()`, `deleteSnapshot()` | no | Implement `template.create` with capture-from-sandbox only. No build-from-spec. |
 | **Quilt** | working | not-implemented | yes — `POST /api/containers/{id}/snapshot`, list, delete, clone | partial — image at create time, snapshot clone | Implement `template.create` with capture-from-sandbox. Build-from-spec via image string. |
 | **Vercel** | working (list throws) | partial (create throws, delete delegates) | yes — `sandbox.snapshot()`, `Snapshot.delete()` | no | Implement `template.create` with capture-from-sandbox only. Remove redundant template block. |
@@ -199,7 +199,6 @@ No snapshot or template concept exists on the platform.
 | CodeSandbox | `sandbox.hibernate()` | Medium |
 | CreateOS | `sandbox.pause()` + `fork()` | Medium |
 | Lightning | `sandbox.createSnapshot()` | Medium |
-| Tensorlake | `sandbox.checkpoint()` | Medium |
 | Isorun | `sandbox.snapshot()` | Low |
 | Quilt | `POST /api/containers/{id}/snapshot` | Low |
 | Vercel | `sandbox.snapshot()` | Low |

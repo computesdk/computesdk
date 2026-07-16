@@ -6,8 +6,11 @@
  * Uses the official tensorlake npm SDK (0.5.7).
  */
 
-import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
+import { Sandbox, SandboxStatus, OutputMode, Image, createSandboxImage } from "tensorlake";
 import type { SandboxInfo } from "tensorlake";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineProvider } from "@computesdk/provider";
 import type {
   CodeResult,
@@ -396,29 +399,98 @@ export const tensorlake = defineProvider<
         config: TensorlakeConfig,
         options: CreateTemplateOptions,
       ) => {
-        if (!options.from) {
-          throw new Error(`Tensorlake does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
-        }
         const { apiKey, apiUrl } = resolveAuth(config);
-        try {
-          const sandbox = await Sandbox.connect({ sandboxId: options.from, apiKey, apiUrl });
-          const result = await sandbox.checkpoint();
 
-          if (!result) {
-            throw new Error(
-              `Failed to create template for sandbox '${options.from}': checkpoint() did not return a snapshot result.`,
-            );
+        // Mode 1: Capture from a running sandbox (filesystem/memory checkpoint).
+        if (options.from) {
+          try {
+            const sandbox = await Sandbox.connect({ sandboxId: options.from, apiKey, apiUrl });
+            const result = await sandbox.checkpoint();
+
+            if (!result) {
+              throw new Error(
+                `Failed to create template for sandbox '${options.from}': checkpoint() did not return a snapshot result.`,
+              );
+            }
+
+            return {
+              id: result.snapshotId,
+              provider: "tensorlake",
+              name: options.name,
+              createdAt: new Date(),
+              status: "active" as const,
+              metadata: { ...options.metadata, source: "capture", sandboxId: options.from },
+            };
+          } catch (error) {
+            throw new Error(`Failed to create Tensorlake template: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        // Mode 2: Build from spec. The SDK's native image builder materializes
+        // the image in a build sandbox, snapshots the filesystem, and registers
+        // it as a named sandbox template usable as `image` on sandbox.create.
+        if (!options.dockerfile && !options.baseImage) {
+          throw new Error(
+            "Tensorlake template.create requires `dockerfile`, `baseImage`, or `from`. " +
+              "Provide a Dockerfile string, a base image name, or a sandbox ID to capture from.",
+          );
+        }
+
+        // The native builder authenticates via environment variables rather than
+        // explicit arguments, so surface the resolved credentials there.
+        if (apiKey) process.env.TENSORLAKE_API_KEY = apiKey;
+        if (apiUrl) process.env.TENSORLAKE_API_URL = apiUrl;
+
+        const buildOptions = {
+          registeredName: options.name,
+          ...(options.cpuCount && { cpus: options.cpuCount }),
+          ...(options.memoryMB && { memoryMb: options.memoryMB }),
+          ...(options.contextDir && { contextDir: options.contextDir }),
+        };
+
+        try {
+          let result: Record<string, unknown>;
+
+          if (options.dockerfile) {
+            // A string source must be a Dockerfile path on disk, so materialize
+            // the raw content into a temporary Dockerfile first.
+            const dir = await mkdtemp(join(tmpdir(), "tl-template-"));
+            const dockerfilePath = join(dir, "Dockerfile");
+            await writeFile(dockerfilePath, options.dockerfile, "utf-8");
+            result = await createSandboxImage(dockerfilePath, buildOptions);
+          } else {
+            const image = new Image({ name: options.name, baseImage: options.baseImage });
+            if (options.envs) {
+              for (const [key, value] of Object.entries(options.envs)) {
+                image.env(key, value);
+              }
+            }
+            if (options.startCommand) {
+              image.run(options.startCommand);
+            }
+            result = await image.build(buildOptions);
           }
 
+          const templateId =
+            (typeof result.id === "string" && result.id) ||
+            (typeof result.templateId === "string" && result.templateId) ||
+            options.name;
+
           return {
-            id: result.snapshotId,
+            id: templateId,
             provider: "tensorlake",
             name: options.name,
             createdAt: new Date(),
-            metadata: { ...options.metadata, source: "capture", sandboxId: options.from },
+            status: "active" as const,
+            metadata: {
+              ...options.metadata,
+              source: "build",
+              registeredName: options.name,
+              build: result,
+            },
           };
         } catch (error) {
-          throw new Error(`Failed to create Tensorlake template: ${error instanceof Error ? error.message : String(error)}`);
+          throw new Error(`Failed to build Tensorlake template: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
 
