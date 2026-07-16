@@ -5,7 +5,7 @@
 import { Sandbox as E2BSandbox } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, PauseOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 type E2BFileEntry = {
@@ -18,6 +18,10 @@ type E2BFileEntry = {
 type E2BSnapshotResult = string | { id?: string; templateId?: string };
 type SnapshotCapableE2BSandbox = E2BSandbox & {
   createSnapshot: (options?: { name?: string }) => Promise<E2BSnapshotResult>;
+};
+type PauseCapableE2BSandbox = E2BSandbox & {
+  pause: (options?: { keepMemory?: boolean }) => Promise<void>;
+  connect: () => Promise<E2BSandbox>;
 };
 type E2BSandboxStatics = typeof E2BSandbox & {
   listTemplates?: (options: { apiKey?: string }) => Promise<unknown[]>;
@@ -164,6 +168,14 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         },
         exists: async (sandbox: E2BSandbox, path: string): Promise<boolean> => sandbox.files.exists(path),
         remove: async (sandbox: E2BSandbox, path: string): Promise<void> => { await sandbox.files.remove(path); }
+      },
+
+      pause: async (sandbox: E2BSandbox, options?: PauseOptions) => {
+        await (sandbox as PauseCapableE2BSandbox).pause(options);
+      },
+
+      resume: async (sandbox: E2BSandbox) => {
+        return await (sandbox as PauseCapableE2BSandbox).connect();
       },
 
       getInstance: (sandbox: E2BSandbox): E2BSandbox => sandbox,

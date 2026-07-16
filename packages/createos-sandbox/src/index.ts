@@ -45,6 +45,7 @@ import type {
   ListSnapshotsOptions,
   RunCommandOptions,
   SandboxInfo,
+  PauseOptions,
 } from "@computesdk/provider";
 
 const PROVIDER_NAME = "createos-sandbox";
@@ -192,9 +193,10 @@ async function resolveShape(
   return picked;
 }
 
-/** Map an createos-sandbox lifecycle state onto ComputeSDK's running|stopped|error. */
+/** Map an createos-sandbox lifecycle state onto ComputeSDK's running|stopped|paused|error. */
 export function mapStatus(status: SandboxStatus): SandboxInfo["status"] {
   if (status === "running") return "running";
+  if (status === "paused") return "paused";
   if (status === "error" || status === "failed") return "error";
   return "stopped";
 }
@@ -404,6 +406,19 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       // Escape hatch: the bare native @nodeops-createos/sandbox handle
       // (pause/resume/fork/disks/...).
       getInstance: (sandbox: Sandbox): Sandbox => sandbox,
+
+      pause: async (sandbox: Sandbox, _options?: PauseOptions) => {
+        // CreateOS pause stops the VM while preserving full memory/filesystem state.
+        await sandbox.pause();
+        await sandbox.waitUntilPaused();
+      },
+
+      resume: async (sandbox: Sandbox) => {
+        // CreateOS resumes an in-place paused VM; for a paused snapshot used as a
+        // template, create a new sandbox via create({ snapshotId }).
+        await sandbox.resume();
+        await sandbox.waitUntilRunning();
+      },
 
       filesystem: {
         readFile: async (sandbox: Sandbox, path: string): Promise<string> => {

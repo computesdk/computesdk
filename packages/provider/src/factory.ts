@@ -22,6 +22,7 @@ import type {
   ListSnapshotsOptions,
   CreateTemplateOptions,
   ListTemplatesOptions,
+  PauseOptions,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
@@ -169,6 +170,14 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
   runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
+
+  // Optional pause/resume lifecycle operations
+  pause?: (sandbox: TSandbox, options?: PauseOptions) => Promise<void>;
+  /**
+   * Resume a paused sandbox. May return a refreshed native sandbox instance;
+   * when returned, the provider wrapper will replace its internal reference.
+   */
+  resume?: (sandbox: TSandbox) => Promise<TSandbox | void>;
 
   // Optional provider-specific typed getInstance method
   getInstance?: (sandbox: TSandbox) => TSandbox;
@@ -489,6 +498,23 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
   async getUrl(options: { port: number; protocol?: string }): Promise<string> {
     return await this.methods.getUrl(this.sandbox, options);
+  }
+
+  async pause(options?: PauseOptions): Promise<void> {
+    if (!this.methods.pause) {
+      throw new Error(`Pause is not supported by the ${this.provider} provider.`);
+    }
+    return await this.methods.pause(this.sandbox, options);
+  }
+
+  async resume(): Promise<void> {
+    if (!this.methods.resume) {
+      throw new Error(`Resume is not supported by the ${this.provider} provider.`);
+    }
+    const result = await this.methods.resume(this.sandbox);
+    if (result !== undefined) {
+      this.sandbox = result;
+    }
   }
 
   getProvider(): Provider<TSandbox> {

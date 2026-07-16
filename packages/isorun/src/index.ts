@@ -16,7 +16,13 @@ import type {
   FileEntry,
   RunCommandOptions,
   SandboxInfo,
+  PauseOptions,
 } from '@computesdk/provider'
+
+type PauseCapableIsorunSandbox = Sandbox & {
+  hibernate: (options?: PauseOptions) => Promise<void>
+  resume: () => Promise<void>
+}
 
 export interface IsorunConfig {
   /** API key. Falls back to `ISORUN_API_KEY` env var. The runner endpoint is derived from the key. */
@@ -126,10 +132,15 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
 
       getInfo: async (sandbox: Sandbox): Promise<SandboxInfo> => {
         const i = await sandbox.info()
+        const status: SandboxInfo['status'] =
+          i.status === 'running' ? 'running' :
+          i.status === 'error' ? 'error' :
+          i.status === 'paused' || i.status === 'hibernated' ? 'paused' :
+          'stopped'
         return {
           id: sandbox.id,
           provider: 'isorun',
-          status: i.status === 'running' ? 'running' : i.status === 'error' ? 'error' : 'stopped',
+          status,
           createdAt: new Date(i.createdAt),
           timeout: sandboxTimeouts.get(sandbox) ?? DEFAULT_TIMEOUT_MS,
           metadata: { createMs: i.createMs, image: i.image },
@@ -144,6 +155,14 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
           return u.toString()
         }
         return url
+      },
+
+      pause: async (sandbox: Sandbox, options?: PauseOptions) => {
+        await (sandbox as PauseCapableIsorunSandbox).hibernate(options)
+      },
+
+      resume: async (sandbox: Sandbox) => {
+        await (sandbox as PauseCapableIsorunSandbox).resume()
       },
 
       getInstance: (sandbox: Sandbox) => sandbox,

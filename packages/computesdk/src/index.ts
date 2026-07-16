@@ -30,6 +30,7 @@ export type {
   RunCommandOptions,
   SandboxFileSystem,
   CreateSandboxOptions,
+  PauseOptions,
 } from './types/universal-sandbox';
 
 // Compute API

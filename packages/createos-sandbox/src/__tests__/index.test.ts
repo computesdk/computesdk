@@ -59,8 +59,8 @@ describe("mapStatus", () => {
     expect(mapStatus("error")).toBe("error");
     expect(mapStatus("failed")).toBe("error");
   });
-  it("maps transitional/paused states to stopped", () => {
-    expect(mapStatus("paused")).toBe("stopped");
+  it("maps paused to paused and transitional states to stopped", () => {
+    expect(mapStatus("paused")).toBe("paused");
     expect(mapStatus("creating")).toBe("stopped");
     expect(mapStatus("resuming")).toBe("stopped");
   });
