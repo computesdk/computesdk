@@ -66,6 +66,76 @@ const IMAGE_SERVICE_ENDPOINTS = {
   BUILD: '/namespace.cloud.image.v1beta.ImageService/Build',
 };
 
+const STORAGE_SERVICE_ENDPOINTS = {
+  SUSPEND_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/SuspendInstance',
+  LIST_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumes',
+  LIST_PERSISTENT_VOLUME_SNAPSHOTS: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumeSnapshots',
+  DESTROY_PERSISTENT_VOLUME_SNAPSHOT: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumeSnapshot',
+};
+
+interface NamespaceVolumeRef {
+  id: string;
+  tag: string;
+}
+
+/**
+ * List the persistent volumes currently attached to a given instance.
+ * Namespace snapshots are volume-scoped, so a persistent volume must be attached
+ * for capture-from-sandbox to produce meaningful state.
+ */
+async function findAttachedVolumes(token: string, instanceId: string): Promise<NamespaceVolumeRef[]> {
+  const resp = await fetchNamespace(
+    token,
+    STORAGE_SERVICE_ENDPOINTS.LIST_PERSISTENT_VOLUMES,
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }
+  );
+  const volumes = (resp.volumes || []) as Array<Record<string, any>>;
+  return volumes
+    .filter((v) => (v.attached_to ?? v.attachedTo) === instanceId)
+    .map((v) => ({ id: v.id, tag: v.tag }));
+}
+
+/**
+ * Poll ListPersistentVolumeSnapshots until a completed snapshot appears for the
+ * given volume, returning the newest one. Returns undefined on timeout.
+ */
+async function pollLatestVolumeSnapshot(
+  token: string,
+  volume: NamespaceVolumeRef,
+  maxWaitMs: number = 5 * 60 * 1000,
+  intervalMs: number = 3000
+): Promise<Record<string, any> | undefined> {
+  const deadline = Date.now() + maxWaitMs;
+  const createdAtMs = (s: Record<string, any>): number => {
+    const t = s.created_at ?? s.createdAt;
+    return t ? new Date(t).getTime() : 0;
+  };
+
+  let latest: Record<string, any> | undefined;
+  while (Date.now() < deadline) {
+    const resp = await fetchNamespace(
+      token,
+      STORAGE_SERVICE_ENDPOINTS.LIST_PERSISTENT_VOLUME_SNAPSHOTS,
+      {
+        method: 'POST',
+        body: JSON.stringify({ id: volume.id, tag: volume.tag }),
+      }
+    );
+    const snapshots = (resp.snapshots || []) as Array<Record<string, any>>;
+    const completed = snapshots.filter((s) => s.completed_snapshot ?? s.completedSnapshot);
+    if (completed.length > 0) {
+      completed.sort((a, b) => createdAtMs(b) - createdAtMs(a));
+      return completed[0];
+    }
+    latest = snapshots.length > 0 ? snapshots[0] : latest;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return latest;
+}
+
 const BLUEPRINT_STATE = {
   UNKNOWN: 0,
   READY: 1,
@@ -414,14 +484,52 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       create: async (config: NamespaceConfig, options: CreateTemplateOptions): Promise<TemplateInfo> => {
         const { token } = await getAndValidateCredentials(config);
 
-        // Mode 1: Capture from running sandbox
+        // Mode 1: Capture from running sandbox via a persistent volume snapshot.
+        // Namespace snapshots are volume-scoped: suspending an instance flushes a
+        // snapshot of its attached PERSISTENT volume(s), which can later seed a new
+        // volume via VolumeRequest.from_snapshot_id.
         if (options.from) {
-          throw new Error(
-            'Namespace does not support capturing templates from running sandboxes. ' +
-              'The ImageService API only supports building from a Dockerfile or APT-based spec. ' +
-              'To use a custom image, build it with template.create({ dockerfile }) or ' +
-              'template.create({ baseImage }), then reference it via the `image` option.'
-          );
+          const volumes = await findAttachedVolumes(token, options.from);
+          if (volumes.length === 0) {
+            throw new Error(
+              `Namespace instance "${options.from}" has no attached persistent volume, so there is nothing to snapshot. ` +
+                'Attach a PERSISTENT volume to the sandbox to enable capture-from-sandbox templates, ' +
+                'or build from spec with template.create({ dockerfile }) / template.create({ baseImage }).'
+            );
+          }
+
+          // Suspending the instance triggers a persistent volume snapshot on shutdown.
+          // NOTE: this stops the source instance; resume it with the native WakeInstance API.
+          await fetchNamespace(token, STORAGE_SERVICE_ENDPOINTS.SUSPEND_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: options.from }),
+          });
+
+          const volume = volumes[0];
+          const snapshot = await pollLatestVolumeSnapshot(token, volume);
+          if (!snapshot) {
+            throw new Error(
+              `Namespace did not produce a completed persistent volume snapshot for instance "${options.from}".`
+            );
+          }
+
+          const snapshotId = snapshot.completed_snapshot ?? snapshot.completedSnapshot ?? snapshot.id;
+          const snapshotCreatedAt = snapshot.created_at ?? snapshot.createdAt;
+          return {
+            id: snapshotId,
+            provider: 'namespace',
+            name: options.name,
+            createdAt: snapshotCreatedAt ? new Date(snapshotCreatedAt) : new Date(),
+            status: 'active',
+            metadata: {
+              ...options.metadata,
+              source: 'capture',
+              sandboxId: options.from,
+              volumeId: volume.id,
+              volumeTag: volume.tag,
+              snapshotId,
+            },
+          };
         }
 
         // Mode 2: Build from spec via ImageService API
@@ -517,6 +625,8 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       list: async (config: NamespaceConfig): Promise<TemplateInfo[]> => {
         const { token } = await getAndValidateCredentials(config);
 
+        // Build templates (blueprints from the ImageService).
+        let blueprintTemplates: TemplateInfo[] = [];
         try {
           const resp = await fetchNamespace(
             token,
@@ -529,7 +639,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           );
 
           const blueprints = resp.blueprints || [];
-          return blueprints.map((bp: any) => {
+          blueprintTemplates = blueprints.map((bp: any) => {
             const bpStates = Object.values(bp.state || {}) as Array<{ state?: number }>;
             const allReady = bpStates.length > 0 && bpStates.every(s => s?.state === BLUEPRINT_STATE.READY);
             const anyFailed = bpStates.some(s => s?.state === BLUEPRINT_STATE.FAILED);
@@ -542,6 +652,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               createdAt: bp.created_at ? new Date(bp.created_at) : new Date(),
               status: anyFailed ? 'error' as const : anyBuilding ? 'building' as const : allReady ? 'active' as const : 'inactive' as const,
               metadata: {
+                source: 'build',
                 blueprintId: bp.id,
                 imageRef: bp.status?.image_ref,
                 creatorId: bp.creator_id,
@@ -553,11 +664,61 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             `Failed to list Namespace blueprints: ${error instanceof Error ? error.message : String(error)}`
           );
         }
+
+        // Capture templates (persistent volume snapshots from the StorageService).
+        let snapshotTemplates: TemplateInfo[] = [];
+        try {
+          const volumesResp = await fetchNamespace(
+            token,
+            STORAGE_SERVICE_ENDPOINTS.LIST_PERSISTENT_VOLUMES,
+            {
+              method: 'POST',
+              body: JSON.stringify({}),
+            }
+          );
+          const volumes = (volumesResp.volumes || []) as Array<Record<string, any>>;
+
+          for (const volume of volumes) {
+            const snapResp = await fetchNamespace(
+              token,
+              STORAGE_SERVICE_ENDPOINTS.LIST_PERSISTENT_VOLUME_SNAPSHOTS,
+              {
+                method: 'POST',
+                body: JSON.stringify({ id: volume.id, tag: volume.tag }),
+              }
+            );
+            const snapshots = (snapResp.snapshots || []) as Array<Record<string, any>>;
+            for (const snap of snapshots) {
+              const snapshotId = snap.completed_snapshot ?? snap.completedSnapshot ?? snap.id;
+              const createdAt = snap.created_at ?? snap.createdAt;
+              snapshotTemplates.push({
+                id: snapshotId,
+                provider: 'namespace',
+                name: snapshotId,
+                createdAt: createdAt ? new Date(createdAt) : new Date(),
+                status: (snap.completed_snapshot ?? snap.completedSnapshot) ? 'active' : 'building',
+                metadata: {
+                  source: 'capture',
+                  volumeId: volume.id,
+                  volumeTag: volume.tag,
+                  snapshotId,
+                },
+              });
+            }
+          }
+        } catch {
+          // Storage API may be unavailable for the workspace; fall back to blueprints only.
+        }
+
+        return [...blueprintTemplates, ...snapshotTemplates];
       },
 
       delete: async (config: NamespaceConfig, templateId: string): Promise<void> => {
         const { token } = await getAndValidateCredentials(config);
 
+        // Templates can be either build blueprints (ImageService) or capture
+        // snapshots (StorageService). Try blueprint removal first, then fall back
+        // to destroying a persistent volume snapshot.
         try {
           await fetchNamespace(
             token,
@@ -570,10 +731,24 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             },
             IMAGE_SERVICE_BASE_URL
           );
-        } catch (error) {
-          throw new Error(
-            `Failed to remove Namespace blueprint: ${error instanceof Error ? error.message : String(error)}`
-          );
+          return;
+        } catch (blueprintError) {
+          try {
+            await fetchNamespace(
+              token,
+              STORAGE_SERVICE_ENDPOINTS.DESTROY_PERSISTENT_VOLUME_SNAPSHOT,
+              {
+                method: 'POST',
+                body: JSON.stringify({ id: templateId }),
+              }
+            );
+          } catch (snapshotError) {
+            throw new Error(
+              `Failed to delete Namespace template "${templateId}". ` +
+                `Blueprint removal error: ${blueprintError instanceof Error ? blueprintError.message : String(blueprintError)}. ` +
+                `Snapshot destroy error: ${snapshotError instanceof Error ? snapshotError.message : String(snapshotError)}.`
+            );
+          }
         }
       },
     },

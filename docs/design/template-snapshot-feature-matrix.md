@@ -30,6 +30,7 @@ Both modes implemented and working.
 | **Blaxel** | `ImageInstance.fromRegistry().aptInstall().build()` | Not supported (throws) | ImageInstance builder API |
 | **Lelantos** | E2B-compatible `Template.build()` | E2B-compatible `createSnapshot()` | E2B SDK (forked) |
 | **Railway** | `Sandbox.template()` builder | `sandbox.checkpoint()` | Template builder + checkpoints |
+| **Namespace** | ImageService `CreateBlueprint` + `Build` | `SuspendInstance` + persistent volume snapshot | ImageService (build) + StorageService (capture) |
 
 ### Tier 2: Capture-from-sandbox only
 
@@ -39,6 +40,7 @@ Can snapshot a running instance but cannot build from a Dockerfile spec.
 |---|---|---|
 | **CodeSandbox** | `sandbox.hibernate()` | Hibernate/resume is the snapshot mechanism |
 | **CreateOS** | `sandbox.pause()` + `fork()` | Paused sandbox IS the template |
+| **Cloudflare** | `sandbox.createBackup()` + `restoreBackup()` | Directory backup to R2 (direct mode only); no build-from-spec API |
 | **Lightning** | `sandbox.createSnapshot()` | Full snapshot lifecycle |
 | **Tensorlake** | `sandbox.checkpoint()` | Memory + filesystem checkpoint types |
 | **Isorun** | `sandbox.snapshot()` | Full snapshot lifecycle |
@@ -55,7 +57,6 @@ Can build images/templates from a Dockerfile but cannot capture a running instan
 
 | Provider | Build mechanism | Notes |
 |---|---|---|
-| **Namespace** | ImageService `CreateBlueprint` + `Build` (Dockerfile or APT-based) | gRPC API at `global.namespaceapis.com` |
 | **HopX** | `Template.createTemplate()` + `Template.build()` | Full template builder |
 | **Beam** | `Image.fromRegistry().build()` | Image build API |
 | **Superserve** | `Template.create()` with build spec | Template with `from` + `steps` |
@@ -71,7 +72,6 @@ Platform supports templates/images but only via CLI, not programmatically expose
 | **Cloud Run** | Cloud Build, container templates | Pass-through `config.template` string | No template CRUD via API |
 | **Northflank** | Build service from Dockerfile | Not implemented | Build via Northflank dashboard/CLI |
 | **K8s** | Container images, volume snapshots | Not implemented | Images serve as templates |
-| **Cloudflare** | Custom Dockerfile support | Not implemented | Build-time Dockerfile, no runtime API |
 | **Collimate** | Template ID required at create time | Pass-through string | No template CRUD |
 
 ### Not applicable
@@ -89,20 +89,20 @@ No snapshot or template concept exists on the platform.
 
 ## Summary
 
-**27 providers** now have template blocks implemented (up from 20 in the initial pass):
+**28 providers** now have template blocks implemented (up from 20 in the initial pass):
 
-- 8 with both build-from-spec and capture-from-sandbox
-- 11 with capture-from-sandbox only
-- 6 with build-from-spec only
+- 9 with both build-from-spec and capture-from-sandbox
+- 12 with capture-from-sandbox only
+- 5 with build-from-spec only
 - 2 with CLI-only guidance (throws with instructions)
 
-**7 providers** where template/snapshot does not apply or is not yet exposed.
+**6 providers** where template/snapshot does not apply or is not yet exposed.
 
 ## Next Steps
 
-1. **Investigate Cloudflare, Northflank, K8s** for programmatic image build APIs that could be wired up
+1. **Investigate Northflank, K8s** for programmatic image build APIs that could be wired up
 2. **Benchmark**: Add a `template-benchmark.ts` to the benchmarks repo measuring build time, capture time, and spawn-from-template TTI
-3. **Deprecate `compute.snapshot`**: Once `compute.template.create({ from: sandboxId })` is widely adopted, remove `compute.snapshot` from the singleton
+3. **Keep `compute.snapshot` and `compute.template` distinct**: `compute.snapshot` remains the capture-only primitive; `compute.template` adds build-from-spec on top of capture. Both stay first-class.
 4. **Documentation**: Update README and ADD-PROVIDER.md with the unified template API guide
 
 ## Legend
@@ -163,10 +163,10 @@ No snapshot or template concept exists on the platform.
 | **Blaxel** | stub | throws | no | no | No native snapshot or template API. Sandboxes configured via image string at create time. |
 | **Docker** | not-implemented | not-implemented | no (conceptually `docker commit`) | yes — Docker images | Could support `docker commit` as capture-from-sandbox and `docker build` as build-from-spec. |
 | **Cloud Run** | not-implemented | not-implemented | no | partial — `config.template` maps to multi-container template name | No snapshot. Template is a pass-through string, no CRUD. |
-| **Cloudflare** | not-implemented | not-implemented | no | no | Durable Object sandboxes, no snapshot or template concept. |
+| **Cloudflare** | not-implemented | capture (implemented) | yes — `sandbox.createBackup()` / `restoreBackup()` (direct mode) | no | Directory backups to R2 via the Sandbox SDK. `template.create({ from })` implemented; no build-from-spec API. |
 | **K8s** | not-implemented | not-implemented | no | partial — container images | K8s pods are ephemeral. Container images serve as templates but no image management. |
 | **Railway** | not-implemented | not-implemented | no | partial — `Sandbox.template()` builder | README explicitly says templates not exposed. Builder exists in native SDK. |
-| **Namespace** | not-implemented | working | no | yes — ImageService gRPC API: `CreateBlueprint` (Dockerfile or APT-based), `Build`, `FetchBlueprint`, `ListBlueprints`, `RemoveBlueprint` | Implemented build-from-spec via ImageService at `global.namespaceapis.com`. No snapshot/capture. |
+| **Namespace** | not-implemented | working (build + capture) | yes — `SuspendInstance` + StorageService `ListPersistentVolumeSnapshots` / `DestroyPersistentVolumeSnapshot` | yes — ImageService gRPC API: `CreateBlueprint` (Dockerfile or APT-based), `Build`, `FetchBlueprint`, `ListBlueprints`, `RemoveBlueprint` | Build-from-spec via ImageService at `global.namespaceapis.com`; capture-from-sandbox via persistent volume snapshots (requires an attached PERSISTENT volume). |
 | **Northflank** | not-implemented | not-implemented | no | partial — image path or internal deployment | No snapshot. Build service exists but no template CRUD. |
 | **Collimate** | not-implemented | not-implemented | no | partial — templateId required at create time | No snapshot. Template is a pass-through string, no CRUD. |
 | **AgentCore** | not-implemented | not-implemented | no | no | Ephemeral code interpreter sessions. No snapshot or template concept. |
@@ -217,7 +217,7 @@ No snapshot or template concept exists on the platform.
 
 ### Providers where snapshot/template does not apply
 
-AgentCore, Archil, Just-Bash, Secure-Exec, Cloudflare
+AgentCore, Archil, Just-Bash, Secure-Exec
 
 ### Providers with partial/template-as-passthrough only (low priority)
 
