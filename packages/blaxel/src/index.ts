@@ -155,7 +155,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			list: async (config: BlaxelConfig) => {
 				initializeBlaxel(config);
-				const sandboxList = await SandboxInstance.list();
+				const sandboxList = await listAllSandboxes();
 				return sandboxList.map(sandbox => ({
 					sandbox,
 					sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
@@ -398,7 +398,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			list: async (config: BlaxelConfig) => {
 				initializeBlaxel(config);
-				const sandboxList = await SandboxInstance.list();
+				const sandboxList = await listAllSandboxes();
 				return sandboxList.map(sandbox => ({
 					id: sandbox.metadata?.name || 'blaxel-unknown',
 					provider: 'blaxel',
@@ -501,6 +501,18 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		}
 	}
 });
+
+/**
+ * Collect all sandboxes across pages — since @blaxel/core 0.3.x, list()
+ * returns a cursor-paginated, auto-paging async iterable instead of an array.
+ */
+async function listAllSandboxes(): Promise<SandboxInstance[]> {
+	const sandboxes: SandboxInstance[] = [];
+	for await (const sandbox of await SandboxInstance.list()) {
+		sandboxes.push(sandbox);
+	}
+	return sandboxes;
+}
 
 /**
  * Parse TTL value from Blaxel's format to milliseconds

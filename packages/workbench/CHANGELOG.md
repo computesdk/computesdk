@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 29.0.6
+
+### Patch Changes
+
+- Updated dependencies [662bd35]
+  - @computesdk/blaxel@1.6.17
+
 ## 29.0.5
 
 ### Patch Changes
