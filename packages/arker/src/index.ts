@@ -128,10 +128,17 @@ export const arker = defineProvider<VM, ArkerConfig>({
 
         let fullCommand = command;
         if (options?.env && Object.keys(options.env).length > 0) {
-          const envPrefix = Object.entries(options.env)
-            .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
+          const assignments = Object.entries(options.env)
+            .map(([k, v]) => {
+              // A shell `NAME=value` prefix can't quote the name, so reject any
+              // name that isn't a valid identifier.
+              if (!/^[A-Za-z_]\w*$/.test(k)) {
+                throw new Error(`Arker runCommand: invalid environment variable name: ${JSON.stringify(k)}`);
+              }
+              return `${k}="${escapeShellArg(String(v))}"`;
+            })
             .join(' ');
-          fullCommand = `${envPrefix} ${fullCommand}`;
+          fullCommand = `${assignments} ${fullCommand}`;
         }
         if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
         // Wrap in `sh -c` so any cwd/env prefix detaches with the command;
