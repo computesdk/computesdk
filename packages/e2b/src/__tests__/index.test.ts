@@ -7,5 +7,6 @@ runProviderTestSuite({
   supportsFilesystem: true,  // E2B supports filesystem operations
   supportsPauseResume: true, // E2B supports native pause/resume
   skipIntegration: !process.env.E2B_API_KEY,
+  timeout: 300000, // Pause/resume can take longer than the default 60s
   ports: [3000, 8080]  // Enable getUrl tests
 });
