@@ -50,17 +50,23 @@ const sandbox = await sdk.sandbox.create();
 
 ## How sandboxes are created
 
-Arker disables direct VM creation — every sandbox is **forked from a golden source image**. `create()` forks `ubuntu-small` (Node.js + Python preinstalled) by default. Choose a different golden via `source` in config or `templateId` in create options:
+Arker disables direct VM creation — every sandbox is **forked from a source VM**. `create()` forks the `ubuntu-small` golden (Node.js + Python preinstalled) by default. The source can be chosen two ways:
+
+- **By name** — a golden/template, via `source` in config or `templateId` in create options.
+- **By id** — a specific existing VM, via `snapshotId` in create options. The `sandboxId` returned by `create()` is itself a valid source, so this branches a sandbox from its current state (Arker's equivalent of a snapshot restore). If both are given, `snapshotId` wins.
 
 ```typescript
 // Default: forks the `ubuntu-small` golden
 const sandbox = await sdk.sandbox.create();
 
 // Pick a golden globally for this provider
-const py = arker({ apiKey, source: 'ubuntu-py-repl' });
+const heavy = arker({ apiKey, source: 'ubuntu-full' });
 
-// Or per sandbox
-const sandbox = await sdk.sandbox.create({ templateId: 'ubuntu-js-repl' });
+// ...or per sandbox, by name
+const other = await sdk.sandbox.create({ templateId: 'ubuntu-full' });
+
+// Fork an existing sandbox by id — branches from its current state
+const forked = await sdk.sandbox.create({ snapshotId: sandbox.sandboxId });
 ```
 
 ## Configuration
@@ -140,7 +146,7 @@ await sandbox.destroy();
 
 ## Limitations
 
-- **Creation is fork-only** — direct VM creation is disabled; `create()` forks a golden source.
+- **Creation is fork-only** — direct VM creation is disabled; `create()` forks a golden by name (`templateId`/`source`) or an existing VM by id (`snapshotId`). There's no separate snapshot store, but any `sandboxId` can be re-forked as a `snapshotId`.
 - **`getUrl` is not supported** — Arker does not expose per-port URLs; `getUrl` throws. VMs forked with network reachability enabled get a stable per-VM hostname — see the [Arker SDK](https://github.com/ArkerHQ/arker-sdk) fork network options.
 - **`getInfo` status** — always reports `running`; idle sandboxes resume automatically on their next command.
 

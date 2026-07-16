@@ -8,7 +8,7 @@
 import { Arker, ArkerError, VM } from '@arker-ai/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { ForkOptions, RunOptions } from '@arker-ai/sdk';
+import type { RunOptions } from '@arker-ai/sdk';
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /** Region used when none is configured. */
@@ -37,7 +37,7 @@ const env = (key: string): string | undefined => {
  */
 function makeClient(config: ArkerConfig): Arker {
   return new Arker({
-    apiKey: config.apiKey,
+    apiKey: config.apiKey ?? env('ARKER_API_KEY'),
     region: config.region ?? env('ARKER_REGION') ?? DEFAULT_REGION,
   });
 }
@@ -85,12 +85,12 @@ export const arker = defineProvider<VM, ArkerConfig>({
 
       create: async (config: ArkerConfig, options?: CreateSandboxOptions) => {
         const client = makeClient(config);
-        const source = options?.templateId || options?.snapshotId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE;
+        const name = options?.name ?? null;
+        
+        const vm = options?.snapshotId
+          ? await client.fork({ sourceVmId: options.snapshotId, name })
+          : await client.fork(options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE, { name });
 
-        const forkOpts: Partial<ForkOptions> = {};
-        if (options?.name) forkOpts.name = options.name;
-
-        const vm = await client.fork(source, forkOpts);
         return { sandbox: vm, sandboxId: vm.id };
       },
 
