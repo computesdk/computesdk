@@ -697,13 +697,13 @@ describe('Factory', () => {
       expect(typeof sandbox.pause).toBe('function')
       expect(typeof sandbox.resume).toBe('function')
 
-      await sandbox.pause({ keepMemory: true })
+      await sandbox.pause!({ keepMemory: true })
       expect(pause).toHaveBeenCalledWith(
         { id: 'test-pause', status: 'running' },
         { keepMemory: true }
       )
 
-      await sandbox.resume()
+      await sandbox.resume!()
       expect(resume).toHaveBeenCalledWith({ id: 'test-pause', status: 'running' })
     })
 
@@ -736,7 +736,7 @@ describe('Factory', () => {
 
       const provider = providerFactory({ apiKey: 'test-key' })
       const sandbox = await provider.sandbox.create()
-      await sandbox.resume()
+      await sandbox.resume!()
 
       // Subsequent getInfo should use the resumed sandbox instance
       await sandbox.getInfo()
@@ -770,8 +770,8 @@ describe('Factory', () => {
       const provider = providerFactory({ apiKey: 'test-key' })
       const sandbox = await provider.sandbox.create()
 
-      await expect(sandbox.pause()).rejects.toThrow('Pause is not supported by the mock provider.')
-      await expect(sandbox.resume()).rejects.toThrow('Resume is not supported by the mock provider.')
+      await expect(sandbox.pause!()).rejects.toThrow('Pause is not supported by the mock provider.')
+      await expect(sandbox.resume!()).rejects.toThrow('Resume is not supported by the mock provider.')
     })
   })
 })
