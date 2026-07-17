@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.6.17
+
+### Patch Changes
+
+- 662bd35: Update @blaxel/core to 0.3.3 and adapt sandbox/snapshot listing to the new cursor-paginated list() API (auto-paginates through all pages).
+
 ## 1.6.16
 
 ### Patch Changes

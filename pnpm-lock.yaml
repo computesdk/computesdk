@@ -347,8 +347,8 @@ importers:
   packages/blaxel:
     dependencies:
       '@blaxel/core':
-        specifier: ^0.2.89
-        version: 0.2.91(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.3.3
+        version: 0.3.3(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2497,8 +2497,8 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@blaxel/core@0.2.91':
-    resolution: {integrity: sha512-xtwuH9hpb5x+jmEF8rTUgJdQdEdn1lkr9OlTqjcGwkDRsaviqJzN5UfhN3zR2iG7yaUYfRwOLcMOEJVofWaOqg==}
+  '@blaxel/core@0.3.3':
+    resolution: {integrity: sha512-GOc7ILVMP2eJT/QleeoI0W5ylp60m6aWItUAHQ+DxX8GdPZNVKm5l5pYeLGCouFJfH08qgSzrOrNancymyYv6A==}
     engines: {node: '>=18'}
 
   '@borewit/text-codec@0.2.1':
@@ -6549,10 +6549,6 @@ packages:
     resolution: {integrity: sha512-eSmmWE5bZTK2Nou4g0AI3zZ9rswp7GRKoKXS1BLUkvPviOqs4YTN1djQIqrXy9k5gEtdLPy86JjRwsNM9tnDcA==}
     engines: {node: '>=0.10.0'}
 
-  hono@4.11.10:
-    resolution: {integrity: sha512-kyWP5PAiMooEvGrA9jcD3IXF7ATu8+o7B3KCbPXid5se52NPqnOpM/r9qeW2heMnOekF4kqR1fXJqCYeCLKrZg==}
-    engines: {node: '>=16.9.0'}
-
   hono@4.12.27:
     resolution: {integrity: sha512-1yrb/+w6HWQJrUCLkJ2IF5jNIPvvFkblV5RNOYl6bV+OA6p9GLcMpHFFGTosSvHvcAUibuUukRqhlYI4z32C7Q==}
     engines: {node: '>=16.9.0'}
@@ -9674,19 +9670,19 @@ snapshots:
       - debug
       - utf-8-validate
 
-  '@blaxel/core@0.2.91(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@blaxel/core@0.3.3(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
       '@modelcontextprotocol/sdk': 1.26.0(zod@3.25.76)
       archiver: 7.0.1
-      axios: 1.13.5
+      axios: 1.18.1
       dockerfile-ast: 0.7.1
       dotenv: 16.6.1
       form-data: 4.0.5
       jwt-decode: 4.0.0
       toml: 3.0.0
       uuid: 11.1.0
-      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yaml: 2.8.2
       zod: 3.25.76
     transitivePeerDependencies:
@@ -10614,9 +10610,9 @@ snapshots:
     transitivePeerDependencies:
       - magicast
 
-  '@hono/node-server@1.19.9(hono@4.11.10)':
+  '@hono/node-server@1.19.9(hono@4.12.27)':
     dependencies:
-      hono: 4.11.10
+      hono: 4.12.27
 
   '@hopx-ai/sdk@0.5.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
@@ -10958,7 +10954,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.26.0(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 1.19.9(hono@4.11.10)
+      '@hono/node-server': 1.19.9(hono@4.12.27)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -10968,7 +10964,7 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.2.1(express@5.2.1)
-      hono: 4.11.10
+      hono: 4.12.27
       jose: 6.2.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.0
@@ -10980,7 +10976,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.26.0(zod@4.4.3)':
     dependencies:
-      '@hono/node-server': 1.19.9(hono@4.11.10)
+      '@hono/node-server': 1.19.9(hono@4.12.27)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -10990,7 +10986,7 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.2.1(express@5.2.1)
-      hono: 4.11.10
+      hono: 4.12.27
       jose: 6.2.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.0
@@ -14259,8 +14255,6 @@ snapshots:
     dependencies:
       parse-passwd: 1.0.0
 
-  hono@4.11.10: {}
-
   hono@4.12.27: {}
 
   hpagent@1.2.0: {}
@@ -15514,7 +15508,7 @@ snapshots:
 
   pyodide@0.27.7(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
