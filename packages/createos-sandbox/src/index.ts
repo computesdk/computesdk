@@ -56,6 +56,9 @@ const PROVIDER_NAME = "createos-sandbox";
  *  entry is collected with its sandbox. */
 const sandboxConfig = new WeakMap<Sandbox, CreateosConfig>();
 
+/** Reuse clients for the same apiKey+baseUrl pair. */
+const clientCache = new Map<string, CreateosSandboxClient>();
+
 /** Quote a value into one complete, self-contained shell token. Unlike the
  *  framework's `escapeShellArg` (which only neutralises metacharacters *inside*
  *  surrounding double quotes), this wraps in single quotes so the token is safe
@@ -112,12 +115,18 @@ export interface CreateosCreateOptions extends CreateSandboxOptions {
   cpus?: number;
   /** Overlay disk size (MiB). 0 / omitted = the shape's default disk. */
   ephemeralDiskMb?: number;
-  /** Enable public ingress. Defaults to true. */
+  /** Enable public ingress. Defaults to false. */
   ingressEnabled?: boolean;
   /** SSH public keys to inject at boot. */
   sshPubkeys?: string[];
   /** Egress allow-list. */
   egress?: string[];
+  /** Env vars set at sandbox creation. */
+  envs?: Record<string, string>;
+  /** Explicit sandbox name (control mints one if omitted). */
+  name?: string;
+  /** Snapshot id (paused sandbox) to fork from — bypasses cold create. */
+  snapshotId?: string;
 }
 
 /** Production control-plane base URL, used when neither `config.baseUrl` nor
@@ -140,7 +149,13 @@ function resolveClient(config: CreateosConfig): CreateosSandboxClient {
   // is treated as unset so the next source applies.
   const baseUrl =
     config.baseUrl?.trim() || env("CREATEOS_SANDBOX_BASE_URL")?.trim() || DEFAULT_BASE_URL;
-  return new CreateosSandboxClient({ apiKey, baseUrl });
+  const cacheKey = `${apiKey}\0${baseUrl}`;
+  let client = clientCache.get(cacheKey);
+  if (!client) {
+    client = new CreateosSandboxClient({ apiKey, baseUrl });
+    clientCache.set(cacheKey, client);
+  }
+  return client;
 }
 
 /** True only for a genuine "resource does not exist" (404). Everything else —
@@ -174,6 +189,11 @@ export function defaultShape(shapes: Shape[]): string | undefined {
   return (fit ?? sorted[0])?.id;
 }
 
+/** Cache shapes per client with a 5-minute TTL. */
+const shapesCache = new WeakMap<CreateosSandboxClient, { shapes: Shape[]; expires: number }>();
+const SHAPES_CACHE_TTL_MS = 5 * 60 * 1_000;
+const FALLBACK_SHAPE = "s-1vcpu-1gb";
+
 /** Resolve the shape for a create() call. Fetches the live catalog only when
  *  no explicit `shape` is pinned, so the explicit path never depends on
  *  `/v1/shapes` being reachable. */
@@ -184,11 +204,14 @@ async function resolveShape(
 ): Promise<string> {
   const explicit = opts.shape ?? config.shape;
   if (explicit) return explicit;
-  const shapes = await client.listShapes();
-  const picked = pickShape(shapes, opts.memoryMb, opts.cpus) ?? defaultShape(shapes);
-  if (!picked) {
-    throw new Error("CreateOS control plane returned an empty shape catalog.");
+  if (opts.memoryMb == null && opts.cpus == null) return FALLBACK_SHAPE;
+  const now = Date.now();
+  let entry = shapesCache.get(client);
+  if (!entry || entry.expires < now) {
+    entry = { shapes: await client.listShapes(), expires: now + SHAPES_CACHE_TTL_MS };
+    shapesCache.set(client, entry);
   }
+  const picked = pickShape(entry.shapes, opts.memoryMb, opts.cpus) ?? defaultShape(entry.shapes) ?? FALLBACK_SHAPE;
   return picked;
 }
 
@@ -213,7 +236,7 @@ function strArray(v: unknown): string[] | undefined {
 /** Pure map: ComputeSDK create options → createos-sandbox fork request body. */
 export function toForkRequest(opts: CreateosCreateOptions): ForkSandboxRequest {
   const req: ForkSandboxRequest = {
-    ingress_enabled: opts.ingressEnabled !== undefined ? Boolean(opts.ingressEnabled) : true,
+    ingress_enabled: opts.ingressEnabled !== undefined ? Boolean(opts.ingressEnabled) : false,
   };
   const ssh = strArray(opts.sshPubkeys);
   if (ssh) req.ssh_pubkeys = ssh;
@@ -232,7 +255,7 @@ export function toCreateRequest(
 ): CreateSandboxRequest {
   const req: CreateSandboxRequest = {
     shape,
-    ingress_enabled: opts.ingressEnabled !== undefined ? Boolean(opts.ingressEnabled) : true,
+    ingress_enabled: opts.ingressEnabled !== undefined ? Boolean(opts.ingressEnabled) : false,
   };
   if (rootfs) req.rootfs = rootfs;
   if (opts.name) req.name = String(opts.name);
@@ -314,7 +337,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         }
 
         const shape = await resolveShape(client, opts, config);
-        const rootfs = opts.image ?? opts.runtime ?? config.rootfs;
+        const rootfs = opts.image ?? opts.runtime ?? config.rootfs ?? "devbox:1";
         const sandbox = await client.createSandbox(toCreateRequest(opts, shape, rootfs));
         sandboxConfig.set(sandbox, config);
         return { sandbox, sandboxId: sandbox.id };
@@ -345,8 +368,10 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       destroy: async (config: CreateosConfig, sandboxId: string) => {
         const client = resolveClient(config);
         try {
-          const sandbox = await client.getSandbox(sandboxId);
-          await sandbox.destroy();
+          await client.http.request(
+            "DELETE",
+            `/v1/sandboxes/${encodeURIComponent(sandboxId)}`,
+          );
         } catch (e) {
           if (isNotFound(e)) return; // already gone; destroy is idempotent
           throw e;
