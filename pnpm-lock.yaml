@@ -768,8 +768,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@nodeops-createos/sandbox':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.7.1
+        version: 0.7.1
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -1995,7 +1995,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@24.12.4)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+        version: 1.6.1(@types/node@26.1.1)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
   packages/tigris:
     dependencies:
@@ -4070,8 +4070,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@nodeops-createos/sandbox@0.6.0':
-    resolution: {integrity: sha512-MoCJJU7qzhE9HrPLy73lqhUYcckgCxxRUMytTbaRgHAeMcRqkO9+OLZ7VVryRusqgRCm4gTZZV61WQn+QsYTjw==}
+  '@nodeops-createos/sandbox@0.7.1':
+    resolution: {integrity: sha512-6bGA3wNe8OZ6pmcH2AzVA7grAalqzHGBrxY0DQkHTJ8JR/oSWRf/Xhdd0hNZYMDbkQQxwumRfbtfSZVot10/Lg==}
     engines: {node: '>=20'}
 
   '@northflank/js-client@0.9.5':
@@ -5029,6 +5029,9 @@ packages:
 
   '@types/node@24.12.4':
     resolution: {integrity: sha512-GUUEShf+PBCGW2KaXwcIt3Yk+e3pkKwWKb9GSyM9WQVE+ep2jzmHdGsHzu4wgcZy5fN9FBdVzjpBQsYlpfpgLA==}
+
+  '@types/node@26.1.1':
+    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
 
   '@types/pg-pool@2.0.6':
     resolution: {integrity: sha512-TaAUE5rq2VQYxab5Ts7WZhKNmuN78Q6PiFonTDdpbx8a1H0M1vhy3rhiMjl+e2iHmogyMw7jZF4FrE6eJUy5HQ==}
@@ -8538,6 +8541,9 @@ packages:
   undici-types@7.16.0:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
 
+  undici-types@8.3.0:
+    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
+
   undici@5.29.0:
     resolution: {integrity: sha512-raqeBD6NQK4SkWhQzeYKd1KmIG6dllBOTt55Rmkt4HtI9mwdWtJljnrXjAFUBLTSN67HWrOIZ3EPF4kjUw80Bg==}
     engines: {node: '>=14.0'}
@@ -10979,7 +10985,10 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@nodeops-createos/sandbox@0.6.0': {}
+  '@nodeops-createos/sandbox@0.7.1':
+    optionalDependencies:
+      '@types/node': 26.1.1
+      undici: 7.28.0
 
   '@northflank/js-client@0.9.5':
     dependencies:
@@ -12264,6 +12273,11 @@ snapshots:
   '@types/node@24.12.4':
     dependencies:
       undici-types: 7.16.0
+
+  '@types/node@26.1.1':
+    dependencies:
+      undici-types: 8.3.0
+    optional: true
 
   '@types/pg-pool@2.0.6':
     dependencies:
@@ -16456,6 +16470,9 @@ snapshots:
 
   undici-types@7.16.0: {}
 
+  undici-types@8.3.0:
+    optional: true
+
   undici@5.29.0:
     dependencies:
       '@fastify/busboy': 2.1.1
@@ -16564,13 +16581,13 @@ snapshots:
       - supports-color
       - terser
 
-  vite-node@1.6.1(@types/node@24.12.4)(terser@5.43.1):
+  vite-node@1.6.1(@types/node@26.1.1)(terser@5.43.1):
     dependencies:
       cac: 6.7.14
       debug: 4.4.3
       pathe: 1.1.2
       picocolors: 1.1.1
-      vite: 5.4.19(@types/node@24.12.4)(terser@5.43.1)
+      vite: 5.4.19(@types/node@26.1.1)(terser@5.43.1)
     transitivePeerDependencies:
       - '@types/node'
       - less
@@ -16602,13 +16619,13 @@ snapshots:
       fsevents: 2.3.3
       terser: 5.43.1
 
-  vite@5.4.19(@types/node@24.12.4)(terser@5.43.1):
+  vite@5.4.19(@types/node@26.1.1)(terser@5.43.1):
     dependencies:
       esbuild: 0.21.5
       postcss: 8.5.6
       rollup: 4.45.1
     optionalDependencies:
-      '@types/node': 24.12.4
+      '@types/node': 26.1.1
       fsevents: 2.3.3
       terser: 5.43.1
 
@@ -16682,7 +16699,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@1.6.1(@types/node@24.12.4)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1):
+  vitest@1.6.1(@types/node@26.1.1)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1):
     dependencies:
       '@vitest/expect': 1.6.1
       '@vitest/runner': 1.6.1
@@ -16701,11 +16718,11 @@ snapshots:
       strip-literal: 2.1.1
       tinybench: 2.9.0
       tinypool: 0.8.4
-      vite: 5.4.19(@types/node@24.12.4)(terser@5.43.1)
-      vite-node: 1.6.1(@types/node@24.12.4)(terser@5.43.1)
+      vite: 5.4.19(@types/node@26.1.1)(terser@5.43.1)
+      vite-node: 1.6.1(@types/node@26.1.1)(terser@5.43.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 24.12.4
+      '@types/node': 26.1.1
       jsdom: 23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - less
