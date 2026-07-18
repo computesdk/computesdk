@@ -30,6 +30,9 @@ export type {
   RunCommandOptions,
   SandboxFileSystem,
   CreateSandboxOptions,
+  SandboxResourceOptions,
+  RunloopLaunchParameters,
+  VercelSandboxResources,
 } from './types/universal-sandbox';
 
 // Compute API
