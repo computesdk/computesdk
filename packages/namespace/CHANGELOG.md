@@ -1,5 +1,11 @@
 # @computesdk/namespace
 
+## 1.6.13
+
+### Patch Changes
+
+- 92b93da: Use Namespace's managed `builtin:base` image when no sandbox image is provided.
+
 ## 1.6.12
 
 ### Patch Changes
