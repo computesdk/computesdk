@@ -154,7 +154,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       },
 
       runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const startTime = Date.now();
+        const startTime = performance.now();
         try {
           let fullCommand = command;
           if (options?.env && Object.keys(options.env).length > 0) {
@@ -168,9 +168,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
             cwd: options?.cwd, detached: options?.background,
             stdout: stdout?.sink, stderr: stderr?.sink,
           });
-          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
+          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Math.round(performance.now() - startTime) };
         } catch (error) {
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
+          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Math.round(performance.now() - startTime) };
         }
       },
 

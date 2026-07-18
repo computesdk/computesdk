@@ -197,7 +197,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       // Instance operations
 
       runCommand: async (sandbox: UpstashSandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const startTime = Date.now();
+        const startTime = performance.now();
 
         try {
           let fullCommand = command;
@@ -223,7 +223,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
             stdout: run.result || '',
             stderr: '',
             exitCode: run.exitCode ?? 0,
-            durationMs: Date.now() - startTime,
+            durationMs: Math.round(performance.now() - startTime),
           };
         } catch (error) {
           const result = (error as any)?.result;
@@ -232,7 +232,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               stdout: typeof result === 'string' ? result : result.output || '',
               stderr: typeof result === 'string' ? '' : result.error || '',
               exitCode: (error as any)?.exitCode ?? 1,
-              durationMs: Date.now() - startTime,
+              durationMs: Math.round(performance.now() - startTime),
             };
           }
 
@@ -240,7 +240,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127,
-            durationMs: Date.now() - startTime,
+            durationMs: Math.round(performance.now() - startTime),
           };
         }
       },
