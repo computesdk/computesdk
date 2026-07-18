@@ -133,6 +133,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       create: async (config: NamespaceConfig, options?: CreateSandboxOptions) => {
         const { token } = await getAndValidateCredentials(config);
         const containerName = config.targetContainerName || 'main-container';
+        const image = options?.image;
 
         try {
           const requestBody = {
@@ -144,7 +145,9 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             },
             containers: [{
               name: containerName,
-              image_ref: (options as any)?.image ?? 'ubuntu:latest',
+              ...(image === undefined
+                ? { known_image_id: 'builtin:base' }
+                : { image_ref: image }),
               args: ['sleep', 'infinity'],
               ...(options?.envs && Object.keys(options.envs).length > 0 && {
                 environment: options.envs
@@ -279,13 +282,13 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
           if (options?.env && Object.keys(options.env).length > 0) {
             const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}=${escapeShellArg(v)}`)
+              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
               .join(' ');
             fullCommand = `${envPrefix} ${fullCommand}`;
           }
 
           if (options?.cwd) {
-            fullCommand = `cd ${escapeShellArg(options.cwd)} && ${fullCommand}`;
+            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           }
 
           if (options?.background) {
