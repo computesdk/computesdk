@@ -121,7 +121,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           }
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          const execution = await sandbox.commands.run(fullCommand);
+          const execution = await sandbox.commands.run(fullCommand, { timeoutMs: options?.timeout });
           return { stdout: execution.stdout, stderr: execution.stderr, exitCode: execution.exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           const result = (error as { result?: E2BExecutionResult })?.result;
