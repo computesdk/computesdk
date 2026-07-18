@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, PauseOptions } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -49,7 +49,9 @@ const API_ENDPOINTS = {
   CREATE_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/CreateInstance',
   DESCRIBE_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/DescribeInstance',
   LIST_INSTANCES: '/namespace.cloud.compute.v1beta.ComputeService/ListInstances',
-  DESTROY_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/DestroyInstance'
+  DESTROY_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/DestroyInstance',
+  SUSPEND_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/SuspendInstance',
+  WAKE_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/WakeInstance'
 };
 
 const COMMAND_SERVICE = {
@@ -95,6 +97,57 @@ const handleApiErrors = (response: any) => {
     throw new Error(`Namespace API error: ${response.error}`);
   }
 };
+
+async function describeNamespaceInstance(token: string, instanceId: string): Promise<any> {
+  return fetchNamespace(token, API_ENDPOINTS.DESCRIBE_INSTANCE, {
+    method: 'POST',
+    body: JSON.stringify({ instance_id: instanceId })
+  });
+}
+
+export function mapStatus(status: number | string): SandboxInfo['status'] {
+  const numeric = typeof status === 'string' ? parseInt(status, 10) : status;
+  switch (numeric) {
+    case 3:
+      return 'running';
+    case 7:
+      return 'paused';
+    case 6:
+      // Suspending is a transient state on the way to paused.
+      return 'paused';
+    case 4:
+    case 5:
+      return 'stopped';
+    case 8:
+      return 'error';
+    default:
+      // PREPARING, STARTING, UNKNOWN are all "not yet running" states.
+      return 'running';
+  }
+}
+
+async function waitForInstanceStatus(
+  token: string,
+  instanceId: string,
+  target: number | number[],
+  maxWaitMs: number = 5 * 60 * 1000,
+  intervalMs: number = 3000
+): Promise<any> {
+  const targets = Array.isArray(target) ? target : [target];
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const response = await describeNamespaceInstance(token, instanceId);
+    const status = response?.metadata?.status;
+    if (targets.includes(status)) {
+      return response;
+    }
+    if (status === 8) {
+      throw new Error(`Namespace instance ${instanceId} entered an error state`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Timed out waiting for Namespace instance ${instanceId} to reach status ${JSON.stringify(targets)}`);
+}
 
 export const fetchNamespace = async (
   token: string,
@@ -334,17 +387,53 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       getInfo: async (sandbox: NamespaceSandbox): Promise<SandboxInfo> => {
+        const response = await describeNamespaceInstance(sandbox.token, sandbox.instanceId);
         return {
           id: sandbox.instanceId,
           provider: 'namespace',
-          status: 'running',
+          status: mapStatus(response?.metadata?.status),
           createdAt: sandbox.createdAt,
           timeout: 0,
           metadata: {
             name: sandbox.name,
-            commandServiceEndpoint: sandbox.commandServiceEndpoint,
+            commandServiceEndpoint: response?.extendedMetadata?.commandServiceEndpoint ?? sandbox.commandServiceEndpoint,
           }
         };
+      },
+
+      pause: async (sandbox: NamespaceSandbox, options?: PauseOptions): Promise<void> => {
+        if (options?.keepMemory === false) {
+          throw new Error('Namespace does not support filesystem-only pause; SuspendInstance always preserves memory state.');
+        }
+        try {
+          await fetchNamespace(sandbox.token, API_ENDPOINTS.SUSPEND_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: sandbox.instanceId })
+          });
+          await waitForInstanceStatus(sandbox.token, sandbox.instanceId, [7]);
+        } catch (error) {
+          throw new Error(
+            `Failed to pause Namespace instance: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      resume: async (sandbox: NamespaceSandbox): Promise<NamespaceSandbox> => {
+        try {
+          await fetchNamespace(sandbox.token, API_ENDPOINTS.WAKE_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: sandbox.instanceId })
+          });
+          const response = await waitForInstanceStatus(sandbox.token, sandbox.instanceId, [3]);
+          return {
+            ...sandbox,
+            commandServiceEndpoint: response?.extendedMetadata?.commandServiceEndpoint ?? sandbox.commandServiceEndpoint
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to resume Namespace instance: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       getUrl: async (_sandbox: NamespaceSandbox, _options: { port: number; protocol?: string }): Promise<string> => {

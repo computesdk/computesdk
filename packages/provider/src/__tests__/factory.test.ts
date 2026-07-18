@@ -662,5 +662,116 @@ describe('Factory', () => {
       expect(onStdout).toHaveBeenCalledWith('chunk-a\n')
       expect(onStderr).toHaveBeenCalledWith('err-a\n')
     })
+
+    it('should expose pause and resume when provider implements them', async () => {
+      const pause = vi.fn().mockResolvedValue(undefined)
+      const resume = vi.fn().mockResolvedValue(undefined)
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-pause', status: 'running' },
+          sandboxId: 'test-pause'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '', stderr: '', exitCode: 0, durationMs: 1
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-pause', provider: 'mock', status: 'running',
+          createdAt: new Date(), timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-pause-3000.mock.dev'),
+        pause,
+        resume,
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+
+      expect(typeof sandbox.pause).toBe('function')
+      expect(typeof sandbox.resume).toBe('function')
+
+      await sandbox.pause!({ keepMemory: true })
+      expect(pause).toHaveBeenCalledWith(
+        { id: 'test-pause', status: 'running' },
+        { keepMemory: true }
+      )
+
+      await sandbox.resume!()
+      expect(resume).toHaveBeenCalledWith({ id: 'test-pause', status: 'running' })
+    })
+
+    it('should update internal sandbox when resume returns a new instance', async () => {
+      const resumedSandbox = { id: 'test-pause-resumed', status: 'running' }
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-pause', status: 'running' },
+          sandboxId: 'test-pause'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '', stderr: '', exitCode: 0, durationMs: 1
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-pause', provider: 'mock', status: 'running',
+          createdAt: new Date(), timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-pause-3000.mock.dev'),
+        pause: vi.fn().mockResolvedValue(undefined),
+        resume: vi.fn().mockResolvedValue(resumedSandbox),
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+      await sandbox.resume!()
+
+      // Subsequent getInfo should use the resumed sandbox instance
+      await sandbox.getInfo()
+      expect(methods.getInfo).toHaveBeenLastCalledWith(resumedSandbox)
+    })
+
+    it('should throw when pause or resume is not supported', async () => {
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-nopause', status: 'running' },
+          sandboxId: 'test-nopause'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn().mockResolvedValue({
+          stdout: '', stderr: '', exitCode: 0, durationMs: 1
+        } as CommandResult),
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-nopause', provider: 'mock', status: 'running',
+          createdAt: new Date(), timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn().mockResolvedValue('https://test-nopause-3000.mock.dev')
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+
+      await expect(sandbox.pause!()).rejects.toThrow('Pause is not supported by the mock provider.')
+      await expect(sandbox.resume!()).rejects.toThrow('Resume is not supported by the mock provider.')
+    })
   })
 })

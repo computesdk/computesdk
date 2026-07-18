@@ -15,7 +15,7 @@
  */
 
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
-import type { RunCommandOptions, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from "computesdk";
+import type { RunCommandOptions, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, PauseOptions } from "computesdk";
 import {
   TenkiSandbox,
   Session,
@@ -48,6 +48,11 @@ interface TenkiScope {
   workspaceId: string;
   projectId: string;
 }
+
+type PauseCapableSession = Session & {
+  pause: () => Promise<void>;
+  resume: () => Promise<void>;
+};
 
 // ---------------------------------------------------------------------------
 // Client + scope resolution
@@ -147,6 +152,7 @@ function mapStatus(state: SessionState): SandboxInfo["status"] {
       return "running";
     case "PAUSED":
     case "PAUSING":
+      return "paused";
     case "TERMINATING":
     case "TERMINATED":
       return "stopped";
@@ -337,6 +343,14 @@ export const tenki = defineProvider<Session, TenkiConfig>({
       },
 
       getInstance: (sandbox) => sandbox,
+
+      pause: async (sandbox, _options?: PauseOptions) => {
+        await (sandbox as PauseCapableSession).pause();
+      },
+
+      resume: async (sandbox) => {
+        await (sandbox as PauseCapableSession).resume();
+      },
 
       // Native filesystem: Tenki exposes real file primitives over its data
       // plane, so we bypass the shell-based fallback (and its escaping

@@ -27,6 +27,8 @@ export interface ProviderTestConfig {
   supportsGetUrl?: boolean;
   /** Base path for filesystem tests (default: '/tmp') */
   filesystemBasePath?: string;
+  /** Whether this provider supports pause/resume lifecycle tests */
+  supportsPauseResume?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
     ports,
     supportsGetUrl = true,
     filesystemBasePath = '/tmp',
+    supportsPauseResume = false,
   } = config;
 
   return () => {
@@ -222,6 +225,30 @@ export function defineProviderTests(config: ProviderTestConfig) {
         expect(result.stdout.trim()).toBe('test content');
       }, timeout);
     });
+
+    if (!skipIntegration && supportsPauseResume) {
+      describe('Pause/Resume lifecycle', () => {
+        it('should pause and resume while preserving filesystem state', async () => {
+          const markerPath = `${filesystemBasePath}/computesdk-pause-resume-marker.txt`;
+          const markerContent = `paused-${Date.now()}`;
+
+          await sandbox.runCommand(`sh -c 'echo "${markerContent}" > ${markerPath}'`);
+
+          await sandbox.pause!();
+          const pausedInfo = await sandbox.getInfo();
+          expect(pausedInfo.status).toBe('paused');
+
+          await sandbox.resume!();
+          const resumedInfo = await sandbox.getInfo();
+          expect(resumedInfo.status).toBe('running');
+
+          if (supportsFilesystem) {
+            const result = await sandbox.runCommand(`cat ${markerPath}`);
+            expect(result.stdout.trim()).toBe(markerContent);
+          }
+        }, timeout);
+      });
+    }
   };
 }
 

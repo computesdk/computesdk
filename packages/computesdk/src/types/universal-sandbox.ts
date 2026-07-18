@@ -25,6 +25,18 @@ export interface CommandResult {
 }
 
 /**
+ * Options for pausing a sandbox
+ */
+export interface PauseOptions {
+  /**
+   * Whether to preserve memory (running process state) when pausing.
+   * Defaults to provider behavior. Providers that do not support memory
+   * snapshots will ignore this or throw if `true` is requested explicitly.
+   */
+  keepMemory?: boolean;
+}
+
+/**
  * Sandbox information
  */
 export interface SandboxInfo {
@@ -33,7 +45,7 @@ export interface SandboxInfo {
   /** Provider hosting the sandbox */
   provider: string;
   /** Current status of the sandbox */
-  status: 'running' | 'stopped' | 'error';
+  status: 'running' | 'stopped' | 'paused' | 'error';
   /** When the sandbox was created */
   createdAt: Date;
   /** Execution timeout in milliseconds */
@@ -172,7 +184,17 @@ export interface Sandbox {
   
   /** Destroy the sandbox and clean up resources */
   destroy(): Promise<void>;
-  
+
+  /**
+   * Pause the sandbox, preserving its filesystem state.
+   * Providers that support memory snapshots may also preserve running
+   * processes when `keepMemory: true` is requested.
+   */
+  pause?(options?: PauseOptions): Promise<void>;
+
+  /** Resume a paused sandbox */
+  resume?(): Promise<void>;
+
   /** File system operations */
   readonly filesystem: SandboxFileSystem;
 }

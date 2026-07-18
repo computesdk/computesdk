@@ -14,12 +14,18 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 
+type PauseCapableSuperserveSandbox = SuperserveSandbox & {
+  pause: (options?: PauseOptions) => Promise<void>;
+  resume: () => Promise<void>;
+};
+
 import type {
   CommandResult,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
   SandboxInfo,
+  PauseOptions,
 } from '@computesdk/provider';
 
 export interface SuperserveConfig {
@@ -188,7 +194,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       getInfo: async (sandbox: SuperserveSandbox): Promise<SandboxInfo> => {
         const info = await sandbox.getInfo();
         const status: SandboxInfo['status'] =
-          info.status === 'paused' ? 'stopped' :
+          info.status === 'paused' ? 'paused' :
           info.status === 'failed' ? 'error' :
           'running';
         return {
@@ -206,6 +212,14 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
           'Superserve does not currently support arbitrary port forwarding via getUrl(). ' +
             'Use sandbox.commands.run() to interact with services running inside the sandbox.',
         );
+      },
+
+      pause: async (sandbox: SuperserveSandbox, options?: PauseOptions) => {
+        await (sandbox as PauseCapableSuperserveSandbox).pause(options);
+      },
+
+      resume: async (sandbox: SuperserveSandbox) => {
+        await (sandbox as PauseCapableSuperserveSandbox).resume();
       },
 
       filesystem: {

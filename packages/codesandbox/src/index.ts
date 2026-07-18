@@ -6,9 +6,11 @@ import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, PauseOptions } from '@computesdk/provider';
 
 type HibernateCapableSandbox = CodesandboxSandbox & { hibernate: () => Promise<void>; };
+
+const sandboxApiKeys = new WeakMap<CodesandboxSandbox, string>();
 
 export interface CodesandboxConfig {
   /** CodeSandbox API key - if not provided, will fallback to CSB_API_KEY environment variable */
@@ -50,6 +52,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             sandbox = await sdk.sandboxes.create(createOptions);
             sandboxId = sandbox.id;
           }
+          sandboxApiKeys.set(sandbox, apiKey);
           return { sandbox, sandboxId };
         } catch (error) {
           if (error instanceof Error) {
@@ -70,6 +73,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         const sdk = new CodeSandbox(apiKey);
         try {
           const sandbox = await sdk.sandboxes.resume(sandboxId);
+          sandboxApiKeys.set(sandbox, apiKey);
           return { sandbox, sandboxId };
         } catch { return null; }
       },
@@ -156,6 +160,22 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           const client = await sandbox.connect();
           await client.fs.remove(path);
         }
+      },
+
+      pause: async (sandbox: CodesandboxSandbox, _options?: PauseOptions) => {
+        // CodeSandbox hibernate() preserves filesystem + memory and is the snapshot mechanism.
+        await (sandbox as HibernateCapableSandbox).hibernate();
+      },
+
+      resume: async (sandbox: CodesandboxSandbox) => {
+        const apiKey = sandboxApiKeys.get(sandbox);
+        if (!apiKey) {
+          throw new Error('CodeSandbox API key not available for resume. Retrieve the sandbox via getById before resuming.');
+        }
+        const sdk = new CodeSandbox(apiKey);
+        const resumed = await sdk.sandboxes.resume(sandbox.id);
+        sandboxApiKeys.set(resumed, apiKey);
+        return resumed;
       },
 
       getInstance: (sandbox: CodesandboxSandbox): CodesandboxSandbox => sandbox,

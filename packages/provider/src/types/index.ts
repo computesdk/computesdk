@@ -14,6 +14,7 @@ export type {
   RunCommandOptions,
   SandboxFileSystem,
   CreateSandboxOptions,
+  PauseOptions,
 } from 'computesdk';
 
 // Provider-specific types (defined in this package)

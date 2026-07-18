@@ -144,6 +144,38 @@ describeIntegration('compute provider integration', () => {
     }
   }, 180000);
 
+  it.runIf(testProvider === 'e2b')(
+    'pauses and resumes a sandbox while preserving filesystem state',
+    async () => {
+      if (!testProvider) {
+        throw new Error('TEST_PROVIDER must be set when COMPUTESDK_INTEGRATION=1');
+      }
+
+      const providerFactory = await loadProviderFactory(testProvider);
+      const provider = providerFactory(getProviderConfig(testProvider));
+
+      const sdk = compute({ provider });
+      const sandbox = await sdk.sandbox.create({ timeout: 120000 } as any);
+
+      try {
+        await sandbox.runCommand('echo e2b-pause-marker > /tmp/computesdk-pause-marker.txt');
+        await sandbox.pause!();
+        const pausedInfo = await sandbox.getInfo();
+        expect(pausedInfo.status).toBe('paused');
+
+        await sandbox.resume!();
+        const resumedInfo = await sandbox.getInfo();
+        expect(resumedInfo.status).toBe('running');
+
+        const result = await sandbox.runCommand('cat /tmp/computesdk-pause-marker.txt');
+        expect(result.stdout).toContain('e2b-pause-marker');
+      } finally {
+        await sdk.sandbox.destroy(sandbox.sandboxId);
+      }
+    },
+    300000,
+  );
+
   it.runIf(testProvider === 'vercel')(
     'streams daemon output callbacks before command completion',
     async () => {

@@ -5,7 +5,7 @@
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, PauseOptions } from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -17,6 +17,15 @@ export interface DaytonaConfig {
   runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+}
+
+function mapDaytonaState(state?: string): SandboxInfo['status'] {
+  if (!state) return 'running';
+  const s = state.toLowerCase();
+  if (s.includes('paused')) return 'paused';
+  if (s.includes('stopped')) return 'stopped';
+  if (s.includes('error') || s.includes('failed')) return 'error';
+  return 'running';
 }
 
 /**
@@ -174,7 +183,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         return {
           id: sandbox.id,
           provider: 'daytona',
-          status: 'running',
+          status: mapDaytonaState(sandbox.state),
           createdAt: new Date(),
           timeout: 300000,
           metadata: { daytonaSandboxId: sandbox.id }
@@ -194,6 +203,16 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         } catch (error) {
           throw new Error(`Failed to get Daytona preview URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`);
         }
+      },
+
+      pause: async (sandbox: DaytonaSandbox, _options?: PauseOptions) => {
+        // Daytona pause is only supported for VM sandboxes (Linux VM / Windows).
+        // VM pause preserves both filesystem and memory; containers do not support pause.
+        await sandbox.pause();
+      },
+
+      resume: async (sandbox: DaytonaSandbox) => {
+        await sandbox.start();
       },
 
       filesystem: {

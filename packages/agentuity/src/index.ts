@@ -21,6 +21,7 @@ import type {
     CreateSandboxOptions,
     FileEntry,
     RunCommandOptions,
+    PauseOptions,
 } from 'computesdk';
 
 type RunCommandFn = (sandbox: AgentuityHandle, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
@@ -459,11 +460,11 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                 }>(await res.json());
 
                 // Convert status → ComputeSDK standard
-                const statusMap: Record<string, 'running' | 'stopped' | 'error'> = {
+                const statusMap: Record<string, 'running' | 'stopped' | 'paused' | 'error'> = {
                     idle: 'running',
                     running: 'running',
                     creating: 'running',
-                    paused: 'stopped',
+                    paused: 'paused',
                     terminated: 'stopped',
                     failed: 'error',
                 };
@@ -650,6 +651,16 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
             },
 
             getInstance: (sandbox: AgentuityHandle): AgentuityHandle => sandbox,
+
+            pause: async (sandbox: AgentuityHandle, _options?: PauseOptions) => {
+                const res = await agentuityFetch(sandbox, 'POST', `/sandbox/${sandbox.sandboxId}/pause`);
+                if (!res.ok) throw new Error(`Agentuity: failed to pause sandbox (${res.status})`);
+            },
+
+            resume: async (sandbox: AgentuityHandle) => {
+                const res = await agentuityFetch(sandbox, 'POST', `/sandbox/${sandbox.sandboxId}/resume`);
+                if (!res.ok) throw new Error(`Agentuity: failed to resume sandbox (${res.status})`);
+            },
         },
     },
 });
