@@ -1,5 +1,13 @@
 # @computesdk/vercel
 
+## 1.7.31
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
 ## 1.7.30
 
 ### Patch Changes

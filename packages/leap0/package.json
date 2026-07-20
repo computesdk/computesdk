@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/leap0",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Leap0 provider for ComputeSDK - cloud sandboxed environments for AI agents",
   "author": "ComputeSDK",
   "license": "MIT",

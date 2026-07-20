@@ -1,5 +1,13 @@
 # @computesdk/cloud-run
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
 ## 0.1.6
 
 ### Patch Changes

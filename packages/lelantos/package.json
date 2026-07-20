@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/lelantos",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Lelantos provider for ComputeSDK - EU-native Firecracker microVM sandboxes (E2B-API-compatible) with full Linux environments, filesystem access, and per-port preview URLs",
   "author": "Lelantos",
   "license": "MIT",

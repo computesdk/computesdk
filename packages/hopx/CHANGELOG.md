@@ -1,5 +1,18 @@
 # @computesdk/hopx
 
+## 0.2.27
+
+### Patch Changes
+
+- c2d1730: Forward `RunCommandOptions.timeout` to the underlying command APIs
+
+  - `@computesdk/e2b`: pass `timeoutMs` to `sandbox.commands.run()`.
+  - `@computesdk/hopx`: pass `timeout` (in seconds) to `sandbox.commands.run()`.
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
 ## 0.2.26
 
 ### Patch Changes

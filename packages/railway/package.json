@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/railway",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Railway Sandboxes provider for ComputeSDK - run commands in Railway-hosted sandboxes",
   "author": "ComputeSDK",
   "license": "MIT",

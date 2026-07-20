@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/collimate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Collimate provider for ComputeSDK",
   "author": "Collimate <hello@collimate.ai>",
   "license": "MIT",

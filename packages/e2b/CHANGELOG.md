@@ -1,5 +1,18 @@
 # @computesdk/e2b
 
+## 1.7.52
+
+### Patch Changes
+
+- c2d1730: Forward `RunCommandOptions.timeout` to the underlying command APIs
+
+  - `@computesdk/e2b`: pass `timeoutMs` to `sandbox.commands.run()`.
+  - `@computesdk/hopx`: pass `timeout` (in seconds) to `sandbox.commands.run()`.
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
 ## 1.7.51
 
 ### Patch Changes
