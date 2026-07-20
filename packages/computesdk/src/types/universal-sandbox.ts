@@ -105,11 +105,95 @@ export interface SandboxFileSystem {
 }
 
 /**
- * Options for creating a sandbox
- * 
- * Providers can extend this with additional properties specific to their implementation
+ * Resource sizing options for sandbox creation.
+ *
+ * These are the cross-provider knobs for CPU, memory, and provider-specific
+ * resource selection. Field names intentionally mirror the provider SDKs that
+ * consume them, so callers can build a single typed resource map (e.g. keyed
+ * by provider name) instead of resorting to `Record<string, any>`. Every field
+ * is optional; providers only read the keys they understand and fall back to
+ * their own defaults.
+ *
+ * Units are intentionally not normalized — `memory` is MB for Blaxel/Beam,
+ * `memoryMiB`/`memMiB` are MiB for Modal/Isorun, and `memoryMb` is MB for
+ * Tensorlake. See each provider's docs for the exact interpretation.
  */
-export interface CreateSandboxOptions {
+export interface SandboxResourceOptions {
+  /** CPU cores (Modal, Beam). Modal: 1 core = 2 vCPUs. */
+  cpu?: number;
+  /** Hard CPU limit (Modal). */
+  cpuLimit?: number;
+  /** CPU cores (Tensorlake). */
+  cpus?: number;
+  /** vCPUs (Isorun). Vercel uses `resources.vcpus` instead. */
+  vcpus?: number;
+  /** Memory in MB (Blaxel, Beam). */
+  memory?: number;
+  /** Memory in MiB (Modal). */
+  memoryMiB?: number;
+  /** Memory in MiB (Isorun). */
+  memMiB?: number;
+  /** Memory in MB (Tensorlake). */
+  memoryMb?: number;
+  /** Disk size in MiB (Isorun). */
+  diskMiB?: number;
+  /**
+   * Vercel resource overrides. Vercel only exposes vCPU control; memory is
+   * derived from the vCPU count.
+   */
+  resources?: VercelSandboxResources;
+  /**
+   * Runloop-only. Forwarded verbatim into the devbox `launch_parameters`.
+   * Use `resource_size_request: 'CUSTOM_SIZE'` with the `custom_*` fields to
+   * request an explicit size.
+   */
+  launch_parameters?: RunloopLaunchParameters;
+  /** Northflank billing plan ID (e.g. `'nf-compute-50'`). */
+  deploymentPlan?: string;
+  /** Upstash box size preset (e.g. `'small'`, `'medium'`, `'large'`). */
+  size?: string;
+  /** CodeSandbox VM tier. Pass the SDK's `VMTier` value or its string equivalent. */
+  vmTier?: string | number;
+}
+
+/**
+ * Runloop `launch_parameters` shape for sandbox creation.
+ *
+ * Only the resource-relevant fields are typed; additional runloop-specific
+ * keys pass through via the index signature.
+ */
+export interface RunloopLaunchParameters {
+  keep_alive_time_seconds?: number;
+  resource_size_request?:
+    | 'X_SMALL'
+    | 'SMALL'
+    | 'MEDIUM'
+    | 'LARGE'
+    | 'X_LARGE'
+    | '2X_LARGE'
+    | 'CUSTOM_SIZE';
+  custom_cpu_cores?: number;
+  custom_memory_gb?: number;
+  custom_disk_size?: number;
+  [key: string]: any;
+}
+
+/**
+ * Vercel `resources` shape for sandbox creation.
+ */
+export interface VercelSandboxResources {
+  vcpus?: number;
+  [key: string]: any;
+}
+
+/**
+ * Options for creating a sandbox.
+ *
+ * Extends {@link SandboxResourceOptions} with the core lifecycle fields
+ * (timeout, template/snapshot IDs, env, metadata, etc.). Providers can also
+ * read additional provider-specific keys via the index signature.
+ */
+export interface CreateSandboxOptions extends SandboxResourceOptions {
   timeout?: number;
   /** Provider-agnostic template/image ID to boot from */
   templateId?: string;
@@ -131,6 +215,15 @@ export interface CreateSandboxOptions {
   directory?: string;
   /** AbortSignal for cancelling sandbox creation and cleaning up orphaned sandboxes */
   signal?: AbortSignal;
+  /**
+   * Runtime environment for the sandbox (e.g. `'node'`, `'python'`).
+   *
+   * Read by Isorun, Blaxel, Upstash, Northflank and others to pick a default
+   * image when `image` is not set.
+   */
+  runtime?: string;
+  /** Container/VM image to boot from, overriding the provider default. */
+  image?: string;
   // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
 }

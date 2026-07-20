@@ -14,6 +14,9 @@ export type {
   RunCommandOptions,
   SandboxFileSystem,
   CreateSandboxOptions,
+  SandboxResourceOptions,
+  RunloopLaunchParameters,
+  VercelSandboxResources,
 } from 'computesdk';
 
 // Provider-specific types (defined in this package)

@@ -248,7 +248,9 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           }
       
           // Execute command using sandbox.commands.run()
-          const result = await sandbox.commands.run(fullCommand);
+          const result = await sandbox.commands.run(fullCommand, {
+            timeout: options?.timeout ? Math.ceil(options.timeout / 1000) : undefined,
+          });
       
           return {
             stdout: result.stdout || '',

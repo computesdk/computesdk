@@ -61,7 +61,7 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
     sandbox: {
       create: async (config: ConfigWithClient, options?: CreateSandboxOptions) => {
         const client = getClient(config)
-        const runtime = options?.runtime ?? 'node'
+        const runtime = (options?.runtime as Runtime | undefined) ?? 'node'
         const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
         const sandbox = await client.create({
           image: options?.image || defaultImage(runtime),

@@ -155,6 +155,7 @@ export const runloop = defineProvider<
             ports: _ports,
             namespace: _namespace,
             directory: _directory,
+            launch_parameters: optLaunchParameters,
             ...providerOptions
           } = options || {};
 
@@ -166,6 +167,7 @@ export const runloop = defineProvider<
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: {
               keep_alive_time_seconds: keepAliveSeconds,
+              ...(optLaunchParameters as Partial<Runloop.DevboxCreateParams['launch_parameters']> | undefined),
             },
             name: name || optSandboxId,
             metadata,
