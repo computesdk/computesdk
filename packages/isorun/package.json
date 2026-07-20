@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/isorun",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Isorun provider for ComputeSDK — isolated Linux VM sandboxes for running untrusted and AI-generated code",
   "author": "Isorun <hello@isorun.ai>",
   "license": "MIT",

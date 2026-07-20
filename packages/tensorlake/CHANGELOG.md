@@ -1,5 +1,13 @@
 # @computesdk/tensorlake
 
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
 ## 0.1.8
 
 ### Patch Changes

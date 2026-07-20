@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/hyperbrowser",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Hyperbrowser browser provider for ComputeSDK - cloud browser sessions with stealth mode, proxies, profiles, and session recording",
   "author": "Garrison",
   "license": "MIT",
