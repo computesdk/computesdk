@@ -147,6 +147,7 @@ function mapStatus(state: SessionState): SandboxInfo["status"] {
       return "running";
     case "PAUSED":
     case "PAUSING":
+    case "USER_SHUTDOWN":
     case "TERMINATING":
     case "TERMINATED":
       return "stopped";
