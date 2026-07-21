@@ -2074,8 +2074,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@upstash/box':
-        specifier: ^0.1.28
-        version: 0.1.28(zod@4.4.3)
+        specifier: ^0.5.5
+        version: 0.5.5(zod@4.4.3)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -5187,8 +5187,8 @@ packages:
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
     deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
-  '@upstash/box@0.1.28':
-    resolution: {integrity: sha512-xU85ShDYTVvtbH4Qb3GNOFzt4PXC2BtBFRd7GxYnHatF79mquNDCEMvfTs7VLbxkD2cDYXXtDVVMlcDG+1SeaQ==}
+  '@upstash/box@0.5.5':
+    resolution: {integrity: sha512-fypRKwrIgOKe6hWhhw/gvhUI30GKH453KUo1deRWjIP02rqUqMCJu3ecGWNg1XMzPY2UHEbIn54lfrg9p6pt3g==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -12598,7 +12598,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@upstash/box@0.1.28(zod@4.4.3)':
+  '@upstash/box@0.5.5(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
       zod-to-json-schema: 3.25.1(zod@4.4.3)

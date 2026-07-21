@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@upstash/box": "^0.1.28",
+    "@upstash/box": "^0.5.5",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
