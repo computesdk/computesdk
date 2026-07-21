@@ -1,5 +1,11 @@
 # @computesdk/upstash
 
+## 0.3.8
+
+### Patch Changes
+
+- c0ce001: Update `@upstash/box` dependency from `^0.1.28` to `^0.5.5`.
+
 ## 0.3.7
 
 ### Patch Changes
