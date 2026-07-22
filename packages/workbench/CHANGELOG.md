@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 29.0.10
+
+### Patch Changes
+
+- Updated dependencies [b398632]
+  - @computesdk/upstash@0.3.9
+
 ## 29.0.9
 
 ### Patch Changes
