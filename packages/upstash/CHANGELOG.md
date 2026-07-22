@@ -1,5 +1,11 @@
 # @computesdk/upstash
 
+## 0.3.9
+
+### Patch Changes
+
+- b398632: Pass through the `size` option (and `env`) when creating ephemeral Upstash boxes, so sandbox sizing is honored on both the persistent and ephemeral creation paths.
+
 ## 0.3.8
 
 ### Patch Changes
