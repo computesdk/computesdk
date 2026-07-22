@@ -86,6 +86,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
                 runtime,
                 timeout,
                 ttl,
+                size: (options as any)?.size,
                 env: options?.envs,
               });
             } else {
@@ -127,6 +128,8 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               runtime: (optRuntime ?? config.runtime ?? 'node') as any,
               timeout,
               ttl,
+              size: (options as any)?.size,
+              env: options?.envs,
             });
             box = ephemeralBox;
           }
