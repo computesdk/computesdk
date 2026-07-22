@@ -43,7 +43,7 @@ function resolveConfig(config: TilionConfig) {
   const baseUrl = (
     config.baseUrl ||
     (typeof process !== 'undefined' && process.env?.TILION_BASE_URL) ||
-    'https://tilion-control.fly.dev'
+    'https://api.tilion.dev'
   ).replace(/\/+$/, '');
   return { apiKey, baseUrl };
 }
@@ -57,9 +57,43 @@ function fixScheme(baseUrl: string, url: string): string {
   return baseUrl.startsWith('https') && url.startsWith('ws://') ? 'wss://' + url.slice(5) : url;
 }
 
-function normalize(baseUrl: string, s: TilionSession) {
-  const connectUrl = fixScheme(baseUrl, s.connect_url || '');
+/** Encode a session id before interpolating it into a request path so it can't alter the route. */
+function enc(sessionId: string): string {
+  return encodeURIComponent(sessionId);
+}
+
+/**
+ * Shape a session that is guaranteed to carry a connect url (create / getById). Throws if the API
+ * omitted it, rather than handing back a present-but-empty connectUrl that would fail a CDP connect.
+ */
+function toSession(baseUrl: string, s: TilionSession) {
+  if (!s.session_id || !s.connect_url) {
+    throw new Error('tilion: response missing session_id or connect_url');
+  }
+  return { session: s, sessionId: s.session_id, connectUrl: fixScheme(baseUrl, s.connect_url) };
+}
+
+/**
+ * Shape a session where the connect url may legitimately be absent (e.g. list entries). Leaves
+ * connectUrl undefined — not "" — so callers don't attempt a CDP connect with an empty url.
+ */
+function toListEntry(baseUrl: string, s: TilionSession) {
+  const connectUrl = s.connect_url ? fixScheme(baseUrl, s.connect_url) : undefined;
   return { session: s, sessionId: s.session_id, connectUrl };
+}
+
+/**
+ * Mint a fresh CDP connect url for a session. Tilion connect tokens are single-use and issued on
+ * demand, so the create response and this endpoint carry a `connect_url` while plain session reads
+ * (getById / list) return `connect_url: null`.
+ */
+async function mintConnectUrl(baseUrl: string, apiKey: string, sessionId: string): Promise<string> {
+  const r = await fetch(`${baseUrl}/v1/session/${enc(sessionId)}/connect`, {
+    headers: headers(apiKey),
+  });
+  if (!r.ok) throw new Error(`tilion connect ${r.status}: ${await r.text()}`);
+  const { connect_url } = (await r.json()) as { connect_url: string };
+  return fixScheme(baseUrl, connect_url);
 }
 
 /**
@@ -93,44 +127,51 @@ export const tilion = defineBrowserProvider<TilionSession, TilionConfig>({
           body: JSON.stringify({ residential: false }),
         });
         if (!r.ok) throw new Error(`tilion create ${r.status}: ${await r.text()}`);
-        const s = (await r.json()) as TilionSession;
-        if (!s.session_id || !s.connect_url) {
-          throw new Error('tilion: response missing session_id or connect_url');
-        }
-        return normalize(baseUrl, s);
+        return toSession(baseUrl, (await r.json()) as TilionSession);
       },
 
       getById: async (config: TilionConfig, sessionId: string) => {
         const { apiKey, baseUrl } = resolveConfig(config);
-        const r = await fetch(`${baseUrl}/v1/session/${sessionId}`, { headers: headers(apiKey) });
-        if (!r.ok) return null;
-        return normalize(baseUrl, (await r.json()) as TilionSession);
+        const r = await fetch(`${baseUrl}/v1/session/${enc(sessionId)}`, {
+          headers: headers(apiKey),
+        });
+        // 404 means no such session — a null return, not an error.
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error(`tilion getById ${r.status}: ${await r.text()}`);
+        const s = (await r.json()) as TilionSession;
+        // Session reads don't re-issue a connect url; mint a fresh one so callers get a usable
+        // connectUrl (the BrowserSession contract requires it) rather than an empty string.
+        const connectUrl = s.connect_url
+          ? fixScheme(baseUrl, s.connect_url)
+          : await mintConnectUrl(baseUrl, apiKey, s.session_id);
+        return { session: s, sessionId: s.session_id, connectUrl };
       },
 
       list: async (config: TilionConfig) => {
         const { apiKey, baseUrl } = resolveConfig(config);
         const r = await fetch(`${baseUrl}/v1/sessions`, { headers: headers(apiKey) });
-        if (!r.ok) return [];
+        // Surface failures (e.g. auth) rather than masking them as an empty list.
+        if (!r.ok) throw new Error(`tilion list ${r.status}: ${await r.text()}`);
         const rows = (await r.json()) as TilionSession[];
-        return rows.map((s) => normalize(baseUrl, s));
+        return rows.map((s) => toListEntry(baseUrl, s));
       },
 
       destroy: async (config: TilionConfig, sessionId: string) => {
         const { apiKey, baseUrl } = resolveConfig(config);
-        await fetch(`${baseUrl}/v1/session/${sessionId}`, {
+        const r = await fetch(`${baseUrl}/v1/session/${enc(sessionId)}`, {
           method: 'DELETE',
           headers: headers(apiKey),
-        }).catch(() => {});
+        });
+        // Deleting an already-gone session (404) is a no-op; surface any other failure so
+        // callers can detect e.g. invalid credentials or leaked sessions.
+        if (!r.ok && r.status !== 404) {
+          throw new Error(`tilion destroy ${r.status}: ${await r.text()}`);
+        }
       },
 
       getConnectUrl: async (config: TilionConfig, sessionId: string) => {
         const { apiKey, baseUrl } = resolveConfig(config);
-        const r = await fetch(`${baseUrl}/v1/session/${sessionId}/connect`, {
-          headers: headers(apiKey),
-        });
-        if (!r.ok) throw new Error(`tilion connect ${r.status}: ${await r.text()}`);
-        const { connect_url } = (await r.json()) as { connect_url: string };
-        return fixScheme(baseUrl, connect_url);
+        return mintConnectUrl(baseUrl, apiKey, sessionId);
       },
     },
   },

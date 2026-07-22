@@ -25,7 +25,7 @@ await t.session.destroy(session.sessionId);
 | option | env | default |
 |---|---|---|
 | `apiKey` | `TILION_API_KEY` | — (required) |
-| `baseUrl` | `TILION_BASE_URL` | `https://tilion-control.fly.dev` |
+| `baseUrl` | `TILION_BASE_URL` | `https://api.tilion.dev` |
 
 `create` returns an authenticated CDP url inline (`connectUrl`), so `connectOverCDP` works with no
 extra round trip. Sessions are non-stealth with direct egress by default.
