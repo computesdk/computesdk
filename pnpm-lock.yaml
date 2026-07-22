@@ -323,8 +323,8 @@ importers:
   packages/beam:
     dependencies:
       '@beamcloud/beam-js':
-        specifier: ^1.0.12
-        version: 1.0.12(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
+        specifier: ^1.0.13
+        version: 1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2548,8 +2548,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@beamcloud/beam-js@1.0.12':
-    resolution: {integrity: sha512-y1tIvqphJNvwKjSqOikkJ+viUtCpbjXWZT5sG7+QbLgUd10QQshXf7cbMe/xtWc55nqzvFDfB5wQI5Gmh1XU5g==}
+  '@beamcloud/beam-js@1.0.13':
+    resolution: {integrity: sha512-y2DDUKNr2lK8mQbeSkeo1W6RMhTeLeZRyED8FfxjowLxYEj2QN3kgXxn2/v93OY1OCRW4mRYSe0+cHhpe65iqQ==}
     peerDependencies:
       typescript: ^5.0.0
 
@@ -9725,7 +9725,7 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@beamcloud/beam-js@1.0.12(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
+  '@beamcloud/beam-js@1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
     dependencies:
       archiver: 7.0.1
       axios: 1.18.1
