@@ -202,7 +202,10 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 
-          const proc = await sandbox.exec(['sh', '-c', fullCommand]);
+          const proc = await sandbox.exec(
+            ['sh', '-c', fullCommand],
+            { wait: true } as Parameters<SandboxInstance['exec']>[1],
+          );
           await proc.wait();
           const [stdoutStr, stderrStr] = await Promise.all([proc.stdout.read(), proc.stderr.read()]);
           return { stdout: stdoutStr || '', stderr: stderrStr || '', exitCode: proc.exitCode || 0, durationMs: Date.now() - startTime };
