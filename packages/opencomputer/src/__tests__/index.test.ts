@@ -86,7 +86,13 @@ describe('opencomputer provider', () => {
       templateId: 'node',
       timeout: 120_000,
       envs: { NODE_ENV: 'test' },
-      metadata: { nested: { ok: true } },
+      metadata: {
+        nested: { ok: true },
+        bigint: 1n,
+        skippedUndefined: undefined,
+        skippedFunction: () => 'nope',
+        skippedSymbol: Symbol('nope'),
+      },
       memory: 8192,
     });
 
@@ -97,7 +103,7 @@ describe('opencomputer provider', () => {
       template: 'node',
       timeout: 120,
       envs: { NODE_ENV: 'test' },
-      metadata: { nested: '{"ok":true}' },
+      metadata: { nested: '{"ok":true}', bigint: '1' },
       memoryMB: 8192,
     }));
   });
@@ -168,7 +174,7 @@ describe('opencomputer provider', () => {
     vi.useFakeTimers();
     try {
       createFromCheckpointMock
-        .mockRejectedValueOnce(new Error('Failed to create sandbox from checkpoint: 404 {"error":"checkpoint not found"}'))
+        .mockRejectedValueOnce(new Error('Failed to create sandbox from checkpoint: 404 {"error":"Checkpoint not found"}'))
         .mockResolvedValueOnce(makeSandbox({ sandboxId: 'sb_clone', id: 'sb_clone' }));
       const provider = opencomputer({ apiKey: 'osb_test' });
 
@@ -181,6 +187,31 @@ describe('opencomputer provider', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('redacts one-time secrets from sandbox info metadata', async () => {
+    const native = makeSandbox({
+      previewAuthToken: 'preview-secret',
+      webhooks: [
+        { id: 'wh_1', url: 'https://example.test/hook', secret: 'whsec_secret' },
+        { id: 'wh_2', url: 'https://example.test/no-secret' },
+      ],
+    });
+    createMock.mockResolvedValue(native);
+    const sandbox = await opencomputer().sandbox.create();
+
+    const info = await sandbox.getInfo();
+
+    expect(info.metadata).toEqual(expect.objectContaining({
+      opencomputerSandboxId: 'sb_123',
+      previewAuthEnabled: true,
+      webhooks: [
+        { id: 'wh_1', url: 'https://example.test/hook', hasSecret: true },
+        { id: 'wh_2', url: 'https://example.test/no-secret', hasSecret: false },
+      ],
+    }));
+    expect(JSON.stringify(info.metadata)).not.toContain('preview-secret');
+    expect(JSON.stringify(info.metadata)).not.toContain('whsec_secret');
   });
 
   it('exposes checkpoints through the snapshot manager', async () => {

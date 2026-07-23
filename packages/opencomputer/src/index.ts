@@ -171,9 +171,35 @@ function stringifyMetadata(metadata: Record<string, unknown> | undefined): Recor
   if (!metadata) return undefined;
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(metadata)) {
-    out[key] = typeof value === 'string' ? value : JSON.stringify(value);
+    if (value == null || typeof value === 'function' || typeof value === 'symbol') {
+      continue;
+    }
+    if (typeof value === 'string') {
+      out[key] = value;
+      continue;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+      out[key] = String(value);
+      continue;
+    }
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized !== undefined) {
+        out[key] = serialized;
+      }
+    } catch {
+      // Skip metadata values that cannot be represented as JSON strings.
+    }
   }
   return out;
+}
+
+function redactWebhooks(webhooks: OpenComputerNativeSandbox['webhooks']): Array<{ id: string; url: string; hasSecret: boolean }> | undefined {
+  return webhooks?.map((webhook) => ({
+    id: webhook.id,
+    url: webhook.url,
+    hasSecret: typeof webhook.secret === 'string' && webhook.secret.length > 0,
+  }));
 }
 
 function createOpts(config: OpenComputerConfig, options?: CreateSandboxOptions): OpenComputerSandboxOpts {
@@ -250,7 +276,8 @@ async function waitForCheckpointReady(
 
 function isCheckpointIndexMiss(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return error.message.includes('404') && error.message.includes('checkpoint not found');
+  const message = error.message.toLowerCase();
+  return message.includes('404') && message.includes('checkpoint') && message.includes('not found');
 }
 
 async function createFromCheckpointWithRetry(
@@ -372,8 +399,8 @@ const _provider = defineProvider<OpenComputerNativeSandbox, OpenComputerConfig, 
           timeout: 0,
           metadata: {
             opencomputerSandboxId: sandbox.sandboxId || sandbox.id,
-            previewAuthToken: sandbox.previewAuthToken || undefined,
-            webhooks: sandbox.webhooks,
+            previewAuthEnabled: Boolean(sandbox.previewAuthToken),
+            webhooks: redactWebhooks(sandbox.webhooks),
           },
         };
       },
