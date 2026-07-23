@@ -41,6 +41,10 @@ interface OpenComputerProcessResult {
   exitCode?: number;
 }
 
+interface OpenComputerExecSession {
+  sessionId: string;
+}
+
 interface OpenComputerEntryInfo {
   name: string;
   isDir: boolean;
@@ -76,6 +80,7 @@ interface OpenComputerNativeSandbox {
   };
   readonly exec?: {
     run(command: string, opts?: { cwd?: string; env?: Record<string, string>; timeout?: number; timeoutMs?: number }): Promise<OpenComputerProcessResult>;
+    background?(command: string, opts?: { cwd?: string; env?: Record<string, string>; timeout?: number; timeoutMs?: number }): Promise<OpenComputerExecSession>;
   };
   readonly files: {
     read(path: string): Promise<string>;
@@ -368,10 +373,17 @@ const _provider = defineProvider<OpenComputerNativeSandbox, OpenComputerConfig, 
             timeout: toSeconds(options?.timeout),
             timeoutMs: options?.timeout,
           };
-          const result = await (sandbox.exec ?? sandbox.commands).run(
-            options?.background ? `nohup ${command} > /dev/null 2>&1 &` : command,
-            runOptions,
-          );
+          if (options?.background && sandbox.exec?.background) {
+            const session = await sandbox.exec.background(command, runOptions);
+            return {
+              stdout: session.sessionId,
+              stderr: '',
+              exitCode: 0,
+              durationMs: Date.now() - startTime,
+            };
+          }
+
+          const result = await (sandbox.exec ?? sandbox.commands).run(command, runOptions);
           return {
             stdout: result.stdout || '',
             stderr: result.stderr || '',

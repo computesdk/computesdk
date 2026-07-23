@@ -22,6 +22,7 @@ function makeSandbox(overrides: Record<string, unknown> = {}) {
     webhooks: [],
     exec: {
       run: vi.fn().mockResolvedValue({ stdout: 'ok\n', stderr: '', exitCode: 0 }),
+      background: vi.fn().mockResolvedValue({ sessionId: 'exec_123' }),
     },
     commands: {
       run: vi.fn().mockResolvedValue({ stdout: 'ok\n', stderr: '', exitCode: 0 }),
@@ -122,6 +123,28 @@ describe('opencomputer provider', () => {
     }));
     expect(result).toMatchObject({ stdout: 'ok\n', stderr: '', exitCode: 0 });
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('runs background commands through native OpenComputer exec sessions', async () => {
+    const native = makeSandbox();
+    createMock.mockResolvedValue(native);
+    const sandbox = await opencomputer().sandbox.create();
+
+    const result = await sandbox.runCommand('node server.js', {
+      background: true,
+      cwd: '/workspace',
+      env: { PORT: '3000' },
+      timeout: 60_000,
+    });
+
+    expect(native.exec.background).toHaveBeenCalledWith('node server.js', expect.objectContaining({
+      cwd: '/workspace',
+      env: { PORT: '3000' },
+      timeout: 60,
+      timeoutMs: 60000,
+    }));
+    expect(native.exec.run).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ stdout: 'exec_123', stderr: '', exitCode: 0 });
   });
 
   it('maps filesystem and preview URL operations', async () => {
