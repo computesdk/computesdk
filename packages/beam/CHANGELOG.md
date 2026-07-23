@@ -1,5 +1,11 @@
 # @computesdk/beam
 
+## 0.3.0
+
+### Minor Changes
+
+- 403b5cf: Update `@beamcloud/beam-js` SDK to `^1.0.13` and switch `runCommand` to use Beam's inline command completion (`sandbox.exec(..., { wait: true })`) for synchronous command output.
+
 ## 0.2.1
 
 ### Patch Changes
