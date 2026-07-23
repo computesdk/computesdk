@@ -14,6 +14,7 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
+  CreateTemplateOptions,
 } from 'computesdk';
 
 type RunCommandFn = (sandbox: SandboxInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
@@ -283,6 +284,67 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       getInstance: (sandbox: SandboxInstance): SandboxInstance => sandbox,
+    },
+
+    template: {
+      create: async (config: BeamConfig, options: CreateTemplateOptions) => {
+        configureBeamOpts(config);
+
+        if (!beamOpts.token) {
+          throw new Error(
+            `Missing Beam token. Provide 'token' in config or set BEAM_TOKEN environment variable.`,
+          );
+        }
+
+        // Capture mode: not supported (no snapshot API)
+        if (options.from) {
+          throw new Error(
+            'Beam does not support capturing templates from running sandboxes. ' +
+              'Use build-from-spec mode with baseImage or dockerfile.',
+          );
+        }
+
+        // Build mode: use Image.fromRegistry() or Image constructor with dockerfile
+        try {
+          const baseImage = options.baseImage || (options.dockerfile
+            ? (options.dockerfile.split('\n').find((l) => l.toUpperCase().startsWith('FROM ')) || '').replace(/^FROM\s+/i, '').trim() || 'node:20-slim'
+            : 'node:20-slim');
+
+          const image = Image.fromRegistry(baseImage);
+
+          if (options.envs) {
+            image.withEnvs(options.envs);
+          }
+
+          const result = await image.build();
+
+          return {
+            id: result.imageId || 'unknown',
+            provider: 'beam',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: {
+              ...options.metadata,
+              source: 'build',
+              success: result.success,
+              pythonVersion: result.pythonVersion,
+            },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create Beam template: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+
+      list: async (_config: BeamConfig) => {
+        // Beam has no template listing API
+        return [];
+      },
+
+      delete: async (_config: BeamConfig, _templateId: string) => {
+        // Beam has no template deletion API — no-op
+      },
     },
   },
 });

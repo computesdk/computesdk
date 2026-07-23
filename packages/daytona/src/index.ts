@@ -2,10 +2,10 @@
  * Daytona Provider - Factory-based Implementation
  */
 
-import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { Daytona, Sandbox as DaytonaSandbox, Image as DaytonaImage } from '@daytonaio/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -270,18 +270,101 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
     },
 
     template: {
-      create: async (_config: DaytonaConfig, _options: { name: string }) => {
-        throw new Error('To create a template in Daytona, create a snapshot from a running sandbox using snapshot.create()');
+      create: async (config: DaytonaConfig, options: CreateTemplateOptions) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
+        if (!apiKey) {
+          throw new Error(`Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable.`);
+        }
+
+        const daytona = new Daytona({ apiKey });
+
+        try {
+          // Mode 1: Capture from running sandbox
+          if (options.from) {
+            const snapshot = await (daytona as any).snapshot.create({
+              workspaceId: options.from,
+              name: options.name,
+            });
+            const snapshotId = (snapshot as { id?: string; name?: string }).id || (snapshot as { name?: string }).name || options.name;
+            return {
+              id: snapshotId,
+              provider: 'daytona',
+              name: options.name,
+              createdAt: new Date(),
+              metadata: { ...options.metadata, source: 'capture', sandboxId: options.from, snapshot },
+            };
+          }
+
+          // Mode 2: Build from spec (base image or Dockerfile)
+          let image: string | DaytonaImage;
+          if (options.dockerfile) {
+            // Daytona's Image.fromDockerfile takes a file path, but we have raw content.
+            // Use Image.base() with dockerfileCommands for inline Dockerfile support.
+            if (options.baseImage) {
+              image = DaytonaImage.base(options.baseImage);
+            } else {
+              // Parse FROM from Dockerfile content
+              const fromLine = options.dockerfile.split('\n').find((l) => l.toUpperCase().startsWith('FROM '));
+              const baseTag = fromLine ? fromLine.replace(/^FROM\s+/i, '').trim() : 'ubuntu:22.04';
+              image = DaytonaImage.base(baseTag);
+            }
+            // Add non-FROM lines as dockerfile commands
+            const commands = options.dockerfile.split('\n').filter((l) => l.trim() && !l.toUpperCase().startsWith('FROM '));
+            if (commands.length > 0 && typeof (image as DaytonaImage).dockerfileCommands === 'function') {
+              image = (image as DaytonaImage).dockerfileCommands(commands);
+            }
+          } else if (options.baseImage) {
+            image = DaytonaImage.base(options.baseImage);
+          } else {
+            image = 'ubuntu:22.04';
+          }
+
+          const createParams: Record<string, any> = {
+            name: options.name,
+            image,
+          };
+
+          if (options.cpuCount || options.memoryMB) {
+            createParams.resources = {};
+            if (options.cpuCount) createParams.resources.cpu = options.cpuCount;
+            if (options.memoryMB) createParams.resources.memory = Math.ceil(options.memoryMB / 1024);
+          }
+
+          const snapshot = await (daytona as any).snapshot.create(createParams);
+
+          return {
+            id: (snapshot as { id?: string; name?: string }).id || (snapshot as { name?: string }).name || options.name,
+            provider: 'daytona',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: 'build', snapshot },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Daytona template: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
       list: async (config: DaytonaConfig) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
-        try { return await (daytona as any).snapshot.list(); } catch { return []; }
+        try {
+          const result = await (daytona as any).snapshot.list();
+          const items = (result as { items?: any[] }).items || result || [];
+          return (Array.isArray(items) ? items : []).map((s: Record<string, any>) => ({
+            id: s.id || s.name || 'unknown',
+            provider: 'daytona',
+            name: s.name || s.id || 'unnamed',
+            createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
+            metadata: s,
+          }));
+        } catch { return []; }
       },
       delete: async (config: DaytonaConfig, templateId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
-        try { await (daytona as any).snapshot.delete(templateId); } catch { /* ignore */ }
+        try {
+          const snapshot = await (daytona as any).snapshot.get(templateId);
+          await (daytona as any).snapshot.delete(snapshot);
+        } catch { /* ignore */ }
       }
     }
   }

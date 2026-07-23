@@ -8,7 +8,7 @@
 import { Box, EphemeralBox } from '@upstash/box';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 export type UpstashSandboxInstance = Box | EphemeralBox;
 
@@ -369,10 +369,29 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
     },
 
     template: {
-      create: async (_config: UpstashConfig, _options: { name: string }) => {
-        throw new Error(
-          'Upstash Box does not support template creation directly. Use snapshot.create() to save a box state, then Box.fromSnapshot() to restore from it.'
-        );
+      create: async (config: UpstashConfig, options: CreateTemplateOptions) => {
+        if (!options.from) {
+          throw new Error(`Upstash does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
+        }
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.UPSTASH_BOX_API_KEY) || '';
+        if (!apiKey) {
+          throw new Error(`Missing Upstash Box API key. Provide 'apiKey' in config or set UPSTASH_BOX_API_KEY environment variable.`);
+        }
+        try {
+          const box = await Box.get(options.from, { apiKey });
+          const snapshot = await box.snapshot({
+            name: options.name || `template-${Date.now()}`,
+          });
+          return {
+            id: snapshot.id,
+            provider: 'upstash',
+            name: options.name,
+            createdAt: new Date(snapshot.created_at * 1000),
+            metadata: { ...options.metadata, source: 'capture', sandboxId: options.from, boxId: snapshot.box_id, sizeBytes: snapshot.size_bytes, status: snapshot.status },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Upstash template: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
 
       list: async (_config: UpstashConfig) => {

@@ -15,7 +15,7 @@
  */
 
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
-import type { RunCommandOptions, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from "computesdk";
+import type { RunCommandOptions, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, CreateTemplateOptions } from "computesdk";
 import {
   TenkiSandbox,
   Session,
@@ -372,6 +372,116 @@ export const tenki = defineProvider<Session, TenkiConfig>({
         remove: async (sandbox, path) => {
           await sandbox.remove(path);
         },
+      },
+    },
+
+    template: {
+      create: async (config, options: CreateTemplateOptions) => {
+        const client = getClient(config);
+
+        // Mode 1: Capture from a running sandbox (snapshot API)
+        if (options.from) {
+          try {
+            const snapshot = await client.createSnapshotAndWait(options.from, {
+              name: options.name,
+            });
+            return {
+              id: snapshot.id,
+              provider: "tenki",
+              name: options.name,
+              createdAt: snapshot.createdAt,
+              metadata: {
+                ...options.metadata,
+                source: "capture",
+                sandboxId: options.from,
+                sessionId: snapshot.sessionId,
+                snapshotType: snapshot.type,
+                snapshot,
+              },
+            };
+          } catch (error) {
+            throw new Error(
+              `Failed to capture Tenki template: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+
+        // Mode 2: Build from spec (create a template from a base image, then build it)
+        try {
+          const scope = await resolveScope(config, client);
+          const baseImageId = options.baseImage || (options.dockerfile
+            ? (options.dockerfile.split("\n").find((l) => l.toUpperCase().startsWith("FROM ")) || "").replace(/^FROM\s+/i, "").trim()
+            : undefined);
+
+          const template = await client.createTemplate({
+            workspaceId: scope.workspaceId,
+            projectId: scope.projectId,
+            name: options.name,
+            ...(baseImageId ? { baseImageId } : {}),
+            ...(options.dockerfile ? { setupScript: options.dockerfile } : {}),
+            ...(options.startCommand ? { startCmd: options.startCommand } : {}),
+            ...(options.envs ? { env: options.envs } : {}),
+            ...(options.cpuCount || options.memoryMB
+              ? {
+                  resources: {
+                    ...(options.cpuCount ? { cpuCores: options.cpuCount } : {}),
+                    ...(options.memoryMB ? { memoryMb: options.memoryMB } : {}),
+                  },
+                }
+              : {}),
+          });
+
+          // Build the template
+          await client.buildTemplate(template.id);
+
+          return {
+            id: template.id,
+            provider: "tenki",
+            name: options.name,
+            createdAt: new Date(),
+            metadata: {
+              ...options.metadata,
+              source: "build",
+              baseImageId: template.baseImageId,
+              template,
+            },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create Tenki template: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+
+      list: async (config) => {
+        const client = getClient(config);
+        try {
+          const snapshots = await client.listSnapshots();
+          return snapshots.map((snap) => ({
+            id: snap.id,
+            provider: "tenki",
+            name: snap.name,
+            createdAt: snap.createdAt,
+            metadata: {
+              sessionId: snap.sessionId,
+              snapshotType: snap.type,
+              state: snap.state,
+              sizeBytes: snap.sizeBytes,
+              snapshot: snap,
+            },
+          }));
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config, templateId: string) => {
+        const client = getClient(config);
+        try {
+          await client.deleteSnapshot(templateId);
+        } catch {
+          /* already deleted or not found */
+        }
       },
     },
   },

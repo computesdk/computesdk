@@ -4,7 +4,7 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 import { ModalClient } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
@@ -287,6 +287,72 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
       list: async (_config: ModalConfig) => [],
       delete: async (_config: ModalConfig, _snapshotId: string) => { /* No-op */ }
+    },
+
+    template: {
+      create: async (config: ModalInternalConfig, options: CreateTemplateOptions) => {
+        try {
+          const client = config._client;
+          const app = await config._appPromise;
+
+          // Mode 1: Capture from running sandbox
+          if (options.from) {
+            const sandbox = await client.sandboxes.fromId(options.from);
+            const image = await sandbox.snapshotFilesystem();
+            return {
+              id: image.imageId,
+              provider: 'modal',
+              name: options.name,
+              createdAt: new Date(),
+              metadata: { ...options.metadata, source: 'capture', sandboxId: options.from, image },
+            };
+          }
+
+          // Mode 2: Build from spec
+          let image;
+          if (options.dockerfile) {
+            // Parse Dockerfile content into lines for dockerfileCommands
+            const lines = options.dockerfile.split('\n').filter((l) => l.trim());
+            const baseImage = lines.find((l) => l.toUpperCase().startsWith('FROM '));
+            if (baseImage) {
+              const tag = baseImage.replace(/^FROM\s+/i, '').trim();
+              image = client.images.fromRegistry(tag);
+            } else {
+              image = client.images.fromRegistry(options.baseImage || DEFAULT_IMAGE);
+            }
+            // Pass remaining non-FROM lines as dockerfile commands
+            const commands = lines.filter((l) => !l.toUpperCase().startsWith('FROM '));
+            if (commands.length > 0) {
+              image = image.dockerfileCommands(commands);
+            }
+          } else if (options.baseImage) {
+            image = client.images.fromRegistry(options.baseImage);
+          } else {
+            image = client.images.fromRegistry(DEFAULT_IMAGE);
+          }
+
+          const builtImage = await image.build(app);
+
+          return {
+            id: builtImage.imageId,
+            provider: 'modal',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: 'build', imageId: builtImage.imageId },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Modal template: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      list: async (_config: ModalConfig) => {
+        // Modal doesn't have a native image listing API
+        return [];
+      },
+      delete: async (config: ModalInternalConfig, templateId: string) => {
+        try {
+          await config._client.images.delete(templateId);
+        } catch { /* ignore */ }
+      }
     }
   }
 });

@@ -13,6 +13,7 @@ import type {
   CreateSnapshotOptions,
   ListSnapshotsOptions,
   RunCommandOptions,
+  CreateTemplateOptions,
 } from "@computesdk/provider";
 import type {
   CreateSandboxOptions,
@@ -132,7 +133,7 @@ export interface CreateBlueprintTemplateOptions {
 export const runloop = defineProvider<
   RunloopSandbox,
   RunloopConfig,
-  RunloopTemplate,
+  any,
   RunloopSnapshot
 >({
   name: "runloop",
@@ -385,9 +386,26 @@ export const runloop = defineProvider<
     },
 
     template: {
-      create: async (config: RunloopConfig, options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams) => {
+      create: async (config: RunloopConfig, options: any) => {
         const client = getRunloopClient(config);
-        return client.api.blueprints.create(options);
+        
+        // Mode 1: Capture from running sandbox (disk snapshot)
+        if (options.from) {
+          const sandboxId = options.from;
+          const snapshotParams: any = {};
+          if (options.name) snapshotParams.name = options.name;
+          const snapshot = await client.api.devboxes.snapshotDisk(sandboxId, snapshotParams);
+          return {
+            id: (snapshot as any).id || (snapshot as any).snapshotId || String(snapshot),
+            provider: 'runloop',
+            name: options.name || 'unnamed',
+            createdAt: new Date(),
+            metadata: { source: 'capture', sandboxId, snapshot },
+          };
+        }
+
+        // Mode 2: Build from spec (blueprint)
+        return client.api.blueprints.create(options as Runloop.BlueprintCreateParams);
       },
 
       list: async (config: RunloopConfig, options?: { limit?: number }) => {

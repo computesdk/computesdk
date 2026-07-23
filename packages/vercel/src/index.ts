@@ -8,7 +8,7 @@ import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions } from '@computesdk/provider';
 
 export interface VercelConfig {
   token?: string;
@@ -242,8 +242,28 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
     },
 
     template: {
-      create: async (_config: VercelConfig, _options: { name: string }) => {
-        throw new Error(`Vercel does not support creating templates directly. Use snapshot.create() instead.`);
+      create: async (config: VercelConfig, options: CreateTemplateOptions) => {
+        if (!options.from) {
+          throw new Error(`Vercel does not support building templates from spec. Use { from: sandboxId } to capture from a running sandbox.`);
+        }
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        try {
+          const sandbox = creds.useOidc
+            ? await VercelSandbox.get({ sandboxId: options.from })
+            : await VercelSandbox.get({ sandboxId: options.from, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
+          const snapshot = await sandbox.snapshot();
+          const snapshotId = (snapshot as any)?.snapshotId || String(snapshot);
+          return {
+            id: snapshotId,
+            provider: 'vercel',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: 'capture', sandboxId: options.from },
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Vercel template: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
       list: async (_config: VercelConfig) => { throw new Error(`Vercel provider does not support listing templates.`); },
       delete: async (config: VercelConfig, templateId: string) => {

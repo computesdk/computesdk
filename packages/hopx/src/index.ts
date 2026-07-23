@@ -11,14 +11,15 @@
  * - Preview URLs for accessing sandbox services
  */
 
-import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
+import { Sandbox as HopxSandbox, Template as HopxTemplate, createTemplate as createHopxTemplate } from '@hopx-ai/sdk';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
   FileEntry,
-  RunCommandOptions
+  RunCommandOptions,
+  CreateTemplateOptions,
 } from 'computesdk';
 
 /**
@@ -402,6 +403,112 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        */
       getInstance: (sandbox: HopxSandbox): HopxSandbox => {
         return sandbox;
+      },
+    },
+
+    template: {
+      create: async (config: HopxConfig, options: CreateTemplateOptions) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
+        if (!apiKey) {
+          throw new Error(
+            `Missing HopX API key. Provide 'apiKey' in config or set HOPX_API_KEY environment variable.`
+          );
+        }
+
+        // Capture mode: not supported (no snapshot API)
+        if (options.from) {
+          throw new Error(
+            'HopX does not support capturing templates from running sandboxes. ' +
+              'Use build-from-spec mode with baseImage or dockerfile.',
+          );
+        }
+
+        // Build mode: use Template builder + Template.build()
+        try {
+          const baseImage = options.baseImage || (options.dockerfile
+            ? (options.dockerfile.split('\n').find((l) => l.toUpperCase().startsWith('FROM ')) || '').replace(/^FROM\s+/i, '').trim() || 'ubuntu:22.04'
+            : 'ubuntu:22.04');
+
+          const template = createHopxTemplate(baseImage);
+
+          if (options.envs) {
+            template.setEnvs(options.envs);
+          }
+
+          if (options.startCommand) {
+            template.setStartCmd(options.startCommand);
+          }
+
+          // If dockerfile is provided, add non-FROM lines as run commands
+          if (options.dockerfile) {
+            const lines = options.dockerfile.split('\n').filter(
+              (l) => l.trim() && !l.toUpperCase().startsWith('FROM '),
+            );
+            for (const line of lines) {
+              if (line.toUpperCase().startsWith('RUN ')) {
+                template.runCmd(line.replace(/^RUN\s+/i, ''));
+              }
+            }
+          }
+
+          const buildOptions = {
+            name: options.name,
+            apiKey,
+            ...(config.baseURL ? { baseURL: config.baseURL } : {}),
+            ...(options.cpuCount ? { cpu: options.cpuCount } : {}),
+            ...(options.memoryMB ? { memory: options.memoryMB } : {}),
+          };
+
+          const result = await HopxTemplate.build(template, buildOptions);
+          return {
+            id: result.templateID,
+            provider: 'hopx',
+            name: options.name,
+            createdAt: new Date(),
+            metadata: { ...options.metadata, source: 'build', buildId: result.buildID, duration: result.duration },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create HopX template: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+
+      list: async (config: HopxConfig) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
+        if (!apiKey) {
+          return [];
+        }
+        try {
+          const templates = await HopxSandbox.listTemplates({
+            apiKey,
+            ...(config.baseURL ? { baseURL: config.baseURL } : {}),
+          });
+          return templates.map((info: any) => ({
+            id: info.id,
+            provider: 'hopx',
+            name: info.name || info.displayName || 'unnamed',
+            createdAt: info.createdAt ? new Date(info.createdAt) : new Date(),
+            metadata: { status: info.status, buildId: info.buildId, isActive: info.isActive, template: info },
+          }));
+        } catch {
+          return [];
+        }
+      },
+
+      delete: async (config: HopxConfig, templateId: string) => {
+        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
+        if (!apiKey) {
+          return;
+        }
+        try {
+          await HopxSandbox.deleteTemplate(templateId, {
+            apiKey,
+            ...(config.baseURL ? { baseURL: config.baseURL } : {}),
+          });
+        } catch {
+          /* already deleted or not found */
+        }
       },
     }
   }

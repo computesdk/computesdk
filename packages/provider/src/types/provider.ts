@@ -52,6 +52,10 @@ export interface ListSnapshotsOptions {
 
 /**
  * Common options for creating templates/blueprints
+ *
+ * Supports two modes:
+ * 1. Build from spec: provide `dockerfile` and/or `baseImage` to build a new template
+ * 2. Capture from sandbox: provide `from` (a sandbox ID) to snapshot a running instance
  */
 export interface CreateTemplateOptions {
   /** Name of the template */
@@ -60,6 +64,44 @@ export interface CreateTemplateOptions {
   description?: string;
   /** Optional metadata for the template */
   metadata?: Record<string, string>;
+
+  // Build-from-spec mode
+  /** Dockerfile content (raw string) to build the template from */
+  dockerfile?: string;
+  /** Base image to use (e.g. "python:3.12", "ubuntu:22.04"). Ignored if `dockerfile` is provided. */
+  baseImage?: string;
+  /** Local directory path containing files referenced by COPY/ADD in the Dockerfile */
+  contextDir?: string;
+  /** Environment variables to set in the template */
+  envs?: Record<string, string>;
+  /** Start command to run during template build (captured in the snapshot) */
+  startCommand?: string;
+  /** CPU count for the build */
+  cpuCount?: number;
+  /** Memory in MB for the build */
+  memoryMB?: number;
+
+  // Capture-from-sandbox mode
+  /** Sandbox ID to capture a template from (creates a snapshot of the running instance) */
+  from?: string;
+}
+
+/**
+ * Template information returned by template operations
+ */
+export interface TemplateInfo {
+  /** Unique identifier for the template */
+  id: string;
+  /** Provider hosting the template */
+  provider: string;
+  /** Name of the template */
+  name: string;
+  /** When the template was created */
+  createdAt: Date;
+  /** Current status of the template */
+  status?: 'active' | 'building' | 'error' | 'inactive';
+  /** Additional provider-specific metadata */
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -86,9 +128,14 @@ export interface ProviderSandboxManager<TSandbox = any> {
 
 /**
  * Provider template manager interface - handles template/blueprint lifecycle
+ *
+ * Templates unify the concept of images, snapshots, and blueprints across providers.
+ * `create()` supports two modes via CreateTemplateOptions:
+ * - Build from spec: pass `dockerfile` and/or `baseImage`
+ * - Capture from sandbox: pass `from` with a sandbox ID
  */
 export interface ProviderTemplateManager<TTemplate = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
-  /** Create a new template */
+  /** Create a new template (build from spec or capture from a running sandbox) */
   create(options: TCreateOptions): Promise<TTemplate>;
   /** List all available templates */
   list(options?: ListTemplatesOptions): Promise<TTemplate[]>;

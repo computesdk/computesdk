@@ -20,6 +20,7 @@ import type {
   FileEntry,
   RunCommandOptions,
   SandboxInfo,
+  CreateTemplateOptions,
 } from '@computesdk/provider';
 
 export interface SuperserveConfig {
@@ -290,11 +291,80 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
     },
 
     template: {
-      create: async (_config: SuperserveConfig, _options: { name: string }) => {
-        throw new Error(
-          'Templates require a build spec. Use the @superserve/sdk Template.create() ' +
-            'API directly with `from` and `steps`, or define templates via the Superserve console.',
-        );
+      create: async (config: SuperserveConfig, options: CreateTemplateOptions) => {
+        // Capture mode: not supported
+        if (options.from) {
+          throw new Error(
+            'Superserve does not support capturing templates from running sandboxes. ' +
+              'Use build-from-spec mode with baseImage or dockerfile.',
+          );
+        }
+
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+
+        // Build mode: use SuperserveTemplate.create() with build spec (from + steps)
+        try {
+          const from = options.baseImage || (options.dockerfile
+            ? (options.dockerfile.split('\n').find((l) => l.toUpperCase().startsWith('FROM ')) || '').replace(/^FROM\s+/i, '').trim() || 'ubuntu:22.04'
+            : 'ubuntu:22.04');
+
+          const steps: Array<{ run: string } | { env: { key: string; value: string } } | { workdir: string }> = [];
+
+          // Parse dockerfile lines into build steps
+          if (options.dockerfile) {
+            const lines = options.dockerfile.split('\n').filter((l) => l.trim() && !l.toUpperCase().startsWith('FROM '));
+            for (const line of lines) {
+              if (line.toUpperCase().startsWith('RUN ')) {
+                steps.push({ run: line.replace(/^RUN\s+/i, '') });
+              } else if (line.toUpperCase().startsWith('ENV ')) {
+                const envPart = line.replace(/^ENV\s+/i, '');
+                const match = envPart.match(/^(\S+)=(.*)$/);
+                if (match) {
+                  steps.push({ env: { key: match[1], value: match[2].replace(/^["']|["']$/g, '') } });
+                }
+              } else if (line.toUpperCase().startsWith('WORKDIR ')) {
+                steps.push({ workdir: line.replace(/^WORKDIR\s+/i, '') });
+              }
+            }
+          }
+
+          // Add envs from options
+          if (options.envs) {
+            for (const [key, value] of Object.entries(options.envs)) {
+              steps.push({ env: { key, value } });
+            }
+          }
+
+          const createOpts = {
+            apiKey,
+            baseUrl,
+            name: options.name,
+            from,
+            ...(steps.length > 0 ? { steps } : {}),
+            ...(options.startCommand ? { startCmd: options.startCommand } : {}),
+            ...(options.cpuCount ? { vcpu: options.cpuCount } : {}),
+            ...(options.memoryMB ? { memoryMib: options.memoryMB } : {}),
+          };
+
+          const template = await SuperserveTemplate.create(createOpts);
+          const info = await template.getInfo();
+          return {
+            id: info.id,
+            provider: 'superserve',
+            name: options.name,
+            createdAt: info.createdAt,
+            metadata: {
+              ...options.metadata,
+              source: 'build',
+              status: info.status,
+              vcpu: info.vcpu,
+              memoryMib: info.memoryMib,
+            },
+          };
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to create Superserve template');
+        }
       },
       list: async (config: SuperserveConfig) => {
         const apiKey = resolveApiKey(config);

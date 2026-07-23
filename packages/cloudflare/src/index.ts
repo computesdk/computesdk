@@ -23,7 +23,7 @@ async function getSandbox(binding: any, id: string, options?: any): Promise<any>
   return _getSandboxFn(binding, id, options);
 }
 
-import type { CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateTemplateOptions, TemplateInfo } from '@computesdk/provider';
 
 export interface CloudflareConfig {
   sandboxUrl?: string;
@@ -583,6 +583,79 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           await cfSandbox.sandbox.deleteFile(path);
         }
       }
-    }
+    },
+
+    // Templates on Cloudflare are point-in-time backups of a sandbox directory,
+    // captured via the Sandbox SDK backup/restore API and stored in R2.
+    // Cloudflare has no build-from-spec API (images are built at deploy time via
+    // Dockerfile), so only capture-from-sandbox is supported.
+    template: {
+      create: async (config: CloudflareConfig, options: CreateTemplateOptions): Promise<TemplateInfo> => {
+        if (!options.from) {
+          throw new Error(
+            'Cloudflare does not support building templates from spec. ' +
+            'Container images are built at deploy time from your Dockerfile. ' +
+            'Use { from: sandboxId } to capture a point-in-time backup of a running sandbox.'
+          );
+        }
+
+        if (isRemote(config)) {
+          throw new Error(
+            'Cloudflare template capture requires direct mode (sandboxBinding). ' +
+            'The Sandbox backup API is not exposed through the bridge Worker.'
+          );
+        }
+
+        if (!config.sandboxBinding) {
+          throw new Error(
+            'Cloudflare template capture requires a sandboxBinding (direct mode). ' +
+            'Provide sandboxBinding from your Workers environment.'
+          );
+        }
+
+        const lease = await getDirectSandbox(config, options.from, config.sandboxOptions, false);
+        if (!lease) {
+          throw new Error(`Cloudflare sandbox "${options.from}" not found.`);
+        }
+
+        const dir = options.contextDir || '/workspace';
+        try {
+          const backup = await lease.sandbox.createBackup({
+            dir,
+            name: options.name,
+          });
+
+          return {
+            id: backup.id,
+            provider: 'cloudflare',
+            name: options.name,
+            createdAt: new Date(),
+            status: 'active',
+            metadata: {
+              ...options.metadata,
+              source: 'capture',
+              sandboxId: options.from,
+              dir: backup.dir ?? dir,
+            },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create Cloudflare template: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      list: async (_config: CloudflareConfig): Promise<TemplateInfo[]> => {
+        // Cloudflare backups live as objects in the user's R2 bucket, not in a
+        // queryable sandbox API. Enumerate them via the R2 binding directly.
+        return [];
+      },
+
+      delete: async (_config: CloudflareConfig, _templateId: string): Promise<void> => {
+        // Backups are stored in the user's R2 bucket under backups/{id}/. Deletion
+        // is performed through the R2 binding (BACKUP_BUCKET.delete), which is not
+        // available from the provider config, so this is a no-op.
+      },
+    },
   }
 });
