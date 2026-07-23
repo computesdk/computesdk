@@ -323,8 +323,8 @@ importers:
   packages/beam:
     dependencies:
       '@beamcloud/beam-js':
-        specifier: 1.0.0-rc.30
-        version: 1.0.0-rc.30(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
+        specifier: ^1.0.13
+        version: 1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2585,8 +2585,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@beamcloud/beam-js@1.0.0-rc.30':
-    resolution: {integrity: sha512-lIs9Y5yD9xK1ZpUqAY1VQEBwoxJmnaghd9aB9+DvuBcjEEoU7y7XpU42h6Jh37DKt20uYjqCWXHTauVPHFcI2Q==}
+  '@beamcloud/beam-js@1.0.13':
+    resolution: {integrity: sha512-y2DDUKNr2lK8mQbeSkeo1W6RMhTeLeZRyED8FfxjowLxYEj2QN3kgXxn2/v93OY1OCRW4mRYSe0+cHhpe65iqQ==}
     peerDependencies:
       typescript: ^5.0.0
 
@@ -5457,9 +5457,6 @@ packages:
 
   axios@1.11.0:
     resolution: {integrity: sha512-1Lx3WLFQWm3ooKDYZD1eXmoGO9fxYQjrycfHFC8P0sCfQVXyROp0p9PFWBehewBOdCwHc+f/b8I0fMto5eSfwA==}
-
-  axios@1.13.5:
-    resolution: {integrity: sha512-cz4ur7Vb0xS4/KUN0tPWe44eqxrIu31me+fbang3ijiNscE129POzipJJA6zniq2C/Z6sJCjMimjS8Lc/GAs8Q==}
 
   axios@1.18.1:
     resolution: {integrity: sha512-3nTvFlvpn9Zu/RkHUqtc7/+al4UpRW5az71ap5zccp6e8RAYEzhMTecX8Dz1wWDYrPpUoB1HAQEGEAEvUr7S9g==}
@@ -9769,18 +9766,19 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@beamcloud/beam-js@1.0.0-rc.30(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
+  '@beamcloud/beam-js@1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
     dependencies:
       archiver: 7.0.1
-      axios: 1.13.5
+      axios: 1.18.1
       commander: 12.1.0
       ignore: 7.0.5
       strip-ansi: 7.2.0
       typescript: 5.8.3
-      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - debug
+      - supports-color
       - utf-8-validate
 
   '@blaxel/core@0.3.3(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
@@ -12912,14 +12910,6 @@ snapshots:
   aws4fetch@1.0.20: {}
 
   axios@1.11.0:
-    dependencies:
-      follow-redirects: 1.15.11
-      form-data: 4.0.5
-      proxy-from-env: 1.1.0
-    transitivePeerDependencies:
-      - debug
-
-  axios@1.13.5:
     dependencies:
       follow-redirects: 1.15.11
       form-data: 4.0.5
