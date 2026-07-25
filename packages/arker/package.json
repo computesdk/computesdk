@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/arker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Arker provider for ComputeSDK - sandboxed VMs with persistent filesystems, forked from golden images",
   "author": "Arker",
   "license": "MIT",

@@ -1,5 +1,26 @@
 # @computesdk/workbench
 
+## 30.0.0
+
+### Patch Changes
+
+- Updated dependencies [403b5cf]
+  - @computesdk/beam@0.3.0
+
+## 29.0.10
+
+### Patch Changes
+
+- Updated dependencies [b398632]
+  - @computesdk/upstash@0.3.9
+
+## 29.0.9
+
+### Patch Changes
+
+- Updated dependencies [c0ce001]
+  - @computesdk/upstash@0.3.8
+
 ## 29.0.8
 
 ### Patch Changes

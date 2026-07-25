@@ -34,6 +34,7 @@
   * [Modal](providers/modal.md)
   * [Namespace](providers/namespace.md)
   * [Northflank](providers/northflank.md)
+  * [OpenComputer](providers/opencomputer.md)
   * [Quilt](providers/quilt.md)
   * [Railway](providers/railway.md)
   * [Runloop](providers/runloop.md)

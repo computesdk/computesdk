@@ -23,28 +23,29 @@ When you install a package like `@computesdk/e2b`, you get a factory function fo
 
 ## Supported cloud sandbox providers
 
-| Package                        | Provider    |
-| ------------------------------ | ----------- |
-| `@computesdk/archil`           | Archil      |
-| `@computesdk/beam`             | Beam        |
-| `@computesdk/blaxel`           | Blaxel      |
-| `@computesdk/cloud-run`        | Cloud Run   |
-| `@computesdk/cloudflare`       | Cloudflare  |
-| `@computesdk/codesandbox`      | CodeSandbox |
-| `@computesdk/createos-sandbox` | CreateOS    |
-| `@computesdk/daytona`          | Daytona     |
-| `@computesdk/declaw`           | Declaw      |
-| `@computesdk/e2b`              | E2B         |
-| `@computesdk/hopx`             | HopX        |
-| `@computesdk/isorun`           | Isorun      |
-| `@computesdk/lightning`        | Lightning   |
-| `@computesdk/modal`            | Modal       |
-| `@computesdk/northflank`       | Northflank  |
-| `@computesdk/runloop`          | Runloop     |
-| `@computesdk/superserve`       | Superserve  |
-| `@computesdk/tensorlake`       | Tensorlake  |
-| `@computesdk/upstash`          | Upstash     |
-| `@computesdk/vercel`           | Vercel      |
+| Package                        | Provider     |
+| ------------------------------ | ------------ |
+| `@computesdk/archil`           | Archil       |
+| `@computesdk/beam`             | Beam         |
+| `@computesdk/blaxel`           | Blaxel       |
+| `@computesdk/cloud-run`        | Cloud Run    |
+| `@computesdk/cloudflare`       | Cloudflare   |
+| `@computesdk/codesandbox`      | CodeSandbox  |
+| `@computesdk/createos-sandbox` | CreateOS     |
+| `@computesdk/daytona`          | Daytona      |
+| `@computesdk/declaw`           | Declaw       |
+| `@computesdk/e2b`              | E2B          |
+| `@computesdk/hopx`             | HopX         |
+| `@computesdk/isorun`           | Isorun       |
+| `@computesdk/lightning`        | Lightning    |
+| `@computesdk/modal`            | Modal        |
+| `@computesdk/northflank`       | Northflank   |
+| `@computesdk/opencomputer`     | OpenComputer |
+| `@computesdk/runloop`          | Runloop      |
+| `@computesdk/superserve`       | Superserve   |
+| `@computesdk/tensorlake`       | Tensorlake   |
+| `@computesdk/upstash`          | Upstash      |
+| `@computesdk/vercel`           | Vercel       |
 
 ## Why teams use ComputeSDK
 

@@ -86,6 +86,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
                 runtime,
                 timeout,
                 ttl,
+                size: (options as any)?.size,
                 env: options?.envs,
               });
             } else {
@@ -119,7 +120,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               timeout,
               env: envs,
               ...providerOptions,
-            });
+            } as Parameters<typeof Box.create>[0]);
           } else {
             // create lightweight ephemeral box (exec + files only, instant ready)
             const ephemeralBox = await EphemeralBox.create({
@@ -127,6 +128,8 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               runtime: (optRuntime ?? config.runtime ?? 'node') as any,
               timeout,
               ttl,
+              size: (options as any)?.size,
+              env: options?.envs,
             });
             box = ephemeralBox;
           }

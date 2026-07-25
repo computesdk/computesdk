@@ -386,10 +386,11 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         // `sh -c` (not `bash -lc`): POSIX-portable so bare rootfses without
         // bash still run. buildScript only emits POSIX constructs. Transport /
         // auth errors propagate; a command that ran reports its own exit code.
+        const execOpts = options?.timeout ? { timeoutMs: options.timeout } : undefined;
         const { result, exec_ms } = await sandbox.runCommand("sh", [
           "-c",
           buildScript(command, options),
-        ]);
+        ], execOpts);
         const stderr = result.error ? `${result.stderr}${result.error}` : result.stderr;
         return {
           stdout: result.stdout,

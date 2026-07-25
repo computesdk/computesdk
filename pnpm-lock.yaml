@@ -323,8 +323,8 @@ importers:
   packages/beam:
     dependencies:
       '@beamcloud/beam-js':
-        specifier: 1.0.0-rc.30
-        version: 1.0.0-rc.30(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
+        specifier: ^1.0.13
+        version: 1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -1550,6 +1550,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/opencomputer:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@opencomputer/sdk':
+        specifier: ^0.12.4
+        version: 0.12.4
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/provider:
     dependencies:
       '@computesdk/cmd':
@@ -2044,14 +2081,48 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/tilion:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/upstash:
     dependencies:
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
       '@upstash/box':
-        specifier: ^0.1.28
-        version: 0.1.28(zod@4.4.3)
+        specifier: ^0.5.5
+        version: 0.5.5(zod@4.4.3)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2524,8 +2595,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@beamcloud/beam-js@1.0.0-rc.30':
-    resolution: {integrity: sha512-lIs9Y5yD9xK1ZpUqAY1VQEBwoxJmnaghd9aB9+DvuBcjEEoU7y7XpU42h6Jh37DKt20uYjqCWXHTauVPHFcI2Q==}
+  '@beamcloud/beam-js@1.0.13':
+    resolution: {integrity: sha512-y2DDUKNr2lK8mQbeSkeo1W6RMhTeLeZRyED8FfxjowLxYEj2QN3kgXxn2/v93OY1OCRW4mRYSe0+cHhpe65iqQ==}
     peerDependencies:
       typescript: ^5.0.0
 
@@ -4128,6 +4199,10 @@ packages:
   '@onkernel/sdk@0.49.0':
     resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
+  '@opencomputer/sdk@0.12.4':
+    resolution: {integrity: sha512-/BpMJMHxskkSI2GUri27xej9eXMrjlvu85NxIz/luiEKJ6lJKFF3w6uTY0IweZlB50SqIt7/dsC5ksZFXkyPzA==}
+    engines: {node: '>=18'}
+
   '@opentelemetry/api-logs@0.214.0':
     resolution: {integrity: sha512-40lSJeqYO8Uz2Yj7u94/SJWE/wONa7rmMKjI1ZcIjgf3MHNHv1OZUCrCETGuaRF62d5pQD1wKIW+L4lmSMTzZA==}
     engines: {node: '>=8.0.0'}
@@ -5163,8 +5238,8 @@ packages:
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
     deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
-  '@upstash/box@0.1.28':
-    resolution: {integrity: sha512-xU85ShDYTVvtbH4Qb3GNOFzt4PXC2BtBFRd7GxYnHatF79mquNDCEMvfTs7VLbxkD2cDYXXtDVVMlcDG+1SeaQ==}
+  '@upstash/box@0.5.5':
+    resolution: {integrity: sha512-fypRKwrIgOKe6hWhhw/gvhUI30GKH453KUo1deRWjIP02rqUqMCJu3ecGWNg1XMzPY2UHEbIn54lfrg9p6pt3g==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -5392,9 +5467,6 @@ packages:
 
   axios@1.11.0:
     resolution: {integrity: sha512-1Lx3WLFQWm3ooKDYZD1eXmoGO9fxYQjrycfHFC8P0sCfQVXyROp0p9PFWBehewBOdCwHc+f/b8I0fMto5eSfwA==}
-
-  axios@1.13.5:
-    resolution: {integrity: sha512-cz4ur7Vb0xS4/KUN0tPWe44eqxrIu31me+fbang3ijiNscE129POzipJJA6zniq2C/Z6sJCjMimjS8Lc/GAs8Q==}
 
   axios@1.18.1:
     resolution: {integrity: sha512-3nTvFlvpn9Zu/RkHUqtc7/+al4UpRW5az71ap5zccp6e8RAYEzhMTecX8Dz1wWDYrPpUoB1HAQEGEAEvUr7S9g==}
@@ -9704,18 +9776,19 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@beamcloud/beam-js@1.0.0-rc.30(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
+  '@beamcloud/beam-js@1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
     dependencies:
       archiver: 7.0.1
-      axios: 1.13.5
+      axios: 1.18.1
       commander: 12.1.0
       ignore: 7.0.5
       strip-ansi: 7.2.0
       typescript: 5.8.3
-      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - debug
+      - supports-color
       - utf-8-validate
 
   '@blaxel/core@0.3.3(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
@@ -11107,6 +11180,8 @@ snapshots:
       - encoding
 
   '@onkernel/sdk@0.49.0': {}
+
+  '@opencomputer/sdk@0.12.4': {}
 
   '@opentelemetry/api-logs@0.214.0':
     dependencies:
@@ -12574,7 +12649,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@upstash/box@0.1.28(zod@4.4.3)':
+  '@upstash/box@0.5.5(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
       zod-to-json-schema: 3.25.1(zod@4.4.3)
@@ -12845,14 +12920,6 @@ snapshots:
   aws4fetch@1.0.20: {}
 
   axios@1.11.0:
-    dependencies:
-      follow-redirects: 1.15.11
-      form-data: 4.0.5
-      proxy-from-env: 1.1.0
-    transitivePeerDependencies:
-      - debug
-
-  axios@1.13.5:
     dependencies:
       follow-redirects: 1.15.11
       form-data: 4.0.5
