@@ -540,7 +540,7 @@ Your PR should include:
 - [ ] A changeset in `.changeset/` with a `patch` (or `minor`) bump -- never `major`
 - [ ] **No changes outside the allowed paths** -- run `git diff --stat main` and confirm
       every file is in `packages/my-provider/`, `docs/`, `.changeset/`, or the root
-      `README.md`. No edits to `packages/computesdk/`, `packages/provider/`,
+      `README.md`. No edits to `packages/computesdk/` or `packages/provider/`.
       See [Scope](#scope-no-core-sdk-changes).
 
 ## Best Practices
