@@ -68,7 +68,7 @@ function resolveToken(config: Sandbox0Config): string {
   const token = config.token || env('SANDBOX0_TOKEN') || env('SANDBOX0_API_KEY');
   if (!token) {
     throw new Error(
-      'Missing Sandbox0 token. Pass sandbox0({ token }) or set SANDBOX0_TOKEN.',
+      'Missing Sandbox0 token. Pass sandbox0({ token }) or set SANDBOX0_TOKEN or SANDBOX0_API_KEY.',
     );
   }
   return token;
@@ -79,7 +79,7 @@ function createClient(config: Sandbox0Config): Client {
   return new Client({
     token: resolveToken(config),
     baseUrl: config.baseUrl || env('SANDBOX0_BASE_URL'),
-    userAgent: '@computesdk/sandbox0/1.0.0',
+    userAgent: '@computesdk/sandbox0',
     ...(teamId ? { headers: { 'X-Team-ID': teamId } } : {}),
   });
 }

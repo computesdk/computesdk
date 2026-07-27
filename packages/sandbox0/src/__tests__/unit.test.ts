@@ -118,7 +118,9 @@ describe('sandbox0 provider', () => {
     try {
       const provider = sandbox0();
       expect(provider.name).toBe('sandbox0');
-      await expect(provider.sandbox.create()).rejects.toThrow('Missing Sandbox0 token');
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        'Missing Sandbox0 token. Pass sandbox0({ token }) or set SANDBOX0_TOKEN or SANDBOX0_API_KEY.',
+      );
     } finally {
       if (previousToken === undefined) delete process.env.SANDBOX0_TOKEN;
       else process.env.SANDBOX0_TOKEN = previousToken;
@@ -151,7 +153,7 @@ describe('sandbox0 provider', () => {
       {
         token: 's0_test',
         baseUrl: 'https://api.example.test',
-        userAgent: '@computesdk/sandbox0/1.0.0',
+        userAgent: '@computesdk/sandbox0',
         headers: { 'X-Team-ID': 'team_123' },
       },
     ]);
