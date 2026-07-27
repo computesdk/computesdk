@@ -1,0 +1,64 @@
+{
+  "name": "@computesdk/sandbox0",
+  "version": "1.0.0",
+  "description": "Sandbox0 provider for ComputeSDK - fast persistent sandboxes with command execution and native filesystem access",
+  "author": "Sandbox0 Team",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "computesdk",
+    "sandbox0",
+    "sandbox",
+    "persistent-sandbox",
+    "code-execution",
+    "cloud",
+    "compute",
+    "provider"
+  ],
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*",
+    "sandbox0": "^0.9.5"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/sandbox0"
+  },
+  "homepage": "https://sandbox0.ai",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  }
+}
