@@ -7,6 +7,31 @@ This guide walks you through creating a new provider package for ComputeSDK.
 - **Node.js** >= 18 and **pnpm** >= 9 are required
 - Familiarize yourself with the provider you're integrating (API docs, SDK, auth model)
 
+### Scope: no core SDK changes
+
+A provider PR adds a provider. It must not modify the SDK core. Confine your changes to
+these paths:
+
+| Path | What goes there |
+|---|---|
+| `packages/my-provider/` | Your entire provider package |
+| `docs/providers/my-provider.md` | Your docs page (§7) |
+| `docs/SUMMARY.md` | The one nav line linking your docs page (§7) |
+| `.changeset/<slug>.md` | Your changeset (§8) |
+| `README.md` (root) | Your row in the provider table and package list |
+
+**Do not touch** anything else -- in particular:
+
+- `packages/computesdk/` and `packages/provider/` -- the SDK core and provider framework.
+  If your provider can't be expressed with the existing `defineProvider` interface, that's
+  a framework gap: open an issue describing what you need, and don't work around it by
+  editing core in your PR.
+- Other providers' packages, shared tooling, root configs (`tsconfig.json`,
+  `pnpm-workspace.yaml`, CI workflows), and lockfile edits beyond what `pnpm install`
+  produces for your own package.
+
+A PR that changes core alongside a new provider will be asked to split into two.
+
 ## 1. Scaffold the Package
 
 Create a new directory under `packages/`:
@@ -343,7 +368,145 @@ Create a `README.md` for your package that includes:
 
 See [packages/e2b/README.md](e2b/README.md) for a good example.
 
-## 7. Build and Verify
+## 7. Add a Docs Page
+
+Every provider gets a page in the published documentation site (GitBook), which lives in
+the top-level [docs/](docs/) directory.
+
+### Create `docs/providers/my-provider.md`
+
+Start with the GitBook front matter block, then the page body. Copy the `layout` block
+verbatim -- it's identical across every provider page -- and write your own `description`:
+
+````markdown
+---
+description: >-
+  My Provider for ComputeSDK - one or two sentences describing what the provider
+  does and its key capabilities.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
+# My Provider
+
+[My Provider](https://my-provider.com) provider for ComputeSDK - brief description.
+
+## Installation & Setup
+
+```bash
+npm install @computesdk/my-provider
+```
+
+Add your My Provider credentials to a `.env` file:
+
+```bash
+MY_PROVIDER_API_KEY=your_my_provider_api_key
+```
+
+## Usage
+
+```typescript
+import { myProvider } from '@computesdk/my-provider';
+
+const compute = myProvider({
+  apiKey: process.env.MY_PROVIDER_API_KEY,
+});
+
+// Create sandbox
+const sandbox = await compute.sandbox.create();
+
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from My Provider!"');
+console.log(result.stdout);
+
+// Clean up
+await sandbox.destroy();
+```
+
+### Configuration Options
+
+```typescript
+interface MyProviderConfig {
+  /** My Provider API key - if not provided, will use MY_PROVIDER_API_KEY env var */
+  apiKey?: string;
+  /** Execution timeout in milliseconds */
+  timeout?: number;
+}
+```
+````
+
+Keep the page focused on what a user needs to get running: install, credentials, a
+working example, config options, and any provider-specific concepts or limitations. The
+`tags:` front matter key (e.g. the `benchmarked` tag) and the benchmark embed are added by
+maintainers once a provider has been benchmarked -- leave them out of your initial page.
+
+### Register it in `docs/SUMMARY.md`
+
+GitBook builds its navigation from [docs/SUMMARY.md](docs/SUMMARY.md). Add your page to
+the `Providers` list, **in alphabetical order by display name**:
+
+```markdown
+* [Providers](providers/README.md)
+  ...
+  * [Modal](providers/modal.md)
+  * [My Provider](providers/my-provider.md)
+  * [Namespace](providers/namespace.md)
+  ...
+```
+
+A page that isn't in `SUMMARY.md` won't appear in the docs site.
+
+See [docs/providers/leap0.md](docs/providers/leap0.md) for a good example.
+
+## 8. Add a Changeset
+
+Releases are managed with [Changesets](https://github.com/changesets/changesets). Every PR
+that adds or changes a published package needs one, or the package won't be versioned and
+published.
+
+Create `.changeset/<short-slug>.md` (any unique kebab-case filename works):
+
+```markdown
+---
+"@computesdk/my-provider": patch
+---
+
+Add My Provider provider
+```
+
+### Bump type
+
+**Never use `major`.** A new provider package is additive -- it can't break existing
+consumers -- so a major bump is always wrong here.
+
+| Bump | When |
+|---|---|
+| `patch` | **Default for a new provider package.** Use this unless a maintainer says otherwise. |
+| `minor` | Only when a maintainer explicitly asks for it (e.g. a notable feature landing alongside the package). |
+| `major` | Never. |
+
+List only the package your PR adds. For a new provider that's exactly one entry --
+`"@computesdk/my-provider"`. Never list `computesdk` or `@computesdk/provider`: a provider
+PR doesn't change them (see [Scope](#scope-no-core-sdk-changes)), so they have nothing to
+release.
+
+## 9. Build and Verify
 
 ```bash
 # Install dependencies
@@ -365,7 +528,7 @@ pnpm --filter @computesdk/my-provider run lint
 pnpm --filter @computesdk/my-provider run test
 ```
 
-## 8. Submit Your PR
+## 10. Submit Your PR
 
 Your PR should include:
 
@@ -373,6 +536,12 @@ Your PR should include:
 - [ ] Passing `build`, `typecheck`, and `lint` checks
 - [ ] Tests for all required sandbox methods
 - [ ] A README with setup and usage instructions
+- [ ] A docs page at `docs/providers/my-provider.md`, linked from `docs/SUMMARY.md`
+- [ ] A changeset in `.changeset/` with a `patch` (or `minor`) bump -- never `major`
+- [ ] **No changes outside the allowed paths** -- run `git diff --stat main` and confirm
+      every file is in `packages/my-provider/`, `docs/`, `.changeset/`, or the root
+      `README.md`. No edits to `packages/computesdk/`, `packages/provider/`,
+      See [Scope](#scope-no-core-sdk-changes).
 
 ## Best Practices
 
