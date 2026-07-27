@@ -23,7 +23,7 @@ export interface Sandbox0Config {
   teamId?: string;
   /** API endpoint. Falls back to SANDBOX0_BASE_URL, then the SDK default. */
   baseUrl?: string;
-  /** Default template for new sandboxes. Falls back to SANDBOX0_TEMPLATE, then `default`. */
+  /** Default template for new sandboxes. Falls back to SANDBOX0_TEMPLATE, then `coding-agent`. */
   templateId?: string;
   /** Default soft runtime TTL in seconds. */
   ttl?: number;
@@ -85,7 +85,7 @@ function createClient(config: Sandbox0Config): Client {
 }
 
 function resolveTemplate(config: Sandbox0Config, options?: CreateSandboxOptions): string {
-  return options?.templateId || config.templateId || env('SANDBOX0_TEMPLATE') || 'default';
+  return options?.templateId || config.templateId || env('SANDBOX0_TEMPLATE') || 'coding-agent';
 }
 
 function optionalPositiveSeconds(name: string, value: unknown): number | undefined {

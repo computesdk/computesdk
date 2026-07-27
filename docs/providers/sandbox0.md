@@ -59,7 +59,7 @@ compute.setConfig({
 });
 
 const sandbox = await compute.sandbox.create({
-  templateId: 'default',
+  templateId: 'coding-agent',
   memory: 256,
 });
 
@@ -88,7 +88,7 @@ interface Sandbox0Config {
 }
 ```
 
-Numeric memory values are interpreted as MiB. `ttl` and `hardTtl` use seconds; `commandTimeout` uses milliseconds.
+Numeric memory values are interpreted as MiB. `ttl` and `hardTtl` use seconds; `commandTimeout` uses milliseconds. When `templateId` is omitted, the provider uses `SANDBOX0_TEMPLATE` and then falls back to `coding-agent`.
 
 Per-create `templateId`, `snapshotId`, `memory`, `envs`, `ttl`, `hardTtl`, and `autoResume` options override provider defaults where applicable.
 

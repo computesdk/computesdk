@@ -37,7 +37,7 @@ compute.setConfig({
 });
 
 const sandbox = await compute.sandbox.create({
-  templateId: 'default',
+  templateId: 'coding-agent',
   memory: 256,
 });
 
@@ -57,7 +57,7 @@ await sandbox.destroy();
 | `token` | `SANDBOX0_TOKEN` or `SANDBOX0_API_KEY` | required | Team API key, or an access token when `teamId` is set |
 | `teamId` | `SANDBOX0_TEAM_ID` | none | Team ID required with access-token authentication |
 | `baseUrl` | `SANDBOX0_BASE_URL` | SDK default | Sandbox0 API endpoint |
-| `templateId` | `SANDBOX0_TEMPLATE` | `default` | Template used for new sandboxes |
+| `templateId` | `SANDBOX0_TEMPLATE` | `coding-agent` | Template used for new sandboxes |
 | `ttl` | - | platform default | Soft runtime TTL in seconds |
 | `hardTtl` | - | platform default | Hard sandbox TTL in seconds |
 | `memory` | - | template default | Memory in MiB or a quantity such as `1Gi` |

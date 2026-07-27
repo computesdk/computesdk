@@ -129,6 +129,18 @@ describe('sandbox0 provider', () => {
     }
   });
 
+  it('uses the coding-agent template by default', async () => {
+    const previousTemplate = process.env.SANDBOX0_TEMPLATE;
+    delete process.env.SANDBOX0_TEMPLATE;
+    try {
+      await sandbox0({ token: 's0_test' }).sandbox.create();
+      expect(claimMock).toHaveBeenCalledWith('coding-agent');
+    } finally {
+      if (previousTemplate === undefined) delete process.env.SANDBOX0_TEMPLATE;
+      else process.env.SANDBOX0_TEMPLATE = previousTemplate;
+    }
+  });
+
   it('maps create options to the official Sandbox0 SDK', async () => {
     const provider = sandbox0({
       token: 's0_test',
