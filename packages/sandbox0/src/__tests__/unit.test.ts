@@ -143,6 +143,7 @@ describe('sandbox0 provider', () => {
       memory: 256,
       envs: { CALL: '2' },
       ttl: 60,
+      hardTtl: 600,
       autoResume: false,
     });
 
@@ -158,7 +159,7 @@ describe('sandbox0 provider', () => {
       config: {
         envVars: { BASE: '1', CALL: '2' },
         ttl: 60,
-        hardTtl: 300,
+        hardTtl: 600,
         autoResume: false,
       },
       snapshotId: 'snapshot_1',
