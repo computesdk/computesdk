@@ -439,8 +439,8 @@ describe('run-cloud provider', () => {
       new Response(JSON.stringify({
         id: 'tunnel_123',
         sandboxId: 'sbx_123',
-        hostname: `${'a'.repeat(40)}-tunnel.run.cloud`,
-        url: `https://${'a'.repeat(40)}-tunnel.run.cloud`,
+        hostname: `${'a'.repeat(32)}-tunnel.run.cloud`,
+        url: `https://${'a'.repeat(32)}-tunnel.run.cloud`,
         port: 3000,
         expiresAt: new Date(Date.now() + 900_000).toISOString(),
       }), {
@@ -458,7 +458,7 @@ describe('run-cloud provider', () => {
     const first = await sandbox.getUrl({ port: 3000 });
     const second = await sandbox.getUrl({ port: 3000 });
 
-    expect(first).toBe(`https://${'a'.repeat(40)}-tunnel.run.cloud`);
+    expect(first).toBe(`https://${'a'.repeat(32)}-tunnel.run.cloud`);
     expect(second).toBe(first);
     expect(tunnelFetch).toHaveBeenCalledOnce();
     expect(tunnelFetch).toHaveBeenCalledWith(
