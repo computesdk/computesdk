@@ -1726,6 +1726,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/run-cloud:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@run-cloud/sdk':
+        specifier: ^0.7.0
+        version: 0.7.0
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/runloop:
     dependencies:
       '@computesdk/provider':
@@ -4833,6 +4870,10 @@ packages:
     resolution: {integrity: sha512-M/fKi4sasCdM8i0aWJjCSFm2qEnYRR8AMLG2kxp6wD13+tMGA4Z1tVAuHkNRjud5SW2EM3naLuK35w9twvf6aA==}
     cpu: [x64]
     os: [win32]
+
+  '@run-cloud/sdk@0.7.0':
+    resolution: {integrity: sha512-DJQc14G4X6xYhTmOjVXTzSSSGkpJGH3FWFEfh8W4WrpXKBdPuzxpDetbSq4XBSX/ADCk9Q9Ykh/Obslbcf8cOA==}
+    engines: {node: '>=20'}
 
   '@runloop/api-client@1.24.0':
     resolution: {integrity: sha512-A/G9l2MlBz/u0Wr2RvCEJvh0+4Pn/8p15BTq9wQt3vEgEGLEk844+9bIKsfWbDvU/4JdRvIUND79Vu5qvKQzUQ==}
@@ -12003,6 +12044,8 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
+
+  '@run-cloud/sdk@0.7.0': {}
 
   '@runloop/api-client@1.24.0':
     dependencies:
