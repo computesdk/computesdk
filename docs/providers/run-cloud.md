@@ -92,10 +92,11 @@ interface RunCloudConfig {
   region?: string;
   orgId?: string;
   commandTimeout?: number;
+  tunnelTtlSeconds?: number;
 }
 ```
 
-`cpu` accepts fractional vCPUs, `memory` uses MiB, and `disk` uses GiB. `timeout` and `commandTimeout` use milliseconds; `idlePauseSeconds` uses seconds.
+`cpu` accepts fractional vCPUs, `memory` uses MiB, and `disk` uses GiB. `timeout` and `commandTimeout` use milliseconds; `idlePauseSeconds` and `tunnelTtlSeconds` use seconds.
 
 Per-create `templateId` or `image`, `snapshotId`, `cpu`, `memory`, `disk`, `idlePauseSeconds`, `timeoutSeconds`, `region`, `name`, `orgId`, and `idempotencyKey` override provider defaults.
 
@@ -115,13 +116,13 @@ await sandbox.runCommand('echo "$MODEL"', {
 | `getById` | ✅ | Returns `null` for missing sandboxes. |
 | `list` | ✅ | Lists running sandboxes. |
 | `destroy` | ✅ | Idempotent when already deleted. |
-| `runCommand` | ✅ | Supports cwd, env, timeout, and background mode. |
+| `runCommand` | ✅ | Supports cwd, env, timeout, streaming callbacks, and background mode. |
 | `getInfo` | ✅ | Refreshes lifecycle and resource metadata. |
-| `getUrl` | ❌ | Public per-port URLs are not available in the current Run Cloud SDK. |
+| `getUrl` | ✅ | Opens an expiring capability URL without making the sandbox persistent. |
 | Filesystem | ✅ | Read, write, mkdir, list, exists, and remove. |
 | Snapshots | ✅ | Create, list, delete, and restore. |
 
 Use `sandbox.getInstance()` to access the official Run Cloud client and native sandbox record.
 
-Streaming output callbacks depend on ComputeSDK's daemon transport, which requires a
-public port URL. Command output is buffered until Run Cloud exposes that capability.
+Tunnel hostnames are random bearer capabilities. Do not write them to public logs.
+They expire automatically and are removed when the tunnel or sandbox is deleted.

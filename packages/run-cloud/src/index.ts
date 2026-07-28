@@ -23,6 +23,7 @@ import type {
 
 const DEFAULT_IMAGE = 'runcloud/agent-base';
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
+const DEFAULT_TUNNEL_TTL_SECONDS = 3_600;
 
 export interface RunCloudConfig {
   /** API key. Falls back to RUN_CLOUD_API_KEY, then RUN_CLOUD_API_TOKEN. */
@@ -49,6 +50,8 @@ export interface RunCloudConfig {
   orgId?: string;
   /** Default command timeout in milliseconds. */
   commandTimeout?: number;
+  /** Lifetime of public port URLs in seconds. Defaults to one hour. */
+  tunnelTtlSeconds?: number;
 }
 
 /**
@@ -61,6 +64,7 @@ export interface RunCloudSandbox {
   readonly client: Client;
   sandbox: NativeSandbox;
   readonly commandTimeout: number;
+  readonly getTunnelUrl: (port: number) => Promise<string>;
 }
 
 export interface RunCloudSnapshot {
@@ -95,6 +99,62 @@ function createClient(config: RunCloudConfig): Client {
     apiUrl: config.apiUrl || env('RUN_CLOUD_API_URL'),
     fetch: config.fetch,
   });
+}
+
+interface NativeTunnel {
+  url: string;
+  expiresAt: string;
+}
+
+async function tunnelRequest(
+  config: RunCloudConfig,
+  sandboxId: string,
+  port: number,
+): Promise<NativeTunnel> {
+  const ttlSeconds =
+    optionalNumber(
+      'tunnelTtlSeconds',
+      config.tunnelTtlSeconds ?? DEFAULT_TUNNEL_TTL_SECONDS,
+    ) ?? DEFAULT_TUNNEL_TTL_SECONDS;
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 86_400) {
+    throw new Error(
+      'Run Cloud tunnelTtlSeconds must be an integer from 60 to 86400.',
+    );
+  }
+  const fetchImpl = config.fetch ?? globalThis.fetch;
+  if (!fetchImpl) {
+    throw new Error('Run Cloud public URLs require a fetch implementation.');
+  }
+  const apiUrl =
+    config.apiUrl || env('RUN_CLOUD_API_URL') || 'https://api.run.cloud';
+  const response = await fetchImpl(
+    `${apiUrl.replace(/\/$/, '')}/run-cloud/sandboxes/` +
+      `${encodeURIComponent(sandboxId)}/tunnels`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resolveApiKey(config)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ port, ttlSeconds }),
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(
+      `Run Cloud tunnel creation failed (${response.status})` +
+        (detail ? `: ${detail}` : ''),
+    );
+  }
+  const tunnel = await response.json() as Partial<NativeTunnel>;
+  if (
+    typeof tunnel.url !== 'string' ||
+    !tunnel.url.startsWith('https://') ||
+    typeof tunnel.expiresAt !== 'string'
+  ) {
+    throw new Error('Run Cloud tunnel creation returned an invalid response.');
+  }
+  return { url: tunnel.url, expiresAt: tunnel.expiresAt };
 }
 
 function isNotFound(error: unknown): boolean {
@@ -158,10 +218,29 @@ function makeHandle(
   sandbox: NativeSandbox,
   config: RunCloudConfig,
 ): RunCloudSandbox {
+  const tunnels = new Map<number, Promise<NativeTunnel>>();
   return {
     client,
     sandbox,
     commandTimeout: config.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
+    getTunnelUrl: async (port) => {
+      let pending = tunnels.get(port);
+      if (pending) {
+        const existing = await pending;
+        if (new Date(existing.expiresAt).getTime() > Date.now() + 30_000) {
+          return existing.url;
+        }
+        tunnels.delete(port);
+      }
+      pending = tunnelRequest(config, sandbox.id, port);
+      tunnels.set(port, pending);
+      try {
+        return (await pending).url;
+      } catch (error) {
+        tunnels.delete(port);
+        throw error;
+      }
+    },
   };
 }
 
@@ -360,12 +439,8 @@ const _provider = defineProvider<
         };
       },
 
-      getUrl: async (_handle, options): Promise<string> => {
-        throw new Error(
-          `Run Cloud public port URLs are not available in @run-cloud/sdk yet ` +
-            `(requested port ${options.port}).`,
-        );
-      },
+      getUrl: async (handle, options): Promise<string> =>
+        handle.getTunnelUrl(options.port),
 
       getInstance: (handle): RunCloudSandbox => handle,
 

@@ -77,6 +77,7 @@ interface RunCloudConfig {
   region?: string;
   orgId?: string;
   commandTimeout?: number;
+  tunnelTtlSeconds?: number;
 }
 ```
 
@@ -84,6 +85,7 @@ interface RunCloudConfig {
 - `memory` is measured in MiB.
 - `disk` is the writable disk quota in GiB.
 - `timeout` and `commandTimeout` are milliseconds.
+- `tunnelTtlSeconds` controls public port URL lifetime and defaults to one hour.
 - `idlePauseSeconds` is seconds; set it to `0` to disable automatic pause.
 - `templateId` and `image` both select a registered Run Cloud OCI image.
 - `snapshotId` restores a previously created Run Cloud snapshot.
@@ -105,13 +107,13 @@ await sandbox.runCommand('echo "$MODEL"', {
 | `getById` | ✅ | Returns `null` when the sandbox does not exist. |
 | `list` | ✅ | Lists running sandboxes visible to the API key. |
 | `destroy` | ✅ | Idempotent when the sandbox is already gone. |
-| `runCommand` | ✅ | Supports `cwd`, command-scoped env, timeouts, and detached background commands. |
+| `runCommand` | ✅ | Supports `cwd`, command-scoped env, timeouts, streaming callbacks, and detached background commands. |
 | `getInfo` | ✅ | Refreshes state and resource metadata from Run Cloud. |
-| `getUrl` | ❌ | The current Run Cloud SDK does not expose public per-port URLs. |
+| `getUrl` | ✅ | Opens an expiring capability URL without making the sandbox persistent. |
 | Filesystem | ✅ | Native reads; shell-backed write, mkdir, list, exists, and remove. |
 | Snapshots | ✅ | Create, list, delete, and restore through `snapshotId`. |
 
 `sandbox.getInstance()` returns a `RunCloudSandbox` handle containing the official `Client` and the latest native sandbox record.
 
-Streaming output callbacks depend on ComputeSDK's daemon transport, which requires a
-public port URL. Command output is buffered until Run Cloud exposes that capability.
+Tunnel hostnames are random bearer capabilities. Do not write them to public logs.
+They expire automatically and are removed when the tunnel or sandbox is deleted.

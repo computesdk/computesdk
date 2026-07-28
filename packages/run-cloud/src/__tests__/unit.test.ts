@@ -434,10 +434,43 @@ describe('run-cloud provider', () => {
     expect(destroyMock).toHaveBeenCalledWith('sbx_123');
   });
 
-  it('explains that public port URLs are not exposed yet', async () => {
-    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
-    await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow(
-      'Run Cloud public port URLs are not available in @run-cloud/sdk yet',
+  it('opens and reuses an expiring tunnel without changing persistence', async () => {
+    const tunnelFetch = vi.fn(async () =>
+      new Response(JSON.stringify({
+        id: 'tunnel_123',
+        sandboxId: 'sbx_123',
+        hostname: `${'a'.repeat(40)}-tunnel.run.cloud`,
+        url: `https://${'a'.repeat(40)}-tunnel.run.cloud`,
+        port: 3000,
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const sandbox = await runCloud({
+      apiKey: 'rc_test',
+      apiUrl: 'https://api.example.test/',
+      fetch: tunnelFetch,
+      tunnelTtlSeconds: 900,
+    }).sandbox.create();
+
+    const first = await sandbox.getUrl({ port: 3000 });
+    const second = await sandbox.getUrl({ port: 3000 });
+
+    expect(first).toBe(`https://${'a'.repeat(40)}-tunnel.run.cloud`);
+    expect(second).toBe(first);
+    expect(tunnelFetch).toHaveBeenCalledOnce();
+    expect(tunnelFetch).toHaveBeenCalledWith(
+      'https://api.example.test/run-cloud/sandboxes/sbx_123/tunnels',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer rc_test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ port: 3000, ttlSeconds: 900 }),
+      }),
     );
   });
 });
