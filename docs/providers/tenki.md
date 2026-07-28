@@ -68,9 +68,9 @@ interface TenkiConfig {
   apiKey?: string;
   /** API base URL. Falls back to TENKI_API_URL, then https://api.tenki.cloud. */
   baseUrl?: string;
-  /** Workspace to create sandboxes in. Falls back to TENKI_WORKSPACE_ID, then auto-resolved from the API key. */
+  /** Workspace to create sandboxes in. Falls back to TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
   workspaceId?: string;
-  /** Project to create sandboxes in. Falls back to TENKI_PROJECT_ID, then auto-resolved from the API key. */
+  /** @deprecated Tenki no longer scopes sandboxes by project. */
   projectId?: string;
   /** Default runCommand timeout in milliseconds. */
   timeout?: number;
@@ -96,6 +96,6 @@ interface TenkiConfig {
 
 ### Notes
 
-* When `workspaceId`/`projectId` are not set, the provider resolves them once from the API key's identity (first workspace with a project). Set them explicitly, or via `TENKI_WORKSPACE_ID` / `TENKI_PROJECT_ID`, to skip the lookup.
+* Workspace API keys infer their workspace server-side. Set `workspaceId`, or `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
 * Background commands (`{ background: true }`) detach stdio automatically; a bare `&` would hold the exec output stream open.
 * Snapshots and pause/resume exist in the underlying `@tenkicloud/sandbox` SDK but are not yet wired to the provider's snapshot methods. For advanced features (SSH, volumes, tunnels, git, snapshots), use `sandbox.getInstance()` to reach the SDK `Session` directly.
