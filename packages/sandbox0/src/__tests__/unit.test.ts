@@ -45,16 +45,39 @@ vi.mock('sandbox0', () => {
 });
 
 function makeSandbox() {
+  const contextStream = {
+    id: 'ctx_123',
+    outputs: vi.fn(async function* () {
+      yield { source: 'stdout', data: 'ok\n' };
+    }),
+    wait: vi.fn().mockResolvedValue({
+      contextId: 'ctx_123',
+      exitCode: 0,
+      state: 'exited',
+    }),
+    close: vi.fn(),
+  };
   return {
     id: 'sb_123',
     status: 'running',
     template: 'default',
     clusterId: 'cluster_1',
     cmd: vi.fn().mockResolvedValue({
+      contextId: 'ctx_123',
+      stdout: 'ok\n',
+      stderr: '',
+      exitCode: undefined,
+    }),
+    connectWsContext: vi.fn().mockResolvedValue(contextStream),
+    getContext: vi.fn().mockResolvedValue({
+      id: 'ctx_123',
+      running: false,
       stdout: 'ok\n',
       stderr: '',
       exitCode: 0,
+      state: 'exited',
     }),
+    deleteContext: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn().mockResolvedValue(new TextEncoder().encode('file-content')),
     writeFile: vi.fn().mockResolvedValue(undefined),
     mkdir: vi.fn().mockResolvedValue(undefined),
@@ -196,17 +219,110 @@ describe('sandbox0 provider', () => {
 
     expect(nativeSandbox.cmd).toHaveBeenCalledWith('printf "$VALUE"', {
       command: ['sh', '-lc', 'printf "$VALUE"'],
-      wait: true,
+      wait: false,
       cwd: '/workspace',
       envVars: { VALUE: 'hello' },
       ttlSec: 5,
     });
+    expect(nativeSandbox.connectWsContext).toHaveBeenCalledWith('ctx_123');
+    expect(nativeSandbox.getContext).toHaveBeenCalledWith('ctx_123');
     expect(result).toMatchObject({ stdout: 'ok\n', stderr: '', exitCode: 0 });
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('falls back to streamed output and preserves a non-zero exit code', async () => {
+    nativeSandbox.connectWsContext.mockResolvedValueOnce({
+      id: 'ctx_123',
+      outputs: vi.fn(async function* () {
+        yield { source: 'stdout', data: 'out\n' };
+        yield { source: 'stderr', data: 'err\n' };
+      }),
+      wait: vi.fn().mockResolvedValue({
+        contextId: 'ctx_123',
+        exitCode: 7,
+        state: 'crashed',
+      }),
+      close: vi.fn(),
+    });
+    nativeSandbox.getContext.mockResolvedValueOnce({
+      id: 'ctx_123',
+      running: false,
+      exitCode: 7,
+      state: 'crashed',
+    });
+    const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+
+    const result = await sandbox.runCommand('echo out; echo err >&2; exit 7');
+
+    expect(result).toMatchObject({
+      stdout: 'out\n',
+      stderr: 'err\n',
+      exitCode: 7,
+    });
+  });
+
+  it('polls the Context API if the WebSocket closes before a terminal event', async () => {
+    vi.useFakeTimers();
+    try {
+      nativeSandbox.connectWsContext.mockResolvedValueOnce({
+        id: 'ctx_123',
+        outputs: vi.fn(async function* () {}),
+        wait: vi.fn().mockResolvedValue({ contextId: 'ctx_123' }),
+        close: vi.fn(),
+      });
+      nativeSandbox.getContext
+        .mockResolvedValueOnce({ id: 'ctx_123', running: true })
+        .mockResolvedValueOnce({
+          id: 'ctx_123',
+          running: false,
+          stdout: 'done\n',
+          stderr: '',
+          exitCode: 0,
+          state: 'exited',
+        });
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+
+      const pending = sandbox.runCommand('sleep 1; echo done', { timeout: 1_000 });
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(pending).resolves.toMatchObject({
+        stdout: 'done\n',
+        exitCode: 0,
+      });
+      expect(nativeSandbox.getContext).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('deletes the Context when a foreground command times out', async () => {
+    vi.useFakeTimers();
+    try {
+      nativeSandbox.connectWsContext.mockResolvedValueOnce({
+        id: 'ctx_123',
+        outputs: vi.fn(async function* () {}),
+        wait: vi.fn().mockReturnValue(new Promise(() => undefined)),
+        close: vi.fn(),
+      });
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+
+      const pending = sandbox.runCommand('sleep 30', { timeout: 50 });
+      const rejection = expect(pending).rejects.toMatchObject({
+        name: 'TimeoutError',
+        message: 'Sandbox0 command timed out after 50ms.',
+      });
+      await vi.advanceTimersByTimeAsync(50);
+
+      await rejection;
+      expect(nativeSandbox.deleteContext).toHaveBeenCalledWith('ctx_123');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('starts background commands without waiting for an exit code', async () => {
     nativeSandbox.cmd.mockResolvedValueOnce({
+      contextId: 'ctx_123',
       stdout: '',
       stderr: '',
       exitCode: undefined,
@@ -223,6 +339,9 @@ describe('sandbox0 provider', () => {
       expect.objectContaining({ wait: false, ttlSec: 2 }),
     );
     expect(result.exitCode).toBe(0);
+    expect(nativeSandbox.connectWsContext).not.toHaveBeenCalled();
+    expect(nativeSandbox.getContext).not.toHaveBeenCalled();
+    expect(nativeSandbox.deleteContext).not.toHaveBeenCalled();
   });
 
   it('gets and paginates team sandboxes', async () => {

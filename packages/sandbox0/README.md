@@ -78,6 +78,12 @@ Per-create `templateId`, `snapshotId`, `memory`, `envs`, `ttl`, `hardTtl`, and `
 | Restore from snapshot | Yes, with `snapshotId` at create time |
 | Snapshot management | Use the native Sandbox0 SDK |
 
+Foreground `runCommand` calls start an asynchronous Sandbox0 Context, follow
+its WebSocket terminal event, and read the final result from the Context API.
+If the WebSocket disconnects, the provider polls the Context until it exits.
+The command `timeout` is also applied as the Context TTL, and a timed-out call
+attempts to delete the Context.
+
 `destroy` is idempotent and retries short-lived throttling or server failures. Setting `hardTtl` is still recommended for automated workloads so a failed client cannot leave a sandbox indefinitely.
 
 For Sandbox0-specific capabilities such as pause/resume, services, snapshots, volumes, and observability, call `sandbox.getInstance()` to access the native `sandbox0` SDK handle.

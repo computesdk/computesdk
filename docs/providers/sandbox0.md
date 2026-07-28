@@ -100,11 +100,16 @@ Per-create `templateId`, `snapshotId`, `memory`, `envs`, `ttl`, `hardTtl`, and `
 | `getById` | ✅ | Returns `null` for a missing sandbox. |
 | `list` | ✅ | Paginates through sandboxes visible to the team token. |
 | `destroy` | ✅ | Idempotent, with bounded retry for throttling and server failures. |
-| `runCommand` | ✅ | Uses `sh -lc`; supports `cwd`, env, timeout, and background mode. |
+| `runCommand` | ✅ | Uses `sh -lc`; foreground calls follow an asynchronous Context through WebSocket with API polling fallback. Supports `cwd`, env, timeout, and background mode. |
 | `getInfo` | ✅ | Uses lifecycle metadata already returned by Sandbox0 without adding a post-create request. |
 | `getUrl` | ✅ | Returns the URL of an existing public Sandbox0 service for the requested port. |
 | `filesystem` | ✅ | Native read, write, mkdir, list, stat, and delete operations. |
 
 For automated workloads, set `hardTtl` as a safety net in addition to calling `destroy`.
+
+Foreground commands use the requested timeout as both a local deadline and the
+Sandbox0 Context TTL. If the WebSocket disconnects before a terminal event, the
+provider continues through the Context API. A timeout also triggers a
+best-effort Context deletion.
 
 Use `sandbox.getInstance()` for Sandbox0-specific pause/resume, services, snapshots, volumes, and observability APIs.
