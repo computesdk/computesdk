@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sandbox0",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sandbox0 provider for ComputeSDK - fast persistent sandboxes with command execution and native filesystem access",
   "author": "Sandbox0 Team",
   "license": "MIT",
