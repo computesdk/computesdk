@@ -24,8 +24,9 @@ layout:
 
 # Sail
 
-[Sail](https://sailresearch.com) provides isolated Firecracker microVM
-sandboxes for running agent and developer workloads.
+[Sail](https://sailresearch.com) provides maximally-efficient Firecracker microVM
+sandboxes for running agent and developer workloads. They can live forever and bill only for active 
+CPU, memory, and disk usage.
 
 ## Installation & Setup
 
