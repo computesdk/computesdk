@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 30.0.1
+
+### Patch Changes
+
+- Updated dependencies [cfc45de]
+  - @computesdk/northflank@1.1.3
+
 ## 30.0.0
 
 ### Patch Changes
