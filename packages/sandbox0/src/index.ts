@@ -295,7 +295,7 @@ async function observeCommandCompletion(
   deadline: number | undefined,
   timeout: number | undefined,
 ): Promise<{
-  context: Sandbox0Context;
+  context?: Sandbox0Context;
   terminal?: Sandbox0StreamDone;
   output: CapturedCommandOutput;
 }> {
@@ -319,21 +319,32 @@ async function observeCommandCompletion(
     stream?.close();
   }
 
-  let context = await withinCommandDeadline(
-    sandbox.getContext(contextId),
-    deadline,
-    timeout,
-  );
-  while (context.running && terminal?.exitCode === undefined) {
-    const delay = deadline === undefined
-      ? commandPollIntervalMs
-      : Math.min(commandPollIntervalMs, Math.max(1, deadline - Date.now()));
-    await sleep(delay);
+  let context: Sandbox0Context | undefined;
+  try {
     context = await withinCommandDeadline(
       sandbox.getContext(contextId),
       deadline,
       timeout,
     );
+    while (context.running && terminal?.exitCode === undefined) {
+      const delay = deadline === undefined
+        ? commandPollIntervalMs
+        : Math.min(commandPollIntervalMs, Math.max(1, deadline - Date.now()));
+      await sleep(delay);
+      context = await withinCommandDeadline(
+        sandbox.getContext(contextId),
+        deadline,
+        timeout,
+      );
+    }
+  } catch (error) {
+    // Preserve a completed WebSocket result if the final Context snapshot is unavailable.
+    if (
+      error instanceof Sandbox0CommandTimeoutError
+      || terminal?.exitCode === undefined
+    ) {
+      throw error;
+    }
   }
 
   return { context, terminal, output };
@@ -459,9 +470,9 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
             timeout,
           );
           return {
-            stdout: completed.context.stdout ?? completed.output.stdout,
-            stderr: completed.context.stderr ?? completed.output.stderr,
-            exitCode: completed.context.exitCode ?? completed.terminal?.exitCode ?? 1,
+            stdout: completed.context?.stdout ?? completed.output.stdout,
+            stderr: completed.context?.stderr ?? completed.output.stderr,
+            exitCode: completed.context?.exitCode ?? completed.terminal?.exitCode ?? 1,
             durationMs: Date.now() - startedAt,
           };
         } catch (error) {

@@ -230,7 +230,7 @@ describe('sandbox0 provider', () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('falls back to streamed output and preserves a non-zero exit code', async () => {
+  it('uses the streamed result if the final Context lookup fails', async () => {
     nativeSandbox.connectWsContext.mockResolvedValueOnce({
       id: 'ctx_123',
       outputs: vi.fn(async function* () {
@@ -244,12 +244,9 @@ describe('sandbox0 provider', () => {
       }),
       close: vi.fn(),
     });
-    nativeSandbox.getContext.mockResolvedValueOnce({
-      id: 'ctx_123',
-      running: false,
-      exitCode: 7,
-      state: 'crashed',
-    });
+    nativeSandbox.getContext.mockRejectedValueOnce(
+      new APIError({ statusCode: 503, message: 'unavailable' }),
+    );
     const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
 
     const result = await sandbox.runCommand('echo out; echo err >&2; exit 7');
@@ -259,6 +256,8 @@ describe('sandbox0 provider', () => {
       stderr: 'err\n',
       exitCode: 7,
     });
+    expect(nativeSandbox.getContext).toHaveBeenCalledWith('ctx_123');
+    expect(nativeSandbox.deleteContext).not.toHaveBeenCalled();
   });
 
   it('polls the Context API if the WebSocket closes before a terminal event', async () => {
