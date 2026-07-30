@@ -1,5 +1,11 @@
 # @computesdk/tenki
 
+## 0.1.3
+
+### Patch Changes
+
+- d92e1e3: Update `@tenkicloud/sandbox` to 0.5.4 and replace project scope with server-side workspace inference.
+
 ## 0.1.2
 
 ### Patch Changes

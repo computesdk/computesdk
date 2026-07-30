@@ -32,9 +32,9 @@ export interface TenkiConfig {
   apiKey?: string;
   /** API base URL. Falls back to TENKI_API_URL, then https://api.tenki.cloud. */
   baseUrl?: string;
-  /** Workspace to create sandboxes in. Falls back to TENKI_WORKSPACE_ID, then auto-resolved from the API key. */
+  /** Workspace to create sandboxes in. Falls back to TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
   workspaceId?: string;
-  /** Project to create sandboxes in. Falls back to TENKI_PROJECT_ID, then auto-resolved from the API key. */
+  /** @deprecated Tenki no longer scopes sandboxes by project. */
   projectId?: string;
   /** Default runCommand timeout in milliseconds. */
   timeout?: number;
@@ -44,13 +44,8 @@ export interface TenkiConfig {
   diskSizeGb?: number;
 }
 
-interface TenkiScope {
-  workspaceId: string;
-  projectId: string;
-}
-
 // ---------------------------------------------------------------------------
-// Client + scope resolution
+// Client resolution
 // ---------------------------------------------------------------------------
 
 /**
@@ -59,7 +54,6 @@ interface TenkiScope {
  * call (create/getById/list/destroy).
  */
 const clients = new Map<string, TenkiSandbox>();
-const scopes = new Map<string, TenkiScope>();
 
 function resolveApiKey(config: TenkiConfig): string {
   const apiKey = config.apiKey ?? process.env.TENKI_API_KEY ?? process.env.TENKI_AUTH_TOKEN;
@@ -89,35 +83,6 @@ function getClient(config: TenkiConfig): TenkiSandbox {
     clients.set(key, client);
   }
   return client;
-}
-
-/**
- * Tenki sandboxes are created inside a workspace/project. When neither is
- * configured we resolve the key's identity once via whoAmI() and pick the
- * first workspace that has a project.
- */
-async function resolveScope(config: TenkiConfig, client: TenkiSandbox): Promise<TenkiScope> {
-  const workspaceId = config.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
-  const projectId = config.projectId ?? process.env.TENKI_PROJECT_ID;
-  if (workspaceId && projectId) return { workspaceId, projectId };
-
-  const key = clientKey(config);
-  const cached = scopes.get(key);
-  if (cached) return cached;
-
-  const identity = await client.whoAmI();
-  const workspace = identity.workspaces.find((w) => w.projects.length > 0);
-  const project = workspace?.projects[0];
-  if (!workspace || !project) {
-    throw new Error(
-      "Could not resolve a Tenki workspace/project for this API key.\n" +
-        "Pass them explicitly: tenki({ workspaceId, projectId })\n" +
-        "Or set TENKI_WORKSPACE_ID and TENKI_PROJECT_ID in your environment.",
-    );
-  }
-  const scope = { workspaceId: workspace.id, projectId: project.id };
-  scopes.set(key, scope);
-  return scope;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,11 +121,10 @@ function mapStatus(state: SessionState): SandboxInfo["status"] {
   }
 }
 
-function toCreateOptions(config: TenkiConfig, scope: TenkiScope, options?: CreateSandboxOptions): CreateOptions {
-  const opts: CreateOptions = {
-    workspaceId: scope.workspaceId,
-    projectId: scope.projectId,
-  };
+function toCreateOptions(config: TenkiConfig, options?: CreateSandboxOptions): CreateOptions {
+  const opts: CreateOptions = {};
+  const workspaceId = config.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
+  if (workspaceId) opts.workspaceId = workspaceId;
   if (options?.name) opts.name = options.name;
   if (options?.envs) opts.env = options.envs;
   if (options?.metadata) {
@@ -274,8 +238,7 @@ export const tenki = defineProvider<Session, TenkiConfig>({
     sandbox: {
       create: async (config, options) => {
         const client = getClient(config);
-        const scope = await resolveScope(config, client);
-        const session = await client.createAndWait(toCreateOptions(config, scope, options));
+        const session = await client.createAndWait(toCreateOptions(config, options));
         return { sandbox: rememberSession(session, config), sandboxId: session.id };
       },
 
@@ -326,7 +289,7 @@ export const tenki = defineProvider<Session, TenkiConfig>({
             cpuCores: sandbox.cpuCores,
             memoryMb: sandbox.memoryMb,
             diskSizeGb: sandbox.diskSizeGb,
-            projectId: sandbox.projectId,
+            workspaceId: sandbox.workspaceId,
             tags: sandbox.tags,
           },
         };
