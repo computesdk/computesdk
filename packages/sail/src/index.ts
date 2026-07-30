@@ -39,6 +39,7 @@ const PROVIDER = 'sail';
 const DEFAULT_APP = 'computesdk';
 const DEFAULT_SIZE: SailboxSize = 's';
 const GONE_STATUSES = new Set(['terminating', 'terminated']);
+const MAX_RESOLVED_CONFIGS = 32;
 
 interface ResolvedSailConfig {
   client: Client;
@@ -46,26 +47,48 @@ interface ResolvedSailConfig {
   appPromise?: Promise<App>;
 }
 
-const resolvedConfigs = new WeakMap<SailConfig, ResolvedSailConfig>();
+const resolvedConfigs = new Map<string, ResolvedSailConfig>();
 
-/** Resolve and cache the native client associated with one provider config. */
+/** Resolve and cache equivalent provider configs so their transports are shared. */
 function resolve(config: SailConfig): ResolvedSailConfig {
-  let entry = resolvedConfigs.get(config);
-  if (entry) return entry;
-
   const environment = resolveConfig();
-  if (!config.apiKey && !environment.apiKey) {
+  const apiKey = config.apiKey ?? environment.apiKey;
+  if (!apiKey) {
     throw new Error(
       'Missing Sail API key. Pass sail({ apiKey }) or set SAIL_API_KEY. ' +
         'Create a key at https://app.sailresearch.com.',
     );
   }
+  const appName = config.app ?? process.env.SAIL_APP ?? DEFAULT_APP;
+  const cacheKey = JSON.stringify([
+    apiKey,
+    appName,
+    environment.mode ?? null,
+    environment.apiUrl,
+    environment.sailboxApiUrl,
+    environment.imagebuilderUrl,
+    environment.ingressScheme,
+    environment.ingressBase,
+  ]);
+  let entry = resolvedConfigs.get(cacheKey);
+  if (entry) {
+    // Refresh insertion order so the bounded map behaves as an LRU cache.
+    resolvedConfigs.delete(cacheKey);
+    resolvedConfigs.set(cacheKey, entry);
+    return entry;
+  }
 
   entry = {
-    client: config.apiKey ? clientWithKey(config.apiKey) : Client.fromEnv(),
-    appName: config.app ?? process.env.SAIL_APP ?? DEFAULT_APP,
+    client: config.apiKey
+      ? clientWithKey(config.apiKey, environment)
+      : Client.fromEnv(),
+    appName,
   };
-  resolvedConfigs.set(config, entry);
+  resolvedConfigs.set(cacheKey, entry);
+  if (resolvedConfigs.size > MAX_RESOLVED_CONFIGS) {
+    const oldest = resolvedConfigs.keys().next().value;
+    if (oldest !== undefined) resolvedConfigs.delete(oldest);
+  }
   return entry;
 }
 
@@ -86,8 +109,7 @@ function resolveApp(config: SailConfig): Promise<App> {
 }
 
 /** Preserve connection settings resolved by the Sail SDK. */
-function clientWithKey(apiKey: string): Client {
-  const environment = resolveConfig();
+function clientWithKey(apiKey: string, environment: ReturnType<typeof resolveConfig>): Client {
   return Client.fromConfig({
     apiKey,
     mode: environment.mode ?? undefined,

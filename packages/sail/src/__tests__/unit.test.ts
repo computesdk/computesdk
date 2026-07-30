@@ -100,7 +100,7 @@ vi.mock('@sailresearch/sdk', () => {
   };
 });
 
-import { sail } from '../index';
+let sail: typeof import('../index').sail;
 
 function provider() {
   return sail({ app: 'demo', apiKey: 'key' });
@@ -114,7 +114,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   h.state.appMissing = false;
   h.state.createGate = undefined;
   h.state.createArgs = [];
@@ -126,19 +126,21 @@ beforeEach(() => {
   h.state.lsResult = [];
   h.state.notFoundOnGet = false;
   vi.clearAllMocks();
+  vi.resetModules();
+  ({ sail } = await import('../index'));
 });
 
 describe('sail provider', () => {
-  it('creates named Sailboxes and shares one app lookup', async () => {
+  it('creates named Sailboxes and shares one client and app lookup across providers', async () => {
     const sdk = await import('@sailresearch/sdk');
-    const compute = provider();
     const [first, second] = await Promise.all([
-      compute.sandbox.create({ name: 'first', size: 'l', memoryGib: 64 }),
-      compute.sandbox.create(),
+      provider().sandbox.create({ name: 'first', size: 'l', memoryGib: 64 }),
+      provider().sandbox.create(),
     ]);
 
     expect(first.sandboxId).toBe('sb_new');
     expect(second.sandboxId).toBe('sb_new');
+    expect(sdk.Client.fromConfig).toHaveBeenCalledTimes(1);
     expect(sdk.App.find).toHaveBeenCalledTimes(1);
     expect(h.state.createArgs[0]).toMatchObject({
       app: { id: 'app_demo', name: 'demo' },
