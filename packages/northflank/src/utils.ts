@@ -51,6 +51,8 @@ export interface NorthflankConfig {
   timeout?: number;
   /** Deploy from a Northflank build service instead of an external image */
   internalDeployment?: NorthflankInternalDeployment;
+  /** Ephemeral storage per container in MB (e.g. 5120 for 5 GiB). Maps to `deployment.storage.ephemeralStorage.storageSize` in the Northflank API. */
+  ephemeralStorageSize?: number;
 }
 
 export function prefix(config: NorthflankConfig): string {

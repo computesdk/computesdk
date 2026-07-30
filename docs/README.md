@@ -42,6 +42,7 @@ When you install a package like `@computesdk/e2b`, you get a factory function fo
 | `@computesdk/northflank`       | Northflank   |
 | `@computesdk/opencomputer`     | OpenComputer |
 | `@computesdk/runloop`          | Runloop      |
+| `@computesdk/sandbox0`         | Sandbox0     |
 | `@computesdk/superserve`       | Superserve   |
 | `@computesdk/tensorlake`       | Tensorlake   |
 | `@computesdk/upstash`          | Upstash      |
