@@ -287,7 +287,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^0.8.3
-        version: 0.8.3(@computesdk/daytona@1.7.32(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.52)(@computesdk/modal@1.9.4)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 0.8.3(@computesdk/daytona@1.7.32(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.52)(@computesdk/modal@1.9.4)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -323,8 +323,8 @@ importers:
   packages/beam:
     dependencies:
       '@beamcloud/beam-js':
-        specifier: ^1.0.13
-        version: 1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
+        specifier: ^1.0.17
+        version: 1.0.17(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -843,7 +843,7 @@ importers:
         version: link:../provider
       '@daytonaio/sdk':
         specifier: ^0.192.0
-        version: 0.192.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+        version: 0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2669,8 +2669,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@beamcloud/beam-js@1.0.13':
-    resolution: {integrity: sha512-y2DDUKNr2lK8mQbeSkeo1W6RMhTeLeZRyED8FfxjowLxYEj2QN3kgXxn2/v93OY1OCRW4mRYSe0+cHhpe65iqQ==}
+  '@beamcloud/beam-js@1.0.17':
+    resolution: {integrity: sha512-LcgLeUDYZajTOktXXwRiWH6waE7ikWdaM5PjVv0bctjEOxwwFuUEtEc2iyj3SYAXaCJaXDiWs1LSB5frIkzBhQ==}
     peerDependencies:
       typescript: ^5.0.0
 
@@ -5482,6 +5482,7 @@ packages:
 
   anchorbrowser@0.16.3:
     resolution: {integrity: sha512-slz85Zmj0T3XDOKLH8n7nxcLFHcvpPJInCHcysuOyUbP2sMAyhMwMS6LiS727WqnTMaVGx4p6KgJpIJ8+FWhlw==}
+    deprecated: 'anchorbrowser 0.x.x is deprecated. Upgrade to anchorbrowser@^1.0.0 — see the migration guide: https://github.com/anchorbrowser/AnchorBrowser-SDK-Typescript/blob/main/MIGRATION.md'
 
   ansi-colors@4.1.3:
     resolution: {integrity: sha512-/6w/C21Pm1A7aZitlI5Ni/2J6FFQN8i1Cvz3kHABAAbw93v/NlvKdVOqz7CCWz/3iv/JplRSEEZ83XION15ovw==}
@@ -9199,6 +9200,9 @@ packages:
     resolution: {integrity: sha512-4UEqdc2RYGHZc7Doyqkrqiln3p9X2DZVxaGbwhn2pi7MrRagKaOcIKe8L3OxYcbhXLgLFUS3zAYuQjKBQgmuNg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
 
+  yazl@3.3.1:
+    resolution: {integrity: sha512-BbETDVWG+VcMUle37k5Fqp//7SDOK2/1+T7X8TD96M3D9G8jK5VLUdQVdVjGi8im7FGkazX7kk5hkU8X4L5Bng==}
+
   yn@3.1.1:
     resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
     engines: {node: '>=6'}
@@ -9256,11 +9260,11 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.12
       '@jridgewell/trace-mapping': 0.3.29
 
-  '@arker-ai/sdk@0.8.3(@computesdk/daytona@1.7.32(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.52)(@computesdk/modal@1.9.4)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@0.8.3(@computesdk/daytona@1.7.32(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.52)(@computesdk/modal@1.9.4)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.32(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@computesdk/daytona': 1.7.32(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       '@computesdk/e2b': 1.7.52
       '@computesdk/modal': 1.9.4
       computesdk: link:packages/computesdk
@@ -9918,15 +9922,15 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@beamcloud/beam-js@1.0.13(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
+  '@beamcloud/beam-js@1.0.17(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
     dependencies:
-      archiver: 7.0.1
       axios: 1.18.1
       commander: 12.1.0
       ignore: 7.0.5
       strip-ansi: 7.2.0
       typescript: 5.8.3
-      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      yazl: 3.3.1
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -10250,10 +10254,10 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.32(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@computesdk/daytona@1.7.32(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
       '@computesdk/provider': 2.1.4
-      '@daytonaio/sdk': 0.192.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@daytonaio/sdk': 0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       computesdk: 4.1.4
     transitivePeerDependencies:
       - aws-crt
@@ -10359,7 +10363,7 @@ snapshots:
       - debug
       - supports-color
 
-  '@daytonaio/sdk@0.192.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@daytonaio/sdk@0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
       '@aws-sdk/client-s3': 3.1045.0
       '@aws-sdk/lib-storage': 3.1045.0(@aws-sdk/client-s3@3.1045.0)
@@ -10380,7 +10384,7 @@ snapshots:
       expand-tilde: 2.0.2
       fast-glob: 3.3.3
       form-data: 4.0.5
-      isomorphic-ws: 5.0.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      isomorphic-ws: 5.0.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       pathe: 2.0.3
       shell-quote: 1.8.3
       tar: 7.5.16
@@ -14710,7 +14714,7 @@ snapshots:
       type-fest: 4.41.0
       widest-line: 5.0.0
       wrap-ansi: 9.0.0
-      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yoga-layout: 3.2.1
     transitivePeerDependencies:
       - bufferutil
@@ -14830,9 +14834,9 @@ snapshots:
     dependencies:
       ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  isomorphic-ws@5.0.0(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
+  isomorphic-ws@5.0.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
     dependencies:
-      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3):
     dependencies:
@@ -14917,7 +14921,7 @@ snapshots:
       whatwg-encoding: 3.1.1
       whatwg-mimetype: 4.0.0
       whatwg-url: 14.2.0
-      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - bufferutil
@@ -15834,7 +15838,7 @@ snapshots:
 
   pyodide@0.28.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -17340,6 +17344,10 @@ snapshots:
       y18n: 5.0.8
       yargs-parser: 22.0.0
     optional: true
+
+  yazl@3.3.1:
+    dependencies:
+      buffer-crc32: 1.0.0
 
   yn@3.1.1: {}
 
