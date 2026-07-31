@@ -23,6 +23,8 @@ export interface ArkerConfig {
   region?: string;
   /** Golden source VM to fork on create(). Falls back to ARKER_SOURCE, then `ubuntu-small`. */
   source?: string;
+  /** Compute platforms to fork onto, e.g. `['graviton4']`. Falls back to ARKER_PLATFORMS (comma-separated). */
+  platforms?: string[];
 }
 
 const env = (key: string): string | undefined => {
@@ -42,38 +44,24 @@ function makeClient(config: ArkerConfig): Arker {
   });
 }
 
-const decoder = new TextDecoder();
-
 /** Single-quote a string for `sh -c`, escaping any embedded single quotes. */
 const singleQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
-/** Decode a run-status output field per its declared encoding. */
-const decodeOutput = (value: string, encoding: string): string =>
-  encoding === 'base64' ? Buffer.from(value, 'base64').toString('utf8') : value;
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * A run that outlives its synchronous window (default 30s) converts to a
- * background run; poll it to completion. The platform imposes no inner
- * timeout on the command itself, so an unbounded command is the caller's.
- */
-async function pollRunToCompletion(sandbox: VM, runId: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  let delayMs = 500;
-  for (;;) {
-    const run = await sandbox.getRun(runId);
-    if (run.state === 'completed') {
-      if (run.exit_code == null) throw new Error(`Arker run ${runId} completed without an exit code.`);
-      return {
-        stdout: decodeOutput(run.stdout, run.stdout_encoding),
-        stderr: decodeOutput(run.stderr, run.stderr_encoding),
-        exitCode: run.exit_code,
-      };
-    }
-    if (run.state === 'failed') throw new Error(`Arker run ${runId} failed: ${run.fail_reason ?? 'unknown reason'}`);
-    if (run.state === 'cancelled') throw new Error(`Arker run ${runId} was cancelled.`);
-    await sleep(delayMs);
-    delayMs = Math.min(delayMs * 2, 2000);
+/** Reject once `ms` elapses, so a caller's timeout is a real deadline. */
+async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Arker command timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer!);
+    // The losing run keeps going until its server-side kill bound; swallow its
+    // outcome so it cannot surface as an unhandled rejection.
+    promise.catch(() => {});
   }
 }
 
@@ -87,9 +75,16 @@ export const arker = defineProvider<VM, ArkerConfig>({
         const client = makeClient(config);
         const name = options?.name ?? null;
         
+        const platforms =
+          config.platforms ??
+          env('ARKER_PLATFORMS')?.split(',').map((p) => p.trim()).filter(Boolean);
+
         const vm = options?.snapshotId
           ? await client.fork({ sourceVmId: options.snapshotId, name })
-          : await client.fork(options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE, { name });
+          : await client.fork(options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE, {
+              name,
+              ...(platforms?.length ? { platforms } : {}),
+            });
 
         return { sandbox: vm, sandboxId: vm.id };
       },
@@ -145,27 +140,25 @@ export const arker = defineProvider<VM, ArkerConfig>({
         // a bare `nohup cd … && …` would run only `cd` under nohup.
         if (options?.background) fullCommand = `nohup sh -c ${singleQuote(fullCommand)} > /dev/null 2>&1 &`;
 
-        const runOptions: RunOptions = {};
-        if (options?.timeout) runOptions.timeout = options.timeout;
+        // `background: false` picks the SDK's synchronous overload, which polls a
+        // backgrounded run to completion itself and always yields CompletedRunResult.
+        const runOptions: RunOptions & { background?: false } = { background: false };
+        // ComputeSDK's timeout is milliseconds; Arker's is seconds (rounded up so a
+        // sub-second timeout stays non-zero — 0 means "no limit" to Arker).
+        if (options?.timeout) runOptions.timeout = Math.max(1, Math.ceil(options.timeout / 1000));
 
-        const result = await sandbox.run(fullCommand, runOptions);
-        if (result.type === 'completed') {
-          return {
-            stdout: decoder.decode(result.stdout),
-            stderr: decoder.decode(result.stderr),
-            exitCode: result.exitCode,
-            durationMs: Date.now() - startTime,
-          };
-        }
-        // The run outlived its synchronous window and converted to background.
-        // With an explicit timeout the window *was* the caller's deadline —
-        // cancel and report the timeout; otherwise poll to completion.
-        if (options?.timeout) {
-          await sandbox.cancelRun(result.runId).catch(() => {});
-          throw new Error(`Arker command timed out after ${options.timeout}ms and was cancelled (run ${result.runId}).`);
-        }
-        const polled = await pollRunToCompletion(sandbox, result.runId);
-        return { ...polled, durationMs: Date.now() - startTime };
+        const run = sandbox.run(fullCommand, runOptions);
+        // The run's `timeout` is a server-side kill bound, so an over-running command
+        // comes back as a completed run with a non-zero exit code rather than a
+        // rejection. RunCommandOptions.timeout is documented as a deadline, so reject
+        // once it passes; the kill bound above stops the command server-side.
+        const result = options?.timeout ? await withDeadline(run, options.timeout) : await run;
+        return {
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          durationMs: Date.now() - startTime,
+        };
       },
 
       getInfo: async (sandbox: VM): Promise<SandboxInfo> => ({
