@@ -59,7 +59,7 @@ await sandbox.destroy()
 The `isorun` SDK exposes a few capabilities that don't have slots in the standard ComputeSDK interface — fork (`sandbox.fork(n)`), hibernate/resume (`sandbox.hibernate()` / `sandbox.resume()`), and timeout reset (`sandbox.setTimeout(seconds)`). Reach the underlying instance via:
 
 ```typescript
-const native = sandbox.getInstance(sandbox) // returns the raw Sandbox
+const native = sandbox.getInstance() // returns the raw Sandbox
 await native.fork(4)
 await native.hibernate()
 ```
