@@ -85,6 +85,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
+| **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
@@ -289,6 +290,7 @@ npm install @computesdk/lightning        # Lightning AI provider
 npm install @computesdk/modal            # Modal provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/runloop          # Runloop provider
+npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
 npm install @computesdk/tensorlake       # Tensorlake provider

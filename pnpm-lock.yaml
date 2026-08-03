@@ -1797,6 +1797,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/sail:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@sailresearch/sdk':
+        specifier: ^0.5.1
+        version: 0.5.1
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/sandbox0:
     dependencies:
       '@computesdk/provider':
@@ -4837,6 +4874,52 @@ packages:
   '@runloop/api-client@1.24.0':
     resolution: {integrity: sha512-A/G9l2MlBz/u0Wr2RvCEJvh0+4Pn/8p15BTq9wQt3vEgEGLEk844+9bIKsfWbDvU/4JdRvIUND79Vu5qvKQzUQ==}
 
+  '@sailresearch/sdk-darwin-arm64@0.5.1':
+    resolution: {integrity: sha512-ShPaFm0+9rfs0vdfKPVW74Q00xNu4IJhVIDF3oACWtkcr3SQg783E4HdgORSUpU45zavXPheRbKCVNoE8cGm4A==}
+    engines: {node: '>=22'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@sailresearch/sdk-darwin-x64@0.5.1':
+    resolution: {integrity: sha512-WwFqv0ds1TTPoVCda03smYLZhPQiuWhsFzHJvK/TTAdEEe0+MtAnWKjCiRlD4C1unljvAOzVdfOvPjn3SqFtUw==}
+    engines: {node: '>=22'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@sailresearch/sdk-linux-arm64-gnu@0.5.1':
+    resolution: {integrity: sha512-ivgHDITXxMO+LMlbgeZH/ywxqaIr1ax8srzNhMQxPas7nsY16h6vLhPDHW5pzMVpPFGl8b3vHGp6UB9PUHImYQ==}
+    engines: {node: '>=22'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@sailresearch/sdk-linux-arm64-musl@0.5.1':
+    resolution: {integrity: sha512-dISiV2oDSEX8wLxG4vcK/nVKAhNOm+JbRKi3skdDZ3vg25k8RbIv0LkijD66zATEmL6cb650HRrWUwIVAaF+Eg==}
+    engines: {node: '>=22'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@sailresearch/sdk-linux-x64-gnu@0.5.1':
+    resolution: {integrity: sha512-eZKhrq3yDGaH/6L8JBsB94OKu80AgimyFybzpbzNr7r/jdqmBneqhq882sE4x7gWPiD45I2Kj/Sgn67ed1/Eug==}
+    engines: {node: '>=22'}
+    cpu: [x64]
+    os: [linux]
+
+  '@sailresearch/sdk-linux-x64-musl@0.5.1':
+    resolution: {integrity: sha512-4+iAMHK2v4T8+ZQ3YRnvtF6DW/DdWdIjWXMd4gu32Q5gkngp4njBs5Ccv7n2GqSdt2MU4b8RglNcfcGJIbN1yA==}
+    engines: {node: '>=22'}
+    cpu: [x64]
+    os: [linux]
+
+  '@sailresearch/sdk-win32-x64-msvc@0.5.1':
+    resolution: {integrity: sha512-WHIgGmWVaag7SHMWEwbDUrxXAE/Wjm5nRyu7uT0ssktp9cIJ45trMJWjHeH87CgdKstw+b1ptRb1YTT/7jq3AQ==}
+    engines: {node: '>=22'}
+    cpu: [x64]
+    os: [win32]
+
+  '@sailresearch/sdk@0.5.1':
+    resolution: {integrity: sha512-r9m2y/2pmdw2Ds6sw3DUSan9td5KfokiNHtXSBHYpVdaad/cRtI57krPcEebpNT9ALNKtQr6bmJvcOSTkk9awA==}
+    engines: {node: '>=22'}
+
   '@secure-exec/browser@0.1.1-rc.3':
     resolution: {integrity: sha512-syjym68632Yzba6Uu9tfnd2KGHTHoiOMTg3hnYRxs4t2RrTfzKm3fWOBVmOZHaZT7ECMCItXerDfYmH05tbHDg==}
 
@@ -5185,6 +5268,9 @@ packages:
 
   '@types/node@20.19.5':
     resolution: {integrity: sha512-M4CtoNkoQrYOD7O80KM7DjGdzwMvoXZ12SGUbxc0X1AK6gfBKjkJswW/B4MyTPMIuU0sodukEgj8CzIJKEAQXQ==}
+
+  '@types/node@22.20.1':
+    resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
   '@types/node@24.12.4':
     resolution: {integrity: sha512-GUUEShf+PBCGW2KaXwcIt3Yk+e3pkKwWKb9GSyM9WQVE+ep2jzmHdGsHzu4wgcZy5fN9FBdVzjpBQsYlpfpgLA==}
@@ -12041,6 +12127,39 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
+  '@sailresearch/sdk-darwin-arm64@0.5.1':
+    optional: true
+
+  '@sailresearch/sdk-darwin-x64@0.5.1':
+    optional: true
+
+  '@sailresearch/sdk-linux-arm64-gnu@0.5.1':
+    optional: true
+
+  '@sailresearch/sdk-linux-arm64-musl@0.5.1':
+    optional: true
+
+  '@sailresearch/sdk-linux-x64-gnu@0.5.1':
+    optional: true
+
+  '@sailresearch/sdk-linux-x64-musl@0.5.1':
+    optional: true
+
+  '@sailresearch/sdk-win32-x64-msvc@0.5.1':
+    optional: true
+
+  '@sailresearch/sdk@0.5.1':
+    dependencies:
+      '@types/node': 22.20.1
+    optionalDependencies:
+      '@sailresearch/sdk-darwin-arm64': 0.5.1
+      '@sailresearch/sdk-darwin-x64': 0.5.1
+      '@sailresearch/sdk-linux-arm64-gnu': 0.5.1
+      '@sailresearch/sdk-linux-arm64-musl': 0.5.1
+      '@sailresearch/sdk-linux-x64-gnu': 0.5.1
+      '@sailresearch/sdk-linux-x64-musl': 0.5.1
+      '@sailresearch/sdk-win32-x64-msvc': 0.5.1
+
   '@secure-exec/browser@0.1.1-rc.3':
     dependencies:
       '@secure-exec/core': 0.1.1-rc.3
@@ -12510,6 +12629,10 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/node@20.19.5':
+    dependencies:
+      undici-types: 6.21.0
+
+  '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
 
