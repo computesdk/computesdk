@@ -8,6 +8,7 @@
 import { Client, RunCloudError } from '@run-cloud/sdk';
 import type {
   Sandbox as NativeSandbox,
+  SandboxTunnel as NativeTunnel,
   Snapshot as NativeSnapshot,
 } from '@run-cloud/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
@@ -24,6 +25,8 @@ import type {
 const DEFAULT_IMAGE = 'runcloud/agent-base';
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const DEFAULT_TUNNEL_TTL_SECONDS = 3_600;
+/** Refresh a cached tunnel slightly before it expires. */
+const TUNNEL_REFRESH_MARGIN_MS = 30_000;
 
 export interface RunCloudConfig {
   /** API key. Falls back to RUN_CLOUD_API_KEY, then RUN_CLOUD_API_TOKEN. */
@@ -101,16 +104,7 @@ function createClient(config: RunCloudConfig): Client {
   });
 }
 
-interface NativeTunnel {
-  url: string;
-  expiresAt: string;
-}
-
-async function tunnelRequest(
-  config: RunCloudConfig,
-  sandboxId: string,
-  port: number,
-): Promise<NativeTunnel> {
+function resolveTunnelTtlSeconds(config: RunCloudConfig): number {
   const ttlSeconds =
     optionalNumber(
       'tunnelTtlSeconds',
@@ -121,40 +115,27 @@ async function tunnelRequest(
       'Run Cloud tunnelTtlSeconds must be an integer from 60 to 86400.',
     );
   }
-  const fetchImpl = config.fetch ?? globalThis.fetch;
-  if (!fetchImpl) {
-    throw new Error('Run Cloud public URLs require a fetch implementation.');
-  }
-  const apiUrl =
-    config.apiUrl || env('RUN_CLOUD_API_URL') || 'https://api.run.cloud';
-  const response = await fetchImpl(
-    `${apiUrl.replace(/\/$/, '')}/run-cloud/sandboxes/` +
-      `${encodeURIComponent(sandboxId)}/tunnels`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resolveApiKey(config)}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ port, ttlSeconds }),
-    },
-  );
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(
-      `Run Cloud tunnel creation failed (${response.status})` +
-        (detail ? `: ${detail}` : ''),
-    );
-  }
-  const tunnel = await response.json() as Partial<NativeTunnel>;
+  return ttlSeconds;
+}
+
+async function openTunnel(
+  client: Client,
+  config: RunCloudConfig,
+  sandboxId: string,
+  port: number,
+): Promise<NativeTunnel> {
+  const tunnel = await client.sandboxes.openTunnel(sandboxId, port, {
+    ttlSeconds: resolveTunnelTtlSeconds(config),
+  });
   if (
+    typeof tunnel?.id !== 'string' ||
     typeof tunnel.url !== 'string' ||
     !tunnel.url.startsWith('https://') ||
     typeof tunnel.expiresAt !== 'string'
   ) {
     throw new Error('Run Cloud tunnel creation returned an invalid response.');
   }
-  return { url: tunnel.url, expiresAt: tunnel.expiresAt };
+  return tunnel;
 }
 
 function isNotFound(error: unknown): boolean {
@@ -202,6 +183,10 @@ function optionalString(name: string, value: unknown): string | undefined {
   return value;
 }
 
+function generatedIdempotencyKey(): string {
+  return `computesdk_${globalThis.crypto.randomUUID()}`;
+}
+
 function abortError(signal: AbortSignal): Error {
   if (signal.reason instanceof Error) return signal.reason;
   const error = new Error('Run Cloud sandbox creation was aborted.');
@@ -227,12 +212,20 @@ function makeHandle(
       let pending = tunnels.get(port);
       if (pending) {
         const existing = await pending;
-        if (new Date(existing.expiresAt).getTime() > Date.now() + 30_000) {
+        if (
+          new Date(existing.expiresAt).getTime() >
+          Date.now() + TUNNEL_REFRESH_MARGIN_MS
+        ) {
           return existing.url;
         }
         tunnels.delete(port);
+        // Active tunnels are capped per sandbox and per organization, so
+        // release the expiring one rather than waiting out its TTL.
+        void client.sandboxes
+          .closeTunnel(sandbox.id, existing.id)
+          .catch(() => undefined);
       }
-      pending = tunnelRequest(config, sandbox.id, port);
+      pending = openTunnel(client, config, sandbox.id, port);
       tunnels.set(port, pending);
       try {
         return (await pending).url;
@@ -280,7 +273,7 @@ function createOptions(
     idempotencyKey: optionalString(
       'idempotencyKey',
       providerOptions?.idempotencyKey,
-    ),
+    ) ?? generatedIdempotencyKey(),
   };
 }
 
@@ -430,7 +423,6 @@ const _provider = defineProvider<
             milliCpu: sandbox.milliCpu,
             memMb: sandbox.memMb,
             hostId: sandbox.hostId,
-            warmStart: sandbox.warmStart,
             idlePauseSeconds: sandbox.idlePauseSeconds,
             timeoutSeconds: sandbox.timeoutSeconds,
             lastActiveAt: sandbox.lastActiveAt,

@@ -9,6 +9,8 @@ const listMock = vi.fn();
 const execMock = vi.fn();
 const readFileMock = vi.fn();
 const destroyMock = vi.fn();
+const openTunnelMock = vi.fn();
+const closeTunnelMock = vi.fn();
 const createSnapshotMock = vi.fn();
 const listSnapshotsMock = vi.fn();
 const deleteSnapshotMock = vi.fn();
@@ -34,6 +36,8 @@ vi.mock('@run-cloud/sdk', () => {
       exec: execMock,
       readFile: readFileMock,
       destroy: destroyMock,
+      openTunnel: openTunnelMock,
+      closeTunnel: closeTunnelMock,
       snapshot: createSnapshotMock,
     };
 
@@ -54,6 +58,20 @@ vi.mock('@run-cloud/sdk', () => {
   };
 });
 
+function nativeTunnel(overrides: Record<string, unknown> = {}) {
+  const hostname = `${'a'.repeat(32)}-tunnel.run.cloud`;
+  return {
+    id: 'tunnel_123',
+    sandboxId: 'sbx_123',
+    hostname,
+    url: `https://${hostname}`,
+    port: 3000,
+    expiresAt: new Date(Date.now() + 900_000).toISOString(),
+    createdAt: '2026-07-28T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function nativeSandbox(overrides: Record<string, unknown> = {}) {
   return {
     id: 'sbx_123',
@@ -65,7 +83,6 @@ function nativeSandbox(overrides: Record<string, unknown> = {}) {
     milliCpu: 2_000,
     memMb: 4_096,
     hostId: 'host_1',
-    warmStart: false,
     idlePauseSeconds: 300,
     timeoutSeconds: 600,
     createdAt: '2026-07-28T10:00:00.000Z',
@@ -90,6 +107,7 @@ describe('run-cloud provider', () => {
     });
     readFileMock.mockResolvedValue(new TextEncoder().encode('file-content'));
     destroyMock.mockResolvedValue(undefined);
+    closeTunnelMock.mockResolvedValue(undefined);
     createSnapshotMock.mockResolvedValue({
       id: 'snap_123',
       created_at: '2026-07-28T10:02:00.000Z',
@@ -191,7 +209,7 @@ describe('run-cloud provider', () => {
       region: undefined,
       name: undefined,
       orgId: undefined,
-      idempotencyKey: undefined,
+      idempotencyKey: expect.stringMatching(/^computesdk_[0-9a-f-]{36}$/),
     });
   });
 
@@ -304,7 +322,7 @@ describe('run-cloud provider', () => {
 
   it('refreshes native state in getInfo', async () => {
     getMock.mockResolvedValueOnce(
-      nativeSandbox({ state: 'paused', warmStart: true }),
+      nativeSandbox({ state: 'paused' }),
     );
     const sandbox = await runCloud({
       apiKey: 'rc_test',
@@ -324,7 +342,6 @@ describe('run-cloud provider', () => {
         image: 'runcloud/agent-base',
         milliCpu: 2_000,
         memMb: 4_096,
-        warmStart: true,
       }),
     });
   });
@@ -435,42 +452,52 @@ describe('run-cloud provider', () => {
   });
 
   it('opens and reuses an expiring tunnel without changing persistence', async () => {
-    const tunnelFetch = vi.fn(async () =>
-      new Response(JSON.stringify({
-        id: 'tunnel_123',
-        sandboxId: 'sbx_123',
-        hostname: `${'a'.repeat(32)}-tunnel.run.cloud`,
-        url: `https://${'a'.repeat(32)}-tunnel.run.cloud`,
-        port: 3000,
-        expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      }), {
-        status: 201,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+    const url = `https://${'a'.repeat(32)}-tunnel.run.cloud`;
+    openTunnelMock.mockResolvedValue(nativeTunnel({ url }));
     const sandbox = await runCloud({
       apiKey: 'rc_test',
-      apiUrl: 'https://api.example.test/',
-      fetch: tunnelFetch,
       tunnelTtlSeconds: 900,
     }).sandbox.create();
 
     const first = await sandbox.getUrl({ port: 3000 });
     const second = await sandbox.getUrl({ port: 3000 });
 
-    expect(first).toBe(`https://${'a'.repeat(32)}-tunnel.run.cloud`);
+    expect(first).toBe(url);
     expect(second).toBe(first);
-    expect(tunnelFetch).toHaveBeenCalledOnce();
-    expect(tunnelFetch).toHaveBeenCalledWith(
-      'https://api.example.test/run-cloud/sandboxes/sbx_123/tunnels',
-      expect.objectContaining({
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer rc_test',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ port: 3000, ttlSeconds: 900 }),
-      }),
+    expect(openTunnelMock).toHaveBeenCalledOnce();
+    expect(openTunnelMock).toHaveBeenCalledWith('sbx_123', 3000, {
+      ttlSeconds: 900,
+    });
+    expect(closeTunnelMock).not.toHaveBeenCalled();
+  });
+
+  it('closes a tunnel that is about to expire before opening its replacement', async () => {
+    openTunnelMock
+      .mockResolvedValueOnce(
+        nativeTunnel({
+          id: 'tunnel_expiring',
+          expiresAt: new Date(Date.now() + 5_000).toISOString(),
+        }),
+      )
+      .mockResolvedValueOnce(nativeTunnel({ id: 'tunnel_fresh' }));
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+
+    await sandbox.getUrl({ port: 3000 });
+    await sandbox.getUrl({ port: 3000 });
+
+    expect(openTunnelMock).toHaveBeenCalledTimes(2);
+    expect(closeTunnelMock).toHaveBeenCalledWith('sbx_123', 'tunnel_expiring');
+  });
+
+  it('rejects an out-of-range tunnel TTL before calling the API', async () => {
+    const sandbox = await runCloud({
+      apiKey: 'rc_test',
+      tunnelTtlSeconds: 30,
+    }).sandbox.create();
+
+    await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow(
+      /tunnelTtlSeconds must be an integer from 60 to 86400/,
     );
+    expect(openTunnelMock).not.toHaveBeenCalled();
   });
 });

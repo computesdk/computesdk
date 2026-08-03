@@ -45,7 +45,7 @@
   ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@run-cloud/sdk": "^0.7.0",
+    "@run-cloud/sdk": "^0.9.0",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

@@ -1732,8 +1732,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@run-cloud/sdk':
-        specifier: ^0.7.0
-        version: 0.7.0
+        specifier: ^0.9.0
+        version: 0.9.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4871,8 +4871,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@run-cloud/sdk@0.7.0':
-    resolution: {integrity: sha512-DJQc14G4X6xYhTmOjVXTzSSSGkpJGH3FWFEfh8W4WrpXKBdPuzxpDetbSq4XBSX/ADCk9Q9Ykh/Obslbcf8cOA==}
+  '@run-cloud/sdk@0.9.0':
+    resolution: {integrity: sha512-wBVUs3wZJzbcJBnNMxpJevn9TchWvzE+Z8iHjHfFDSyjGOLyR8cIj6eW/rDRsupXr6KzpKOmFDG4vPkemM9uYA==}
     engines: {node: '>=20'}
 
   '@runloop/api-client@1.24.0':
@@ -12045,7 +12045,12 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@run-cloud/sdk@0.7.0': {}
+  '@run-cloud/sdk@0.9.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+    dependencies:
+      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@runloop/api-client@1.24.0':
     dependencies:
