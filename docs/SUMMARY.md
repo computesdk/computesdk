@@ -32,6 +32,7 @@
   * [Lelantos](providers/lelantos.md)
   * [Lightning](providers/lightning.md)
   * [Modal](providers/modal.md)
+  * [Mosaic](providers/mosaic.md)
   * [Namespace](providers/namespace.md)
   * [Northflank](providers/northflank.md)
   * [OpenComputer](providers/opencomputer.md)

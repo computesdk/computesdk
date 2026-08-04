@@ -288,6 +288,7 @@ npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/lightning        # Lightning AI provider
 npm install @computesdk/modal            # Modal provider
+npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/runloop          # Runloop provider
 npm install @computesdk/sail             # Sail provider
@@ -322,6 +323,7 @@ See individual provider READMEs for details:
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
+- **[@computesdk/mosaic](./packages/mosaic)** - Firecracker-based sandbox environments
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
