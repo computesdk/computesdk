@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/mosaic",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Mosaic provider for ComputeSDK - Firecracker-based sandbox environments",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -13,7 +13,9 @@
       "require": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "clean": "rimraf dist",
