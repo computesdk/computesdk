@@ -9,6 +9,7 @@ import type {
 
 const PROVIDER = 'mosaic' as const;
 const DEFAULT_TIMEOUT_MS = 120_000;
+const COMMAND_HTTP_TIMEOUT_BUFFER_MS = 5_000;
 
 export interface MosaicConfig {
   /** Public or private MAR REST endpoint. Falls back to MOSAIC_API_URL. */
@@ -244,6 +245,9 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig>({
 
       runCommand: async (sandbox, command, options): Promise<CommandResult> => {
         const started = performance.now();
+        const httpTimeoutMs = options?.timeout
+          ? options.timeout + COMMAND_HTTP_TIMEOUT_BUFFER_MS
+          : undefined;
         const result = await request<MarExecResponse>(
           sandbox.config,
           `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/exec`,
@@ -254,7 +258,7 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig>({
               ...(options?.timeout ? { timeout_ms: options.timeout } : {}),
             }),
           },
-          options?.timeout,
+          httpTimeoutMs,
         );
         options?.onStdout?.(result.stdout);
         options?.onStderr?.(result.stderr);
