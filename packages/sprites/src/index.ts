@@ -105,7 +105,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         const token = sandbox._token;
         const baseUrl = sandbox._baseUrl;
         const name = sandbox.name;
-        const startTime = Date.now();
+        const startTime = performance.now();
 
         const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
         let shellCmd = command;
@@ -134,7 +134,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           });
 
           const raw = await res.text();
-          if (!res.ok) return { stdout: '', stderr: raw, exitCode: 1, durationMs: Date.now() - startTime };
+          if (!res.ok) return { stdout: '', stderr: raw, exitCode: 1, durationMs: Math.round(performance.now() - startTime) };
 
           const delimIdx = raw.lastIndexOf(delimiter);
           let output: string;
@@ -147,9 +147,9 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
             exitCode = 0;
           }
 
-          return { stdout: exitCode === 0 ? output : '', stderr: exitCode !== 0 ? output : '', exitCode, durationMs: Date.now() - startTime };
+          return { stdout: exitCode === 0 ? output : '', stderr: exitCode !== 0 ? output : '', exitCode, durationMs: Math.round(performance.now() - startTime) };
         } catch (error) {
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
+          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Math.round(performance.now() - startTime) };
         }
       },
 

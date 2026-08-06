@@ -90,14 +90,14 @@ export const tensorlake = defineProvider<
         };
 
         try {
-          const startTime = Date.now();
+          const startTime = performance.now();
           const instance = await Sandbox.create(params);
 
           const sandbox: TensorlakeSandboxContext = {
             config,
             sandbox: instance,
           };
-          const durationMs = Date.now() - startTime;
+          const durationMs = Math.round(performance.now() - startTime);
           return {
             sandbox,
             sandboxId: instance.sandboxId,
@@ -175,7 +175,7 @@ export const tensorlake = defineProvider<
         command: string,
         options?: RunCommandOptions,
       ): Promise<CommandResult> => {
-        const startTime = Date.now();
+        const startTime = performance.now();
 
         if (options?.background) {
           try {
@@ -192,7 +192,7 @@ export const tensorlake = defineProvider<
               stdout: "",
               stderr: error instanceof Error ? error.message : String(error),
               exitCode: 127,
-              durationMs: Date.now() - startTime,
+              durationMs: Math.round(performance.now() - startTime),
             };
           }
         }
@@ -205,7 +205,7 @@ export const tensorlake = defineProvider<
             ...(options?.cwd && { workingDir: options.cwd }),
           });
 
-          const durationMs = Date.now() - startTime;
+          const durationMs = Math.round(performance.now() - startTime);
           return {
             stdout: result.stdout,
             stderr: result.stderr,
@@ -217,7 +217,7 @@ export const tensorlake = defineProvider<
             stdout: "",
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127,
-            durationMs: Date.now() - startTime,
+            durationMs: Math.round(performance.now() - startTime),
           };
         }
       },

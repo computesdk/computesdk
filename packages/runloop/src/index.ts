@@ -250,7 +250,7 @@ export const runloop = defineProvider<
         command: string,
         options?: RunCommandOptions
       ): Promise<CommandResult> => {
-        const startTime = Date.now();
+        const startTime = performance.now();
         const devbox = sandbox;
         const client = sandbox.client;
 
@@ -282,7 +282,7 @@ export const runloop = defineProvider<
             stdout: executionResult.stdout || "",
             stderr: executionResult.stderr || "",
             exitCode: executionResult.exit_status || 0,
-            durationMs: Date.now() - startTime,
+            durationMs: Math.round(performance.now() - startTime),
           };
         } catch (error) {
           if (error instanceof Error && error.message.includes("Syntax error")) {

@@ -155,7 +155,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         command: string,
         options?: RunCommandOptions,
       ): Promise<CommandResult> => {
-        const startTime = Date.now();
+        const startTime = performance.now();
         try {
           let fullCommand = command;
           if (options?.background) {
@@ -173,14 +173,14 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
             stdout: result.stdout,
             stderr: result.stderr,
             exitCode: result.exitCode,
-            durationMs: Date.now() - startTime,
+            durationMs: Math.round(performance.now() - startTime),
           };
         } catch (error) {
           return {
             stdout: '',
             stderr: error instanceof Error ? error.message : String(error),
             exitCode: 127,
-            durationMs: Date.now() - startTime,
+            durationMs: Math.round(performance.now() - startTime),
           };
         }
       },
