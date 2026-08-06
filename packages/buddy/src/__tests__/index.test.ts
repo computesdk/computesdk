@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 
 import { buddy } from '../index';
-import { buildShellCommand } from '../commands';
+import { buildShellCommand, runCommand } from '../commands';
 import {
   apiUrlForRegion,
   isInstanceNotRunning,
@@ -120,6 +120,13 @@ describe('command building', () => {
 
   it('neutralises quotes in env values', () => {
     expect(buildShellCommand('echo hi', { env: { A: 'a"b' } })).not.toBe('export A="a"b" && echo hi');
+  });
+
+  it('rejects the outdated argument-array call shape', async () => {
+    await expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      runCommand({} as any, 'echo', ['hello-args'] as any),
+    ).rejects.toThrow(/not an argument array/);
   });
 });
 

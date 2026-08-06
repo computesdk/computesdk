@@ -45,6 +45,17 @@ export async function runCommand(
   command: string,
   options: BuddyRunCommandOptions = {},
 ): Promise<CommandResult> {
+  // `ADD-PROVIDER.md` still documents an older `runCommand(command, args)`
+  // shape. Called that way, the array arrives here as `options`, where only
+  // `cwd` and `env` are read — the arguments would be dropped silently and the
+  // bare command would still exit 0. Fail loudly instead.
+  if (Array.isArray(options)) {
+    throw new TypeError(
+      `runCommand takes a command line and an options object, not an argument array. `
+      + `Pass the arguments inside the command, e.g. '${command} ${options.join(' ')}'.`,
+    );
+  }
+
   const startedAt = Date.now();
   const runtime = options.runtime ?? 'BASH';
   const payload = runtime === 'BASH' ? buildShellCommand(command, options) : command;
