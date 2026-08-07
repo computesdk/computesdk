@@ -13,6 +13,8 @@ import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCo
 export interface DaytonaConfig {
   /** Daytona API key - if not provided, will fallback to DAYTONA_API_KEY environment variable */
   apiKey?: string;
+  /** Target region/location for Daytona sandboxes (e.g. 'us', 'eu'). Falls back to DAYTONA_TARGET. */
+  target?: string;
   /** Default runtime environment (e.g. 'python', 'node') */
   runtime?: string;
   /** Execution timeout in milliseconds */
@@ -22,27 +24,38 @@ export interface DaytonaConfig {
 /**
  * Create a Daytona provider instance using the factory pattern
  */
+function getDaytonaClient(config: DaytonaConfig, targetOverride?: string): Daytona {
+  const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
+
+  if (!apiKey) {
+    throw new Error(
+      `Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable. Get your API key from https://daytona.io/`
+    );
+  }
+
+  const target = targetOverride ?? config.target ?? (typeof process !== 'undefined' && process.env?.DAYTONA_TARGET);
+  const clientConfig: any = { apiKey };
+  if (target) {
+    clientConfig.target = target;
+  }
+
+  return new Daytona(clientConfig);
+}
+
 export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
   methods: {
     sandbox: {
       create: async (config: DaytonaConfig, options?: CreateSandboxOptions) => {
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
-
-        if (!apiKey) {
-          throw new Error(
-            `Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable. Get your API key from https://daytona.io/`
-          );
-        }
-
         const runtime = (options as any)?.runtime || config.runtime || 'node';
         const timeout = options?.timeout ?? config.timeout;
 
         try {
-          const daytona = new Daytona({ apiKey: apiKey });
+          const daytona = getDaytonaClient(config, (options as any)?.target);
 
           const {
             timeout: _timeout,
+            target: _target,
             envs,
             name,
             metadata,
@@ -102,9 +115,8 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       getById: async (config: DaytonaConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         try {
-          const daytona = new Daytona({ apiKey: apiKey });
+          const daytona = getDaytonaClient(config);
           const session = await daytona.get(sandboxId);
           return { sandbox: session, sandboxId };
         } catch (error) {
@@ -116,9 +128,8 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       list: async (config: DaytonaConfig) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         try {
-          const daytona = new Daytona({ apiKey: apiKey });
+          const daytona = getDaytonaClient(config);
           // daytona.list() returns an auto-paginating async iterator (offset-based
           // /api/sandbox/paginated pagination was retired in @daytonaio/sdk v0.180.0).
           const sandboxes = [];
@@ -132,9 +143,8 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       destroy: async (config: DaytonaConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         try {
-          const daytona = new Daytona({ apiKey: apiKey });
+          const daytona = getDaytonaClient(config);
           const sandbox = await daytona.get(sandboxId);
           await sandbox.delete();
         } catch (error) {
@@ -245,8 +255,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
 
     snapshot: {
       create: async (config: DaytonaConfig, sandboxId: string, options?: { name?: string }) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        const daytona = new Daytona({ apiKey: apiKey });
+        const daytona = getDaytonaClient(config);
         try {
           const snapshot = await (daytona as any).snapshot.create({
             workspaceId: sandboxId,
@@ -258,13 +267,11 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
       list: async (config: DaytonaConfig) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        const daytona = new Daytona({ apiKey: apiKey });
+        const daytona = getDaytonaClient(config);
         try { return await (daytona as any).snapshot.list(); } catch { return []; }
       },
       delete: async (config: DaytonaConfig, snapshotId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        const daytona = new Daytona({ apiKey: apiKey });
+        const daytona = getDaytonaClient(config);
         try { await (daytona as any).snapshot.delete(snapshotId); } catch { /* ignore */ }
       }
     },
@@ -274,13 +281,11 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         throw new Error('To create a template in Daytona, create a snapshot from a running sandbox using snapshot.create()');
       },
       list: async (config: DaytonaConfig) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        const daytona = new Daytona({ apiKey: apiKey });
+        const daytona = getDaytonaClient(config);
         try { return await (daytona as any).snapshot.list(); } catch { return []; }
       },
       delete: async (config: DaytonaConfig, templateId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        const daytona = new Daytona({ apiKey: apiKey });
+        const daytona = getDaytonaClient(config);
         try { await (daytona as any).snapshot.delete(templateId); } catch { /* ignore */ }
       }
     }
