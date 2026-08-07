@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <strong>A unified SDK for running code in remote sandboxes.</strong>
+  <strong>The open, multi-provider harness behind ComputeSDK Benchmarks.</strong>
 </div>
 
 <div align="center">
@@ -19,7 +19,7 @@
 
 ## What is ComputeSDK?
 
-ComputeSDK provides a consistent TypeScript interface for executing code in remote sandboxes. Whether you're using E2B for data science, Modal for GPU workloads, or Vercel for serverless functions - ComputeSDK provides one unified API.
+ComputeSDK is the open, multi-provider harness behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks). It provides one unified TypeScript interface for executing code in remote sandboxes, so benchmarks can run the same workload on every provider and you can build applications on the same API. Whether you're using E2B for data science, Modal for GPU workloads, or Vercel for serverless functions - ComputeSDK provides one unified API.
 
 **Perfect for:**
 - 🤖 AI code execution agents
