@@ -123,7 +123,9 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         };
         try {
           if (options?.background) {
-            await sandbox.commands.run(command, { ...nativeOptions, background: true as const });
+            // Native E2B background commands default to a 60s timeout. Detached work should run until
+            // explicitly stopped, so default to 0 (no timeout) when the caller did not specify one.
+            await sandbox.commands.run(command, { ...nativeOptions, timeoutMs: options?.timeout ?? 0, background: true as const });
             return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
           }
           const execution = await sandbox.commands.run(command, nativeOptions);
