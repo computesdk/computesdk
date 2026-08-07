@@ -3,7 +3,7 @@
  */
 
 import { Sandbox as E2BSandbox } from 'e2b';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -113,15 +113,20 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
       runCommand: async (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
+        const nativeOptions = {
+          ...(options?.user ? { user: options.user } : {}),
+          ...(options?.cwd ? { cwd: options.cwd } : {}),
+          ...(options?.env && Object.keys(options.env).length > 0 ? { envs: options.env } : {}),
+          ...(options?.timeout !== undefined ? { timeoutMs: options.timeout } : {}),
+          ...(options?.onStdout ? { onStdout: options.onStdout } : {}),
+          ...(options?.onStderr ? { onStderr: options.onStderr } : {}),
+        };
         try {
-          let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
+          if (options?.background) {
+            await sandbox.commands.run(command, { ...nativeOptions, background: true as const });
+            return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
           }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          const execution = await sandbox.commands.run(fullCommand, { timeoutMs: options?.timeout });
+          const execution = await sandbox.commands.run(command, nativeOptions);
           return { stdout: execution.stdout, stderr: execution.stderr, exitCode: execution.exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           const result = (error as { result?: E2BExecutionResult })?.result;
