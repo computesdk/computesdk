@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { APIError, Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type {
   CommandResult,
@@ -55,16 +55,24 @@ const NAME_PREFIX = 'computesdk-';
 const OWNER_TAG = 'computesdk';
 const OWNER_VALUE = 'vercel';
 const MAX_METADATA_TAGS = 4;
+const DEFAULT_DAEMON_SSE_PORT = 38989;
 
 function isNotFound(error: unknown): boolean {
   return error instanceof APIError && error.response.status === 404;
 }
 
 function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePort?: number | false): number[] {
-  const daemonPort = daemonSsePort === false ? undefined : (daemonSsePort ?? undefined);
+  const daemonPort = daemonSsePort === false ? undefined : (daemonSsePort ?? DEFAULT_DAEMON_SSE_PORT);
   const merged = [...(primary ?? fallback ?? [])];
   if (typeof daemonPort === 'number') merged.push(daemonPort);
   return Array.from(new Set(merged.filter((port) => Number.isInteger(port) && port > 0 && port <= 65535)));
+}
+
+function resolveRuntime(runtime?: string): string {
+  if (!runtime) return 'node24';
+  if (runtime === 'node') return 'node24';
+  if (runtime === 'python') return 'python3.13';
+  return runtime;
 }
 
 function mapTags(metadata: Record<string, unknown> = {}): Record<string, string> {
@@ -124,16 +132,17 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
 
         const source =
           options?.source ??
-          (options?.snapshotId ? { type: 'snapshot' as const, snapshotId: options.snapshotId } : undefined);
+          (options?.snapshotId ? { type: 'snapshot' as const, snapshotId: options.snapshotId } : undefined) ??
+          (options?.templateId ? { type: 'snapshot' as const, snapshotId: options.templateId } : undefined);
 
         if (source) {
           createParams.source = source;
         } else {
-          const image = options?.image ?? options?.templateId ?? config.image;
+          const image = options?.image ?? config.image;
           if (image) {
             createParams.image = image;
           } else {
-            createParams.runtime = config.runtime ?? 'node24';
+            createParams.runtime = resolveRuntime(options?.runtime ?? config.runtime);
           }
         }
 
@@ -152,7 +161,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       },
 
       list: async (_config: VercelConfig) => {
-        const paginator = await VercelSandbox.list({ namePrefix: NAME_PREFIX });
+        const paginator = await VercelSandbox.list({ tags: { [OWNER_TAG]: OWNER_VALUE } });
         const records = await paginator.toArray();
         const results = await Promise.all(
           records.map(async (record: { name: string }) => {
@@ -302,7 +311,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           path: string,
           runCommand: (sandbox: VercelSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
         ): Promise<FileEntry[]> => {
-          const response = await runCommand(sandbox, `ls -la "${path}"`);
+          const response = await runCommand(sandbox, `ls -la "${escapeShellArg(path)}"`);
           if (response.exitCode !== 0) throw new Error(`Directory not found or cannot be read: ${path}`);
           const lines = response.stdout.split('\n').filter((l: string) => l.trim());
           const entries: FileEntry[] = [];
@@ -325,7 +334,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           path: string,
           runCommand: (sandbox: VercelSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
         ): Promise<boolean> => {
-          const response = await runCommand(sandbox, `test -e "${path}"`);
+          const response = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`);
           return response.exitCode === 0;
         },
         remove: async (
@@ -333,7 +342,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           path: string,
           runCommand: (sandbox: VercelSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
         ): Promise<void> => {
-          const response = await runCommand(sandbox, `rm -rf "${path}"`);
+          const response = await runCommand(sandbox, `rm -rf "${escapeShellArg(path)}"`);
           if (response.exitCode !== 0) throw new Error(`Failed to remove: ${path}`);
         },
       },

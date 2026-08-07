@@ -120,16 +120,14 @@ jobs:
     - name: Run Vercel Integration Tests
       if: matrix.provider == 'vercel'
       env:
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        VERCEL_OIDC_TOKEN: ${{ secrets.VERCEL_OIDC_TOKEN }}
         COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
       run: |
-         if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_TEAM_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+         if [ -n "$VERCEL_OIDC_TOKEN" ]; then
            echo "Running Vercel integration tests with real API..."
            pnpm --filter @computesdk/vercel test
          else
-           echo "Skipping Vercel integration tests - missing required secrets"
+           echo "Skipping Vercel integration tests - missing VERCEL_OIDC_TOKEN"
          fi
         
     - name: Run Daytona Integration Tests
@@ -208,9 +206,7 @@ jobs:
         COMPUTESDK_INTEGRATION: "1"
         TEST_PROVIDER: ${{ matrix.provider }}
         E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        VERCEL_OIDC_TOKEN: ${{ secrets.VERCEL_OIDC_TOKEN }}
         DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
         MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -226,8 +222,8 @@ jobs:
             fi
             ;;
           vercel)
-            if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_TEAM_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-              echo "Skipping computesdk integration for vercel - missing Vercel credentials"
+            if [ -z "$VERCEL_OIDC_TOKEN" ]; then
+              echo "Skipping computesdk integration for vercel - missing VERCEL_OIDC_TOKEN"
               exit 0
             fi
             ;;
