@@ -71,11 +71,10 @@ function getProviderConfig(provider: SupportedProvider): Record<string, string> 
         apiKey: requireEnv('E2B_API_KEY'),
       };
     case 'vercel':
-      return {
-        token: requireEnv('VERCEL_TOKEN'),
-        teamId: requireEnv('VERCEL_TEAM_ID'),
-        projectId: requireEnv('VERCEL_PROJECT_ID'),
-      };
+      // V2 authenticates via OIDC/environment credentials; the provider reads
+      // VERCEL_OIDC_TOKEN directly. Old token/team/project config is ignored.
+      requireEnv('VERCEL_OIDC_TOKEN');
+      return {};
     case 'daytona':
       return {
         apiKey: requireEnv('DAYTONA_API_KEY'),
