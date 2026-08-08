@@ -89,7 +89,11 @@ interface RunCloudConfig {
 - `idlePauseSeconds` is seconds; set it to `0` to disable automatic pause.
 - `templateId` and `image` both select a registered Run Cloud OCI image.
 - `snapshotId` restores a previously created Run Cloud snapshot.
-- Per-create `cpu`, `memory`, `disk`, `idlePauseSeconds`, `timeoutSeconds`, `region`, `name`, `orgId`, and `idempotencyKey` override provider defaults.
+- Fresh creates accept per-create `cpu`, `memory`, `disk`, `idlePauseSeconds`,
+  `timeoutSeconds`, `region`, `name`, `orgId`, and `idempotencyKey` overrides.
+- Snapshot restores accept `cpu`, `memory`, `disk`, `timeoutSeconds`, `region`,
+  and `name` overrides. Options the restore API cannot apply are rejected
+  instead of being silently ignored.
 
 Run Cloud does not currently support persistent sandbox-level `envs`. Pass command-scoped variables with:
 
@@ -103,7 +107,7 @@ await sandbox.runCommand('echo "$MODEL"', {
 
 | Method | Supported | Notes |
 |---|---|---|
-| `create` | ✅ | Fresh image boot or snapshot restore; configurable CPU, memory, disk, region, idle pause, and lifetime. |
+| `create` | ✅ | Fresh image boot or snapshot restore; restore-safe overrides are validated and applied. |
 | `getById` | ✅ | Returns `null` when the sandbox does not exist. |
 | `list` | ✅ | Lists running sandboxes visible to the API key. |
 | `destroy` | ✅ | Idempotent when the sandbox is already gone. |

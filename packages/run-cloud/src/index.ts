@@ -218,43 +218,65 @@ function makeHandle(
         ) {
           return existing.url;
         }
-        tunnels.delete(port);
-        // Active tunnels are capped per sandbox and per organization, so
-        // release the expiring one rather than waiting out its TTL.
-        void client.sandboxes
-          .closeTunnel(sandbox.id, existing.id)
-          .catch(() => undefined);
+
+        const current = tunnels.get(port);
+        if (current === pending) {
+          // Active tunnels are capped per sandbox and per organization. Share
+          // one refresh and wait for the old slot to be released before opening
+          // its replacement.
+          const refresh = (async () => {
+            await client.sandboxes
+              .closeTunnel(sandbox.id, existing.id)
+              .catch(() => undefined);
+            return openTunnel(client, config, sandbox.id, port);
+          })();
+          tunnels.set(port, refresh);
+          pending = refresh;
+        } else if (current) {
+          pending = current;
+        }
+      } else {
+        pending = openTunnel(client, config, sandbox.id, port);
+        tunnels.set(port, pending);
       }
-      pending = openTunnel(client, config, sandbox.id, port);
-      tunnels.set(port, pending);
+
       try {
         return (await pending).url;
       } catch (error) {
-        tunnels.delete(port);
+        if (tunnels.get(port) === pending) tunnels.delete(port);
         throw error;
       }
     },
   };
 }
 
+function rejectSandboxEnvs(options?: CreateSandboxOptions): void {
+  if (!options?.envs || Object.keys(options.envs).length === 0) return;
+  throw new Error(
+    'Run Cloud does not support sandbox-level envs yet. ' +
+      'Pass environment variables to sandbox.runCommand(..., { env }).',
+  );
+}
+
+function resolveTimeoutSeconds(
+  config: RunCloudConfig,
+  options?: CreateSandboxOptions,
+): number | undefined {
+  const providerOptions = options as Record<string, unknown> | undefined;
+  return providerOptions?.timeoutSeconds === undefined
+    ? millisecondsToSeconds('timeout', options?.timeout ?? config.timeout)
+    : optionalNumber('timeoutSeconds', providerOptions.timeoutSeconds, {
+        allowZero: true,
+      });
+}
+
 function createOptions(
   config: RunCloudConfig,
   options?: CreateSandboxOptions,
 ) {
-  if (options?.envs && Object.keys(options.envs).length > 0) {
-    throw new Error(
-      'Run Cloud does not support sandbox-level envs yet. ' +
-        'Pass environment variables to sandbox.runCommand(..., { env }).',
-    );
-  }
+  rejectSandboxEnvs(options);
 
   const providerOptions = options as Record<string, unknown> | undefined;
-  const timeoutSeconds =
-    providerOptions?.timeoutSeconds === undefined
-      ? millisecondsToSeconds('timeout', options?.timeout ?? config.timeout)
-      : optionalNumber('timeoutSeconds', providerOptions.timeoutSeconds, {
-          allowZero: true,
-        });
 
   return {
     image: options?.image || options?.templateId || config.image || DEFAULT_IMAGE,
@@ -266,7 +288,7 @@ function createOptions(
       providerOptions?.idlePauseSeconds ?? config.idlePauseSeconds,
       { allowZero: true },
     ),
-    timeoutSeconds,
+    timeoutSeconds: resolveTimeoutSeconds(config, options),
     region: options?.region ?? config.region,
     name: options?.name,
     orgId: optionalString('orgId', providerOptions?.orgId ?? config.orgId),
@@ -274,6 +296,54 @@ function createOptions(
       'idempotencyKey',
       providerOptions?.idempotencyKey,
     ) ?? generatedIdempotencyKey(),
+  };
+}
+
+function snapshotRestoreOptions(
+  config: RunCloudConfig,
+  options: CreateSandboxOptions,
+) {
+  rejectSandboxEnvs(options);
+  const providerOptions = options as Record<string, unknown>;
+  const unsupported: string[] = [];
+
+  if (options.image !== undefined || options.templateId !== undefined) {
+    unsupported.push('image/templateId');
+  }
+  if (
+    providerOptions.idlePauseSeconds !== undefined ||
+    config.idlePauseSeconds !== undefined
+  ) {
+    optionalNumber(
+      'idlePauseSeconds',
+      providerOptions.idlePauseSeconds ?? config.idlePauseSeconds,
+      { allowZero: true },
+    );
+    unsupported.push('idlePauseSeconds');
+  }
+  if (providerOptions.orgId !== undefined || config.orgId !== undefined) {
+    optionalString('orgId', providerOptions.orgId ?? config.orgId);
+    unsupported.push('orgId');
+  }
+  if (providerOptions.idempotencyKey !== undefined) {
+    optionalString('idempotencyKey', providerOptions.idempotencyKey);
+    unsupported.push('idempotencyKey');
+  }
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Run Cloud snapshot restores do not support ${unsupported.join(', ')}.`,
+    );
+  }
+
+  return {
+    restore: {
+      name: options.name,
+      region: options.region ?? config.region,
+      cpu: optionalNumber('cpu', options.cpu ?? config.cpu),
+      memory: optionalNumber('memory', options.memory ?? config.memory),
+      disk: optionalNumber('disk', providerOptions.disk ?? config.disk),
+    },
+    timeoutSeconds: resolveTimeoutSeconds(config, options),
   };
 }
 
@@ -314,10 +384,22 @@ async function createSandbox(
   let sandbox: NativeSandbox;
 
   if (options?.snapshotId) {
-    sandbox = await client.snapshots.restore(options.snapshotId, {
-      name: options.name,
-      region: options.region ?? config.region,
-    });
+    const restoreOptions = snapshotRestoreOptions(config, options);
+    sandbox = await client.snapshots.restore(
+      options.snapshotId,
+      restoreOptions.restore,
+    );
+    if (restoreOptions.timeoutSeconds !== undefined) {
+      try {
+        sandbox = await client.sandboxes.setTimeout(
+          sandbox.id,
+          restoreOptions.timeoutSeconds,
+        );
+      } catch (error) {
+        await client.sandboxes.destroy(sandbox.id).catch(() => undefined);
+        throw error;
+      }
+    }
   } else {
     sandbox = await client.sandboxes.create(createOptions(config, options));
   }

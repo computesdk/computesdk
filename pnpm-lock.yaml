@@ -1766,8 +1766,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@run-cloud/sdk':
-        specifier: ^0.9.0
-        version: 0.9.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.15.0
+        version: 0.15.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4987,8 +4987,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@run-cloud/sdk@0.9.0':
-    resolution: {integrity: sha512-wBVUs3wZJzbcJBnNMxpJevn9TchWvzE+Z8iHjHfFDSyjGOLyR8cIj6eW/rDRsupXr6KzpKOmFDG4vPkemM9uYA==}
+  '@run-cloud/sdk@0.15.0':
+    resolution: {integrity: sha512-E0RZ0fArFX32R88mOq5w4nmBb2LOz9UB1gGgOCVo3b08Ly90IuyTYarh4VonHj5b/UtP5WA0sorWYvvIVaPtKg==}
     engines: {node: '>=20'}
 
   '@runloop/api-client@1.24.0':
@@ -5422,6 +5422,9 @@ packages:
 
   '@types/tedious@4.0.14':
     resolution: {integrity: sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@6.21.0':
     resolution: {integrity: sha512-oy9+hTPCUFpngkEZUSzbf9MxI65wbKFoQYsgPdILTfbUldp5ovUuphZVe4i30emU9M/kP+T64Di0mxl7dSw3MA==}
@@ -12267,9 +12270,10 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@run-cloud/sdk@0.9.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@run-cloud/sdk@0.15.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@types/ws': 8.18.1
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -12837,6 +12841,10 @@ snapshots:
     dependencies:
       '@types/node': 20.19.41
     optional: true
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 20.19.41
 
   '@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:

@@ -9,6 +9,7 @@ const listMock = vi.fn();
 const execMock = vi.fn();
 const readFileMock = vi.fn();
 const destroyMock = vi.fn();
+const setTimeoutMock = vi.fn();
 const openTunnelMock = vi.fn();
 const closeTunnelMock = vi.fn();
 const createSnapshotMock = vi.fn();
@@ -36,6 +37,7 @@ vi.mock('@run-cloud/sdk', () => {
       exec: execMock,
       readFile: readFileMock,
       destroy: destroyMock,
+      setTimeout: setTimeoutMock,
       openTunnel: openTunnelMock,
       closeTunnel: closeTunnelMock,
       snapshot: createSnapshotMock,
@@ -107,6 +109,9 @@ describe('run-cloud provider', () => {
     });
     readFileMock.mockResolvedValue(new TextEncoder().encode('file-content'));
     destroyMock.mockResolvedValue(undefined);
+    setTimeoutMock.mockImplementation(async () =>
+      nativeSandbox({ id: 'sbx_restored' }),
+    );
     closeTunnelMock.mockResolvedValue(undefined);
     createSnapshotMock.mockResolvedValue({
       id: 'snap_123',
@@ -213,31 +218,62 @@ describe('run-cloud provider', () => {
     });
   });
 
-  it('restores a ComputeSDK snapshot instead of creating a fresh sandbox', async () => {
+  it('validates and forwards supported options when restoring a snapshot', async () => {
     const sandbox = await runCloud({
       apiKey: 'rc_test',
       region: 'hel1',
+      cpu: 1,
+      memory: 1_024,
+      disk: 20,
+      timeout: 120_000,
     }).sandbox.create({
       snapshotId: 'snap_123',
       name: 'restored',
+      cpu: 2,
+      memory: 4_096,
+      disk: 40,
+      timeoutSeconds: 300,
     });
 
     expect(restoreSnapshotMock).toHaveBeenCalledWith('snap_123', {
       name: 'restored',
       region: 'hel1',
+      cpu: 2,
+      memory: 4_096,
+      disk: 40,
     });
+    expect(setTimeoutMock).toHaveBeenCalledWith('sbx_restored', 300);
     expect(createMock).not.toHaveBeenCalled();
     expect(sandbox.sandboxId).toBe('sbx_restored');
   });
 
-  it('rejects sandbox-level envs with an actionable alternative', async () => {
+  it('rejects options that Run Cloud cannot apply to snapshot restores', async () => {
     await expect(
       runCloud({ apiKey: 'rc_test' }).sandbox.create({
-        envs: { TOKEN: 'secret' },
+        snapshotId: 'snap_123',
+        idlePauseSeconds: 60,
+        orgId: 'org_123',
+        idempotencyKey: 'restore_123',
       }),
     ).rejects.toThrow(
-      'Pass environment variables to sandbox.runCommand(..., { env }).',
+      'snapshot restores do not support idlePauseSeconds, orgId, idempotencyKey',
     );
+    expect(restoreSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects sandbox-level envs with an actionable alternative', async () => {
+    const provider = runCloud({ apiKey: 'rc_test' });
+    for (const snapshotId of [undefined, 'snap_123']) {
+      await expect(
+        provider.sandbox.create({
+          snapshotId,
+          envs: { TOKEN: 'secret' },
+        }),
+      ).rejects.toThrow(
+        'Pass environment variables to sandbox.runCommand(..., { env }).',
+      );
+    }
+    expect(restoreSnapshotMock).not.toHaveBeenCalled();
   });
 
   it('runs commands with cwd, env, and timeout', async () => {
@@ -471,7 +507,13 @@ describe('run-cloud provider', () => {
     expect(closeTunnelMock).not.toHaveBeenCalled();
   });
 
-  it('closes a tunnel that is about to expire before opening its replacement', async () => {
+  it('awaits tunnel closure before opening its replacement', async () => {
+    let finishClosing: (() => void) | undefined;
+    closeTunnelMock.mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        finishClosing = resolve;
+      }),
+    );
     openTunnelMock
       .mockResolvedValueOnce(
         nativeTunnel({
@@ -483,10 +525,50 @@ describe('run-cloud provider', () => {
     const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
 
     await sandbox.getUrl({ port: 3000 });
-    await sandbox.getUrl({ port: 3000 });
+    const refreshing = sandbox.getUrl({ port: 3000 });
+
+    await vi.waitFor(() => expect(closeTunnelMock).toHaveBeenCalledOnce());
+    expect(openTunnelMock).toHaveBeenCalledOnce();
+    finishClosing?.();
+    await refreshing;
 
     expect(openTunnelMock).toHaveBeenCalledTimes(2);
     expect(closeTunnelMock).toHaveBeenCalledWith('sbx_123', 'tunnel_expiring');
+  });
+
+  it('shares one replacement tunnel across simultaneous refreshes', async () => {
+    let finishClosing: (() => void) | undefined;
+    closeTunnelMock.mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        finishClosing = resolve;
+      }),
+    );
+    openTunnelMock
+      .mockResolvedValueOnce(
+        nativeTunnel({
+          id: 'tunnel_expiring',
+          expiresAt: new Date(Date.now() + 5_000).toISOString(),
+        }),
+      )
+      .mockResolvedValueOnce(
+        nativeTunnel({
+          id: 'tunnel_fresh',
+          url: `https://${'b'.repeat(32)}-tunnel.run.cloud`,
+        }),
+      );
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+
+    await sandbox.getUrl({ port: 3000 });
+    const firstRefresh = sandbox.getUrl({ port: 3000 });
+    const secondRefresh = sandbox.getUrl({ port: 3000 });
+
+    await vi.waitFor(() => expect(closeTunnelMock).toHaveBeenCalledOnce());
+    finishClosing?.();
+    const urls = await Promise.all([firstRefresh, secondRefresh]);
+
+    expect(urls[0]).toBe(urls[1]);
+    expect(closeTunnelMock).toHaveBeenCalledOnce();
+    expect(openTunnelMock).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an out-of-range tunnel TTL before calling the API', async () => {

@@ -98,7 +98,11 @@ interface RunCloudConfig {
 
 `cpu` accepts fractional vCPUs, `memory` uses MiB, and `disk` uses GiB. `timeout` and `commandTimeout` use milliseconds; `idlePauseSeconds` and `tunnelTtlSeconds` use seconds.
 
-Per-create `templateId` or `image`, `snapshotId`, `cpu`, `memory`, `disk`, `idlePauseSeconds`, `timeoutSeconds`, `region`, `name`, `orgId`, and `idempotencyKey` override provider defaults.
+Fresh creates accept per-create `templateId` or `image`, `cpu`, `memory`,
+`disk`, `idlePauseSeconds`, `timeoutSeconds`, `region`, `name`, `orgId`, and
+`idempotencyKey` overrides. Snapshot restores accept `cpu`, `memory`, `disk`,
+`timeoutSeconds`, `region`, and `name` overrides; options the restore API cannot
+apply are rejected instead of being silently ignored.
 
 Sandbox-level environment variables are not yet persisted by Run Cloud. Pass command-scoped variables through `runCommand`:
 
