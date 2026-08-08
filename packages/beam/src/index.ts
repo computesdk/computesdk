@@ -77,6 +77,21 @@ function sandboxCacheKey(sandboxConfig: any): string {
 
 const MAX_SANDBOX_CACHE_ENTRIES = 32;
 const sandboxCache = new Map<string, Sandbox>();
+const sandboxReadiness = new WeakMap<SandboxInstance, Promise<void>>();
+
+function ensureSandboxReady(sandbox: SandboxInstance): Promise<void> {
+  const pending = sandboxReadiness.get(sandbox);
+  if (pending) return pending;
+
+  const readiness = Sandbox.connect(sandbox.containerId)
+    .then(() => undefined)
+    .catch((error) => {
+      sandboxReadiness.delete(sandbox);
+      throw error;
+    });
+  sandboxReadiness.set(sandbox, readiness);
+  return readiness;
+}
 
 function getCachedSandbox(cacheKey: string, sandboxConfig: any): Sandbox {
   const cachedSandbox = sandboxCache.get(cacheKey);
@@ -156,7 +171,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
           cacheKey = sandboxCacheKey(sandboxConfig);
           const sandbox = getCachedSandbox(cacheKey, sandboxConfig);
-          const instance = await sandbox.create();
+          const instance = await sandbox.create({ waitForReady: false });
           return { sandbox: instance, sandboxId: instance.containerId };
         } catch (error) {
           if (cacheKey) sandboxCache.delete(cacheKey);
@@ -186,8 +201,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         configureBeamOpts(config);
         if (!beamOpts.token) return;
         try {
-          const instance = await Sandbox.connect(sandboxId);
-          await instance.terminate();
+          await Sandbox.terminate(sandboxId);
         } catch { /* Sandbox might already be destroyed */ }
       },
 
@@ -207,6 +221,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             { wait: true } as Parameters<SandboxInstance['exec']>[1],
           );
           await proc.wait();
+          sandboxReadiness.set(sandbox, Promise.resolve());
           const [stdoutStr, stderrStr] = await Promise.all([proc.stdout.read(), proc.stderr.read()]);
           return { stdout: stdoutStr || '', stderr: stderrStr || '', exitCode: proc.exitCode || 0, durationMs: Date.now() - startTime };
         } catch (error) {
@@ -242,6 +257,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
       getUrl: async (sandbox: SandboxInstance, options: { port: number; protocol?: string }): Promise<string> => {
         try {
+          await ensureSandboxReady(sandbox);
           return await sandbox.exposePort(options.port);
         } catch (error) {
           throw new Error(`Failed to get Beam URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`);
@@ -264,6 +280,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (result.exitCode !== 0) throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
         },
         readdir: async (sandbox: SandboxInstance, path: string, _runCommand: RunCommandFn): Promise<FileEntry[]> => {
+          await ensureSandboxReady(sandbox);
           const files = await sandbox.fs.listFiles(path);
           return files.map((file: any) => ({
             name: file.name,

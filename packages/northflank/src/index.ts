@@ -78,6 +78,8 @@ interface NorthflankCreateOptions extends CreateSandboxOptions {
   ports?: NorthflankPortInput[];
   deploymentPlan?: string;
   internalDeployment?: NorthflankInternalDeployment;
+  /** Ephemeral storage per container in MB — overrides config.ephemeralStorageSize */
+  ephemeralStorageSize?: number;
 }
 
 function readCreateOptions(options?: CreateSandboxOptions): NorthflankCreateOptions {
@@ -189,6 +191,11 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           const explicitImage = opts.image ?? config.image;
           const imagePath = explicitImage ?? imageForRuntime(runtime);
           deployment.external = { imagePath };
+        }
+
+        const ephemeralStorageSize = opts.ephemeralStorageSize ?? config.ephemeralStorageSize;
+        if (ephemeralStorageSize != null) {
+          deployment.storage = { ephemeralStorage: { storageSize: ephemeralStorageSize } };
         }
 
         const data: Parameters<typeof client.create.service.deployment>[0]['data'] = {

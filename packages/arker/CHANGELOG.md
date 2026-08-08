@@ -1,5 +1,11 @@
 # @computesdk/arker
 
+## 0.1.2
+
+### Patch Changes
+
+- d14a9d7: Drop custom output decoding and background-run polling now handled by the Arker SDK; require @arker-ai/sdk ^0.9.0 and add a `platforms` option.
+
 ## 0.1.1
 
 ### Patch Changes

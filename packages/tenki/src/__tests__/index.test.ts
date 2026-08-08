@@ -6,7 +6,6 @@ runProviderTestSuite({
   provider: tenki({
     apiKey: process.env.TENKI_API_KEY,
     workspaceId: process.env.TENKI_WORKSPACE_ID,
-    projectId: process.env.TENKI_PROJECT_ID,
   }),
   supportsFilesystem: true,
   supportsGetUrl: true,

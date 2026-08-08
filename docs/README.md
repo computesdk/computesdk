@@ -1,16 +1,17 @@
 ---
 description: >-
-  ComputeSDK is a TypeScript sandbox SDK for secure code execution across
+  ComputeSDK is the open, multi-provider harness that powers ComputeSDK
+  Benchmarks and a TypeScript sandbox SDK for secure code execution across
   multiple cloud providers with one unified API.
 ---
 
 # Introduction
 
-## ComputeSDK for secure code execution
+## ComputeSDK: the benchmark harness for sandboxes
 
-ComputeSDK is a TypeScript sandbox SDK for secure code execution across multiple cloud providers. Use one provider-agnostic sandbox API to create isolated environments, run shell commands, and manage files without learning vendor-specific APIs.
+ComputeSDK is the open, multi-provider harness behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks). It exposes one provider-agnostic sandbox API so benchmarks can run the same workload on every provider and produce fair, reproducible results. The same API is also available as a TypeScript SDK for building AI agents, code execution platforms, developer tools, testing systems, and any product that needs safe cloud sandboxes.
 
-It works well for AI agents, code execution platforms, developer tools, testing systems, and any product that needs safe cloud sandboxes. Your application code stays the same even when you switch providers.
+Because every provider returns the same sandbox interface, your application code stays the same even when you switch providers.
 
 ## How the sandbox API works
 
@@ -52,6 +53,7 @@ When you install a package like `@computesdk/e2b`, you get a factory function fo
 ## Why teams use ComputeSDK
 
 **Provider-agnostic sandbox API** — Switch providers with minimal code changes\
+**Open benchmark harness** — Powers [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks) with the same API on every provider\
 **Secure code execution** — Run untrusted code in isolated sandboxes\
 **Lean installs** — Add only the cloud sandbox providers you need\
 **TypeScript-native SDK** — Get a clean developer experience with strong typing\
@@ -59,6 +61,7 @@ When you install a package like `@computesdk/e2b`, you get a factory function fo
 
 ### Common use cases
 
+* **Benchmarking infrastructure providers** — Compare sandbox, storage, browser, and AI gateway providers with one consistent harness
 * **AI agent infrastructure** — Let agents run code, commands, and file operations safely
 * **Code execution platforms** — Execute user-submitted code in isolated sandboxes
 * **Browser IDEs and education tools** — Provide interactive coding environments

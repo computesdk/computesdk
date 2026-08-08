@@ -1,5 +1,27 @@
 # @computesdk/workbench
 
+## 30.0.3
+
+### Patch Changes
+
+- Updated dependencies [23fb5c6]
+  - @computesdk/beam@0.3.1
+
+## 30.0.2
+
+### Patch Changes
+
+- d92e1e3: Update `@tenkicloud/sandbox` to 0.5.4 and replace project scope with server-side workspace inference.
+- Updated dependencies [d92e1e3]
+  - @computesdk/tenki@0.1.3
+
+## 30.0.1
+
+### Patch Changes
+
+- Updated dependencies [cfc45de]
+  - @computesdk/northflank@1.1.3
+
 ## 30.0.0
 
 ### Patch Changes

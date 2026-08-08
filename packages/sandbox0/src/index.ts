@@ -232,6 +232,128 @@ function commandTimeoutSeconds(value: number | undefined): number | undefined {
   return Math.max(1, Math.ceil(value / 1_000));
 }
 
+type Sandbox0Context = Awaited<ReturnType<Sandbox0Sandbox['getContext']>>;
+type Sandbox0ContextStream = Awaited<ReturnType<Sandbox0Sandbox['connectWsContext']>>;
+type Sandbox0StreamDone = Awaited<ReturnType<Sandbox0ContextStream['wait']>>;
+
+interface CapturedCommandOutput {
+  stdout: string;
+  stderr: string;
+}
+
+const commandPollIntervalMs = 100;
+
+class Sandbox0CommandTimeoutError extends Error {
+  constructor(timeout: number) {
+    super(`Sandbox0 command timed out after ${timeout}ms.`);
+    this.name = 'TimeoutError';
+  }
+}
+
+async function withinCommandDeadline<T>(
+  operation: Promise<T>,
+  deadline: number | undefined,
+  timeout: number | undefined,
+): Promise<T> {
+  if (deadline === undefined || timeout === undefined) return operation;
+
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Sandbox0CommandTimeoutError(timeout);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Sandbox0CommandTimeoutError(timeout)),
+          remaining,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function captureContextOutput(
+  stream: Sandbox0ContextStream,
+  output: CapturedCommandOutput,
+): Promise<void> {
+  for await (const chunk of stream.outputs()) {
+    if (chunk.source === 'stderr') {
+      output.stderr += chunk.data;
+    } else {
+      output.stdout += chunk.data;
+    }
+  }
+}
+
+async function observeCommandCompletion(
+  sandbox: Sandbox0Sandbox,
+  contextId: string,
+  deadline: number | undefined,
+  timeout: number | undefined,
+): Promise<{
+  context?: Sandbox0Context;
+  terminal?: Sandbox0StreamDone;
+  output: CapturedCommandOutput;
+}> {
+  const output: CapturedCommandOutput = { stdout: '', stderr: '' };
+  let terminal: Sandbox0StreamDone | undefined;
+  let stream: Sandbox0ContextStream | undefined;
+
+  try {
+    stream = await withinCommandDeadline(
+      sandbox.connectWsContext(contextId),
+      deadline,
+      timeout,
+    );
+    const outputTask = captureContextOutput(stream, output).catch(() => undefined);
+    terminal = await withinCommandDeadline(stream.wait(), deadline, timeout);
+    await outputTask;
+  } catch (error) {
+    if (error instanceof Sandbox0CommandTimeoutError) throw error;
+    // A dropped WebSocket must not lose the command. Fall back to the Context API.
+  } finally {
+    stream?.close();
+  }
+
+  let context: Sandbox0Context | undefined;
+  try {
+    context = await withinCommandDeadline(
+      sandbox.getContext(contextId),
+      deadline,
+      timeout,
+    );
+    while (context.running && terminal?.exitCode === undefined) {
+      const delay = deadline === undefined
+        ? commandPollIntervalMs
+        : Math.min(commandPollIntervalMs, Math.max(1, deadline - Date.now()));
+      await sleep(delay);
+      context = await withinCommandDeadline(
+        sandbox.getContext(contextId),
+        deadline,
+        timeout,
+      );
+    }
+  } catch (error) {
+    // Preserve a completed WebSocket result if the final Context snapshot is unavailable.
+    if (
+      error instanceof Sandbox0CommandTimeoutError
+      || terminal?.exitCode === undefined
+    ) {
+      throw error;
+    }
+  }
+
+  return { context, terminal, output };
+}
+
+function deleteContextBestEffort(sandbox: Sandbox0Sandbox, contextId: string): void {
+  void sandbox.deleteContext(contextId).catch(() => undefined);
+}
+
 async function createSandbox(config: Sandbox0Config, options?: CreateSandboxOptions) {
   throwIfAborted(options?.signal);
   const client = createClient(config);
@@ -320,19 +442,43 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
       ): Promise<CommandResult> => {
         const startedAt = Date.now();
         const timeout = options?.timeout ?? observations.get(sandbox)?.commandTimeout;
-        const result = await sandbox.cmd(command, {
+        const ttlSec = commandTimeoutSeconds(timeout);
+        const deadline = timeout !== undefined && timeout > 0
+          ? startedAt + timeout
+          : undefined;
+        const started = await sandbox.cmd(command, {
           command: ['sh', '-lc', command],
-          wait: !options?.background,
+          wait: false,
           cwd: options?.cwd,
           envVars: options?.env,
-          ttlSec: commandTimeoutSeconds(timeout),
+          ttlSec,
         });
-        return {
-          stdout: result.stdout || '',
-          stderr: result.stderr || '',
-          exitCode: result.exitCode ?? (options?.background ? 0 : 1),
-          durationMs: Date.now() - startedAt,
-        };
+        if (options?.background) {
+          return {
+            stdout: started.stdout || '',
+            stderr: started.stderr || '',
+            exitCode: 0,
+            durationMs: Date.now() - startedAt,
+          };
+        }
+
+        try {
+          const completed = await observeCommandCompletion(
+            sandbox,
+            started.contextId,
+            deadline,
+            timeout,
+          );
+          return {
+            stdout: completed.context?.stdout ?? completed.output.stdout,
+            stderr: completed.context?.stderr ?? completed.output.stderr,
+            exitCode: completed.context?.exitCode ?? completed.terminal?.exitCode ?? 1,
+            durationMs: Date.now() - startedAt,
+          };
+        } catch (error) {
+          deleteContextBestEffort(sandbox, started.contextId);
+          throw error;
+        }
       },
 
       getInfo: async (sandbox): Promise<SandboxInfo> => {

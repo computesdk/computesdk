@@ -68,12 +68,12 @@ const url = await sandbox.getUrl({ port: 3000 });
 |---|---|---|---|
 | `apiKey` | `TENKI_API_KEY` / `TENKI_AUTH_TOKEN` | required | Tenki API key (`tk_...`) |
 | `baseUrl` | `TENKI_API_URL` | `https://api.tenki.cloud` | API endpoint |
-| `workspaceId` | `TENKI_WORKSPACE_ID` | auto-resolved | Workspace for new sandboxes |
-| `projectId` | `TENKI_PROJECT_ID` | auto-resolved | Project for new sandboxes |
+| `workspaceId` | `TENKI_WORKSPACE_ID` | inferred from workspace API key | Explicit workspace for trusted service credentials |
+| `projectId` | - | ignored | Deprecated; Tenki no longer scopes sandboxes by project |
 | `timeout` | - | none | Default `runCommand` timeout (ms) |
 | `cpuCores` / `memoryMb` / `diskSizeGb` | - | Tenki defaults | Default sandbox resources |
 
-When `workspaceId`/`projectId` are not set, the provider resolves them once from the API key's identity (first workspace with a project).
+Workspace API keys infer their workspace server-side. Set `workspaceId`, or `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
 
 Per-sandbox resource overrides are accepted on `create`:
 

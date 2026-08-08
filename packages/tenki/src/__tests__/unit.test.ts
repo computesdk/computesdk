@@ -4,7 +4,7 @@
  * filesystem path, and not-found handling. Integration coverage lives in
  * index.test.ts via the standard provider test suite.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 const enc = new TextEncoder();
 
@@ -21,7 +21,7 @@ class FakeSession {
   cpuCores = 2;
   memoryMb = 4096;
   diskSizeGb = 10;
-  projectId = 'proj_1';
+  workspaceId = 'ws_1';
   tags: string[] = [];
   timeoutAt = new Date(Date.now() + 3_600_000);
   closed = false;
@@ -102,13 +102,6 @@ const sharedSession = new FakeSession();
 
 class FakeTenkiSandbox {
   constructor(public options: any) {}
-  async whoAmI() {
-    return {
-      ownerType: 'USER',
-      ownerId: 'user_1',
-      workspaces: [{ id: 'ws_1', name: 'WS', projects: [{ id: 'proj_1', name: 'P' }] }],
-    };
-  }
   async createAndWait(opts: any) {
     lastCreateOptions = opts;
     return sharedSession;
@@ -150,11 +143,16 @@ describe('tenki provider (mocked SDK)', () => {
     sharedSession.closed = false;
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('has the right name', () => {
     expect(tenki({ apiKey: 'tk_test' }).name).toBe('tenki');
   });
 
-  it('create resolves scope via whoAmI and maps options', async () => {
+  it('creates with server-inferred scope and maps options', async () => {
+    vi.stubEnv('TENKI_WORKSPACE_ID', '');
     const provider = tenki({ apiKey: 'tk_test', memoryMb: 8192 });
     const sandbox = await provider.sandbox.create({
       envs: { NODE_ENV: 'production' },
@@ -162,18 +160,18 @@ describe('tenki provider (mocked SDK)', () => {
     });
     expect(sandbox.sandboxId).toBe('sbx_123');
     expect(lastCreateOptions).toMatchObject({
-      workspaceId: 'ws_1',
-      projectId: 'proj_1',
       env: { NODE_ENV: 'production' },
       maxDurationMs: 60_000,
       memoryMb: 8192,
     });
+    expect(lastCreateOptions).not.toHaveProperty('workspaceId');
   });
 
-  it('explicit workspace/project skips whoAmI resolution', async () => {
+  it('passes an explicit workspace and ignores legacy project scope', async () => {
     const provider = tenki({ apiKey: 'tk_test', workspaceId: 'ws_x', projectId: 'proj_x' });
     await provider.sandbox.create();
-    expect(lastCreateOptions).toMatchObject({ workspaceId: 'ws_x', projectId: 'proj_x' });
+    expect(lastCreateOptions).toMatchObject({ workspaceId: 'ws_x' });
+    expect(lastCreateOptions).not.toHaveProperty('projectId');
   });
 
   it('runCommand wraps the command in sh -lc', async () => {
@@ -249,6 +247,7 @@ describe('tenki provider (mocked SDK)', () => {
     expect(info.provider).toBe('tenki');
     expect(info.status).toBe('running');
     expect(info.id).toBe('sbx_123');
+    expect(info.metadata?.workspaceId).toBe('ws_1');
     expect(info.createdAt).toBeInstanceOf(Date);
   });
 

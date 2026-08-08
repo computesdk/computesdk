@@ -109,7 +109,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | reado
     domain: ['LELANTOS_DOMAIN', 'E2B_DOMAIN'],
     apiUrl: ['LELANTOS_API_URL', 'E2B_API_URL'],
   },
-  tenki: { apiKey: 'TENKI_API_KEY', baseUrl: 'TENKI_API_URL', workspaceId: 'TENKI_WORKSPACE_ID', projectId: 'TENKI_PROJECT_ID' },
+  tenki: { apiKey: 'TENKI_API_KEY', baseUrl: 'TENKI_API_URL', workspaceId: 'TENKI_WORKSPACE_ID' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {

@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/beam",
-  "version": "0.3.1",
-  "description": "Beam provider for ComputeSDK - containerized sandbox environments with process management and filesystem access",
-  "author": "ComputeSDK",
+  "name": "@computesdk/sail",
+  "version": "1.0.1",
+  "description": "Sail provider for ComputeSDK - fast, isolated microVM sandboxes with native filesystem access",
+  "author": "Sail Research",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -27,10 +27,21 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
+  "keywords": [
+    "computesdk",
+    "sail",
+    "sailbox",
+    "sandbox",
+    "microvm",
+    "code-execution",
+    "cloud",
+    "compute",
+    "provider"
+  ],
   "dependencies": {
-    "@beamcloud/beam-js": "^1.0.17",
-    "computesdk": "workspace:*",
-    "@computesdk/provider": "workspace:*"
+    "@computesdk/provider": "workspace:*",
+    "@sailresearch/sdk": "^0.5.1",
+    "computesdk": "workspace:*"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
@@ -42,24 +53,15 @@
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   },
-  "keywords": [
-    "computesdk",
-    "beam",
-    "sandbox",
-    "code-execution",
-    "python",
-    "javascript",
-    "cloud",
-    "compute",
-    "provider",
-    "containers"
-  ],
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/beam"
+    "directory": "packages/sail"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://sailresearch.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

@@ -66,6 +66,8 @@ interface NorthflankConfig {
   timeout?: number;
   /** Deploy from a Northflank build service instead of an external image */
   internalDeployment?: { id: string; branch?: string; buildSHA?: string };
+  /** Ephemeral storage per container in MB (e.g. 5120 for 5 GiB) */
+  ephemeralStorageSize?: number;
 }
 ```
 
@@ -100,6 +102,7 @@ await compute.sandbox.create({
   timeout: 180000,                      // overrides config.timeout
   envs: { LOG_LEVEL: 'debug' },         // merged into runtimeEnvironment
   name: 'my-sandbox',                   // service name (auto-prefixed)
+  ephemeralStorageSize: 5120,           // 5 GiB ephemeral storage per container
 });
 ```
 
