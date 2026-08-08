@@ -34,6 +34,7 @@
   * [Modal](providers/modal.md)
   * [Mosaic](providers/mosaic.md)
   * [Namespace](providers/namespace.md)
+  * [NeevCloud](providers/neevcloud.md)
   * [Northflank](providers/northflank.md)
   * [OpenComputer](providers/opencomputer.md)
   * [Quilt](providers/quilt.md)
