@@ -21,6 +21,7 @@ const SHARED_PROVIDER_NAMES = [
   'hopx',
   'declaw',
   'isorun',
+  'runtools',
   'sprites',
   'agentuity',
   'freestyle',
@@ -57,6 +58,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   hopx: [['HOPX_API_KEY']],
   declaw: [['DECLAW_API_KEY']],
   isorun: [['ISORUN_API_KEY']],
+  runtools: [['RUNTOOLS_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
   freestyle: [['FREESTYLE_API_KEY']],
@@ -96,6 +98,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | reado
   hopx: { apiKey: 'HOPX_API_KEY' },
   declaw: { apiKey: 'DECLAW_API_KEY' },
   isorun: { apiKey: 'ISORUN_API_KEY' },
+  runtools: { apiKey: 'RUNTOOLS_API_KEY', apiUrl: 'RUNTOOLS_API_URL' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
   freestyle: { apiKey: 'FREESTYLE_API_KEY' },
@@ -365,6 +368,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/declaw');
       case 'isorun':
         return await import('@computesdk/isorun');
+      case 'runtools':
+        return await import('@computesdk/runtools');
       case 'sprites':
         return await import('@computesdk/sprites');
       case 'agentuity':

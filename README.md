@@ -291,6 +291,7 @@ npm install @computesdk/modal            # Modal provider
 npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/runloop          # Runloop provider
+npm install @computesdk/runtools         # RunTools Firecracker provider
 npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
@@ -326,6 +327,7 @@ See individual provider READMEs for details:
 - **[@computesdk/mosaic](./packages/mosaic)** - Firecracker-based sandbox environments
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
+- **[@computesdk/runtools](./packages/runtools)** - Firecracker sandboxes for agents and code execution
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
 - **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
