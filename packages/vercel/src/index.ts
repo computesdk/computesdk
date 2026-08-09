@@ -75,6 +75,17 @@ function resolveRuntime(runtime?: string): string {
   return runtime;
 }
 
+function resolveCredentials(config: VercelConfig): Partial<Pick<VercelConfig, 'token' | 'teamId' | 'projectId'>> {
+  const token = config.token ?? (typeof process !== 'undefined' && process.env?.VERCEL_TOKEN);
+  const teamId = config.teamId ?? (typeof process !== 'undefined' && process.env?.VERCEL_TEAM_ID);
+  const projectId = config.projectId ?? (typeof process !== 'undefined' && process.env?.VERCEL_PROJECT_ID);
+  const result: Partial<Pick<VercelConfig, 'token' | 'teamId' | 'projectId'>> = {};
+  if (typeof token === 'string' && token) result.token = token;
+  if (typeof teamId === 'string' && teamId) result.teamId = teamId;
+  if (typeof projectId === 'string' && projectId) result.projectId = projectId;
+  return result;
+}
+
 function mapTags(metadata: Record<string, unknown> = {}): Record<string, string> {
   return Object.fromEntries([
     [OWNER_TAG, OWNER_VALUE],
@@ -97,8 +108,9 @@ function ensureRunning(sandbox: VercelSandbox): VercelSandbox {
   return sandbox;
 }
 
-async function getNative(name: string): Promise<VercelSandbox> {
-  return VercelSandbox.get({ name, resume: false });
+async function getNative(name: string, config: VercelConfig): Promise<VercelSandbox> {
+  const creds = resolveCredentials(config);
+  return VercelSandbox.get({ name, resume: false, ...creds });
 }
 
 export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSnapshot>({
@@ -146,13 +158,14 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           }
         }
 
-        const sandbox = await VercelSandbox.create(createParams);
+        const creds = resolveCredentials(config);
+        const sandbox = await VercelSandbox.create({ ...createParams, ...creds });
         return { sandbox, sandboxId: sandbox.name };
       },
 
-      getById: async (_config: VercelConfig, sandboxId: string) => {
+      getById: async (config: VercelConfig, sandboxId: string) => {
         try {
-          const sandbox = await getNative(sandboxId);
+          const sandbox = await getNative(sandboxId, config);
           return { sandbox, sandboxId: sandbox.name };
         } catch (error) {
           if (isNotFound(error)) return null;
@@ -160,13 +173,14 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         }
       },
 
-      list: async (_config: VercelConfig) => {
-        const paginator = await VercelSandbox.list({ tags: { [OWNER_TAG]: OWNER_VALUE } });
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        const paginator = await VercelSandbox.list({ tags: { [OWNER_TAG]: OWNER_VALUE }, ...creds });
         const records = await paginator.toArray();
         const results = await Promise.all(
           records.map(async (record: { name: string }) => {
             try {
-              const sandbox = await getNative(record.name);
+              const sandbox = await getNative(record.name, config);
               return { sandbox, sandboxId: sandbox.name };
             } catch (error) {
               if (isNotFound(error)) return null;
@@ -177,9 +191,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         return results.filter((r): r is { sandbox: VercelSandbox; sandboxId: string } => r !== null);
       },
 
-      destroy: async (_config: VercelConfig, sandboxId: string) => {
+      destroy: async (config: VercelConfig, sandboxId: string) => {
         try {
-          const sandbox = await getNative(sandboxId);
+          const sandbox = await getNative(sandboxId, config);
           await sandbox.delete();
         } catch (error) {
           if (isNotFound(error)) return;
@@ -247,42 +261,20 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         };
       },
 
-      getInfo: async (sandbox: VercelSandbox): Promise<SandboxInfo> => {
-        try {
-          const current = await getNative(sandbox.name);
-          return {
-            id: current.name,
-            provider: 'vercel',
-            status: mapStatus(current.status),
-            createdAt: current.createdAt,
-            timeout: current.timeout ?? 0,
-            metadata: {
-              ...(current.tags ?? {}),
-              image: current.image,
-              region: current.region,
-              vcpus: current.vcpus,
-              memoryMb: current.memory,
-            },
-          };
-        } catch (error) {
-          if (isNotFound(error)) {
-            return {
-              id: sandbox.name,
-              provider: 'vercel',
-              status: 'stopped',
-              createdAt: sandbox.createdAt,
-              timeout: sandbox.timeout ?? 0,
-              metadata: {
-                image: sandbox.image,
-                region: sandbox.region,
-                vcpus: sandbox.vcpus,
-                memoryMb: sandbox.memory,
-              },
-            };
-          }
-          throw error;
-        }
-      },
+      getInfo: async (sandbox: VercelSandbox): Promise<SandboxInfo> => ({
+        id: sandbox.name,
+        provider: 'vercel',
+        status: mapStatus(sandbox.status),
+        createdAt: sandbox.createdAt,
+        timeout: sandbox.timeout ?? 0,
+        metadata: {
+          ...(sandbox.tags ?? {}),
+          image: sandbox.image,
+          region: sandbox.region,
+          vcpus: sandbox.vcpus,
+          memoryMb: sandbox.memory,
+        },
+      }),
 
       getUrl: async (sandbox: VercelSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         const url = ensureRunning(sandbox).currentSession().domain(options.port);
@@ -351,17 +343,19 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
     },
 
     snapshot: {
-      create: async (_config: VercelConfig, sandboxId: string, _options?: { name?: string }) => {
-        const sandbox = await getNative(sandboxId);
+      create: async (config: VercelConfig, sandboxId: string, _options?: { name?: string }) => {
+        const sandbox = await getNative(sandboxId, config);
         return await sandbox.snapshot();
       },
-      list: async (_config: VercelConfig) => {
-        const paginator = await VercelSnapshot.list();
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        const paginator = await VercelSnapshot.list({ ...creds });
         const page = await paginator.toArray();
         return page as unknown as VercelSnapshot[];
       },
-      delete: async (_config: VercelConfig, snapshotId: string) => {
-        const snapshot = await VercelSnapshot.get({ snapshotId });
+      delete: async (config: VercelConfig, snapshotId: string) => {
+        const creds = resolveCredentials(config);
+        const snapshot = await VercelSnapshot.get({ snapshotId, ...creds });
         await snapshot.delete();
       },
     },
@@ -373,8 +367,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       list: async (_config: VercelConfig) => {
         throw new Error('Vercel provider does not support listing templates.');
       },
-      delete: async (_config: VercelConfig, templateId: string) => {
-        const snapshot = await VercelSnapshot.get({ snapshotId: templateId });
+      delete: async (config: VercelConfig, templateId: string) => {
+        const creds = resolveCredentials(config);
+        const snapshot = await VercelSnapshot.get({ snapshotId: templateId, ...creds });
         await snapshot.delete();
       },
     },

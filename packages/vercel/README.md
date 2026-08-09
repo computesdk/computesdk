@@ -75,16 +75,22 @@ export VERCEL_PROJECT_ID=your_project_id_here
 
 ```typescript
 interface VercelConfig {
-  /** Vercel API token - if not provided, will use VERCEL_TOKEN env var */
-  token?: string;
-  /** Vercel team ID - if not provided, will use VERCEL_TEAM_ID env var */
-  teamId?: string;
-  /** Vercel project ID - if not provided, will use VERCEL_PROJECT_ID env var */
-  projectId?: string;
-  /** Execution timeout in milliseconds */
+  /** VCR image to boot from. If omitted, `runtime` is used. */
+  image?: string;
+  /** Number of vCPUs to allocate (default 1). */
+  vcpus?: number;
+  /** Stock runtime to use when `image` is not set (`node` or `python`, default `node24`). */
+  runtime?: string;
+  /** Maximum sandbox lifetime in milliseconds. */
   timeout?: number;
-  /** Ports to expose */
+  /** Ports to expose on the sandbox. */
   ports?: number[];
+  /** Vercel API token or OIDC token. Falls back to `VERCEL_TOKEN` env var. */
+  token?: string;
+  /** Vercel team ID. Falls back to `VERCEL_TEAM_ID` env var. */
+  teamId?: string;
+  /** Vercel project ID. Falls back to `VERCEL_PROJECT_ID` env var. */
+  projectId?: string;
 }
 ```
 
@@ -443,7 +449,7 @@ await sandbox.destroy();
 ## Limitations
 
 - **Ephemeral Sandboxes**: Each sandbox is single-use and cannot be reconnected to
-- **No Sandbox Listing**: Vercel doesn't support listing all sandboxes
+- **Sandbox Listing**: Only sandboxes created through ComputeSDK (tagged `computesdk:vercel`) are listed
 - **No Interactive Terminals**: Terminal operations are not supported
 - **Memory Limits**: Subject to Vercel sandbox memory constraints (2048 MB per vCPU)
 - **Execution Time**: Maximum 45 minutes execution time
