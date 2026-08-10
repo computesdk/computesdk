@@ -1,39 +1,43 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { vercel } from '../index';
 import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
 
-// Mock @vercel/sandbox
-vi.mock('@vercel/sandbox', () => {
-  const mockSnapshotInstance = {
+const mocks = vi.hoisted(() => ({
+  snapshotInstance: {
     delete: vi.fn().mockResolvedValue(undefined),
-  };
+  },
+  sandboxInstance: {
+    name: 'mock-sandbox-name',
+    status: 'running',
+    snapshot: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+  },
+  listPaginator: {
+    toArray: vi.fn().mockResolvedValue([]),
+  },
+}));
 
-  const mockSandboxInstance = {
-    sandboxId: 'mock-sandbox-id',
-    snapshot: vi.fn().mockResolvedValue(mockSnapshotInstance),
-    stop: vi.fn().mockResolvedValue(undefined),
-  };
-
-  return {
-    Sandbox: {
-      create: vi.fn().mockResolvedValue(mockSandboxInstance),
-      get: vi.fn().mockResolvedValue(mockSandboxInstance),
-    },
-    Snapshot: {
-      get: vi.fn().mockResolvedValue(mockSnapshotInstance),
+vi.mock('@vercel/sandbox', () => ({
+  Sandbox: {
+    create: vi.fn().mockResolvedValue(mocks.sandboxInstance),
+    get: vi.fn().mockResolvedValue(mocks.sandboxInstance),
+    list: vi.fn().mockResolvedValue(mocks.listPaginator),
+  },
+  Snapshot: {
+    get: vi.fn().mockResolvedValue(mocks.snapshotInstance),
+    list: vi.fn().mockResolvedValue(mocks.listPaginator),
+  },
+  APIError: class extends Error {
+    response: { status: number };
+    constructor(response: { status: number }, message = 'API error') {
+      super(message);
+      this.response = response;
     }
-  };
-});
+  },
+}));
 
 describe('Vercel Snapshot Support', () => {
-  const config = {
-    token: 'mock-token',
-    teamId: 'mock-team',
-    projectId: 'mock-project'
-  };
-
-  const provider = vercel(config);
+  const provider = vercel({ vcpus: 1 });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,19 +49,13 @@ describe('Vercel Snapshot Support', () => {
     }
 
     await provider.snapshot.create('sandbox-123');
-    
+
     expect(VercelSandbox.get).toHaveBeenCalledWith(expect.objectContaining({
-      sandboxId: 'sandbox-123',
-      token: 'mock-token',
-      teamId: 'mock-team',
-      projectId: 'mock-project'
+      name: 'sandbox-123',
+      resume: false,
     }));
-    
-    // Check that .snapshot() was called on the sandbox instance
-    // We can't easily access the mock instance returned by get() inside the mock definition unless we expose it
-    // But verify calling sequence is enough for now or use the return value
-    const mockSandbox = await (VercelSandbox.get as any).mock.results[0].value;
-    expect(mockSandbox.snapshot).toHaveBeenCalled();
+
+    expect(mocks.sandboxInstance.snapshot).toHaveBeenCalled();
   });
 
   it('should delete a snapshot', async () => {
@@ -69,13 +67,9 @@ describe('Vercel Snapshot Support', () => {
 
     expect(VercelSnapshot.get).toHaveBeenCalledWith(expect.objectContaining({
       snapshotId: 'snapshot-123',
-      token: 'mock-token',
-      teamId: 'mock-team',
-      projectId: 'mock-project'
     }));
 
-    const mockSnapshot = await (VercelSnapshot.get as any).mock.results[0].value;
-    expect(mockSnapshot.delete).toHaveBeenCalled();
+    expect(mocks.snapshotInstance.delete).toHaveBeenCalled();
   });
 
   it('should create a sandbox from a snapshot', async () => {
@@ -84,40 +78,35 @@ describe('Vercel Snapshot Support', () => {
     expect(VercelSandbox.create).toHaveBeenCalledWith(expect.objectContaining({
       source: {
         type: 'snapshot',
-        snapshotId: 'snap-123'
+        snapshotId: 'snap-123',
       },
-      token: 'mock-token',
-      teamId: 'mock-team',
-      projectId: 'mock-project'
     }));
   });
 
   it('should create a sandbox from a snapshot using nested source format', async () => {
-    // This format matches the Vercel SDK's native format
-    // The gateway may pass options in this format
-    await provider.sandbox.create({ 
-      source: { 
-        type: 'snapshot', 
-        snapshotId: 'snap-456' 
-      } 
+    await provider.sandbox.create({
+      source: {
+        type: 'snapshot',
+        snapshotId: 'snap-456',
+      },
     } as any);
 
     expect(VercelSandbox.create).toHaveBeenCalledWith(expect.objectContaining({
       source: {
         type: 'snapshot',
-        snapshotId: 'snap-456'
+        snapshotId: 'snap-456',
       },
-      token: 'mock-token',
-      teamId: 'mock-team',
-      projectId: 'mock-project'
     }));
   });
 
-  it('should throw when listing snapshots', async () => {
+  it('should list snapshots', async () => {
     if (!provider.snapshot) {
       throw new Error('Snapshot manager not initialized');
     }
 
-    await expect(provider.snapshot.list()).rejects.toThrow('Vercel provider does not support listing snapshots');
+    const list = await provider.snapshot.list();
+
+    expect(VercelSnapshot.list).toHaveBeenCalled();
+    expect(list).toEqual([]);
   });
 });
