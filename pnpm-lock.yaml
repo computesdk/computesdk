@@ -1760,6 +1760,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/run-cloud:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@run-cloud/sdk':
+        specifier: ^0.15.0
+        version: 0.15.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/runloop:
     dependencies:
       '@computesdk/provider':
@@ -4905,6 +4942,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@run-cloud/sdk@0.15.0':
+    resolution: {integrity: sha512-E0RZ0fArFX32R88mOq5w4nmBb2LOz9UB1gGgOCVo3b08Ly90IuyTYarh4VonHj5b/UtP5WA0sorWYvvIVaPtKg==}
+    engines: {node: '>=20'}
+
   '@runloop/api-client@1.24.0':
     resolution: {integrity: sha512-A/G9l2MlBz/u0Wr2RvCEJvh0+4Pn/8p15BTq9wQt3vEgEGLEk844+9bIKsfWbDvU/4JdRvIUND79Vu5qvKQzUQ==}
 
@@ -5332,6 +5373,9 @@ packages:
 
   '@types/tedious@4.0.14':
     resolution: {integrity: sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@6.21.0':
     resolution: {integrity: sha512-oy9+hTPCUFpngkEZUSzbf9MxI65wbKFoQYsgPdILTfbUldp5ovUuphZVe4i30emU9M/kP+T64Di0mxl7dSw3MA==}
@@ -12138,6 +12182,14 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
+  '@run-cloud/sdk@0.15.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+    dependencies:
+      '@types/ws': 8.18.1
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@runloop/api-client@1.24.0':
     dependencies:
       '@types/node': 18.19.123
@@ -12701,6 +12753,10 @@ snapshots:
     dependencies:
       '@types/node': 20.19.41
     optional: true
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 20.19.41
 
   '@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:
