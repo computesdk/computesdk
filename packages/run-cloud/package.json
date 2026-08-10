@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/run-cloud",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Run Cloud provider for ComputeSDK - fast Firecracker microVM sandboxes with snapshots and filesystem access",
   "author": "Run Cloud",
   "license": "MIT",
