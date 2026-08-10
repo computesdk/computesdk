@@ -149,6 +149,28 @@ describe('Mosaic ComputeSDK provider', () => {
     expect(calls[1].body).toEqual({ port: 3000, expires_in_seconds: 3600 });
   });
 
+  it('refuses a non-https preview without minting one', async () => {
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-http', state: 'running', tti_ms: 1 }),
+    });
+
+    const sandbox = await mosaic(config).sandbox.create();
+
+    await expect(sandbox.getUrl({ port: 3000, protocol: 'http' })).rejects.toThrow(/served over https/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('treats a configured default that is not stock as an environment', async () => {
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-default-env', state: 'running', tti_ms: 1 }),
+    });
+
+    await mosaic({ ...config, template: 'my-toolchain' }).sandbox.create();
+
+    expect(calls[0].body.snapshot_id).toBe('my-toolchain');
+    expect(calls[0].body.template).toBeUndefined();
+  });
+
   it('reads and writes workspace files over the files API', async () => {
     const written: string[] = [];
     const calls = gateway({
@@ -303,6 +325,7 @@ describe('Mosaic ComputeSDK provider', () => {
 
     expect((await provider.template!.list()).map((entry) => entry.id)).toEqual(['snap-img']);
     expect((await provider.snapshot!.list()).map((entry) => entry.id)).toEqual(['snap-plain', 'snap-img']);
+    expect((await provider.snapshot!.list({ sandboxId: 'sbx-2' })).map((entry) => entry.id)).toEqual(['snap-img']);
   });
 
   it('reports a missing sandbox as absent rather than as a failure', async () => {

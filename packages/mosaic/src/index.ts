@@ -7,6 +7,7 @@ import type {
   CreateTemplateOptions,
   FileEntry,
   ListSnapshotsOptions,
+  ListTemplatesOptions,
   RunCommandOptions,
   SandboxInfo,
 } from '@computesdk/provider';
@@ -101,6 +102,7 @@ interface MarVmInfo {
 interface MarSnapshotInfo {
   id: string;
   name?: string | null;
+  source_sandbox_id?: string;
   template: string;
   memory_mb: number;
   vcpu: number;
@@ -229,7 +231,9 @@ function bootFrom(
   if (options?.templateId) return { template: options.templateId };
   if (options?.runtime === 'python') return { template: 'python-3.11' };
   if (options?.runtime === 'node') return { template: 'node-20' };
-  return { template: config.template };
+  return isStockTemplate(config.template)
+    ? { template: config.template }
+    : { snapshot_id: config.template };
 }
 
 function fromInfo(config: MosaicConfig, info: MarVmInfo): MosaicSandbox {
@@ -440,6 +444,12 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
       },
 
       getUrl: async (sandbox, options): Promise<string> => {
+        if (options.protocol && options.protocol !== 'https') {
+          // Previews terminate TLS at Mosaic's edge; the guest port is plain HTTP.
+          throw new Error(
+            `Mosaic previews are served over https; ${options.protocol} was requested for port ${options.port}.`,
+          );
+        }
         const resolved = resolvedConfig(sandbox.config);
         const preview = await request<{ url: string }>(
           sandbox.config,
@@ -452,12 +462,6 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
             }),
           },
         );
-        if (options.protocol && options.protocol !== 'https') {
-          // Previews terminate TLS at Mosaic's edge; the guest port is plain HTTP.
-          throw new Error(
-            `Mosaic previews are served over https; ${options.protocol} was requested for port ${options.port}.`,
-          );
-        }
         return preview.url;
       },
 
@@ -584,7 +588,10 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
         const result = await request<{ snapshots: MarSnapshotInfo[] }>(config, '/v1/snapshots', {
           method: 'GET',
         });
-        const snapshots = result.snapshots.map(asSnapshot);
+        const matching = options?.sandboxId
+          ? result.snapshots.filter((snapshot) => snapshot.source_sandbox_id === options.sandboxId)
+          : result.snapshots;
+        const snapshots = matching.map(asSnapshot);
         return options?.limit ? snapshots.slice(0, options.limit) : snapshots;
       },
 
@@ -634,11 +641,12 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
         return asSnapshot(operation.environment);
       },
 
-      list: async (config) => {
+      list: async (config, options?: ListTemplatesOptions) => {
         const result = await request<{ snapshots: MarSnapshotInfo[] }>(config, '/v1/snapshots', {
           method: 'GET',
         });
-        return result.snapshots.filter((snapshot) => snapshot.source_image).map(asSnapshot);
+        const templates = result.snapshots.filter((snapshot) => snapshot.source_image).map(asSnapshot);
+        return options?.limit ? templates.slice(0, options.limit) : templates;
       },
 
       delete: async (config, templateId) => {
