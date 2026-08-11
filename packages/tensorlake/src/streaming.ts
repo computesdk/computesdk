@@ -130,20 +130,19 @@ export async function streamTensorlakeCommand(
 
   let timedOut = false;
   let exited = false;
-  // The deadline kills the process and then abandons the follow streams, so a
-  // kill that never lands can't hold the caller open past its timeout. It is
-  // disarmed the moment the process is known to have exited, so the exit status
-  // can be read at leisure without a late deadline claiming a finished command.
+  // The deadline abandons the follow streams first and only then asks for the
+  // kill, so neither a kill that fails nor one that never answers can hold the
+  // caller open past its timeout. It is disarmed once the process is known to
+  // have exited, so the exit status can be read at leisure without a late
+  // deadline claiming a finished command.
   let timer: ReturnType<typeof setTimeout> | undefined =
     options.timeout === undefined
       ? undefined
       : setTimeout(() => {
           if (exited) return;
           timedOut = true;
-          void Promise.resolve()
-            .then(() => sandbox.killProcess(process.pid))
-            .catch(() => {})
-            .finally(() => controller.abort());
+          controller.abort();
+          void sandbox.killProcess(process.pid).catch(() => {});
         }, options.timeout);
 
   const disarm = () => {
@@ -166,9 +165,13 @@ export async function streamTensorlakeCommand(
       }),
     ]);
 
-    // Both streams have ended, so the process is gone and the deadline no longer
-    // applies to it.
-    disarm();
+    // A stream can end for two reasons, and they mean opposite things. If both
+    // ended cleanly the process has exited, so the deadline no longer applies to
+    // it. If either *failed*, the process is very likely still running — the
+    // deadline is still the only thing that will stop it, and its exit is worth
+    // waiting for however long the caller allowed.
+    const lostStream = stdoutPump.failed || stderrPump.failed;
+    if (!lostStream) disarm();
 
     const status = () =>
       sandbox
@@ -178,16 +181,19 @@ export async function streamTensorlakeCommand(
     let info: { status: string; exitCode?: number } = await status();
     // A timed-out command's exit status is not worth waiting for: it is reported
     // as a timeout either way, and waiting is what the deadline just refused.
+    const attempts =
+      lostStream && options.timeout !== undefined
+        ? Number.POSITIVE_INFINITY
+        : EXIT_POLL_ATTEMPTS;
     for (
       let attempt = 0;
-      !timedOut &&
-      attempt < EXIT_POLL_ATTEMPTS &&
-      info.status === ProcessStatus.RUNNING;
+      !timedOut && attempt < attempts && info.status === ProcessStatus.RUNNING;
       attempt += 1
     ) {
       await sleep(EXIT_POLL_INTERVAL_MS);
       info = await status();
     }
+    disarm();
 
     if (stdoutPump.failed) {
       const buffered = await sandbox

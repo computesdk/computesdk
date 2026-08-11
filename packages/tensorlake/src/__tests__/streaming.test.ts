@@ -202,6 +202,40 @@ describe('streamTensorlakeCommand', () => {
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
   });
 
+  it('returns at the deadline even when the kill request never answers', async () => {
+    const fake = fakeSandbox({
+      killProcess: vi.fn(() => new Promise<void>(() => {})),
+      getProcess: vi.fn(async () => ({ status: 'running' })),
+    });
+
+    const result = await streamTensorlakeCommand(fake.sandbox, 'sleep 600', {
+      timeout: 5,
+      onStdout: () => {},
+    });
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+  });
+
+  it('keeps the deadline armed when a follow failed and the process is still running', async () => {
+    // A dropped follow is not an exit, so the timeout is still the only thing
+    // that will stop the command.
+    const fake = fakeSandbox({
+      // eslint-disable-next-line require-yield
+      followStdout: async function* () {
+        throw new Error('connection reset');
+      },
+      getProcess: vi.fn(async () => ({ status: 'running' })),
+      getStdout: async () => ({ lines: ['tick 1'] }),
+    });
+
+    const result = await streamTensorlakeCommand(fake.sandbox, 'sleep 600', {
+      timeout: 30,
+      onStdout: () => {},
+    });
+
+    expect(fake.sandbox.killProcess).toHaveBeenCalledWith(7);
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+  });
+
   it('reports a process that could not be started', async () => {
     const fake = fakeSandbox({
       startProcess: vi.fn(async () => {
