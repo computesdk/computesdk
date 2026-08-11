@@ -27,6 +27,13 @@ export interface ProviderTestConfig {
   supportsGetUrl?: boolean;
   /** Base path for filesystem tests (default: '/tmp') */
   filesystemBasePath?: string;
+  /**
+   * Whether to check live command output (`onStdout`/`onStderr`). Any provider
+   * can serve it — natively via `streamCommand`, otherwise through the daemond
+   * bridge — but the bridge needs a routable port inside the sandbox, so this is
+   * opt-in per provider rather than assumed.
+   */
+  supportsStreaming?: boolean;
 }
 
 /**
@@ -43,6 +50,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
     ports,
     supportsGetUrl = true,
     filesystemBasePath = '/tmp',
+    supportsStreaming = false,
   } = config;
 
   return () => {
@@ -200,6 +208,74 @@ export function defineProviderTests(config: ProviderTestConfig) {
       });
     }
 
+    if (supportsStreaming) {
+      describe('Live Command Output', () => {
+        it('should deliver output while the command is still running', async () => {
+          // The point of streaming is *when* output arrives, so the assertion is
+          // about ordering against the command's own completion rather than
+          // about the final text.
+          const chunks: string[] = [];
+          const startedAt = Date.now();
+          let firstChunkAt: number | undefined;
+
+          const result = await sandbox.runCommand(
+            `sh -c 'for i in 1 2 3 4 5; do echo tick $i; sleep 1; done'`,
+            {
+              onStdout: (text: string) => {
+                firstChunkAt ??= Date.now();
+                chunks.push(text);
+              }
+            }
+          );
+
+          expect(result.exitCode).toBe(0);
+          expect(firstChunkAt).toBeDefined();
+          // The first tick is printed immediately and the last four seconds are
+          // spent sleeping, so a first chunk that arrives in the first half of
+          // the command's life could not have been buffered until exit.
+          expect((firstChunkAt as number) - startedAt).toBeLessThan(
+            result.durationMs / 2
+          );
+          // Everything streamed is exactly what the command produced: no chunk
+          // dropped, and none delivered twice.
+          expect(chunks.join('')).toBe(result.stdout);
+          for (let i = 1; i <= 5; i += 1) {
+            expect(result.stdout).toContain(`tick ${i}`);
+          }
+        }, timeout);
+
+        it('should stream stderr separately and report a non-zero exit', async () => {
+          const out: string[] = [];
+          const err: string[] = [];
+
+          const result = await sandbox.runCommand(
+            `sh -c 'echo out; echo err 1>&2; exit 3'`,
+            {
+              onStdout: (text: string) => out.push(text),
+              onStderr: (text: string) => err.push(text)
+            }
+          );
+
+          expect(result.exitCode).toBe(3);
+          expect(out.join('')).toContain('out');
+          expect(err.join('')).toContain('err');
+          expect(out.join('')).not.toContain('err');
+        }, timeout);
+
+        it('should stop a streaming command that outruns its timeout', async () => {
+          const result = await sandbox.runCommand(
+            `sh -c 'echo starting; sleep 60'`,
+            { timeout: 5000, onStdout: () => {} }
+          );
+
+          // What matters is that it came back at the deadline rather than after
+          // the full sleep, and that it is not reported as a success.
+          expect(result.exitCode).not.toBe(0);
+          expect(result.durationMs).toBeLessThan(30000);
+        }, timeout);
+      });
+    }
+
     describe('Shell Command Argument Quoting', () => {
       it('should properly quote arguments with spaces', async () => {
         const result = await sandbox.runCommand('sh -c \'echo "hello world"\'');
@@ -249,6 +325,29 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
     getInstance: <T = unknown>(): T => ({} as T),
 
     runCommand: async (command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+      // Mocked streaming: the chunks are handed over before the promise settles,
+      // which is the property the streaming tests are actually checking.
+      if (command.includes('for i in 1 2 3 4 5')) {
+        const startedAt = Date.now();
+        let stdout = '';
+        for (let i = 1; i <= 5; i += 1) {
+          const text = `tick ${i}\n`;
+          stdout += text;
+          options?.onStdout?.(text);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return { stdout, stderr: '', exitCode: 0, durationMs: Date.now() - startedAt };
+      }
+      if (command.includes('echo err 1>&2')) {
+        options?.onStdout?.('out\n');
+        options?.onStderr?.('err\n');
+        return { stdout: 'out\n', stderr: 'err\n', exitCode: 3, durationMs: 5 };
+      }
+      if (command.includes('echo starting; sleep 60')) {
+        options?.onStdout?.('starting\n');
+        await new Promise((resolve) => setTimeout(resolve, options?.timeout ? 5 : 10));
+        return { stdout: 'starting\n', stderr: '', exitCode: 124, durationMs: 5 };
+      }
       if (command.includes('echo "Hello from command"')) {
         return { stdout: 'Hello from command\n', stderr: '', exitCode: 0, durationMs: 10 };
       }

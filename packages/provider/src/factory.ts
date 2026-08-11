@@ -167,6 +167,19 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
 
   // Instance operations
   runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
+
+  /**
+   * Optional native streaming implementation, used instead of the daemond SSE
+   * bridge when the caller passes `onStdout`/`onStderr`.
+   *
+   * The bridge reaches the daemon over an HTTP port inside the sandbox, so it
+   * only works where that port is routable from the caller. A provider whose
+   * own API streams a process's output — Tensorlake's `followStdout`, for
+   * instance — should stream through it rather than expose a port, and this is
+   * where that implementation goes. Callbacks must fire while the command runs;
+   * a provider that can only deliver output at exit should leave this unset.
+   */
+  streamCommand?: (sandbox: TSandbox, command: string, options: RunCommandOptions) => Promise<CommandResult>;
   getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
   getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
 
@@ -370,6 +383,12 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     if (options?.onStdout || options?.onStderr) {
       if (options.background) {
         throw new Error('runCommand with streaming callbacks does not support background mode.');
+      }
+
+      // A provider that streams over its own API needs neither the daemon nor a
+      // routable port for it, so it is asked first.
+      if (this.methods.streamCommand) {
+        return await this.methods.streamCommand(this.sandbox, command, options);
       }
 
       const forwardedOptions: RunCommandOptions = { ...options };

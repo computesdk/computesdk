@@ -9,6 +9,7 @@
 import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
 import type { SandboxInfo } from "tensorlake";
 import { defineProvider } from "@computesdk/provider";
+import { streamTensorlakeCommand } from "./streaming";
 import type {
   CodeResult,
   CommandResult,
@@ -221,6 +222,17 @@ export const tensorlake = defineProvider<
           };
         }
       },
+
+      // Native streaming: `run()` returns a command's output only once it has
+      // exited, so a long step would look dead until it finished. Following the
+      // process instead delivers each line as it is written, and does it over
+      // the management API rather than a port exposed on the sandbox.
+      streamCommand: async (
+        ctx: TensorlakeSandboxContext,
+        command: string,
+        options: RunCommandOptions,
+      ): Promise<CommandResult> =>
+        await streamTensorlakeCommand(ctx.sandbox, command, options),
 
       getInfo: async (
         ctx: TensorlakeSandboxContext,

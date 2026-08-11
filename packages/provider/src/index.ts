@@ -42,5 +42,13 @@ export type {
 // Export utilities
 export { calculateBackoff, escapeShellArg } from './utils';
 
+// Export the process-API streaming helper for providers that stream natively
+export {
+  streamCommandViaProcess,
+  TIMEOUT_EXIT_CODE,
+  START_FAILURE_EXIT_CODE
+} from './stream-process';
+export type { StreamedProcess } from './stream-process';
+
 // Export all types
 export type * from './types';
