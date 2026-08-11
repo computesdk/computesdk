@@ -1,5 +1,12 @@
 # @computesdk/freestyle
 
+## 0.1.12
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
 ## 0.1.11
 
 ### Patch Changes

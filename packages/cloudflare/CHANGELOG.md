@@ -1,5 +1,12 @@
 # @computesdk/cloudflare
 
+## 1.6.15
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
 ## 1.6.14
 
 ### Patch Changes

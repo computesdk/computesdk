@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/neevcloud",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "NeevCloud provider for ComputeSDK - secure cloud sandboxes with command execution, filesystem access, and preview URLs",
   "author": "NeevCloud",
   "license": "MIT",
@@ -14,7 +14,9 @@
       "require": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "clean": "rimraf dist",

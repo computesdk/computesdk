@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sail",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Sail provider for ComputeSDK - fast, isolated microVM sandboxes with native filesystem access",
   "author": "Sail Research",
   "license": "MIT",

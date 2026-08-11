@@ -1,5 +1,12 @@
 # @computesdk/notte
 
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
 ## 0.3.6
 
 ### Patch Changes
