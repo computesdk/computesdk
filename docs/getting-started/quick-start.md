@@ -1,6 +1,6 @@
 # Quick Start
 
-Welcome to ComputeSDK! This guide will get you up and running with secure, isolated code execution across multiple cloud providers using a unified TypeScript interface.
+Welcome to ComputeSDK! This guide will get you up and running with the open, multi-provider harness behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks): a unified TypeScript interface for secure, isolated code execution across cloud providers.
 
 ## Installation
 

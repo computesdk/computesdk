@@ -1,5 +1,11 @@
 # @computesdk/mosaic
 
+## 0.1.2
+
+### Patch Changes
+
+- 1665ea4: Support previews, filesystem, snapshots and image templates, and give sandboxes network access by default
+
 ## 0.1.1
 
 ### Patch Changes

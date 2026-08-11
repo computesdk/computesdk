@@ -1,8 +1,12 @@
 {
-  "name": "@computesdk/mosaic",
-  "version": "0.1.2",
-  "description": "Mosaic provider for ComputeSDK - Firecracker-based sandbox environments",
+  "name": "@computesdk/run-cloud",
+  "version": "1.0.1",
+  "description": "Run Cloud provider for ComputeSDK - fast Firecracker microVM sandboxes with snapshots and filesystem access",
+  "author": "Run Cloud",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -28,24 +32,20 @@
   },
   "keywords": [
     "computesdk",
-    "mosaic",
+    "run-cloud",
+    "runcloud",
     "sandbox",
     "firecracker",
+    "microvm",
+    "snapshot",
     "code-execution",
+    "cloud",
     "compute",
     "provider"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/mosaic"
-  },
-  "homepage": "https://www.mosaicos.com",
-  "bugs": {
-    "url": "https://github.com/computesdk/computesdk/issues"
-  },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
+    "@run-cloud/sdk": "^0.15.0",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
@@ -57,5 +57,14 @@
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/run-cloud"
+  },
+  "homepage": "https://run.cloud",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
   }
 }
