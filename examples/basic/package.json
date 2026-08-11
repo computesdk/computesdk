@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-basic",
-  "version": "0.4.92",
+  "version": "0.4.93",
   "private": true,
   "description": "Basic usage examples for ComputeSDK",
   "scripts": {
