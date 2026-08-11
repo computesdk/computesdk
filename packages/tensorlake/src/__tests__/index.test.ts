@@ -5,6 +5,8 @@ runProviderTestSuite({
   name: 'tensorlake',
   provider: tensorlake({}),
   supportsFilesystem: true,
+  // Tensorlake streams over its own process API, so no exposed port is needed.
+  supportsStreaming: true,
   // Skip integration tests unless an explicit API key is provided and SKIP_INTEGRATION=false.
   // This avoids dependency on external Tensorlake infrastructure for local development.
   skipIntegration:
