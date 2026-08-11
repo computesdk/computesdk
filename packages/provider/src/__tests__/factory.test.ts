@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { defineProvider } from '../factory.js'
-import type { CommandResult, SandboxInfo } from '../types/index.js'
+import type { CommandResult, RunCommandOptions, SandboxInfo } from '../types/index.js'
 
 const {
   daemonSeedScriptCommand,
@@ -305,6 +305,51 @@ describe('Factory', () => {
       await expect(
         sandbox.runCommand('pwd', { onStdout: vi.fn(), background: true })
       ).rejects.toThrow('runCommand with streaming callbacks does not support background mode.')
+    })
+
+    it('should stream through the provider when it implements streamCommand', async () => {
+      const streamCommand = vi.fn(async (_sandbox: unknown, _command: string, options: RunCommandOptions) => {
+        options.onStdout?.('tick 1\n')
+        options.onStdout?.('tick 2\n')
+        return { stdout: 'tick 1\ntick 2\n', stderr: '', exitCode: 0, durationMs: 9 } as CommandResult
+      })
+      const methods = {
+        create: vi.fn().mockResolvedValue({
+          sandbox: { id: 'test-791', status: 'running' },
+          sandboxId: 'test-791'
+        }),
+        getById: vi.fn().mockResolvedValue(null),
+        list: vi.fn().mockResolvedValue([]),
+        destroy: vi.fn().mockResolvedValue(undefined),
+        runCommand: vi.fn(),
+        streamCommand,
+        getInfo: vi.fn().mockResolvedValue({
+          id: 'test-791',
+          provider: 'mock',
+          status: 'running',
+          createdAt: new Date(),
+          timeout: 300000
+        } as SandboxInfo),
+        getUrl: vi.fn()
+      }
+
+      const providerFactory = defineProvider({
+        name: 'mock',
+        methods: { sandbox: methods }
+      })
+
+      const provider = providerFactory({ apiKey: 'test-key' })
+      const sandbox = await provider.sandbox.create()
+      const onStdout = vi.fn()
+      const result = await sandbox.runCommand('pwd', { onStdout })
+
+      expect(onStdout).toHaveBeenNthCalledWith(1, 'tick 1\n')
+      expect(onStdout).toHaveBeenNthCalledWith(2, 'tick 2\n')
+      expect(result.stdout).toBe('tick 1\ntick 2\n')
+      // No daemon seeded, and no port asked for: the provider's own API carried it.
+      expect(methods.runCommand).not.toHaveBeenCalled()
+      expect(methods.getUrl).not.toHaveBeenCalled()
+      expect(daemonSeedScriptCommand).not.toHaveBeenCalled()
     })
 
     it('should not fail daemon command when provider cannot expose SSE URL', async () => {
