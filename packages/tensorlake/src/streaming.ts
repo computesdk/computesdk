@@ -129,13 +129,30 @@ export async function streamTensorlakeCommand(
   const controller = new AbortController();
 
   let timedOut = false;
-  const timer =
+  let exited = false;
+  // The deadline kills the process and then abandons the follow streams, so a
+  // kill that never lands can't hold the caller open past its timeout. It is
+  // disarmed the moment the process is known to have exited, so the exit status
+  // can be read at leisure without a late deadline claiming a finished command.
+  let timer: ReturnType<typeof setTimeout> | undefined =
     options.timeout === undefined
       ? undefined
       : setTimeout(() => {
+          if (exited) return;
           timedOut = true;
-          void sandbox.killProcess(process.pid).catch(() => {});
+          void Promise.resolve()
+            .then(() => sandbox.killProcess(process.pid))
+            .catch(() => {})
+            .finally(() => controller.abort());
         }, options.timeout);
+
+  const disarm = () => {
+    exited = true;
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+  };
 
   try {
     const [stdoutPump, stderrPump] = await Promise.all([
@@ -149,14 +166,27 @@ export async function streamTensorlakeCommand(
       }),
     ]);
 
-    let info = await sandbox.getProcess(process.pid);
+    // Both streams have ended, so the process is gone and the deadline no longer
+    // applies to it.
+    disarm();
+
+    const status = () =>
+      sandbox
+        .getProcess(process.pid)
+        .catch(() => ({ status: ProcessStatus.RUNNING as string }));
+
+    let info: { status: string; exitCode?: number } = await status();
+    // A timed-out command's exit status is not worth waiting for: it is reported
+    // as a timeout either way, and waiting is what the deadline just refused.
     for (
       let attempt = 0;
-      attempt < EXIT_POLL_ATTEMPTS && info.status === ProcessStatus.RUNNING;
+      !timedOut &&
+      attempt < EXIT_POLL_ATTEMPTS &&
+      info.status === ProcessStatus.RUNNING;
       attempt += 1
     ) {
       await sleep(EXIT_POLL_INTERVAL_MS);
-      info = await sandbox.getProcess(process.pid);
+      info = await status();
     }
 
     if (stdoutPump.failed) {
@@ -186,6 +216,6 @@ export async function streamTensorlakeCommand(
       durationMs: durationMs(),
     };
   } finally {
-    if (timer) clearTimeout(timer);
+    disarm();
   }
 }

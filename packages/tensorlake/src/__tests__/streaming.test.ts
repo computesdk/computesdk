@@ -17,22 +17,25 @@ function fakeSandbox(overrides: Partial<StreamableTensorlakeSandbox> = {}) {
     while (waiters.length > 0) waiters.pop()!();
   };
 
-  async function* follow(lines: string[]): AsyncIterable<{ line: string }> {
+  async function* follow(lines: string[], signal?: AbortSignal): AsyncIterable<{ line: string }> {
     let sent = 0;
     while (true) {
       while (sent < lines.length) {
         yield { line: lines[sent] };
         sent += 1;
       }
-      if (exited) return;
-      await new Promise<void>((resolve) => waiters.push(resolve));
+      if (exited || signal?.aborted) return;
+      await new Promise<void>((resolve) => {
+        waiters.push(resolve);
+        signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
     }
   }
 
   const sandbox: StreamableTensorlakeSandbox = {
     startProcess: vi.fn(async () => ({ pid: 7 })),
-    followStdout: () => follow(stdout),
-    followStderr: () => follow(stderr),
+    followStdout: (_pid, options) => follow(stdout, options?.signal),
+    followStderr: (_pid, options) => follow(stderr, options?.signal),
     getProcess: vi.fn(async () => ({
       status: exited ? 'exited' : 'running',
       exitCode,
@@ -158,6 +161,44 @@ describe('streamTensorlakeCommand', () => {
 
     const result = await running;
     expect(fake.sandbox.killProcess).toHaveBeenCalledWith(7);
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+  });
+
+  it('does not call a finished command timed out while reading its exit status', async () => {
+    const fake = fakeSandbox({
+      // Reading the exit status outlasts the deadline; the process itself did not.
+      getProcess: vi.fn(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 40));
+        return { status: 'exited', exitCode: 0 };
+      }),
+    });
+
+    const running = streamTensorlakeCommand(fake.sandbox, 'echo hi', {
+      timeout: 5,
+      onStdout: () => {},
+    });
+    fake.emitStdout('hi');
+    fake.exit(0);
+
+    const result = await running;
+    expect(result.exitCode).toBe(0);
+    expect(fake.sandbox.killProcess).not.toHaveBeenCalled();
+  });
+
+  it('returns at the deadline even when the kill request fails', async () => {
+    const fake = fakeSandbox({
+      killProcess: vi.fn(async () => {
+        throw new Error('management API unreachable');
+      }),
+      getProcess: vi.fn(async () => ({ status: 'running' })),
+    });
+
+    // The process never exits and cannot be killed: only abandoning the follow
+    // streams gets the caller its deadline back.
+    const result = await streamTensorlakeCommand(fake.sandbox, 'sleep 600', {
+      timeout: 5,
+      onStdout: () => {},
+    });
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
   });
 
