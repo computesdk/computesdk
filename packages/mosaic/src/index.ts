@@ -148,16 +148,17 @@ class MosaicApiError extends Error {
   }
 }
 
+// The connections a burst opens belong to the process, not to one provider
+// object, so the count is shared; the limit is the caller's own.
 let inFlight = 0;
-let requestLimit = DEFAULT_MAX_CONCURRENT_REQUESTS;
 const queued: Array<() => void> = [];
 
 /**
  * Waits for room among the in-flight requests, or for the grace period,
  * whichever comes first.
  */
-async function takeRequestSlot(): Promise<void> {
-  if (inFlight < requestLimit) {
+async function takeRequestSlot(limit: number): Promise<void> {
+  if (inFlight < limit) {
     inFlight += 1;
     return;
   }
@@ -218,8 +219,7 @@ async function request<T>(
   const upstreamSignal = init.signal;
   const abort = () => controller.abort(upstreamSignal?.reason);
   upstreamSignal?.addEventListener('abort', abort, { once: true });
-  requestLimit = resolved.maxConcurrentRequests;
-  await takeRequestSlot();
+  await takeRequestSlot(resolved.maxConcurrentRequests);
   try {
     const response = await fetch(`${resolved.baseUrl}${path}`, {
       ...init,
