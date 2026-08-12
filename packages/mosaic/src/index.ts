@@ -211,6 +211,9 @@ async function request<T>(
   timeoutMs?: number,
 ): Promise<T> {
   const resolved = resolvedConfig(config);
+  // The slot is taken before the deadline starts, so time spent queueing is
+  // not charged against the caller's timeout.
+  await takeRequestSlot(resolved.maxConcurrentRequests);
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(new Error('Mosaic API request timed out')),
@@ -219,7 +222,6 @@ async function request<T>(
   const upstreamSignal = init.signal;
   const abort = () => controller.abort(upstreamSignal?.reason);
   upstreamSignal?.addEventListener('abort', abort, { once: true });
-  await takeRequestSlot(resolved.maxConcurrentRequests);
   try {
     const response = await fetch(`${resolved.baseUrl}${path}`, {
       ...init,

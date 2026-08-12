@@ -385,6 +385,33 @@ describe('Mosaic ComputeSDK provider', () => {
     expect(started).toBe(2);
   });
 
+  it('spends the caller timeout on the request, not on the queue', async () => {
+    let released = () => {};
+    const holder = new Promise<void>((resolve) => {
+      released = resolve;
+    });
+    let answered = 0;
+    globalThis.fetch = vi.fn(async (_url, init?: RequestInit) => {
+      if (answered === 0) {
+        answered += 1;
+        await holder;
+      } else {
+        answered += 1;
+      }
+      expect((init?.signal as AbortSignal | undefined)?.aborted).toBe(false);
+      return json({ id: 'sbx-timeout', state: 'running', tti_ms: 4 });
+    }) as typeof fetch;
+
+    const provider = mosaic({ ...config, maxConcurrentRequests: 1 });
+    const first = provider.sandbox.create({});
+    // Queued behind a request that outlives the second caller's own deadline.
+    const second = provider.sandbox.create({ timeout: 300 });
+
+    await expect(second).resolves.toMatchObject({ sandboxId: 'sbx-timeout' });
+    released();
+    await first;
+  });
+
   it('keeps the gateway remediation in the error it throws', async () => {
     gateway({
       'POST /v1/sandboxes': () =>
