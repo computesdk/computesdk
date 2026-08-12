@@ -19,9 +19,17 @@
 
 ## What is ComputeSDK?
 
-ComputeSDK is the open, multi-provider harness behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks). It provides one unified TypeScript interface for executing code in remote sandboxes, so benchmarks can run the same workload on every provider and you can build applications on the same API. Whether you're using E2B for data science, Modal for GPU workloads, or Vercel for serverless functions - ComputeSDK provides one unified API.
+ComputeSDK is the open, multi-provider benchmark harness for cloud infrastructure. It is the engine behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks) and a unified TypeScript SDK for running code in remote sandboxes.
+
+The same API lets you:
+
+- **Benchmark providers fairly** — run the same workload on E2B, Modal, Vercel, and dozens of others, then publish reproducible results.
+- **Build provider-agnostic apps** — switch sandboxes without changing application code for AI agents, code-execution platforms, and developer tools.
+
+Whether you're comparing infrastructure or running it, ComputeSDK provides one unified API.
 
 **Perfect for:**
+- 📊 Benchmarking infrastructure providers
 - 🤖 AI code execution agents
 - 📊 Data science platforms
 - 🎓 Educational coding environments
@@ -54,6 +62,7 @@ await sandbox.destroy();
 
 ## Features
 
+- 🧪 **Open benchmark harness** - Run reproducible workloads across providers and publish independent benchmarks ([ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks))
 - 🔄 **Multi-provider support** - E2B, Modal, Daytona, Vercel, and more
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Command execution** - Run shell commands in sandboxes

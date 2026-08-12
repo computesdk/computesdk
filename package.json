@@ -2,7 +2,7 @@
   "name": "computesdk",
   "version": "0.1.0",
   "private": true,
-  "description": "A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
+  "description": "Open benchmark harness for cloud infrastructure. Unified TypeScript SDK and provider abstraction layer for running code in secure, isolated sandboxed environments across multiple cloud providers.",
   "scripts": {
     "build": "pnpm --filter '@computesdk/cmd' run build && pnpm --filter daemond run build && pnpm --filter computesdk run build && pnpm --filter '@computesdk/provider' run build && pnpm --filter '@computesdk/test-utils' run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!daemond' --filter '!@computesdk/provider' --filter '!@computesdk/cmd' --filter '!@computesdk/test-utils' run build",
     "clean": "pnpm -r run clean",

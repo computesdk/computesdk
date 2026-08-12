@@ -70,6 +70,7 @@ When you install a package like `@computesdk/e2b`, you get a factory function fo
 
 ## Core features
 
+**Open benchmark harness** — Run the same workload on every provider and publish reproducible benchmarks ([ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks))\
 **Multi-provider support** — Use E2B, Modal, Vercel, and other providers through one SDK\
 **Sandbox lifecycle management** — Create, reconnect, list, and destroy sandboxes\
 **Filesystem operations** — Read, write, remove, and organize files\
