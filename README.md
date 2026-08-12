@@ -91,8 +91,11 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
 | **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
+| **Mosaic** | `MOSAIC_API_URL`, `MOSAIC_API_TOKEN` | Firecracker microVMs with preview URLs, snapshots, and container-image environments |
+| **NeevCloud** | `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID` | Cloud sandboxes with command execution and preview URLs |
 | **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
+| **Run Cloud** | `RUN_CLOUD_API_KEY` | Fast Firecracker microVM sandboxes with snapshots |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
@@ -299,6 +302,7 @@ npm install @computesdk/lightning        # Lightning AI provider
 npm install @computesdk/modal            # Modal provider
 npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
+npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provider
 npm install @computesdk/runloop          # Runloop provider
 npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
@@ -332,8 +336,10 @@ See individual provider READMEs for details:
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
-- **[@computesdk/mosaic](./packages/mosaic)** - Firecracker-based sandbox environments
+- **[@computesdk/mosaic](./packages/mosaic)** - Firecracker microVMs with preview URLs, snapshots, and container-image environments
+- **[@computesdk/neevcloud](./packages/neevcloud)** - Secure cloud sandboxes with command execution, filesystem, and preview URLs
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
+- **[@computesdk/run-cloud](./packages/run-cloud)** - Fast Firecracker microVM sandboxes with filesystem and snapshot support
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
 - **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.52
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
 ## 1.5.51
 
 ### Patch Changes
