@@ -340,6 +340,78 @@ describe('Mosaic ComputeSDK provider', () => {
     await expect(provider.sandbox.destroy('gone')).resolves.toBeUndefined();
   });
 
+  it('creates a burst of sandboxes without putting every request in flight at once', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    let answer = () => {};
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    globalThis.fetch = vi.fn(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await answered;
+      inFlight -= 1;
+      return json({ id: 'sbx-burst', state: 'running', tti_ms: 9 });
+    }) as typeof fetch;
+
+    const provider = mosaic({ ...config, maxConcurrentRequests: 4 });
+    const burst = Promise.all(Array.from({ length: 20 }, () => provider.sandbox.create({})));
+    // Let every create reach the queue before any of them is answered.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(peak).toBe(4);
+
+    answer();
+    await burst;
+    expect(peak).toBe(4);
+  });
+
+  it('lets a queued request through when the ones ahead of it are long-running', async () => {
+    let started = 0;
+    globalThis.fetch = vi.fn(async () => {
+      started += 1;
+      // A command that runs for minutes never frees its slot on its own.
+      await new Promise(() => {});
+      return json({});
+    }) as typeof fetch;
+
+    const provider = mosaic({ ...config, maxConcurrentRequests: 1 });
+    void provider.sandbox.create({}).catch(() => {});
+    void provider.sandbox.create({}).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(started).toBe(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(started).toBe(2);
+  });
+
+  it('spends the caller timeout on the request, not on the queue', async () => {
+    let released = () => {};
+    const holder = new Promise<void>((resolve) => {
+      released = resolve;
+    });
+    let answered = 0;
+    globalThis.fetch = vi.fn(async (_url, init?: RequestInit) => {
+      if (answered === 0) {
+        answered += 1;
+        await holder;
+      } else {
+        answered += 1;
+      }
+      expect((init?.signal as AbortSignal | undefined)?.aborted).toBe(false);
+      return json({ id: 'sbx-timeout', state: 'running', tti_ms: 4 });
+    }) as typeof fetch;
+
+    const provider = mosaic({ ...config, maxConcurrentRequests: 1 });
+    const first = provider.sandbox.create({});
+    // Queued behind a request that outlives the second caller's own deadline.
+    const second = provider.sandbox.create({ timeout: 300 });
+
+    await expect(second).resolves.toMatchObject({ sandboxId: 'sbx-timeout' });
+    released();
+    await first;
+  });
+
   it('keeps the gateway remediation in the error it throws', async () => {
     gateway({
       'POST /v1/sandboxes': () =>

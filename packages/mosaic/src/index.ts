@@ -14,6 +14,11 @@ import type {
 
 const PROVIDER = 'mosaic' as const;
 const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_MAX_CONCURRENT_REQUESTS = 32;
+// A queued request gives up its place rather than wait indefinitely, so a
+// caller whose requests are all long-running keeps its concurrency: the queue
+// smooths a burst of connection setups, it does not cap throughput.
+const REQUEST_QUEUE_GRACE_MS = 1_000;
 const COMMAND_HTTP_TIMEOUT_BUFFER_MS = 5_000;
 const BUILD_TIMEOUT_MS = 20 * 60 * 1000;
 const BUILD_POLL_INTERVAL_MS = 2_000;
@@ -34,6 +39,13 @@ export interface MosaicConfig {
   vcpu?: number;
   /** HTTP request timeout. */
   requestTimeoutMs?: number;
+  /**
+   * How many HTTP requests this client keeps in flight before it starts
+   * queueing. `fetch` opens a connection per in-flight request, so an
+   * unbounded client answers a burst of sandbox creates with a burst of TLS
+   * handshakes. Defaults to 32; Infinity restores the unbounded behaviour.
+   */
+  maxConcurrentRequests?: number;
   /** Give sandboxes egress. On by default; installs and fetches need it. */
   networkEnabled?: boolean;
   /** How long a preview URL from getUrl stays valid. */
@@ -136,6 +148,40 @@ class MosaicApiError extends Error {
   }
 }
 
+// The connections a burst opens belong to the process, not to one provider
+// object, so the count is shared; the limit is the caller's own.
+let inFlight = 0;
+const queued: Array<() => void> = [];
+
+/**
+ * Waits for room among the in-flight requests, or for the grace period,
+ * whichever comes first.
+ */
+async function takeRequestSlot(limit: number): Promise<void> {
+  if (inFlight < limit) {
+    inFlight += 1;
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const proceed = () => {
+      clearTimeout(timer);
+      const waiting = queued.indexOf(proceed);
+      if (waiting >= 0) queued.splice(waiting, 1);
+      resolve();
+    };
+    const timer = setTimeout(proceed, REQUEST_QUEUE_GRACE_MS);
+    // Node keeps the process alive for a pending timer it does not need to.
+    (timer as unknown as { unref?: () => void }).unref?.();
+    queued.push(proceed);
+  });
+  inFlight += 1;
+}
+
+function releaseRequestSlot(): void {
+  inFlight -= 1;
+  queued.shift()?.();
+}
+
 function env(name: string): string | undefined {
   return typeof process === 'undefined' ? undefined : process.env?.[name];
 }
@@ -152,6 +198,7 @@ function resolvedConfig(config: MosaicConfig): Required<MosaicConfig> {
     memoryMb: config.memoryMb ?? 4096,
     vcpu: config.vcpu ?? 2,
     requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS,
+    maxConcurrentRequests: config.maxConcurrentRequests ?? DEFAULT_MAX_CONCURRENT_REQUESTS,
     networkEnabled: config.networkEnabled ?? true,
     previewExpiresInSeconds: config.previewExpiresInSeconds ?? 3600,
   };
@@ -164,6 +211,9 @@ async function request<T>(
   timeoutMs?: number,
 ): Promise<T> {
   const resolved = resolvedConfig(config);
+  // The slot is taken before the deadline starts, so time spent queueing is
+  // not charged against the caller's timeout.
+  await takeRequestSlot(resolved.maxConcurrentRequests);
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(new Error('Mosaic API request timed out')),
@@ -196,6 +246,7 @@ async function request<T>(
     }
     return (body ? JSON.parse(body) : undefined) as T;
   } finally {
+    releaseRequestSlot();
     clearTimeout(timer);
     upstreamSignal?.removeEventListener('abort', abort);
   }
