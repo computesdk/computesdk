@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@nodeops-createos/sandbox": "^0.7.1"
+    "@nodeops-createos/sandbox": "^0.8.1"
   },
   "keywords": [
     "code-execution",

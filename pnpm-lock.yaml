@@ -781,8 +781,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@nodeops-createos/sandbox':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.8.1
+        version: 0.8.1
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -4379,8 +4379,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@nodeops-createos/sandbox@0.7.1':
-    resolution: {integrity: sha512-6bGA3wNe8OZ6pmcH2AzVA7grAalqzHGBrxY0DQkHTJ8JR/oSWRf/Xhdd0hNZYMDbkQQxwumRfbtfSZVot10/Lg==}
+  '@nodeops-createos/sandbox@0.8.1':
+    resolution: {integrity: sha512-xNm+maWd+TDcXe9rJmZP/BQRDG8fqMcJCrLeKvcuI2QB6FVHVJWszNU6q7BKgUg058no6D+y+5iwdiElXI1cIQ==}
     engines: {node: '>=20'}
 
   '@northflank/js-client@0.9.5':
@@ -11448,7 +11448,7 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@nodeops-createos/sandbox@0.7.1':
+  '@nodeops-createos/sandbox@0.8.1':
     optionalDependencies:
       '@types/node': 26.1.1
       undici: 7.28.0
