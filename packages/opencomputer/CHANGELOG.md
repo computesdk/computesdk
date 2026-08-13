@@ -1,5 +1,11 @@
 # @computesdk/opencomputer
 
+## 1.0.3
+
+### Patch Changes
+
+- b832bc8: Bump `@nodeops-createos/sandbox` to `^0.8.1` and track `latest` for `@opencomputer/sdk`.
+
 ## 1.0.2
 
 ### Patch Changes
