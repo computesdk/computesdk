@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => {
     write: vi.fn(),
   };
   const nativeDevbox = { command, cmd: command, file };
+  const executions = {
+    kill: vi.fn(),
+    streamStdoutUpdates: vi.fn(),
+    streamStderrUpdates: vi.fn(),
+  };
   const devboxes = {
     createAndAwaitRunning: vi.fn(),
     retrieve: vi.fn(),
@@ -19,6 +24,7 @@ const mocks = vi.hoisted(() => {
     snapshotDisk: vi.fn(),
     listDiskSnapshots: vi.fn(),
     deleteDiskSnapshot: vi.fn(),
+    executions,
   };
   const blueprints = {
     create: vi.fn(),
@@ -29,7 +35,7 @@ const mocks = vi.hoisted(() => {
     api: { devboxes, blueprints },
     devbox: { fromId: vi.fn(() => nativeDevbox) },
   };
-  return { command, file, nativeDevbox, devboxes, blueprints, client };
+  return { command, file, nativeDevbox, executions, devboxes, blueprints, client };
 });
 
 vi.mock("@runloop/api-client", () => ({
@@ -100,6 +106,9 @@ beforeEach(() => {
   mocks.devboxes.shutdown.mockResolvedValue(devbox("shutdown"));
   mocks.devboxes.snapshotDisk.mockResolvedValue(snapshot("snapshot-created"));
   mocks.devboxes.listDiskSnapshots.mockReturnValue(paginated([]));
+  mocks.executions.kill.mockResolvedValue(undefined);
+  mocks.executions.streamStdoutUpdates.mockResolvedValue(paginated([]));
+  mocks.executions.streamStderrUpdates.mockResolvedValue(paginated([]));
   mocks.command.exec.mockResolvedValue(result());
   mocks.file.read.mockResolvedValue("");
   mocks.file.write.mockResolvedValue(undefined);
@@ -167,25 +176,41 @@ describe("Runloop command execution", () => {
 
   it("cancels a timed-out async execution, returns 124, and stops callbacks", async () => {
     vi.useFakeTimers();
-    let streamingParams: { stdout?: (chunk: string) => void } = {};
-    const kill = vi.fn().mockResolvedValue(undefined);
-    const pendingResult = new Promise<never>(() => {});
-    mocks.command.execAsync.mockImplementation(async (_command, params) => {
-      streamingParams = params;
-      return { result: () => pendingResult, kill };
+    mocks.executions.kill.mockRejectedValueOnce(new Error("kill request failed"));
+    mocks.executions.streamStdoutUpdates.mockImplementation(async (
+      _devboxId,
+      _executionId,
+      _params,
+      requestOptions,
+    ) => ({
+      async *[Symbol.asyncIterator]() {
+        yield { output: "before-timeout\n" };
+        await new Promise<void>((resolve) => {
+          requestOptions.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        yield { output: "after-timeout\n" };
+      },
+    }));
+    mocks.command.execAsync.mockResolvedValue({
+      executionId: "exec-1",
+      result: ({ signal }: { signal: AbortSignal }) => new Promise((_, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("monitor aborted")), { once: true });
+      }),
     });
     const onStdout = vi.fn();
     const { sandbox } = await getSandbox();
 
     const running = sandbox.runCommand("sleep 60", { timeout: 50, onStdout });
     await vi.advanceTimersByTimeAsync(10);
-    streamingParams.stdout?.("before-timeout\n");
     await vi.advanceTimersByTimeAsync(40);
     const commandResult = await running;
-    streamingParams.stdout?.("after-timeout\n");
 
     expect(commandResult.exitCode).toBe(124);
-    expect(kill).toHaveBeenCalledOnce();
+    expect(mocks.executions.kill).toHaveBeenCalledWith(
+      "devbox-1",
+      "exec-1",
+      { kill_process_group: true },
+    );
     expect(onStdout).toHaveBeenCalledTimes(1);
     expect(onStdout).toHaveBeenCalledWith("before-timeout\n");
   });
@@ -214,6 +239,22 @@ describe("Runloop lifecycle and listing", () => {
         },
       }),
       { longPoll: { timeoutMs: 2_500 } },
+    );
+
+    await provider.sandbox.create({
+      launch_parameters: {
+        keep_alive_time_seconds: 999,
+        resource_size_request: "LARGE",
+      },
+    });
+    expect(mocks.devboxes.createAndAwaitRunning).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        launch_parameters: {
+          keep_alive_time_seconds: 999,
+          resource_size_request: "LARGE",
+        },
+      }),
+      undefined,
     );
   });
 

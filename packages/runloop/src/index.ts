@@ -195,6 +195,24 @@ function normalizeSnapshot(snapshot: Runloop.DevboxSnapshotView): Snapshot {
   };
 }
 
+async function streamExecutionOutput(
+  openStream: () => Promise<AsyncIterable<{ output: string }>>,
+  onChunk: ((chunk: string) => void) | undefined,
+  signal: AbortSignal,
+  isActive: () => boolean,
+): Promise<void> {
+  if (!onChunk) return;
+  try {
+    const stream = await openStream();
+    for await (const chunk of stream) {
+      if (signal.aborted) break;
+      if (isActive()) onChunk(chunk.output);
+    }
+  } catch {
+    // Streaming is best effort, matching the native SDK callback behavior.
+  }
+}
+
 async function executeCommand(
   sandbox: RunloopSandbox,
   command: string,
@@ -230,8 +248,33 @@ async function executeCommand(
   }
 
   const timeoutMs = options.timeout;
-  const execution = await devbox.cmd.execAsync(fullCommand, executionParams);
-  const resultPromise = execution.result();
+  const monitorController = new AbortController();
+  const execution = await devbox.cmd.execAsync(fullCommand);
+  const streamPromises = [
+    streamExecutionOutput(
+      () => sandbox.client.api.devboxes.executions.streamStdoutUpdates(
+        sandbox.id,
+        execution.executionId,
+        {},
+        { signal: monitorController.signal },
+      ),
+      options.onStdout,
+      monitorController.signal,
+      () => callbacksActive,
+    ),
+    streamExecutionOutput(
+      () => sandbox.client.api.devboxes.executions.streamStderrUpdates(
+        sandbox.id,
+        execution.executionId,
+        {},
+        { signal: monitorController.signal },
+      ),
+      options.onStderr,
+      monitorController.signal,
+      () => callbacksActive,
+    ),
+  ];
+  const resultPromise = execution.result({ signal: monitorController.signal });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), Math.max(0, timeoutMs));
@@ -245,14 +288,21 @@ async function executeCommand(
 
     if (outcome === "timeout") {
       callbacksActive = false;
-      void resultPromise.catch(() => undefined);
+      monitorController.abort();
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await Promise.race([
-          execution.kill().catch(() => undefined),
-          new Promise<void>((resolve) => {
-            killTimer = setTimeout(resolve, 1_000);
-          }),
+        await Promise.all([
+          Promise.race([
+            sandbox.client.api.devboxes.executions.kill(
+              sandbox.id,
+              execution.executionId,
+              { kill_process_group: true },
+            ).catch(() => undefined),
+            new Promise<void>((resolve) => {
+              killTimer = setTimeout(resolve, 1_000);
+            }),
+          ]),
+          Promise.allSettled([resultPromise, ...streamPromises]),
         ]);
       } finally {
         if (killTimer) clearTimeout(killTimer);
@@ -265,10 +315,16 @@ async function executeCommand(
       };
     }
 
+    await Promise.allSettled(streamPromises);
     return await toCommandResult(outcome.result);
+  } catch (error) {
+    monitorController.abort();
+    await Promise.allSettled(streamPromises);
+    throw error;
   } finally {
     if (timer) clearTimeout(timer);
     callbacksActive = false;
+    monitorController.abort();
   }
 }
 
@@ -352,9 +408,9 @@ export const runloop = defineProvider<
           } = options || {};
 
           const effectiveTimeout = optTimeout ?? timeout;
-          const keepAliveSeconds = effectiveTimeout
+          const keepAliveSeconds = effectiveTimeout !== undefined
             ? Math.ceil(effectiveTimeout / 1000)
-            : 1800;
+            : optLaunchParameters?.keep_alive_time_seconds ?? 1800;
 
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: deepMerge(

@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { runloop } from "../index";
 
-const runLive = Boolean(process.env.RUNLOOP_API_KEY);
+const runLive = process.env.RUNLOOP_INTEGRATION === "1" && Boolean(process.env.RUNLOOP_API_KEY);
 
 it.runIf(runLive)("runs the modernized adapter against one shared Runloop devbox", async () => {
   const provider = runloop({
@@ -50,7 +50,7 @@ it.runIf(runLive)("runs the modernized adapter against one shared Runloop devbox
 
     await sandbox.runCommand(`rm -f -- '${timeoutMarker}'`);
     const timedOut = await sandbox.runCommand(
-      `sleep 2; touch -- '${timeoutMarker}'`,
+      `(sleep 2; touch -- '${timeoutMarker}') & wait`,
       { timeout: 200 },
     );
     expect(timedOut.exitCode).toBe(124);
