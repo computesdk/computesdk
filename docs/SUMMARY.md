@@ -33,6 +33,7 @@
   * [Lightning](providers/lightning.md)
   * [Modal](providers/modal.md)
   * [Microsandbox](providers/microsandbox.md)
+  * [MIOSA](providers/miosa.md)
   * [Mosaic](providers/mosaic.md)
   * [Namespace](providers/namespace.md)
   * [NeevCloud](providers/neevcloud.md)
