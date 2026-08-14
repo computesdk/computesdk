@@ -227,6 +227,27 @@ async function streamExecutionOutput(
   }
 }
 
+async function bestEffortKillExecution(
+  sandbox: RunloopSandbox,
+  executionId: string,
+): Promise<void> {
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      sandbox.client.api.devboxes.executions.kill(
+        sandbox.id,
+        executionId,
+        { kill_process_group: true },
+      ).catch(() => undefined),
+      new Promise<void>((resolve) => {
+        killTimer = setTimeout(resolve, 1_000);
+      }),
+    ]);
+  } finally {
+    if (killTimer) clearTimeout(killTimer);
+  }
+}
+
 async function executeCommand(
   sandbox: RunloopSandbox,
   command: string,
@@ -297,6 +318,7 @@ async function executeCommand(
     ),
   ];
   const resultPromise = execution.result({ signal: monitorController.signal });
+  let executionCompleted = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), Math.max(0, timeoutMs));
@@ -311,24 +333,10 @@ async function executeCommand(
     if (outcome === "timeout") {
       callbacksActive = false;
       monitorController.abort();
-      let killTimer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.all([
-          Promise.race([
-            sandbox.client.api.devboxes.executions.kill(
-              sandbox.id,
-              execution.executionId,
-              { kill_process_group: true },
-            ).catch(() => undefined),
-            new Promise<void>((resolve) => {
-              killTimer = setTimeout(resolve, 1_000);
-            }),
-          ]),
-          Promise.allSettled([resultPromise, ...streamPromises]),
-        ]);
-      } finally {
-        if (killTimer) clearTimeout(killTimer);
-      }
+      await Promise.all([
+        bestEffortKillExecution(sandbox, execution.executionId),
+        Promise.allSettled([resultPromise, ...streamPromises]),
+      ]);
       return {
         stdout: streamedStdout,
         stderr: streamedStderr,
@@ -337,6 +345,7 @@ async function executeCommand(
       };
     }
 
+    executionCompleted = true;
     monitorController.abort();
     await Promise.allSettled(streamPromises);
     const commandResult = await toCommandResult(outcome.result);
@@ -344,8 +353,14 @@ async function executeCommand(
     emitMissingOutput(streamedStderr, commandResult.stderr, options.onStderr);
     return commandResult;
   } catch (error) {
+    callbacksActive = false;
     monitorController.abort();
-    await Promise.allSettled(streamPromises);
+    await Promise.all([
+      executionCompleted
+        ? Promise.resolve()
+        : bestEffortKillExecution(sandbox, execution.executionId),
+      Promise.allSettled(streamPromises),
+    ]);
     throw error;
   } finally {
     if (timer) clearTimeout(timer);
@@ -434,14 +449,15 @@ export const runloop = defineProvider<
           } = options || {};
 
           const effectiveTimeout = optTimeout ?? timeout;
-          const keepAliveSeconds = effectiveTimeout !== undefined
-            ? Math.ceil(effectiveTimeout / 1000)
-            : optLaunchParameters?.keep_alive_time_seconds ?? 1800;
+          const keepAliveSeconds = optLaunchParameters?.keep_alive_time_seconds
+            ?? (effectiveTimeout !== undefined
+              ? Math.ceil(effectiveTimeout / 1000)
+              : 1800);
 
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: deepMerge(
-              (optLaunchParameters ?? {}) as Record<string, unknown>,
               { keep_alive_time_seconds: keepAliveSeconds },
+              (optLaunchParameters ?? {}) as Record<string, unknown>,
             ) as Runloop.DevboxCreateParams["launch_parameters"],
             name: name || optSandboxId,
             metadata,
@@ -604,9 +620,10 @@ export const runloop = defineProvider<
         },
 
         readdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
+          const findPath = path.startsWith("-") ? `./${path}` : path;
           const result = await runCommand(
             sandbox,
-            `find -- ${shellQuote(path)} -mindepth 1 -maxdepth 1 -exec sh -c ` +
+            `find -- ${shellQuote(findPath)} -mindepth 1 -maxdepth 1 -exec sh -c ` +
               `${shellQuote('for entry do name=${entry##*/}; if [ -d "$entry" ]; then type=directory; else type=file; fi; encoded=$(printf %s "$name" | base64 | tr -d "\\n"); size=$(stat -c %s -- "$entry") || exit; modified=$(stat -c %Y -- "$entry") || exit; printf "%s\\t%s\\t%s\\t%s\\n" "$encoded" "$type" "$size" "$modified"; done')} ` +
               `sh {} +`,
           );

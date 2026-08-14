@@ -243,10 +243,27 @@ describe("Runloop command execution", () => {
     expect(commandResult).toMatchObject({ stdout: "streamed\nfinal\n", exitCode: 0 });
     expect(onStdout.mock.calls.flat()).toEqual(["streamed\n", "final\n"]);
   });
+
+  it("kills the remote process group when result monitoring fails", async () => {
+    mocks.command.execAsync.mockResolvedValue({
+      executionId: "exec-monitor-failed",
+      result: vi.fn().mockRejectedValue(new Error("result polling failed")),
+    });
+    const { sandbox } = await getSandbox();
+
+    await expect(sandbox.runCommand("still-running", { timeout: 10_000 }))
+      .rejects.toThrow("result polling failed");
+
+    expect(mocks.executions.kill).toHaveBeenCalledWith(
+      "devbox-1",
+      "exec-monitor-failed",
+      { kill_process_group: true },
+    );
+  });
 });
 
 describe("Runloop lifecycle and listing", () => {
-  it("deep-merges launch parameters while retaining the calculated keep-alive", async () => {
+  it("deep-merges launch parameters while preserving an explicit keep-alive", async () => {
     const provider = runloop({ apiKey: "test-key" });
     await provider.sandbox.create({
       timeout: 2_500,
@@ -261,11 +278,19 @@ describe("Runloop lifecycle and listing", () => {
     expect(mocks.devboxes.createAndAwaitRunning).toHaveBeenCalledWith(
       expect.objectContaining({
         launch_parameters: {
-          keep_alive_time_seconds: 3,
+          keep_alive_time_seconds: 999,
           resource_size_request: "CUSTOM_SIZE",
           custom_cpu_cores: 4,
           lifecycle: { resume_triggers: { http: true } },
         },
+      }),
+      { longPoll: { timeoutMs: 2_500 } },
+    );
+
+    await provider.sandbox.create({ timeout: 2_500 });
+    expect(mocks.devboxes.createAndAwaitRunning).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        launch_parameters: { keep_alive_time_seconds: 3 },
       }),
       { longPoll: { timeoutMs: 2_500 } },
     );
@@ -463,6 +488,20 @@ describe("Runloop filesystem", () => {
     ]);
     expect(mocks.command.exec.mock.calls[0][0]).toContain("find -- '/tmp/a path/'\"'\"'quoted'\"'\"'\nroot'");
     expect(mocks.command.exec.mock.calls[0][0]).not.toContain("ls -la");
+  });
+
+  it("prefixes dash-leading relative readdir paths for GNU find", async () => {
+    mocks.command.exec.mockResolvedValue(result(
+      `${Buffer.from("entry.txt").toString("base64")}\tfile\t4\t1710000000\n`,
+    ));
+    const { sandbox } = await getSandbox();
+
+    await expect(sandbox.filesystem.readdir("-dir/'quoted'\nroot")).resolves.toEqual([
+      { name: "entry.txt", type: "file", size: 4, modified: new Date(1_710_000_000_000) },
+    ]);
+    expect(mocks.command.exec.mock.calls.at(-1)?.[0]).toContain(
+      `find -- './-dir/'"'"'quoted'"'"'\nroot'`,
+    );
   });
 
   it("quotes shell fallback paths, terminates options, and guards deletion roots", async () => {

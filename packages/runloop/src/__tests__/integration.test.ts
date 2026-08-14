@@ -16,6 +16,7 @@ it.runIf(runLive)("runs the modernized adapter against one shared Runloop devbox
   const root = `/tmp/computesdk hostile ' $() ${Date.now()}\nroot`;
   const fileName = `space ' quote $(touch-nope)\nfile.txt`;
   const filePath = `${root}/${fileName}`;
+  const dashRoot = `-computesdk-dash-${Date.now()}`;
   const timeoutMarker = `/tmp/computesdk-timeout-${Date.now()}`;
 
   try {
@@ -45,6 +46,12 @@ it.runIf(runLive)("runs the modernized adapter against one shared Runloop devbox
       size: Buffer.byteLength(content),
     });
 
+    await sandbox.filesystem.mkdir(dashRoot);
+    await sandbox.filesystem.writeFile(`${dashRoot}/entry.txt`, "dash-safe");
+    await expect(sandbox.filesystem.readdir(dashRoot)).resolves.toEqual([
+      expect.objectContaining({ name: "entry.txt", type: "file", size: 9 }),
+    ]);
+
     const info = await sandbox.getInfo();
     expect(info).toMatchObject({ id: sandbox.sandboxId, provider: "runloop", status: "running" });
 
@@ -58,6 +65,7 @@ it.runIf(runLive)("runs the modernized adapter against one shared Runloop devbox
     expect(cancellation.exitCode).toBe(0);
   } finally {
     await sandbox.filesystem.remove(root).catch(() => undefined);
+    await sandbox.filesystem.remove(dashRoot).catch(() => undefined);
     await sandbox.runCommand(`rm -f -- '${timeoutMarker}'`).catch(() => undefined);
     await sandbox.destroy().catch(() => undefined);
   }
