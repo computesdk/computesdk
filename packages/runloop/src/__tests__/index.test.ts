@@ -206,6 +206,8 @@ describe("Runloop command execution", () => {
     const commandResult = await running;
 
     expect(commandResult.exitCode).toBe(124);
+    expect(commandResult.stdout).toBe("before-timeout\n");
+    expect(commandResult.stderr).toBe("");
     expect(mocks.executions.kill).toHaveBeenCalledWith(
       "devbox-1",
       "exec-1",
@@ -213,6 +215,33 @@ describe("Runloop command execution", () => {
     );
     expect(onStdout).toHaveBeenCalledTimes(1);
     expect(onStdout).toHaveBeenCalledWith("before-timeout\n");
+  });
+
+  it("aborts monitor streams after completion and emits output missing from callbacks", async () => {
+    let resolveResult!: (value: ReturnType<typeof result>) => void;
+    mocks.executions.streamStdoutUpdates.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        yield { output: "streamed\n" };
+        await new Promise<void>((resolve) => {
+          const signal = mocks.executions.streamStdoutUpdates.mock.calls.at(-1)?.[3].signal;
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+      },
+    });
+    mocks.command.execAsync.mockResolvedValue({
+      executionId: "exec-complete",
+      result: () => new Promise((resolve) => { resolveResult = resolve; }),
+    });
+    const onStdout = vi.fn();
+    const { sandbox } = await getSandbox();
+
+    const running = sandbox.runCommand("quick", { timeout: 10_000, onStdout });
+    await vi.waitFor(() => expect(onStdout).toHaveBeenCalledWith("streamed\n"));
+    resolveResult(result("streamed\nfinal\n", "", 0));
+    const commandResult = await running;
+
+    expect(commandResult).toMatchObject({ stdout: "streamed\nfinal\n", exitCode: 0 });
+    expect(onStdout.mock.calls.flat()).toEqual(["streamed\n", "final\n"]);
   });
 });
 
@@ -321,11 +350,11 @@ describe("Runloop lifecycle and listing", () => {
   });
 });
 
-function snapshot(id: string) {
+function snapshot(id: string, metadata: Record<string, unknown> = { purpose: "test" }) {
   return {
     id,
     create_time_ms: 1_710_000_000_000,
-    metadata: { purpose: "test" },
+    metadata,
     source_devbox_id: "devbox-1",
     source_blueprint_id: "bpt_1",
     name: "checkpoint",
@@ -337,27 +366,44 @@ function snapshot(id: string) {
 describe("Runloop snapshots", () => {
   it("normalizes created snapshots", async () => {
     const provider = runloop({ apiKey: "test-key" });
+    mocks.devboxes.snapshotDisk.mockResolvedValueOnce(snapshot("snapshot-created", {
+      purpose: "test",
+      name: "user-defined-name",
+      sizeBytes: "user-defined-size",
+    }));
 
     const created = await provider.snapshot!.create("devbox-1", {
       name: "checkpoint",
-      metadata: { purpose: "test" },
+      metadata: {
+        purpose: "test",
+        name: "user-defined-name",
+        sizeBytes: "user-defined-size",
+      },
     });
 
     expect(mocks.devboxes.snapshotDisk).toHaveBeenCalledWith("devbox-1", {
       name: "checkpoint",
-      metadata: { purpose: "test" },
+      metadata: {
+        purpose: "test",
+        name: "user-defined-name",
+        sizeBytes: "user-defined-size",
+      },
     });
     expect(created).toEqual({
       id: "snapshot-created",
       provider: "runloop",
       createdAt: new Date(1_710_000_000_000),
       metadata: {
-        purpose: "test",
         name: "checkpoint",
         sourceDevboxId: "devbox-1",
         sourceBlueprintId: "bpt_1",
         sizeBytes: 12_345,
         commitMessage: "before migration",
+        userMetadata: {
+          purpose: "test",
+          name: "user-defined-name",
+          sizeBytes: "user-defined-size",
+        },
       },
     });
   });
@@ -372,6 +418,10 @@ describe("Runloop snapshots", () => {
 
     expect(snapshots.map((item) => item.id)).toEqual(["snp_1", "snp_2"]);
     expect(snapshots.every((item) => item.provider === "runloop")).toBe(true);
+    expect(snapshots[0]?.metadata).toMatchObject({
+      name: "checkpoint",
+      userMetadata: { purpose: "test" },
+    });
     expect(mocks.devboxes.listDiskSnapshots).toHaveBeenCalledWith({
       devbox_id: "devbox-1",
       limit: 2,

@@ -185,23 +185,37 @@ function normalizeSnapshot(snapshot: Runloop.DevboxSnapshotView): Snapshot {
     provider: "runloop",
     createdAt: new Date(snapshot.create_time_ms),
     metadata: {
-      ...snapshot.metadata,
       name: snapshot.name ?? null,
       sourceDevboxId: snapshot.source_devbox_id,
       sourceBlueprintId: snapshot.source_blueprint_id ?? null,
       sizeBytes: snapshot.size_bytes ?? null,
       commitMessage: snapshot.commit_message ?? null,
+      userMetadata: snapshot.metadata ?? {},
     },
   };
 }
 
+function emitMissingOutput(
+  emitted: string,
+  complete: string,
+  callback: ((chunk: string) => void) | undefined,
+): void {
+  if (!callback || !complete || emitted.includes(complete)) return;
+  if (!emitted) {
+    callback(complete);
+  } else if (complete.startsWith(emitted)) {
+    callback(complete.slice(emitted.length));
+  } else if (!complete.includes(emitted)) {
+    callback(complete);
+  }
+}
+
 async function streamExecutionOutput(
   openStream: () => Promise<AsyncIterable<{ output: string }>>,
-  onChunk: ((chunk: string) => void) | undefined,
+  onChunk: (chunk: string) => void,
   signal: AbortSignal,
   isActive: () => boolean,
 ): Promise<void> {
-  if (!onChunk) return;
   try {
     const stream = await openStream();
     for await (const chunk of stream) {
@@ -250,6 +264,8 @@ async function executeCommand(
   const timeoutMs = options.timeout;
   const monitorController = new AbortController();
   const execution = await devbox.cmd.execAsync(fullCommand);
+  let streamedStdout = "";
+  let streamedStderr = "";
   const streamPromises = [
     streamExecutionOutput(
       () => sandbox.client.api.devboxes.executions.streamStdoutUpdates(
@@ -258,7 +274,10 @@ async function executeCommand(
         {},
         { signal: monitorController.signal },
       ),
-      options.onStdout,
+      (chunk) => {
+        streamedStdout += chunk;
+        options.onStdout?.(chunk);
+      },
       monitorController.signal,
       () => callbacksActive,
     ),
@@ -269,7 +288,10 @@ async function executeCommand(
         {},
         { signal: monitorController.signal },
       ),
-      options.onStderr,
+      (chunk) => {
+        streamedStderr += chunk;
+        options.onStderr?.(chunk);
+      },
       monitorController.signal,
       () => callbacksActive,
     ),
@@ -308,15 +330,19 @@ async function executeCommand(
         if (killTimer) clearTimeout(killTimer);
       }
       return {
-        stdout: "",
-        stderr: "",
+        stdout: streamedStdout,
+        stderr: streamedStderr,
         exitCode: 124,
         durationMs: Date.now() - startTime,
       };
     }
 
+    monitorController.abort();
     await Promise.allSettled(streamPromises);
-    return await toCommandResult(outcome.result);
+    const commandResult = await toCommandResult(outcome.result);
+    emitMissingOutput(streamedStdout, commandResult.stdout, options.onStdout);
+    emitMissingOutput(streamedStderr, commandResult.stderr, options.onStderr);
+    return commandResult;
   } catch (error) {
     monitorController.abort();
     await Promise.allSettled(streamPromises);
