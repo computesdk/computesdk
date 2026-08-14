@@ -7,6 +7,7 @@
 
 import { RunloopSDK, type Runloop } from "@runloop/api-client";
 import { defineProvider } from "@computesdk/provider";
+import { posix as posixPath } from "node:path";
 import type {
   CommandResult,
   SandboxInfo,
@@ -74,47 +75,16 @@ function longPollOptions<TOptions>(timeoutMs?: number): TOptions | undefined {
   return timeoutMs ? ({ longPoll: { timeoutMs } } as TOptions) : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function deepMerge<T extends Record<string, unknown>>(
-  base: T,
-  override?: Record<string, unknown>,
-): T {
-  if (!override) return { ...base };
-
-  const merged: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const current = merged[key];
-    merged[key] = isRecord(current) && isRecord(value)
-      ? deepMerge(current, value)
-      : value;
-  }
-  return merged as T;
-}
-
-function shellQuote(value: string): string {
+function quotePosixShellToken(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
-function normalizePosixPath(value: string): string {
-  const absolute = value.startsWith("/");
-  const parts: string[] = [];
-  for (const part of value.split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") {
-      if (parts.length > 0 && parts[parts.length - 1] !== "..") {
-        parts.pop();
-      } else if (!absolute) {
-        parts.push(part);
-      }
-    } else {
-      parts.push(part);
-    }
+function assertSafeRemovalPath(value: string): void {
+  const normalized = posixPath.normalize(value);
+  if (value.length === 0 || normalized === "/" || normalized === "." ||
+      normalized === ".." || normalized.startsWith("../")) {
+    throw new Error(`Refusing to remove unsafe path: ${JSON.stringify(value)}`);
   }
-  if (absolute) return `/${parts.join("/")}`;
-  return parts.join("/") || ".";
 }
 
 function buildCommand(command: string, options?: RunCommandOptions): string {
@@ -126,25 +96,67 @@ function buildCommand(command: string, options?: RunCommandOptions): string {
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
           throw new Error(`Invalid environment variable name: ${JSON.stringify(key)}`);
         }
-        return `${key}=${shellQuote(String(value))}`;
+        return `${key}=${quotePosixShellToken(String(value))}`;
       })
       .join(" ");
     fullCommand = `${envPrefix} ${fullCommand}`;
   }
 
   if (options?.cwd) {
-    fullCommand = `cd -- ${shellQuote(options.cwd)} && ${fullCommand}`;
+    fullCommand = `cd -- ${quotePosixShellToken(options.cwd)} && ${fullCommand}`;
   }
 
   if (options?.background) {
-    fullCommand = `nohup sh -lc ${shellQuote(fullCommand)} >/dev/null 2>&1 &`;
+    fullCommand = `nohup sh -lc ${quotePosixShellToken(fullCommand)} >/dev/null 2>&1 &`;
   }
 
   return fullCommand;
 }
 
 function isHttpNotFound(error: unknown): boolean {
-  return isRecord(error) && error.status === 404;
+  return typeof error === "object" && error !== null &&
+    "status" in error && error.status === 404;
+}
+
+const READDIR_ENTRY_SCRIPT = [
+  "for entry; do",
+  '  name=${entry##*/}',
+  '  if [ -d "$entry" ]; then type=directory; else type=file; fi',
+  '  encoded=$(printf %s "$name" | base64 | tr -d "\\n")',
+  '  size=$(stat -c %s -- "$entry") || exit',
+  '  modified=$(stat -c %Y -- "$entry") || exit',
+  '  printf "%s\\t%s\\t%s\\t%s\\n" "$encoded" "$type" "$size" "$modified"',
+  "done",
+].join("\n");
+
+function buildReaddirCommand(path: string): string {
+  const findRoot = path.startsWith("-") ? `./${path}` : path;
+  return [
+    `find -- ${quotePosixShellToken(findRoot)} -mindepth 1 -maxdepth 1 -exec sh -c`,
+    quotePosixShellToken(READDIR_ENTRY_SCRIPT),
+    "sh {} +",
+  ].join(" ");
+}
+
+function parseReaddirOutput(stdout: string): FileEntry[] {
+  return stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [encodedName, type, rawSize, rawModified] = line.split("\t");
+      const size = Number(rawSize);
+      const modifiedSeconds = Number(rawModified);
+      if (!encodedName || (type !== "file" && type !== "directory") ||
+          !Number.isFinite(size) || !Number.isFinite(modifiedSeconds)) {
+        throw new Error(`Malformed Runloop directory entry: ${JSON.stringify(line)}`);
+      }
+      return {
+        name: Buffer.from(encodedName, "base64").toString("utf8"),
+        type,
+        size,
+        modified: new Date(modifiedSeconds * 1000),
+      };
+    });
 }
 
 function mapStatus(status: Runloop.DevboxView["status"]): SandboxInfo["status"] {
@@ -449,16 +461,15 @@ export const runloop = defineProvider<
           } = options || {};
 
           const effectiveTimeout = optTimeout ?? timeout;
-          const keepAliveSeconds = optLaunchParameters?.keep_alive_time_seconds
-            ?? (effectiveTimeout !== undefined
-              ? Math.ceil(effectiveTimeout / 1000)
-              : 1800);
+          const keepAliveSeconds = effectiveTimeout !== undefined
+            ? Math.ceil(effectiveTimeout / 1000)
+            : 1800;
 
           let devboxParams: Runloop.DevboxCreateParams = {
-            launch_parameters: deepMerge(
-              { keep_alive_time_seconds: keepAliveSeconds },
-              (optLaunchParameters ?? {}) as Record<string, unknown>,
-            ) as Runloop.DevboxCreateParams["launch_parameters"],
+            launch_parameters: {
+              keep_alive_time_seconds: keepAliveSeconds,
+              ...optLaunchParameters,
+            } as Runloop.DevboxCreateParams["launch_parameters"],
             name: name || optSandboxId,
             metadata,
             environment_variables: envs,
@@ -615,52 +626,25 @@ export const runloop = defineProvider<
         },
 
         mkdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const result = await runCommand(sandbox, `mkdir -p -- ${shellQuote(path)}`);
+          const result = await runCommand(sandbox, `mkdir -p -- ${quotePosixShellToken(path)}`);
           if (result.exitCode !== 0) throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
         },
 
         readdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
-          const findPath = path.startsWith("-") ? `./${path}` : path;
-          const result = await runCommand(
-            sandbox,
-            `find -- ${shellQuote(findPath)} -mindepth 1 -maxdepth 1 -exec sh -c ` +
-              `${shellQuote('for entry do name=${entry##*/}; if [ -d "$entry" ]; then type=directory; else type=file; fi; encoded=$(printf %s "$name" | base64 | tr -d "\\n"); size=$(stat -c %s -- "$entry") || exit; modified=$(stat -c %Y -- "$entry") || exit; printf "%s\\t%s\\t%s\\t%s\\n" "$encoded" "$type" "$size" "$modified"; done')} ` +
-              `sh {} +`,
-          );
+          const result = await runCommand(sandbox, buildReaddirCommand(path));
           if (result.exitCode !== 0) throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
 
-          return (result.stdout || "")
-            .split("\n")
-            .filter(Boolean)
-            .map((line: string) => {
-              const [encodedName, type, rawSize, rawModified] = line.split("\t");
-              const size = Number(rawSize);
-              const modifiedSeconds = Number(rawModified);
-              if (!encodedName || (type !== "file" && type !== "directory") ||
-                  !Number.isFinite(size) || !Number.isFinite(modifiedSeconds)) {
-                throw new Error(`Malformed Runloop directory entry: ${JSON.stringify(line)}`);
-              }
-              return {
-                name: Buffer.from(encodedName, "base64").toString("utf8"),
-                type,
-                size,
-                modified: new Date(modifiedSeconds * 1000),
-              };
-            });
+          return parseReaddirOutput(result.stdout || "");
         },
 
         exists: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
-          const result = await runCommand(sandbox, `test -e ${shellQuote(path)}`);
+          const result = await runCommand(sandbox, `test -e ${quotePosixShellToken(path)}`);
           return result.exitCode === 0;
         },
 
         remove: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const normalized = normalizePosixPath(path);
-          if (path.length === 0 || normalized === "/" || normalized === "." ||
-              normalized === ".." || normalized.startsWith("../")) {
-            throw new Error(`Refusing to remove unsafe path: ${JSON.stringify(path)}`);
-          }
-          const result = await runCommand(sandbox, `rm -rf -- ${shellQuote(path)}`);
+          assertSafeRemovalPath(path);
+          const result = await runCommand(sandbox, `rm -rf -- ${quotePosixShellToken(path)}`);
           if (result.exitCode !== 0) throw new Error(`Failed to remove ${path}: ${result.stderr}`);
         },
       },

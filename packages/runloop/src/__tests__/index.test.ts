@@ -487,6 +487,7 @@ describe("Runloop filesystem", () => {
       { name: names[1], type: "directory", size: 4096, modified: new Date(1_710_000_001_000) },
     ]);
     expect(mocks.command.exec.mock.calls[0][0]).toContain("find -- '/tmp/a path/'\"'\"'quoted'\"'\"'\nroot'");
+    expect(mocks.command.exec.mock.calls[0][0]).toContain("for entry; do\n");
     expect(mocks.command.exec.mock.calls[0][0]).not.toContain("ls -la");
   });
 
