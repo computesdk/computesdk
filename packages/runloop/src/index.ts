@@ -6,7 +6,7 @@
  */
 
 import { RunloopSDK, type Runloop } from "@runloop/api-client";
-import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import { defineProvider } from "@computesdk/provider";
 import type {
   CommandResult,
   SandboxInfo,
@@ -17,14 +17,13 @@ import type {
 import type {
   CreateSandboxOptions,
   FileEntry,
+  Snapshot,
 } from "computesdk";
 
 // Define Runloop-specific types
-type RunloopSnapshot = Runloop.DevboxSnapshotView;
 type RunloopTemplate = Runloop.BlueprintView;
 type RunloopSandbox = Runloop.DevboxView & { client: RunloopSDK };
 type RunloopCreateWaitOptions = Parameters<RunloopSDK["api"]["devboxes"]["createAndAwaitRunning"]>[1];
-type RunloopExecuteWaitOptions = Parameters<RunloopSDK["api"]["devboxes"]["executeAndAwaitCompletion"]>[2];
 
 type CommandRunner = (
   sandbox: RunloopSandbox,
@@ -75,9 +74,202 @@ function longPollOptions<TOptions>(timeoutMs?: number): TOptions | undefined {
   return timeoutMs ? ({ longPoll: { timeoutMs } } as TOptions) : undefined;
 }
 
-function optimisticTimeoutSeconds(timeoutMs?: number): number {
-  if (!timeoutMs) return 25;
-  return Math.max(1, Math.min(25, Math.ceil(timeoutMs / 1000)));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function deepMerge<T extends Record<string, unknown>>(
+  base: T,
+  override?: Record<string, unknown>,
+): T {
+  if (!override) return { ...base };
+
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const current = merged[key];
+    merged[key] = isRecord(current) && isRecord(value)
+      ? deepMerge(current, value)
+      : value;
+  }
+  return merged as T;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function normalizePosixPath(value: string): string {
+  const absolute = value.startsWith("/");
+  const parts: string[] = [];
+  for (const part of value.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (parts.length > 0 && parts[parts.length - 1] !== "..") {
+        parts.pop();
+      } else if (!absolute) {
+        parts.push(part);
+      }
+    } else {
+      parts.push(part);
+    }
+  }
+  if (absolute) return `/${parts.join("/")}`;
+  return parts.join("/") || ".";
+}
+
+function buildCommand(command: string, options?: RunCommandOptions): string {
+  let fullCommand = command;
+
+  if (options?.env && Object.keys(options.env).length > 0) {
+    const envPrefix = Object.entries(options.env)
+      .map(([key, value]) => {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+          throw new Error(`Invalid environment variable name: ${JSON.stringify(key)}`);
+        }
+        return `${key}=${shellQuote(String(value))}`;
+      })
+      .join(" ");
+    fullCommand = `${envPrefix} ${fullCommand}`;
+  }
+
+  if (options?.cwd) {
+    fullCommand = `cd -- ${shellQuote(options.cwd)} && ${fullCommand}`;
+  }
+
+  if (options?.background) {
+    fullCommand = `nohup sh -lc ${shellQuote(fullCommand)} >/dev/null 2>&1 &`;
+  }
+
+  return fullCommand;
+}
+
+function isHttpNotFound(error: unknown): boolean {
+  return isRecord(error) && error.status === 404;
+}
+
+function mapStatus(status: Runloop.DevboxView["status"]): SandboxInfo["status"] {
+  switch (status) {
+    case "scheduled":
+    case "queued":
+    case "provisioning":
+    case "initializing":
+    case "resuming":
+    case "running":
+      return "running";
+    case "suspending":
+    case "suspended":
+    case "shutdown":
+      return "stopped";
+    case "failure":
+      return "error";
+  }
+}
+
+async function collectPaginated<T>(
+  source: AsyncIterable<T>,
+  limit?: number,
+): Promise<T[]> {
+  if (limit !== undefined && limit <= 0) return [];
+
+  const results: T[] = [];
+  for await (const item of source) {
+    results.push(item);
+    if (limit !== undefined && results.length >= limit) break;
+  }
+  return results;
+}
+
+function normalizeSnapshot(snapshot: Runloop.DevboxSnapshotView): Snapshot {
+  return {
+    id: snapshot.id,
+    provider: "runloop",
+    createdAt: new Date(snapshot.create_time_ms),
+    metadata: {
+      ...snapshot.metadata,
+      name: snapshot.name ?? null,
+      sourceDevboxId: snapshot.source_devbox_id,
+      sourceBlueprintId: snapshot.source_blueprint_id ?? null,
+      sizeBytes: snapshot.size_bytes ?? null,
+      commitMessage: snapshot.commit_message ?? null,
+    },
+  };
+}
+
+async function executeCommand(
+  sandbox: RunloopSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const startTime = Date.now();
+  const devbox = sandbox.client.devbox.fromId(sandbox.id);
+  const fullCommand = buildCommand(command, options);
+  let callbacksActive = true;
+  const executionParams = {
+    ...(options?.onStdout
+      ? { stdout: (chunk: string) => callbacksActive && options.onStdout?.(chunk) }
+      : {}),
+    ...(options?.onStderr
+      ? { stderr: (chunk: string) => callbacksActive && options.onStderr?.(chunk) }
+      : {}),
+  };
+
+  const toCommandResult = async (result: Awaited<ReturnType<typeof devbox.cmd.exec>>): Promise<CommandResult> => ({
+    stdout: await result.stdout(),
+    stderr: await result.stderr(),
+    exitCode: result.exitCode ?? -1,
+    durationMs: Date.now() - startTime,
+  });
+
+  if (options?.timeout === undefined) {
+    try {
+      const result = await devbox.cmd.exec(fullCommand, executionParams);
+      return await toCommandResult(result);
+    } finally {
+      callbacksActive = false;
+    }
+  }
+
+  const timeoutMs = options.timeout;
+  const execution = await devbox.cmd.execAsync(fullCommand, executionParams);
+  const resultPromise = execution.result();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), Math.max(0, timeoutMs));
+  });
+
+  try {
+    const outcome = await Promise.race([
+      resultPromise.then((result) => ({ result })),
+      timeoutPromise,
+    ]);
+
+    if (outcome === "timeout") {
+      callbacksActive = false;
+      void resultPromise.catch(() => undefined);
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          execution.kill().catch(() => undefined),
+          new Promise<void>((resolve) => {
+            killTimer = setTimeout(resolve, 1_000);
+          }),
+        ]);
+      } finally {
+        if (killTimer) clearTimeout(killTimer);
+      }
+      return {
+        stdout: "",
+        stderr: "",
+        exitCode: 124,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    return await toCommandResult(outcome.result);
+  } finally {
+    if (timer) clearTimeout(timer);
+    callbacksActive = false;
+  }
 }
 
 /**
@@ -133,7 +325,7 @@ export const runloop = defineProvider<
   RunloopSandbox,
   RunloopConfig,
   RunloopTemplate,
-  RunloopSnapshot
+  Snapshot
 >({
   name: "runloop",
   methods: {
@@ -165,10 +357,10 @@ export const runloop = defineProvider<
             : 1800;
 
           let devboxParams: Runloop.DevboxCreateParams = {
-            launch_parameters: {
-              keep_alive_time_seconds: keepAliveSeconds,
-              ...(optLaunchParameters as Partial<Runloop.DevboxCreateParams['launch_parameters']> | undefined),
-            },
+            launch_parameters: deepMerge(
+              (optLaunchParameters ?? {}) as Record<string, unknown>,
+              { keep_alive_time_seconds: keepAliveSeconds },
+            ) as Runloop.DevboxCreateParams["launch_parameters"],
             name: name || optSandboxId,
             metadata,
             environment_variables: envs,
@@ -216,32 +408,28 @@ export const runloop = defineProvider<
             sandbox: { ...devbox, client } as RunloopSandbox,
             sandboxId,
           };
-        } catch {
-          return null;
+        } catch (error) {
+          if (isHttpNotFound(error)) return null;
+          throw error;
         }
       },
 
       list: async (config: RunloopConfig) => {
-        try {
-          const client = getRunloopClient(config);
-          const response = await client.api.devboxes.list();
-          const devboxes = response.devboxes || [];
+        const client = getRunloopClient(config);
+        const devboxes = await collectPaginated(client.api.devboxes.list());
 
-          return devboxes.map((devbox) => ({
-            sandbox: { ...devbox, client } as RunloopSandbox,
-            sandboxId: devbox.id,
-          }));
-        } catch {
-          return [];
-        }
+        return devboxes.map((devbox) => ({
+          sandbox: { ...devbox, client } as RunloopSandbox,
+          sandboxId: devbox.id,
+        }));
       },
 
       destroy: async (config: RunloopConfig, sandboxId: string) => {
         try {
           const client = getRunloopClient(config);
           await client.api.devboxes.shutdown(sandboxId);
-        } catch {
-          // Devbox might already be destroyed or doesn't exist
+        } catch (error) {
+          if (!isHttpNotFound(error)) throw error;
         }
       },
 
@@ -250,40 +438,8 @@ export const runloop = defineProvider<
         command: string,
         options?: RunCommandOptions
       ): Promise<CommandResult> => {
-        const startTime = Date.now();
-        const devbox = sandbox;
-        const client = sandbox.client;
-
         try {
-          let fullCommand = command;
-
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
-
-          if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          }
-
-          const executionResult =
-            await client.api.devboxes.executeAndAwaitCompletion(devbox.id, {
-              command: fullCommand,
-              optimistic_timeout: optimisticTimeoutSeconds(options?.timeout),
-            }, longPollOptions<RunloopExecuteWaitOptions>(options?.timeout));
-
-          return {
-            stdout: executionResult.stdout || "",
-            stderr: executionResult.stderr || "",
-            exitCode: executionResult.exit_status || 0,
-            durationMs: Date.now() - startTime,
-          };
+          return await executeCommand(sandbox, command, options);
         } catch (error) {
           if (error instanceof Error && error.message.includes("Syntax error")) {
             throw error;
@@ -294,14 +450,31 @@ export const runloop = defineProvider<
         }
       },
 
-      getInfo: async (sandbox): Promise<SandboxInfo> => {
-        const devbox = sandbox;
-        const keepAliveSecs = devbox.launch_parameters.keep_alive_time_seconds;
+      streamCommand: async (
+        sandbox: RunloopSandbox,
+        command: string,
+        options: RunCommandOptions,
+      ): Promise<CommandResult> => {
+        try {
+          return await executeCommand(sandbox, command, options);
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("Syntax error")) {
+            throw error;
+          }
+          throw new Error(
+            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+
+      getInfo: async (sandbox: RunloopSandbox): Promise<SandboxInfo> => {
+        const devbox = await sandbox.client.api.devboxes.retrieve(sandbox.id);
+        const keepAliveSecs = devbox.launch_parameters?.keep_alive_time_seconds;
 
         return {
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
-          status: devbox.status as 'running' | 'stopped' | 'error',
+          status: mapStatus(devbox.status),
           createdAt: new Date(devbox.create_time_ms || Date.now()),
           // keep_alive_time_seconds is in seconds; SandboxInfo.timeout is in milliseconds
           timeout: keepAliveSecs ? keepAliveSecs * 1000 : 300000,
@@ -332,51 +505,63 @@ export const runloop = defineProvider<
       },
 
       filesystem: {
-        readFile: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
-          const result = await runCommand(sandbox, `test -f "${path}" && base64 < "${path}" | tr -d '\\n'`);
-          if (result.exitCode !== 0) throw new Error(`File not found or unreadable: ${result.stderr}`);
-          return Buffer.from(result.stdout, 'base64').toString('utf8');
+        readFile: async (sandbox: RunloopSandbox, path: string): Promise<string> => {
+          return sandbox.client.devbox.fromId(sandbox.id).file.read({ file_path: path });
         },
 
-        writeFile: async (sandbox: RunloopSandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
-          const encoded = Buffer.from(content).toString('base64');
-          const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
-          if (result.exitCode !== 0) throw new Error(`Failed to write file ${path}: ${result.stderr}`);
+        writeFile: async (sandbox: RunloopSandbox, path: string, content: string): Promise<void> => {
+          await sandbox.client.devbox.fromId(sandbox.id).file.write({
+            file_path: path,
+            contents: content,
+          });
         },
 
         mkdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const result = await runCommand(sandbox, `mkdir -p "${path}"`);
+          const result = await runCommand(sandbox, `mkdir -p -- ${shellQuote(path)}`);
           if (result.exitCode !== 0) throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
         },
 
         readdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
-          const result = await runCommand(sandbox, `ls -la "${path}"`);
+          const result = await runCommand(
+            sandbox,
+            `find -- ${shellQuote(path)} -mindepth 1 -maxdepth 1 -exec sh -c ` +
+              `${shellQuote('for entry do name=${entry##*/}; if [ -d "$entry" ]; then type=directory; else type=file; fi; encoded=$(printf %s "$name" | base64 | tr -d "\\n"); size=$(stat -c %s -- "$entry") || exit; modified=$(stat -c %Y -- "$entry") || exit; printf "%s\\t%s\\t%s\\t%s\\n" "$encoded" "$type" "$size" "$modified"; done')} ` +
+              `sh {} +`,
+          );
           if (result.exitCode !== 0) throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
 
-          const lines = (result.stdout || "")
+          return (result.stdout || "")
             .split("\n")
-            .filter((line: string) => line.trim() && !line.startsWith("total"));
-
-          return lines.map((line: string) => {
-            const parts = line.trim().split(/\s+/);
-            const name = parts[parts.length - 1];
-            const isDirectory = line.startsWith("d");
-            return {
-              name,
-              type: isDirectory ? 'directory' as const : 'file' as const,
-              size: parseInt(parts[4]) || 0,
-              modified: new Date(),
-            };
-          });
+            .filter(Boolean)
+            .map((line: string) => {
+              const [encodedName, type, rawSize, rawModified] = line.split("\t");
+              const size = Number(rawSize);
+              const modifiedSeconds = Number(rawModified);
+              if (!encodedName || (type !== "file" && type !== "directory") ||
+                  !Number.isFinite(size) || !Number.isFinite(modifiedSeconds)) {
+                throw new Error(`Malformed Runloop directory entry: ${JSON.stringify(line)}`);
+              }
+              return {
+                name: Buffer.from(encodedName, "base64").toString("utf8"),
+                type,
+                size,
+                modified: new Date(modifiedSeconds * 1000),
+              };
+            });
         },
 
         exists: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
-          const result = await runCommand(sandbox, `test -e "${path}"`);
+          const result = await runCommand(sandbox, `test -e ${shellQuote(path)}`);
           return result.exitCode === 0;
         },
 
         remove: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const result = await runCommand(sandbox, `rm -rf "${path}"`);
+          const normalized = normalizePosixPath(path);
+          if (path.length === 0 || normalized === "/" || normalized === "." ||
+              normalized === ".." || normalized.startsWith("../")) {
+            throw new Error(`Refusing to remove unsafe path: ${JSON.stringify(path)}`);
+          }
+          const result = await runCommand(sandbox, `rm -rf -- ${shellQuote(path)}`);
           if (result.exitCode !== 0) throw new Error(`Failed to remove ${path}: ${result.stderr}`);
         },
       },
@@ -392,10 +577,9 @@ export const runloop = defineProvider<
 
       list: async (config: RunloopConfig, options?: { limit?: number }) => {
         const client = getRunloopClient(config);
-        const listParams: any = {};
-        if (options?.limit) listParams.limit = options.limit;
-        const response = await client.api.blueprints.list(listParams);
-        return response.blueprints || [];
+        const listParams: Runloop.BlueprintListParams = {};
+        if (options?.limit !== undefined) listParams.limit = options.limit;
+        return collectPaginated(client.api.blueprints.list(listParams), options?.limit);
       },
 
       delete: async (config: RunloopConfig, blueprintId: string) => {
@@ -407,18 +591,23 @@ export const runloop = defineProvider<
     snapshot: {
       create: async (config: RunloopConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
         const client = getRunloopClient(config);
-        const snapshotParams: any = {};
+        const snapshotParams: Runloop.DevboxSnapshotDiskParams = {};
         if (options?.name) snapshotParams.name = options.name;
         if (options?.metadata) snapshotParams.metadata = options.metadata;
-        return client.api.devboxes.snapshotDisk(sandboxId, snapshotParams);
+        const snapshot = await client.api.devboxes.snapshotDisk(sandboxId, snapshotParams);
+        return normalizeSnapshot(snapshot);
       },
 
       list: async (config: RunloopConfig, options?: ListSnapshotsOptions) => {
         const client = getRunloopClient(config);
-        const listParams: any = {};
-        if (options?.limit) listParams.limit = options.limit;
-        const response = await client.api.devboxes.listDiskSnapshots(listParams);
-        return response.snapshots || [];
+        const listParams: Runloop.DevboxListDiskSnapshotsParams = {};
+        if (options?.limit !== undefined) listParams.limit = options.limit;
+        if (options?.sandboxId) listParams.devbox_id = options.sandboxId;
+        const snapshots = await collectPaginated(
+          client.api.devboxes.listDiskSnapshots(listParams),
+          options?.limit,
+        );
+        return snapshots.map(normalizeSnapshot);
       },
 
       delete: async (config: RunloopConfig, snapshotId: string) => {
