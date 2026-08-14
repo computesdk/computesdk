@@ -222,7 +222,7 @@ describe("Runloop command execution", () => {
     expect(onStdout).toHaveBeenCalledWith("before-timeout\n");
   });
 
-  it("bounds async execution creation with the command deadline", async () => {
+  it("returns at the deadline while retaining late execution IDs for cleanup", async () => {
     vi.useFakeTimers();
     let resolveExecution!: (execution: {
       executionId: string;
@@ -231,7 +231,7 @@ describe("Runloop command execution", () => {
     mocks.command.execAsync.mockImplementation((_command, _params, requestOptions) =>
       new Promise((resolve) => {
         resolveExecution = resolve;
-        expect(requestOptions.timeout).toBe(50);
+        expect(requestOptions).toBeUndefined();
       }),
     );
     const { sandbox } = await getSandbox();
@@ -244,7 +244,6 @@ describe("Runloop command execution", () => {
       exitCode: 124,
       durationMs: 50,
     });
-    expect(mocks.command.execAsync.mock.calls[0][2].signal.aborted).toBe(true);
 
     resolveExecution({
       executionId: "exec-created-late",

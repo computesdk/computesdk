@@ -318,12 +318,11 @@ async function executeCommand(
   });
 
   try {
-    const requestTimeoutMs = Math.max(1, deadline - Date.now());
-    const executionPromise = devbox.cmd.execAsync(
-      fullCommand,
-      {},
-      { signal: monitorController.signal, timeout: requestTimeoutMs },
-    );
+    // Keep creation alive after the caller's deadline. Aborting this non-idempotent
+    // request can hide an execution that the server already accepted, leaving no ID
+    // available for cleanup. The caller still returns at the deadline; if creation
+    // resolves later, the timeout branch below kills the remote process group.
+    const executionPromise = devbox.cmd.execAsync(fullCommand);
     const creationOutcome = await Promise.race([
       executionPromise.then((createdExecution) => ({ execution: createdExecution })),
       timeoutPromise,
