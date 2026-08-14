@@ -222,6 +222,42 @@ describe("Runloop command execution", () => {
     expect(onStdout).toHaveBeenCalledWith("before-timeout\n");
   });
 
+  it("bounds async execution creation with the command deadline", async () => {
+    vi.useFakeTimers();
+    let resolveExecution!: (execution: {
+      executionId: string;
+      result: ReturnType<typeof vi.fn>;
+    }) => void;
+    mocks.command.execAsync.mockImplementation((_command, _params, requestOptions) =>
+      new Promise((resolve) => {
+        resolveExecution = resolve;
+        expect(requestOptions.timeout).toBe(50);
+      }),
+    );
+    const { sandbox } = await getSandbox();
+
+    const running = sandbox.runCommand("slow-to-start", { timeout: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(running).resolves.toMatchObject({
+      stdout: "",
+      stderr: "",
+      exitCode: 124,
+      durationMs: 50,
+    });
+    expect(mocks.command.execAsync.mock.calls[0][2].signal.aborted).toBe(true);
+
+    resolveExecution({
+      executionId: "exec-created-late",
+      result: vi.fn(),
+    });
+    await vi.runAllTimersAsync();
+    expect(mocks.executions.kill).toHaveBeenCalledWith(
+      "devbox-1",
+      "exec-created-late",
+      { kill_process_group: true },
+    );
+  });
+
   it("aborts monitor streams after completion and emits output missing from callbacks", async () => {
     let resolveResult!: (value: ReturnType<typeof result>) => void;
     mocks.executions.streamStdoutUpdates.mockResolvedValue({

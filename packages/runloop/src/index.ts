@@ -295,48 +295,81 @@ async function executeCommand(
   }
 
   const timeoutMs = options.timeout;
+  const deadline = startTime + Math.max(0, timeoutMs);
   const monitorController = new AbortController();
-  const execution = await devbox.cmd.execAsync(fullCommand);
   let streamedStdout = "";
   let streamedStderr = "";
-  const streamPromises = [
-    streamExecutionOutput(
-      () => sandbox.client.api.devboxes.executions.streamStdoutUpdates(
-        sandbox.id,
-        execution.executionId,
-        {},
-        { signal: monitorController.signal },
-      ),
-      (chunk) => {
-        streamedStdout += chunk;
-        options.onStdout?.(chunk);
-      },
-      monitorController.signal,
-      () => callbacksActive,
-    ),
-    streamExecutionOutput(
-      () => sandbox.client.api.devboxes.executions.streamStderrUpdates(
-        sandbox.id,
-        execution.executionId,
-        {},
-        { signal: monitorController.signal },
-      ),
-      (chunk) => {
-        streamedStderr += chunk;
-        options.onStderr?.(chunk);
-      },
-      monitorController.signal,
-      () => callbacksActive,
-    ),
-  ];
-  const resultPromise = execution.result({ signal: monitorController.signal });
+  let execution: Awaited<ReturnType<typeof devbox.cmd.execAsync>> | undefined;
+  let resultPromise: ReturnType<Awaited<ReturnType<typeof devbox.cmd.execAsync>>["result"]> | undefined;
+  let streamPromises: Promise<void>[] = [];
   let executionCompleted = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), Math.max(0, timeoutMs));
+    timer = setTimeout(() => {
+      resolve("timeout");
+      monitorController.abort();
+    }, Math.max(0, deadline - Date.now()));
+  });
+  const timeoutResult = (): CommandResult => ({
+    stdout: streamedStdout,
+    stderr: streamedStderr,
+    exitCode: 124,
+    durationMs: Date.now() - startTime,
   });
 
   try {
+    const requestTimeoutMs = Math.max(1, deadline - Date.now());
+    const executionPromise = devbox.cmd.execAsync(
+      fullCommand,
+      {},
+      { signal: monitorController.signal, timeout: requestTimeoutMs },
+    );
+    const creationOutcome = await Promise.race([
+      executionPromise.then((createdExecution) => ({ execution: createdExecution })),
+      timeoutPromise,
+    ]);
+
+    if (creationOutcome === "timeout") {
+      callbacksActive = false;
+      void executionPromise
+        .then((lateExecution) => bestEffortKillExecution(sandbox, lateExecution.executionId))
+        .catch(() => undefined);
+      return timeoutResult();
+    }
+
+    const activeExecution = creationOutcome.execution;
+    execution = activeExecution;
+    streamPromises = [
+      streamExecutionOutput(
+        () => sandbox.client.api.devboxes.executions.streamStdoutUpdates(
+          sandbox.id,
+          activeExecution.executionId,
+          {},
+          { signal: monitorController.signal },
+        ),
+        (chunk) => {
+          streamedStdout += chunk;
+          options.onStdout?.(chunk);
+        },
+        monitorController.signal,
+        () => callbacksActive,
+      ),
+      streamExecutionOutput(
+        () => sandbox.client.api.devboxes.executions.streamStderrUpdates(
+          sandbox.id,
+          activeExecution.executionId,
+          {},
+          { signal: monitorController.signal },
+        ),
+        (chunk) => {
+          streamedStderr += chunk;
+          options.onStderr?.(chunk);
+        },
+        monitorController.signal,
+        () => callbacksActive,
+      ),
+    ];
+    resultPromise = activeExecution.result({ signal: monitorController.signal });
     const outcome = await Promise.race([
       resultPromise.then((result) => ({ result })),
       timeoutPromise,
@@ -349,12 +382,7 @@ async function executeCommand(
         bestEffortKillExecution(sandbox, execution.executionId),
         Promise.allSettled([resultPromise, ...streamPromises]),
       ]);
-      return {
-        stdout: streamedStdout,
-        stderr: streamedStderr,
-        exitCode: 124,
-        durationMs: Date.now() - startTime,
-      };
+      return timeoutResult();
     }
 
     executionCompleted = true;
@@ -368,10 +396,13 @@ async function executeCommand(
     callbacksActive = false;
     monitorController.abort();
     await Promise.all([
-      executionCompleted
+      executionCompleted || !execution
         ? Promise.resolve()
         : bestEffortKillExecution(sandbox, execution.executionId),
-      Promise.allSettled(streamPromises),
+      Promise.allSettled([
+        ...(resultPromise ? [resultPromise] : []),
+        ...streamPromises,
+      ]),
     ]);
     throw error;
   } finally {
