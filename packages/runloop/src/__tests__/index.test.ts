@@ -111,7 +111,12 @@ beforeEach(() => {
   mocks.executions.streamStderrUpdates.mockResolvedValue(paginated([]));
   mocks.command.exec.mockResolvedValue(result());
   mocks.file.read.mockResolvedValue("");
-  mocks.file.write.mockResolvedValue(undefined);
+  mocks.file.write.mockResolvedValue({
+    devbox_id: "devbox-1",
+    exit_status: 0,
+    stderr: "",
+    stdout: "",
+  });
   mocks.blueprints.list.mockReturnValue(paginated([]));
 });
 
@@ -468,6 +473,19 @@ describe("Runloop filesystem", () => {
     expect(mocks.file.read).toHaveBeenCalledWith({ file_path: hostilePath });
     expect(read).toBe(content);
     expect(mocks.command.exec).not.toHaveBeenCalled();
+  });
+
+  it("rejects a failed native file write", async () => {
+    mocks.file.write.mockResolvedValueOnce({
+      devbox_id: "devbox-1",
+      exit_status: 13,
+      stderr: "permission denied",
+      stdout: "",
+    });
+    const { sandbox } = await getSandbox();
+
+    await expect(sandbox.filesystem.writeFile("/root/blocked", "content"))
+      .rejects.toThrow("Failed to write file /root/blocked: permission denied");
   });
 
   it("decodes structured directory metadata including newline-containing names", async () => {

@@ -381,6 +381,23 @@ async function executeCommand(
   }
 }
 
+async function runCommandWithErrors(
+  sandbox: RunloopSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  try {
+    return await executeCommand(sandbox, command, options);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Syntax error")) {
+      throw error;
+    }
+    throw new Error(
+      `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 /**
  * Runloop-specific blueprint creation options
  */
@@ -542,39 +559,9 @@ export const runloop = defineProvider<
         }
       },
 
-      runCommand: async (
-        sandbox: RunloopSandbox,
-        command: string,
-        options?: RunCommandOptions
-      ): Promise<CommandResult> => {
-        try {
-          return await executeCommand(sandbox, command, options);
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("Syntax error")) {
-            throw error;
-          }
-          throw new Error(
-            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
+      runCommand: runCommandWithErrors,
 
-      streamCommand: async (
-        sandbox: RunloopSandbox,
-        command: string,
-        options: RunCommandOptions,
-      ): Promise<CommandResult> => {
-        try {
-          return await executeCommand(sandbox, command, options);
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("Syntax error")) {
-            throw error;
-          }
-          throw new Error(
-            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      },
+      streamCommand: runCommandWithErrors,
 
       getInfo: async (sandbox: RunloopSandbox): Promise<SandboxInfo> => {
         const devbox = await sandbox.client.api.devboxes.retrieve(sandbox.id);
@@ -619,10 +606,15 @@ export const runloop = defineProvider<
         },
 
         writeFile: async (sandbox: RunloopSandbox, path: string, content: string): Promise<void> => {
-          await sandbox.client.devbox.fromId(sandbox.id).file.write({
+          const result = await sandbox.client.devbox.fromId(sandbox.id).file.write({
             file_path: path,
             contents: content,
           });
+          if (result.exit_status !== 0) {
+            throw new Error(
+              `Failed to write file ${path}: ${result.stderr || `exit ${result.exit_status}`}`,
+            );
+          }
         },
 
         mkdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
