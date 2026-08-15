@@ -31,6 +31,7 @@ const SHARED_PROVIDER_NAMES = [
   'collimate',
   'lelantos',
   'tenki',
+  'microsandbox',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -69,6 +70,8 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   // key alone counts as configured.
   lelantos: [['LELANTOS_API_KEY'], ['E2B_API_KEY']],
   tenki: [['TENKI_API_KEY'], ['TENKI_AUTH_TOKEN']],
+  // Local is the default, while cloud credentials are resolved by the SDK.
+  microsandbox: [[]],
 };
 
 // Each config key maps to an env var name, or — when a provider accepts
@@ -110,6 +113,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | reado
     apiUrl: ['LELANTOS_API_URL', 'E2B_API_URL'],
   },
   tenki: { apiKey: 'TENKI_API_KEY', baseUrl: 'TENKI_API_URL', workspaceId: 'TENKI_WORKSPACE_ID' },
+  microsandbox: {},
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
@@ -390,6 +394,9 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'tenki':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/tenki');
+      case 'microsandbox':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/microsandbox');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }

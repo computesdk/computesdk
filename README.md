@@ -91,6 +91,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
 | **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
+| **Microsandbox** | None locally; `MSB_BACKEND=cloud`, `MSB_API_KEY` for cloud | Hardware-isolated microVMs on local machines or microsandbox cloud |
 | **Mosaic** | `MOSAIC_API_URL`, `MOSAIC_API_TOKEN` | Firecracker microVMs with preview URLs, snapshots, and container-image environments |
 | **NeevCloud** | `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID` | Cloud sandboxes with command execution and preview URLs |
 | **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
@@ -300,6 +301,7 @@ npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/lightning        # Lightning AI provider
 npm install @computesdk/modal            # Modal provider
+npm install @computesdk/microsandbox     # Local and cloud microsandbox provider
 npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provider

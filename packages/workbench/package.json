@@ -68,6 +68,7 @@
     "@computesdk/declaw": "workspace:*",
     "@computesdk/isorun": "workspace:*",
     "@computesdk/modal": "workspace:*",
+    "@computesdk/microsandbox": "workspace:*",
     "@computesdk/runloop": "workspace:*",
     "@computesdk/vercel": "workspace:*",
     "@computesdk/namespace": "workspace:*",
@@ -90,6 +91,9 @@
       "optional": true
     },
     "@computesdk/modal": {
+      "optional": true
+    },
+    "@computesdk/microsandbox": {
       "optional": true
     },
     "@computesdk/runloop": {
