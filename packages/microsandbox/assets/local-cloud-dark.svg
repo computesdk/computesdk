@@ -33,32 +33,21 @@
   <text x="28" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16" fill="#d2c99c">OR PROCESS</text>
   <text x="28" y="414" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" fill="#8f886a">SHARED KERNEL</text>
 
-  <!-- Microsandbox spans both top cells as one provider. -->
-  <rect x="190" y="137" width="722" height="102" fill="#121212" stroke="#d2c99c" stroke-width="2"/>
-  <rect x="190" y="137" width="722" height="27" fill="#d2c99c"/>
-  <text x="204" y="155" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="11" font-weight="700" letter-spacing="1.8" fill="#121212">MICROSANDBOX</text>
-  <text x="894" y="155" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="1.6" fill="#121212">ONE PROVIDER / TWO BACKENDS</text>
+  <!-- Every provider uses the same marker; the quiet rule links the two microsandbox backends. -->
+  <path d="M340 160 H571" fill="none" stroke="#8f886a" stroke-dasharray="3 4"/>
+  <rect x="405" y="149" width="132" height="22" fill="#121212"/>
+  <text x="471" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.2" fill="#8f886a">SAME PROVIDER / API</text>
 
-  <rect x="210" y="180" width="12" height="12" fill="#d2c99c"/>
-  <text x="236" y="191" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">CLOUD BACKEND</text>
-  <text x="236" y="213" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="1.2" fill="#8f886a">REMOTE MICROVM</text>
-
-  <path d="M395 189 H699" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
-  <rect x="496" y="176" width="102" height="27" fill="#121212" stroke="#d2c99c" stroke-width="1.5"/>
-  <text x="547" y="194" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" font-weight="700" letter-spacing="1.5" fill="#d2c99c">SAME API</text>
-
-  <rect x="715" y="180" width="12" height="12" fill="#d2c99c"/>
-  <text x="741" y="191" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">LOCAL BACKEND</text>
-  <text x="741" y="213" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="1.2" fill="#8f886a">LOCAL MICROVM</text>
-
-  <!-- Other providers occupy a single cell. -->
-  <text x="190" y="266" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.8" fill="#8f886a">CLOUD-ONLY MICROVM PROVIDERS</text>
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" fill="#d2c99c">
-    <rect x="190" y="275" width="6" height="6" fill="#d2c99c"/><text x="204" y="282">E2B</text>
-    <rect x="254" y="275" width="6" height="6" fill="#d2c99c"/><text x="268" y="282">VERCEL</text>
-    <rect x="350" y="275" width="6" height="6" fill="#d2c99c"/><text x="364" y="282">CODESANDBOX</text>
-    <rect x="481" y="275" width="6" height="6" fill="#d2c99c"/><text x="495" y="282">BLAXEL</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">
+    <rect x="190" y="153" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="216" y="163">MICROSANDBOX</text>
+    <rect x="571" y="153" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="597" y="163">MICROSANDBOX</text>
+    <rect x="190" y="205" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="216" y="215">E2B</text>
+    <rect x="350" y="205" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="376" y="215">VERCEL</text>
+    <rect x="190" y="250" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="216" y="260">CODESANDBOX</text>
+    <rect x="350" y="250" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="376" y="260">BLAXEL</text>
   </g>
+  <text x="216" y="181" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.3" fill="#8f886a">CLOUD BACKEND</text>
+  <text x="597" y="181" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.3" fill="#8f886a">LOCAL BACKEND</text>
 
   <text x="190" y="326" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.8" fill="#8f886a">CLOUD PROVIDERS</text>
   <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">
