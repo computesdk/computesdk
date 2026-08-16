@@ -1,63 +1,81 @@
 <svg width="960" height="540" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title description">
-  <title id="title">Where ComputeSDK providers run</title>
-  <desc id="description">A comparison of ComputeSDK providers by execution location and isolation. One microsandbox boundary contains both a cloud backend and a local backend, showing that one provider offers hardware-isolated microVMs in both places.</desc>
+  <title id="title">ComputeSDK provider map</title>
+  <desc id="description">A flat two-by-two map of ComputeSDK providers by execution location and isolation. Microsandbox is shown as one outlined band spanning the provider cloud and your machine in the hardware-isolated microVM row.</desc>
 
-  <rect width="960" height="540" rx="16" fill="#0d1117"/>
-  <rect x="0.5" y="0.5" width="959" height="539" rx="15.5" fill="none" stroke="#30363d"/>
+  <rect width="960" height="540" fill="#121212"/>
+  <rect x="0.75" y="0.75" width="958.5" height="538.5" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
 
-  <text x="48" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#f0f6fc">One provider, local or cloud</text>
-  <text x="48" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#8b949e">Microsandbox runs hardware-isolated microVMs in either place through the same ComputeSDK API.</text>
+  <!-- Header -->
+  <path d="M0 86 H960 M590 0 V86 M748 0 V86" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
+  <text x="28" y="27" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="11" letter-spacing="2.4" fill="#8f886a">COMPUTESDK / PROVIDER MAP</text>
+  <text x="28" y="62" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="24" letter-spacing="0.5" fill="#d2c99c">WHERE PROVIDERS RUN</text>
 
-  <rect x="48" y="112" width="864" height="340" rx="14" fill="#161b22" stroke="#30363d"/>
-  <path d="M48 332 H912" fill="none" stroke="#30363d"/>
-  <path d="M570 130 V432" fill="none" stroke="#30363d" stroke-dasharray="4 6"/>
+  <text x="610" y="27" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2.2" fill="#8f886a">ISOLATION</text>
+  <text x="610" y="61" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17" fill="#d2c99c">2 MODELS</text>
+  <text x="768" y="27" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2.2" fill="#8f886a">MICROSANDBOX BACKENDS</text>
+  <text x="768" y="61" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17" fill="#d2c99c">LOCAL + CLOUD</text>
 
-  <text x="68" y="143" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.6" fill="#8b949e">HARDWARE-ISOLATED MICROVM</text>
-  <text x="68" y="365" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.6" fill="#8b949e">CONTAINER / HOST PROCESS</text>
+  <!-- Map frame -->
+  <path d="M170 112 H932 V448 H170 Z M170 294 H932 M551 112 V448" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
+  <path d="M0 294 H170" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
 
-  <!-- A single boundary groups both microsandbox backends as one provider. -->
-  <rect x="224" y="154" width="660" height="116" rx="18" fill="#173d25" stroke="#3fb950" stroke-width="2"/>
-  <rect x="470" y="140" width="168" height="29" rx="14.5" fill="#238636"/>
-  <text x="554" y="160" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">microsandbox</text>
+  <!-- Axis labels -->
+  <text x="190" y="106" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2" fill="#8f886a">PROVIDER CLOUD</text>
+  <text x="571" y="106" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2" fill="#8f886a">YOUR MACHINE</text>
 
-  <rect x="244" y="180" width="214" height="67" rx="12" fill="#0d1117" stroke="#2f6f40"/>
-  <circle cx="276" cy="213" r="17" fill="#173d25"/>
-  <path d="M265 217.5 H286.5 C291 217.5 292.5 211.5 288.5 209.5 C288 202 277 199.5 273.5 206 C268.5 204.5 264 208 265 212.5" fill="none" stroke="#56d364" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="305" y="209" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#f0f6fc">Cloud backend</text>
-  <text x="305" y="229" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8b949e">runs remotely</text>
+  <text x="28" y="143" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2" fill="#8f886a">ISOLATION / 01</text>
+  <text x="28" y="176" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16" fill="#d2c99c">HARDWARE-</text>
+  <text x="28" y="199" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16" fill="#d2c99c">ISOLATED</text>
+  <text x="28" y="231" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" fill="#8f886a">MICROVM</text>
 
-  <rect x="650" y="180" width="214" height="67" rx="12" fill="#0d1117" stroke="#2f6f40"/>
-  <circle cx="682" cy="213" r="17" fill="#173d25"/>
-  <rect x="671" y="204" width="22" height="15" rx="2" fill="none" stroke="#56d364" stroke-width="2"/>
-  <path d="M668 223 H696" fill="none" stroke="#56d364" stroke-width="2" stroke-linecap="round"/>
-  <text x="711" y="209" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#f0f6fc">Local backend</text>
-  <text x="711" y="229" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8b949e">runs on your machine</text>
+  <text x="28" y="326" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2" fill="#8f886a">ISOLATION / 02</text>
+  <text x="28" y="359" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16" fill="#d2c99c">CONTAINER</text>
+  <text x="28" y="382" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16" fill="#d2c99c">OR PROCESS</text>
+  <text x="28" y="414" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" fill="#8f886a">SHARED KERNEL</text>
 
-  <path d="M478 213 H630" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round"/>
-  <path d="M486 207 L478 213 L486 219 M622 207 L630 213 L622 219" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="511" y="199" width="86" height="28" rx="14" fill="#173d25"/>
-  <text x="554" y="217" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#56d364">SAME API</text>
+  <!-- Microsandbox spans both top cells as one provider. -->
+  <rect x="190" y="137" width="722" height="102" fill="#121212" stroke="#d2c99c" stroke-width="2"/>
+  <rect x="190" y="137" width="722" height="27" fill="#d2c99c"/>
+  <text x="204" y="155" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="11" font-weight="700" letter-spacing="1.8" fill="#121212">MICROSANDBOX</text>
+  <text x="894" y="155" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="1.6" fill="#121212">ONE PROVIDER / TWO BACKENDS</text>
 
-  <text x="224" y="302" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="0.5" fill="#6e7681">CLOUD-ONLY MICROVM PROVIDERS</text>
-  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8b949e">
-    <rect x="224" y="310" width="54" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="251" y="328" text-anchor="middle">e2b</text>
-    <rect x="286" y="310" width="66" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="319" y="328" text-anchor="middle">vercel</text>
-    <rect x="360" y="310" width="112" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="416" y="328" text-anchor="middle">codesandbox</text>
-    <rect x="480" y="310" width="66" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="513" y="328" text-anchor="middle">blaxel</text>
+  <rect x="210" y="180" width="12" height="12" fill="#d2c99c"/>
+  <text x="236" y="191" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">CLOUD BACKEND</text>
+  <text x="236" y="213" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="1.2" fill="#8f886a">REMOTE MICROVM</text>
+
+  <path d="M395 189 H699" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
+  <rect x="496" y="176" width="102" height="27" fill="#121212" stroke="#d2c99c" stroke-width="1.5"/>
+  <text x="547" y="194" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" font-weight="700" letter-spacing="1.5" fill="#d2c99c">SAME API</text>
+
+  <rect x="715" y="180" width="12" height="12" fill="#d2c99c"/>
+  <text x="741" y="191" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">LOCAL BACKEND</text>
+  <text x="741" y="213" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="1.2" fill="#8f886a">LOCAL MICROVM</text>
+
+  <!-- Other providers occupy a single cell. -->
+  <text x="190" y="266" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.8" fill="#8f886a">CLOUD-ONLY MICROVM PROVIDERS</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" fill="#d2c99c">
+    <rect x="190" y="275" width="6" height="6" fill="#d2c99c"/><text x="204" y="282">E2B</text>
+    <rect x="254" y="275" width="6" height="6" fill="#d2c99c"/><text x="268" y="282">VERCEL</text>
+    <rect x="350" y="275" width="6" height="6" fill="#d2c99c"/><text x="364" y="282">CODESANDBOX</text>
+    <rect x="481" y="275" width="6" height="6" fill="#d2c99c"/><text x="495" y="282">BLAXEL</text>
   </g>
 
-  <text x="224" y="394" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="0.5" fill="#6e7681">PROVIDER CLOUD</text>
-  <text x="590" y="394" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="0.5" fill="#6e7681">YOUR MACHINE</text>
-  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8b949e">
-    <rect x="224" y="403" width="78" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="263" y="421" text-anchor="middle">daytona</text>
-    <rect x="310" y="403" width="66" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="343" y="421" text-anchor="middle">modal</text>
-    <rect x="590" y="403" width="72" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="626" y="421" text-anchor="middle">docker</text>
-    <rect x="670" y="403" width="88" height="28" rx="14" fill="#0d1117" stroke="#30363d"/><text x="714" y="421" text-anchor="middle">just-bash</text>
+  <text x="190" y="326" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.8" fill="#8f886a">CLOUD PROVIDERS</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">
+    <rect x="190" y="345" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="216" y="355">DAYTONA</text>
+    <rect x="190" y="385" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="216" y="395">MODAL</text>
   </g>
 
-  <text x="224" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8b949e">CLOUD</text>
-  <path d="M282 478 H820" fill="none" stroke="#6e7681" stroke-width="1.5"/>
-  <path d="M812 472 L820 478 L812 484" fill="none" stroke="#6e7681" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="836" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8b949e">LOCAL</text>
-  <text x="480" y="516" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#f0f6fc">Other providers occupy one part of the map. Microsandbox covers both ends.</text>
+  <text x="571" y="326" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.8" fill="#8f886a">LOCAL PROVIDERS</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">
+    <rect x="571" y="345" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="597" y="355">DOCKER</text>
+    <rect x="571" y="385" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="597" y="395">JUST-BASH</text>
+  </g>
+
+  <!-- Footer -->
+  <path d="M0 472 H960 M170 472 V540" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
+  <text x="28" y="500" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2" fill="#8f886a">READING THE MAP</text>
+  <text x="28" y="526" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" fill="#d2c99c">TOP + BOTH SIDES</text>
+  <text x="190" y="500" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" letter-spacing="0.4" fill="#d2c99c">MICROSANDBOX IS THE ONLY COMPUTESDK PROVIDER SHOWN IN BOTH TOP CELLS.</text>
+  <text x="190" y="525" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="1.4" fill="#8f886a">CLOUD  ----------------------------------------------------------&gt;  LOCAL</text>
 </svg>
