@@ -224,8 +224,13 @@ describe('microsandbox provider', () => {
       ports: [3000],
     });
     const sandbox = await provider.sandbox.create({ name: 'cloud-box' });
+    const instance = sandbox.getInstance();
 
     expect(mock.created[0]).toMatchObject({ backend: 'cloud', ports: [] });
+    expect(instance).toMatchObject({ backendKind: 'cloud' });
+    expect(instance).not.toHaveProperty('backend');
+    expect(instance).not.toHaveProperty('apiKey');
+    expect(await sandbox.getInfo()).toMatchObject({ id: 'cloud-box', status: 'running' });
     await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow(/cloud does not currently support published ports/);
     await expect(provider.snapshot?.list()).rejects.toThrow(/cloud does not currently support disk snapshots/);
   });

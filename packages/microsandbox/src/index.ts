@@ -71,7 +71,6 @@ export interface MicrosandboxConfig {
 export interface MicrosandboxSandbox {
   name: string;
   backendKind: 'local' | 'cloud';
-  backend?: DefaultBackend;
   sandbox: NativeSandbox | null;
   handle: NativeSandboxHandle | null;
   createdAt: Date;
@@ -107,6 +106,13 @@ interface RecoveredConfig {
 
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
 let backendQueue = Promise.resolve();
+
+/**
+ * Keep credential-bearing backend configuration out of the public sandbox
+ * object returned by getInstance(). The mapping is only needed when a sandbox
+ * created in this process must lazily recover its native handle.
+ */
+const sandboxBackends = new WeakMap<MicrosandboxSandbox, DefaultBackend | undefined>();
 
 function loadSdk(): Promise<MicrosandboxModule> {
   sdkPromise ??= import('microsandbox');
@@ -222,10 +228,9 @@ function handleFromNative(
   timeoutMs: number,
 ): MicrosandboxSandbox {
   const config = handle.config() as RecoveredConfig;
-  return {
+  const sandbox: MicrosandboxSandbox = {
     name: handle.name,
     backendKind: handle.backendKind,
-    backend,
     sandbox: null,
     handle,
     createdAt: handle.createdAt ?? new Date(),
@@ -233,11 +238,13 @@ function handleFromNative(
     metadata: decodeMetadata(config.labels),
     ports: portsFromConfig(config),
   };
+  sandboxBackends.set(sandbox, backend);
+  return sandbox;
 }
 
 async function nativeHandle(sandbox: MicrosandboxSandbox): Promise<NativeSandboxHandle> {
   if (sandbox.handle) return sandbox.handle;
-  sandbox.handle = await withBackend(sandbox.backend, async ({ Sandbox }) => Sandbox.get(sandbox.name));
+  sandbox.handle = await withBackend(sandboxBackends.get(sandbox), async ({ Sandbox }) => Sandbox.get(sandbox.name));
   return sandbox.handle;
 }
 
@@ -440,18 +447,20 @@ export const microsandbox = defineProvider<
           options.signal.throwIfAborted();
         }
 
+        const sandbox: MicrosandboxSandbox = {
+          name,
+          backendKind: native.backendKind,
+          sandbox: native,
+          handle: null,
+          createdAt: new Date(),
+          timeoutMs,
+          metadata,
+          ports: new Map(ports.map((port) => [port.guest, port.host])),
+        };
+        sandboxBackends.set(sandbox, config.backend);
+
         return {
-          sandbox: {
-            name,
-            backendKind: native.backendKind,
-            backend: config.backend,
-            sandbox: native,
-            handle: null,
-            createdAt: new Date(),
-            timeoutMs,
-            metadata,
-            ports: new Map(ports.map((port) => [port.guest, port.host])),
-          },
+          sandbox,
           sandboxId: name,
         };
       }),
