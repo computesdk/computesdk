@@ -1,65 +1,59 @@
 <svg width="960" height="540" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title description">
   <title id="title">Where ComputeSDK sandbox providers run</title>
-  <desc id="description">A comparison of ComputeSDK sandbox providers by execution location and isolation. E2B, Vercel, CodeSandbox, and Blaxel provide cloud microVMs. Docker and just-bash run locally without microVM isolation. Microsandbox is the only provider shown that runs the same microVM sandbox both locally and in the cloud.</desc>
+  <desc id="description">A comparison of ComputeSDK sandbox providers by execution location and isolation. Microsandbox appears as connected cloud and local points in the microVM row because the same provider and ComputeSDK API work in both places.</desc>
 
   <rect width="960" height="540" rx="16" fill="#0d1117"/>
   <rect x="0.5" y="0.5" width="959" height="539" rx="15.5" fill="none" stroke="#30363d"/>
 
   <text x="48" y="48" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#f0f6fc">Where ComputeSDK sandbox providers run</text>
-  <text x="48" y="76" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#8b949e">Most run in one place. Microsandbox runs the same microVM sandbox locally and in the cloud.</text>
+  <text x="48" y="76" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#8b949e">Microsandbox spans local and cloud without changing the sandbox API or isolation model.</text>
 
   <rect x="48" y="112" width="864" height="340" rx="12" fill="#161b22" stroke="#30363d"/>
-  <path d="M48 166 H912 M48 309 H912 M204 112 V452 M440 112 V452 M676 112 V452" fill="none" stroke="#30363d"/>
+  <path d="M48 166 H912 M48 330 H912 M204 112 V452 M558 112 V452" fill="none" stroke="#30363d"/>
 
   <rect x="49" y="113" width="154" height="52" rx="11" fill="#0d1117"/>
-  <rect x="205" y="113" width="234" height="52" fill="#0d1117"/>
-  <rect x="441" y="113" width="234" height="52" fill="#0d1117"/>
-  <path d="M677 113 H900 A11 11 0 0 1 911 124 V165 H677 Z" fill="#12261b"/>
+  <rect x="205" y="113" width="352" height="52" fill="#0d1117"/>
+  <path d="M559 113 H900 A11 11 0 0 1 911 124 V165 H559 Z" fill="#0d1117"/>
 
   <text x="68" y="145" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.7" fill="#8b949e">ISOLATION</text>
-  <text x="322" y="145" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5" fill="#8b949e">PROVIDER CLOUD ONLY</text>
-  <text x="558" y="145" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5" fill="#8b949e">YOUR MACHINE ONLY</text>
-  <text x="794" y="145" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5" fill="#3fb950">LOCAL + CLOUD</text>
+  <text x="381" y="145" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5" fill="#8b949e">RUNS IN PROVIDER CLOUD</text>
+  <text x="735" y="145" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5" fill="#8b949e">RUNS ON YOUR MACHINE</text>
 
-  <text x="68" y="220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.5" fill="#8b949e">HARDWARE-ISOLATED</text>
-  <text x="68" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#f0f6fc">microVM</text>
+  <text x="68" y="223" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.5" fill="#8b949e">HARDWARE-ISOLATED</text>
+  <text x="68" y="249" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#f0f6fc">microVM</text>
 
-  <circle cx="228" cy="211" r="5" fill="#6e7681"/>
-  <text x="240" y="216" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">e2b</text>
-  <circle cx="328" cy="211" r="5" fill="#6e7681"/>
-  <text x="340" y="216" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">vercel</text>
-  <circle cx="228" cy="260" r="5" fill="#6e7681"/>
-  <text x="240" y="265" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">codesandbox</text>
-  <circle cx="345" cy="260" r="5" fill="#6e7681"/>
-  <text x="357" y="265" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">blaxel</text>
+  <circle cx="233" cy="207" r="5" fill="#6e7681"/>
+  <text x="245" y="212" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">e2b</text>
+  <circle cx="335" cy="207" r="5" fill="#6e7681"/>
+  <text x="347" y="212" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">vercel</text>
+  <circle cx="233" cy="248" r="5" fill="#6e7681"/>
+  <text x="245" y="253" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">codesandbox</text>
+  <circle cx="356" cy="248" r="5" fill="#6e7681"/>
+  <text x="368" y="253" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">blaxel</text>
 
-  <text x="558" y="231" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" fill="#484f58">—</text>
-  <text x="558" y="255" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#6e7681">none shown</text>
+  <line x1="473" y1="287" x2="797" y2="287" stroke="#3fb950" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="473" cy="287" r="12" fill="#161b22" stroke="#3fb950" stroke-width="4"/>
+  <circle cx="473" cy="287" r="5" fill="#3fb950"/>
+  <circle cx="797" cy="287" r="12" fill="#161b22" stroke="#3fb950" stroke-width="4"/>
+  <circle cx="797" cy="287" r="5" fill="#3fb950"/>
+  <rect x="548" y="271" width="174" height="32" rx="16" fill="#12261b"/>
+  <text x="635" y="291" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#56d364">SAME PROVIDER • SAME API</text>
+  <text x="473" y="316" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#56d364">microsandbox cloud</text>
+  <text x="797" y="316" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#56d364">microsandbox local</text>
 
-  <rect x="688" y="178" width="212" height="119" rx="10" fill="#12261b" stroke="#3fb950" stroke-width="2"/>
-  <line x1="733" y1="211" x2="855" y2="211" stroke="#3fb950" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="733" cy="211" r="9" fill="#3fb950"/>
-  <circle cx="855" cy="211" r="9" fill="#3fb950"/>
-  <text x="733" y="238" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#56d364">LOCAL</text>
-  <text x="855" y="238" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#56d364">CLOUD</text>
-  <text x="794" y="266" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#56d364">microsandbox</text>
-  <text x="794" y="285" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" fill="#8b949e">same provider • same API</text>
+  <text x="68" y="378" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.5" fill="#8b949e">CONTAINER /</text>
+  <text x="68" y="404" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#f0f6fc">host process</text>
 
-  <text x="68" y="363" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.5" fill="#8b949e">CONTAINER /</text>
-  <text x="68" y="389" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#f0f6fc">host process</text>
+  <circle cx="280" cy="374" r="5" fill="#6e7681"/>
+  <text x="292" y="379" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">daytona</text>
+  <circle cx="400" cy="374" r="5" fill="#6e7681"/>
+  <text x="412" y="379" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">modal</text>
 
-  <circle cx="252" cy="359" r="5" fill="#6e7681"/>
-  <text x="264" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">daytona</text>
-  <circle cx="252" cy="407" r="5" fill="#6e7681"/>
-  <text x="264" y="412" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">modal</text>
+  <circle cx="650" cy="374" r="5" fill="#6e7681"/>
+  <text x="662" y="379" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">docker</text>
+  <circle cx="759" cy="374" r="5" fill="#6e7681"/>
+  <text x="771" y="379" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">just-bash</text>
 
-  <circle cx="491" cy="359" r="5" fill="#6e7681"/>
-  <text x="503" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">docker</text>
-  <circle cx="491" cy="407" r="5" fill="#6e7681"/>
-  <text x="503" y="412" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">just-bash</text>
-
-  <text x="794" y="382" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" fill="#484f58">—</text>
-
-  <text x="480" y="489" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#f0f6fc">Develop against a local microVM. Run remotely on a hosted microVM.</text>
-  <text x="480" y="513" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">The ComputeSDK integration stays the same; only the microsandbox backend changes.</text>
+  <text x="480" y="489" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#f0f6fc">Two locations, one provider.</text>
+  <text x="480" y="513" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">Choose the backend when the app starts; the ComputeSDK integration stays the same.</text>
 </svg>
