@@ -22,24 +22,24 @@
   <text x="68" y="223" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.5" fill="#8b949e">HARDWARE-ISOLATED</text>
   <text x="68" y="249" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#f0f6fc">microVM</text>
 
-  <circle cx="233" cy="207" r="5" fill="#6e7681"/>
-  <text x="245" y="212" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">e2b</text>
-  <circle cx="335" cy="207" r="5" fill="#6e7681"/>
-  <text x="347" y="212" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">vercel</text>
-  <circle cx="233" cy="248" r="5" fill="#6e7681"/>
-  <text x="245" y="253" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">codesandbox</text>
-  <circle cx="356" cy="248" r="5" fill="#6e7681"/>
-  <text x="368" y="253" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">blaxel</text>
+  <text x="558" y="194" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#56d364">microsandbox</text>
+  <line x1="381" y1="214" x2="735" y2="214" stroke="#3fb950" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="381" cy="214" r="12" fill="#161b22" stroke="#3fb950" stroke-width="4"/>
+  <circle cx="381" cy="214" r="5" fill="#3fb950"/>
+  <circle cx="735" cy="214" r="12" fill="#161b22" stroke="#3fb950" stroke-width="4"/>
+  <circle cx="735" cy="214" r="5" fill="#3fb950"/>
+  <text x="381" y="243" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#56d364">CLOUD BACKEND</text>
+  <text x="558" y="243" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" fill="#8b949e">same ComputeSDK API</text>
+  <text x="735" y="243" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#56d364">LOCAL BACKEND</text>
 
-  <line x1="473" y1="287" x2="797" y2="287" stroke="#3fb950" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="473" cy="287" r="12" fill="#161b22" stroke="#3fb950" stroke-width="4"/>
-  <circle cx="473" cy="287" r="5" fill="#3fb950"/>
-  <circle cx="797" cy="287" r="12" fill="#161b22" stroke="#3fb950" stroke-width="4"/>
-  <circle cx="797" cy="287" r="5" fill="#3fb950"/>
-  <rect x="548" y="271" width="174" height="32" rx="16" fill="#12261b"/>
-  <text x="635" y="291" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#56d364">SAME PROVIDER • SAME API</text>
-  <text x="473" y="316" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#56d364">microsandbox cloud</text>
-  <text x="797" y="316" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#56d364">microsandbox local</text>
+  <circle cx="233" cy="276" r="5" fill="#6e7681"/>
+  <text x="245" y="281" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">e2b</text>
+  <circle cx="335" cy="276" r="5" fill="#6e7681"/>
+  <text x="347" y="281" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">vercel</text>
+  <circle cx="233" cy="309" r="5" fill="#6e7681"/>
+  <text x="245" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">codesandbox</text>
+  <circle cx="356" cy="309" r="5" fill="#6e7681"/>
+  <text x="368" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8b949e">blaxel</text>
 
   <text x="68" y="378" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.5" fill="#8b949e">CONTAINER /</text>
   <text x="68" y="404" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#f0f6fc">host process</text>
