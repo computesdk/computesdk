@@ -115,7 +115,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           }
 
           const sandbox = await VercelSandbox.create(params);
-          return { sandbox, sandboxId: sandbox.sandboxId };
+          return { sandbox, sandboxId: sandbox.name };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('token')) {
@@ -133,8 +133,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         const creds = resolveCredentials(config);
         try {
           const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ sandboxId })
-            : await VercelSandbox.get({ sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
+            ? await VercelSandbox.get({ name: sandboxId })
+            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
           return { sandbox, sandboxId };
         } catch { return null; }
       },
@@ -147,8 +147,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         const creds = resolveCredentials(config);
         try {
           const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ sandboxId })
-            : await VercelSandbox.get({ sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
+            ? await VercelSandbox.get({ name: sandboxId })
+            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
           await sandbox.stop();
         } catch { /* already destroyed or doesn't exist */ }
       },
@@ -227,8 +227,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
       create: async (config: VercelConfig, sandboxId: string) => {
         const creds = resolveCredentials(config);
         const sandbox = creds.useOidc
-          ? await VercelSandbox.get({ sandboxId })
-          : await VercelSandbox.get({ sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
+          ? await VercelSandbox.get({ name: sandboxId })
+          : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         return await sandbox.snapshot();
       },
       list: async (_config: VercelConfig) => { throw new Error(`Vercel provider does not support listing snapshots.`); },
