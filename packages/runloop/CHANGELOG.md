@@ -1,5 +1,11 @@
 # @computesdk/runloop
 
+## 1.3.56
+
+### Patch Changes
+
+- 9956e9e: Modernize Runloop command execution, streaming, filesystem operations, lifecycle handling, pagination, errors, and snapshots using `@runloop/api-client` 1.28.
+
 ## 1.3.55
 
 ### Patch Changes
