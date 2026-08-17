@@ -33,9 +33,9 @@ Microsandbox requires Node.js 22 or newer.
 npm install computesdk @computesdk/microsandbox
 ```
 
-## Local backend
+## Cloud backend
 
-Local execution is the default and does not require credentials:
+Cloud is the default backend and does not require virtualization on the caller's machine. Pass an API key directly or let the microsandbox SDK resolve `MSB_API_KEY`, `MSB_PROFILE`, or the active profile:
 
 ```typescript
 import { compute } from 'computesdk';
@@ -43,9 +43,8 @@ import { microsandbox } from '@computesdk/microsandbox';
 
 compute.setConfig({
   provider: microsandbox({
-    backend: 'local',
+    apiKey: process.env.MSB_API_KEY,
     image: 'python:3.12',
-    ports: [{ host: 8000, guest: 8000 }],
   }),
 });
 
@@ -54,25 +53,23 @@ console.log((await sandbox.runCommand('python --version')).stdout);
 await sandbox.destroy();
 ```
 
-The local runtime requires supported hardware virtualization: Hypervisor.framework on Apple Silicon macOS, KVM on Linux, or Windows Hypervisor Platform.
+You can also select a configured cloud profile with `microsandbox({ profile: 'production' })`. Calling `microsandbox()` with no configuration uses the SDK's cloud credential and profile resolution. If none resolves, the provider reports how to configure cloud or select local mode instead of silently running locally.
 
-## Cloud backend
+## Local backend
 
-Microsandbox cloud uses the same provider methods but does not require virtualization on the caller's machine:
+Select local execution explicitly when the sandbox should run on the calling machine. It does not require credentials:
 
 ```typescript
 compute.setConfig({
   provider: microsandbox({
-    backend: {
-      kind: 'cloud',
-      apiKey: process.env.MSB_API_KEY!,
-    },
+    backend: 'local',
     image: 'python:3.12',
+    ports: [{ host: 8000, guest: 8000 }],
   }),
 });
 ```
 
-You can also select a configured microsandbox profile with `backend: { kind: 'cloud', profile: 'production' }`. If `backend` is omitted, the provider follows the SDK's `MSB_BACKEND`, `MSB_PROFILE`, active-profile, and local-default resolution order.
+The local runtime requires supported hardware virtualization: Hypervisor.framework on Apple Silicon macOS, KVM on Linux, or Windows Hypervisor Platform.
 
 ## Commands and files
 

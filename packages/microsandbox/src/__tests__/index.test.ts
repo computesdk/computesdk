@@ -4,6 +4,7 @@ const mock = vi.hoisted(() => ({
   backendKind: 'local' as 'local' | 'cloud',
   backendScopes: 0,
   maxBackendScopes: 0,
+  backendSelections: [] as Array<'local' | { kind: 'cloud'; apiKey?: string; url?: string; profile?: string }>,
   created: [] as Array<Record<string, unknown>>,
   handles: new Map<string, any>(),
   listPages: [] as Array<{ sandboxes: any[]; nextCursor?: string }>,
@@ -140,6 +141,7 @@ vi.mock('microsandbox', () => {
     defaultBackendKind: () => mock.backendKind,
     withDefaultBackend: async (backend: 'local' | { kind: 'cloud' }, operation: () => Promise<unknown>) => {
       const previous = mock.backendKind;
+      mock.backendSelections.push(backend);
       mock.backendKind = backend === 'local' ? 'local' : 'cloud';
       mock.backendScopes += 1;
       mock.maxBackendScopes = Math.max(mock.maxBackendScopes, mock.backendScopes);
@@ -178,6 +180,7 @@ beforeEach(() => {
   mock.backendKind = 'local';
   mock.backendScopes = 0;
   mock.maxBackendScopes = 0;
+  mock.backendSelections.length = 0;
   mock.created.length = 0;
   mock.handles.clear();
   mock.listPages.length = 0;
@@ -220,13 +223,19 @@ describe('microsandbox provider', () => {
 
   it('uses the cloud backend without requesting unsupported port publishing', async () => {
     const provider = microsandbox({
-      backend: { kind: 'cloud', apiKey: 'secret' },
+      apiKey: 'secret',
+      apiUrl: 'https://cloud.example.test',
       ports: [3000],
     });
     const sandbox = await provider.sandbox.create({ name: 'cloud-box' });
     const instance = sandbox.getInstance();
 
     expect(mock.created[0]).toMatchObject({ backend: 'cloud', ports: [] });
+    expect(mock.backendSelections[0]).toEqual({
+      kind: 'cloud',
+      apiKey: 'secret',
+      url: 'https://cloud.example.test',
+    });
     expect(instance).toMatchObject({ backendKind: 'cloud' });
     expect(instance).not.toHaveProperty('backend');
     expect(instance).not.toHaveProperty('apiKey');
@@ -235,10 +244,41 @@ describe('microsandbox provider', () => {
     await expect(provider.snapshot?.list()).rejects.toThrow(/cloud does not currently support disk snapshots/);
   });
 
+  it('defaults to a cloud backend resolved by the microsandbox SDK', async () => {
+    mock.backendKind = 'cloud';
+
+    await microsandbox().sandbox.create({ name: 'default-cloud' });
+
+    expect(mock.created[0]).toMatchObject({ name: 'default-cloud', backend: 'cloud' });
+    expect(mock.backendSelections).toEqual([]);
+  });
+
+  it('does not silently fall back to local when cloud is not configured', async () => {
+    await expect(microsandbox().sandbox.create({ name: 'missing-cloud' })).rejects.toThrow(
+      /cloud is the default.*MSB_API_KEY.*backend: 'local'/,
+    );
+    expect(mock.created).toEqual([]);
+  });
+
+  it('selects named cloud profiles and rejects conflicting backend options', async () => {
+    await microsandbox({ profile: 'production' }).sandbox.create({ name: 'profile-cloud' });
+    expect(mock.backendSelections[0]).toEqual({ kind: 'cloud', profile: 'production' });
+
+    await expect(
+      microsandbox({ backend: 'local', apiKey: 'secret' }).sandbox.create({ name: 'invalid-local' }),
+    ).rejects.toThrow(/cloud credentials cannot be used with backend: 'local'/);
+    await expect(
+      microsandbox({ profile: 'production', apiKey: 'secret' }).sandbox.create({ name: 'invalid-profile' }),
+    ).rejects.toThrow(/'profile' cannot be combined with 'apiKey' or 'apiUrl'/);
+    await expect(
+      microsandbox({ apiUrl: 'https://cloud.example.test' }).sandbox.create({ name: 'invalid-url' }),
+    ).rejects.toThrow(/'apiUrl' requires 'apiKey'/);
+  });
+
   it('serializes process-wide backend scopes across concurrent local and cloud creates', async () => {
     await Promise.all([
       microsandbox({ backend: 'local' }).sandbox.create({ name: 'local-concurrent' }),
-      microsandbox({ backend: { kind: 'cloud', apiKey: 'secret' } }).sandbox.create({ name: 'cloud-concurrent' }),
+      microsandbox({ apiKey: 'secret' }).sandbox.create({ name: 'cloud-concurrent' }),
     ]);
 
     expect(mock.maxBackendScopes).toBe(1);

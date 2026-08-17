@@ -42,10 +42,16 @@ export interface MicrosandboxPort {
 
 export interface MicrosandboxConfig {
   /**
-   * Explicit microsandbox backend. Omit this to use the SDK's environment and
-   * profile resolution, which defaults to the local runtime.
+   * Execution backend. Cloud is the default; pass `local` to use the runtime
+   * installed on the calling machine.
    */
-  backend?: DefaultBackend;
+  backend?: 'cloud' | 'local';
+  /** Cloud API key. Falls back to the microsandbox SDK's `MSB_API_KEY` resolution. */
+  apiKey?: string;
+  /** Hosted API endpoint override. Requires `apiKey`. */
+  apiUrl?: string;
+  /** Named microsandbox cloud profile. Cannot be combined with `apiKey` or `apiUrl`. */
+  profile?: string;
   /** Default OCI image. */
   image?: string;
   /** Default number of guest vCPUs. */
@@ -104,6 +110,11 @@ interface RecoveredConfig {
   };
 }
 
+interface BackendSelection {
+  kind: 'local' | 'cloud';
+  override?: DefaultBackend;
+}
+
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
 let backendQueue = Promise.resolve();
 
@@ -112,7 +123,7 @@ let backendQueue = Promise.resolve();
  * object returned by getInstance(). The mapping is only needed when a sandbox
  * created in this process must lazily recover its native handle.
  */
-const sandboxBackends = new WeakMap<MicrosandboxSandbox, DefaultBackend | undefined>();
+const sandboxBackends = new WeakMap<MicrosandboxSandbox, BackendSelection>();
 
 function loadSdk(): Promise<MicrosandboxModule> {
   sdkPromise ??= import('microsandbox');
@@ -125,7 +136,7 @@ function loadSdk(): Promise<MicrosandboxModule> {
  * other's temporary backend while create/get/list/remove is awaiting I/O.
  */
 async function withBackend<T>(
-  backend: DefaultBackend | undefined,
+  selection: BackendSelection,
   operation: (sdk: MicrosandboxModule) => Promise<T>,
 ): Promise<T> {
   let release!: () => void;
@@ -136,10 +147,58 @@ async function withBackend<T>(
   await previous;
   try {
     const sdk = await loadSdk();
-    return await (backend ? sdk.withDefaultBackend(backend, () => operation(sdk)) : operation(sdk));
+    const run = async () => {
+      const resolvedKind = sdk.defaultBackendKind();
+      if (resolvedKind !== selection.kind) {
+        throw new Error(
+          `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
+          `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
+        );
+      }
+      return operation(sdk);
+    };
+    return await (selection.override ? sdk.withDefaultBackend(selection.override, run) : run());
   } finally {
     release();
   }
+}
+
+function selectBackend(config: MicrosandboxConfig): BackendSelection {
+  const kind = config.backend ?? 'cloud';
+  const hasApiKey = Boolean(config.apiKey);
+  const hasApiUrl = Boolean(config.apiUrl);
+  const hasProfile = Boolean(config.profile);
+
+  if (kind === 'local') {
+    if (hasApiKey || hasApiUrl || hasProfile) {
+      throw new Error(`Microsandbox cloud credentials cannot be used with backend: 'local'.`);
+    }
+    return { kind, override: 'local' };
+  }
+
+  if (hasProfile && (hasApiKey || hasApiUrl)) {
+    throw new Error(`Microsandbox 'profile' cannot be combined with 'apiKey' or 'apiUrl'.`);
+  }
+  if (hasApiUrl && !hasApiKey) {
+    throw new Error(`Microsandbox 'apiUrl' requires 'apiKey'.`);
+  }
+  if (config.profile) {
+    return { kind, override: { kind: 'cloud', profile: config.profile } };
+  }
+  if (config.apiKey) {
+    return {
+      kind,
+      override: {
+        kind: 'cloud',
+        apiKey: config.apiKey,
+        ...(config.apiUrl ? { url: config.apiUrl } : {}),
+      },
+    };
+  }
+
+  // Let the SDK resolve MSB_API_KEY, MSB_PROFILE, or the active profile, then
+  // enforce cloud so an unconfigured machine does not silently fall back local.
+  return { kind };
 }
 
 function errorMessage(error: unknown): string {
@@ -224,7 +283,7 @@ function portsFromConfig(config: RecoveredConfig): Map<number, number> {
 
 function handleFromNative(
   handle: NativeSandboxHandle,
-  backend: DefaultBackend | undefined,
+  backend: BackendSelection,
   timeoutMs: number,
 ): MicrosandboxSandbox {
   const config = handle.config() as RecoveredConfig;
@@ -244,7 +303,9 @@ function handleFromNative(
 
 async function nativeHandle(sandbox: MicrosandboxSandbox): Promise<NativeSandboxHandle> {
   if (sandbox.handle) return sandbox.handle;
-  sandbox.handle = await withBackend(sandboxBackends.get(sandbox), async ({ Sandbox }) => Sandbox.get(sandbox.name));
+  const backend = sandboxBackends.get(sandbox);
+  if (!backend) throw new Error(`Microsandbox backend state is unavailable for sandbox "${sandbox.name}".`);
+  sandbox.handle = await withBackend(backend, async ({ Sandbox }) => Sandbox.get(sandbox.name));
   return sandbox.handle;
 }
 
@@ -387,7 +448,7 @@ function snapshotFromNative(snapshot: {
   };
 }
 
-export const microsandbox = defineProvider<
+const _microsandbox = defineProvider<
   MicrosandboxSandbox,
   MicrosandboxConfig,
   never,
@@ -396,7 +457,7 @@ export const microsandbox = defineProvider<
   name: PROVIDER,
   methods: {
     sandbox: {
-      create: async (config, options) => withBackend(config.backend, async (sdk) => {
+      create: async (config, options) => withBackend(selectBackend(config), async (sdk) => {
         options?.signal?.throwIfAborted();
         const backendKind = sdk.defaultBackendKind();
         const name = options?.name ?? `${config.namePrefix ?? DEFAULT_NAME_PREFIX}${randomUUID()}`;
@@ -457,7 +518,7 @@ export const microsandbox = defineProvider<
           metadata,
           ports: new Map(ports.map((port) => [port.guest, port.host])),
         };
-        sandboxBackends.set(sandbox, config.backend);
+        sandboxBackends.set(sandbox, selectBackend(config));
 
         return {
           sandbox,
@@ -465,11 +526,11 @@ export const microsandbox = defineProvider<
         };
       }),
 
-      getById: async (config, sandboxId) => withBackend(config.backend, async ({ Sandbox }) => {
+      getById: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {
         try {
           const handle = await Sandbox.get(sandboxId);
           return {
-            sandbox: handleFromNative(handle, config.backend, config.timeout ?? DEFAULT_TIMEOUT_MS),
+            sandbox: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
             sandboxId,
           };
         } catch (error) {
@@ -478,7 +539,7 @@ export const microsandbox = defineProvider<
         }
       }),
 
-      list: async (config) => withBackend(config.backend, async ({ Sandbox }) => {
+      list: async (config) => withBackend(selectBackend(config), async ({ Sandbox }) => {
         const sandboxes: Array<{ sandbox: MicrosandboxSandbox; sandboxId: string }> = [];
         let cursor: string | undefined;
         do {
@@ -488,7 +549,7 @@ export const microsandbox = defineProvider<
             return configured;
           });
           sandboxes.push(...page.sandboxes.map((handle) => ({
-            sandbox: handleFromNative(handle, config.backend, config.timeout ?? DEFAULT_TIMEOUT_MS),
+            sandbox: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
             sandboxId: handle.name,
           })));
           cursor = page.nextCursor;
@@ -496,7 +557,7 @@ export const microsandbox = defineProvider<
         return sandboxes;
       }),
 
-      destroy: async (config, sandboxId) => withBackend(config.backend, async ({ Sandbox }) => {
+      destroy: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {
         try {
           await removeSandbox(await Sandbox.get(sandboxId));
         } catch (error) {
@@ -580,7 +641,7 @@ export const microsandbox = defineProvider<
     },
 
     snapshot: {
-      create: async (config, sandboxId, options?: CreateSnapshotOptions) => withBackend(config.backend, async (sdk) => {
+      create: async (config, sandboxId, options?: CreateSnapshotOptions) => withBackend(selectBackend(config), async (sdk) => {
         requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const handle = await sdk.Sandbox.get(sandboxId);
         const wasRunning = handle.status === 'running' || handle.status === 'draining';
@@ -635,7 +696,7 @@ export const microsandbox = defineProvider<
         };
       }),
 
-      list: async (config, options?: ListSnapshotsOptions) => withBackend(config.backend, async (sdk) => {
+      list: async (config, options?: ListSnapshotsOptions) => withBackend(selectBackend(config), async (sdk) => {
         requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const snapshots: MicrosandboxSnapshot[] = [];
         for (const handle of await sdk.Snapshot.list()) {
@@ -657,12 +718,17 @@ export const microsandbox = defineProvider<
         return snapshots;
       }),
 
-      delete: async (config, snapshotId) => withBackend(config.backend, async (sdk) => {
+      delete: async (config, snapshotId) => withBackend(selectBackend(config), async (sdk) => {
         requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         await sdk.Snapshot.remove(snapshotId);
       }),
     },
   },
 });
+
+/** Create a cloud-first microsandbox provider, or opt into the local runtime explicitly. */
+export function microsandbox(config: MicrosandboxConfig = {}): ReturnType<typeof _microsandbox> {
+  return _microsandbox(config);
+}
 
 export default microsandbox;

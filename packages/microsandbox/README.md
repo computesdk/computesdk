@@ -5,8 +5,8 @@ Microsandbox provider for ComputeSDK. It runs the same sandbox API against hardw
 ## Requirements
 
 - Node.js 22 or newer
-- Local backend: macOS on Apple Silicon, Linux with KVM, or Windows with Windows Hypervisor Platform
 - Cloud backend: microsandbox cloud access and an API key
+- Local backend: macOS on Apple Silicon, Linux with KVM, or Windows with Windows Hypervisor Platform
 
 ## Installation
 
@@ -14,9 +14,30 @@ Microsandbox provider for ComputeSDK. It runs the same sandbox API against hardw
 npm install computesdk @computesdk/microsandbox
 ```
 
+## Cloud quick start
+
+Cloud is the default backend. Pass an API key directly or omit it to use the microsandbox SDK's `MSB_API_KEY`, `MSB_PROFILE`, or active-profile resolution:
+
+```typescript
+import { compute } from 'computesdk';
+import { microsandbox } from '@computesdk/microsandbox';
+
+compute.setConfig({
+  provider: microsandbox({
+    apiKey: process.env.MSB_API_KEY,
+    image: 'node:22',
+  }),
+});
+
+const sandbox = await compute.sandbox.create();
+const result = await sandbox.runCommand('node --version');
+console.log(result.stdout);
+await sandbox.destroy();
+```
+
 ## Local quick start
 
-The local backend is the default and does not require an account or API key:
+Select the local backend explicitly when the sandbox should run on the calling machine. Local mode does not require an account or API key:
 
 ```typescript
 import { compute } from 'computesdk';
@@ -31,42 +52,27 @@ compute.setConfig({
 });
 
 const sandbox = await compute.sandbox.create();
-const result = await sandbox.runCommand('node --version');
-console.log(result.stdout);
-await sandbox.destroy();
-```
-
-## Cloud quick start
-
-Cloud uses the same sandbox, command, and filesystem methods. Select it explicitly and supply an API key:
-
-```typescript
-import { compute } from 'computesdk';
-import { microsandbox } from '@computesdk/microsandbox';
-
-compute.setConfig({
-  provider: microsandbox({
-    backend: {
-      kind: 'cloud',
-      apiKey: process.env.MSB_API_KEY!,
-    },
-    image: 'node:22',
-  }),
-});
-
-const sandbox = await compute.sandbox.create();
 await sandbox.filesystem.writeFile('/tmp/hello.js', 'console.log("hello")');
 console.log((await sandbox.runCommand('node /tmp/hello.js')).stdout);
 await sandbox.destroy();
 ```
 
-Omit `backend` to use microsandbox's standard `MSB_BACKEND`, `MSB_PROFILE`, and active-profile resolution. The SDK defaults to local when none of those selects cloud.
+Calling `microsandbox()` with no configuration uses cloud through the microsandbox SDK's standard environment and active-profile resolution. If no cloud credentials resolve, the provider reports how to configure cloud or opt into `backend: 'local'`; it never silently falls back to local.
+
+Use a named cloud profile instead of an API key when appropriate:
+
+```typescript
+const provider = microsandbox({ profile: 'production' });
+```
 
 ## Configuration
 
 ```typescript
 interface MicrosandboxConfig {
-  backend?: 'local' | { kind: 'cloud'; apiKey: string; url?: string } | { kind: 'cloud'; profile: string };
+  backend?: 'cloud' | 'local'; // Defaults to cloud
+  apiKey?: string;             // Falls back to MSB_API_KEY
+  apiUrl?: string;             // Optional endpoint override; requires apiKey
+  profile?: string;            // Named cloud profile; mutually exclusive with apiKey/apiUrl
   image?: string;
   cpus?: number;
   memoryMib?: number;
