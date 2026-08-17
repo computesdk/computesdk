@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 30.0.6
+
+### Patch Changes
+
+- Updated dependencies [e8709ce]
+  - @computesdk/vercel@1.7.33
+
 ## 30.0.5
 
 ### Patch Changes
