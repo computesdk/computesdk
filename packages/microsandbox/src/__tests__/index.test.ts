@@ -221,6 +221,34 @@ describe('microsandbox provider', () => {
     expect((await sandbox.getInfo()).metadata).toMatchObject({ backend: 'local', requestId: 42 });
   });
 
+  it('lets a per-sandbox directory override the provider workdir', async () => {
+    const provider = microsandbox({ backend: 'local', workdir: '/provider-default' });
+
+    await provider.sandbox.create({ name: 'custom-workdir', directory: '/per-sandbox' });
+    await provider.sandbox.create({ name: 'default-workdir' });
+
+    expect(mock.created[0]).toMatchObject({ workdir: '/per-sandbox' });
+    expect(mock.created[1]).toMatchObject({ workdir: '/provider-default' });
+  });
+
+  it('builds local URLs from explicit and wildcard bind addresses', async () => {
+    const provider = microsandbox({
+      backend: 'local',
+      ports: [
+        { bind: '192.0.2.10', host: 4301, guest: 3001 },
+        { bind: '0.0.0.0', host: 4302, guest: 3002 },
+        { bind: '::1', host: 4303, guest: 3003 },
+        { bind: '::', host: 4304, guest: 3004 },
+      ],
+    });
+    const sandbox = await provider.sandbox.create({ name: 'bound-ports' });
+
+    expect(await sandbox.getUrl({ port: 3001 })).toBe('http://192.0.2.10:4301');
+    expect(await sandbox.getUrl({ port: 3002 })).toBe('http://127.0.0.1:4302');
+    expect(await sandbox.getUrl({ port: 3003, protocol: 'https' })).toBe('https://[::1]:4303');
+    expect(await sandbox.getUrl({ port: 3004 })).toBe('http://[::1]:4304');
+  });
+
   it('uses the cloud backend without requesting unsupported port publishing', async () => {
     const provider = microsandbox({
       apiKey: 'secret',
@@ -289,27 +317,27 @@ describe('microsandbox provider', () => {
   });
 
   it('drains paginated sandbox listings and restores metadata and ports', async () => {
-    const makeHandle = (name: string, host: number) => ({
+    const makeHandle = (name: string, hostPort: number, hostBind: string) => ({
       name,
       status: 'running',
       backendKind: 'local',
       createdAt: new Date(0),
       config: () => ({
         labels: { 'computesdk.metadata.owner': JSON.stringify('test') },
-        network: { ports: [{ host, guest: 3000 }] },
+        network: { ports: [{ hostPort, guestPort: 3000, hostBind }] },
       }),
       refresh: async function () { return this; },
       connect: async () => mock.handles.get(name)?.native,
     });
     mock.listPages.push(
-      { sandboxes: [makeHandle('one', 4101)], nextCursor: '1' },
-      { sandboxes: [makeHandle('two', 4102)] },
+      { sandboxes: [makeHandle('one', 4101, '127.0.0.1')], nextCursor: '1' },
+      { sandboxes: [makeHandle('two', 4102, '192.0.2.20')] },
     );
 
     const sandboxes = await microsandbox({ backend: 'local' }).sandbox.list();
 
     expect(sandboxes.map((sandbox) => sandbox.sandboxId)).toEqual(['one', 'two']);
-    expect(await sandboxes[1].getUrl({ port: 3000 })).toBe('http://127.0.0.1:4102');
+    expect(await sandboxes[1].getUrl({ port: 3000 })).toBe('http://192.0.2.20:4102');
     expect((await sandboxes[0].getInfo()).metadata).toMatchObject({ owner: 'test' });
   });
 

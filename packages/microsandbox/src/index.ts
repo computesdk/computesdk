@@ -106,6 +106,8 @@ interface RecoveredConfig {
       guest?: number;
       hostPort?: number;
       guestPort?: number;
+      bind?: string;
+      hostBind?: string;
     }>;
   };
 }
@@ -113,6 +115,11 @@ interface RecoveredConfig {
 interface BackendSelection {
   kind: 'local' | 'cloud';
   override?: DefaultBackend;
+}
+
+interface RecoveredPorts {
+  hostPorts: Map<number, number>;
+  hostBinds: Map<number, string>;
 }
 
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
@@ -124,6 +131,9 @@ let backendQueue = Promise.resolve();
  * created in this process must lazily recover its native handle.
  */
 const sandboxBackends = new WeakMap<MicrosandboxSandbox, BackendSelection>();
+
+/** Preserve bind addresses without changing the public `getInstance()` shape. */
+const sandboxPortBinds = new WeakMap<MicrosandboxSandbox, Map<number, string>>();
 
 function loadSdk(): Promise<MicrosandboxModule> {
   sdkPromise ??= import('microsandbox');
@@ -245,6 +255,14 @@ function normalizePorts(
   return [...byGuest.values()];
 }
 
+function bindAddressesFor(ports: MicrosandboxPort[]): Map<number, string> {
+  const binds = new Map<number, string>();
+  for (const port of ports) {
+    if (port.bind) binds.set(port.guest, port.bind);
+  }
+  return binds;
+}
+
 function encodeMetadata(metadata: Record<string, unknown>): Record<string, string> {
   const labels: Record<string, string> = {};
   for (const [key, value] of Object.entries(metadata)) {
@@ -271,14 +289,26 @@ function decodeMetadata(labels: Record<string, string> | undefined): Record<stri
   return metadata;
 }
 
-function portsFromConfig(config: RecoveredConfig): Map<number, number> {
-  const ports = new Map<number, number>();
+function portsFromConfig(config: RecoveredConfig): RecoveredPorts {
+  const hostPorts = new Map<number, number>();
+  const hostBinds = new Map<number, string>();
   for (const port of config.network?.ports ?? []) {
     const host = Number(port.host ?? port.hostPort);
     const guest = Number(port.guest ?? port.guestPort);
-    if (Number.isInteger(host) && Number.isInteger(guest)) ports.set(guest, host);
+    const bind = port.bind ?? port.hostBind;
+    if (Number.isInteger(host) && Number.isInteger(guest)) {
+      hostPorts.set(guest, host);
+      if (bind) hostBinds.set(guest, bind);
+    }
   }
-  return ports;
+  return { hostPorts, hostBinds };
+}
+
+function urlHostForBind(bind: string | undefined): string {
+  if (!bind || bind === '0.0.0.0') return '127.0.0.1';
+  if (bind === '::' || bind === '[::]') return '[::1]';
+  if (bind.startsWith('[') && bind.endsWith(']')) return bind;
+  return bind.includes(':') ? `[${bind}]` : bind;
 }
 
 function handleFromNative(
@@ -287,6 +317,7 @@ function handleFromNative(
   timeoutMs: number,
 ): MicrosandboxSandbox {
   const config = handle.config() as RecoveredConfig;
+  const recoveredPorts = portsFromConfig(config);
   const sandbox: MicrosandboxSandbox = {
     name: handle.name,
     backendKind: handle.backendKind,
@@ -295,9 +326,10 @@ function handleFromNative(
     createdAt: handle.createdAt ?? new Date(),
     timeoutMs,
     metadata: decodeMetadata(config.labels),
-    ports: portsFromConfig(config),
+    ports: recoveredPorts.hostPorts,
   };
   sandboxBackends.set(sandbox, backend);
+  sandboxPortBinds.set(sandbox, recoveredPorts.hostBinds);
   return sandbox;
 }
 
@@ -484,7 +516,8 @@ const _microsandbox = defineProvider<
             ...encodeMetadata(metadata),
           });
 
-        if (config.workdir ?? options?.directory) builder = builder.workdir(config.workdir ?? options?.directory as string);
+        const workdir = options?.directory ?? config.workdir;
+        if (workdir) builder = builder.workdir(workdir);
         if (options?.envs && Object.keys(options.envs).length > 0) builder = builder.envs(options.envs);
         if (config.pullPolicy) builder = builder.pullPolicy(config.pullPolicy);
         if (config.networkEnabled === false) builder = builder.disableNetwork();
@@ -519,6 +552,7 @@ const _microsandbox = defineProvider<
           ports: new Map(ports.map((port) => [port.guest, port.host])),
         };
         sandboxBackends.set(sandbox, selectBackend(config));
+        sandboxPortBinds.set(sandbox, bindAddressesFor(ports));
 
         return {
           sandbox,
@@ -602,12 +636,14 @@ const _microsandbox = defineProvider<
       getUrl: async (sandbox, options) => {
         requireLocal(sandbox.backendKind, 'published ports');
         const hostPort = sandbox.ports.get(options.port);
-        if (!hostPort) {
+        if (hostPort == null) {
           throw new Error(
             `Guest port ${options.port} was not published. Configure it before creating the microsandbox sandbox.`,
           );
         }
-        return `${options.protocol ?? 'http'}://127.0.0.1:${hostPort}`;
+        const bind = sandboxPortBinds.get(sandbox)?.get(options.port);
+        const host = urlHostForBind(bind);
+        return `${options.protocol ?? 'http'}://${host}:${hostPort}`;
       },
 
       getInstance: (sandbox) => sandbox,
