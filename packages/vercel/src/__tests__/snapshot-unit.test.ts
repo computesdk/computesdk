@@ -10,7 +10,7 @@ vi.mock('@vercel/sandbox', () => {
   };
 
   const mockSandboxInstance = {
-    sandboxId: 'mock-sandbox-id',
+    name: 'mock-sandbox-id',
     snapshot: vi.fn().mockResolvedValue(mockSnapshotInstance),
     stop: vi.fn().mockResolvedValue(undefined),
   };
@@ -47,7 +47,7 @@ describe('Vercel Snapshot Support', () => {
     await provider.snapshot.create('sandbox-123');
     
     expect(VercelSandbox.get).toHaveBeenCalledWith(expect.objectContaining({
-      sandboxId: 'sandbox-123',
+      name: 'sandbox-123',
       token: 'mock-token',
       teamId: 'mock-team',
       projectId: 'mock-project'
