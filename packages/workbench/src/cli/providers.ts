@@ -31,6 +31,7 @@ const SHARED_PROVIDER_NAMES = [
   'collimate',
   'lelantos',
   'tenki',
+  'microsandbox',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -69,6 +70,9 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   // key alone counts as configured.
   lelantos: [['LELANTOS_API_KEY'], ['E2B_API_KEY']],
   tenki: [['TENKI_API_KEY'], ['TENKI_AUTH_TOKEN']],
+  // Cloud is the default, and it can authenticate with either a direct key or
+  // a named SDK profile.
+  microsandbox: [['MSB_API_KEY'], ['MSB_PROFILE']],
 };
 
 // Each config key maps to an env var name, or — when a provider accepts
@@ -110,6 +114,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | reado
     apiUrl: ['LELANTOS_API_URL', 'E2B_API_URL'],
   },
   tenki: { apiKey: 'TENKI_API_KEY', baseUrl: 'TENKI_API_URL', workspaceId: 'TENKI_WORKSPACE_ID' },
+  microsandbox: { apiKey: 'MSB_API_KEY', apiUrl: 'MSB_API_URL', profile: 'MSB_PROFILE' },
 };
 
 function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
@@ -122,6 +127,17 @@ function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, 
       if (value) { config[configKey] = value; break; }
     }
   }
+
+  if (provider === 'microsandbox') {
+    // The SDK treats key-based auth and profile auth as mutually exclusive.
+    // Prefer the explicit key, including its optional endpoint, when both are set.
+    if (config.apiKey) {
+      delete config.profile;
+    } else if (config.profile) {
+      delete config.apiUrl;
+    }
+  }
+
   return config;
 }
 
@@ -390,6 +406,9 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'tenki':
         // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/tenki');
+      case 'microsandbox':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/microsandbox');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }

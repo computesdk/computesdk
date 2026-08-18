@@ -30,6 +30,8 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "dev:ts": "tsx src/bin/workbench-ts.ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -68,6 +70,7 @@
     "@computesdk/declaw": "workspace:*",
     "@computesdk/isorun": "workspace:*",
     "@computesdk/modal": "workspace:*",
+    "@computesdk/microsandbox": "workspace:*",
     "@computesdk/runloop": "workspace:*",
     "@computesdk/vercel": "workspace:*",
     "@computesdk/namespace": "workspace:*",
@@ -90,6 +93,9 @@
       "optional": true
     },
     "@computesdk/modal": {
+      "optional": true
+    },
+    "@computesdk/microsandbox": {
       "optional": true
     },
     "@computesdk/runloop": {
@@ -165,6 +171,7 @@
     "ts-node": "^10.9.2",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   }
 }
