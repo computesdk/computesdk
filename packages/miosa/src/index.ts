@@ -115,6 +115,22 @@ const HTTP2_SESSION_COUNT = (() => {
 interface Http2SessionPool {
   sessions: import("node:http2").ClientHttp2Session[];
   next: number;
+  inFlight: number;
+}
+
+// A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
+// event loop alive. Idle sessions are therefore unref'd so a finished script
+// exits on its own, and re-ref'd only while a request is actually in flight so
+// the process cannot exit out from under a pending response.
+function setPoolRef(pool: Http2SessionPool, referenced: boolean): void {
+  for (const session of pool.sessions) {
+    try {
+      if (referenced) session.ref();
+      else session.unref();
+    } catch {
+      // Session already closed; nothing to (un)reference.
+    }
+  }
 }
 
 const http2SessionPools = new Map<string, Http2SessionPool>();
@@ -141,7 +157,11 @@ function canUseNodeHttp2(url: URL): boolean {
 
 async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
   const http2 = await import("node:http2");
-  const pool = http2SessionPools.get(origin) ?? { sessions: [], next: 0 };
+  const pool = http2SessionPools.get(origin) ?? {
+    sessions: [],
+    next: 0,
+    inFlight: 0,
+  };
   pool.sessions = pool.sessions.filter(
     (candidate) => !candidate.closed && !candidate.destroyed,
   );
@@ -149,6 +169,14 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
 
   while (pool.sessions.length < HTTP2_SESSION_COUNT) {
     const session = http2.connect(origin);
+    // Preconnected sessions start idle, so they must not hold the event loop.
+    if (pool.inFlight === 0) {
+      try {
+        session.unref();
+      } catch {
+        // Session already closed.
+      }
+    }
     pool.sessions.push(session);
 
     const discard = () => {
@@ -164,13 +192,48 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
   return pool;
 }
 
+function hasUsableCredentials(config: MiosaConfig): boolean {
+  const apiKey =
+    config.apiKey ??
+    (typeof process !== "undefined" ? process.env?.MIOSA_API_KEY : undefined) ??
+    "";
+  return apiKey.startsWith("msk_");
+}
+
 function preconnectMiosa(config: MiosaConfig): void {
+  // Preconnect runs before resolveAuth, so check credentials here too: a
+  // misconfigured provider must not open a pool of TLS connections it can
+  // never use. resolveAuth still raises the descriptive error on first call.
+  if (!hasUsableCredentials(config)) return;
+
   const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const url = new URL(baseUrl);
 
   if (canUseNodeHttp2(url)) {
     void ensureHttp2Sessions(url.origin).catch(() => undefined);
   }
+}
+
+/**
+ * Close every pooled HTTP/2 session.
+ *
+ * Sessions are unref'd while idle, so this is not required for a process to
+ * exit. It is here for callers that want to release sockets deterministically,
+ * such as long-lived hosts creating providers for many different origins.
+ */
+export function closeMiosaConnections(): void {
+  for (const pool of http2SessionPools.values()) {
+    for (const session of pool.sessions) {
+      try {
+        session.close();
+      } catch {
+        // Session already closed.
+      }
+    }
+    pool.sessions = [];
+    pool.inFlight = 0;
+  }
+  http2SessionPools.clear();
 }
 
 async function nodeHttp2Request(
@@ -185,35 +248,46 @@ async function nodeHttp2Request(
   const session = pool.sessions[pool.next % pool.sessions.length]!;
   pool.next = (pool.next + 1) % pool.sessions.length;
 
-  return new Promise((resolve, reject) => {
-    let status = 0;
-    const chunks: Buffer[] = [];
-    const request = session.request({
-      ":method": method,
-      ":path": `${url.pathname}${url.search}`,
-      ...headers,
-      ...(body === undefined
-        ? {}
-        : { "content-length": Buffer.byteLength(body).toString() }),
-    });
+  if (pool.inFlight === 0) setPoolRef(pool, true);
+  pool.inFlight += 1;
 
-    request.on("response", (responseHeaders) => {
-      status = Number(responseHeaders[":status"] ?? 0);
-    });
-    request.on("data", (chunk: Buffer | Uint8Array) => {
-      chunks.push(Buffer.from(chunk));
-    });
-    request.once("error", reject);
-    request.once("end", () => {
-      const responseBody = Buffer.concat(chunks).toString("utf8");
-      resolve({
-        ok: status >= 200 && status < 300,
-        status,
-        text: async () => responseBody,
+  try {
+    return await new Promise<MiosaHttpResponse>((resolve, reject) => {
+      let status = 0;
+      const chunks: Buffer[] = [];
+      const request = session.request({
+        ":method": method,
+        ":path": `${url.pathname}${url.search}`,
+        ...headers,
+        ...(body === undefined
+          ? {}
+          : { "content-length": Buffer.byteLength(body).toString() }),
       });
+
+      request.on("response", (responseHeaders) => {
+        status = Number(responseHeaders[":status"] ?? 0);
+      });
+      request.on("data", (chunk: Buffer | Uint8Array) => {
+        chunks.push(Buffer.from(chunk));
+      });
+      request.once("error", reject);
+      request.once("end", () => {
+        const responseBody = Buffer.concat(chunks).toString("utf8");
+        resolve({
+          ok: status >= 200 && status < 300,
+          status,
+          text: async () => responseBody,
+        });
+      });
+      request.end(body);
     });
-    request.end(body);
-  });
+  } finally {
+    pool.inFlight -= 1;
+    if (pool.inFlight <= 0) {
+      pool.inFlight = 0;
+      setPoolRef(pool, false);
+    }
+  }
 }
 
 async function sendMiosaRequest(
@@ -320,13 +394,20 @@ function unwrapSandbox(payload: unknown): MiosaSandboxRecord {
     : asRecord;
 }
 
+function toCreatedAt(value: string | null | undefined): Date {
+  const parsed = value ? new Date(value) : undefined;
+  // A compact create response may omit created_at. Returning an Invalid Date
+  // breaks every consumer that formats it, so fall back to now.
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
+}
+
 function toMs(timeoutSec: number | null | undefined): number {
   return typeof timeoutSec === "number"
     ? timeoutSec * 1000
     : DEFAULT_TIMEOUT_MS;
 }
 
-function toStatus(state: string): SandboxInfo["status"] {
+function toStatus(state: string | null | undefined): SandboxInfo["status"] {
   switch (state) {
     case "running":
     case "starting":
@@ -492,12 +573,32 @@ const createMiosaProvider = defineProvider<
       runCommand: execInSandbox,
 
       getInfo: async (sandbox: MiosaSandbox): Promise<SandboxInfo> => {
-        const record = sandbox.record;
+        // The handle's record is a snapshot from create/getById and goes stale
+        // as soon as the sandbox stops or fails. Refetch so callers polling
+        // status see live state, and refresh the handle for later reads. This
+        // also repairs fields the compact create response may have omitted.
+        let record = sandbox.record;
+        let missing = false;
+        try {
+          const payload = await miosaRequest<unknown>(
+            { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl },
+            "GET",
+            `/sandboxes/${record.id}`,
+          );
+          record = unwrapSandbox(payload);
+          sandbox.record = record;
+        } catch (error) {
+          if (!(error instanceof MiosaApiError && error.status === 404)) throw error;
+          // Already destroyed: report it as stopped rather than echoing the
+          // last known running state back to the caller.
+          missing = true;
+        }
+
         return {
           id: record.id,
           provider: "miosa",
-          status: toStatus(record.state),
-          createdAt: new Date(record.created_at),
+          status: missing ? "stopped" : toStatus(record.state),
+          createdAt: toCreatedAt(record.created_at),
           timeout: toMs(record.timeout_sec),
           metadata: {
             slug: record.slug,

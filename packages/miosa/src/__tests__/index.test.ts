@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { miosa, DEFAULT_BASE_URL } from "../index";
+import { closeMiosaConnections, miosa, DEFAULT_BASE_URL } from "../index";
 import type { MiosaSandboxRecord } from "../index";
 
 const API_KEY = "msk_test_0123456789abcdef";
@@ -260,12 +260,18 @@ describe("miosa provider", () => {
   });
 
   describe("getInfo", () => {
-    it("should map the sandbox record to SandboxInfo", async () => {
+    it("should map the refetched sandbox record to SandboxInfo", async () => {
       fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
       const provider = miosa({ apiKey: API_KEY });
       const sandbox = await provider.sandbox.create();
 
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord()));
       const info = await sandbox.getInfo();
+
+      expect(lastRequest(fetchMock).url).toBe(
+        `${DEFAULT_BASE_URL}/sandboxes/${sandbox.sandboxId}`,
+      );
+      expect(lastRequest(fetchMock).init.method).toBe("GET");
       expect(info).toMatchObject({
         id: sandbox.sandboxId,
         provider: "miosa",
@@ -273,6 +279,55 @@ describe("miosa provider", () => {
         timeout: 300_000,
       });
       expect(info.metadata?.previewUrl).toBe("https://a1b2c3d4.miosa.ai");
+    });
+
+    it("should report live state rather than the cached create record", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      // The sandbox stopped after create; the cached record still says running.
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse(sandboxRecord({ state: "stopped" })),
+      );
+
+      const info = await sandbox.getInfo();
+      expect(info.status).toBe("stopped");
+    });
+
+    it("should report a destroyed sandbox as stopped", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ error: { code: "NOT_FOUND" } }, 404),
+      );
+
+      const info = await sandbox.getInfo();
+      expect(info.status).toBe("stopped");
+      expect(info.id).toBe(sandbox.sandboxId);
+    });
+
+    it("should tolerate a compact record missing state and created_at", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      const partial = sandboxRecord();
+      delete (partial as Partial<MiosaSandboxRecord>).state;
+      delete (partial as Partial<MiosaSandboxRecord>).created_at;
+      fetchMock.mockResolvedValueOnce(jsonResponse(partial));
+
+      const info = await sandbox.getInfo();
+      expect(info.status).toBe("stopped");
+      expect(Number.isNaN(info.createdAt.getTime())).toBe(false);
+    });
+  });
+
+  describe("connection pooling", () => {
+    it("should expose a disposal hook that is safe to call with no pool", () => {
+      expect(() => closeMiosaConnections()).not.toThrow();
     });
   });
 
