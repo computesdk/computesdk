@@ -1,5 +1,13 @@
 # @computesdk/workbench
 
+## 30.0.7
+
+### Patch Changes
+
+- 183f0f1: Add a microsandbox provider with local and cloud backends, native command streaming, filesystem access, and local port and snapshot support.
+- Updated dependencies [183f0f1]
+  - @computesdk/microsandbox@0.1.1
+
 ## 30.0.6
 
 ### Patch Changes
