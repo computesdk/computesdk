@@ -1,5 +1,11 @@
 # @computesdk/vercel
 
+## 1.7.33
+
+### Patch Changes
+
+- e8709ce: Bump `@vercel/sandbox` to `^3.0.0` and migrate `Sandbox.get` calls and sandbox identifiers to the `name` property introduced in v3.
+
 ## 1.7.32
 
 ### Patch Changes
