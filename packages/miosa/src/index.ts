@@ -114,8 +114,11 @@ const HTTP2_SESSION_COUNT = (() => {
 
 interface Http2SessionPool {
   sessions: import("node:http2").ClientHttp2Session[];
+  ready: Set<import("node:http2").ClientHttp2Session>;
   next: number;
   inFlight: number;
+  firstReady: Promise<void>;
+  signalFirstReady: () => void;
 }
 
 // A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
@@ -157,11 +160,22 @@ function canUseNodeHttp2(url: URL): boolean {
 
 async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
   const http2 = await import("node:http2");
-  const pool = http2SessionPools.get(origin) ?? {
-    sessions: [],
-    next: 0,
-    inFlight: 0,
-  };
+  const pool =
+    http2SessionPools.get(origin) ??
+    (() => {
+      let signalFirstReady = () => {};
+      const firstReady = new Promise<void>((resolve) => {
+        signalFirstReady = resolve;
+      });
+      return {
+        sessions: [],
+        ready: new Set<import("node:http2").ClientHttp2Session>(),
+        next: 0,
+        inFlight: 0,
+        firstReady,
+        signalFirstReady,
+      };
+    })();
   pool.sessions = pool.sessions.filter(
     (candidate) => !candidate.closed && !candidate.destroyed,
   );
@@ -180,6 +194,7 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     pool.sessions.push(session);
 
     const discard = () => {
+      pool.ready.delete(session);
       pool.sessions = pool.sessions.filter(
         (candidate) => candidate !== session,
       );
@@ -187,6 +202,14 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     session.once("close", discard);
     session.once("error", discard);
     session.once("goaway", discard);
+    // A session accepted by http2.connect() is still mid TCP/TLS handshake.
+    // Requests routed onto it ride that handshake inline, which showed up as
+    // roughly 250ms of extra median latency on a cold 100-way burst. Track
+    // readiness so request routing can prefer established sessions.
+    session.once("remoteSettings", () => {
+      pool.ready.add(session);
+      pool.signalFirstReady();
+    });
   }
 
   return pool;
@@ -245,11 +268,30 @@ async function nodeHttp2Request(
   const origin = url.origin;
   const pool = await ensureHttp2Sessions(origin);
 
-  const session = pool.sessions[pool.next % pool.sessions.length]!;
-  pool.next = (pool.next + 1) % pool.sessions.length;
-
+  // Reference the pool for the lifetime of this request BEFORE any await:
+  // idle sessions are unref'd, and awaiting the first handshake on a fully
+  // unref'd pool would let the process exit mid-request.
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
+
+  // Cold start: wait for a quorum of handshakes instead of racing onto the
+  // first established session. Routing an entire burst onto one just-ready
+  // session serializes it behind a single TCP connection; the handshakes run
+  // in parallel, so waiting for several costs barely more than waiting for
+  // one. Established pools skip this entirely.
+  if (pool.ready.size === 0) {
+    await pool.firstReady;
+    const quorum = Math.min(8, pool.sessions.length);
+    const deadline = Date.now() + 250;
+    while (pool.ready.size < quorum && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  const candidates =
+    pool.ready.size > 0 ? Array.from(pool.ready) : pool.sessions;
+  const session = candidates[pool.next % candidates.length]!;
+  pool.next = (pool.next + 1) % candidates.length;
 
   try {
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
