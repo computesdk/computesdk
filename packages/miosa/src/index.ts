@@ -501,6 +501,29 @@ const createMiosaProvider = defineProvider<
           persistent: false,
           timeout_sec: Math.ceil(timeoutMs / 1000),
         };
+        // Map ComputeSDK's provider-agnostic resource hints (vcpus / memory
+        // in MB) onto MIOSA's size contracts. MIOSA sizes are fixed shapes,
+        // so pick the smallest size that satisfies both requested dimensions
+        // (same interpretation Modal/Beam/Blaxel apply to these fields).
+        const requestedVcpus = options?.vcpus ?? options?.cpus ?? options?.cpu;
+        const requestedMemoryMb = options?.memory ?? options?.memoryMiB;
+        if (requestedVcpus !== undefined || requestedMemoryMb !== undefined) {
+          const sizes: Array<{ size: string; vcpus: number; memoryMb: number }> = [
+            { size: "xs", vcpus: 1, memoryMb: 2048 },
+            { size: "small", vcpus: 2, memoryMb: 4096 },
+            { size: "medium", vcpus: 4, memoryMb: 8192 },
+            { size: "large", vcpus: 8, memoryMb: 16384 },
+            { size: "xl", vcpus: 16, memoryMb: 32768 },
+          ];
+          const fit = sizes.find(
+            (candidate) =>
+              (requestedVcpus === undefined || candidate.vcpus >= requestedVcpus) &&
+              (requestedMemoryMb === undefined || candidate.memoryMb >= requestedMemoryMb),
+          );
+          // Oversized requests clamp to the largest shape rather than failing:
+          // the caller asked for "big", xl is the biggest big we sell.
+          body.size = (fit ?? sizes[sizes.length - 1]).size;
+        }
         if (options?.templateId !== undefined)
           body.template_id = options.templateId;
         if (options?.snapshotId !== undefined)
