@@ -366,6 +366,59 @@ export function closeMiosaConnections(): void {
   http2SessionPools.clear();
 }
 
+function releaseHttp2Pool(pool: Http2SessionPool): void {
+  pool.inFlight -= 1;
+  if (pool.inFlight <= 0) {
+    pool.inFlight = 0;
+    setPoolRef(pool, false);
+  }
+}
+
+// Cold start: wait for a quorum of handshakes instead of racing onto the first
+// established session. Routing an entire burst onto one just-ready session
+// serializes it behind a single TCP connection; the handshakes run in parallel,
+// so waiting for several costs barely more than waiting for one. A pool that
+// already has its quorum skips the wait entirely.
+//
+// Every wait is bounded, and the pool can drain completely while we wait
+// (goaway storm, or another caller closing the pool), so selection is retried
+// against a freshly established pool before giving up with a real error.
+async function acquireHttp2Session(
+  origin: string,
+): Promise<{ pool: Http2SessionPool; session: Http2Session }> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const pool = await ensureHttp2Sessions(origin);
+
+    // Reference the pool for the lifetime of this request BEFORE any await:
+    // idle sessions are unref'd, and awaiting the first handshake on a fully
+    // unref'd pool would let the process exit mid-request.
+    if (pool.inFlight === 0) setPoolRef(pool, true);
+    pool.inFlight += 1;
+
+    const quorum = Math.min(HTTP2_READY_QUORUM, pool.sessions.length);
+    if (pool.readyOrder.length < quorum) {
+      await waitForReadySessions(pool, quorum, HTTP2_REQUEST_READY_TIMEOUT_MS);
+    }
+
+    // Established sessions are preferred; a pool that has not finished any
+    // handshake still routes onto pending sessions so requests keep working.
+    const candidates =
+      pool.readyOrder.length > 0 ? pool.readyOrder : pool.sessions;
+
+    if (candidates.length > 0) {
+      const cursor = pool.next;
+      pool.next = cursor >= Number.MAX_SAFE_INTEGER ? 0 : cursor + 1;
+      return { pool, session: candidates[cursor % candidates.length]! };
+    }
+
+    releaseHttp2Pool(pool);
+  }
+
+  throw new Error(
+    `MIOSA transport has no usable HTTP/2 session to ${origin}: every pooled session closed before the request could be sent`,
+  );
+}
+
 async function nodeHttp2Request(
   url: URL,
   method: "GET" | "POST" | "PATCH" | "DELETE",
@@ -373,34 +426,7 @@ async function nodeHttp2Request(
   body?: string,
 ): Promise<MiosaHttpResponse> {
   const origin = url.origin;
-  const pool = await ensureHttp2Sessions(origin);
-
-  // Reference the pool for the lifetime of this request BEFORE any await:
-  // idle sessions are unref'd, and awaiting the first handshake on a fully
-  // unref'd pool would let the process exit mid-request.
-  if (pool.inFlight === 0) setPoolRef(pool, true);
-  pool.inFlight += 1;
-
-  // Cold start: wait for a quorum of handshakes instead of racing onto the
-  // first established session. Routing an entire burst onto one just-ready
-  // session serializes it behind a single TCP connection; the handshakes run
-  // in parallel, so waiting for several costs barely more than waiting for
-  // one. Established pools skip this entirely.
-  if (pool.readyOrder.length === 0) {
-    await waitForReadySessions(
-      pool,
-      Math.min(HTTP2_READY_QUORUM, pool.sessions.length),
-      HTTP2_REQUEST_READY_TIMEOUT_MS,
-    );
-  }
-
-  // Established sessions are preferred; a pool that has not finished any
-  // handshake still routes onto pending sessions so requests keep working.
-  const candidates =
-    pool.readyOrder.length > 0 ? pool.readyOrder : pool.sessions;
-  const cursor = pool.next;
-  pool.next = cursor >= Number.MAX_SAFE_INTEGER ? 0 : cursor + 1;
-  const session = candidates[cursor % candidates.length]!;
+  const { pool, session } = await acquireHttp2Session(origin);
 
   try {
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
@@ -433,11 +459,7 @@ async function nodeHttp2Request(
       request.end(body);
     });
   } finally {
-    pool.inFlight -= 1;
-    if (pool.inFlight <= 0) {
-      pool.inFlight = 0;
-      setPoolRef(pool, false);
-    }
+    releaseHttp2Pool(pool);
   }
 }
 
