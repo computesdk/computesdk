@@ -30,9 +30,8 @@ describe("MIOSA connection preparation", () => {
     });
     vi.doMock("node:http2", () => ({ connect }));
 
-    const { closeMiosaConnections, prepareMiosaConnections } = await import(
-      "../index"
-    );
+    const { closeMiosaConnections, prepareMiosaConnections } =
+      await import("../index");
     let prepared = false;
     const preparation = prepareMiosaConnections({
       apiKey: "msk_test_0123456789abcdef",
@@ -71,9 +70,8 @@ describe("MIOSA connection preparation", () => {
       });
       vi.doMock("node:http2", () => ({ connect }));
 
-      const { closeMiosaConnections, prepareMiosaConnections } = await import(
-        "../index"
-      );
+      const { closeMiosaConnections, prepareMiosaConnections } =
+        await import("../index");
       const preparation = prepareMiosaConnections({
         apiKey: "msk_test_0123456789abcdef",
       });
@@ -103,9 +101,8 @@ describe("MIOSA connection preparation", () => {
     });
     vi.doMock("node:http2", () => ({ connect }));
 
-    const { closeMiosaConnections, prepareMiosaConnections } = await import(
-      "../index"
-    );
+    const { closeMiosaConnections, prepareMiosaConnections } =
+      await import("../index");
     const config = { apiKey: "msk_test_0123456789abcdef" };
 
     const first = prepareMiosaConnections(config);

@@ -107,7 +107,7 @@ const HTTP2_SESSION_COUNT = (() => {
     (typeof process !== "undefined"
       ? process.env.MIOSA_HTTP2_SESSION_COUNT
       : undefined) ?? "16",
-    10
+    10,
   );
 
   return Number.isFinite(configured)
@@ -166,7 +166,7 @@ function markSessionReady(pool: Http2SessionPool, session: Http2Session): void {
 
 function markSessionUnready(
   pool: Http2SessionPool,
-  session: Http2Session
+  session: Http2Session,
 ): void {
   if (!pool.ready.delete(session)) return;
   const index = pool.readyOrder.indexOf(session);
@@ -182,7 +182,7 @@ function waitForReadySessions(
   pool: Http2SessionPool,
   needed: number,
   timeoutMs: number,
-  keepProcessAlive = false
+  keepProcessAlive = false,
 ): Promise<number> {
   if (needed <= 0 || pool.readyOrder.length >= needed) {
     return Promise.resolve(pool.readyOrder.length);
@@ -226,7 +226,7 @@ class MiosaApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code?: string
+    readonly code?: string,
   ) {
     super(message);
     this.name = "MiosaApiError";
@@ -256,7 +256,7 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
       readyBarrier: null,
     } satisfies Http2SessionPool);
   pool.sessions = pool.sessions.filter(
-    (candidate) => !candidate.closed && !candidate.destroyed
+    (candidate) => !candidate.closed && !candidate.destroyed,
   );
   http2SessionPools.set(origin, pool);
 
@@ -275,7 +275,7 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     const discard = () => {
       markSessionUnready(pool, session);
       pool.sessions = pool.sessions.filter(
-        (candidate) => candidate !== session
+        (candidate) => candidate !== session,
       );
     };
     session.once("close", discard);
@@ -329,7 +329,7 @@ function preconnectMiosa(config: MiosaConfig): void {
  * key does throw, since no amount of waiting makes it usable.
  */
 export async function prepareMiosaConnections(
-  config: MiosaConfig
+  config: MiosaConfig,
 ): Promise<MiosaConnectionReadiness> {
   const { baseUrl } = resolveAuth(config);
   const url = new URL(baseUrl);
@@ -344,7 +344,7 @@ export async function prepareMiosaConnections(
     pool,
     requested,
     HTTP2_PREPARE_TIMEOUT_MS,
-    true
+    true,
   );
 
   return { ready, requested, established: ready >= requested };
@@ -407,13 +407,13 @@ function readyBarrierFor(pool: Http2SessionPool): Promise<number> {
   pool.readyBarrier ??= waitForReadySessions(
     pool,
     Math.min(HTTP2_READY_QUORUM, pool.sessions.length),
-    HTTP2_REQUEST_READY_TIMEOUT_MS
+    HTTP2_REQUEST_READY_TIMEOUT_MS,
   );
   return pool.readyBarrier;
 }
 
 async function acquireHttp2Session(
-  origin: string
+  origin: string,
 ): Promise<{ pool: Http2SessionPool; session: Http2Session }> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const pool = await ensureHttp2Sessions(origin);
@@ -441,7 +441,7 @@ async function acquireHttp2Session(
   }
 
   throw new Error(
-    `MIOSA transport has no usable HTTP/2 session to ${origin}: every pooled session closed before the request could be sent`
+    `MIOSA transport has no usable HTTP/2 session to ${origin}: every pooled session closed before the request could be sent`,
   );
 }
 
@@ -449,7 +449,7 @@ async function nodeHttp2Request(
   url: URL,
   method: "GET" | "POST" | "PATCH" | "DELETE",
   headers: Record<string, string>,
-  body?: string
+  body?: string,
 ): Promise<MiosaHttpResponse> {
   const origin = url.origin;
   const { pool, session } = await acquireHttp2Session(origin);
@@ -493,7 +493,7 @@ async function sendMiosaRequest(
   url: string,
   method: "GET" | "POST" | "PATCH" | "DELETE",
   headers: Record<string, string>,
-  body?: string
+  body?: string,
 ): Promise<MiosaHttpResponse> {
   const parsedUrl = new URL(url);
   if (canUseNodeHttp2(parsedUrl)) {
@@ -511,12 +511,12 @@ function resolveAuth(config: MiosaConfig): { apiKey: string; baseUrl: string } {
 
   if (!apiKey) {
     throw new Error(
-      `Missing MIOSA API key. Provide 'apiKey' in config or set MIOSA_API_KEY environment variable.`
+      `Missing MIOSA API key. Provide 'apiKey' in config or set MIOSA_API_KEY environment variable.`,
     );
   }
   if (!apiKey.startsWith("msk_")) {
     throw new Error(
-      `Invalid MIOSA API key format. MIOSA API keys start with 'msk_'.`
+      `Invalid MIOSA API key format. MIOSA API keys start with 'msk_'.`,
     );
   }
 
@@ -530,7 +530,7 @@ async function miosaRequest<T>(
   auth: { apiKey: string; baseUrl: string },
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
 ): Promise<T> {
   const headers = {
     authorization: `Bearer ${auth.apiKey}`,
@@ -541,7 +541,7 @@ async function miosaRequest<T>(
     `${auth.baseUrl}${path}`,
     method,
     headers,
-    requestBody
+    requestBody,
   );
 
   const text = await response.text();
@@ -559,9 +559,7 @@ async function miosaRequest<T>(
       | {
           code?: string;
           message?: string;
-          error?:
-            | string
-            | { code?: string; message?: string; details?: unknown };
+          error?: string | { code?: string; message?: string; details?: unknown };
         }
       | undefined;
     const nestedError =
@@ -573,13 +571,11 @@ async function miosaRequest<T>(
       (typeof errorBody?.error === "string" ? errorBody.error : undefined);
     const details = nestedError?.details;
     throw new MiosaApiError(
-      `MIOSA API ${method} ${path} failed with ${response.status}${
-        code ? ` (${code})` : ""
-      }${message ? `: ${message}` : ""}${
-        details === undefined ? "" : `: ${JSON.stringify(details)}`
-      }`,
+      `MIOSA API ${method} ${path} failed with ${response.status}${code ? ` (${code})` : ""}${
+        message ? `: ${message}` : ""
+      }${details === undefined ? "" : `: ${JSON.stringify(details)}`}`,
       response.status,
-      code
+      code,
     );
   }
 
@@ -627,7 +623,7 @@ function toStatus(state: string | null | undefined): SandboxInfo["status"] {
 async function execInSandbox(
   sandbox: MiosaSandbox,
   command: string,
-  options?: RunCommandOptions
+  options?: RunCommandOptions,
 ): Promise<CommandResult> {
   const startTime = Date.now();
 
@@ -642,7 +638,7 @@ async function execInSandbox(
   // the full lifetime as the wait parameter.
   const readinessTimeoutMs = Math.min(
     options?.timeout ?? toMs(sandbox.record.timeout_sec),
-    120_000
+    120_000,
   );
   body.wait = true;
   body.wait_timeout_ms = readinessTimeoutMs;
@@ -656,7 +652,7 @@ async function execInSandbox(
       sandbox,
       "POST",
       `/sandboxes/${sandbox.record.id}/exec`,
-      body
+      body,
     );
     const result = response.data ?? {};
     return {
@@ -716,12 +712,12 @@ const createMiosaProvider = defineProvider<
           auth,
           "POST",
           "/sandboxes",
-          body
+          body,
         );
         const record = unwrapSandbox(payload);
         if (!record.id) {
           throw new Error(
-            "MIOSA create sandbox returned a record without an id"
+            "MIOSA create sandbox returned a record without an id",
           );
         }
 
@@ -734,7 +730,7 @@ const createMiosaProvider = defineProvider<
           const payload = await miosaRequest<unknown>(
             auth,
             "GET",
-            `/sandboxes/${sandboxId}`
+            `/sandboxes/${sandboxId}`,
           );
           const record = unwrapSandbox(payload);
           return { sandbox: { record, ...auth }, sandboxId: record.id };
@@ -750,7 +746,7 @@ const createMiosaProvider = defineProvider<
         const payload = await miosaRequest<{ data: MiosaSandboxRecord[] }>(
           auth,
           "GET",
-          "/sandboxes"
+          "/sandboxes",
         );
         return (payload.data ?? []).map((record) => ({
           sandbox: { record, ...auth },
@@ -764,7 +760,7 @@ const createMiosaProvider = defineProvider<
           await miosaRequest<unknown>(
             auth,
             "DELETE",
-            `/sandboxes/${sandboxId}`
+            `/sandboxes/${sandboxId}`,
           );
         } catch (error) {
           // Destroying an already-destroyed sandbox is a no-op.
@@ -786,13 +782,12 @@ const createMiosaProvider = defineProvider<
           const payload = await miosaRequest<unknown>(
             { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl },
             "GET",
-            `/sandboxes/${record.id}`
+            `/sandboxes/${record.id}`,
           );
           record = unwrapSandbox(payload);
           sandbox.record = record;
         } catch (error) {
-          if (!(error instanceof MiosaApiError && error.status === 404))
-            throw error;
+          if (!(error instanceof MiosaApiError && error.status === 404)) throw error;
           // Already destroyed: report it as stopped rather than echoing the
           // last known running state back to the caller.
           missing = true;
@@ -816,7 +811,7 @@ const createMiosaProvider = defineProvider<
 
       getUrl: async (
         sandbox: MiosaSandbox,
-        options: { port: number; protocol?: string }
+        options: { port: number; protocol?: string },
       ): Promise<string> => {
         // POST /sandboxes/:id/expose provisions a per-port preview URL on the
         // tenant's (white-label aware) preview domain. Never build the domain
@@ -825,17 +820,17 @@ const createMiosaProvider = defineProvider<
           sandbox,
           "POST",
           `/sandboxes/${sandbox.record.id}/expose`,
-          { port: options.port }
+          { port: options.port },
         );
         if (!response.url) {
           throw new Error(
-            `MIOSA expose returned no URL for port ${options.port} on sandbox ${sandbox.record.id}`
+            `MIOSA expose returned no URL for port ${options.port} on sandbox ${sandbox.record.id}`,
           );
         }
         if (options.protocol) {
           return response.url.replace(
             /^[a-z+]+:\/\//,
-            `${options.protocol}://`
+            `${options.protocol}://`,
           );
         }
         return response.url;
@@ -847,14 +842,12 @@ const createMiosaProvider = defineProvider<
         // Native: GET /sandboxes/:id/fs/read?path=…  → { path, content }
         readFile: async (
           sandbox: MiosaSandbox,
-          path: string
+          path: string,
         ): Promise<string> => {
           const response = await miosaRequest<{ content: string }>(
             sandbox,
             "GET",
-            `/sandboxes/${sandbox.record.id}/fs/read?path=${encodeURIComponent(
-              path
-            )}`
+            `/sandboxes/${sandbox.record.id}/fs/read?path=${encodeURIComponent(path)}`,
           );
           return response.content;
         },
@@ -863,7 +856,7 @@ const createMiosaProvider = defineProvider<
         writeFile: async (
           sandbox: MiosaSandbox,
           path: string,
-          content: string
+          content: string,
         ): Promise<void> => {
           await miosaRequest<unknown>(
             sandbox,
@@ -872,7 +865,7 @@ const createMiosaProvider = defineProvider<
             {
               path,
               content,
-            }
+            },
           );
         },
 
@@ -885,21 +878,19 @@ const createMiosaProvider = defineProvider<
             {
               path,
               recursive: true,
-            }
+            },
           );
         },
 
         // Native: GET /sandboxes/:id/fs?path=…  → { files: [{name, type, size_bytes, modified_at}] }
         readdir: async (
           sandbox: MiosaSandbox,
-          path: string
+          path: string,
         ): Promise<FileEntry[]> => {
           const response = await miosaRequest<{ files: MiosaFileListEntry[] }>(
             sandbox,
             "GET",
-            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(
-              path
-            )}`
+            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
           );
           return (response.files ?? []).map((entry) => ({
             name: entry.name,
@@ -922,12 +913,12 @@ const createMiosaProvider = defineProvider<
           runCommand: (
             sandbox: MiosaSandbox,
             command: string,
-            options?: RunCommandOptions
-          ) => Promise<CommandResult>
+            options?: RunCommandOptions,
+          ) => Promise<CommandResult>,
         ): Promise<boolean> => {
           const result = await runCommand(
             sandbox,
-            `test -e "${escapeShellArg(path)}"`
+            `test -e "${escapeShellArg(path)}"`,
           );
           return result.exitCode === 0;
         },
@@ -937,9 +928,7 @@ const createMiosaProvider = defineProvider<
           await miosaRequest<unknown>(
             sandbox,
             "DELETE",
-            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(
-              path
-            )}`
+            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
           );
         },
       },
@@ -950,7 +939,7 @@ const createMiosaProvider = defineProvider<
       create: async (
         config: MiosaConfig,
         sandboxId: string,
-        options?: CreateSnapshotOptions
+        options?: CreateSnapshotOptions,
       ): Promise<MiosaSnapshotRecord> => {
         const auth = resolveAuth(config);
         const body: Record<string, unknown> = {};
@@ -963,29 +952,29 @@ const createMiosaProvider = defineProvider<
 
       list: async (
         config: MiosaConfig,
-        options?: { sandboxId?: string }
+        options?: { sandboxId?: string },
       ): Promise<MiosaSnapshotRecord[]> => {
         const auth = resolveAuth(config);
         if (!options?.sandboxId) {
           throw new Error(
-            "MIOSA snapshots are scoped per sandbox: pass { sandboxId } to list()."
+            "MIOSA snapshots are scoped per sandbox: pass { sandboxId } to list().",
           );
         }
         const response = await miosaRequest<{ data: MiosaSnapshotRecord[] }>(
           auth,
           "GET",
-          `/sandboxes/${options.sandboxId}/snapshots`
+          `/sandboxes/${options.sandboxId}/snapshots`,
         );
         return response.data ?? [];
       },
 
       delete: async (
         _config: MiosaConfig,
-        _snapshotId: string
+        _snapshotId: string,
       ): Promise<void> => {
         throw new Error(
           "MIOSA snapshot deletion is scoped per sandbox (DELETE /sandboxes/:id/snapshots/:snap_id). " +
-            "Use the MIOSA SDK/API directly until ComputeSDK passes the sandbox scope."
+            "Use the MIOSA SDK/API directly until ComputeSDK passes the sandbox scope.",
         );
       },
     },
