@@ -19,8 +19,11 @@ import { miosa, prepareMiosaConnections } from '@computesdk/miosa';
 const miosaConfig = { apiKey: process.env.MIOSA_API_KEY };
 
 // Optional for latency-sensitive hosts: finish TCP, TLS, and HTTP/2 setup
-// before starting a timed operation or accepting work.
-await prepareMiosaConnections(miosaConfig);
+// before starting a timed operation or accepting work. Best effort - it
+// resolves with the readiness it reached instead of throwing on a slow
+// network, and requests work either way. Invalid credentials still throw.
+const readiness = await prepareMiosaConnections(miosaConfig);
+// { ready: 8, requested: 8, established: true }
 
 const compute = createCompute({
   defaultProvider: miosa(miosaConfig),

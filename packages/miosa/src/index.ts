@@ -89,6 +89,7 @@ export const DEFAULT_BASE_URL = "https://api.miosa.ai/api/v1";
 const DEFAULT_TIMEOUT_MS = 300_000;
 const HTTP2_READY_QUORUM = 8;
 const HTTP2_PREPARE_TIMEOUT_MS = 5_000;
+const HTTP2_REQUEST_READY_TIMEOUT_MS = 2_000;
 
 interface MiosaHttpResponse {
   readonly ok: boolean;
@@ -114,13 +115,83 @@ const HTTP2_SESSION_COUNT = (() => {
     : 16;
 })();
 
+type Http2Session = import("node:http2").ClientHttp2Session;
+
+interface ReadyWaiter {
+  needed: number;
+  resolve: () => void;
+  timer?: ReturnType<typeof setTimeout>;
+}
+
 interface Http2SessionPool {
-  sessions: import("node:http2").ClientHttp2Session[];
-  ready: Set<import("node:http2").ClientHttp2Session>;
+  sessions: Http2Session[];
+  ready: Set<Http2Session>;
+  /** Ready sessions in the order they completed their handshake. */
+  readyOrder: Http2Session[];
+  /** Monotonic round-robin cursor; taken modulo the candidate count at use. */
   next: number;
   inFlight: number;
-  firstReady: Promise<void>;
-  signalFirstReady: () => void;
+  waiters: Set<ReadyWaiter>;
+}
+
+/** Outcome of a best-effort readiness barrier. */
+export interface MiosaConnectionReadiness {
+  /** Sessions that finished TCP, TLS, and HTTP/2 negotiation. */
+  ready: number;
+  /** Sessions the readiness barrier waited for. */
+  requested: number;
+  /** True when `ready >= requested`. */
+  established: boolean;
+}
+
+function markSessionReady(pool: Http2SessionPool, session: Http2Session): void {
+  if (pool.ready.has(session)) return;
+  pool.ready.add(session);
+  pool.readyOrder.push(session);
+  for (const waiter of pool.waiters) {
+    if (pool.readyOrder.length >= waiter.needed) {
+      pool.waiters.delete(waiter);
+      if (waiter.timer) clearTimeout(waiter.timer);
+      waiter.resolve();
+    }
+  }
+}
+
+function markSessionUnready(
+  pool: Http2SessionPool,
+  session: Http2Session,
+): void {
+  if (!pool.ready.delete(session)) return;
+  const index = pool.readyOrder.indexOf(session);
+  if (index !== -1) pool.readyOrder.splice(index, 1);
+}
+
+// Readiness is driven by the HTTP/2 `remoteSettings` event rather than a timer
+// poll, and every wait is bounded: a pool that never completes a handshake
+// resolves with however many sessions are ready (zero) instead of hanging, and
+// callers fall back to the pending sessions. Waiters are per-call, so a host
+// that loses every session and reconnects gets a fresh barrier automatically.
+function waitForReadySessions(
+  pool: Http2SessionPool,
+  needed: number,
+  timeoutMs: number,
+): Promise<number> {
+  if (needed <= 0 || pool.readyOrder.length >= needed) {
+    return Promise.resolve(pool.readyOrder.length);
+  }
+
+  return new Promise<number>((resolve) => {
+    const waiter: ReadyWaiter = {
+      needed,
+      resolve: () => resolve(pool.readyOrder.length),
+    };
+    waiter.timer = setTimeout(() => {
+      pool.waiters.delete(waiter);
+      resolve(pool.readyOrder.length);
+    }, timeoutMs);
+    waiter.timer.unref?.();
+    pool.waiters.add(waiter);
+  });
 }
 
 // A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
@@ -164,20 +235,14 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
   const http2 = await import("node:http2");
   const pool =
     http2SessionPools.get(origin) ??
-    (() => {
-      let signalFirstReady = () => {};
-      const firstReady = new Promise<void>((resolve) => {
-        signalFirstReady = resolve;
-      });
-      return {
-        sessions: [],
-        ready: new Set<import("node:http2").ClientHttp2Session>(),
-        next: 0,
-        inFlight: 0,
-        firstReady,
-        signalFirstReady,
-      };
-    })();
+    ({
+      sessions: [],
+      ready: new Set<Http2Session>(),
+      readyOrder: [],
+      next: 0,
+      inFlight: 0,
+      waiters: new Set<ReadyWaiter>(),
+    } satisfies Http2SessionPool);
   pool.sessions = pool.sessions.filter(
     (candidate) => !candidate.closed && !candidate.destroyed,
   );
@@ -196,7 +261,7 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     pool.sessions.push(session);
 
     const discard = () => {
-      pool.ready.delete(session);
+      markSessionUnready(pool, session);
       pool.sessions = pool.sessions.filter(
         (candidate) => candidate !== session,
       );
@@ -209,8 +274,7 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     // roughly 250ms of extra median latency on a cold 100-way burst. Track
     // readiness so request routing can prefer established sessions.
     session.once("remoteSettings", () => {
-      pool.ready.add(session);
-      pool.signalFirstReady();
+      markSessionReady(pool, session);
     });
   }
 
@@ -246,28 +310,31 @@ function preconnectMiosa(config: MiosaConfig): void {
  * therefore cannot wait for TCP, TLS, and HTTP/2 negotiation to finish. Hosts
  * that exclude client setup from a timed operation can await this function at
  * their setup boundary so the first sandbox request uses established sessions.
+ *
+ * This is a best-effort optimization: a slow or unreachable network resolves
+ * with `established: false` rather than throwing, and requests still work by
+ * falling back to sessions that are mid-handshake. Invalid credentials do
+ * throw, since no amount of waiting makes them usable.
  */
 export async function prepareMiosaConnections(
   config: MiosaConfig,
-): Promise<void> {
+): Promise<MiosaConnectionReadiness> {
   const { baseUrl } = resolveAuth(config);
   const url = new URL(baseUrl);
 
-  if (!canUseNodeHttp2(url)) return;
+  if (!canUseNodeHttp2(url)) {
+    return { ready: 0, requested: 0, established: true };
+  }
 
   const pool = await ensureHttp2Sessions(url.origin);
-  const quorum = Math.min(HTTP2_READY_QUORUM, pool.sessions.length);
-  const deadline = Date.now() + HTTP2_PREPARE_TIMEOUT_MS;
+  const requested = Math.min(HTTP2_READY_QUORUM, pool.sessions.length);
+  const ready = await waitForReadySessions(
+    pool,
+    requested,
+    HTTP2_PREPARE_TIMEOUT_MS,
+  );
 
-  while (pool.ready.size < quorum && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-
-  if (pool.ready.size < quorum) {
-    throw new Error(
-      `MIOSA HTTP/2 pool readiness timed out: ${pool.ready.size}/${quorum} sessions established`,
-    );
-  }
+  return { ready, requested, established: ready >= requested };
 }
 
 /**
@@ -287,7 +354,14 @@ export function closeMiosaConnections(): void {
       }
     }
     pool.sessions = [];
+    pool.ready.clear();
+    pool.readyOrder = [];
     pool.inFlight = 0;
+    for (const waiter of pool.waiters) {
+      if (waiter.timer) clearTimeout(waiter.timer);
+      waiter.resolve();
+    }
+    pool.waiters.clear();
   }
   http2SessionPools.clear();
 }
@@ -312,19 +386,21 @@ async function nodeHttp2Request(
   // session serializes it behind a single TCP connection; the handshakes run
   // in parallel, so waiting for several costs barely more than waiting for
   // one. Established pools skip this entirely.
-  if (pool.ready.size === 0) {
-    await pool.firstReady;
-    const quorum = Math.min(HTTP2_READY_QUORUM, pool.sessions.length);
-    const deadline = Date.now() + 250;
-    while (pool.ready.size < quorum && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+  if (pool.readyOrder.length === 0) {
+    await waitForReadySessions(
+      pool,
+      Math.min(HTTP2_READY_QUORUM, pool.sessions.length),
+      HTTP2_REQUEST_READY_TIMEOUT_MS,
+    );
   }
 
+  // Established sessions are preferred; a pool that has not finished any
+  // handshake still routes onto pending sessions so requests keep working.
   const candidates =
-    pool.ready.size > 0 ? Array.from(pool.ready) : pool.sessions;
-  const session = candidates[pool.next % candidates.length]!;
-  pool.next = (pool.next + 1) % candidates.length;
+    pool.readyOrder.length > 0 ? pool.readyOrder : pool.sessions;
+  const cursor = pool.next;
+  pool.next = cursor >= Number.MAX_SAFE_INTEGER ? 0 : cursor + 1;
+  const session = candidates[cursor % candidates.length]!;
 
   try {
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
