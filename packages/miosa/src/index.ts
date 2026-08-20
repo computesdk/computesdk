@@ -325,8 +325,8 @@ function preconnectMiosa(config: MiosaConfig): void {
  *
  * This is a best-effort optimization: a slow or unreachable network resolves
  * with `established: false` rather than throwing, and requests still work by
- * falling back to sessions that are mid-handshake. Invalid credentials do
- * throw, since no amount of waiting makes them usable.
+ * falling back to sessions that are mid-handshake. A missing or malformed API
+ * key does throw, since no amount of waiting makes it usable.
  */
 export async function prepareMiosaConnections(
   config: MiosaConfig
