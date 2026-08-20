@@ -64,6 +64,15 @@ interface MiosaFileListEntry {
   modified_at?: string | null;
 }
 
+/**
+ * Snapshot-id -> sandbox-id resolution cache. MIOSA scopes snapshot routes
+ * under the owning sandbox, but ComputeSDK's snapshot.delete only carries the
+ * snapshot id. Every snapshot that passes through create()/list() is
+ * remembered here; delete() falls back to scanning the tenant's sandboxes
+ * when the id was minted by another process.
+ */
+const snapshotSandboxIndex = new Map<string, string>();
+
 export interface MiosaSnapshotRecord {
   id: string;
   sandbox_id: string;
@@ -771,7 +780,9 @@ const createMiosaProvider = defineProvider<
         const response = await miosaRequest<
           { data?: MiosaSnapshotRecord } & MiosaSnapshotRecord
         >(auth, "POST", `/sandboxes/${sandboxId}/snapshots`, body);
-        return response.data ?? response;
+        const record = response.data ?? response;
+        if (record?.id) snapshotSandboxIndex.set(record.id, sandboxId);
+        return record;
       },
 
       list: async (
@@ -789,17 +800,59 @@ const createMiosaProvider = defineProvider<
           "GET",
           `/sandboxes/${options.sandboxId}/snapshots`,
         );
-        return response.data ?? [];
+        const records = response.data ?? [];
+        for (const record of records) {
+          if (record?.id && record?.sandbox_id)
+            snapshotSandboxIndex.set(record.id, record.sandbox_id);
+        }
+        return records;
       },
 
       delete: async (
-        _config: MiosaConfig,
-        _snapshotId: string,
+        config: MiosaConfig,
+        snapshotId: string,
       ): Promise<void> => {
-        throw new Error(
-          "MIOSA snapshot deletion is scoped per sandbox (DELETE /sandboxes/:id/snapshots/:snap_id). " +
-            "Use the MIOSA SDK/API directly until ComputeSDK passes the sandbox scope.",
-        );
+        const auth = resolveAuth(config);
+        let sandboxId = snapshotSandboxIndex.get(snapshotId);
+        if (!sandboxId) {
+          // Snapshot minted outside this process: resolve the owning sandbox
+          // by scanning the tenant's sandboxes. Bounded by the caller's own
+          // sandbox count and only paid on this cold path.
+          const listing = await miosaRequest<{
+            data?: Array<{ id: string }>;
+          }>(auth, "GET", "/sandboxes");
+          for (const candidate of listing.data ?? []) {
+            try {
+              const snaps = await miosaRequest<{
+                data?: MiosaSnapshotRecord[];
+              }>(auth, "GET", `/sandboxes/${candidate.id}/snapshots`);
+              if ((snaps.data ?? []).some((snap) => snap.id === snapshotId)) {
+                sandboxId = candidate.id;
+                break;
+              }
+            } catch (error) {
+              if (error instanceof MiosaApiError && error.status === 404)
+                continue;
+              throw error;
+            }
+          }
+        }
+        if (!sandboxId) {
+          // Unknown snapshot: deletion is idempotent, treat as already gone.
+          return;
+        }
+        try {
+          await miosaRequest(
+            auth,
+            "DELETE",
+            `/sandboxes/${sandboxId}/snapshots/${snapshotId}`,
+          );
+        } catch (error) {
+          if (error instanceof MiosaApiError && error.status === 404) return;
+          throw error;
+        } finally {
+          snapshotSandboxIndex.delete(snapshotId);
+        }
       },
     },
   },
