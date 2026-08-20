@@ -64,6 +64,26 @@ interface MiosaFileListEntry {
   modified_at?: string | null;
 }
 
+/**
+ * Snapshot-id -> sandbox-id resolution cache. MIOSA scopes snapshot routes
+ * under the owning sandbox, but ComputeSDK's snapshot.delete only carries the
+ * snapshot id. Every snapshot that passes through create()/list() is
+ * remembered here; delete() falls back to a bounded scan of the caller's
+ * sandboxes when the id was minted by another process.
+ *
+ * Entries are keyed by the resolved API credential so a shared Node.js
+ * process serving multiple tenants can never resolve (or time-observe) a
+ * mapping cached by a different tenant.
+ */
+const snapshotSandboxIndex = new Map<string, string>();
+
+function snapshotIndexKey(auth: { apiKey: string }, snapshotId: string): string {
+  return `${auth.apiKey}:${snapshotId}`;
+}
+
+/** Upper bound on sandboxes examined by the delete() fallback scan. */
+const SNAPSHOT_SCAN_LIMIT = 25;
+
 export interface MiosaSnapshotRecord {
   id: string;
   sandbox_id: string;
@@ -771,7 +791,10 @@ const createMiosaProvider = defineProvider<
         const response = await miosaRequest<
           { data?: MiosaSnapshotRecord } & MiosaSnapshotRecord
         >(auth, "POST", `/sandboxes/${sandboxId}/snapshots`, body);
-        return response.data ?? response;
+        const record = response.data ?? response;
+        if (record?.id)
+          snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), sandboxId);
+        return record;
       },
 
       list: async (
@@ -789,17 +812,89 @@ const createMiosaProvider = defineProvider<
           "GET",
           `/sandboxes/${options.sandboxId}/snapshots`,
         );
-        return response.data ?? [];
+        const records = response.data ?? [];
+        for (const record of records) {
+          // The listing is already scoped to options.sandboxId, so that is the
+          // owner even when the record itself omits sandbox_id. Recording it
+          // unconditionally is what lets a later delete() skip the scan.
+          const owner = record?.sandbox_id ?? options.sandboxId;
+          if (record?.id && owner)
+            snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), owner);
+        }
+        return records;
       },
 
       delete: async (
-        _config: MiosaConfig,
-        _snapshotId: string,
+        config: MiosaConfig,
+        snapshotId: string,
       ): Promise<void> => {
-        throw new Error(
-          "MIOSA snapshot deletion is scoped per sandbox (DELETE /sandboxes/:id/snapshots/:snap_id). " +
-            "Use the MIOSA SDK/API directly until ComputeSDK passes the sandbox scope.",
-        );
+        const auth = resolveAuth(config);
+        const indexKey = snapshotIndexKey(auth, snapshotId);
+        let sandboxId = snapshotSandboxIndex.get(indexKey);
+        let scanCapped = false;
+        if (!sandboxId) {
+          // Snapshot minted outside this process: resolve the owning sandbox
+          // by scanning the caller's sandboxes. The scan is sequential and
+          // hard-capped at SNAPSHOT_SCAN_LIMIT sandboxes so a delete() with
+          // an unknown id can never amplify into an unbounded request storm.
+          const listing = await miosaRequest<{
+            data?: Array<{ id: string }>;
+          }>(auth, "GET", "/sandboxes");
+          const all = listing.data ?? [];
+          const candidates = all.slice(0, SNAPSHOT_SCAN_LIMIT);
+          scanCapped = all.length > candidates.length;
+          for (const candidate of candidates) {
+            try {
+              const snaps = await miosaRequest<{
+                data?: MiosaSnapshotRecord[];
+              }>(auth, "GET", `/sandboxes/${candidate.id}/snapshots`);
+              if ((snaps.data ?? []).some((snap) => snap.id === snapshotId)) {
+                sandboxId = candidate.id;
+                break;
+              }
+            } catch (error) {
+              if (error instanceof MiosaApiError && error.status === 404)
+                continue;
+              throw error;
+            }
+          }
+        }
+        if (!sandboxId) {
+          if (scanCapped) {
+            // The scan stopped at SNAPSHOT_SCAN_LIMIT before examining every
+            // sandbox, so "not found" here does not mean "does not exist".
+            // Reporting success would leave a live snapshot billing silently.
+            throw new MiosaApiError(
+              `MIOSA could not resolve the sandbox owning snapshot ${snapshotId} ` +
+                `within the first ${SNAPSHOT_SCAN_LIMIT} sandboxes. Delete it via ` +
+                `the owning sandbox (DELETE /sandboxes/:id/snapshots/${snapshotId}), ` +
+                `or call snapshot.list({ sandboxId }) first so the provider learns ` +
+                `the mapping.`,
+              409,
+              "SNAPSHOT_OWNER_UNRESOLVED",
+            );
+          }
+          // Every sandbox was examined and none owns it: genuinely gone.
+          // Deletion is idempotent, so report success.
+          return;
+        }
+        try {
+          await miosaRequest(
+            auth,
+            "DELETE",
+            `/sandboxes/${sandboxId}/snapshots/${snapshotId}`,
+          );
+          snapshotSandboxIndex.delete(indexKey);
+        } catch (error) {
+          if (error instanceof MiosaApiError && error.status === 404) {
+            // Already gone server-side: the mapping is stale, drop it.
+            snapshotSandboxIndex.delete(indexKey);
+            return;
+          }
+          // Transient failure: keep the mapping so a retry can use the
+          // shortcut instead of re-running the fallback scan.
+          throw error;
+        }
       },
     },
   },
