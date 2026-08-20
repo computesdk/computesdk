@@ -132,6 +132,13 @@ interface Http2SessionPool {
   next: number;
   inFlight: number;
   waiters: Set<ReadyWaiter>;
+  /**
+   * Shared bounded readiness barrier for the current connection generation.
+   * Every request awaits this one promise, so reaching (or failing to reach)
+   * the quorum costs at most one wait per generation rather than one per
+   * request. Re-armed only when the ready set drains completely.
+   */
+  readyBarrier: Promise<number> | null;
 }
 
 /** Outcome of a best-effort readiness barrier. */
@@ -164,13 +171,13 @@ function markSessionUnready(
   if (!pool.ready.delete(session)) return;
   const index = pool.readyOrder.indexOf(session);
   if (index !== -1) pool.readyOrder.splice(index, 1);
+  if (pool.readyOrder.length === 0) pool.readyBarrier = null;
 }
 
 // Readiness is driven by the HTTP/2 `remoteSettings` event rather than a timer
 // poll, and every wait is bounded: a pool that never completes a handshake
 // resolves with however many sessions are ready (zero) instead of hanging, and
-// callers fall back to the pending sessions. Waiters are per-call, so a host
-// that loses every session and reconnects gets a fresh barrier automatically.
+// callers fall back to the pending sessions.
 function waitForReadySessions(
   pool: Http2SessionPool,
   needed: number,
@@ -242,6 +249,7 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
       next: 0,
       inFlight: 0,
       waiters: new Set<ReadyWaiter>(),
+      readyBarrier: null,
     } satisfies Http2SessionPool);
   pool.sessions = pool.sessions.filter(
     (candidate) => !candidate.closed && !candidate.destroyed,
@@ -356,6 +364,7 @@ export function closeMiosaConnections(): void {
     pool.sessions = [];
     pool.ready.clear();
     pool.readyOrder = [];
+    pool.readyBarrier = null;
     pool.inFlight = 0;
     for (const waiter of pool.waiters) {
       if (waiter.timer) clearTimeout(waiter.timer);
@@ -380,9 +389,24 @@ function releaseHttp2Pool(pool: Http2SessionPool): void {
 // so waiting for several costs barely more than waiting for one. A pool that
 // already has its quorum skips the wait entirely.
 //
+// The wait is a single shared barrier per connection generation, so a pool that
+// can never reach its quorum (per-IP connection caps, partial network failure)
+// pays the bound once instead of on every request; subsequent requests route
+// straight onto whatever healthy sessions exist. It re-arms only when the ready
+// set drains completely and a new generation of sessions begins.
+//
 // Every wait is bounded, and the pool can drain completely while we wait
 // (goaway storm, or another caller closing the pool), so selection is retried
 // against a freshly established pool before giving up with a real error.
+function readyBarrierFor(pool: Http2SessionPool): Promise<number> {
+  pool.readyBarrier ??= waitForReadySessions(
+    pool,
+    Math.min(HTTP2_READY_QUORUM, pool.sessions.length),
+    HTTP2_REQUEST_READY_TIMEOUT_MS,
+  );
+  return pool.readyBarrier;
+}
+
 async function acquireHttp2Session(
   origin: string,
 ): Promise<{ pool: Http2SessionPool; session: Http2Session }> {
@@ -395,10 +419,7 @@ async function acquireHttp2Session(
     if (pool.inFlight === 0) setPoolRef(pool, true);
     pool.inFlight += 1;
 
-    const quorum = Math.min(HTTP2_READY_QUORUM, pool.sessions.length);
-    if (pool.readyOrder.length < quorum) {
-      await waitForReadySessions(pool, quorum, HTTP2_REQUEST_READY_TIMEOUT_MS);
-    }
+    await readyBarrierFor(pool);
 
     // Established sessions are preferred; a pool that has not finished any
     // handshake still routes onto pending sessions so requests keep working.
