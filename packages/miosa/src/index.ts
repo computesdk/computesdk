@@ -814,11 +814,12 @@ const createMiosaProvider = defineProvider<
         );
         const records = response.data ?? [];
         for (const record of records) {
-          if (record?.id && record?.sandbox_id)
-            snapshotSandboxIndex.set(
-              snapshotIndexKey(auth, record.id),
-              record.sandbox_id,
-            );
+          // The listing is already scoped to options.sandboxId, so that is the
+          // owner even when the record itself omits sandbox_id. Recording it
+          // unconditionally is what lets a later delete() skip the scan.
+          const owner = record?.sandbox_id ?? options.sandboxId;
+          if (record?.id && owner)
+            snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), owner);
         }
         return records;
       },
