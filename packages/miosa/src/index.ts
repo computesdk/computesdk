@@ -87,6 +87,8 @@ export interface MiosaSandbox {
 
 export const DEFAULT_BASE_URL = "https://api.miosa.ai/api/v1";
 const DEFAULT_TIMEOUT_MS = 300_000;
+const HTTP2_READY_QUORUM = 8;
+const HTTP2_PREPARE_TIMEOUT_MS = 5_000;
 
 interface MiosaHttpResponse {
   readonly ok: boolean;
@@ -238,6 +240,37 @@ function preconnectMiosa(config: MiosaConfig): void {
 }
 
 /**
+ * Establish the MIOSA HTTP/2 pool before latency-sensitive work begins.
+ *
+ * `miosa()` starts this work eagerly, but creating a client is synchronous and
+ * therefore cannot wait for TCP, TLS, and HTTP/2 negotiation to finish. Hosts
+ * that exclude client setup from a timed operation can await this function at
+ * their setup boundary so the first sandbox request uses established sessions.
+ */
+export async function prepareMiosaConnections(
+  config: MiosaConfig,
+): Promise<void> {
+  const { baseUrl } = resolveAuth(config);
+  const url = new URL(baseUrl);
+
+  if (!canUseNodeHttp2(url)) return;
+
+  const pool = await ensureHttp2Sessions(url.origin);
+  const quorum = Math.min(HTTP2_READY_QUORUM, pool.sessions.length);
+  const deadline = Date.now() + HTTP2_PREPARE_TIMEOUT_MS;
+
+  while (pool.ready.size < quorum && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  if (pool.ready.size < quorum) {
+    throw new Error(
+      `MIOSA HTTP/2 pool readiness timed out: ${pool.ready.size}/${quorum} sessions established`,
+    );
+  }
+}
+
+/**
  * Close every pooled HTTP/2 session.
  *
  * Sessions are unref'd while idle, so this is not required for a process to
@@ -281,7 +314,7 @@ async function nodeHttp2Request(
   // one. Established pools skip this entirely.
   if (pool.ready.size === 0) {
     await pool.firstReady;
-    const quorum = Math.min(8, pool.sessions.length);
+    const quorum = Math.min(HTTP2_READY_QUORUM, pool.sessions.length);
     const deadline = Date.now() + 250;
     while (pool.ready.size < quorum && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 10));

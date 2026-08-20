@@ -14,10 +14,16 @@ pnpm add @computesdk/miosa computesdk
 
 ```typescript
 import { createCompute } from 'computesdk';
-import { miosa } from '@computesdk/miosa';
+import { miosa, prepareMiosaConnections } from '@computesdk/miosa';
+
+const miosaConfig = { apiKey: process.env.MIOSA_API_KEY };
+
+// Optional for latency-sensitive hosts: finish TCP, TLS, and HTTP/2 setup
+// before starting a timed operation or accepting work.
+await prepareMiosaConnections(miosaConfig);
 
 const compute = createCompute({
-  defaultProvider: miosa({ apiKey: process.env.MIOSA_API_KEY }),
+  defaultProvider: miosa(miosaConfig),
 });
 
 const sandbox = await compute.sandbox.create();
