@@ -830,6 +830,7 @@ const createMiosaProvider = defineProvider<
         const auth = resolveAuth(config);
         const indexKey = snapshotIndexKey(auth, snapshotId);
         let sandboxId = snapshotSandboxIndex.get(indexKey);
+        let scanCapped = false;
         if (!sandboxId) {
           // Snapshot minted outside this process: resolve the owning sandbox
           // by scanning the caller's sandboxes. The scan is sequential and
@@ -838,7 +839,9 @@ const createMiosaProvider = defineProvider<
           const listing = await miosaRequest<{
             data?: Array<{ id: string }>;
           }>(auth, "GET", "/sandboxes");
-          const candidates = (listing.data ?? []).slice(0, SNAPSHOT_SCAN_LIMIT);
+          const all = listing.data ?? [];
+          const candidates = all.slice(0, SNAPSHOT_SCAN_LIMIT);
+          scanCapped = all.length > candidates.length;
           for (const candidate of candidates) {
             try {
               const snaps = await miosaRequest<{
@@ -856,7 +859,22 @@ const createMiosaProvider = defineProvider<
           }
         }
         if (!sandboxId) {
-          // Unknown snapshot: deletion is idempotent, treat as already gone.
+          if (scanCapped) {
+            // The scan stopped at SNAPSHOT_SCAN_LIMIT before examining every
+            // sandbox, so "not found" here does not mean "does not exist".
+            // Reporting success would leave a live snapshot billing silently.
+            throw new MiosaApiError(
+              `MIOSA could not resolve the sandbox owning snapshot ${snapshotId} ` +
+                `within the first ${SNAPSHOT_SCAN_LIMIT} sandboxes. Delete it via ` +
+                `the owning sandbox (DELETE /sandboxes/:id/snapshots/${snapshotId}), ` +
+                `or call snapshot.list({ sandboxId }) first so the provider learns ` +
+                `the mapping.`,
+              409,
+              "SNAPSHOT_OWNER_UNRESOLVED",
+            );
+          }
+          // Every sandbox was examined and none owns it: genuinely gone.
+          // Deletion is idempotent, so report success.
           return;
         }
         try {
