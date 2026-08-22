@@ -60,6 +60,8 @@ export interface RunCommandOptions {
   env?: Record<string, string>;
   timeout?: number;
   background?: boolean;
+  /** User to run the command as, when the provider supports it. */
+  user?: string;
   /**
    * Callback for streamed stdout chunks when supported by the provider.
    */
