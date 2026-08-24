@@ -24,7 +24,7 @@ When you install a package like `@computesdk/e2b`, you get a factory function fo
 
 ## Supported sandbox providers
 
-Providers are platforms that sandboxes. Each package under `@computesdk/{provider}` exposes the same sandbox interface, so you can swap infrastructure without rewriting application code.
+Providers are platforms that provide sandboxes. Each package under `@computesdk/{provider}` exposes the same sandbox interface, so you can swap infrastructure without rewriting application code.
 
 | Package                        | Provider     |
 | ------------------------------ | ------------ |
