@@ -1,5 +1,11 @@
 # @computesdk/miosa
 
+## 1.0.3
+
+### Patch Changes
+
+- d7a0e73: Implement snapshot deletion: resolve the owning sandbox from an in-process index populated by create/list, falling back to scanning the caller's sandboxes; idempotent on unknown or already-deleted snapshots
+
 ## 1.0.2
 
 ### Patch Changes
