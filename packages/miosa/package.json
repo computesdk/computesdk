@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/miosa",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "MIOSA provider for ComputeSDK - hardware-isolated Firecracker microVM sandboxes with snapshots, persistent graduation, and white-label infrastructure",
   "author": "MIOSA",
   "license": "MIT",
