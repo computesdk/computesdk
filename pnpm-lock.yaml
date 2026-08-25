@@ -1911,8 +1911,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@runloop/api-client':
-        specifier: ^1.28.0
-        version: 1.28.0
+        specifier: ^1.30.0
+        version: 1.30.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -5069,8 +5069,8 @@ packages:
     resolution: {integrity: sha512-E0RZ0fArFX32R88mOq5w4nmBb2LOz9UB1gGgOCVo3b08Ly90IuyTYarh4VonHj5b/UtP5WA0sorWYvvIVaPtKg==}
     engines: {node: '>=20'}
 
-  '@runloop/api-client@1.28.0':
-    resolution: {integrity: sha512-ZQVSbSutqknTjgRpsfiiI5WXSkx5KgQvWkUpZQwGMsHR+dPCyM6QQegbAYqQaKuhIxEwxsLkJrSTm2fJkXmunw==}
+  '@runloop/api-client@1.30.0':
+    resolution: {integrity: sha512-hfUkudjkYm+h514K0s2eohh1zAy/IR0pnYJQKJEBPQSvYVGI+jMv1S5fEoQAYMZB3W+lknh/SlCcSQw1MnZyNw==}
 
   '@sailresearch/sdk-darwin-arm64@0.5.1':
     resolution: {integrity: sha512-ShPaFm0+9rfs0vdfKPVW74Q00xNu4IJhVIDF3oACWtkcr3SQg783E4HdgORSUpU45zavXPheRbKCVNoE8cGm4A==}
@@ -12360,7 +12360,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@runloop/api-client@1.28.0':
+  '@runloop/api-client@1.30.0':
     dependencies:
       '@types/node': 18.19.123
       '@types/node-fetch': 2.6.13
