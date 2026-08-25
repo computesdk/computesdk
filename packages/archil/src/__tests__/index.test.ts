@@ -83,40 +83,17 @@ describe('archil create semantics', () => {
     await expect(provider.sandbox.create()).rejects.toThrow(/requires an existing disk id on the top-level options/i);
   });
 
-  it('resolves existing disk id without creating a new disk', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === 'GET') {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: {
-              id: 'disk_abc123',
-              name: 'existing-disk',
-              organization: 'org',
-              status: 'ready',
-              provider: 'archil',
-              region: 'aws-us-east-1',
-              createdAt: new Date().toISOString(),
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      return new Response(JSON.stringify({ success: false, error: 'unexpected method' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    });
+  it('uses an existing disk id without fetching it', async () => {
+    const fetchMock = vi.fn();
     global.fetch = fetchMock as typeof fetch;
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const created = await provider.sandbox.create({ diskId: 'disk_abc123' });
+    const info = await created.getInfo();
 
     expect(created.sandboxId).toBe('disk_abc123');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const method = ((fetchMock.mock.calls as any[][])[0][1] as RequestInit | undefined)?.method;
-    expect(method).toBe('GET');
+    expect(info).toMatchObject({ id: 'disk_abc123', status: 'running' });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

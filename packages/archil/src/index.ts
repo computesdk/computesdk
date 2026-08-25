@@ -54,6 +54,8 @@ interface DiskResponse {
   createdAt: string;
 }
 
+type DiskHandle = Pick<DiskResponse, 'id'>;
+
 interface ExecTiming {
   totalMs: number;
   queueMs: number;
@@ -73,7 +75,7 @@ interface ResolvedConfig {
 }
 
 interface ArchilSandbox {
-  disk: DiskResponse;
+  disk: DiskHandle | DiskResponse;
   resolved: ResolvedConfig;
   createdAt: Date;
 }
@@ -204,14 +206,9 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       create: async (config: ArchilConfig, options?: ArchilCreateOptions) => {
         const resolved = resolveConfig(config);
         const diskId = resolveCreateDiskId(options);
-        const disk = await callApi<DiskResponse>(
-          resolved,
-          'GET',
-          `/api/disks/${encodeURIComponent(diskId)}`,
-        );
         return {
-          sandbox: { disk, resolved, createdAt: new Date() },
-          sandboxId: disk.id,
+          sandbox: { disk: { id: diskId }, resolved, createdAt: new Date() },
+          sandboxId: diskId,
         };
       },
 
@@ -270,18 +267,21 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       },
 
       getInfo: async (sandbox: ArchilSandbox): Promise<SandboxInfo> => {
+        const diskInfo = 'status' in sandbox.disk ? sandbox.disk : undefined;
         return {
           id: sandbox.disk.id,
           provider: 'archil',
-          status: sandbox.disk.status === 'ready' ? 'running' : 'stopped',
-          createdAt: new Date(sandbox.disk.createdAt),
+          status: !diskInfo || diskInfo.status === 'ready' ? 'running' : 'stopped',
+          createdAt: diskInfo ? new Date(diskInfo.createdAt) : sandbox.createdAt,
           timeout: 0,
-          metadata: {
-            name: sandbox.disk.name,
-            organization: sandbox.disk.organization,
-            region: sandbox.disk.region,
-            provider: sandbox.disk.provider,
-          },
+          metadata: diskInfo
+            ? {
+                name: diskInfo.name,
+                organization: diskInfo.organization,
+                region: diskInfo.region,
+                provider: diskInfo.provider,
+              }
+            : {},
         };
       },
 
