@@ -1,5 +1,13 @@
 # @computesdk/archil
 
+## 0.4.9
+
+### Patch Changes
+
+- 0f3660c: perf(archil): skip disk lookup on create
+
+  `provider.sandbox.create()` no longer fetches the disk before returning, and `getInfo()` derives metadata from the disk handle when full disk metadata is not available.
+
 ## 0.4.8
 
 ### Patch Changes
