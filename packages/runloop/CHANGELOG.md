@@ -1,5 +1,13 @@
 # @computesdk/runloop
 
+## 1.3.57
+
+### Patch Changes
+
+- 43b9fa6: chore(runloop): update client to 1.30.0
+
+  Bump `@runloop/api-client` to `^1.30.0` to pick up improvements to the `create_and_await_running` API that reduce latency.
+
 ## 1.3.56
 
 ### Patch Changes
