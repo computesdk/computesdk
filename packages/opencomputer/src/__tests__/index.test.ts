@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { opencomputer } from '../index';
 
-const createMock = vi.fn();
-const connectMock = vi.fn();
-const createFromCheckpointMock = vi.fn();
+// vi.hoisted: the SDK import now starts at module load, so the mock factory
+// can run before this file's own top-level consts are initialized.
+const { createMock, connectMock, createFromCheckpointMock } = vi.hoisted(() => ({
+  createMock: vi.fn(),
+  connectMock: vi.fn(),
+  createFromCheckpointMock: vi.fn(),
+}));
 
 vi.mock('@opencomputer/sdk', () => ({
   Sandbox: {
