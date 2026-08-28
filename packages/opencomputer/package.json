@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/opencomputer",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "OpenComputer provider for ComputeSDK - persistent cloud VMs with checkpoints, preview URLs, command execution, and filesystem access",
   "author": "ComputeSDK",
   "license": "MIT",
