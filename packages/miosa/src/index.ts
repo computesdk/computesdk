@@ -134,6 +134,13 @@ const HTTP2_SESSION_COUNT = (() => {
 
 interface Http2SessionPool {
   sessions: import("node:http2").ClientHttp2Session[];
+  // Sessions whose TLS + HTTP/2 handshake has completed. Dispatching onto a
+  // session that has not connected yet makes the request pay that session's
+  // full handshake as first-byte latency - at burst start that is every
+  // request in the burst, serialized behind 16 cold connects.
+  ready: Set<import("node:http2").ClientHttp2Session>;
+  firstReady: Promise<void>;
+  resolveFirstReady: () => void;
   next: number;
   inFlight: number;
 }
@@ -177,8 +184,15 @@ function canUseNodeHttp2(url: URL): boolean {
 
 async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
   const http2 = await import("node:http2");
+  let resolveFirstReady: () => void = () => {};
+  const firstReady = new Promise<void>((resolve) => {
+    resolveFirstReady = resolve;
+  });
   const pool = http2SessionPools.get(origin) ?? {
     sessions: [],
+    ready: new Set<import("node:http2").ClientHttp2Session>(),
+    firstReady,
+    resolveFirstReady,
     next: 0,
     inFlight: 0,
   };
@@ -199,7 +213,13 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     }
     pool.sessions.push(session);
 
+    session.once("connect", () => {
+      pool.ready.add(session);
+      pool.resolveFirstReady();
+    });
+
     const discard = () => {
+      pool.ready.delete(session);
       pool.sessions = pool.sessions.filter(
         (candidate) => candidate !== session,
       );
@@ -265,11 +285,26 @@ async function nodeHttp2Request(
   const origin = url.origin;
   const pool = await ensureHttp2Sessions(origin);
 
-  const session = pool.sessions[pool.next % pool.sessions.length]!;
-  pool.next = (pool.next + 1) % pool.sessions.length;
-
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
+
+  // Cold start: wait for the first connected session, then give the rest of
+  // the pool a short window (250ms cap) to reach a quorum so a concurrent
+  // burst spreads over warm connections instead of serializing behind
+  // handshakes. Steady state pays nothing: ready.size > 0 skips all of this.
+  if (pool.ready.size === 0) {
+    await pool.firstReady;
+    const quorum = Math.min(8, pool.sessions.length);
+    const deadline = Date.now() + 250;
+    while (pool.ready.size < quorum && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  const candidates =
+    pool.ready.size > 0 ? Array.from(pool.ready) : pool.sessions;
+  const session = candidates[pool.next % candidates.length]!;
+  pool.next = (pool.next + 1) % candidates.length;
 
   try {
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
