@@ -196,6 +196,13 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     next: 0,
     inFlight: 0,
   };
+  // A fully-recycled pool (every session discarded) must re-arm the
+  // cold-start gate: the original firstReady stays resolved forever, so a
+  // later refill would otherwise skip the wait and land on cold sessions.
+  if (pool.sessions.length === 0 && pool.ready.size === 0) {
+    pool.firstReady = firstReady;
+    pool.resolveFirstReady = resolveFirstReady;
+  }
   pool.sessions = pool.sessions.filter(
     (candidate) => !candidate.closed && !candidate.destroyed,
   );
@@ -292,12 +299,25 @@ async function nodeHttp2Request(
   // the pool a short window (250ms cap) to reach a quorum so a concurrent
   // burst spreads over warm connections instead of serializing behind
   // handshakes. Steady state pays nothing: ready.size > 0 skips all of this.
+  // The first wait is BOUNDED (1s): if no session ever connects (unreachable
+  // or misconfigured endpoint), dispatch falls through to the legacy
+  // any-session path below and the request itself surfaces the connection
+  // error promptly, exactly as before this optimization - never a hang.
   if (pool.ready.size === 0) {
-    await pool.firstReady;
-    const quorum = Math.min(8, pool.sessions.length);
-    const deadline = Date.now() + 250;
-    while (pool.ready.size < quorum && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    let firstReadyTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      pool.firstReady,
+      new Promise<void>((resolve) => {
+        firstReadyTimer = setTimeout(resolve, 1000);
+      }),
+    ]);
+    if (firstReadyTimer !== undefined) clearTimeout(firstReadyTimer);
+    if (pool.ready.size > 0) {
+      const quorum = Math.min(8, pool.sessions.length);
+      const deadline = Date.now() + 250;
+      while (pool.ready.size < quorum && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
     }
   }
 
