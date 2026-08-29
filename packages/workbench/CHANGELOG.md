@@ -1,5 +1,887 @@
 # @computesdk/workbench
 
+## 30.0.9
+
+### Patch Changes
+
+- Updated dependencies [43b9fa6]
+  - @computesdk/runloop@1.3.57
+
+## 30.0.8
+
+### Patch Changes
+
+- Updated dependencies [42a5158]
+  - @computesdk/microsandbox@0.1.2
+
+## 30.0.7
+
+### Patch Changes
+
+- 183f0f1: Add a microsandbox provider with local and cloud backends, native command streaming, filesystem access, and local port and snapshot support.
+- Updated dependencies [183f0f1]
+  - @computesdk/microsandbox@0.1.1
+
+## 30.0.6
+
+### Patch Changes
+
+- Updated dependencies [e8709ce]
+  - @computesdk/vercel@1.7.33
+
+## 30.0.5
+
+### Patch Changes
+
+- Updated dependencies [9956e9e]
+  - @computesdk/runloop@1.3.56
+
+## 30.0.4
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+  - @computesdk/agentuity@0.0.13
+  - @computesdk/beam@0.3.2
+  - @computesdk/blaxel@1.6.19
+  - @computesdk/cloud-run@0.1.8
+  - @computesdk/cloudflare@1.6.15
+  - @computesdk/codesandbox@1.5.52
+  - @computesdk/collimate@0.1.2
+  - @computesdk/daytona@1.7.33
+  - @computesdk/declaw@0.2.9
+  - @computesdk/e2b@1.7.53
+  - @computesdk/freestyle@0.1.12
+  - @computesdk/hopx@0.2.28
+  - @computesdk/isorun@0.1.2
+  - @computesdk/just-bash@0.4.16
+  - @computesdk/k8s@0.2.5
+  - @computesdk/lelantos@0.2.3
+  - @computesdk/modal@1.9.5
+  - @computesdk/namespace@1.6.15
+  - @computesdk/northflank@1.1.4
+  - @computesdk/runloop@1.3.55
+  - @computesdk/secure-exec@0.1.12
+  - @computesdk/sprites@0.1.15
+  - @computesdk/tenki@0.1.4
+  - @computesdk/upstash@0.3.10
+  - @computesdk/vercel@1.7.32
+
+## 30.0.3
+
+### Patch Changes
+
+- Updated dependencies [23fb5c6]
+  - @computesdk/beam@0.3.1
+
+## 30.0.2
+
+### Patch Changes
+
+- d92e1e3: Update `@tenkicloud/sandbox` to 0.5.4 and replace project scope with server-side workspace inference.
+- Updated dependencies [d92e1e3]
+  - @computesdk/tenki@0.1.3
+
+## 30.0.1
+
+### Patch Changes
+
+- Updated dependencies [cfc45de]
+  - @computesdk/northflank@1.1.3
+
+## 30.0.0
+
+### Patch Changes
+
+- Updated dependencies [403b5cf]
+  - @computesdk/beam@0.3.0
+
+## 29.0.10
+
+### Patch Changes
+
+- Updated dependencies [b398632]
+  - @computesdk/upstash@0.3.9
+
+## 29.0.9
+
+### Patch Changes
+
+- Updated dependencies [c0ce001]
+  - @computesdk/upstash@0.3.8
+
+## 29.0.8
+
+### Patch Changes
+
+- Updated dependencies [c2d1730]
+- Updated dependencies [e324fd6]
+- Updated dependencies [f3fe311]
+  - @computesdk/e2b@1.7.52
+  - @computesdk/hopx@0.2.27
+  - @computesdk/tenki@0.1.2
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+  - @computesdk/isorun@0.1.1
+  - @computesdk/runloop@1.3.54
+  - @computesdk/agentuity@0.0.12
+  - @computesdk/beam@0.2.1
+  - @computesdk/blaxel@1.6.18
+  - @computesdk/cloud-run@0.1.7
+  - @computesdk/cloudflare@1.6.14
+  - @computesdk/codesandbox@1.5.51
+  - @computesdk/collimate@0.1.1
+  - @computesdk/daytona@1.7.32
+  - @computesdk/declaw@0.2.8
+  - @computesdk/freestyle@0.1.11
+  - @computesdk/just-bash@0.4.15
+  - @computesdk/k8s@0.2.4
+  - @computesdk/lelantos@0.2.2
+  - @computesdk/modal@1.9.4
+  - @computesdk/namespace@1.6.14
+  - @computesdk/northflank@1.1.2
+  - @computesdk/secure-exec@0.1.11
+  - @computesdk/sprites@0.1.14
+  - @computesdk/upstash@0.3.7
+  - @computesdk/vercel@1.7.31
+
+## 29.0.7
+
+### Patch Changes
+
+- Updated dependencies [92b93da]
+  - @computesdk/namespace@1.6.13
+
+## 29.0.6
+
+### Patch Changes
+
+- Updated dependencies [662bd35]
+  - @computesdk/blaxel@1.6.17
+
+## 29.0.5
+
+### Patch Changes
+
+- Updated dependencies [028d47f]
+  - @computesdk/cloud-run@0.1.6
+
+## 29.0.4
+
+### Patch Changes
+
+- Updated dependencies [1267b65]
+  - @computesdk/cloud-run@0.1.5
+
+## 29.0.3
+
+### Patch Changes
+
+- Updated dependencies [90764f1]
+  - @computesdk/cloud-run@0.1.4
+
+## 29.0.2
+
+### Patch Changes
+
+- Updated dependencies [f2e71b2]
+  - @computesdk/cloud-run@0.1.3
+
+## 29.0.1
+
+### Patch Changes
+
+- Updated dependencies [96a248a]
+  - @computesdk/cloud-run@0.1.2
+
+## 29.0.0
+
+### Patch Changes
+
+- Updated dependencies [9c72917]
+  - @computesdk/beam@0.2.0
+
+## 28.0.2
+
+### Patch Changes
+
+- Updated dependencies [44de339]
+  - @computesdk/lelantos@0.2.1
+
+## 28.0.1
+
+### Patch Changes
+
+- ec1be06: Add a Google Cloud Run Sandboxes provider and register it in the workbench provider list.
+- Updated dependencies [ec1be06]
+  - @computesdk/cloud-run@0.1.1
+
+## 28.0.0
+
+### Patch Changes
+
+- b144c15: Workbench now honors the Lelantos provider's `E2B_API_KEY` / `E2B_DOMAIN` / `E2B_API_URL` fallback. Previously only `LELANTOS_*` was recognized, so a user who had configured Lelantos via the `E2B_*` variables (which the provider itself accepts) saw it reported as unconfigured and got no auto-config from the environment.
+- Updated dependencies [b144c15]
+- Updated dependencies [1ffe0e3]
+  - @computesdk/lelantos@0.2.0
+  - @computesdk/tenki@0.1.1
+
+## 27.0.6
+
+### Patch Changes
+
+- Updated dependencies [f89e63e]
+  - @computesdk/daytona@1.7.31
+
+## 27.0.5
+
+### Patch Changes
+
+- Updated dependencies [3e2c625]
+- Updated dependencies [3e2c625]
+  - @computesdk/cloudflare@1.6.13
+
+## 27.0.4
+
+### Patch Changes
+
+- Updated dependencies [de20947]
+  - @computesdk/runloop@1.3.53
+
+## 27.0.3
+
+### Patch Changes
+
+- Updated dependencies [52a02aa]
+  - @computesdk/blaxel@1.6.16
+
+## 27.0.2
+
+### Patch Changes
+
+- Updated dependencies [1a3a44e]
+  - @computesdk/runloop@1.3.52
+
+## 27.0.1
+
+### Patch Changes
+
+- Updated dependencies [1b5bebf]
+  - @computesdk/northflank@1.1.1
+
+## 27.0.0
+
+### Patch Changes
+
+- Updated dependencies [ab81945]
+  - @computesdk/northflank@1.1.0
+
+## 26.0.4
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/agentuity@0.0.11
+  - @computesdk/beam@0.1.14
+  - @computesdk/blaxel@1.6.15
+  - @computesdk/cloudflare@1.6.12
+  - @computesdk/codesandbox@1.5.50
+  - @computesdk/daytona@1.7.30
+  - @computesdk/declaw@0.2.7
+  - @computesdk/e2b@1.7.51
+  - @computesdk/freestyle@0.1.10
+  - @computesdk/hopx@0.2.26
+  - @computesdk/just-bash@0.4.14
+  - @computesdk/k8s@0.2.3
+  - @computesdk/modal@1.9.3
+  - @computesdk/namespace@1.6.12
+  - @computesdk/provider@2.1.3
+  - @computesdk/runloop@1.3.51
+  - @computesdk/secure-exec@0.1.10
+  - @computesdk/sprites@0.1.13
+  - @computesdk/upstash@0.3.6
+  - @computesdk/vercel@1.7.30
+
+## 26.0.3
+
+### Patch Changes
+
+- Updated dependencies [5812a55]
+  - @computesdk/modal@1.9.2
+
+## 26.0.2
+
+### Patch Changes
+
+- Updated dependencies [0470843]
+  - @computesdk/e2b@1.7.50
+
+## 26.0.1
+
+### Patch Changes
+
+- Updated dependencies [d1a81bb]
+  - @computesdk/modal@1.9.1
+
+## 26.0.0
+
+### Patch Changes
+
+- Updated dependencies [f1d87cb]
+- Updated dependencies [f4941b9]
+  - @computesdk/modal@1.9.0
+
+## 25.0.3
+
+### Patch Changes
+
+- Updated dependencies [5b1046f]
+  - @computesdk/runloop@1.3.50
+
+## 25.0.2
+
+### Patch Changes
+
+- Updated dependencies [643c935]
+  - @computesdk/modal@1.8.45
+  - computesdk@4.1.2
+  - @computesdk/provider@2.1.2
+  - @computesdk/agentuity@0.0.10
+  - @computesdk/beam@0.1.13
+  - @computesdk/blaxel@1.6.14
+  - @computesdk/cloudflare@1.6.11
+  - @computesdk/codesandbox@1.5.49
+  - @computesdk/daytona@1.7.29
+  - @computesdk/declaw@0.2.6
+  - @computesdk/e2b@1.7.49
+  - @computesdk/freestyle@0.1.9
+  - @computesdk/hopx@0.2.25
+  - @computesdk/just-bash@0.4.13
+  - @computesdk/k8s@0.2.2
+  - @computesdk/namespace@1.6.11
+  - @computesdk/runloop@1.3.49
+  - @computesdk/secure-exec@0.1.9
+  - @computesdk/sprites@0.1.12
+  - @computesdk/upstash@0.3.5
+  - @computesdk/vercel@1.7.29
+
+## 25.0.1
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+  - @computesdk/agentuity@0.0.9
+  - @computesdk/beam@0.1.12
+  - @computesdk/blaxel@1.6.13
+  - @computesdk/cloudflare@1.6.10
+  - @computesdk/codesandbox@1.5.48
+  - @computesdk/daytona@1.7.28
+  - @computesdk/declaw@0.2.5
+  - @computesdk/e2b@1.7.48
+  - @computesdk/freestyle@0.1.8
+  - @computesdk/hopx@0.2.24
+  - @computesdk/just-bash@0.4.12
+  - @computesdk/k8s@0.2.1
+  - @computesdk/modal@1.8.44
+  - @computesdk/namespace@1.6.10
+  - @computesdk/runloop@1.3.48
+  - @computesdk/secure-exec@0.1.8
+  - @computesdk/sprites@0.1.11
+  - @computesdk/upstash@0.3.4
+  - @computesdk/vercel@1.7.28
+
+## 25.0.0
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+- Updated dependencies [1882c17]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+  - @computesdk/k8s@0.2.0
+  - @computesdk/agentuity@0.0.8
+  - @computesdk/beam@0.1.11
+  - @computesdk/blaxel@1.6.12
+  - @computesdk/cloudflare@1.6.9
+  - @computesdk/codesandbox@1.5.47
+  - @computesdk/daytona@1.7.27
+  - @computesdk/declaw@0.2.4
+  - @computesdk/e2b@1.7.47
+  - @computesdk/freestyle@0.1.7
+  - @computesdk/hopx@0.2.23
+  - @computesdk/just-bash@0.4.11
+  - @computesdk/modal@1.8.43
+  - @computesdk/namespace@1.6.9
+  - @computesdk/runloop@1.3.47
+  - @computesdk/secure-exec@0.1.7
+  - @computesdk/sprites@0.1.10
+  - @computesdk/upstash@0.3.3
+  - @computesdk/vercel@1.7.27
+
+## 24.0.4
+
+### Patch Changes
+
+- Updated dependencies [7f731c5]
+  - @computesdk/k8s@0.1.1
+
+## 24.0.3
+
+### Patch Changes
+
+- Updated dependencies [d651717]
+  - @computesdk/declaw@0.2.3
+
+## 24.0.2
+
+### Patch Changes
+
+- Updated dependencies [e84e734]
+  - @computesdk/modal@1.8.42
+
+## 24.0.1
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+  - @computesdk/provider@2.0.0
+  - @computesdk/agentuity@0.0.7
+  - @computesdk/beam@0.1.10
+  - @computesdk/blaxel@1.6.11
+  - @computesdk/cloudflare@1.6.8
+  - @computesdk/codesandbox@1.5.46
+  - @computesdk/daytona@1.7.26
+  - @computesdk/declaw@0.2.2
+  - @computesdk/e2b@1.7.46
+  - @computesdk/freestyle@0.1.6
+  - @computesdk/hopx@0.2.22
+  - @computesdk/just-bash@0.4.10
+  - @computesdk/modal@1.8.41
+  - @computesdk/namespace@1.6.8
+  - @computesdk/railway@1.2.2
+  - @computesdk/runloop@1.3.46
+  - @computesdk/secure-exec@0.1.6
+  - @computesdk/sprites@0.1.9
+  - @computesdk/upstash@0.3.2
+  - @computesdk/vercel@1.7.26
+
+## 24.0.0
+
+### Major Changes
+
+- 371f667: Remove the legacy daemon/client subsystem.
+
+  **Breaking changes (`computesdk`):**
+
+  - Removed the `Sandbox` client class and its entire `src/client/` subsystem (WebSocket protocol, resources, terminal/run/server/watcher/file/env/sessionToken/magicLink/signal/auth/child namespaces).
+  - Removed re-exports: `Sandbox`, `SandboxStatus`, `ProviderSandboxInfo`, `CommandExitError`, `isCommandExitError`, `TerminalInstance`, `FileWatcher`, `SignalService`, `WebSocketConstructor`, `encodeBinaryMessage`, `decodeBinaryMessage`, `MessageType`, `buildSetupPayload`, `encodeSetupPayload`, `SetupPayload`, `SetupOverlayConfig`.
+  - Removed the 11 optional advanced namespaces (`terminal?`, `run?`, `server?`, `watcher?`, `file?`, `env?`, `sessionToken?`, `magicLink?`, `signal?`, `auth?`, `child?`) from the `SandboxInterface`.
+  - Removed `SandboxOverlayConfig`, `SandboxServerConfig`, `SandboxHealthCheckConfig` types.
+  - Removed `overlays` and `servers` fields from `CreateSandboxOptions`.
+
+  These APIs were only wired against the daemon transport, which was removed from the published package earlier. No shipped provider implemented them.
+
+  **Breaking changes (`@computesdk/workbench`):**
+
+  - Removed `workbench connect <url> [token]` (required the deleted `Sandbox` client class).
+  - Removed `workbench provider local` and local-daemon auto-attach (required the deleted `Sandbox` client class).
+  - Removed `mode gateway|direct` toggle and `provider direct <name>` / `provider gateway <name>` aliases.
+  - Dropped the `child`, `server`, and `terminal` REPL bindings — they delegated to daemon-only namespaces.
+  - Dropped `ws` runtime dependency.
+
+  **Breaking changes (`@computesdk/cli`):**
+
+  - Removed `pty` mode. `compute connect`, `compute sandbox connect`, `workspace attach`, and `sandbox create --connect` now drop into the REPL (`runCommand`-based) instead of an interactive PTY shell.
+  - Removed the `/shell` REPL command that dropped into PTY.
+
+  **Other:**
+
+  - `@computesdk/provider` drops the optional `findOrCreate` / `find` / `extendTimeout` fields from `SandboxMethods` (matching the earlier compute-wrapper cleanup).
+  - 14 provider packages get a patch bump for internal destructuring cleanup (removed unused `overlays` / `servers` destructure targets).
+
+### Patch Changes
+
+- Updated dependencies [3ef4817]
+- Updated dependencies [371f667]
+  - @computesdk/provider@1.4.0
+  - computesdk@3.0.0
+  - @computesdk/runloop@1.3.45
+  - @computesdk/declaw@0.2.1
+  - @computesdk/vercel@1.7.25
+  - @computesdk/modal@1.8.40
+  - @computesdk/hopx@0.2.21
+  - @computesdk/e2b@1.7.45
+  - @computesdk/daytona@1.7.25
+  - @computesdk/codesandbox@1.5.45
+  - @computesdk/beam@0.1.9
+  - @computesdk/upstash@0.3.1
+  - @computesdk/sprites@0.1.8
+  - @computesdk/cloudflare@1.6.7
+  - @computesdk/blaxel@1.6.10
+  - @computesdk/agentuity@0.0.6
+  - @computesdk/freestyle@0.1.5
+  - @computesdk/just-bash@0.4.9
+  - @computesdk/namespace@1.6.7
+  - @computesdk/railway@1.2.1
+  - @computesdk/secure-exec@0.1.5
+
+## 23.0.0
+
+### Patch Changes
+
+- Updated dependencies [44af00e]
+  - @computesdk/declaw@0.2.0
+
+## 22.0.0
+
+### Patch Changes
+
+- Updated dependencies [8466e41]
+  - @computesdk/upstash@0.3.0
+
+## 21.1.0
+
+### Minor Changes
+
+- a321f01: Remove hosted control-plane assumptions from `computesdk` and move to direct provider mode.
+
+  ### `computesdk`
+
+  - Remove gateway/control-plane transport from `compute`; `compute.sandbox.*` now routes directly to configured provider instances.
+  - Replace legacy config pathways with direct provider configuration only:
+    - `compute.setConfig({ provider })`
+    - `compute.setConfig({ providers: [...] })`
+  - Add multi-provider routing support with:
+    - `provider` + `providers` support
+    - `providerStrategy` (`priority` / `round-robin`)
+    - `fallbackOnError`
+    - per-call provider override (`{ provider: 'name' }`)
+  - Remove legacy hosted/gateway modules and exports (`auto-detect`, `explicit-config`, provider env/config exports).
+  - Replace provider compatibility tests with direct-provider contract tests and new CI integration coverage.
+
+  ### `@computesdk/provider`
+
+  - Remove deprecated `defineCompute` and compute-factory exports that depended on hosted control-plane behavior.
+  - Keep direct provider APIs (`defineProvider`, `createCompute`, `defineInfraProvider`).
+
+  ### `@computesdk/railway` and `@computesdk/render`
+
+  - Remove control-plane compute wrapper behavior.
+  - Package entrypoints now throw explicit migration errors explaining that these wrappers are no longer supported after control-plane removal.
+
+  ### `@computesdk/workbench`
+
+  - Remove dependency on deleted `computesdk` provider config exports.
+  - Inline provider env/auth metadata and switch compute instantiation to direct provider instances in both mode paths.
+  - This preserves workbench mode UX while removing legacy control-plane config usage.
+
+  ### Migration Notes
+
+  - Stop using legacy config shapes such as provider-name strings with control-plane keys.
+  - Configure `computesdk` with provider instances from provider packages.
+  - For infrastructure packages previously used as control-plane wrappers (`@computesdk/railway`, `@computesdk/render`), migrate to supported direct provider packages.
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+  - @computesdk/railway@1.2.0
+  - @computesdk/agentuity@0.0.5
+  - @computesdk/beam@0.1.8
+  - @computesdk/blaxel@1.6.9
+  - @computesdk/cloudflare@1.6.6
+  - @computesdk/codesandbox@1.5.44
+  - @computesdk/daytona@1.7.24
+  - @computesdk/e2b@1.7.44
+  - @computesdk/freestyle@0.1.4
+  - @computesdk/hopx@0.2.20
+  - @computesdk/just-bash@0.4.8
+  - @computesdk/modal@1.8.39
+  - @computesdk/namespace@1.6.6
+  - @computesdk/runloop@1.3.44
+  - @computesdk/secure-exec@0.1.4
+  - @computesdk/sprites@0.1.7
+  - @computesdk/upstash@0.2.3
+  - @computesdk/vercel@1.7.24
+
+## 21.0.3
+
+### Patch Changes
+
+- Updated dependencies [7c53d28]
+  - @computesdk/provider@1.2.0
+  - @computesdk/e2b@1.7.43
+  - @computesdk/daytona@1.7.23
+  - @computesdk/modal@1.8.38
+  - @computesdk/namespace@1.6.5
+  - @computesdk/sprites@0.1.6
+  - @computesdk/codesandbox@1.5.43
+  - @computesdk/hopx@0.2.19
+  - @computesdk/beam@0.1.7
+  - @computesdk/blaxel@1.6.8
+  - @computesdk/upstash@0.2.2
+  - @computesdk/agentuity@0.0.4
+  - @computesdk/cloudflare@1.6.5
+  - @computesdk/freestyle@0.1.3
+  - @computesdk/just-bash@0.4.7
+  - @computesdk/railway@1.1.42
+  - @computesdk/runloop@1.3.43
+  - @computesdk/secure-exec@0.1.3
+  - @computesdk/vercel@1.7.23
+
+## 21.0.2
+
+### Patch Changes
+
+- Updated dependencies [aba08d4]
+  - @computesdk/vercel@1.7.22
+
+## 21.0.2
+
+### Patch Changes
+
+- Updated dependencies [80ce13f]
+  - @computesdk/vercel@1.7.22
+
+## 21.0.1
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+  - @computesdk/agentuity@0.0.3
+  - @computesdk/beam@0.1.6
+  - @computesdk/blaxel@1.6.7
+  - @computesdk/cloudflare@1.6.4
+  - @computesdk/codesandbox@1.5.42
+  - @computesdk/daytona@1.7.22
+  - @computesdk/e2b@1.7.42
+  - @computesdk/freestyle@0.1.2
+  - @computesdk/hopx@0.2.18
+  - @computesdk/just-bash@0.4.6
+  - @computesdk/modal@1.8.37
+  - @computesdk/namespace@1.6.4
+  - @computesdk/railway@1.1.41
+  - @computesdk/runloop@1.3.42
+  - @computesdk/secure-exec@0.1.2
+  - @computesdk/sprites@0.1.5
+  - @computesdk/upstash@0.2.1
+  - @computesdk/vercel@1.7.21
+
+## 21.0.1
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+  - @computesdk/agentuity@0.0.3
+  - @computesdk/beam@0.1.6
+  - @computesdk/blaxel@1.6.7
+  - @computesdk/cloudflare@1.6.4
+  - @computesdk/codesandbox@1.5.42
+  - @computesdk/daytona@1.7.22
+  - @computesdk/e2b@1.7.42
+  - @computesdk/freestyle@0.1.2
+  - @computesdk/hopx@0.2.18
+  - @computesdk/just-bash@0.4.6
+  - @computesdk/modal@1.8.37
+  - @computesdk/namespace@1.6.4
+  - @computesdk/railway@1.1.41
+  - @computesdk/runloop@1.3.42
+  - @computesdk/secure-exec@0.1.2
+  - @computesdk/sprites@0.1.5
+  - @computesdk/upstash@0.2.1
+  - @computesdk/vercel@1.7.21
+
+## 21.0.1
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+  - @computesdk/agentuity@0.0.3
+  - @computesdk/beam@0.1.6
+  - @computesdk/blaxel@1.6.7
+  - @computesdk/cloudflare@1.6.4
+  - @computesdk/codesandbox@1.5.42
+  - @computesdk/daytona@1.7.22
+  - @computesdk/e2b@1.7.42
+  - @computesdk/freestyle@0.1.2
+  - @computesdk/hopx@0.2.18
+  - @computesdk/just-bash@0.4.6
+  - @computesdk/modal@1.8.37
+  - @computesdk/namespace@1.6.4
+  - @computesdk/railway@1.1.41
+  - @computesdk/runloop@1.3.42
+  - @computesdk/secure-exec@0.1.2
+  - @computesdk/sprites@0.1.5
+  - @computesdk/upstash@0.2.1
+  - @computesdk/vercel@1.7.21
+
+## 21.0.0
+
+### Patch Changes
+
+- 45f918b: Add Upstash Box provider package with support for sandbox CRUD, code execution, shell commands, filesystem operations, preview URLs, and snapshots
+- Updated dependencies [45f918b]
+  - @computesdk/upstash@0.2.0
+  - computesdk@2.5.3
+  - @computesdk/agentuity@0.0.2
+  - @computesdk/beam@0.1.5
+  - @computesdk/blaxel@1.6.6
+  - @computesdk/cloudflare@1.6.3
+  - @computesdk/codesandbox@1.5.41
+  - @computesdk/daytona@1.7.21
+  - @computesdk/e2b@1.7.41
+  - @computesdk/freestyle@0.1.1
+  - @computesdk/hopx@0.2.17
+  - @computesdk/just-bash@0.4.5
+  - @computesdk/modal@1.8.36
+  - @computesdk/namespace@1.6.3
+  - @computesdk/railway@1.1.40
+  - @computesdk/runloop@1.3.41
+  - @computesdk/secure-exec@0.1.1
+  - @computesdk/sprites@0.1.4
+  - @computesdk/vercel@1.7.20
+  - @computesdk/provider@1.0.33
+
+## 21.0.0
+
+### Patch Changes
+
+- 0b97465: Add Upstash Box provider package with support for sandbox CRUD, code execution, shell commands, filesystem operations, preview URLs, and snapshots
+- Updated dependencies [0b97465]
+  - @computesdk/upstash@0.2.0
+  - computesdk@2.5.3
+  - @computesdk/beam@0.1.5
+  - @computesdk/blaxel@1.6.6
+  - @computesdk/cloudflare@1.6.3
+  - @computesdk/codesandbox@1.5.41
+  - @computesdk/daytona@1.7.21
+  - @computesdk/e2b@1.7.41
+  - @computesdk/freestyle@0.1.1
+  - @computesdk/hopx@0.2.17
+  - @computesdk/just-bash@0.4.5
+  - @computesdk/modal@1.8.36
+  - @computesdk/namespace@1.6.3
+  - @computesdk/railway@1.1.40
+  - @computesdk/runloop@1.3.41
+  - @computesdk/secure-exec@0.1.1
+  - @computesdk/sprites@0.1.4
+  - @computesdk/vercel@1.7.20
+  - @computesdk/provider@1.0.33
+
+## 20.0.2
+
+### Patch Changes
+
+- Updated dependencies [5f3b790]
+  - @computesdk/cloudflare@1.6.2
+
+## 20.0.1
+
+### Patch Changes
+
+- Updated dependencies [29143f3]
+  - @computesdk/blaxel@1.6.5
+
+## 20.0.0
+
+### Patch Changes
+
+- 5f1b08f: feat: add Freestyle as a new compute provider with Node.js and Python runtime support
+- Updated dependencies [5f1b08f]
+- Updated dependencies [5f1b08f]
+- Updated dependencies [5e8b787]
+  - @computesdk/freestyle@0.1.0
+  - computesdk@2.5.2
+  - @computesdk/codesandbox@1.5.40
+  - @computesdk/blaxel@1.6.4
+  - @computesdk/beam@0.1.4
+  - @computesdk/cloudflare@1.6.1
+  - @computesdk/daytona@1.7.20
+  - @computesdk/e2b@1.7.40
+  - @computesdk/hopx@0.2.16
+  - @computesdk/just-bash@0.4.4
+  - @computesdk/modal@1.8.35
+  - @computesdk/namespace@1.6.2
+  - @computesdk/provider@1.0.32
+  - @computesdk/railway@1.1.39
+  - @computesdk/runloop@1.3.40
+  - @computesdk/sprites@0.1.3
+  - @computesdk/vercel@1.7.19
+
+## 16.0.0
+
+### Minor Changes
+
+- 3c4e595: Add sprites provider package
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+  - @computesdk/sprites@0.1.0
+  - @computesdk/beam@0.1.1
+  - @computesdk/blaxel@1.6.1
+  - @computesdk/cloudflare@1.3.36
+  - @computesdk/codesandbox@1.5.37
+  - @computesdk/daytona@1.7.17
+  - @computesdk/e2b@1.7.37
+  - @computesdk/hopx@0.2.13
+  - @computesdk/just-bash@0.4.1
+  - @computesdk/modal@1.8.32
+  - @computesdk/namespace@1.5.1
+  - @computesdk/provider@1.0.29
+  - @computesdk/railway@1.1.36
+  - @computesdk/runloop@1.3.37
+  - @computesdk/vercel@1.7.16
+
+## 15.0.0
+
+### Minor Changes
+
+- 0e4da83: fix empty object issue
+
+### Patch Changes
+
+- Updated dependencies [0e4da83]
+  - @computesdk/just-bash@0.4.0
+
+## 14.0.0
+
+### Minor Changes
+
+- 711625d: fix workbench implementation of just-bash
+
+### Patch Changes
+
+- Updated dependencies [711625d]
+  - @computesdk/just-bash@0.3.0
+
+## 13.0.0
+
+### Patch Changes
+
+- Updated dependencies [6fad31f]
+  - @computesdk/just-bash@0.2.0
+
+## 12.0.0
+
+### Patch Changes
+
+- Updated dependencies [bc2193c]
+  - @computesdk/blaxel@1.6.0
+
 ## 11.0.0
 
 ### Patch Changes

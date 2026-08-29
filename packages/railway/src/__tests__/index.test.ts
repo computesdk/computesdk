@@ -4,6 +4,7 @@ import { railway } from '../index';
 runProviderTestSuite({
   name: 'railway',
   provider: railway({}),
-  supportsFilesystem: false,
-  skipIntegration: !process.env.RAILWAY_API_KEY || !process.env.RAILWAY_PROJECT_ID || !process.env.RAILWAY_ENVIRONMENT_ID
+  supportsFilesystem: true, // implemented over the shell via exec
+  supportsGetUrl: false, // Railway sandboxes do not expose public per-port URLs
+  skipIntegration: !process.env.RAILWAY_API_TOKEN,
 });

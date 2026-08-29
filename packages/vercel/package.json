@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/vercel",
-  "version": "1.7.15",
+  "version": "1.7.33",
   "description": "Vercel Sandbox provider for ComputeSDK - serverless code execution for Python and Node.js on Vercel's edge network",
   "author": "Garrison",
   "license": "MIT",
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@vercel/sandbox": "^1.6.0",
+    "@vercel/sandbox": "^3.0.0",
     "computesdk": "workspace:*",
     "ms": "^2.1.3"
   },

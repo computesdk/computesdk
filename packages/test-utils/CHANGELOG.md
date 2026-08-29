@@ -1,5 +1,84 @@
 # @computesdk/test-utils
 
+## 2.0.1
+
+### Patch Changes
+
+- 6ec91ff: Add a shared live-output suite to the provider tests. A provider opting in with `supportsStreaming: true` is checked against its real sandbox for output arriving before the command exits, streamed text matching the final `stdout` exactly, stderr staying separate with a non-zero exit, and a streaming command being stopped at its timeout — so streaming becomes a conformance property rather than something each provider tests its own way. Enabled for tensorlake and tenki.
+
+## 2.0.0
+
+### Major Changes
+
+- aa4ca58: Remove `Runtime` concept from SDK
+
+  The `Runtime` type (`'node' | 'python' | 'deno' | 'bun'`) and associated
+  `getSupportedRuntimes()` method were originally designed to support a
+  `runCode()` API that has since been removed. With no runtime-dispatch logic
+  remaining in the SDK, these are dead API surface.
+
+  **Breaking changes:**
+
+  - `Runtime` type removed from `computesdk` public exports
+  - `runtime` field removed from `SandboxInfo`
+  - `getSupportedRuntimes(): Runtime[]` removed from the `Provider` interface
+  - Provider implementations no longer need to (and cannot) implement `getSupportedRuntimes()`
+  - Test suite no longer iterates per-runtime; tests run once per sandbox
+
+  **Migration:** Remove any calls to `provider.getSupportedRuntimes()` and any
+  references to `SandboxInfo.runtime` in your code.
+
+## 1.6.1
+
+### Patch Changes
+
+- 3e6a91a: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+## 1.6.1
+
+### Patch Changes
+
+- 9a312d2: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+## 1.6.1
+
+### Patch Changes
+
+- b34d97f: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+## 1.6.0
+
+### Minor Changes
+
+- 45f918b: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+## 1.6.0
+
+### Minor Changes
+
+- 0b97465: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+## 1.6.0
+
+### Minor Changes
+
+- b1d5204: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
 ## 1.5.1
 
 ### Patch Changes

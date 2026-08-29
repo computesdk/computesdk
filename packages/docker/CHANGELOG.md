@@ -1,5 +1,150 @@
 # @computesdk/docker
 
+## 1.2.51
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
+## 1.2.50
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
+## 1.2.49
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 1.2.48
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
+## 1.2.47
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
+## 1.2.46
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+
+## 1.2.45
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+  - @computesdk/provider@2.0.0
+
+## 1.2.44
+
+### Patch Changes
+
+- Updated dependencies [3ef4817]
+- Updated dependencies [371f667]
+  - @computesdk/provider@1.4.0
+  - computesdk@3.0.0
+
+## 1.2.43
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+
+## 1.2.42
+
+### Patch Changes
+
+- 7c53d28: Add `buildShellCommand` utility to unify shell command building across providers
+
+  Centralizes cwd/env handling into a single `buildShellCommand` function in
+  `@computesdk/provider`, fixing bugs where env vars didn't work with cwd set
+  (docker, sprites, hopx) and where values weren't properly quoted (namespace,
+  sprites, hopx). All shell-based providers now use the shared utility.
+
+- Updated dependencies [7c53d28]
+  - @computesdk/provider@1.2.0
+
+## 1.2.41
+
+### Patch Changes
+
+- 9c9521f: Fix build failures and improve container lifecycle:
+
+  - Add missing `@computesdk/provider` dependency (was imported but never declared in package.json)
+  - Fix `runCommand` signature to accept `RunCommandOptions` instead of `string[]`
+  - Use `exec sleep infinity` for keepalive so PID 1 handles signals
+  - Replace slow `stop + force remove` with instant `kill + remove`
+
+## 1.2.40
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - computesdk@2.5.4
+
+## 1.2.40
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - computesdk@2.5.4
+
+## 1.2.40
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - computesdk@2.5.4
+
+## 1.2.39
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+
+## 1.2.39
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+
+## 1.2.38
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+
+## 1.2.35
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+
 ## 1.2.34
 
 ### Patch Changes

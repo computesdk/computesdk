@@ -14,10 +14,8 @@
 import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
 import { defineProvider } from '@computesdk/provider';
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
-  Runtime,
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions
@@ -29,8 +27,6 @@ import type {
 export interface HopxConfig {
   /** HopX API key - if not provided, will fallback to HOPX_API_KEY environment variable */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: Runtime;
   /** Execution timeout in milliseconds */
   timeout?: number;
   /** Template name for sandbox creation (e.g., 'code-interpreter') */
@@ -69,40 +65,55 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
         }
 
         // Convert timeout from milliseconds to seconds (HopX uses seconds)
-        const timeoutSeconds = config.timeout ? Math.ceil(config.timeout / 1000) : undefined;
+        // options.timeout takes precedence over config.timeout
+        const timeout = options?.timeout ?? config.timeout;
+        const timeoutSeconds = timeout ? Math.ceil(timeout / 1000) : undefined;
 
         try {
           let sandbox: HopxSandbox;
           let sandboxId: string;
 
-          if (options?.sandboxId) {
-            // Reconnect to existing HopX sandbox using Sandbox.connect()
-            sandbox = await HopxSandbox.connect(options.sandboxId, apiKey, config.baseURL);
-            sandboxId = options.sandboxId;
-          } else {
+          // Destructure known ComputeSDK fields, collect the rest for passthrough
+          const {
+            timeout: _timeout,
+            envs,
+            name,
+            metadata: _metadata,
+            templateId,
+            snapshotId,
+            sandboxId: _sandboxId,
+            namespace: _namespace,
+            directory: _directory,
+            ...providerOptions
+          } = options || {};
+
             // Create new HopX sandbox using Sandbox.create()
-            // Use templateId if provided, otherwise use template name or default to 'code-interpreter'
             const createOptions: any = {
               apiKey,
               baseURL: config.baseURL,
               timeoutSeconds,
+              ...providerOptions, // Spread provider-specific options
             };
 
-            // Handle template specification (templateId takes precedence)
-            if (options?.templateId) {
-              createOptions.templateId = options.templateId;
+            // Handle template specification (templateId/snapshotId takes precedence)
+            if (templateId || snapshotId) {
+              createOptions.templateId = templateId || snapshotId;
             } else {
               createOptions.template = config.template || 'code-interpreter';
             }
 
-            // Pass environment variables if provided
-            if (options?.envs) {
-              createOptions.envVars = options.envs;
+            // Remap envs to envVars
+            if (envs) {
+              createOptions.envVars = envs;
             }
 
-            sandbox = await HopxSandbox.create(createOptions);
-            sandboxId = sandbox.sandboxId;
-          }
+            // Pass sandbox name
+            if (name) {
+              createOptions.name = name;
+            }
+
+          sandbox = await HopxSandbox.create(createOptions);
+          sandboxId = sandbox.sandboxId;
 
           return {
             sandbox,
@@ -207,103 +218,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
       },
 
       /**
-       * Execute code in the sandbox
-       * 
-       * Uses sandbox.runCode() with auto-detected runtime.
-       * Maps ComputeSDK runtime ('node'/'python') to HopX language ('javascript'/'python').
-       */
-      runCode: async (sandbox: HopxSandbox, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        try {
-          // Auto-detect runtime if not specified using Python indicators
-          const effectiveRuntime = runtime || (
-            // Strong Python indicators
-            code.includes('print(') ||
-            code.includes('import ') ||
-            code.includes('def ') ||
-            code.includes('sys.') ||
-            code.includes('json.') ||
-            code.includes('__') ||
-            code.includes('f"') ||
-            code.includes("f'") ||
-            code.includes('raise ')
-              ? 'python'
-              // Default to Node.js for all other cases (including ambiguous)
-              : 'node'
-          );
-
-          // Map ComputeSDK runtime to HopX language
-          // HopX uses 'javascript' instead of 'node'
-          const language = effectiveRuntime === 'node' ? 'javascript' : 'python';
-
-          // Execute code using sandbox.runCode()
-          const result = await sandbox.runCode(code, { language });
-
-          // Combine stdout and stderr for output (following E2B pattern)
-          const output = result.stderr
-            ? `${result.stdout}${result.stdout && result.stderr ? '\n' : ''}${result.stderr}`
-            : result.stdout;
-
-          // Check for syntax/parse errors in stderr or output and throw them
-          // This ensures invalid code triggers an exception as expected by the test suite
-          // 
-          // IMPORTANT: We distinguish between:
-          // - Syntax errors (invalid code that couldn't parse) → should THROW
-          // - Runtime errors (valid code that threw during execution) → should RETURN with non-zero exit
-          const combinedOutput = `${result.stdout || ''} ${result.stderr || ''}`;
-          
-          // Indicators of syntax/parse errors (code couldn't be executed)
-          // Covers Python, Node.js, and Bun error formats
-          const hasSyntaxError = 
-            // Python syntax errors
-            combinedOutput.includes('SyntaxError') ||
-            combinedOutput.includes('invalid syntax') ||
-            combinedOutput.includes('IndentationError') ||
-            combinedOutput.includes('TabError') ||
-            (combinedOutput.includes('NameError') && combinedOutput.includes('is not defined')) ||
-            // JavaScript/Node.js syntax errors
-            combinedOutput.includes('Unexpected token') ||
-            combinedOutput.includes('Unexpected identifier') ||
-            // Bun parser errors (JavaScript in HopX runs via Bun)
-            combinedOutput.includes('Unexpected end of file') ||
-            (combinedOutput.includes('Expected') && combinedOutput.includes('but found'));
-          
-          // Indicators of runtime errors (code ran but threw - should NOT throw, return result)
-          const isRuntimeError = 
-            combinedOutput.includes('throw ') ||
-            combinedOutput.includes('raise ') ||
-            combinedOutput.includes('Traceback (most recent call last)') ||
-            (combinedOutput.includes('Error:') && !combinedOutput.includes('SyntaxError')) ||
-            (combinedOutput.includes('Exception:') && !combinedOutput.includes('SyntaxError'));
-
-          // Throw for syntax errors (unless it looks like a runtime error)
-          if (hasSyntaxError && !isRuntimeError) {
-            throw new Error(`Syntax error: ${(result.stderr || result.stdout || '').trim()}`);
-          }
-
-          // For non-zero exit codes with empty output, this indicates a parse failure
-          // that couldn't produce any output - throw as a syntax error
-          // Note: HopX SDK returns exit_code (snake_case) in ExecutionResult
-          if (result.exit_code !== 0 && !result.stdout && !result.stderr) {
-            throw new Error(`Code execution failed with exit code ${result.exit_code}`);
-          }
-
-          return {
-            output,
-            exitCode: result.exit_code,
-            language: effectiveRuntime
-          };
-        } catch (error) {
-          // Re-throw syntax errors
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `HopX execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
-
-      /**
        * Execute a shell command in the sandbox
        * 
        * Uses sandbox.commands.run() to execute shell commands.
@@ -334,7 +248,9 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           }
       
           // Execute command using sandbox.commands.run()
-          const result = await sandbox.commands.run(fullCommand);
+          const result = await sandbox.commands.run(fullCommand, {
+            timeout: options?.timeout ? Math.ceil(options.timeout / 1000) : undefined,
+          });
       
           return {
             stdout: result.stdout || '',
@@ -376,7 +292,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           return {
             id: sandbox.sandboxId,
             provider: 'hopx',
-            runtime: 'python', // HopX default runtime
             status: (info.status as 'running' | 'stopped' | 'error') || 'running',
             createdAt: info.createdAt ? new Date(info.createdAt) : new Date(),
             timeout: info.timeoutSeconds ? info.timeoutSeconds * 1000 : 300000,
@@ -392,7 +307,6 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           return {
             id: sandbox.sandboxId,
             provider: 'hopx',
-            runtime: 'python',
             status: 'running',
             createdAt: new Date(),
             timeout: 300000,
@@ -495,4 +409,3 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
 
 // Export HopX sandbox type for explicit typing
 export type { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
-

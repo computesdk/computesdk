@@ -1,5 +1,152 @@
 # @computesdk/namespace
 
+## 1.6.15
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
+## 1.6.14
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
+## 1.6.13
+
+### Patch Changes
+
+- 92b93da: Use Namespace's managed `builtin:base` image when no sandbox image is provided.
+
+## 1.6.12
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 1.6.11
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
+## 1.6.10
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
+## 1.6.9
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+
+## 1.6.8
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+  - @computesdk/provider@2.0.0
+
+## 1.6.7
+
+### Patch Changes
+
+- Updated dependencies [3ef4817]
+- Updated dependencies [371f667]
+  - @computesdk/provider@1.4.0
+  - computesdk@3.0.0
+
+## 1.6.6
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+
+## 1.6.5
+
+### Patch Changes
+
+- 7c53d28: Add `buildShellCommand` utility to unify shell command building across providers
+
+  Centralizes cwd/env handling into a single `buildShellCommand` function in
+  `@computesdk/provider`, fixing bugs where env vars didn't work with cwd set
+  (docker, sprites, hopx) and where values weren't properly quoted (namespace,
+  sprites, hopx). All shell-based providers now use the shared utility.
+
+- Updated dependencies [7c53d28]
+  - @computesdk/provider@1.2.0
+
+## 1.6.4
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.6.4
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.6.4
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.6.3
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
+## 1.6.3
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
+## 1.6.2
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+  - @computesdk/provider@1.0.32
+
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+  - @computesdk/provider@1.0.29
+
 ## 1.5.0
 
 ### Minor Changes

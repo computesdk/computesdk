@@ -5,10 +5,10 @@
  * Reduces ~400 lines of boilerplate to ~100 lines of core logic.
  */
 
-import { Runloop } from "@runloop/api-client";
-import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import { RunloopSDK, type Runloop } from "@runloop/api-client";
+import { defineProvider } from "@computesdk/provider";
+import { posix as posixPath } from "node:path";
 import type {
-  CodeResult,
   CommandResult,
   SandboxInfo,
   CreateSnapshotOptions,
@@ -18,14 +18,19 @@ import type {
 import type {
   CreateSandboxOptions,
   FileEntry,
-  Runtime,
-  SandboxStatus,
-  Sandbox,
+  Snapshot,
 } from "computesdk";
 
 // Define Runloop-specific types
-type RunloopSnapshot = Runloop.DevboxSnapshotView;
 type RunloopTemplate = Runloop.BlueprintView;
+type RunloopSandbox = Runloop.DevboxView & { client: RunloopSDK };
+type RunloopCreateWaitOptions = Parameters<RunloopSDK["api"]["devboxes"]["createAndAwaitRunning"]>[1];
+
+type CommandRunner = (
+  sandbox: RunloopSandbox,
+  command: string,
+  options?: RunCommandOptions
+) => Promise<CommandResult>;
 
 /**
  * Runloop-specific configuration options
@@ -35,6 +40,392 @@ export interface RunloopConfig {
   apiKey?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+}
+
+const clientCache = new WeakMap<RunloopConfig, RunloopSDK>();
+
+function resolveApiKey(config: RunloopConfig): string {
+  return (
+    config.apiKey ||
+    (typeof process !== "undefined" && process.env?.RUNLOOP_API_KEY) ||
+    ""
+  );
+}
+
+function getRunloopClient(config: RunloopConfig): RunloopSDK {
+  const apiKey = resolveApiKey(config);
+  if (!apiKey) {
+    throw new Error(
+      `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`
+    );
+  }
+
+  const cached = clientCache.get(config);
+  if (cached) return cached;
+
+  const client = new RunloopSDK({
+    bearerToken: apiKey,
+    http2: true,
+  });
+  clientCache.set(config, client);
+  return client;
+}
+
+function longPollOptions<TOptions>(timeoutMs?: number): TOptions | undefined {
+  return timeoutMs ? ({ longPoll: { timeoutMs } } as TOptions) : undefined;
+}
+
+function quotePosixShellToken(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function assertSafeRemovalPath(value: string): void {
+  const normalized = posixPath.normalize(value);
+  if (value.length === 0 || normalized === "/" || normalized === "." ||
+      normalized === ".." || normalized.startsWith("../")) {
+    throw new Error(`Refusing to remove unsafe path: ${JSON.stringify(value)}`);
+  }
+}
+
+function buildCommand(command: string, options?: RunCommandOptions): string {
+  let fullCommand = command;
+
+  if (options?.env && Object.keys(options.env).length > 0) {
+    const envPrefix = Object.entries(options.env)
+      .map(([key, value]) => {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+          throw new Error(`Invalid environment variable name: ${JSON.stringify(key)}`);
+        }
+        return `${key}=${quotePosixShellToken(String(value))}`;
+      })
+      .join(" ");
+    fullCommand = `${envPrefix} ${fullCommand}`;
+  }
+
+  if (options?.cwd) {
+    fullCommand = `cd -- ${quotePosixShellToken(options.cwd)} && ${fullCommand}`;
+  }
+
+  if (options?.background) {
+    fullCommand = `nohup sh -lc ${quotePosixShellToken(fullCommand)} >/dev/null 2>&1 &`;
+  }
+
+  return fullCommand;
+}
+
+function isHttpNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null &&
+    "status" in error && error.status === 404;
+}
+
+const READDIR_ENTRY_SCRIPT = [
+  "for entry; do",
+  '  name=${entry##*/}',
+  '  if [ -d "$entry" ]; then type=directory; else type=file; fi',
+  '  encoded=$(printf %s "$name" | base64 | tr -d "\\n")',
+  '  size=$(stat -c %s -- "$entry") || exit',
+  '  modified=$(stat -c %Y -- "$entry") || exit',
+  '  printf "%s\\t%s\\t%s\\t%s\\n" "$encoded" "$type" "$size" "$modified"',
+  "done",
+].join("\n");
+
+function buildReaddirCommand(path: string): string {
+  const findRoot = path.startsWith("-") ? `./${path}` : path;
+  return [
+    `find -- ${quotePosixShellToken(findRoot)} -mindepth 1 -maxdepth 1 -exec sh -c`,
+    quotePosixShellToken(READDIR_ENTRY_SCRIPT),
+    "sh {} +",
+  ].join(" ");
+}
+
+function parseReaddirOutput(stdout: string): FileEntry[] {
+  return stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [encodedName, type, rawSize, rawModified] = line.split("\t");
+      const size = Number(rawSize);
+      const modifiedSeconds = Number(rawModified);
+      if (!encodedName || (type !== "file" && type !== "directory") ||
+          !Number.isFinite(size) || !Number.isFinite(modifiedSeconds)) {
+        throw new Error(`Malformed Runloop directory entry: ${JSON.stringify(line)}`);
+      }
+      return {
+        name: Buffer.from(encodedName, "base64").toString("utf8"),
+        type,
+        size,
+        modified: new Date(modifiedSeconds * 1000),
+      };
+    });
+}
+
+function mapStatus(status: Runloop.DevboxView["status"]): SandboxInfo["status"] {
+  switch (status) {
+    case "scheduled":
+    case "queued":
+    case "provisioning":
+    case "initializing":
+    case "resuming":
+    case "running":
+      return "running";
+    case "suspending":
+    case "suspended":
+    case "shutdown":
+      return "stopped";
+    case "failure":
+      return "error";
+  }
+}
+
+async function collectPaginated<T>(
+  source: AsyncIterable<T>,
+  limit?: number,
+): Promise<T[]> {
+  if (limit !== undefined && limit <= 0) return [];
+
+  const results: T[] = [];
+  for await (const item of source) {
+    results.push(item);
+    if (limit !== undefined && results.length >= limit) break;
+  }
+  return results;
+}
+
+function normalizeSnapshot(snapshot: Runloop.DevboxSnapshotView): Snapshot {
+  return {
+    id: snapshot.id,
+    provider: "runloop",
+    createdAt: new Date(snapshot.create_time_ms),
+    metadata: {
+      name: snapshot.name ?? null,
+      sourceDevboxId: snapshot.source_devbox_id,
+      sourceBlueprintId: snapshot.source_blueprint_id ?? null,
+      sizeBytes: snapshot.size_bytes ?? null,
+      commitMessage: snapshot.commit_message ?? null,
+      userMetadata: snapshot.metadata ?? {},
+    },
+  };
+}
+
+function emitMissingOutput(
+  emitted: string,
+  complete: string,
+  callback: ((chunk: string) => void) | undefined,
+): void {
+  if (!callback || !complete || emitted.includes(complete)) return;
+  if (!emitted) {
+    callback(complete);
+  } else if (complete.startsWith(emitted)) {
+    callback(complete.slice(emitted.length));
+  } else if (!complete.includes(emitted)) {
+    callback(complete);
+  }
+}
+
+async function streamExecutionOutput(
+  openStream: () => Promise<AsyncIterable<{ output: string }>>,
+  onChunk: (chunk: string) => void,
+  signal: AbortSignal,
+  isActive: () => boolean,
+): Promise<void> {
+  try {
+    const stream = await openStream();
+    for await (const chunk of stream) {
+      if (signal.aborted) break;
+      if (isActive()) onChunk(chunk.output);
+    }
+  } catch {
+    // Streaming is best effort, matching the native SDK callback behavior.
+  }
+}
+
+async function bestEffortKillExecution(
+  sandbox: RunloopSandbox,
+  executionId: string,
+): Promise<void> {
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      sandbox.client.api.devboxes.executions.kill(
+        sandbox.id,
+        executionId,
+        { kill_process_group: true },
+      ).catch(() => undefined),
+      new Promise<void>((resolve) => {
+        killTimer = setTimeout(resolve, 1_000);
+      }),
+    ]);
+  } finally {
+    if (killTimer) clearTimeout(killTimer);
+  }
+}
+
+async function executeCommand(
+  sandbox: RunloopSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const startTime = Date.now();
+  const devbox = sandbox.client.devbox.fromId(sandbox.id);
+  const fullCommand = buildCommand(command, options);
+  let callbacksActive = true;
+  const executionParams = {
+    ...(options?.onStdout
+      ? { stdout: (chunk: string) => callbacksActive && options.onStdout?.(chunk) }
+      : {}),
+    ...(options?.onStderr
+      ? { stderr: (chunk: string) => callbacksActive && options.onStderr?.(chunk) }
+      : {}),
+  };
+
+  const toCommandResult = async (result: Awaited<ReturnType<typeof devbox.cmd.exec>>): Promise<CommandResult> => ({
+    stdout: await result.stdout(),
+    stderr: await result.stderr(),
+    exitCode: result.exitCode ?? -1,
+    durationMs: Date.now() - startTime,
+  });
+
+  if (options?.timeout === undefined) {
+    try {
+      const result = await devbox.cmd.exec(fullCommand, executionParams);
+      return await toCommandResult(result);
+    } finally {
+      callbacksActive = false;
+    }
+  }
+
+  const timeoutMs = options.timeout;
+  const deadline = startTime + Math.max(0, timeoutMs);
+  const monitorController = new AbortController();
+  let streamedStdout = "";
+  let streamedStderr = "";
+  let execution: Awaited<ReturnType<typeof devbox.cmd.execAsync>> | undefined;
+  let resultPromise: ReturnType<Awaited<ReturnType<typeof devbox.cmd.execAsync>>["result"]> | undefined;
+  let streamPromises: Promise<void>[] = [];
+  let executionCompleted = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => {
+      resolve("timeout");
+      monitorController.abort();
+    }, Math.max(0, deadline - Date.now()));
+  });
+  const timeoutResult = (): CommandResult => ({
+    stdout: streamedStdout,
+    stderr: streamedStderr,
+    exitCode: 124,
+    durationMs: Date.now() - startTime,
+  });
+
+  try {
+    // Keep creation alive after the caller's deadline. Aborting this non-idempotent
+    // request can hide an execution that the server already accepted, leaving no ID
+    // available for cleanup. The caller still returns at the deadline; if creation
+    // resolves later, the timeout branch below kills the remote process group.
+    const executionPromise = devbox.cmd.execAsync(fullCommand);
+    const creationOutcome = await Promise.race([
+      executionPromise.then((createdExecution) => ({ execution: createdExecution })),
+      timeoutPromise,
+    ]);
+
+    if (creationOutcome === "timeout") {
+      callbacksActive = false;
+      void executionPromise
+        .then((lateExecution) => bestEffortKillExecution(sandbox, lateExecution.executionId))
+        .catch(() => undefined);
+      return timeoutResult();
+    }
+
+    const activeExecution = creationOutcome.execution;
+    execution = activeExecution;
+    streamPromises = [
+      streamExecutionOutput(
+        () => sandbox.client.api.devboxes.executions.streamStdoutUpdates(
+          sandbox.id,
+          activeExecution.executionId,
+          {},
+          { signal: monitorController.signal },
+        ),
+        (chunk) => {
+          streamedStdout += chunk;
+          options.onStdout?.(chunk);
+        },
+        monitorController.signal,
+        () => callbacksActive,
+      ),
+      streamExecutionOutput(
+        () => sandbox.client.api.devboxes.executions.streamStderrUpdates(
+          sandbox.id,
+          activeExecution.executionId,
+          {},
+          { signal: monitorController.signal },
+        ),
+        (chunk) => {
+          streamedStderr += chunk;
+          options.onStderr?.(chunk);
+        },
+        monitorController.signal,
+        () => callbacksActive,
+      ),
+    ];
+    resultPromise = activeExecution.result({ signal: monitorController.signal });
+    const outcome = await Promise.race([
+      resultPromise.then((result) => ({ result })),
+      timeoutPromise,
+    ]);
+
+    if (outcome === "timeout") {
+      callbacksActive = false;
+      monitorController.abort();
+      await Promise.all([
+        bestEffortKillExecution(sandbox, execution.executionId),
+        Promise.allSettled([resultPromise, ...streamPromises]),
+      ]);
+      return timeoutResult();
+    }
+
+    executionCompleted = true;
+    monitorController.abort();
+    await Promise.allSettled(streamPromises);
+    const commandResult = await toCommandResult(outcome.result);
+    emitMissingOutput(streamedStdout, commandResult.stdout, options.onStdout);
+    emitMissingOutput(streamedStderr, commandResult.stderr, options.onStderr);
+    return commandResult;
+  } catch (error) {
+    callbacksActive = false;
+    monitorController.abort();
+    await Promise.all([
+      executionCompleted || !execution
+        ? Promise.resolve()
+        : bestEffortKillExecution(sandbox, execution.executionId),
+      Promise.allSettled([
+        ...(resultPromise ? [resultPromise] : []),
+        ...streamPromises,
+      ]),
+    ]);
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+    callbacksActive = false;
+    monitorController.abort();
+  }
+}
+
+async function runCommandWithErrors(
+  sandbox: RunloopSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  try {
+    return await executeCommand(sandbox, command, options);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Syntax error")) {
+      throw error;
+    }
+    throw new Error(
+      `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /**
@@ -87,63 +478,71 @@ export interface CreateBlueprintTemplateOptions {
  * Create a Runloop provider instance using the factory pattern
  */
 export const runloop = defineProvider<
-  Runloop.DevboxView,         // TSandbox
-  RunloopConfig,              // TConfig
-  RunloopTemplate,            // TTemplate 
-  RunloopSnapshot             // TSnapshot
+  RunloopSandbox,
+  RunloopConfig,
+  RunloopTemplate,
+  Snapshot
 >({
   name: "runloop",
   methods: {
     sandbox: {
-      // Collection operations (map to compute.sandbox.*)
       create: async (config: RunloopConfig, options?: CreateSandboxOptions) => {
-        // Validate API key
-        const apiKey =
-          config.apiKey ||
-          (typeof process !== "undefined" && process.env?.RUNLOOP_API_KEY) ||
-          "";
-
-        if (!apiKey) {
-          throw new Error(
-            `Missing Runloop API key. Provide 'apiKey' in config or set RUNLOOP_API_KEY environment variable. Get your API key from https://runloop.ai/`
-          );
-        }
-
         const timeout = config.timeout;
 
         try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
+          const client = getRunloopClient(config);
+
+          const {
+            timeout: optTimeout,
+            envs,
+            name,
+            metadata,
+            templateId,
+            snapshotId,
+            sandboxId: optSandboxId,
+            ports: _ports,
+            namespace: _namespace,
+            directory: _directory,
+            launch_parameters: optLaunchParameters,
+            ...providerOptions
+          } = options || {};
+
+          const effectiveTimeout = optTimeout ?? timeout;
+          const keepAliveSeconds = effectiveTimeout !== undefined
+            ? Math.ceil(effectiveTimeout / 1000)
+            : 1800;
 
           let devboxParams: Runloop.DevboxCreateParams = {
             launch_parameters: {
-              keep_alive_time_seconds: timeout || options?.timeout || 1800,
-            },
-            name: options?.sandboxId,
-            metadata: options?.metadata,
-            environment_variables: options?.envs,
+              keep_alive_time_seconds: keepAliveSeconds,
+              ...optLaunchParameters,
+            } as Runloop.DevboxCreateParams["launch_parameters"],
+            name: name || optSandboxId,
+            metadata,
+            environment_variables: envs,
+            ...providerOptions,
           };
 
-          // Use blueprint if specified
-          if (options?.templateId) {
-            const templateId = options?.templateId;
-            // Check template prefix to determine parameter type
-            if (templateId?.startsWith("bpt_")) {
+          // snapshotId is the canonical cross-provider field — map it directly to snapshot_id.
+          // templateId is kept for backwards compatibility: bpt_ prefix → blueprint_id, snp_ prefix → snapshot_id.
+          if (snapshotId) {
+            devboxParams.snapshot_id = snapshotId;
+          } else if (templateId) {
+            if (templateId.startsWith("bpt_")) {
               devboxParams.blueprint_id = templateId;
-            } else if (templateId?.startsWith("snp_")) {
+            } else if (templateId.startsWith("snp_")) {
               devboxParams.snapshot_id = templateId;
-            } else {
-              // empty
             }
           }
 
-          const dbx = await client.devboxes.createAndAwaitRunning(devboxParams);
+          const dbx = await client.api.devboxes.createAndAwaitRunning(
+            devboxParams,
+            longPollOptions<RunloopCreateWaitOptions>(effectiveTimeout),
+          );
 
-          // Create a RunloopSandbox object that contains both devbox and client
-          const runloopSandbox = {
-            ...dbx,  // Spread all DevboxView properties
-            client: client  // Add client for method access
+          const runloopSandbox: RunloopSandbox = {
+            ...dbx,
+            client: client
           };
 
           return {
@@ -152,540 +551,173 @@ export const runloop = defineProvider<
           };
         } catch (error) {
           throw new Error(
-            `Failed to create Runloop devbox: ${error instanceof Error ? error.message : String(error)
-            }`
+            `Failed to create Runloop devbox: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       },
 
       getById: async (config: RunloopConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
         try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          const devbox = await client.devboxes.retrieve(sandboxId);
-
+          const client = getRunloopClient(config);
+          const devbox = await client.api.devboxes.retrieve(sandboxId);
           return {
-            sandbox: devbox,
+            sandbox: { ...devbox, client } as RunloopSandbox,
             sandboxId,
           };
         } catch (error) {
-          // Devbox doesn't exist or can't be accessed
-          return null;
+          if (isHttpNotFound(error)) return null;
+          throw error;
         }
       },
 
       list: async (config: RunloopConfig) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
+        const client = getRunloopClient(config);
+        const devboxes = await collectPaginated(client.api.devboxes.list());
 
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          const response = await client.devboxes.list();
-          const devboxes = response.devboxes || [];
-
-          return devboxes.map((devbox) => ({
-            sandbox: devbox,
-            sandboxId: devbox.id,
-          }));
-        } catch (error) {
-          // Return empty array if listing fails
-          return [];
-        }
+        return devboxes.map((devbox) => ({
+          sandbox: { ...devbox, client } as RunloopSandbox,
+          sandboxId: devbox.id,
+        }));
       },
 
       destroy: async (config: RunloopConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
         try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          await client.devboxes.shutdown(sandboxId);
+          const client = getRunloopClient(config);
+          await client.api.devboxes.shutdown(sandboxId);
         } catch (error) {
-          // Devbox might already be destroyed or doesn't exist
-          // This is acceptable for destroy operations
+          if (!isHttpNotFound(error)) throw error;
         }
       },
 
-      // Instance operations (map to individual Sandbox methods)
-      runCode: async (sandbox: any, code: string, runtime?: Runtime): Promise<CodeResult> => {
-        const startTime = Date.now();
-        const devbox = sandbox;
-        const client = sandbox.client;
+      runCommand: runCommandWithErrors,
 
-        // Auto-detect runtime if not specified
-        const effectiveRuntime: Runtime = runtime || (
-          // Strong Python indicators
-          code.includes('print(') ||
-            code.includes('import ') ||
-            code.includes('def ') ||
-            code.includes('sys.') ||
-            code.includes('json.') ||
-            code.includes('__') ||
-            code.includes('f"') ||
-            code.includes("f'") ||
-            code.includes('raise ')
-            ? 'python'
-            // Default to Node.js for all other cases (including ambiguous)
-            : 'node'
-        ) as Runtime;
+      streamCommand: runCommandWithErrors,
 
-        try {
-
-          // Use base64 encoding for both runtimes for reliability and consistency
-          const encoded = Buffer.from(code).toString('base64');
-
-          let command;
-          if (effectiveRuntime === 'python') {
-            command = `echo "${encoded}" | base64 -d | python3`;
-          } else {
-            command = `echo "${encoded}" | base64 -d | node`;
-          }
-
-          // Execute code using Runloop's executeAsync
-          const execution = await client.devboxes.executeAsync(devbox.id, {
-            command: command,
-          });
-
-          const executionResult = await client.devboxes.executions.awaitCompleted(
-            devbox.id,
-            execution.execution_id
-          );
-
-          // Check for syntax errors and throw them (similar to Vercel behavior)
-          if (executionResult.exit_status !== 0 && executionResult.stderr) {
-            // Check for common syntax error patterns
-            if (executionResult.stderr.includes('SyntaxError') ||
-              executionResult.stderr.includes('invalid syntax') ||
-              executionResult.stderr.includes('Unexpected token') ||
-              executionResult.stderr.includes('Unexpected identifier')) {
-              throw new Error(`Syntax error: ${executionResult.stderr.trim()}`);
-            }
-          }
-
-          return {
-            output: (executionResult.stdout || "") + (executionResult.stderr || ""),
-            exitCode: executionResult.exit_status || 0,
-            language: effectiveRuntime,
-          };
-        } catch (error) {
-          // Handle Runloop execution errors
-          if (error instanceof Error && error.message === 'exit status 1') {
-            const actualStderr = (error as any)?.result?.stderr || '';
-            const isSyntaxError = actualStderr.includes('SyntaxError');
-
-            if (isSyntaxError) {
-              // For syntax errors, throw
-              const syntaxErrorLine = actualStderr.split('\n').find((line: string) => line.includes('SyntaxError')) || 'SyntaxError: Invalid syntax in code';
-              throw new Error(`Syntax error: ${syntaxErrorLine}`);
-            } else {
-              // For runtime errors, return a result instead of throwing
-              return {
-                output: actualStderr || 'Error: Runtime error occurred during execution',
-                exitCode: 1,
-                language: effectiveRuntime,
-              };
-            }
-          }
-
-          // Re-throw syntax errors
-          if (error instanceof Error && error.message.includes('Syntax error')) {
-            throw error;
-          }
-          throw new Error(
-            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      },
-
-      runCommand: async (
-        sandbox: any,
-        command: string,
-        options?: RunCommandOptions
-      ): Promise<CommandResult> => {
-        const startTime = Date.now();
-        const devbox = sandbox;
-        const client = sandbox.client;
-
-        try {
-          // Build the full command with options
-          let fullCommand = command;
-
-          // Handle environment variables
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-
-          // Handle working directory
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
-
-          // Handle background execution
-          if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          }
-
-          const execution = await client.devboxes.executeAsync(devbox.id, {
-            command: fullCommand,
-          });
-
-          const executionResult =
-            await client.devboxes.executions.awaitCompleted(
-              devbox.id,
-              execution.execution_id
-            );
-
-          return {
-            stdout: executionResult.stdout || "",
-            stderr: executionResult.stderr || "",
-            exitCode: executionResult.exit_status || 0,
-            durationMs: Date.now() - startTime,
-          };
-        } catch (error) {
-          // Re-throw syntax errors
-          if (
-            error instanceof Error &&
-            error.message.includes("Syntax error")
-          ) {
-            throw error;
-          }
-          throw new Error(
-            `Runloop execution failed: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      },
-
-      getInfo: async (sandbox): Promise<SandboxInfo> => {
-        const devbox = sandbox;
+      getInfo: async (sandbox: RunloopSandbox): Promise<SandboxInfo> => {
+        const devbox = await sandbox.client.api.devboxes.retrieve(sandbox.id);
+        const keepAliveSecs = devbox.launch_parameters?.keep_alive_time_seconds;
 
         return {
           id: devbox.id || "runloop-unknown",
           provider: "runloop",
-          runtime: "node" as Runtime, // Runloop supports multiple runtimes, defaulting to node
-          status: devbox.status as SandboxStatus,
+          status: mapStatus(devbox.status),
           createdAt: new Date(devbox.create_time_ms || Date.now()),
-          timeout: devbox.launch_parameters.keep_alive_time_seconds || 300000,
+          // keep_alive_time_seconds is in seconds; SandboxInfo.timeout is in milliseconds
+          timeout: keepAliveSecs ? keepAliveSecs * 1000 : 300000,
           metadata: {
             runloopDevboxId: devbox.id,
             templateId: devbox.blueprint_id || devbox.snapshot_id,
+            runtime: 'node',
             ...devbox.metadata,
           },
         };
       },
 
       getUrl: async (
-        sandbox: any,
+        sandbox: RunloopSandbox,
         options: { port: number }
       ): Promise<string> => {
         const devbox = sandbox;
         const client = sandbox.client;
 
         try {
-          const tunnel = await client.devboxes.createTunnel(devbox.id, {
-            port: options.port,
-          });
-
-          return tunnel.url;
+          const tunnel = await client.api.devboxes.enableTunnel(devbox.id);
+          return `https://${options.port}-${tunnel.tunnel_key}.tunnel.runloop.ai`;
         } catch (error) {
           throw new Error(
-            `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)
-            }`
+            `Failed to get Runloop URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       },
 
-      // Optional filesystem methods - using Runloop's file operations
       filesystem: {
-        readFile: async (sandbox: any, path: string, runCommand: any): Promise<string> => {
-          try {
-            const result = await runCommand(sandbox, `cat "${path}"`);
-            if (result.exitCode !== 0) {
-              throw new Error(`File not found or unreadable: ${result.stderr}`);
-            }
-            return result.stdout;
-          } catch (error) {
-            throw new Error(
-              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)
-              }`
-            );
-          }
+        readFile: async (sandbox: RunloopSandbox, path: string): Promise<string> => {
+          return sandbox.client.devbox.fromId(sandbox.id).file.read({ file_path: path });
         },
 
-        writeFile: async (
-          sandbox: any,
-          path: string,
-          content: string,
-          runCommand: any
-        ): Promise<void> => {
-          try {
-            // Use command-based approach for file writing since API writeFileContents may have issues
-            const encoded = Buffer.from(content).toString('base64');
-            const result = await runCommand(sandbox, `sh -c 'echo "${encoded}" | base64 -d > "${path}"'`);
-
-            if (result.exitCode !== 0) {
-              throw new Error(`Command failed: ${result.stderr}`);
-            }
-          } catch (error) {
-            throw new Error(
-              `Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)
-              }`
-            );
-          }
-        },
-
-        mkdir: async (
-          sandbox: any,
-          path: string,
-          runCommand: any
-        ): Promise<void> => {
-          const result = await runCommand(sandbox, `mkdir -p "${path}"`);
-          if (result.exitCode !== 0) {
-            throw new Error(
-              `Failed to create directory ${path}: ${result.stderr}`
-            );
-          }
-        },
-
-        readdir: async (
-          sandbox: any,
-          path: string,
-          runCommand: any
-        ): Promise<FileEntry[]> => {
-          const result = await runCommand(sandbox, `ls -la "${path}"`);
-
-          if (result.exitCode !== 0) {
-            throw new Error(
-              `Failed to list directory ${path}: ${result.stderr}`
-            );
-          }
-
-          const lines = (result.stdout || "")
-            .split("\n")
-            .filter((line: string) => line.trim() && !line.startsWith("total"));
-
-          return lines.map((line: string) => {
-            const parts = line.trim().split(/\s+/);
-            const name = parts[parts.length - 1];
-            const isDirectory = line.startsWith("d");
-
-            return {
-              name,
-              type: isDirectory ? 'directory' as const : 'file' as const,
-              size: parseInt(parts[4]) || 0,
-              modified: new Date(),
-            };
+        writeFile: async (sandbox: RunloopSandbox, path: string, content: string): Promise<void> => {
+          const result = await sandbox.client.devbox.fromId(sandbox.id).file.write({
+            file_path: path,
+            contents: content,
           });
+          if (result.exit_status !== 0) {
+            throw new Error(
+              `Failed to write file ${path}: ${result.stderr || `exit ${result.exit_status}`}`,
+            );
+          }
         },
 
-        exists: async (
-          sandbox: any,
-          path: string,
-          runCommand: any
-        ): Promise<boolean> => {
-          const result = await runCommand(sandbox, `test -e "${path}"`);
+        mkdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          const result = await runCommand(sandbox, `mkdir -p -- ${quotePosixShellToken(path)}`);
+          if (result.exitCode !== 0) throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
+        },
+
+        readdir: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
+          const result = await runCommand(sandbox, buildReaddirCommand(path));
+          if (result.exitCode !== 0) throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
+
+          return parseReaddirOutput(result.stdout || "");
+        },
+
+        exists: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
+          const result = await runCommand(sandbox, `test -e ${quotePosixShellToken(path)}`);
           return result.exitCode === 0;
         },
 
-        remove: async (
-          sandbox: any,
-          path: string,
-          runCommand: any
-        ): Promise<void> => {
-          const result = await runCommand(sandbox, `rm -rf "${path}"`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to remove ${path}: ${result.stderr}`);
-          }
+        remove: async (sandbox: RunloopSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          assertSafeRemovalPath(path);
+          const result = await runCommand(sandbox, `rm -rf -- ${quotePosixShellToken(path)}`);
+          if (result.exitCode !== 0) throw new Error(`Failed to remove ${path}: ${result.stderr}`);
         },
       },
 
-      // Provider-specific typed getInstance method
-      getInstance: (sandbox): Runloop.DevboxView => {
-        return sandbox;
-      },
+      getInstance: (sandbox: RunloopSandbox): RunloopSandbox => sandbox,
     },
 
-    // Template management methods using the new factory pattern
     template: {
-      create: async (
-        config: RunloopConfig,
-        options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams
-      ) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-        if (!apiKey) {
-          throw new Error(
-            "Missing Runloop API key for blueprint template creation"
-          );
-        }
-
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          const blueprint = await client.blueprints.create(options);
-          return blueprint;
-        } catch (error) {
-          throw new Error(
-            `Failed to create blueprint template: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+      create: async (config: RunloopConfig, options: CreateBlueprintTemplateOptions | Runloop.BlueprintCreateParams) => {
+        const client = getRunloopClient(config);
+        return client.api.blueprints.create(options);
       },
 
       list: async (config: RunloopConfig, options?: { limit?: number }) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-        if (!apiKey) {
-          throw new Error(
-            "Missing Runloop API key for listing blueprint templates"
-          );
-        }
-
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          const listParams: any = {};
-          if (options?.limit) {
-            listParams.limit = options.limit;
-          }
-
-          const response = await client.blueprints.list(listParams);
-          return response.blueprints || [];
-        } catch (error) {
-          throw new Error(
-            `Failed to list blueprint templates: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = getRunloopClient(config);
+        const listParams: Runloop.BlueprintListParams = {};
+        if (options?.limit !== undefined) listParams.limit = options.limit;
+        return collectPaginated(client.api.blueprints.list(listParams), options?.limit);
       },
 
       delete: async (config: RunloopConfig, blueprintId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-        if (!apiKey) {
-          throw new Error(
-            "Missing Runloop API key for blueprint template deletion"
-          );
-        }
-
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          await client.blueprints.delete(blueprintId);
-        } catch (error) {
-          throw new Error(
-            `Failed to delete blueprint template ${blueprintId}: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = getRunloopClient(config);
+        await client.api.blueprints.delete(blueprintId);
       },
     },
 
-    // Snapshot management methods using the new factory pattern
     snapshot: {
-      create: async (
-        config: RunloopConfig,
-        sandboxId: string,
-        options?: CreateSnapshotOptions
-      ) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for snapshot creation");
-        }
-
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          const snapshotParams: any = {};
-          if (options?.name) {
-            snapshotParams.name = options.name;
-          }
-          if (options?.metadata) {
-            snapshotParams.metadata = options.metadata;
-          }
-
-          const snapshot = await client.devboxes.snapshotDisk(
-            sandboxId,
-            snapshotParams
-          );
-          return snapshot;
-        } catch (error) {
-          throw new Error(
-            `Failed to create snapshot for sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+      create: async (config: RunloopConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
+        const client = getRunloopClient(config);
+        const snapshotParams: Runloop.DevboxSnapshotDiskParams = {};
+        if (options?.name) snapshotParams.name = options.name;
+        if (options?.metadata) snapshotParams.metadata = options.metadata;
+        const snapshot = await client.api.devboxes.snapshotDisk(sandboxId, snapshotParams);
+        return normalizeSnapshot(snapshot);
       },
 
-      list: async (
-        config: RunloopConfig,
-        options?: ListSnapshotsOptions
-      ) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for listing snapshots");
-        }
-
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          const listParams: any = {};
-          if (options?.limit) {
-            listParams.limit = options.limit;
-          }
-
-          const response = await client.devboxes.listDiskSnapshots(listParams);
-          return response.snapshots || [];
-        } catch (error) {
-          throw new Error(
-            `Failed to list snapshots: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+      list: async (config: RunloopConfig, options?: ListSnapshotsOptions) => {
+        const client = getRunloopClient(config);
+        const listParams: Runloop.DevboxListDiskSnapshotsParams = {};
+        if (options?.limit !== undefined) listParams.limit = options.limit;
+        if (options?.sandboxId) listParams.devbox_id = options.sandboxId;
+        const snapshots = await collectPaginated(
+          client.api.devboxes.listDiskSnapshots(listParams),
+          options?.limit,
+        );
+        return snapshots.map(normalizeSnapshot);
       },
 
       delete: async (config: RunloopConfig, snapshotId: string) => {
-        const apiKey = config.apiKey || process.env.RUNLOOP_API_KEY!;
-
-        if (!apiKey) {
-          throw new Error("Missing Runloop API key for snapshot deletion");
-        }
-
-        try {
-          const client = new Runloop({
-            bearerToken: apiKey,
-          });
-
-          await client.devboxes.deleteDiskSnapshot(snapshotId);
-        } catch (error) {
-          throw new Error(
-            `Failed to delete snapshot ${snapshotId}: ${error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        const client = getRunloopClient(config);
+        await client.api.devboxes.deleteDiskSnapshot(snapshotId);
       },
     },
   },

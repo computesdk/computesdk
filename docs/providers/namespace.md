@@ -1,56 +1,51 @@
+---
+description: >-
+  Namespace provider for ComputeSDK - Deploy and manage containerized sandboxes
+  on Namespace's cloud infrastructure.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Namespace
 
-## Deploy sandboxes on Namespace with ComputeSDK
+Namespace provider for ComputeSDK - Deploy and manage containerized sandboxes on Namespace's cloud infrastructure.
 
-Deploy and manage containerized sandboxes on Namespace's cloud infrastructure with ComputeSDK.
-
----
-
-Namespace is a cloud compute platform that provides ephemeral container instances. With ComputeSDK's Namespace provider, you can create isolated sandbox environments without managing infrastructure.
-
----
-
-**Prerequisites**:
-
-- A <a href="https://console.computesdk.com/register" target="_blank">ComputeSDK account</a> with an API key
-- A <a href="https://namespace.so/" target="_blank">Namespace account</a> and `nsc token` (i.e. API key)
-- Node.js 18+ installed
-
----
-
-## Using ComputeSDK with Namespace
----
-
-### Step 1: Install ComputeSDK
-
-Install the ComputeSDK package in your application:
+## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/namespace
 ```
 
----
-
-### Step 2: Configure environment variables
-
-Add your credentials to a `.env` file:
+Add your Namespace credentials to a `.env` file:
 
 ```bash
-# ComputeSDK credentials
-COMPUTESDK_API_KEY=your_computesdk_api_key
-
-# Namespace credentials
 NSC_TOKEN=your_namespace_nsc_token
 ```
 
----
-
-### Step 3: Create and manage sandboxes
-
-ComputeSDK auto-detects Namespace as your provider from the environment variables:
+## Usage
 
 ```typescript
-import { compute } from 'computesdk';
+import { namespace } from '@computesdk/namespace';
+
+const compute = namespace({
+  token: process.env.NSC_TOKEN,
+});
 
 // Create a new sandbox
 const sandbox = await compute.sandbox.create();
@@ -64,46 +59,42 @@ console.log(`Sandbox status: ${info.status}`);
 await sandbox.destroy();
 ```
 
-Your sandboxes are now running on Namespace's cloud infrastructure!
+### Customizing Instance Resources
 
----
-
-### Explicit provider configuration (optional)
-
-If you prefer to configure the provider programmatically—useful for multi-provider setups or dynamic configuration—pass credentials directly:
+You can customize the compute resources allocated to your sandboxes:
 
 ```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'namespace',
-   namespace: {
-     token: process.env.NSC_TOKEN
-   }
+const compute = namespace({
+  token: process.env.NSC_TOKEN,
+  virtualCpu: 4,
+  memoryMegabytes: 8192,
 });
 
 const sandbox = await compute.sandbox.create();
 ```
 
----
+### Configuration Reference
 
-### Configuration reference
+| Option                | Environment Variable | Required | Description                                                                 |
+| --------------------- | -------------------- | -------- | --------------------------------------------------------------------------- |
+| `token`               | `NSC_TOKEN`          | Yes\*    | Your Namespace API token                                                    |
+| `tokenFile`           | `NSC_TOKEN_FILE`     | Yes\*    | Path to a JSON token file (e.g. from `nsc login`) containing `bearer_token` |
+| `virtualCpu`          | -                    | No       | Number of virtual CPU cores (default: 2)                                    |
+| `memoryMegabytes`     | -                    | No       | Memory allocation in MB (default: 4096)                                     |
+| `machineArch`         | -                    | No       | Machine architecture (default: 'amd64')                                     |
+| `os`                  | -                    | No       | Operating system (default: 'linux')                                         |
+| `documentedPurpose`   | -                    | No       | Documented purpose for the instance                                         |
+| `destroyReason`       | -                    | No       | Reason recorded when destroying instances (default: 'ComputeSDK cleanup')   |
+| `targetContainerName` | -                    | No       | Target container name for command execution (default: 'main-container')     |
 
-The Namespace provider accepts the following configuration options:
-
-| Option | Environment Variable | Required | Description |
-|--------|---------------------|----------|-------------|
-| `token` | `NSC_TOKEN` | Yes | Your Namespace API token |
-| `virtualCpu` | - | No | Number of virtual CPU cores (default: 2) |
-| `memoryMegabytes` | - | No | Memory allocation in MB (default: 4096) |
-| `machineArch` | - | No | Machine architecture (default: 'amd64') |
-| `os` | - | No | Operating system (default: 'linux') |
+\* Provide either `token` (or `NSC_TOKEN`) or `tokenFile` (or `NSC_TOKEN_FILE`).
 
 ```typescript
 interface NamespaceConfig {
   /** Namespace API token - if not provided, uses NSC_TOKEN env var */
   token?: string;
+  /** Path to a JSON token file (e.g. from `nsc login`) containing bearer_token - falls back to NSC_TOKEN_FILE */
+  tokenFile?: string;
   /** Virtual CPU cores for the instance (default: 2) */
   virtualCpu?: number;
   /** Memory in megabytes for the instance (default: 4096) */
@@ -112,35 +103,17 @@ interface NamespaceConfig {
   machineArch?: string;
   /** Operating system (default: 'linux') */
   os?: string;
+  /** Documented purpose for the instance */
+  documentedPurpose?: string;
+  /** Reason for destroying instances (default: 'ComputeSDK cleanup') */
+  destroyReason?: string;
+  /** Target container name for command execution (default: 'main-container') */
+  targetContainerName?: string;
 }
 ```
 
----
+## Next Steps
 
-### Customizing instance resources
-
-You can customize the compute resources allocated to your sandboxes:
-
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'namespace',
-   namespace: {
-     token: process.env.NSC_TOKEN,
-     virtualCpu: 4,
-     memoryMegabytes: 8192
-   }
-});
-
-const sandbox = await compute.sandbox.create();
-```
-
----
-
-## Next steps
-
-- Learn about [sandbox lifecycle management](/docs/reference/computesandbox)
-- Explore [Sandbox methods](/docs/reference/sandbox)
-- View the [@computesdk/namespace package](https://github.com/computesdk/computesdk/blob/main/packages/namespace/README.md)
+* Learn about [sandbox lifecycle management](../reference/compute.sandbox)
+* Explore [Sandbox methods](../reference/sandbox/)
+* View the [@computesdk/namespace package](https://github.com/computesdk/computesdk/blob/main/packages/namespace/README.md)

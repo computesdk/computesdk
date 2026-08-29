@@ -1,38 +1,69 @@
+---
+description: >-
+  Use Blaxel with ComputeSDK to create sandboxes with API key and workspace
+  authentication, and configure image, region, memory, and exposed ports.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Blaxel
 
 Blaxel provider for ComputeSDK
 
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/blaxel/" %}
 
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/blaxel
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your Blaxel credentials to a `.env` file:
 
+```bash
 BL_API_KEY=your_blaxel_api_key
 BL_WORKSPACE=your_blaxel_workspace
 ```
 
-
 ## Usage
 
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { blaxel } from '@computesdk/blaxel';
+
+const compute = blaxel({
+  apiKey: process.env.BL_API_KEY,
+  workspace: process.env.BL_WORKSPACE,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Blaxel!")');
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Blaxel!"');
 console.log(result.stdout); // "Hello from Blaxel!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 
@@ -46,45 +77,17 @@ interface BlaxelConfig {
   image?: string;
   /** Default region for sandbox deployment */
   region?: string;
-  /** Default memory allocation in MB (default: 4096) */
+  /** Default memory allocation in MB */
   memory?: number;
+  /** Default ports to expose on the sandbox */
+  ports?: number[];
 }
 ```
 
-## Explicit Provider Configuration
-
-If you prefer to set the provider explicitly, you can do so as follows:
-
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'blaxel',
-   blaxel: {
-     apiKey: process.env.BL_API_KEY,
-     workspace: process.env.BL_WORKSPACE
-   }
-});
-
-const sandbox = await compute.sandbox.create();
-```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases
-
 ### Default Images
 
-The provider automatically selects images based on runtime:
-- **Python:** `blaxel/prod-py-app:latest`
-- **Node.js:** `blaxel/prod-ts-app:latest`
-- **Default:** `blaxel/prod-base:latest`
+The provider automatically selects images based on the runtime specified at creation time:
+
+* **Python:** `blaxel/py-app:latest`
+* **Node.js:** `blaxel/ts-app:latest`
+* **Default:** `blaxel/base-image:latest`

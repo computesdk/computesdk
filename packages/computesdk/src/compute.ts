@@ -1,585 +1,397 @@
 /**
- * Compute API - Gateway HTTP Implementation
+ * Compute API - Direct Provider Implementation
  *
- * Provides the unified compute.* API using direct HTTP calls to the gateway.
- * The `compute` export works as both a singleton and a callable function:
- *
- * - Singleton: `compute.sandbox.create()` (auto-detects from env vars)
- * - Callable: `compute({ provider: 'e2b', ... }).sandbox.create()` (explicit config)
+ * `compute` delegates to one or more configured provider instances directly.
  */
 
-import { Sandbox, WebSocketConstructor, type ServerStartOptions } from './client';
-import { autoConfigureCompute } from './auto-detect';
-import { createConfigFromExplicit } from './explicit-config';
-import { waitForComputeReady } from './compute-daemon/lifecycle';
-import { GATEWAY_URL } from './constants';
-import type { ProviderName } from './provider-config';
-import type { SetupOverlayConfig } from './setup';
+import type {
+  Sandbox as SandboxInterface,
+  CreateSandboxOptions as UniversalCreateSandboxOptions,
+} from './types/universal-sandbox';
 
-/**
- * Gateway configuration
- */
-interface GatewayConfig {
-  apiKey: string;
-  gatewayUrl: string;
-  provider: string;
-  providerHeaders: Record<string, string>;
-  requestTimeoutMs?: number;
-  WebSocket?: WebSocketConstructor;
+export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
+export interface CreateSnapshotOptions {
+  name?: string;
+  metadata?: Record<string, any>;
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
+interface ProviderSandboxManager {
+  create(options?: CreateSandboxOptions): Promise<SandboxInterface>;
+  getById(sandboxId: string): Promise<SandboxInterface | null>;
+  list?(): Promise<SandboxInterface[]>;
+  destroy(sandboxId: string): Promise<void>;
+}
+
+interface ProviderSnapshotManager {
+  create(sandboxId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>;
+  list(): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>>;
+  delete(snapshotId: string): Promise<void>;
+}
+
+export interface DirectProvider {
+  readonly name?: string;
+  readonly sandbox: ProviderSandboxManager;
+  readonly snapshot?: ProviderSnapshotManager;
 }
 
 /**
- * Explicit compute configuration for callable mode
+ * Explicit compute configuration for callable mode.
+ *
+ * Use `provider` for single-provider mode or `providers` for multi-provider mode.
  */
 export interface ExplicitComputeConfig {
-  /** Provider name to use */
-  provider: ProviderName;
-  /**
-   * ComputeSDK API key (required for gateway mode)
-   * @deprecated Use `computesdkApiKey` for clarity
-   */
-  apiKey?: string;
-  /** ComputeSDK API key (required for gateway mode) */
-  computesdkApiKey?: string;
-  /** Optional gateway URL override */
-  gatewayUrl?: string;
-  /** HTTP request timeout for gateway calls in milliseconds */
-  requestTimeoutMs?: number;
-  /**
-   * WebSocket implementation for environments without native WebSocket support.
-   * In Node.js < 22, pass the 'ws' package: `import WebSocket from 'ws'`
-   */
-  WebSocket?: WebSocketConstructor;
-
-  /** Provider-specific configurations */
-  e2b?: { apiKey?: string; projectId?: string; templateId?: string };
-  modal?: { tokenId?: string; tokenSecret?: string };
-  railway?: { apiToken?: string; projectId?: string; environmentId?: string };
-  render?: { apiKey?: string; serviceId?: string };
-  daytona?: { apiKey?: string };
-  vercel?: { oidcToken?: string; token?: string; teamId?: string; projectId?: string };
-  runloop?: { apiKey?: string };
-  cloudflare?: { apiToken?: string; accountId?: string };
-  codesandbox?: { apiKey?: string; templateId?: string; timeout?: number };
-  blaxel?: { apiKey?: string; workspace?: string; image?: string; region?: string; memory?: number };
-  namespace?: { token?: string };
-  hopx?: { apiKey?: string };
-  beam?: { token?: string; workspaceId?: string };
+  /** Single-provider mode */
+  provider?: DirectProvider;
+  /** Multi-provider mode (recommended for resilient routing) */
+  providers?: DirectProvider[];
+  /** Provider selection strategy when no explicit provider is passed */
+  providerStrategy?: 'priority' | 'round-robin';
+  /** Retry the next provider when create fails */
+  fallbackOnError?: boolean;
 }
 
-/**
- * Options for creating a sandbox via the gateway
- * 
- * Note: Runtime is determined by the provider, not specified at creation time.
- * Use sandbox.runCode(code, runtime) to specify which runtime to use for execution.
- */
-export interface CreateSandboxOptions {
-  timeout?: number;
-  templateId?: string;
-  metadata?: Record<string, any>;
-  envs?: Record<string, string>;
-  name?: string;
-  namespace?: string;
-  directory?: string;
-  overlays?: SetupOverlayConfig[];
-  servers?: ServerStartOptions[];
-  /** Docker image to use for the sandbox (for infrastructure providers like Railway) */
-  image?: string;
-  /** Provider-specific snapshot to create from (e.g., Vercel snapshots) */
-  snapshotId?: string;
-}
-
-/**
- * Options for finding or creating a named sandbox
- */
-export interface FindOrCreateSandboxOptions extends CreateSandboxOptions {
-  name: string;
-  namespace?: string;
-}
-
-/**
- * Options for finding a named sandbox
- */
-export interface FindSandboxOptions {
-  name: string;
-  namespace?: string;
-}
-
-/**
- * Options for extending sandbox timeout
- */
-export interface ExtendTimeoutOptions {
-  duration?: number;
-}
-
-/**
- * Helper to call gateway API with retry logic
- */
-async function gatewayFetch<T>(
-  url: string,
-  config: GatewayConfig,
-  options: RequestInit = {}
-): Promise<{ success: boolean; data?: T }> {
-  const timeout = config.requestTimeoutMs ?? 30000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-ComputeSDK-API-Key': config.apiKey,
-        'X-Provider': config.provider,
-        ...config.providerHeaders,
-        ...options.headers,
-      },
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return { success: false };
-      }
-
-      const errorText = await response.text().catch(() => response.statusText);
-      
-      // Build helpful error message
-      let errorMessage = `Gateway API error: ${errorText}`;
-      if (response.status === 401) {
-        errorMessage = `Invalid ComputeSDK API key. Check your COMPUTESDK_API_KEY environment variable.`;
-      } else if (response.status === 403) {
-        errorMessage = `Access forbidden. Your API key may not have permission to use provider "${config.provider}".`;
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    return await response.json();
-  } catch (error) {
-    clearTimeout(timeoutId);
-    
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeout}ms`);
-    }
-    
-    throw error;
-  }
-}
-
-/**
- * Poll gateway until sandbox status becomes "ready" or timeout
- * Uses same exponential backoff pattern as waitForComputeReady
- *
- * This handles the case where a sandbox is being created by another concurrent
- * request and the gateway returns status: "creating". We poll until it's ready.
- */
-async function waitForSandboxStatus(
-  config: GatewayConfig,
-  endpoint: string,
-  body: object,
-  options: { maxWaitMs?: number } = {}
-): Promise<{ success: boolean; data?: any }> {
-  const maxWaitMs = options.maxWaitMs ?? 60000; // 1 minute default (matches gateway timeout)
-  const initialDelayMs = 500;
-  const maxDelayMs = 2000;
-  const backoffFactor = 1.5;
-
-  const startTime = Date.now();
-  let currentDelay = initialDelayMs;
-
-  while (Date.now() - startTime < maxWaitMs) {
-    const result = await gatewayFetch<any>(endpoint, config, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-
-    if (!result.success || !result.data) {
-      return result; // Not found or error
-    }
-
-    if (result.data.status !== 'creating') {
-      return result; // Ready or legacy (no status field)
-    }
-
-    // Still creating - wait and retry
-    if (process.env.COMPUTESDK_DEBUG) {
-      console.log(`[Compute] Sandbox still creating, waiting ${currentDelay}ms...`);
-    }
-
-    await new Promise(resolve => setTimeout(resolve, currentDelay));
-    currentDelay = Math.min(currentDelay * backoffFactor, maxDelayMs);
-  }
-
-  throw new Error(
-    `Sandbox is still being created after ${maxWaitMs}ms. ` +
-    `This may indicate the sandbox failed to start. Check your provider dashboard.`
+function isProviderLike(value: unknown): value is DirectProvider {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  const sandbox = candidate.sandbox as Record<string, unknown> | undefined;
+  return !!(
+    sandbox &&
+    typeof sandbox.create === 'function' &&
+    typeof sandbox.getById === 'function' &&
+    typeof sandbox.destroy === 'function'
   );
 }
 
-/**
- * Compute singleton implementation
- */
-class ComputeManager {
-  private config: GatewayConfig | null = null;
-  private autoConfigured = false;
+function getProviderLabel(provider: DirectProvider, index: number): string {
+  return provider.name || `provider-${index + 1}`;
+}
 
-  /**
-   * Lazy auto-configure from environment if not explicitly configured
-   */
-  private ensureConfigured(): void {
-    if (this.config) return;
-    if (this.autoConfigured) return;
+function getSandboxId(sandbox: SandboxInterface): string | undefined {
+  if ('sandboxId' in sandbox && typeof sandbox.sandboxId === 'string') {
+    return sandbox.sandboxId;
+  }
+  return undefined;
+}
 
-    const config = autoConfigureCompute();
-    this.autoConfigured = true;
+function getProviderErrorDetail(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
 
-    if (config) {
-      this.config = config;
+function resolveProviders(config: ExplicitComputeConfig): DirectProvider[] {
+  const candidates: unknown[] = [];
+
+  // Primary single-provider entrypoint wins ordering when both are provided.
+  if (config.provider) {
+    candidates.push(config.provider);
+  }
+
+  if (Array.isArray(config.providers)) {
+    candidates.push(...config.providers);
+  }
+
+  const providers: DirectProvider[] = [];
+  const seen = new Set<DirectProvider>();
+  const seenNames = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (!isProviderLike(candidate)) continue;
+    if (seen.has(candidate)) continue;
+
+    const name = candidate.name;
+    if (name && seenNames.has(name)) continue;
+
+    providers.push(candidate);
+    seen.add(candidate);
+    if (name) {
+      seenNames.add(name);
     }
   }
 
-  /**
-   * Get gateway config, throwing if not configured
-   */
-  private getGatewayConfig(): GatewayConfig {
-    this.ensureConfigured();
+  if (providers.length > 0) {
+    return providers;
+  }
 
-    if (!this.config) {
+  throw new Error(
+    'No provider instance configured.\n\n' +
+    'Configure compute with provider instances:\n\n' +
+    '  compute.setConfig({ providers: [e2b({...}), modal({...})] })\n' +
+    '  // or: compute.setConfig({ provider: e2b({...}) })'
+  );
+}
+
+class ComputeManager {
+  private providers: DirectProvider[] = [];
+  private providerStrategy: 'priority' | 'round-robin' = 'priority';
+  private fallbackOnError = true;
+  private roundRobinCursor = 0;
+  private sandboxProviders = new Map<string, DirectProvider>();
+  private snapshotProviders = new Map<string, DirectProvider>();
+  private getProviders(): DirectProvider[] {
+    if (this.providers.length === 0) {
       throw new Error(
-        'No ComputeSDK configuration found.\n\n' +
+        'No compute provider configured.\n\n' +
         'Options:\n' +
-        '1. Zero-config: Set COMPUTESDK_API_KEY and provider credentials (e.g., E2B_API_KEY)\n' +
-        '2. Explicit: Call compute.setConfig({ provider: "e2b", computesdkApiKey: "...", e2b: { apiKey: "..." } })\n' +
-        '3. Use provider directly: import { e2b } from \'@computesdk/e2b\'\n\n' +
-        'Docs: https://computesdk.com/docs/quickstart'
+        '1. Configure providers: compute.setConfig({ providers: [e2b({...}), modal({...})] })\n' +
+        '2. Configure a single provider: compute.setConfig({ provider: e2b({...}) })\n' +
+        '3. Use provider directly: const sdk = e2b({...}); await sdk.sandbox.create()'
       );
     }
-
-    return this.config;
+    return this.providers;
   }
 
-  /**
-   * Explicitly configure the compute singleton
-   * 
-   * @example
-   * ```typescript
-   * import { compute } from 'computesdk';
-   * 
-   * compute.setConfig({
-   *   provider: 'e2b',
-   *   apiKey: 'computesdk_xxx',
-   *   e2b: { apiKey: 'e2b_xxx' }
-   * });
-   * 
-   * const sandbox = await compute.sandbox.create();
-   * ```
-   */
+  private getProviderByName(name: string): DirectProvider {
+    const provider = this.getProviders().find((p) => p.name === name);
+    if (!provider) {
+      const names = this.getProviders().map((p, i) => getProviderLabel(p, i)).join(', ');
+      throw new Error(`Provider "${name}" is not configured. Configured providers: ${names || '(none)'}.`);
+    }
+    return provider;
+  }
+
+  private registerSandboxProvider(sandbox: SandboxInterface, provider: DirectProvider): void {
+    const sandboxId = getSandboxId(sandbox);
+    if (sandboxId) {
+      this.sandboxProviders.set(sandboxId, provider);
+    }
+  }
+
+  private getCreateCandidates(preferredProviderName?: string): DirectProvider[] {
+    const providers = this.getProviders();
+    if (preferredProviderName) {
+      return [this.getProviderByName(preferredProviderName)];
+    }
+
+    if (providers.length <= 1 || this.providerStrategy === 'priority') {
+      return [...providers];
+    }
+
+    const start = this.roundRobinCursor % providers.length;
+    this.roundRobinCursor = (this.roundRobinCursor + 1) % providers.length;
+    return [
+      ...providers.slice(start),
+      ...providers.slice(0, start),
+    ];
+  }
+
+  private getByIdCandidates(sandboxId: string): DirectProvider[] {
+    const known = this.sandboxProviders.get(sandboxId);
+    if (!known) return this.getProviders();
+    const providers = this.getProviders();
+    return [known, ...providers.filter((p) => p !== known)];
+  }
+
+  private getSnapshotDeleteCandidates(snapshotId: string): DirectProvider[] {
+    const known = this.snapshotProviders.get(snapshotId);
+    const providers = this.getProviders().filter((p) => !!p.snapshot);
+    if (!known) return providers;
+    return [known, ...providers.filter((p) => p !== known)];
+  }
+
+  private getSnapshotCreateCandidates(sandboxId: string, preferredProviderName?: string): DirectProvider[] {
+    if (preferredProviderName) {
+      return [this.getProviderByName(preferredProviderName)];
+    }
+
+    const known = this.sandboxProviders.get(sandboxId);
+    const providers = this.getProviders().filter((p) => !!p.snapshot);
+
+    if (known && known.snapshot) {
+      return [known, ...providers.filter((p) => p !== known)];
+    }
+
+    return providers;
+  }
+
+  private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
+    const preferredProviderName = options?.provider;
+    const { provider: _providerName, ...providerOptions } = options || {};
+    const candidates = this.getCreateCandidates(preferredProviderName);
+    const canFallback = this.fallbackOnError && !preferredProviderName;
+    const errors: string[] = [];
+
+    for (const [index, provider] of candidates.entries()) {
+      try {
+        const sandbox = await provider.sandbox.create(providerOptions);
+        this.registerSandboxProvider(sandbox, provider);
+        return sandbox;
+      } catch (error) {
+        // AbortErrors should not be treated as provider failures; rethrow immediately
+        if (error instanceof Error && (error as any).name === 'AbortError') {
+          throw error;
+        }
+        errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        if (!canFallback) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error(
+      `Failed to create sandbox across ${candidates.length} provider(s).\n` +
+      errors.map((error) => `- ${error}`).join('\n')
+    );
+  }
+
   setConfig(config: ExplicitComputeConfig): void {
-    const gatewayConfig = createConfigFromExplicit(config);
-    this.config = gatewayConfig;
-    this.autoConfigured = false;
+    this.providers = resolveProviders(config);
+    this.providerStrategy = config.providerStrategy ?? 'priority';
+    this.fallbackOnError = config.fallbackOnError ?? true;
+    this.roundRobinCursor = 0;
+    this.sandboxProviders.clear();
+    this.snapshotProviders.clear();
   }
 
   sandbox = {
-    /**
-     * Create a new sandbox
-     *
-     * @example
-     * ```typescript
-     * const sandbox = await compute.sandbox.create({
-     *   directory: '/custom/path',
-     *   overlays: [
-     *     {
-     *       source: '/templates/nextjs',
-     *       target: 'app',
-     *       strategy: 'smart',
-     *     },
-     *   ],
-     *   servers: [
-     *     {
-     *       slug: 'web',
-     *       start: 'npm run dev',
-     *       path: '/app',
-     *     },
-     *   ],
-     * });
-     * ```
-     */
-    create: async (options?: CreateSandboxOptions): Promise<Sandbox> => {
-      const config = this.getGatewayConfig();
+    create: async (options?: CreateSandboxOptions): Promise<SandboxInterface> => {
+      return this.createWithFallback(options);
+    },
 
-      const result = await gatewayFetch<{
-        sandboxId: string;
-        url: string;
-        token: string;
-        provider: string;
-        metadata?: Record<string, unknown>;
-        name?: string;
-        namespace?: string;
-        overlays?: Array<{
-          id: string;
-          source: string;
-          target: string;
-          copy_status: string;
-        }>;
-        servers?: Array<{
-          slug: string;
-          port?: number;
-          url?: string;
-          status: 'installing' | 'starting' | 'running' | 'ready' | 'failed' | 'stopped' | 'restarting';
-        }>;
-      }>(`${config.gatewayUrl}/v1/sandboxes`, config, {
-        method: 'POST',
-        body: JSON.stringify(options || {}),
-      });
-
-      if (!result.success || !result.data) {
-        throw new Error(`Gateway returned invalid response`);
+    getById: async (sandboxId: string): Promise<SandboxInterface | null> => {
+      for (const provider of this.getByIdCandidates(sandboxId)) {
+        const sandbox = await provider.sandbox.getById(sandboxId);
+        if (sandbox) {
+          this.registerSandboxProvider(sandbox, provider);
+          return sandbox;
+        }
       }
 
-      const { sandboxId, url, token, provider, metadata, name, namespace, overlays, servers } = result.data;
-
-      const sandbox = new Sandbox({
-        sandboxUrl: url,
-        sandboxId,
-        provider,
-        token: token || config.apiKey,
-        metadata: {
-          ...metadata,
-          ...(name && { name }),
-          ...(namespace && { namespace }),
-          ...(overlays && { overlays }),
-          ...(servers && { servers }),
-        },
-        WebSocket: config.WebSocket || globalThis.WebSocket,
-        destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
-            method: 'DELETE',
-          });
-        },
-      });
-
-      await waitForComputeReady(sandbox);
-
-      return sandbox;
+      this.sandboxProviders.delete(sandboxId);
+      return null;
     },
 
-    /**
-     * Get an existing sandbox by ID
-     */
-    getById: async (sandboxId: string): Promise<Sandbox | null> => {
-      const config = this.getGatewayConfig();
+    list: async (): Promise<SandboxInterface[]> => {
+      const all: SandboxInterface[] = [];
 
-      const result = await gatewayFetch<{
-        url: string;
-        token: string;
-        provider: string;
-        metadata?: Record<string, unknown>;
-      }>(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config);
+      for (const provider of this.getProviders()) {
+        if (!provider.sandbox.list) {
+          continue;
+        }
 
-      if (!result.success || !result.data) {
-        return null;
+        const sandboxes = await provider.sandbox.list();
+        for (const sandbox of sandboxes) {
+          this.registerSandboxProvider(sandbox, provider);
+        }
+        all.push(...sandboxes);
       }
 
-      const { url, token, provider, metadata } = result.data;
-
-      const sandbox = new Sandbox({
-        sandboxUrl: url,
-        sandboxId,
-        provider,
-        token: token || config.apiKey,
-        metadata,
-        WebSocket: config.WebSocket || globalThis.WebSocket,
-        destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
-            method: 'DELETE',
-          });
-        },
-      });
-
-      await waitForComputeReady(sandbox);
-
-      return sandbox;
+      return all;
     },
 
-    /**
-     * List all active sandboxes
-     */
-    list: async (): Promise<Sandbox[]> => {
-      throw new Error(
-        'The gateway does not support listing sandboxes. Use getById() with a known sandbox ID instead.'
-      );
-    },
-
-    /**
-     * Destroy a sandbox
-     */
     destroy: async (sandboxId: string): Promise<void> => {
-      const config = this.getGatewayConfig();
+      const candidates = this.getByIdCandidates(sandboxId);
+      const errors: string[] = [];
 
-      await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
-        method: 'DELETE',
-      });
-    },
-
-    /**
-     * Find existing or create new sandbox by (namespace, name)
-     */
-    findOrCreate: async (options: FindOrCreateSandboxOptions): Promise<Sandbox> => {
-      const config = this.getGatewayConfig();
-
-      const { name, namespace, ...restOptions } = options;
-
-      // Use polling to handle concurrent creation (status: "creating")
-      const result = await waitForSandboxStatus(
-        config,
-        `${config.gatewayUrl}/v1/sandboxes/find-or-create`,
-        {
-          namespace: namespace || 'default',
-          name,
-          ...restOptions,
+      for (const [index, provider] of candidates.entries()) {
+        try {
+          await provider.sandbox.destroy(sandboxId);
+          this.sandboxProviders.delete(sandboxId);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         }
-      );
-
-      if (!result.success || !result.data) {
-        throw new Error(`Gateway returned invalid response`);
       }
 
-      const { sandboxId, url, token, provider, metadata } = result.data;
-
-      const sandbox = new Sandbox({
-        sandboxUrl: url,
-        sandboxId,
-        provider,
-        token: token || config.apiKey,
-        metadata: {
-          ...metadata,
-          name: result.data.name,
-          namespace: result.data.namespace,
-        },
-        WebSocket: config.WebSocket || globalThis.WebSocket,
-        destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
-            method: 'DELETE',
-          });
-        },
-      });
-
-      await waitForComputeReady(sandbox);
-
-      return sandbox;
-    },
-
-    /**
-     * Find existing sandbox by (namespace, name) without creating
-     */
-    find: async (options: FindSandboxOptions): Promise<Sandbox | null> => {
-      const config = this.getGatewayConfig();
-
-      // Use polling to handle concurrent creation (status: "creating")
-      const result = await waitForSandboxStatus(
-        config,
-        `${config.gatewayUrl}/v1/sandboxes/find`,
-        {
-          namespace: options.namespace || 'default',
-          name: options.name,
-        }
+      throw new Error(
+        `Failed to destroy sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
       );
+    },
+  };
 
-      if (!result.success || !result.data) {
-        return null;
+  snapshot = {
+    create: async (sandboxId: string, options?: CreateSnapshotOptions): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
+      const preferredProviderName = options?.provider;
+      const { provider: _providerName, ...providerOptions } = options || {};
+      const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.snapshot) {
+          errors.push(`${getProviderLabel(provider, index)}: snapshots not supported`);
+          continue;
+        }
+
+        try {
+          const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
+          this.snapshotProviders.set(snapshot.id, provider);
+          return {
+            ...snapshot,
+            createdAt: new Date(snapshot.createdAt),
+          };
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
       }
 
-      const { sandboxId, url, token, provider, metadata, name, namespace } = result.data;
-
-      const sandbox = new Sandbox({
-        sandboxUrl: url,
-        sandboxId,
-        provider,
-        token: token || config.apiKey,
-        metadata: {
-          ...metadata,
-          name,
-          namespace,
-        },
-        WebSocket: config.WebSocket || globalThis.WebSocket,
-        destroyHandler: async () => {
-          await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}`, config, {
-            method: 'DELETE',
-          });
-        },
-      });
-
-      await waitForComputeReady(sandbox);
-
-      return sandbox;
+      throw new Error(
+        `Failed to create snapshot for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
     },
 
-    /**
-     * Extend sandbox timeout/expiration
-     */
-    extendTimeout: async (sandboxId: string, options?: ExtendTimeoutOptions): Promise<void> => {
-      const config = this.getGatewayConfig();
-      const duration = options?.duration ?? 900000; // Default to 15 minutes
+    list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
+      const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
 
-      await gatewayFetch(`${config.gatewayUrl}/v1/sandboxes/${sandboxId}/extend`, config, {
-        method: 'POST',
-        body: JSON.stringify({ duration }),
-      });
+      for (const provider of this.getProviders()) {
+        if (!provider.snapshot) continue;
+        const listed = await provider.snapshot.list();
+        for (const snapshot of listed) {
+          this.snapshotProviders.set(snapshot.id, provider);
+          snapshots.push({
+            ...snapshot,
+            createdAt: new Date(snapshot.createdAt),
+          });
+        }
+      }
+
+      return snapshots;
+    },
+
+    delete: async (snapshotId: string): Promise<void> => {
+      const candidates = this.getSnapshotDeleteCandidates(snapshotId);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.snapshot) continue;
+        try {
+          await provider.snapshot.delete(snapshotId);
+          this.snapshotProviders.delete(snapshotId);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
     },
   };
 }
 
-/**
- * Singleton instance
- */
 const singletonInstance = new ComputeManager();
 
-/**
- * Factory function for explicit configuration
- */
 function computeFactory(config: ExplicitComputeConfig): ComputeManager {
-  const gatewayConfig = createConfigFromExplicit(config);
   const manager = new ComputeManager();
-  manager['config'] = gatewayConfig;
+  manager.setConfig(config);
   return manager;
 }
 
-/**
- * Callable compute interface - dual nature as both singleton and factory
- * 
- * This interface represents the compute export's two modes:
- * 1. As a ComputeManager singleton (accessed via properties like compute.sandbox)
- * 2. As a factory function (called with config to create new instances)
- */
 export interface CallableCompute extends ComputeManager {
-  /** Create a new compute instance with explicit configuration */
   (config: ExplicitComputeConfig): ComputeManager;
-  /** Explicitly configure the singleton */
   setConfig(config: ExplicitComputeConfig): void;
 }
 
-/**
- * Callable compute - works as both singleton and factory function
- *
- * @example
- * ```typescript
- * import { compute } from 'computesdk';
- *
- * // Singleton mode (auto-detects from env vars)
- * const sandbox1 = await compute.sandbox.create();
- *
- * // Callable mode (explicit config)
- * const sandbox2 = await compute({
- *   provider: 'e2b',
- *   apiKey: 'computesdk_xxx',
- *   e2b: { apiKey: 'e2b_xxx' }
- * }).sandbox.create();
- * ```
- */
 export const compute: CallableCompute = new Proxy(
   computeFactory as any,
   {

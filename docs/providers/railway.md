@@ -1,175 +1,93 @@
+---
+description: >-
+  Railway provider for ComputeSDK — run commands in Railway Sandboxes, ephemeral
+  compute environments backed by the Railway platform.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+---
+
 # Railway
 
-## Deploy sandboxes on Railway with ComputeSDK
+Railway provider for ComputeSDK — run commands in [Railway Sandboxes](https://docs.railway.com/sandboxes), ephemeral compute environments backed by the Railway platform.
 
-Deploy and manage containerized sandboxes on Railway's infrastructure with ComputeSDK.
-
----
-
-Railway is an infrastructure platform with instant deployments and automatic SSL. With ComputeSDK's Railway provider, you can self-host your own sandbox execution environment.
-
----
-
-**Prerequisites**:
-
-- A <a href="https://console.computesdk.com/register" target="_blank">ComputeSDK account</a> with an API key
-- A <a href="https://railway.app/" target="_blank">Railway account</a> with the [ComputeSDK sandbox template deployed](#deploying-the-railway-sandbox-template)
-- Node.js 18+ installed
-
----
-
-## Deploying the Railway sandbox template
-
-Before using Railway as a sandbox provider, you need to deploy the ComputeSDK sandbox infrastructure to your Railway account. This only needs to be done once.
-
-[![Deploy to Railway](https://railway.com/button.svg)](https://railway.com/new/template/sandbox)
-
-**What this deploys:**
-
-The template deploys a lightweight binary (`computesdk/compute`) that converts Railway's infrastructure into a sandbox provider. It handles:
-
-- Sandbox lifecycle management
-- Code execution
-- File system operations
-- Resource isolation
-
-Click the button above or visit [railway.com/deploy/sandbox](https://railway.com/deploy/sandbox) and click **"Deploy Now"** to create the project.
-
-> **Note:** This will deploy a sample sandbox (referred to as a "service" in Railway). Subsequent sandboxes you create using ComputeSDK will be deployed within this same project. You can safely delete the sample sandbox after deployment.
-
----
-
-## Getting your Railway credentials
-
-Once you've deployed the template, collect these three values:
-
-**API Token**
-
-1. Go to your Railway workspace settings (note: not "project" level)
-2. Navigate to **Tokens**
-3. Create a **"New Token"**
-4. Name it (e.g., "ComputeSDK Integration") and copy the generated token
-
-**Project ID**
-
-1. Open your Railway project
-2. Go to **Settings**
-3. Copy the Project ID from the **Project Info** section
-
-**Environment ID**
-
-Find it in the URL when viewing your project settings:
-
-```
-https://railway.com/project/{PROJECT_ID}/settings?environmentId=={ENVIRONMENT_ID}
-```
-
-> **Note:** The sandbox ID returned by ComputeSDK is different from the service name shown in the Railway dashboard. The service name in Railway is the name of the deployed service, while the sandbox ID is the unique identifier for the sandbox instance running inside the service.
-
----
-
-
-## Using ComputeSDK with Railway
----
-
-### Step 1: Install ComputeSDK
-
-Install the ComputeSDK package in your application:
+## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/railway
 ```
 
----
+> **Requires Node.js >= 22** — the underlying `railway` SDK depends on Node 22 APIs (e.g. global `WebSocket`).
 
-### Step 2: Configure environment variables
-
-Add your credentials to a `.env` file:
+Add your Railway credentials to a `.env` file:
 
 ```bash
-# ComputeSDK credentials
-COMPUTESDK_API_KEY=your_computesdk_api_key
-
-# Railway credentials
-RAILWAY_API_KEY=your_railway_api_key
-RAILWAY_PROJECT_ID=your_railway_project_id
-RAILWAY_ENVIRONMENT_ID=your_railway_environment_id
+RAILWAY_API_TOKEN=your_token
+RAILWAY_ENVIRONMENT_ID=your_environment_id
 ```
 
-See [Getting your Railway credentials](#getting-your-railway-credentials) for how to obtain these values.
+Create the token at [railway.com/account/tokens](https://railway.com/account/tokens); find the environment ID under your Railway project's environment settings.
 
----
-
-### Step 3: Create and manage sandboxes
-
-ComputeSDK auto-detects Railway as your provider from the environment variables:
+## Usage
 
 ```typescript
-import { compute } from 'computesdk';
+import { railway } from '@computesdk/railway';
 
-// Create a new sandbox
+const compute = railway({
+  token: process.env.RAILWAY_API_TOKEN,
+  environmentId: process.env.RAILWAY_ENVIRONMENT_ID,
+});
+
+// Create sandbox
 const sandbox = await compute.sandbox.create();
-console.log(`Sandbox created: ${sandbox.sandboxId}`);
 
-// Get sandbox info
-const info = await sandbox.getInfo();
-console.log(`Sandbox status: ${info.status}`);
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Railway!"');
+console.log(result.stdout); // "Hello from Railway!"
 
-// Clean up when done
+// Clean up
 await sandbox.destroy();
 ```
 
-Your sandboxes are now running on your self-hosted Railway infrastructure!
-
----
-
-### Explicit provider configuration (optional)
-
-If you prefer to configure the provider programmatically—useful for multi-provider setups or dynamic configuration—pass credentials directly:
-
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'railway',
-   railway: {
-     apiToken: process.env.RAILWAY_API_KEY,
-     projectId: process.env.RAILWAY_PROJECT_ID,
-     environmentId: process.env.RAILWAY_ENVIRONMENT_ID
-   }
-});
-
-const sandbox = await compute.sandbox.create();
-```
-
----
-
-### Configuration reference
-
-The Railway provider accepts the following configuration options:
-
-| Option | Environment Variable | Required | Description |
-|--------|---------------------|----------|-------------|
-| `apiToken` | `RAILWAY_API_KEY` | Yes | Your Railway API token |
-| `projectId` | `RAILWAY_PROJECT_ID` | Yes | The project ID where you deployed the sandbox template |
-| `environmentId` | `RAILWAY_ENVIRONMENT_ID` | Yes | The target environment within the project |
+### Configuration Options
 
 ```typescript
 interface RailwayConfig {
-  /** Railway API token - if not provided, uses RAILWAY_API_KEY env var */
-  apiToken?: string;
-  /** Railway Project ID - if not provided, uses RAILWAY_PROJECT_ID env var */
-  projectId?: string;
-  /** Railway Environment ID - if not provided, uses RAILWAY_ENVIRONMENT_ID env var */
+  /** Railway API token - falls back to the RAILWAY_API_TOKEN environment variable */
+  token?: string;
+  /** Railway environment ID - falls back to the RAILWAY_ENVIRONMENT_ID environment variable */
   environmentId?: string;
 }
 ```
 
----
+### Supported Operations
 
-## Next steps
+| Method       | Supported | Notes                                                                                                                                 |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Creates a Railway sandbox. Honors `envs`, `idleTimeoutMinutes`, and `networkIsolation` create options.                                |
+| `getById`    | ✅         | Returns `null` when the sandbox is not found.                                                                                         |
+| `list`       | ✅         | Connects to each listed sandbox; unreachable ones are dropped.                                                                        |
+| `destroy`    | ✅         | Best-effort; ignores already-destroyed / unreachable sandboxes.                                                                       |
+| `runCommand` | ✅         | Runs via Railway's `sandbox.exec`. A signal-terminated command reports exit code `-1`.                                                |
+| `getInfo`    | ✅         |                                                                                                                                       |
+| `getUrl`     | ❌         | Throws — Railway sandboxes cannot expose ports / public URLs. Use sandbox-to-sandbox networking within a Railway environment instead. |
+| `filesystem` | ✅         | Implemented over the shell (`base64`, `ls -la`, `mkdir -p`, `rm -rf`, etc.).                                                          |
 
-- Learn about [sandbox lifecycle management](/docs/reference/computesandbox)
-- Explore [Sandbox methods](/docs/reference/sandbox)
-- View the [@computesdk/railway package](https://github.com/computesdk/computesdk/blob/main/packages/railway/README.md)
+### Notes
+
+* Railway has no dedicated filesystem or port-exposure API, so `getUrl` throws and filesystem operations are shell-backed.

@@ -1,42 +1,37 @@
 # Quick Start
 
-Welcome to ComputeSDK! This guide will get you up and running with secure, isolated code execution across multiple cloud providers using a unified TypeScript interface.
-
-
-<br />
-
-## Get an API Key
-
-1) Visit https://console.computesdk.com/register to create an account and get your ComputeSDK API key.
-2) Next create a .env file in the root of your project and add your API key (this is where you will store your API keys for each of your providers):
-
-```bash
-COMPUTESDK_API_KEY=your_api_key_here
-
-# Add your provider API key (e.g., E2B, Modal, Railway, etc.)
-E2B_API_KEY=your_e2b_api_key_here
-```
+Welcome to ComputeSDK! This guide will get you up and running with the open, multi-provider harness behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks): a unified TypeScript interface for secure, isolated code execution across cloud providers.
 
 ## Installation
 
+Install the provider package for the platform you want to use. This guide uses E2B as an example, but the sandbox API is the same across all providers.
+
 ```bash
-npm install computesdk
+npm install @computesdk/e2b
+```
+
+Then add your provider credentials to a `.env` file:
+
+```bash
+E2B_API_KEY=your_e2b_api_key
 ```
 
 ## Basic Usage
 
-A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Railway, Modal, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCode()` executes code and returns the output, and `destroy()` tears down the sandbox to free resources.
+A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Modal, Vercel, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCommand()` executes shell commands and returns the result, and `destroy()` tears down the sandbox to free resources.
 
 ```typescript
-import { compute } from 'computesdk';
+import { e2b } from '@computesdk/e2b';
 
+// Create a compute instance for your provider
+const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 // Create a sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello World!")');
-console.log(result.output); // "Hello World!"
+// Run a command
+const result = await sandbox.runCommand('echo "Hello World!"');
+console.log(result.stdout); // "Hello World!"
 
 // Clean up
 await sandbox.destroy();
@@ -87,9 +82,9 @@ ComputeSDK methods throw exceptions for API/network failures. For command execut
 ```typescript
 try {
   const sandbox = await compute.sandbox.create();
-  const result = await sandbox.runCode('invalid code');
+  const result = await sandbox.runCommand('some-command');
 } catch (error) {
-  console.error('Execution failed:', error.message);
+  console.error('Failed:', error.message);
 }
 ```
 
@@ -104,11 +99,9 @@ Always destroy sandboxes when done to avoid resource leaks and unnecessary costs
 let sandbox;
 try {
   sandbox = await compute.sandbox.create();
-  await sandbox.runCode('print("Hello")');
+  await sandbox.runCommand('echo "Hello"');
 } finally {
-  if (sandbox) {
-    await sandbox.destroy();
-  }
+  await sandbox?.destroy();
 }
 ```
 
@@ -127,20 +120,6 @@ if (result.exitCode !== 0) {
 
 ## Understanding Results
 
-### Code Execution Results
-
-When you call `runCode()`, you receive:
-- `output`: Combined stdout/stderr from your code
-- `exitCode`: `0` for success, non-zero for errors  
-- `language`: Detected or specified language (`'python'`, `'node'`, etc.)
-
-```typescript
-const result = await sandbox.runCode('print("Hello")');
-console.log(result.output);    // "Hello\n"
-console.log(result.exitCode);  // 0
-console.log(result.language);  // "python"
-```
-
 ### Command Execution Results
 
 When you call `runCommand()`, you receive:
@@ -156,28 +135,3 @@ console.log(result.stderr);      // Warnings or errors
 console.log(result.exitCode);    // 0
 console.log(result.durationMs);  // 2341
 ```
-
-## Named Sandboxes
-
-Named sandboxes let you create persistent, reusable sandbox instances. If a sandbox with the same name already exists, `findOrCreate()` returns the existing one instead of creating a duplicate.
-
-```typescript
-// Find or create a sandbox by name
-const sandbox = await compute.sandbox.findOrCreate({
-  name: 'my-project',
-  namespace: 'user-123',  // Optional: isolate by user, team, etc.
-});
-
-// The same call later returns the same sandbox
-const sameSandbox = await compute.sandbox.findOrCreate({
-  name: 'my-project',
-  namespace: 'user-123',
-});
-```
-
-## What's Next?
-
-- **[Overlays](/docs/features/overlays)** - Bootstrap sandboxes from templates instantly
-- **[Servers](/docs/features/servers)** - Run managed dev servers with health checks
-- **[Client-Side Access](/docs/features/client-access)** - Delegate sandbox access to browser clients
-- **[Named Sandboxes](/docs/features/named-sandboxes)** - Persistent, reusable sandbox patterns

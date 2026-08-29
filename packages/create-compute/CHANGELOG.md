@@ -1,5 +1,109 @@
 # create-compute
 
+## 0.2.15
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+
+## 0.2.13
+
+### Patch Changes
+
+- computesdk@4.1.2
+
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+
+## 0.2.11
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [371f667]
+  - computesdk@3.0.0
+
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - computesdk@2.5.4
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - computesdk@2.5.4
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - computesdk@2.5.4
+
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+
 ## 0.2.1
 
 ### Patch Changes

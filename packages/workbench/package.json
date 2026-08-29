@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/workbench",
-  "version": "11.0.0",
+  "version": "30.0.9",
   "description": "Interactive REPL for testing ComputeSDK sandbox operations",
   "author": "Garrison",
   "license": "MIT",
@@ -30,6 +30,8 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "dev:ts": "tsx src/bin/workbench-ts.ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -53,34 +55,47 @@
     "@computesdk/cmd": "workspace:*",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "dotenv": "^16.4.5",
-    "ws": "^8.18.0"
+    "dotenv": "^16.4.5"
   },
   "peerDependencies": {
     "@computesdk/blaxel": "workspace:*",
     "@computesdk/cloudflare": "workspace:*",
+    "@computesdk/cloud-run": "workspace:*",
     "@computesdk/codesandbox": "workspace:*",
     "@computesdk/daytona": "workspace:*",
     "@computesdk/e2b": "workspace:*",
     "@computesdk/beam": "workspace:*",
+    "@computesdk/just-bash": "workspace:*",
     "@computesdk/hopx": "workspace:*",
+    "@computesdk/declaw": "workspace:*",
+    "@computesdk/isorun": "workspace:*",
     "@computesdk/modal": "workspace:*",
-    "@computesdk/railway": "workspace:*",
+    "@computesdk/microsandbox": "workspace:*",
     "@computesdk/runloop": "workspace:*",
     "@computesdk/vercel": "workspace:*",
-    "@computesdk/namespace": "workspace:*"
+    "@computesdk/namespace": "workspace:*",
+    "@computesdk/sprites": "workspace:*",
+    "@computesdk/agentuity": "workspace:*",
+    "@computesdk/freestyle": "workspace:*",
+    "@computesdk/secure-exec": "workspace:*",
+    "@computesdk/upstash": "workspace:*",
+    "@computesdk/k8s": "workspace:*",
+    "@computesdk/northflank": "workspace:*",
+    "@computesdk/collimate": "workspace:*",
+    "@computesdk/lelantos": "workspace:*",
+    "@computesdk/tenki": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
-      "optional": true
-    },
-    "@computesdk/railway": {
       "optional": true
     },
     "@computesdk/daytona": {
       "optional": true
     },
     "@computesdk/modal": {
+      "optional": true
+    },
+    "@computesdk/microsandbox": {
       "optional": true
     },
     "@computesdk/runloop": {
@@ -90,6 +105,9 @@
       "optional": true
     },
     "@computesdk/cloudflare": {
+      "optional": true
+    },
+    "@computesdk/cloud-run": {
       "optional": true
     },
     "@computesdk/codesandbox": {
@@ -104,7 +122,46 @@
     "@computesdk/hopx": {
       "optional": true
     },
+    "@computesdk/declaw": {
+      "optional": true
+    },
+    "@computesdk/isorun": {
+      "optional": true
+    },
     "@computesdk/beam": {
+      "optional": true
+    },
+    "@computesdk/just-bash": {
+      "optional": true
+    },
+    "@computesdk/sprites": {
+      "optional": true
+    },
+    "@computesdk/agentuity": {
+      "optional": true
+    },
+    "@computesdk/freestyle": {
+      "optional": true
+    },
+    "@computesdk/secure-exec": {
+      "optional": true
+    },
+    "@computesdk/upstash": {
+      "optional": true
+    },
+    "@computesdk/k8s": {
+      "optional": true
+    },
+    "@computesdk/northflank": {
+      "optional": true
+    },
+    "@computesdk/collimate": {
+      "optional": true
+    },
+    "@computesdk/lelantos": {
+      "optional": true
+    },
+    "@computesdk/tenki": {
       "optional": true
     }
   },
@@ -114,6 +171,7 @@
     "ts-node": "^10.9.2",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   }
 }

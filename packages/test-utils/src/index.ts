@@ -7,3 +7,5 @@ config({ path: path.resolve(__dirname, '../../../.env') });
 
 export * from './provider-test-suite';
 export * from './provider-crud-test';
+export * from './storage-test-suite';
+export * from './browser-test-suite';

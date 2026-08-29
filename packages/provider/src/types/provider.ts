@@ -4,14 +4,14 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { Runtime, CreateSandboxOptions, SandboxFileSystem, SandboxInterface, CodeResult, CommandResult, SandboxInfo, RunCommandOptions } from 'computesdk';
+import type { CreateSandboxOptions, SandboxInterface } from 'computesdk';
 
 /**
  * Provider Sandbox - what provider implementations return
  * 
  * Extends the universal Sandbox interface with provider-specific methods
  */
-export interface ProviderSandbox<TSandbox = any> extends SandboxInterface {
+export interface ProviderSandbox<TSandbox = any> extends Omit<SandboxInterface, 'runCode'> {
   /** Get the provider that created this sandbox */
   getProvider(): Provider<TSandbox>;
   /** Get the native provider sandbox instance */
@@ -71,38 +71,7 @@ export interface ListTemplatesOptions {
 }
 
 /**
- * Options for finding or creating a named sandbox
- */
-export interface FindOrCreateSandboxOptions extends CreateSandboxOptions {
-  /** User-provided stable identifier (e.g., "my-app", "frontend") */
-  name: string;
-  /** Isolation scope (e.g., "user-123", "org-456"). Defaults to "default" */
-  namespace?: string;
-}
-
-/**
- * Options for finding a named sandbox (without creating)
- */
-export interface FindSandboxOptions {
-  /** User-provided stable identifier */
-  name: string;
-  /** Isolation scope. Defaults to "default" */
-  namespace?: string;
-}
-
-/**
- * Options for extending sandbox timeout
- */
-export interface ExtendTimeoutOptions {
-  /** Additional time to extend in milliseconds. Defaults to 900000 (15 minutes) */
-  duration?: number;
-}
-
-/**
  * Provider sandbox manager interface - handles sandbox lifecycle
- *
- * For most providers (e2b, railway, etc.), this returns ProviderSandbox.
- * The gateway provider returns the full Sandbox with ComputeClient features.
  */
 export interface ProviderSandboxManager<TSandbox = any> {
   /** Create a new sandbox */
@@ -113,12 +82,6 @@ export interface ProviderSandboxManager<TSandbox = any> {
   list(): Promise<ProviderSandbox<TSandbox>[]>;
   /** Destroy a sandbox */
   destroy(sandboxId: string): Promise<void>;
-  /** Find existing or create new sandbox by (namespace, name) */
-  findOrCreate?(options: FindOrCreateSandboxOptions): Promise<ProviderSandbox<TSandbox>>;
-  /** Find existing sandbox by (namespace, name) without creating */
-  find?(options: FindSandboxOptions): Promise<ProviderSandbox<TSandbox> | null>;
-  /** Extend sandbox timeout/expiration */
-  extendTimeout?(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
 }
 
 /**
@@ -160,9 +123,6 @@ export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
 
   /** Optional snapshot management operations */
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
-
-  /** Get the list of supported runtime environments */
-  getSupportedRuntimes(): Runtime[];
 
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;
@@ -210,8 +170,6 @@ export interface CreateSandboxParamsWithOptionalProvider {
  * Base Compute API interface (non-generic)
  *
  * Returns ProviderSandbox which is the common interface for all sandboxes.
- * When using gateway provider, the returned sandbox will have full Sandbox
- * capabilities (terminals, watchers, signals) accessible via getInstance().
  */
 export interface ComputeAPI {
   /** Configuration management */
@@ -228,12 +186,6 @@ export interface ComputeAPI {
     list(provider?: Provider): Promise<ProviderSandbox[]>;
     /** Destroy a sandbox via a provider (or default provider if configured) */
     destroy(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<void>;
-    /** Find existing or create new sandbox by (namespace, name) */
-    findOrCreate(options: FindOrCreateSandboxOptions): Promise<ProviderSandbox>;
-    /** Find existing sandbox by (namespace, name) without creating */
-    find(options: FindSandboxOptions): Promise<ProviderSandbox | null>;
-    /** Extend sandbox timeout/expiration */
-    extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
   };
 
   // Future resource APIs will be added here:
@@ -244,9 +196,6 @@ export interface ComputeAPI {
 
 /**
  * Typed Compute API interface that preserves provider type information
- *
- * When using gateway provider, returns full Sandbox with ComputeClient features.
- * When using other providers, returns TypedProviderSandbox.
  */
 export interface TypedComputeAPI<TProvider extends Provider> extends Omit<ComputeAPI, 'sandbox' | 'setConfig'> {
   /** Configuration management that returns typed compute instance */
@@ -265,12 +214,6 @@ export interface TypedComputeAPI<TProvider extends Provider> extends Omit<Comput
     list(): Promise<TypedProviderSandbox<TProvider>[]>;
     /** Destroy a sandbox via the configured provider */
     destroy(sandboxId: string): Promise<void>;
-    /** Find existing or create new sandbox by (namespace, name) */
-    findOrCreate(options: FindOrCreateSandboxOptions): Promise<TypedProviderSandbox<TProvider>>;
-    /** Find existing sandbox by (namespace, name) without creating */
-    find(options: FindSandboxOptions): Promise<TypedProviderSandbox<TProvider> | null>;
-    /** Extend sandbox timeout/expiration */
-    extendTimeout(sandboxId: string, options?: ExtendTimeoutOptions): Promise<void>;
   };
 }
 
@@ -368,3 +311,94 @@ export interface BlaxelProviderConfig {
 
 // Note: Gateway-specific types (ExplicitComputeConfig, etc.) are in computesdk package
 
+/**
+ * Storage Provider Types
+ * 
+ * Unified interface for object storage providers (S3, R2, Tigris, etc.)
+ */
+
+/**
+ * Storage object metadata
+ */
+export interface StorageObject {
+  /** Bucket name */
+  bucket: string;
+  /** Object key/path */
+  key: string;
+  /** Object size in bytes */
+  size: number;
+  /** ETag (entity tag) for the object */
+  etag?: string;
+  /** Last modified date */
+  lastModified?: Date;
+  /** Optional metadata */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Options for uploading objects
+ */
+export interface UploadOptions {
+  /** MIME content type */
+  contentType?: string;
+  /** Custom metadata */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Result from a download operation
+ */
+export interface DownloadResult {
+  /** Object data as Uint8Array (cross-platform compatible) */
+  data: Uint8Array;
+  /** Object size in bytes */
+  size: number;
+  /** MIME content type */
+  contentType?: string;
+  /** ETag (entity tag) */
+  etag?: string;
+  /** Last modified date */
+  lastModified?: Date;
+  /** Custom metadata */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Options for listing objects
+ */
+export interface ListOptions {
+  /** Prefix to filter objects */
+  prefix?: string;
+  /** Maximum number of keys to return */
+  maxKeys?: number;
+  /** Continuation token for pagination */
+  continuationToken?: string;
+}
+
+/**
+ * Result from a list operation
+ */
+export interface ListResult {
+  /** List of objects */
+  objects: StorageObject[];
+  /** Whether there are more results */
+  truncated: boolean;
+  /** Continuation token for next page */
+  continuationToken?: string;
+}
+
+/**
+ * Base storage provider interface
+ * 
+ * All storage providers (S3, R2, Tigris) implement this interface
+ */
+export interface StorageProvider {
+  /** Upload data to storage */
+  upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject>;
+  /** Download data from storage */
+  download(bucket: string, key: string): Promise<DownloadResult>;
+  /** Delete object from storage */
+  delete(bucket: string, key: string): Promise<void>;
+  /** List objects in bucket */
+  list(bucket: string, options?: ListOptions): Promise<ListResult>;
+}

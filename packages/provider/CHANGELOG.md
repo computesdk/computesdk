@@ -1,5 +1,295 @@
 # @computesdk/provider
 
+## 2.1.5
+
+### Patch Changes
+
+- 6ec91ff: Stream a command's output while it runs, over a provider's own process API. Providers can now implement `streamCommand` to serve `onStdout`/`onStderr` themselves instead of using the daemond SSE bridge, which needs a routable port inside the sandbox, and `streamCommandViaProcess` from `@computesdk/provider` does the whole lifecycle for them — deadline, best-effort kill, exit polling and recovering the tail when a follow connection drops — so a provider supplies only its start/follow/status/kill calls. Tensorlake is the first to use it, so a long-running command there reports line by line rather than only at exit.
+  - daemond@0.1.4
+
+## 2.1.4
+
+### Patch Changes
+
+- f3fe311: Add typed `SandboxResourceOptions` to `CreateSandboxOptions`
+
+  - Introduce `SandboxResourceOptions` (CPU/memory/disk knobs), `RunloopLaunchParameters`, and `VercelSandboxResources` types, exported from `computesdk` and `@computesdk/provider`.
+  - `CreateSandboxOptions` now extends `SandboxResourceOptions` and types `runtime`, `image`, `deploymentPlan`, `size`, `vmTier`, `resources`, and `launch_parameters`, so callers can replace `Record<string, any>` resource maps with `Partial<CreateSandboxOptions>` / `SandboxResourceOptions`.
+  - `@computesdk/isorun`: cast `options.runtime` to the provider `Runtime` type now that the field is typed as `string`.
+  - `@computesdk/runloop`: destructure `launch_parameters` out of passthrough options and merge it into the devbox `launch_parameters` instead of relying on the spread, fixing a type clash with the Runloop SDK's `LaunchParameters`.
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - daemond@0.1.4
+
+## 2.1.3
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - daemond@0.1.4
+
+## 2.1.2
+
+### Patch Changes
+
+- Updated dependencies [1519626]
+  - daemond@0.1.4
+  - computesdk@4.1.2
+
+## 2.1.1
+
+### Patch Changes
+
+- eca5ec2: Remove `RunCommandOptions.daemon` from the public API and make command streaming callback-driven.
+
+  `sandbox.runCommand(...)` now automatically uses daemon-backed streaming internally when `onStdout` and/or `onStderr` callbacks are provided.
+
+  This also removes the need for daemon prewarming in callers and updates provider behavior/tests to treat streaming as an internal transport detail.
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+
+## 2.1.0
+
+### Minor Changes
+
+- cc79d78: Add `daemond` as a runtime dependency and re-export daemon seed helpers/types from the `computesdk` package entrypoint.
+
+  Also extend `RunCommandOptions` with an optional `daemon` field (`boolean | SeedScriptConfig`) so provider-backed sandboxes can opt into daemonized command execution via `sandbox.runCommand(...)`.
+
+  In `@computesdk/provider`, add runtime handling for `runCommand(..., { daemon })` in generated sandbox instances: commands are routed through `daemond` seed launcher, parsed, and normalized into `CommandResult`.
+
+  Also add daemon output callback support via `RunCommandOptions.onStdout` / `RunCommandOptions.onStderr`. When daemon SSE is available from a prior daemon invocation, callbacks receive streamed command chunks; otherwise callbacks receive final parsed stdout/stderr as fallback.
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+
+## 2.0.0
+
+### Major Changes
+
+- aa4ca58: Remove `Runtime` concept from SDK
+
+  The `Runtime` type (`'node' | 'python' | 'deno' | 'bun'`) and associated
+  `getSupportedRuntimes()` method were originally designed to support a
+  `runCode()` API that has since been removed. With no runtime-dispatch logic
+  remaining in the SDK, these are dead API surface.
+
+  **Breaking changes:**
+
+  - `Runtime` type removed from `computesdk` public exports
+  - `runtime` field removed from `SandboxInfo`
+  - `getSupportedRuntimes(): Runtime[]` removed from the `Provider` interface
+  - Provider implementations no longer need to (and cannot) implement `getSupportedRuntimes()`
+  - Test suite no longer iterates per-runtime; tests run once per sandbox
+
+  **Migration:** Remove any calls to `provider.getSupportedRuntimes()` and any
+  references to `SandboxInfo.runtime` in your code.
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+
+## 1.4.0
+
+### Minor Changes
+
+- 3ef4817: Add `@computesdk/hyperbrowser` browser provider and relax `BrowserSession.connectUrl` for list summaries.
+
+  **`@computesdk/hyperbrowser`** (new package)
+
+  - Wraps `@hyperbrowser/sdk` via the `defineBrowserProvider` factory, parallel to `@computesdk/browserbase`.
+  - Implements session lifecycle (`create / getById / list / destroy / getConnectUrl`) using `wsEndpoint` as the connect URL, and maps `active/closed/error` to standard `running/completed/failed` statuses.
+  - Maps session options: `stealth → useStealth`, `proxies (true | ProxyConfig[]) → useProxy / proxyServer / proxyCountry / proxyState / proxyCity` (Hyperbrowser supports a single proxy per session — first `ProxyConfig` wins), `viewport → screen`, `recording → enableWebRecording`, `logging → enableLogCapture`, `profileId → profile.{id, persistChanges}`, `region → region`, `timeout (sec) → timeoutMinutes`. `keepAlive` and `userMetadata` have no native equivalent.
+  - Profiles: full CRUD via `client.profiles.*`.
+  - Extensions: `create` materializes `Uint8Array`/`string` payloads to a temp file (the SDK only accepts `filePath`); `get` filters `client.extensions.list()`; `delete` throws because Hyperbrowser exposes no delete endpoint.
+  - Logs: `client.sessions.eventLogs.list` mapped to `BrowserLog` (`captcha_error → error`, others → `info`).
+  - Recordings: combines `getRecordingURL` and `getRecording` into a single `BrowserRecording` (`format: 'rrweb'`).
+
+  **`@computesdk/provider`** (breaking type relaxation)
+
+  - `BrowserSession.connectUrl` is now optional (`string | undefined`). Always populated by `create()` and `getById()`; may be omitted on entries returned by `list()` when the underlying provider's list endpoint doesn't include it. Callers needing a connectable URL for a listed session should use `provider.getConnectUrl(sessionId)`.
+  - `BrowserSessionMethods.list` return type relaxed accordingly. `create` and `getById` continue to require `connectUrl: string`.
+  - Consumers reading `session.connectUrl` directly may need to add a null check, e.g. `session.connectUrl?.startsWith('wss://')`.
+
+  **`@computesdk/browserbase`** and **`@computesdk/kernel`**
+
+  - No code change; both already populate `connectUrl` on every session method, so they satisfy the looser type. Patch bumps track the upstream provider relaxation.
+
+- 371f667: Remove the legacy daemon/client subsystem.
+
+  **Breaking changes (`computesdk`):**
+
+  - Removed the `Sandbox` client class and its entire `src/client/` subsystem (WebSocket protocol, resources, terminal/run/server/watcher/file/env/sessionToken/magicLink/signal/auth/child namespaces).
+  - Removed re-exports: `Sandbox`, `SandboxStatus`, `ProviderSandboxInfo`, `CommandExitError`, `isCommandExitError`, `TerminalInstance`, `FileWatcher`, `SignalService`, `WebSocketConstructor`, `encodeBinaryMessage`, `decodeBinaryMessage`, `MessageType`, `buildSetupPayload`, `encodeSetupPayload`, `SetupPayload`, `SetupOverlayConfig`.
+  - Removed the 11 optional advanced namespaces (`terminal?`, `run?`, `server?`, `watcher?`, `file?`, `env?`, `sessionToken?`, `magicLink?`, `signal?`, `auth?`, `child?`) from the `SandboxInterface`.
+  - Removed `SandboxOverlayConfig`, `SandboxServerConfig`, `SandboxHealthCheckConfig` types.
+  - Removed `overlays` and `servers` fields from `CreateSandboxOptions`.
+
+  These APIs were only wired against the daemon transport, which was removed from the published package earlier. No shipped provider implemented them.
+
+  **Breaking changes (`@computesdk/workbench`):**
+
+  - Removed `workbench connect <url> [token]` (required the deleted `Sandbox` client class).
+  - Removed `workbench provider local` and local-daemon auto-attach (required the deleted `Sandbox` client class).
+  - Removed `mode gateway|direct` toggle and `provider direct <name>` / `provider gateway <name>` aliases.
+  - Dropped the `child`, `server`, and `terminal` REPL bindings — they delegated to daemon-only namespaces.
+  - Dropped `ws` runtime dependency.
+
+  **Breaking changes (`@computesdk/cli`):**
+
+  - Removed `pty` mode. `compute connect`, `compute sandbox connect`, `workspace attach`, and `sandbox create --connect` now drop into the REPL (`runCommand`-based) instead of an interactive PTY shell.
+  - Removed the `/shell` REPL command that dropped into PTY.
+
+  **Other:**
+
+  - `@computesdk/provider` drops the optional `findOrCreate` / `find` / `extendTimeout` fields from `SandboxMethods` (matching the earlier compute-wrapper cleanup).
+  - 14 provider packages get a patch bump for internal destructuring cleanup (removed unused `overlays` / `servers` destructure targets).
+
+### Patch Changes
+
+- Updated dependencies [371f667]
+  - computesdk@3.0.0
+
+## 1.3.0
+
+### Minor Changes
+
+- a321f01: Remove hosted control-plane assumptions from `computesdk` and move to direct provider mode.
+
+  ### `computesdk`
+
+  - Remove gateway/control-plane transport from `compute`; `compute.sandbox.*` now routes directly to configured provider instances.
+  - Replace legacy config pathways with direct provider configuration only:
+    - `compute.setConfig({ provider })`
+    - `compute.setConfig({ providers: [...] })`
+  - Add multi-provider routing support with:
+    - `provider` + `providers` support
+    - `providerStrategy` (`priority` / `round-robin`)
+    - `fallbackOnError`
+    - per-call provider override (`{ provider: 'name' }`)
+  - Remove legacy hosted/gateway modules and exports (`auto-detect`, `explicit-config`, provider env/config exports).
+  - Replace provider compatibility tests with direct-provider contract tests and new CI integration coverage.
+
+  ### `@computesdk/provider`
+
+  - Remove deprecated `defineCompute` and compute-factory exports that depended on hosted control-plane behavior.
+  - Keep direct provider APIs (`defineProvider`, `createCompute`, `defineInfraProvider`).
+
+  ### `@computesdk/railway` and `@computesdk/render`
+
+  - Remove control-plane compute wrapper behavior.
+  - Package entrypoints now throw explicit migration errors explaining that these wrappers are no longer supported after control-plane removal.
+
+  ### `@computesdk/workbench`
+
+  - Remove dependency on deleted `computesdk` provider config exports.
+  - Inline provider env/auth metadata and switch compute instantiation to direct provider instances in both mode paths.
+  - This preserves workbench mode UX while removing legacy control-plane config usage.
+
+  ### Migration Notes
+
+  - Stop using legacy config shapes such as provider-name strings with control-plane keys.
+  - Configure `computesdk` with provider instances from provider packages.
+  - For infrastructure packages previously used as control-plane wrappers (`@computesdk/railway`, `@computesdk/render`), migrate to supported direct provider packages.
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+
+## 1.2.0
+
+### Minor Changes
+
+- 7c53d28: Add `buildShellCommand` utility to unify shell command building across providers
+
+  Centralizes cwd/env handling into a single `buildShellCommand` function in
+  `@computesdk/provider`, fixing bugs where env vars didn't work with cwd set
+  (docker, sprites, hopx) and where values weren't properly quoted (namespace,
+  sprites, hopx). All shell-based providers now use the shared utility.
+
+## 1.1.0
+
+### Minor Changes
+
+- 3e6a91a: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - computesdk@2.5.4
+
+## 1.1.0
+
+### Minor Changes
+
+- 9a312d2: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - computesdk@2.5.4
+
+## 1.1.0
+
+### Minor Changes
+
+- b34d97f: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - computesdk@2.5.4
+
+## 1.0.33
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+
+## 1.0.33
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+
+## 1.0.32
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+
+## 1.0.29
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+
 ## 1.0.28
 
 ### Patch Changes

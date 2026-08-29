@@ -7,7 +7,6 @@
 // Import and re-export universal types from computesdk (grandmother package)
 export type {
   SandboxInterface,
-  Runtime,
   CodeResult,
   CommandResult,
   SandboxInfo,
@@ -15,8 +14,24 @@ export type {
   RunCommandOptions,
   SandboxFileSystem,
   CreateSandboxOptions,
+  SandboxResourceOptions,
+  RunloopLaunchParameters,
+  VercelSandboxResources,
 } from 'computesdk';
 
 // Provider-specific types (defined in this package)
 // Includes: Provider, ProviderSandbox, TypedProviderSandbox, and all manager interfaces
 export * from './provider';
+
+// Re-export storage types explicitly for clarity
+export type {
+  StorageObject,
+  UploadOptions,
+  DownloadResult,
+  ListOptions,
+  ListResult,
+  StorageProvider,
+} from './provider';
+
+// Browser provider types
+export * from './browser';

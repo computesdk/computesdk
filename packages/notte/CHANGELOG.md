@@ -1,0 +1,64 @@
+# @computesdk/notte
+
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
+## 0.3.6
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
+## 0.3.5
+
+### Patch Changes
+
+- 328da85: Preserve explicit `stealth: false` and `proxies: false` browser session options where provider APIs support them, and warn once when a provider cannot honor the option.
+
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 0.3.3
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+
+## 0.3.0
+
+### Minor Changes
+
+- baf1ac3: Add `@computesdk/notte` browser provider for cloud browser sessions powered by Notte (https://notte.cc). Wraps `notte-sdk` via the `defineBrowserProvider` factory, parallel to `@computesdk/kernel` and `@computesdk/browserbase`.
+
+  - Session lifecycle: `create / getById / list / destroy / getConnectUrl` via `notte-sdk`'s `sessionStart / sessionStatus / listSessions / sessionStop` helpers. `connectUrl` returns Notte's CDP WebSocket endpoint with a short-lived JWT (not the API key) — does not require the same "treat as secret" handling as anchorbrowser/steel.
+  - Profiles: `create / get / list / delete` via `profileCreate / profileGet / profileList / profileDelete`.
+  - Maps session options: `viewport → viewport_width/viewport_height`, `timeout (sec) → max_duration_minutes`, `profileId → profile.{id, persist:true}`. Proxies are mapped two ways: `boolean` toggles Notte's default proxy pool; `ProxyConfig[]` is mapped via the first element only (Notte's runtime accepts a single proxy per session — multi-element arrays return HTTP 500; matches `@computesdk/hyperbrowser`'s "first ProxyConfig wins" convention). Per-element mapping: entries with a `server` URL become Notte `ExternalProxy` (server/username/password forwarded); entries without a `server` use Notte's managed pool with `geolocation.country` (lossy: ComputeSDK `type` discriminator, sub-country geolocation, and `domainPattern` are dropped because Notte doesn't model them). `type: 'custom'` without a `server` throws. `stealth`, `keepAlive`, `recording`, `logging`, `userMetadata`, `extensionIds` have no direct Notte equivalent yet.
+  - Auth via `NOTTE_API_KEY` env var or explicit `apiKey` config; base URL configurable via `NOTTE_API_URL` or `baseUrl`.

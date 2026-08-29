@@ -1,39 +1,151 @@
 /**
  * Provider detection and management for workbench
- *
- * Uses shared provider config from computesdk as single source of truth
  */
 
 import type { ProviderStatus } from './types.js';
 import { c } from './output.js';
-import {
-  PROVIDER_AUTH as SHARED_PROVIDER_AUTH,
-  PROVIDER_NAMES as SHARED_PROVIDER_NAMES,
-  PROVIDER_ENV_MAP,
-  type ProviderName as SharedProviderName,
-  isProviderAuthComplete,
-  getMissingEnvVars,
-  getProviderConfigFromEnv,
-} from 'computesdk';
 
-/**
- * Workbench-specific provider names (includes gateway)
- */
-export const PROVIDER_NAMES = [
-  'gateway',
-  ...SHARED_PROVIDER_NAMES,
+const SHARED_PROVIDER_NAMES = [
+  'e2b',
+  'daytona',
+  'modal',
+  'runloop',
+  'vercel',
+  'cloudflare',
+  'beam',
+  'just-bash',
+  'cloud-run',
+  'codesandbox',
+  'blaxel',
+  'namespace',
+  'hopx',
+  'declaw',
+  'isorun',
+  'sprites',
+  'agentuity',
+  'freestyle',
+  'secure-exec',
+  'upstash',
+  'k8s',
+  'northflank',
+  'collimate',
+  'lelantos',
+  'tenki',
+  'microsandbox',
 ] as const;
+
+type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
+
+const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string[])[]> = {
+  e2b: [['E2B_API_KEY']],
+  daytona: [['DAYTONA_API_KEY']],
+  modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
+  runloop: [['RUNLOOP_API_KEY']],
+  vercel: [
+    ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'],
+    ['VERCEL_OIDC_TOKEN'],
+  ],
+  cloudflare: [
+    ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
+    ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
+  ],
+  'cloud-run': [[]],
+  beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
+  'just-bash': [[]],
+  codesandbox: [['CSB_API_KEY']],
+  blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
+  namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
+  hopx: [['HOPX_API_KEY']],
+  declaw: [['DECLAW_API_KEY']],
+  isorun: [['ISORUN_API_KEY']],
+  sprites: [['SPRITES_TOKEN']],
+  agentuity: [['AGENTUITY_SDK_KEY']],
+  freestyle: [['FREESTYLE_API_KEY']],
+  'secure-exec': [[]],
+  upstash: [['UPSTASH_BOX_API_KEY']],
+  k8s: [[]],
+  northflank: [['NORTHFLANK_TOKEN', 'NORTHFLANK_PROJECT_ID']],
+  collimate: [['COLLIMATE_API_KEY']],
+  // The lelantos provider falls back LELANTOS_API_KEY → E2B_API_KEY, so either
+  // key alone counts as configured.
+  lelantos: [['LELANTOS_API_KEY'], ['E2B_API_KEY']],
+  tenki: [['TENKI_API_KEY'], ['TENKI_AUTH_TOKEN']],
+  // Cloud is the default, and it can authenticate with either a direct key or
+  // a named SDK profile.
+  microsandbox: [['MSB_API_KEY'], ['MSB_PROFILE']],
+};
+
+// Each config key maps to an env var name, or — when a provider accepts
+// fallbacks — an ordered list of env var names tried first-match-wins.
+const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | readonly string[]>> = {
+  e2b: { apiKey: 'E2B_API_KEY' },
+  daytona: { apiKey: 'DAYTONA_API_KEY' },
+  modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
+  runloop: { apiKey: 'RUNLOOP_API_KEY' },
+  vercel: {
+    token: 'VERCEL_TOKEN',
+    teamId: 'VERCEL_TEAM_ID',
+    projectId: 'VERCEL_PROJECT_ID',
+  },
+  cloudflare: {
+    sandboxUrl: 'CLOUDFLARE_SANDBOX_URL',
+    sandboxSecret: 'CLOUDFLARE_SANDBOX_SECRET',
+  },
+  'cloud-run': { sandboxUrl: 'CLOUD_RUN_SANDBOX_URL', sandboxSecret: 'CLOUD_RUN_SANDBOX_SECRET', gatewayAuthToken: 'CLOUD_RUN_AUTH_TOKEN', sandboxBinary: 'CLOUD_RUN_SANDBOX_BINARY' },
+  beam: { token: 'BEAM_TOKEN', workspaceId: 'BEAM_WORKSPACE_ID' },
+  'just-bash': {},
+  codesandbox: { apiKey: 'CSB_API_KEY' },
+  blaxel: { apiKey: 'BL_API_KEY', workspace: 'BL_WORKSPACE' },
+  namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
+  hopx: { apiKey: 'HOPX_API_KEY' },
+  declaw: { apiKey: 'DECLAW_API_KEY' },
+  isorun: { apiKey: 'ISORUN_API_KEY' },
+  sprites: { token: 'SPRITES_TOKEN' },
+  agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
+  freestyle: { apiKey: 'FREESTYLE_API_KEY' },
+  'secure-exec': {},
+  upstash: { apiKey: 'UPSTASH_BOX_API_KEY' },
+  k8s: {},
+  northflank: { token: 'NORTHFLANK_TOKEN', projectId: 'NORTHFLANK_PROJECT_ID', teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL' },
+  collimate: { apiKey: 'COLLIMATE_API_KEY', serverUrl: 'COLLIMATE_API_URL' },
+  lelantos: {
+    apiKey: ['LELANTOS_API_KEY', 'E2B_API_KEY'],
+    domain: ['LELANTOS_DOMAIN', 'E2B_DOMAIN'],
+    apiUrl: ['LELANTOS_API_URL', 'E2B_API_URL'],
+  },
+  tenki: { apiKey: 'TENKI_API_KEY', baseUrl: 'TENKI_API_URL', workspaceId: 'TENKI_WORKSPACE_ID' },
+  microsandbox: { apiKey: 'MSB_API_KEY', apiUrl: 'MSB_API_URL', profile: 'MSB_PROFILE' },
+};
+
+function getProviderConfigFromEnv(provider: SharedProviderName): Record<string, string> {
+  const map = PROVIDER_ENV_MAP[provider] || {};
+  const config: Record<string, string> = {};
+  for (const [configKey, envVar] of Object.entries(map)) {
+    const candidates = Array.isArray(envVar) ? envVar : [envVar];
+    for (const name of candidates) {
+      const value = process.env?.[name];
+      if (value) { config[configKey] = value; break; }
+    }
+  }
+
+  if (provider === 'microsandbox') {
+    // The SDK treats key-based auth and profile auth as mutually exclusive.
+    // Prefer the explicit key, including its optional endpoint, when both are set.
+    if (config.apiKey) {
+      delete config.profile;
+    } else if (config.profile) {
+      delete config.apiUrl;
+    }
+  }
+
+  return config;
+}
+
+export const PROVIDER_NAMES = SHARED_PROVIDER_NAMES;
 
 export type ProviderName = typeof PROVIDER_NAMES[number];
 
-/**
- * Auth requirements for each provider
- * Extends shared config with gateway-specific auth
- */
-export const PROVIDER_AUTH: Record<ProviderName, readonly (readonly string[])[]> = {
-  gateway: [['COMPUTESDK_API_KEY']],
-  ...SHARED_PROVIDER_AUTH,
-};
+export const PROVIDER_AUTH: Record<ProviderName, readonly (readonly string[])[]> = SHARED_PROVIDER_AUTH;
 
 /**
  * Get detailed status for a specific provider
@@ -172,16 +284,11 @@ export function showEnv() {
 /**
  * Auto-detect best provider to use
  */
-export function autoDetectProvider(forceGatewayMode = false): string | null {
+export function autoDetectProvider(): string | null {
   // Check for explicit override
   const explicit = process.env.COMPUTESDK_PROVIDER?.toLowerCase();
   if (explicit && isValidProvider(explicit) && isProviderReady(explicit)) {
     return explicit;
-  }
-
-  // If forcing gateway mode, only return gateway if available
-  if (forceGatewayMode) {
-    return isProviderReady('gateway') ? 'gateway' : null;
   }
 
   // Auto-detect based on priority order
@@ -241,16 +348,12 @@ export function getProviderSetupHelp(provider: string): string {
 export async function loadProvider(providerName: ProviderName): Promise<any> {
   try {
     switch (providerName) {
-      case 'gateway':
-        // Gateway is built into computesdk package
-        return await import('computesdk');
       case 'e2b':
         return await import('@computesdk/e2b');
-      case 'railway':
-        return await import('@computesdk/railway');
       case 'daytona':
         return await import('@computesdk/daytona');
       case 'modal':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/modal');
       case 'runloop':
         return await import('@computesdk/runloop');
@@ -259,23 +362,57 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'cloudflare':
         // @ts-ignore - @cloudflare/sandbox types may not be available
         return await import('@computesdk/cloudflare');
+      case 'cloud-run':
+        return await import('@computesdk/cloud-run');
       case 'beam':
         return await import('@computesdk/beam');
+      case 'just-bash':
+        return await import('@computesdk/just-bash');
       case 'codesandbox':
         return await import('@computesdk/codesandbox');
       case 'blaxel':
         return await import('@computesdk/blaxel');
       case 'namespace':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
         return await import('@computesdk/namespace');
       case 'hopx':
         return await import('@computesdk/hopx');
+      case 'declaw':
+        return await import('@computesdk/declaw');
+      case 'isorun':
+        return await import('@computesdk/isorun');
+      case 'sprites':
+        return await import('@computesdk/sprites');
+      case 'agentuity':
+        return await import('@computesdk/agentuity');
+      case 'freestyle':
+        return await import('@computesdk/freestyle');
+      case 'secure-exec':
+        return await import('@computesdk/secure-exec');
+      case 'upstash':
+        return await import('@computesdk/upstash');
+      case 'k8s':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/k8s');
+      case 'northflank':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/northflank');
+      case 'collimate':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/collimate');
+      case 'lelantos':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/lelantos');
+      case 'tenki':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/tenki');
+      case 'microsandbox':
+        // @ts-ignore - package type declarations may be unavailable in local workbench typecheck
+        return await import('@computesdk/microsandbox');
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }
   } catch (error) {
-    if (providerName === 'gateway') {
-      throw new Error(`Failed to load gateway provider from computesdk package.`);
-    }
     throw new Error(
       `Failed to load provider ${providerName}. ` +
       `Make sure to install it: npm install @computesdk/${providerName}`
@@ -285,16 +422,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
 
 /**
  * Create provider config from environment variables
- * Uses shared PROVIDER_ENV_MAP from computesdk
  */
 export function getProviderConfig(providerName: ProviderName): Record<string, string> {
-  // Handle gateway separately (not in shared config)
-  if (providerName === 'gateway') {
-    const config: Record<string, string> = {};
-    if (process.env.COMPUTESDK_API_KEY) config.apiKey = process.env.COMPUTESDK_API_KEY;
-    return config;
-  }
-
-  // Use shared utility for other providers
-  return getProviderConfigFromEnv(providerName as SharedProviderName);
+  return getProviderConfigFromEnv(providerName);
 }

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/test-utils",
-  "version": "1.5.1",
+  "version": "2.0.1",
   "description": "Testing utilities and helpers for ComputeSDK provider development and integration tests",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,6 +26,7 @@
     "vitest": "^1.0.0"
   },
   "devDependencies": {
+    "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",

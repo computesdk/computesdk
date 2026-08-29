@@ -1,5 +1,211 @@
 # @computesdk/modal
 
+## 1.9.5
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
+## 1.9.4
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
+## 1.9.3
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 1.9.2
+
+### Patch Changes
+
+- 5812a55: Await `process.stdout.readText()`, `process.stderr.readText()`, and `process.wait()` in parallel inside `runCommand` and filesystem ops (`readFile` cat-fallback, `mkdir`, `readdir`, `remove`), removing a serial round trip per exec.
+
+## 1.9.1
+
+### Patch Changes
+
+- d1a81bb: Build the cached `Image` once per provider instance instead of deferring to each `sandbox.create()` call. Concurrent `sandbox.create()` callers now share a single `ImageGetOrCreate` RPC for the default image (or a given template/snapshot id), instead of each call independently triggering one.
+
+## 1.9.0
+
+### Minor Changes
+
+- f4941b9: Add `scalableSandboxes` option to the Modal provider, enabling Modal's experimental scalable sandbox creation. Configurable via provider config or per `create()` call.
+
+### Patch Changes
+
+- f1d87cb: Cache resolved `Image` per provider instance in `modal.sandbox.create`, sharing a single Modal API call across concurrent bursts of sandbox creations for the same template/snapshot id (or default image).
+
+## 1.8.46
+
+### Patch Changes
+
+- Add `scalableSandboxes` to opt into Modal's scalable sandboxes create path.
+
+## 1.8.45
+
+### Patch Changes
+
+- 643c935: Use `encryptedPorts` instead of `unencryptedPorts` when creating Modal sandboxes. This ensures the SDK <> sandbox connection is TLS-wrapped (https://) rather than plaintext (http://), improving both security and latency per Modal's recommendation.
+  - computesdk@4.1.2
+  - @computesdk/provider@2.1.2
+
+## 1.8.44
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
+## 1.8.43
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+
+## 1.8.42
+
+### Patch Changes
+
+- e84e734: Migrate to Modal JS SDK v0.7. Replaces the static API (App.lookup, Sandbox.fromId, app.createSandbox) with the new ModalClient subsystem API (client.apps.fromName, client.sandboxes.create, client.sandboxes.fromId), caches the App as a Promise<App> to keep the modal() factory synchronous, clarifies the auth error message to mention both config and env var credentials, and aligns the README with the v3 SDK.
+
+## 1.8.41
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+  - @computesdk/provider@2.0.0
+
+## 1.8.40
+
+### Patch Changes
+
+- 371f667: Remove the legacy daemon/client subsystem.
+
+  **Breaking changes (`computesdk`):**
+
+  - Removed the `Sandbox` client class and its entire `src/client/` subsystem (WebSocket protocol, resources, terminal/run/server/watcher/file/env/sessionToken/magicLink/signal/auth/child namespaces).
+  - Removed re-exports: `Sandbox`, `SandboxStatus`, `ProviderSandboxInfo`, `CommandExitError`, `isCommandExitError`, `TerminalInstance`, `FileWatcher`, `SignalService`, `WebSocketConstructor`, `encodeBinaryMessage`, `decodeBinaryMessage`, `MessageType`, `buildSetupPayload`, `encodeSetupPayload`, `SetupPayload`, `SetupOverlayConfig`.
+  - Removed the 11 optional advanced namespaces (`terminal?`, `run?`, `server?`, `watcher?`, `file?`, `env?`, `sessionToken?`, `magicLink?`, `signal?`, `auth?`, `child?`) from the `SandboxInterface`.
+  - Removed `SandboxOverlayConfig`, `SandboxServerConfig`, `SandboxHealthCheckConfig` types.
+  - Removed `overlays` and `servers` fields from `CreateSandboxOptions`.
+
+  These APIs were only wired against the daemon transport, which was removed from the published package earlier. No shipped provider implemented them.
+
+  **Breaking changes (`@computesdk/workbench`):**
+
+  - Removed `workbench connect <url> [token]` (required the deleted `Sandbox` client class).
+  - Removed `workbench provider local` and local-daemon auto-attach (required the deleted `Sandbox` client class).
+  - Removed `mode gateway|direct` toggle and `provider direct <name>` / `provider gateway <name>` aliases.
+  - Dropped the `child`, `server`, and `terminal` REPL bindings — they delegated to daemon-only namespaces.
+  - Dropped `ws` runtime dependency.
+
+  **Breaking changes (`@computesdk/cli`):**
+
+  - Removed `pty` mode. `compute connect`, `compute sandbox connect`, `workspace attach`, and `sandbox create --connect` now drop into the REPL (`runCommand`-based) instead of an interactive PTY shell.
+  - Removed the `/shell` REPL command that dropped into PTY.
+
+  **Other:**
+
+  - `@computesdk/provider` drops the optional `findOrCreate` / `find` / `extendTimeout` fields from `SandboxMethods` (matching the earlier compute-wrapper cleanup).
+  - 14 provider packages get a patch bump for internal destructuring cleanup (removed unused `overlays` / `servers` destructure targets).
+
+- Updated dependencies [3ef4817]
+- Updated dependencies [371f667]
+  - @computesdk/provider@1.4.0
+  - computesdk@3.0.0
+
+## 1.8.39
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+
+## 1.8.38
+
+### Patch Changes
+
+- 7c53d28: Add `buildShellCommand` utility to unify shell command building across providers
+
+  Centralizes cwd/env handling into a single `buildShellCommand` function in
+  `@computesdk/provider`, fixing bugs where env vars didn't work with cwd set
+  (docker, sprites, hopx) and where values weren't properly quoted (namespace,
+  sprites, hopx). All shell-based providers now use the shared utility.
+
+- Updated dependencies [7c53d28]
+  - @computesdk/provider@1.2.0
+
+## 1.8.37
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.8.37
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.8.37
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.8.36
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
+## 1.8.36
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
+## 1.8.35
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+  - @computesdk/provider@1.0.32
+
+## 1.8.32
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+  - @computesdk/provider@1.0.29
+
 ## 1.8.31
 
 ### Patch Changes

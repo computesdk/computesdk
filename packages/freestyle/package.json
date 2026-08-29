@@ -1,7 +1,8 @@
 {
   "name": "@computesdk/freestyle",
-  "version": "0.1.0",
+  "version": "0.1.12",
   "description": "Freestyle provider for ComputeSDK - full Linux VMs for long-running agent tasks, with instant startup and cheap snapshotting",
+  "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -18,15 +19,18 @@
   ],
   "scripts": {
     "build": "tsup",
+    "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
   "dependencies": {
+    "freestyle": "^0.2.7",
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*",
-    "freestyle": "^0.2.7"
+    "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",

@@ -7,7 +7,7 @@
 import { SandboxInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Runtime, CodeResult, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -30,62 +30,83 @@ export interface BlaxelConfig {
 /**
  * Create a Blaxel provider instance using the factory pattern
  */
-export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
+export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
 	methods: {
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
 			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
+				// Destructure known ComputeSDK fields, collect the rest for passthrough
+				const {
+					timeout: optTimeout,
+					envs,
+					name: _name,
+					metadata,
+					templateId: _templateId,
+					snapshotId,
+					sandboxId: optSandboxId,
+					namespace: _namespace,
+					directory: _directory,
+					...providerOptions
+				} = options || {};
+
+				const optRuntime = (options as any)?.runtime as string | undefined;
+
 				// Determine the image to use
-				let image = config.image || 'blaxel/prod-base:latest';  // Default to prod-base
+				let image = config.image || 'blaxel/base-image:latest';  // Default to prod-base
 
 				// Override with runtime-specific image if runtime is specified and no explicit image
-				if (!config.image && options?.runtime) {
-					switch (options.runtime) {
+				if (!config.image && optRuntime) {
+					switch (optRuntime) {
 						case 'python':
-							image = 'blaxel/prod-py-app:latest';
+							image = 'blaxel/py-app:latest';
 							break;
 						case 'node':
-							image = 'blaxel/prod-ts-app:latest';
+							image = 'blaxel/ts-app:latest';
 							break;
 						default:
-							image = 'blaxel/prod-base:latest';
+							image = 'blaxel/base-image:latest';
 							break;
 					}
 				}
 				const memory = config.memory;
 				const region = config.region;
-				const envs = options?.envs;
-				const ttl = options?.timeout ? `${Math.ceil(options.timeout / 1000)}s` : undefined;
+				const ttl = optTimeout ? `${Math.ceil(optTimeout / 1000)}s` : undefined;
 
-				try {
-					// Initialize Blaxel SDK with credentials
-					initializeBlaxel(config);
+			try {
+				// Initialize Blaxel SDK with credentials
+				initializeBlaxel(config);
 
-					let sandbox: SandboxInstance;
+				let sandbox: SandboxInstance;
 
+				// Check if we should resume an existing sandbox or create new
+				const existingId = optSandboxId || snapshotId;
+				
+				if (existingId) {
+					// Resume existing sandbox or snapshot
+					sandbox = await SandboxInstance.get(existingId);
+					if (!sandbox) {
+						throw new Error(`Sandbox ${existingId} not found`);
+					}
+				} else {
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
-						name: options?.sandboxId || `blaxel-${Date.now()}`,
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
-						metadata: {
-							name: options?.sandboxId || `blaxel-${Date.now()}`,
-							labels: {
-								...options?.metadata?.labels,
-							}
-						},
+						...(metadata?.labels && { labels: metadata.labels }),
 						ttl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
-						...(region && { region })
+						...(region && { region }),
+						...providerOptions, // Spread provider-specific options
 					});
+				}
 
-					return {
-						sandbox,
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
-					};
-				} catch (error) {
+				return {
+					sandbox,
+					sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
+				};
+			} catch (error) {
 					const errorDetail = error instanceof Error
 						? error.message
 						: typeof error === 'object' && error !== null
@@ -134,7 +155,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 
 			list: async (config: BlaxelConfig) => {
 				initializeBlaxel(config);
-				const sandboxList = await SandboxInstance.list();
+				const sandboxList = await listAllSandboxes();
 				return sandboxList.map(sandbox => ({
 					sandbox,
 					sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
@@ -147,103 +168,10 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 					await SandboxInstance.delete(sandboxId);
 				} catch (error) {
 					// Sandbox might already be destroyed or doesn't exist
-					// This is acceptable for destroy operations
 				}
 			},
 
 			// Instance operations (map to individual Sandbox methods)
-			runCode: async (sandbox: SandboxInstance, code: string, runtime?: Runtime): Promise<CodeResult> => {
-				const startTime = Date.now();
-
-				try {
-					// Determine runtime: 
-					// 1. Use explicitly passed runtime if provided
-					// 2. Check sandbox's actual runtime based on its image
-					// 3. Fall back to auto-detection from code content
-					let effectiveRuntime = runtime;
-
-					if (!effectiveRuntime) {
-						// Check sandbox's image to determine its runtime
-						const sandboxImage = sandbox.spec?.runtime?.image || '';
-						if (sandboxImage.includes('py')) {
-							effectiveRuntime = 'python';
-						} else if (sandboxImage.includes('ts') || sandboxImage.includes('node') || sandboxImage.includes('base')) {
-							// prod-base, prod-ts-app are both Node/TypeScript environments
-							effectiveRuntime = 'node';
-						} else {
-							// Fall back to auto-detection with improved patterns for unknown images
-							effectiveRuntime = (
-								// Strong Python indicators
-								code.includes('print(') ||
-									code.includes('import ') ||
-									code.includes('from ') ||
-									code.includes('def ') ||
-									code.includes('class ') ||
-									code.includes('raise ') ||
-									code.includes('except ') ||
-									code.includes('elif ') ||
-									code.includes('lambda ') ||
-									code.includes('True') ||
-									code.includes('False') ||
-									code.includes('None') ||
-									code.includes('sys.') ||
-									code.includes('json.') ||
-									code.includes('__') ||
-									code.includes('f"') ||
-									code.includes("f'") ||
-									code.includes('"""') ||
-									code.includes("'''")
-									? 'python'
-									// Default to Node.js for all other cases (including ambiguous)
-									: 'node'
-							);
-						}
-					}
-
-					// Execute code using Blaxel's process execution
-					// Escape the code properly for shell execution
-					const escapedCode = code.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-
-					const command = effectiveRuntime === 'python'
-						? `python3 -c "${escapedCode}"`
-						: `node -e "${escapedCode}"`;
-
-					const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, command);
-
-					// Check for syntax errors and throw them
-					if (exitCode !== 0 && stderr) {
-						// Check for common syntax error patterns
-						if (stderr.includes('SyntaxError') ||
-							stderr.includes('invalid syntax') ||
-							stderr.includes('Unexpected token') ||
-							stderr.includes('Unexpected identifier')) {
-							throw new Error(`Syntax error: ${stderr.trim()}`);
-						}
-					}
-
-					// Combine stdout and stderr into output
-					const output = stderr ? `${stdout}\n${stderr}`.trim() : stdout;
-
-					return {
-						output,
-						exitCode,
-						language: effectiveRuntime
-					};
-				} catch (error) {
-					// Re-throw syntax errors
-					if (error instanceof Error && error.message.includes('Syntax error')) {
-						throw error;
-					}
-
-					// For runtime errors, return a result instead of throwing
-					return {
-						output: error instanceof Error ? error.message : String(error),
-						exitCode: 1,
-						language: runtime || 'node'
-					};
-				}
-			},
-
 		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
 			const startTime = Date.now();
 
@@ -288,14 +216,15 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 		},
 
 			getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
+				const runtime = sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node';
 				return {
 					id: sandbox.metadata?.name || 'blaxel-unknown',
 					provider: 'blaxel',
-					runtime: sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node',
 					status: convertSandboxStatus(sandbox.status),
 					createdAt: sandbox.metadata?.createdAt ? new Date(sandbox.metadata.createdAt) : new Date(),
 					timeout: parseTTLToMilliseconds(sandbox.spec?.runtime?.ttl),
 					metadata: {
+						runtime,
 						...sandbox.metadata?.labels
 					}
 				};
@@ -418,13 +347,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 				exists: async (sandbox: SandboxInstance, path: string): Promise<boolean> => {
 					try {
 						await sandbox.fs.read(path);
-						return true;  // It's a file and exists
+						return true;
 					} catch {
 						try {
 							await sandbox.fs.ls(path);
-							return true;  // It's a directory and exists
+							return true;
 						} catch {
-							return false;  // Path doesn't exist
+							return false;
 						}
 					}
 				},
@@ -438,35 +367,110 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig>({
 			getInstance: (sandbox: SandboxInstance): SandboxInstance => {
 				return sandbox;
 			},
+		},
+
+		snapshot: {
+			create: async (config: BlaxelConfig, sandboxId: string, options?: { name?: string }) => {
+				try {
+					initializeBlaxel(config);
+					
+					const sandbox = await SandboxInstance.get(sandboxId);
+					
+					if (!sandbox) {
+						throw new Error(`Sandbox ${sandboxId} not found`);
+					}
+
+					return {
+						id: sandboxId,
+						provider: 'blaxel',
+						createdAt: new Date(),
+						metadata: {
+							name: options?.name,
+							image: sandbox.spec?.runtime?.image
+						}
+					};
+				} catch (error) {
+					throw new Error(
+						`Failed to create Blaxel snapshot: ${error instanceof Error ? error.message : String(error)}`
+					);
+				}
+			},
+
+			list: async (config: BlaxelConfig) => {
+				initializeBlaxel(config);
+				const sandboxList = await listAllSandboxes();
+				return sandboxList.map(sandbox => ({
+					id: sandbox.metadata?.name || 'blaxel-unknown',
+					provider: 'blaxel',
+					createdAt: sandbox.metadata?.createdAt ? new Date(sandbox.metadata.createdAt) : new Date(),
+					metadata: {
+						image: sandbox.spec?.runtime?.image,
+						status: sandbox.status
+					}
+				}));
+			},
+
+			delete: async (config: BlaxelConfig, snapshotId: string) => {
+				try {
+					initializeBlaxel(config);
+					await SandboxInstance.delete(snapshotId);
+				} catch (error) {
+					// Ignore if not found
+				}
+			}
+		},
+
+		// Templates in Blaxel are pre-configured images
+		template: {
+			create: async (_config: BlaxelConfig, _options: { name: string }) => {
+				throw new Error(
+					`Blaxel templates must be created via the Blaxel dashboard or CLI. Use image in sandbox.create() to specify a base image.`
+				);
+			},
+
+			list: async (_config: BlaxelConfig) => {
+				throw new Error(
+					`Blaxel provider does not support listing templates via API. Use the dashboard to manage templates.`
+				);
+			},
+
+			delete: async (_config: BlaxelConfig, _templateId: string) => {
+				throw new Error(
+					`Blaxel templates must be deleted via the Blaxel dashboard or CLI.`
+				);
+			}
 		}
 	}
 });
 
 /**
+ * Collect all sandboxes across pages — since @blaxel/core 0.3.x, list()
+ * returns a cursor-paginated, auto-paging async iterable instead of an array.
+ */
+async function listAllSandboxes(): Promise<SandboxInstance[]> {
+	const sandboxes: SandboxInstance[] = [];
+	for await (const sandbox of await SandboxInstance.list()) {
+		sandboxes.push(sandbox);
+	}
+	return sandboxes;
+}
+
+/**
  * Parse TTL value from Blaxel's format to milliseconds
- * Supports formats like "30m", "24h", "7d" or plain numbers (seconds)
  */
 function parseTTLToMilliseconds(ttl: string | number | undefined): number {
-	if (!ttl) return 300000; // Default to 5 minutes
-
-	// If it's already a number, treat it as seconds and convert to milliseconds
-	if (typeof ttl === 'number') {
-		return ttl * 1000;
-	}
-
-	// Parse string formats like "30m", "24h", "7d"
+	if (!ttl) return 300000;
+	if (typeof ttl === 'number') return ttl * 1000;
 	const match = ttl.match(/^(\d+)([smhd])?$/);
-	if (!match) return 300000; // Default if format is invalid
-
+	if (!match) return 300000;
 	const value = parseInt(match[1], 10);
-	const unit = match[2] || 's'; // Default to seconds if no unit
-
+	const unit = match[2] || 's';
 	switch (unit) {
-		case 's': return value * 1000;           // seconds to ms
-		case 'm': return value * 60 * 1000;      // minutes to ms
-		case 'h': return value * 60 * 60 * 1000; // hours to ms
-		case 'd': return value * 24 * 60 * 60 * 1000; // days to ms
-		default: return 300000; // Default fallback
+		case 's': return value * 1000;
+		case 'm': return value * 60 * 1000;
+		case 'h': return value * 60 * 60 * 1000;
+		case 'd': return value * 24 * 60 * 60 * 1000;
+		default: return 300000;
 	}
 }
 
@@ -490,28 +494,22 @@ function convertSandboxStatus(status: string | undefined): 'running' | 'stopped'
 
 /**
  * Execute a command in the sandbox and capture stdout/stderr
- * Handles the common pattern of executing, streaming logs, and waiting for completion
  */
 async function executeWithStreaming(
 	sandbox: SandboxInstance,
 	command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-	// Execute the command
-	const result = await sandbox.process.exec({ command });
-
-	// Wait for process completion
-	await sandbox.process.wait(result.name);
-
-	// Get final process result for exit code
-	const processResult = await sandbox.process.get(result.name);
-
+	const processResult = await sandbox.process.exec({
+		command,
+		waitForCompletion: true,
+	});
+	const result = processResult as { stdout?: string; stderr?: string; exitCode?: number };
 	return {
-		stdout: processResult.logs,
-		stderr: processResult.logs,
-		exitCode: processResult.exitCode || 0
+		stdout: result.stdout || '',
+		stderr: result.stderr || '',
+		exitCode: result.exitCode || 0,
 	};
 }
 
 // Export the Blaxel SandboxInstance type for explicit typing
 export type { SandboxInstance as BlaxelSandbox } from '@blaxel/core';
-

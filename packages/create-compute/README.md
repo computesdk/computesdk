@@ -68,10 +68,10 @@ git.status()
 
 ```javascript
 // Run Python code
-runCode('print(1 + 1)', 'python')
+runCommand('python -c \"print(1 + 1)\"')
 
 // Run Node.js code  
-runCode('console.log(1 + 1)', 'node')
+runCommand('node -e "console.log(1 + 1)"')
 ```
 
 ### Manage Sandbox

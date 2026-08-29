@@ -76,24 +76,6 @@ export const myProvider = defineProvider<any, MyProviderConfig>({
         );
       },
       
-      runCode: async (sandbox, code, runtime) => {
-        // Execute code in the sandbox
-        const response = await fetch(
-          `https://api.example.com/sandboxes/${sandbox.id}/execute`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ code, runtime })
-          }
-        );
-        
-        const result = await response.json();
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode
-        };
-      },
-      
       runCommand: async (sandbox, command, args) => {
         // Run shell command
         const response = await fetch(
@@ -209,21 +191,6 @@ destroy: async (config, sandboxId) => {
 
 These methods operate on individual sandbox instances:
 
-##### `runCode(sandbox, code, runtime?, config?)`
-
-Execute code in the sandbox.
-
-```typescript
-runCode: async (sandbox, code, runtime) => {
-  const result = await yourApi.executeCode(sandbox.id, code);
-  return {
-    stdout: result.output,
-    stderr: result.errors,
-    exitCode: result.code
-  };
-}
-```
-
 ##### `runCommand(sandbox, command, args?, options?)`
 
 Run a shell command.
@@ -232,7 +199,7 @@ Run a shell command.
 runCommand: async (sandbox, command, args) => {
   const result = await yourApi.runCommand(sandbox.id, command, args);
   return {
-    stdout: result.output,
+    stdout: result.stdout,
     stderr: result.errors,
     exitCode: result.code
   };
@@ -265,41 +232,44 @@ getUrl: async (sandbox, options) => {
 
 ### Optional Filesystem Methods
 
-Add filesystem support by implementing the `filesystem` methods:
+Add filesystem support by implementing the `filesystem` methods. Import `escapeShellArg` from `@computesdk/provider` and always interpolate it inside double quotes — the helper escapes `\`, `"`, `$`, and backticks but not spaces or shell metacharacters like `;` and `|`, so unquoted usage will break on paths with spaces and is unsafe for user-controlled input.
 
 ```typescript
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
+
+// ...
+
 methods: {
   sandbox: {
     // ... required methods
     
     filesystem: {
       readFile: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'cat', [path]);
+        const result = await runCommand(sandbox, `cat "${escapeShellArg(path)}"`);
         return result.stdout;
       },
       
       writeFile: async (sandbox, path, content, runCommand) => {
-        const escaped = content.replace(/'/g, "'\\''");
-        await runCommand(sandbox, 'sh', ['-c', `cat > '${path}' << 'EOF'\n${content}\nEOF`]);
+        await runCommand(sandbox, `cat > "${escapeShellArg(path)}" << 'EOF'\n${content}\nEOF`);
       },
       
       mkdir: async (sandbox, path, runCommand) => {
-        await runCommand(sandbox, 'mkdir', ['-p', path]);
+        await runCommand(sandbox, `mkdir -p "${escapeShellArg(path)}"`);
       },
       
       readdir: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'ls', ['-la', path]);
+        const result = await runCommand(sandbox, `ls -la "${escapeShellArg(path)}"`);
         // Parse ls output and return FileEntry[]
         return parseFileList(result.stdout);
       },
       
       exists: async (sandbox, path, runCommand) => {
-        const result = await runCommand(sandbox, 'test', ['-e', path]);
+        const result = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`);
         return result.exitCode === 0;
       },
       
       remove: async (sandbox, path, runCommand) => {
-        await runCommand(sandbox, 'rm', ['-rf', path]);
+        await runCommand(sandbox, `rm -rf "${escapeShellArg(path)}"`);
       }
     }
   }
@@ -307,37 +277,6 @@ methods: {
 ```
 
 **Note:** If you don't implement `filesystem`, the sandbox will still work but filesystem operations will throw helpful "not supported" errors.
-
-### Optional Named Sandbox Methods
-
-Support named sandboxes (useful for gateway providers):
-
-```typescript
-methods: {
-  sandbox: {
-    // ... required methods
-    
-    findOrCreate: async (config, options) => {
-      // Find sandbox by name or create it
-      const existing = await findByName(config, options.name);
-      if (existing) return existing;
-      
-      return await create(config, options);
-    },
-    
-    find: async (config, options) => {
-      // Find sandbox by name
-      const sandbox = await findByName(config, options.name);
-      return sandbox ? { sandbox, sandboxId: sandbox.id } : null;
-    },
-    
-    extendTimeout: async (config, sandboxId, options) => {
-      // Extend sandbox timeout
-      await yourApi.extendTimeout(sandboxId, options.duration);
-    }
-  }
-}
-```
 
 ## Type Definitions
 
@@ -375,7 +314,7 @@ import type {
 Providers can operate in different modes:
 
 - **`direct`** - Provider has native sandbox capabilities (e.g., E2B, Modal)
-- **`gateway`** - Provider only has infrastructure (e.g., Railway) - routes through gateway
+- **`gateway`** - Provider only has infrastructure - routes through gateway
 
 Set the default mode in your provider config:
 
@@ -424,14 +363,6 @@ export const minimal = defineProvider<any, MinimalConfig>({
       
       destroy: async (config, id) => {
         // Clean up sandbox
-      },
-      
-      runCode: async (sandbox, code, runtime) => {
-        return {
-          stdout: `Executed: ${code}`,
-          stderr: '',
-          exitCode: 0
-        };
       },
       
       runCommand: async (sandbox, command, args) => {
@@ -510,9 +441,9 @@ create: async (config, options) => {
 ### 2. Provide Helpful Error Messages
 
 ```typescript
-runCode: async (sandbox, code, runtime) => {
+runCommand: async (sandbox, command, args) => {
   try {
-    return await yourApi.execute(sandbox.id, code);
+    return await yourApi.runCommand(sandbox.id, command, args);
   } catch (error) {
     if (error.code === 'QUOTA_EXCEEDED') {
       throw new Error(
@@ -574,7 +505,7 @@ describe('MyProvider', () => {
     const compute = myProvider({ apiKey: process.env.MY_PROVIDER_API_KEY! });
     const sandbox = await compute.sandbox.create();
     
-    const result = await sandbox.runCode('print("Hello")', 'python');
+    const result = await sandbox.runCommand('python -c "print(\"Hello\")"');
     expect(result.stdout).toContain('Hello');
     expect(result.exitCode).toBe(0);
     
@@ -587,9 +518,9 @@ describe('MyProvider', () => {
 
 See these provider implementations for reference:
 
-- **[@computesdk/e2b](../e2b)** - Full-featured provider with filesystem and terminals
+- **[@computesdk/e2b](../e2b)** - Full-featured provider with filesystem operations
 - **[@computesdk/modal](../modal)** - GPU-accelerated Python provider
-- **[@computesdk/railway](../railway)** - Infrastructure provider using gateway mode
+- **[@computesdk/daytona](../daytona)** - Workspace-based development sandboxes
 
 ## Related Packages
 

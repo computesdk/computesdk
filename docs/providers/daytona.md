@@ -1,36 +1,66 @@
+---
+description: >-
+  Install and use the Daytona provider for ComputeSDK to create sandboxes and
+  run commands in Daytona development workspaces.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # Daytona
+
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/daytona/" %}
 
 Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
 
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/daytona
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your Daytona credentials to a `.env` file:
 
+```bash
 DAYTONA_API_KEY=your_daytona_api_key
 ```
 
-
 ## Usage
 
-### With ComputeSDK
-
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { daytona } from '@computesdk/daytona';
+
+const compute = daytona({
+  apiKey: process.env.DAYTONA_API_KEY,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from Daytona!")');
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Daytona!"');
 console.log(result.stdout); // "Hello from Daytona!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
 
 ### Configuration Options
@@ -39,38 +69,9 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 interface DaytonaConfig {
   /** Daytona API key - if not provided, will use DAYTONA_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment */
-  runtime?: 'node' | 'python';
+  /** Default runtime environment (e.g. 'node', 'python') */
+  runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
 ```
-
-
-## Explicit Provider Configuration
-If you prefer to set the provider explicitly, you can do so as follows:
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'daytona',
-   daytona: {
-     apiKey: process.env.DAYTONA_API_KEY
-   }
-});
-
-const sandbox = await compute.sandbox.create();
-```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases

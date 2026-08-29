@@ -1,0 +1,41 @@
+<svg width="960" height="460" viewBox="0 0 960 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title description">
+  <title id="title">ComputeSDK provider map</title>
+  <desc id="description">A two-by-two map of ComputeSDK providers by execution location and isolation. Matching microsandbox points in the cloud and local microVM cells are connected to show that they use the same provider and API.</desc>
+
+  <rect width="960" height="460" fill="#121212"/>
+  <rect x="0.75" y="0.75" width="958.5" height="458.5" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
+
+  <text x="32" y="30" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2.2" fill="#8f886a">COMPUTESDK / PROVIDER MAP</text>
+  <text x="32" y="65" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="24" fill="#d2c99c">WHERE PROVIDERS RUN</text>
+
+  <text x="200" y="104" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2" fill="#8f886a">PROVIDER CLOUD</text>
+  <text x="580" y="104" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" letter-spacing="2" fill="#8f886a">YOUR MACHINE</text>
+
+  <path d="M180 112 H928 V424 H180 Z M554 112 V424 M180 268 H928" fill="none" stroke="#d2c99c" stroke-width="1.5"/>
+
+  <text x="32" y="145" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15" fill="#d2c99c">MICROVM</text>
+  <text x="32" y="168" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.5" fill="#8f886a">HARDWARE-ISOLATED</text>
+  <text x="32" y="302" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15" fill="#d2c99c">CONTAINER</text>
+  <text x="32" y="325" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15" fill="#d2c99c">OR PROCESS</text>
+
+  <!-- Microsandbox uses the same marker as every provider; only the quiet rule links its two backends. -->
+  <path d="M350 146 H580" fill="none" stroke="#8f886a" stroke-dasharray="3 4"/>
+  <rect x="413" y="135" width="132" height="22" fill="#121212"/>
+  <text x="479" y="150" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="9" letter-spacing="1.2" fill="#8f886a">SAME PROVIDER / API</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="14" fill="#d2c99c">
+    <rect x="200" y="139" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="226" y="149">MICROSANDBOX</text>
+    <rect x="580" y="139" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="606" y="149">MICROSANDBOX</text>
+
+    <rect x="200" y="194" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="226" y="204">E2B</text>
+    <rect x="360" y="194" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="386" y="204">VERCEL</text>
+    <rect x="200" y="234" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="226" y="244">CODESANDBOX</text>
+    <rect x="360" y="234" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="386" y="244">BLAXEL</text>
+
+    <rect x="200" y="304" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="226" y="314">DAYTONA</text>
+    <rect x="200" y="364" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="226" y="374">MODAL</text>
+
+    <rect x="580" y="304" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="606" y="314">DOCKER</text>
+    <rect x="580" y="364" width="10" height="10" fill="none" stroke="#d2c99c"/><text x="606" y="374">JUST-BASH</text>
+  </g>
+</svg>

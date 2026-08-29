@@ -1,0 +1,70 @@
+{
+  "name": "@computesdk/run-cloud",
+  "version": "1.0.2",
+  "description": "Run Cloud provider for ComputeSDK - fast Firecracker microVM sandboxes with snapshots and filesystem access",
+  "author": "Run Cloud",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "computesdk",
+    "run-cloud",
+    "runcloud",
+    "sandbox",
+    "firecracker",
+    "microvm",
+    "snapshot",
+    "code-execution",
+    "cloud",
+    "compute",
+    "provider"
+  ],
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "@run-cloud/sdk": "^0.15.0",
+    "computesdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/run-cloud"
+  },
+  "homepage": "https://run.cloud",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  }
+}

@@ -1,41 +1,9 @@
 /**
  * Universal Sandbox Interface
- * 
- * The canonical interface for all ComputeSDK sandboxes.
- * 
- * Core methods (required):
- * - runCode, runCommand, getInfo, getUrl, destroy, filesystem
- * 
- * Advanced features (optional):
- * - terminal, server, watcher, auth, env, etc.
- * 
- * Providers can implement as much or as little as makes sense for their platform.
- * The gateway Sandbox class implements the full specification.
- * 
- * **Note on naming:** This interface is named "Sandbox" in this file for clarity,
- * but is exported as "SandboxInterface" from the main computesdk package to avoid
- * collision with the gateway Sandbox class. The rename happens at export time in
- * src/index.ts. Providers using @computesdk/provider will only see "SandboxInterface".
- * 
- * @example Minimal implementation
- * ```typescript
- * class MinimalSandbox implements Pick<Sandbox, 'sandboxId' | 'provider' | 'runCode' | 'runCommand' | 'getInfo' | 'getUrl' | 'destroy' | 'filesystem'> {
- *   // Just implement core methods
- * }
- * ```
- * 
- * @example Full implementation
- * ```typescript
- * class FullSandbox implements Sandbox {
- *   // Implement everything - core + advanced features
- * }
- * ```
+ *
+ * The canonical interface for all ComputeSDK sandboxes. Providers using
+ * @computesdk/provider implement this shape (re-exported as SandboxInterface).
  */
-
-/**
- * Supported runtime environments
- */
-export type Runtime = 'node' | 'python' | 'deno' | 'bun';
 
 /**
  * Code execution result
@@ -64,8 +32,6 @@ export interface SandboxInfo {
   id: string;
   /** Provider hosting the sandbox */
   provider: string;
-  /** Runtime environment in the sandbox */
-  runtime: Runtime;
   /** Current status of the sandbox */
   status: 'running' | 'stopped' | 'error';
   /** When the sandbox was created */
@@ -94,6 +60,36 @@ export interface RunCommandOptions {
   env?: Record<string, string>;
   timeout?: number;
   background?: boolean;
+  /**
+   * Callback for streamed stdout chunks when supported by the provider.
+   */
+  onStdout?: (data: string) => void;
+  /**
+   * Callback for streamed stderr chunks when supported by the provider.
+   */
+  onStderr?: (data: string) => void;
+}
+
+/**
+ * Snapshot information
+ */
+export interface Snapshot {
+  /** Unique identifier for the snapshot */
+  id: string;
+  /** Provider hosting the snapshot */
+  provider: string;
+  /** When the snapshot was created */
+  createdAt: Date;
+  /** Additional provider-specific metadata */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Options for creating a snapshot
+ */
+export interface CreateSnapshotOptions {
+  name?: string;
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -109,66 +105,127 @@ export interface SandboxFileSystem {
 }
 
 /**
- * Options for creating a sandbox
- * 
- * Providers can extend this with additional properties specific to their implementation
+ * Resource sizing options for sandbox creation.
+ *
+ * These are the cross-provider knobs for CPU, memory, and provider-specific
+ * resource selection. Field names intentionally mirror the provider SDKs that
+ * consume them, so callers can build a single typed resource map (e.g. keyed
+ * by provider name) instead of resorting to `Record<string, any>`. Every field
+ * is optional; providers only read the keys they understand and fall back to
+ * their own defaults.
+ *
+ * Units are intentionally not normalized — `memory` is MB for Blaxel/Beam,
+ * `memoryMiB`/`memMiB` are MiB for Modal/Isorun, and `memoryMb` is MB for
+ * Tensorlake. See each provider's docs for the exact interpretation.
  */
-export interface CreateSandboxOptions {
-  runtime?: Runtime;
+export interface SandboxResourceOptions {
+  /** CPU cores (Modal, Beam). Modal: 1 core = 2 vCPUs. */
+  cpu?: number;
+  /** Hard CPU limit (Modal). */
+  cpuLimit?: number;
+  /** CPU cores (Tensorlake). */
+  cpus?: number;
+  /** vCPUs (Isorun). Vercel uses `resources.vcpus` instead. */
+  vcpus?: number;
+  /** Memory in MB (Blaxel, Beam). */
+  memory?: number;
+  /** Memory in MiB (Modal). */
+  memoryMiB?: number;
+  /** Memory in MiB (Isorun). */
+  memMiB?: number;
+  /** Memory in MB (Tensorlake). */
+  memoryMb?: number;
+  /** Disk size in MiB (Isorun). */
+  diskMiB?: number;
+  /**
+   * Vercel resource overrides. Vercel only exposes vCPU control; memory is
+   * derived from the vCPU count.
+   */
+  resources?: VercelSandboxResources;
+  /**
+   * Runloop-only. Forwarded verbatim into the devbox `launch_parameters`.
+   * Use `resource_size_request: 'CUSTOM_SIZE'` with the `custom_*` fields to
+   * request an explicit size.
+   */
+  launch_parameters?: RunloopLaunchParameters;
+  /** Northflank billing plan ID (e.g. `'nf-compute-50'`). */
+  deploymentPlan?: string;
+  /** Upstash box size preset (e.g. `'small'`, `'medium'`, `'large'`). */
+  size?: string;
+  /** CodeSandbox VM tier. Pass the SDK's `VMTier` value or its string equivalent. */
+  vmTier?: string | number;
+}
+
+/**
+ * Runloop `launch_parameters` shape for sandbox creation.
+ *
+ * Only the resource-relevant fields are typed; additional runloop-specific
+ * keys pass through via the index signature.
+ */
+export interface RunloopLaunchParameters {
+  keep_alive_time_seconds?: number;
+  resource_size_request?:
+    | 'X_SMALL'
+    | 'SMALL'
+    | 'MEDIUM'
+    | 'LARGE'
+    | 'X_LARGE'
+    | '2X_LARGE'
+    | 'CUSTOM_SIZE';
+  custom_cpu_cores?: number;
+  custom_memory_gb?: number;
+  custom_disk_size?: number;
+  [key: string]: any;
+}
+
+/**
+ * Vercel `resources` shape for sandbox creation.
+ */
+export interface VercelSandboxResources {
+  vcpus?: number;
+  [key: string]: any;
+}
+
+/**
+ * Options for creating a sandbox.
+ *
+ * Extends {@link SandboxResourceOptions} with the core lifecycle fields
+ * (timeout, template/snapshot IDs, env, metadata, etc.). Providers can also
+ * read additional provider-specific keys via the index signature.
+ */
+export interface CreateSandboxOptions extends SandboxResourceOptions {
   timeout?: number;
+  /** Provider-agnostic template/image ID to boot from */
   templateId?: string;
+  /**
+   * Snapshot ID to restore from when creating a sandbox.
+   *
+   * Each provider maps this to its native concept:
+   * - E2B: passed directly as the template/image ID
+   * - Daytona: sets `createParams.snapshot`
+   * - Modal: loads the image via `client.images.fromId(snapshotId)`
+   * - CodeSandbox: calls `sdk.sandboxes.resume(snapshotId)`
+   * - Runloop: maps to `snapshot_id` in devbox creation params
+   */
+  snapshotId?: string;
   metadata?: Record<string, any>;
   envs?: Record<string, string>;
   name?: string;
   namespace?: string;
   directory?: string;
-  overlays?: SandboxOverlayConfig[];
-  servers?: SandboxServerConfig[];
-  // Allow provider-specific properties (e.g., sandboxId, domain for E2B)
+  /** AbortSignal for cancelling sandbox creation and cleaning up orphaned sandboxes */
+  signal?: AbortSignal;
+  /**
+   * Runtime environment for the sandbox (e.g. `'node'`, `'python'`).
+   *
+   * Read by Isorun, Blaxel, Upstash, Northflank and others to pick a default
+   * image when `image` is not set.
+   */
+  runtime?: string;
+  /** Container/VM image to boot from, overriding the provider default. */
+  image?: string;
+  // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
-}
-
-export interface SandboxOverlayConfig {
-  source: string;
-  target: string;
-  ignore?: string[];
-  strategy?: 'copy' | 'smart';
-}
-
-export type SandboxRestartPolicy = 'never' | 'on-failure' | 'always';
-
-/**
- * Health check configuration for servers
- */
-export interface SandboxHealthCheckConfig {
-  /** Path to poll for health checks (default: "/") */
-  path?: string;
-  /** Interval between health checks in milliseconds (default: 2000) */
-  interval_ms?: number;
-  /** Timeout for each health check request in milliseconds (default: 1500) */
-  timeout_ms?: number;
-  /** Delay before starting health checks after port detection in milliseconds (default: 5000) */
-  delay_ms?: number;
-}
-
-export interface SandboxServerConfig {
-  slug: string;
-  start: string;
-  install?: string;
-  path?: string;
-  port?: number;
-  strict_port?: boolean;
-  autostart?: boolean;
-  env_file?: string;
-  environment?: Record<string, string>;
-  restart_policy?: SandboxRestartPolicy;
-  max_restarts?: number;
-  restart_delay_ms?: number;
-  stop_timeout_ms?: number;
-  depends_on?: string[];
-  overlay?: SandboxOverlayConfig;
-  overlays?: SandboxOverlayConfig[];
-  health_check?: SandboxHealthCheckConfig;
 }
 
 /**
@@ -189,11 +246,8 @@ export interface Sandbox {
   /** Unique identifier for the sandbox */
   readonly sandboxId: string;
   
-  /** Provider name (e2b, railway, modal, gateway, etc.) */
+  /** Provider name (e2b, railway, modal, etc.) */
   readonly provider: string;
-  
-  /** Execute code in the sandbox */
-  runCode(code: string, runtime?: Runtime): Promise<CodeResult>;
   
   /** 
    * Execute shell command
@@ -214,74 +268,4 @@ export interface Sandbox {
   
   /** File system operations */
   readonly filesystem: SandboxFileSystem;
-  
-  // ============================================================================
-  // Advanced Features (Optional - Providers implement if supported)
-  // ============================================================================
-  
-  /**
-   * Terminal management (interactive PTY and exec modes)
-   * Available in: gateway, e2b (potentially)
-   */
-  readonly terminal?: any; // Terminal type from client
-  
-  /**
-   * Code and command execution namespace
-   * Available in: gateway
-   */
-  readonly run?: any; // Run type from client
-  
-  /**
-   * Managed server operations
-   * Available in: gateway
-   */
-  readonly server?: any; // Server type from client
-  
-  /**
-   * File watcher with real-time change events
-   * Available in: gateway
-   */
-  readonly watcher?: any; // Watcher type from client
-  
-  /**
-   * Session token management
-   * Available in: gateway
-   */
-  readonly sessionToken?: any; // SessionToken type from client
-  
-  /**
-   * Magic link authentication
-   * Available in: gateway
-   */
-  readonly magicLink?: any; // MagicLink type from client
-  
-  /**
-   * Signal service for port/error events
-   * Available in: gateway
-   */
-  readonly signal?: any; // Signal type from client
-  
-  /**
-   * File operations namespace
-   * Available in: gateway
-   */
-  readonly file?: any; // File type from client
-  
-  /**
-   * Environment variable management
-   * Available in: gateway
-   */
-  readonly env?: any; // Env type from client
-  
-  /**
-   * Authentication operations
-   * Available in: gateway
-   */
-  readonly auth?: any; // Auth type from client
-  
-  /**
-   * Child sandbox management
-   * Available in: gateway
-   */
-  readonly child?: any; // Child type from client
 }

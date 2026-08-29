@@ -1,9 +1,12 @@
 {
   "name": "@computesdk/railway",
-  "version": "1.1.35",
-  "description": "Railway provider for ComputeSDK - simple cloud deployment for containerized sandboxes",
-  "author": "ComputeSDK Team",
+  "version": "2.0.2",
+  "description": "Railway Sandboxes provider for ComputeSDK - run commands in Railway-hosted sandboxes",
+  "author": "ComputeSDK",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -29,7 +32,8 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "railway": "^3.1.1"
   },
   "keywords": [
     "computesdk",
@@ -38,9 +42,7 @@
     "code-execution",
     "cloud",
     "compute",
-    "containers",
-    "provider",
-    "deployment"
+    "provider"
   ],
   "repository": {
     "type": "git",

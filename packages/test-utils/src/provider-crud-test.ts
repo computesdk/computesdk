@@ -4,7 +4,7 @@
  * Tests the core sandbox lifecycle: create → getById → list → destroy
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 // @ts-ignore - workspace reference
 import type { Provider } from '@computesdk/provider';
 
@@ -37,8 +37,11 @@ const CRUD_ENABLED_PROVIDERS = [
   'railway',  // Has working CRUD operations with stable sandbox lifecycle
   'render',   // Stable provider ready for CRUD testing
   'lambda',   // Lambda provider with instance lifecycle management
-  'namespace', 
-  'avm'
+  'namespace',
+  'avm',
+  'northflank', // Service-per-sandbox lifecycle is fully stable and listed
+  'isorun',   // Isolated Linux VM, full create/getById/list/destroy lifecycle
+  'agentcore', // AgentCore Code Interpreter sessions support full CRUD lifecycle
   // Add more providers here as they become stable for CRUD testing
   // 'e2b',      // Add when CRUD implementation is stable
   // 'vercel',   // Skip - ephemeral sandboxes don't support listing operations
@@ -63,6 +66,25 @@ export function runProviderCrudTest(config: ProviderCrudTestConfig) {
     }
 
     let createdSandboxId: string;
+    let sandboxDestroyed = false;
+
+    // Safety net: ensure sandbox is always cleaned up even if tests fail or abort
+    afterAll(async () => {
+      if (createdSandboxId && !sandboxDestroyed) {
+        try {
+          console.log(`[CRUD cleanup] Destroying leaked ${name} sandbox: ${createdSandboxId}`);
+          await Promise.race([
+            provider.sandbox.destroy(createdSandboxId),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Cleanup destroy timeout')), 10000)
+            ),
+          ]);
+          console.log(`[CRUD cleanup] Successfully destroyed leaked ${name} sandbox: ${createdSandboxId}`);
+        } catch (error) {
+          console.error(`[CRUD cleanup] Failed to destroy ${name} sandbox ${createdSandboxId}:`, error);
+        }
+      }
+    }, 15000);
 
     it('should create a sandbox', async () => {
       const result = await provider.sandbox.create();
@@ -111,6 +133,7 @@ export function runProviderCrudTest(config: ProviderCrudTestConfig) {
       
       // Destroy should not throw an error
       await expect(provider.sandbox.destroy(createdSandboxId)).resolves.not.toThrow();
+      sandboxDestroyed = true;
       
       console.log(`✓ Destroyed ${name} sandbox: ${createdSandboxId}`);
     }, timeout);

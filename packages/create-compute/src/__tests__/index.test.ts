@@ -13,7 +13,7 @@ describe('create-compute', () => {
     )
     
     expect(packageJson.name).toBe('create-compute')
-    expect(packageJson.version).toBe('0.0.1')
+    expect(packageJson.version).toBe('0.2.4')
     expect(packageJson.bin).toHaveProperty('create-compute')
   })
   

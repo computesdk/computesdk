@@ -2,16 +2,16 @@
   "name": "computesdk",
   "version": "0.1.0",
   "private": true,
-  "description": "A unified abstraction layer for executing code in secure, isolated sandboxed environments across multiple cloud providers",
+  "description": "Open benchmark harness for cloud infrastructure. Unified TypeScript SDK and provider abstraction layer for running code in secure, isolated sandboxed environments across multiple cloud providers.",
   "scripts": {
-    "build": "pnpm --filter '@computesdk/cmd' run build && pnpm --filter computesdk run build && pnpm --filter '@computesdk/provider' run build && pnpm --filter '@computesdk/test-utils' run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!@computesdk/provider' --filter '!@computesdk/cmd' --filter '!@computesdk/test-utils' --filter '!@computesdk/avm' --filter '!@computesdk/aws-ecs' --filter '!@computesdk/aws-lambda' --filter '!@computesdk/lambda' --filter '!@computesdk/docker' --filter '!@computesdk/cloudflare' run build",
+    "build": "pnpm --filter '@computesdk/cmd' run build && pnpm --filter daemond run build && pnpm --filter computesdk run build && pnpm --filter '@computesdk/provider' run build && pnpm --filter '@computesdk/test-utils' run build && pnpm --filter './packages/*' --filter '!computesdk' --filter '!daemond' --filter '!@computesdk/provider' --filter '!@computesdk/cmd' --filter '!@computesdk/test-utils' run build",
     "clean": "pnpm -r run clean",
     "dev": "pnpm -r --parallel run dev",
     "lint": "pnpm -r run lint",
-    "test": "pnpm --filter '@computesdk/cmd' --filter '@computesdk/provider' --filter 'computesdk' --filter '@computesdk/events' run test",
+    "test": "pnpm --filter '@computesdk/cmd' --filter '@computesdk/provider' --filter 'computesdk' --filter '@computesdk/events' --filter '@computesdk/workbench' --filter '@computesdk/docker' --filter '@computesdk/runloop' --filter '@computesdk/microsandbox' run test && pnpm --filter daemond run test:integration",
     "test:watch": "pnpm -r --parallel run test:watch",
     "test:coverage": "pnpm -r run test:coverage",
-    "typecheck": "pnpm --filter '@computesdk/cmd' --filter '@computesdk/provider' --filter 'computesdk' --filter '@computesdk/events' --filter '@computesdk/workbench' run typecheck",
+    "typecheck": "pnpm --filter '@computesdk/cmd' --filter '@computesdk/provider' --filter 'computesdk' --filter '@computesdk/events' --filter '@computesdk/workbench' --filter '@computesdk/docker' --filter '@computesdk/microsandbox' --filter 'daemond' run typecheck",
     "changeset": "changeset",
     "version": "changeset version && pnpm install --no-frozen-lockfile",
     "release": "pnpm run build && changeset publish",
@@ -47,5 +47,5 @@
     "node": ">=18.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.15.0"
 }

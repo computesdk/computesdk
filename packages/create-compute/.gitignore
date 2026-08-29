@@ -13,3 +13,5 @@ coverage
 
 # OS
 .DS_Store
+
+.env

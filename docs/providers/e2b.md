@@ -1,37 +1,69 @@
+---
+description: >-
+  Set up the E2B provider for ComputeSDK, configure your API key, and create
+  sandboxes to run commands.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
 # E2B
 
-E2B provider for ComputeSDK
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/e2b/" %}
 
+E2B provider for ComputeSDK
 
 ## Installation & Setup
 
 ```bash
-npm install computesdk
+npm install @computesdk/e2b
+```
 
-# add to .env file
-COMPUTESDK_API_KEY=your_computesdk_api_key
+Add your E2B credentials to a `.env` file:
 
+```bash
 E2B_API_KEY=your_e2b_api_key
 ```
 
+> **Note:** E2B API keys must start with `e2b_`. The provider throws an error if the key is in any other format.
 
 ## Usage
 
 ```typescript
-import { compute } from 'computesdk';
-// auto-detects provider from environment variables
+import { e2b } from '@computesdk/e2b';
+
+const compute = e2b({
+  apiKey: process.env.E2B_API_KEY,
+});
 
 // Create sandbox
 const sandbox = await compute.sandbox.create();
 
-// Execute code
-const result = await sandbox.runCode('print("Hello from E2B!")');
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from E2B!"');
 console.log(result.stdout); // "Hello from E2B!"
 
 // Clean up
-await compute.sandbox.destroy(sandbox.sandboxId);
+await sandbox.destroy();
 ```
-
 
 ### Configuration Options
 
@@ -39,37 +71,7 @@ await compute.sandbox.destroy(sandbox.sandboxId);
 interface E2BConfig {
   /** E2B API key - if not provided, will use E2B_API_KEY env var */
   apiKey?: string;
-  /** Environment template to use */
-  runtime?: 'node' | 'python';
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
 ```
-
-## Explicit Provider Configuration
-If you prefer to set the provider explicitly, you can do so as follows:
-```typescript
-import { compute } from 'computesdk';
-
-compute.setConfig({
-   computesdkApiKey: process.env.COMPUTESDK_API_KEY,
-   provider: 'e2b',
-   e2b: {
-     apiKey: process.env.E2B_API_KEY
-   }
-});
-
-const sandbox = await compute.sandbox.create();
-```
-
-## Runtime Detection
-
-The provider automatically detects the runtime based on code patterns:
-
-**Python indicators:**
-- `print` statements
-- `import` statements  
-- `def` function definitions
-- Python-specific syntax (`f"`, `__`, etc.)
-
-**Default:** Node.js for all other cases

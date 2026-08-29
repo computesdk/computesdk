@@ -22,18 +22,33 @@ export type {
   DaemonConfig
 } from './infra-factory';
 
-export { defineCompute } from './compute-factory';
-export type {
-  ComputeFactoryConfig,
-  ComputeConfig
-} from './compute-factory';
-
 // Export direct mode compute API
 export { createCompute } from './compute';
 export type { CreateComputeConfig, ComputeAPI } from './compute';
 
+// Export browser provider factory
+export { defineBrowserProvider } from './browser-factory';
+export type {
+  BrowserProviderConfig,
+  BrowserSessionMethods,
+  BrowserProfileMethods,
+  BrowserExtensionMethods,
+  BrowserPoolMethods,
+  BrowserLogMethods,
+  BrowserRecordingMethods,
+  BrowserPageMethods,
+} from './browser-factory';
+
 // Export utilities
 export { calculateBackoff, escapeShellArg } from './utils';
+
+// Export the process-API streaming helper for providers that stream natively
+export {
+  streamCommandViaProcess,
+  TIMEOUT_EXIT_CODE,
+  START_FAILURE_EXIT_CODE
+} from './stream-process';
+export type { StreamedProcess } from './stream-process';
 
 // Export all types
 export type * from './types';

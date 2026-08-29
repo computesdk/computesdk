@@ -34,10 +34,8 @@ Create a `.env` file in the root of the monorepo or in `packages/workbench/`:
 # Example with E2B (easiest to get started)
 E2B_API_KEY=e2b_your_api_key_here
 
-# Or Railway
-RAILWAY_API_KEY=your_railway_key
-RAILWAY_PROJECT_ID=your_project_id
-RAILWAY_ENVIRONMENT_ID=your_env_id
+# Or Daytona
+DAYTONA_API_KEY=your_daytona_api_key
 
 # Or Gateway (zero-config option)
 COMPUTESDK_API_KEY=computesdk_live_xxx
@@ -50,8 +48,8 @@ The workbench needs at least one provider package installed:
 ```bash
 # Install providers you want to test
 pnpm install --filter @computesdk/workbench @computesdk/e2b
-# or
-pnpm install --filter @computesdk/workbench @computesdk/railway
+# or any other provider
+pnpm install --filter @computesdk/workbench @computesdk/modal
 ```
 
 Or install them in the root:
@@ -120,7 +118,7 @@ Then test these commands:
 
 ```
 workbench> providers
-workbench> provider railway
+workbench> provider daytona
 workbench> info
 workbench> provider e2b
 ```
