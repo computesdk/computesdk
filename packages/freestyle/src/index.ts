@@ -67,6 +67,8 @@ const SANDBOX_METADATA_MARKER = 'computesdk';
 /** Slug of the auto-baked runtime snapshot, so it is found and reused across processes. */
 const RUNTIME_SNAPSHOT_SLUG = 'computesdk-freestyle-runtime';
 const RUNTIME_NODE_VERSION = 'v22.19.0';
+/** Snapshot list page size; the API pages, so a single call is never the whole account. */
+const SNAPSHOT_PAGE_SIZE = 200;
 const ALLOW_ALL_OUTBOUND: FirewallSpec = {
   rules: [{ action: 'allow', source: {}, destination: { public: true } }],
 };
@@ -129,10 +131,30 @@ function ensureSnapshot(resolved: ResolvedConfig): Promise<string> {
   return pending;
 }
 
+/**
+ * Find a snapshot by slug, paging until it turns up. The runtime snapshot is old
+ * by construction — baked once, then only ever read — so it sinks past the first
+ * page as an account accumulates snapshots. Stopping at one page would miss it
+ * and re-bake under a slug that is already taken.
+ */
+async function findSnapshotBySlug(
+  client: Freestyle,
+  slug: string,
+): Promise<SnapshotData | undefined> {
+  for (let offset = 0; ; offset += SNAPSHOT_PAGE_SIZE) {
+    const { snapshots, totalCount } = await client.vms.snapshots.list({
+      limit: SNAPSHOT_PAGE_SIZE,
+      offset,
+    });
+    const match = snapshots.find((snapshot) => snapshot.slug === slug);
+    if (match) return match;
+    if (snapshots.length === 0 || offset + snapshots.length >= totalCount) return undefined;
+  }
+}
+
 async function bakeRuntimeSnapshot(client: Freestyle): Promise<string> {
   // Reuse a snapshot a previous run already baked.
-  const { snapshots } = await client.vms.snapshots.list({ limit: 200 });
-  const existing = snapshots.find((snapshot) => snapshot.slug === RUNTIME_SNAPSHOT_SLUG);
+  const existing = await findSnapshotBySlug(client, RUNTIME_SNAPSHOT_SLUG);
   if (existing) return existing.id;
 
   const { vm, vmId } = await client.vms.create({
@@ -397,7 +419,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         const client = clientFor(resolveConfig(config));
         const { snapshots } = await client.vms.snapshots.list({
           sourceVmId: options?.sandboxId,
-          limit: options?.limit ?? 200,
+          limit: options?.limit ?? SNAPSHOT_PAGE_SIZE,
         });
         return snapshots.map(toSnapshot);
       },
