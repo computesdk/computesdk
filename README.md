@@ -78,6 +78,7 @@ ComputeSDK automatically detects providers based on environment variables:
 | **HopX** | `HOPX_API_KEY` |
 | **Runloop** | `RUNLOOP_API_KEY` |
 | **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` |
+| **Freestyle** | `FREESTYLE_API_KEY`, `FREESTYLE_SNAPSHOT_ID` |
 | **Cloudflare** | `CLOUDFLARE_API_TOKEN` |
 | **CodeSandbox** | `CODESANDBOX_TOKEN` |
 
@@ -256,6 +257,7 @@ npm install @computesdk/modal      # Modal provider
 npm install @computesdk/railway    # Railway provider
 npm install @computesdk/daytona    # Daytona provider
 npm install @computesdk/vercel     # Vercel provider
+npm install @computesdk/freestyle  # Freestyle provider
 ```
 
 Direct mode usage:
