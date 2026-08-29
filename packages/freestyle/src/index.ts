@@ -11,12 +11,20 @@
  * `FREESTYLE_SNAPSHOT_ID`) at your own snapshot to skip baking entirely.
  */
 
-import { Freestyle, FreestyleApiError, type Vm, type FirewallSpec } from 'freestyle';
+import {
+  Freestyle,
+  FreestyleApiError,
+  type Vm,
+  type FirewallSpec,
+  type SnapshotData,
+} from 'freestyle';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
   SandboxInfo,
   CreateSandboxOptions,
+  CreateSnapshotOptions,
+  ListSnapshotsOptions,
   FileEntry,
   RunCommandOptions,
 } from '@computesdk/provider';
@@ -183,9 +191,35 @@ function buildCommand(command: string, options?: RunCommandOptions): string {
 }
 
 /**
+ * A snapshot in ComputeSDK's shape. The gateway (`compute.setConfig`, and with
+ * it `compute.snapshot.*`) types snapshots as `{ id, provider, createdAt }`, so
+ * returning Freestyle's raw `{ snapshotId }` would make this provider
+ * unassignable to `DirectProvider` and break the gateway path entirely.
+ */
+export interface FreestyleSnapshot {
+  id: string;
+  provider: string;
+  createdAt: Date;
+  metadata?: Record<string, unknown>;
+}
+
+function toSnapshot(data: SnapshotData): FreestyleSnapshot {
+  return {
+    id: data.id,
+    provider: 'freestyle',
+    createdAt: new Date(data.createdAt),
+    metadata: {
+      ...(data.sourceVmId ? { sourceVmId: data.sourceVmId } : {}),
+      ...(data.slug ? { slug: data.slug } : {}),
+      ...(data.displayName ? { displayName: data.displayName } : {}),
+    },
+  };
+}
+
+/**
  * Create a Freestyle provider instance.
  */
-export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, { snapshotId: string }>({
+export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleSnapshot>({
   name: 'freestyle',
   methods: {
     sandbox: {
@@ -342,16 +376,30 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, { snapshot
     },
 
     snapshot: {
-      create: async (config: FreestyleConfig, sandboxId: string) => {
+      create: async (
+        config: FreestyleConfig,
+        sandboxId: string,
+        options?: CreateSnapshotOptions,
+      ): Promise<FreestyleSnapshot> => {
         const client = clientFor(resolveConfig(config));
-        const { snapshotId } = await client.vms.ref(sandboxId).snapshot();
-        return { snapshotId };
+        // Freestyle snapshots carry no free-form metadata, so `options.metadata`
+        // has nowhere to go; `name` becomes the snapshot's display name.
+        const { snapshot } = await client.vms
+          .ref(sandboxId)
+          .snapshot(options?.name ? { displayName: options.name } : undefined);
+        return toSnapshot(snapshot);
       },
 
-      list: async (config: FreestyleConfig) => {
+      list: async (
+        config: FreestyleConfig,
+        options?: ListSnapshotsOptions,
+      ): Promise<FreestyleSnapshot[]> => {
         const client = clientFor(resolveConfig(config));
-        const { snapshots } = await client.vms.snapshots.list({ limit: 200 });
-        return snapshots.map((snapshot) => ({ snapshotId: snapshot.id }));
+        const { snapshots } = await client.vms.snapshots.list({
+          sourceVmId: options?.sandboxId,
+          limit: options?.limit ?? 200,
+        });
+        return snapshots.map(toSnapshot);
       },
 
       delete: async (config: FreestyleConfig, snapshotId: string) => {
