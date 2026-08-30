@@ -298,6 +298,7 @@ npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
 npm install @computesdk/declaw           # Declaw provider
 npm install @computesdk/e2b              # E2B provider
+npm install @computesdk/givemeanode      # givemeanode Firecracker microVM provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/lightning        # Lightning AI provider
@@ -336,6 +337,7 @@ See individual provider READMEs for details:
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/declaw](./packages/declaw)** - Isolated cloud sandboxes
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
+- **[@computesdk/givemeanode](./packages/givemeanode)** - Firecracker microVMs served from a per-region warm pool, with snapshots and forks
 - **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
