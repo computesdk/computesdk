@@ -137,6 +137,68 @@ describe("miosa provider", () => {
     });
   });
 
+  describe("transient refusal retry", () => {
+    function retryableResponse(code: string, status: number): Response {
+      return new Response(JSON.stringify({ error: { code } }), {
+        status,
+        headers: {
+          "content-type": "application/json",
+          // 0 keeps the test instant; the parser treats it as a real wait.
+          "retry-after": "0",
+        },
+      });
+    }
+
+    it("retries a 503 with Retry-After and succeeds", async () => {
+      fetchMock
+        .mockResolvedValueOnce(retryableResponse("CANARY_CLAIM_FAILED", 503))
+        .mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(sandbox.sandboxId).toBe(sandboxRecord().id);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries a 429 rate refusal and succeeds", async () => {
+      fetchMock
+        .mockResolvedValueOnce(retryableResponse("SANDBOX_LIMIT_REACHED", 429))
+        .mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(sandbox.sandboxId).toBe(sandboxRecord().id);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("gives up after the bounded attempts and surfaces the last error", async () => {
+      fetchMock.mockResolvedValue(
+        retryableResponse("CANARY_SHELF_EXHAUSTED", 503),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        /CANARY_SHELF_EXHAUSTED/,
+      );
+      // initial attempt + 3 bounded retries
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    it("never retries a non-retryable status", async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ error: { code: "SANDBOX_CREATE_FAILED" } }, 500),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        /SANDBOX_CREATE_FAILED/,
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("sandbox.getById", () => {
     it("should GET /sandboxes/:id", async () => {
       const record = sandboxRecord();

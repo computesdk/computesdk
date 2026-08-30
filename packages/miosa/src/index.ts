@@ -111,7 +111,26 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 interface MiosaHttpResponse {
   readonly ok: boolean;
   readonly status: number;
+  /** Parsed Retry-After response header (delta-seconds form), when present. */
+  readonly retryAfterMs?: number;
   text(): Promise<string>;
+}
+
+// MIOSA answers transient refusals - a warm-shelf claim that lost a race, a
+// cohort with nothing eligible right now, a rate ceiling - as typed 503/429
+// responses carrying Retry-After, meaning the server did NOT perform the
+// action. Those are safe to retry for every method, bounded so a genuinely
+// unavailable service still fails within the caller's patience rather than
+// spinning forever.
+const RETRY_MAX_ATTEMPTS = 3; // retries after the initial attempt
+const RETRY_MAX_DELAY_MS = 5_000; // per-wait ceiling, Retry-After included
+
+// Both transports (fetch and node:http2) parse the header with this exact
+// contract: delta-seconds form only, anything else ignored.
+function parseRetryAfterMs(header: string | null | undefined): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number.parseInt(header, 10);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1_000 : undefined;
 }
 
 // A bounded HTTP/2 pool prevents 100 independent TLS handshakes without
@@ -274,6 +293,7 @@ async function nodeHttp2Request(
   try {
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
       let status = 0;
+      let retryAfterMs: number | undefined;
       const chunks: Buffer[] = [];
       const request = session.request({
         ":method": method,
@@ -286,6 +306,11 @@ async function nodeHttp2Request(
 
       request.on("response", (responseHeaders) => {
         status = Number(responseHeaders[":status"] ?? 0);
+        retryAfterMs = parseRetryAfterMs(
+          typeof responseHeaders["retry-after"] === "string"
+            ? responseHeaders["retry-after"]
+            : undefined,
+        );
       });
       request.on("data", (chunk: Buffer | Uint8Array) => {
         chunks.push(Buffer.from(chunk));
@@ -296,6 +321,7 @@ async function nodeHttp2Request(
         resolve({
           ok: status >= 200 && status < 300,
           status,
+          retryAfterMs,
           text: async () => responseBody,
         });
       });
@@ -321,7 +347,14 @@ async function sendMiosaRequest(
     return nodeHttp2Request(parsedUrl, method, headers, body);
   }
 
-  return fetch(url, { method, headers, body });
+  const response = await fetch(url, { method, headers, body });
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after")),
+    text: () => response.text(),
+  };
 }
 
 function resolveAuth(config: MiosaConfig): { apiKey: string; baseUrl: string } {
@@ -358,12 +391,41 @@ async function miosaRequest<T>(
     "content-type": "application/json",
   };
   const requestBody = body === undefined ? undefined : JSON.stringify(body);
-  const response = await sendMiosaRequest(
+
+  let response = await sendMiosaRequest(
     `${auth.baseUrl}${path}`,
     method,
     headers,
     requestBody,
   );
+
+  // 429/503 are MIOSA's typed transient refusals (rate ceiling, warm-shelf
+  // claim race, cohort momentarily ineligible): the server states it did NOT
+  // perform the action, so replaying the identical request is safe for every
+  // method. Honor Retry-After when the server names a wait; back off
+  // exponentially when it does not; give up after a bounded number of
+  // attempts so a genuinely down service still fails promptly.
+  for (
+    let attempt = 0;
+    (response.status === 429 || response.status === 503) &&
+    attempt < RETRY_MAX_ATTEMPTS;
+    attempt++
+  ) {
+    const delayMs = Math.min(
+      response.retryAfterMs ?? 250 * 2 ** attempt,
+      RETRY_MAX_DELAY_MS,
+    );
+    // Executor form: this package's TS lib target predates
+    // Promise.withResolvers.
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+
+    response = await sendMiosaRequest(
+      `${auth.baseUrl}${path}`,
+      method,
+      headers,
+      requestBody,
+    );
+  }
 
   const text = await response.text();
   let parsed: unknown = undefined;
