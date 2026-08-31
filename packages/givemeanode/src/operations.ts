@@ -29,6 +29,18 @@ export const DEFAULT_IMAGE = 'sbx-base'
 export const DEFAULT_TIMEOUT_MS = 60_000
 
 /**
+ * How much longer the HTTP call gets than the command it is waiting on.
+ *
+ * The exec route blocks until the command finishes, so the request has to
+ * outlive the command's own deadline or the client aborts a command that is
+ * still running and reports a failure for something that then succeeds.
+ * Probe 10 measured the door's overhead at 11-21 ms, so this is generous by
+ * three orders of magnitude and exists only so a slow network cannot turn a
+ * command that finished into an error.
+ */
+const EXEC_DEADLINE_HEADROOM_MS = 15_000
+
+/**
  * How long to allow for preparing a container image.
  *
  * A container image has to be pulled and converted before anything can
@@ -617,9 +629,22 @@ export async function runCommand(
   const cmd = composeCommand(command, options)
   let lastError: string | undefined
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const body = await sandbox.client.request<{ results?: ExecResult[] }>('POST', '/preview/sandboxes/execs', {
-      execs: [{ sandbox: sandbox.id, cmd, deadline_ms: options?.timeout ?? DEFAULT_TIMEOUT_MS }],
-    })
+    // The command's deadline and the HTTP deadline are different things, and
+    // the second must not be the shorter one. `deadline_ms` may be up to ten
+    // minutes while the client's default request timeout is two, so without
+    // this a command legitimately running longer than the client default is
+    // aborted HERE while it carries on in the sandbox - and the caller is
+    // told a command failed that in fact succeeded. A caller who set a
+    // larger client timeout keeps it.
+    const deadlineMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
+    const requestTimeoutMs = Math.max(sandbox.client.timeout, deadlineMs + EXEC_DEADLINE_HEADROOM_MS)
+    const body = await sandbox.client.request<{ results?: ExecResult[] }>(
+      'POST',
+      '/preview/sandboxes/execs',
+      { execs: [{ sandbox: sandbox.id, cmd, deadline_ms: deadlineMs }] },
+      undefined,
+      requestTimeoutMs,
+    )
     const result = body.results?.[0]
     if (!result) throw new Error(`givemeanode exec returned no result for ${sandbox.id}`)
     // An undelivered command comes back as `{sandbox, error}` with NO

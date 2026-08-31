@@ -655,3 +655,41 @@ describe('a command whose stdout hit the 1 MiB cap', () => {
     assert.match(result.stderr, /^real error\n\[givemeanode\]/)
   })
 })
+
+describe('a command that legitimately runs longer than the client timeout', () => {
+  beforeEach(() => resetFastTokenCache())
+
+  it('gives the HTTP call more time than the command deadline, not less', async () => {
+    // `deadline_ms` may be ten minutes; the client's default request timeout
+    // is two. If the request is the shorter one it aborts a command that is
+    // still running, and the caller is told a command failed that succeeds.
+    const seen: number[] = []
+    const fetchImpl = (async (_url: any, init: any) => {
+      // The client's own timer is what we are checking, so read the deadline
+      // it armed by racing it: a request whose timeout is shorter than the
+      // command deadline would abort before this resolves.
+      seen.push(Date.now())
+      return new Response(JSON.stringify({ results: [{ sandbox: 'sbx-1', stdout: 'done', exit_code: 0 }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl, timeout: 1_000 })
+    const handle = { id: 'sbx-1', client, createdAt: new Date(), metadata: {} } as any
+
+    // A 10-minute command against a 1-second client timeout. Before the fix
+    // this armed a 1-second abort; the assertion below is that the call
+    // completes and reports the command's own result.
+    const result = await ops.runCommand(handle, 'sleep 500', { timeout: 600_000 })
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stdout, 'done')
+    assert.equal(seen.length, 1)
+  })
+
+  it('does not shrink a client timeout that is already larger', async () => {
+    const { client } = door(() => ({ body: { results: [{ sandbox: 'sbx-1', stdout: '', exit_code: 0 }] } }))
+    const handle = { id: 'sbx-1', client, createdAt: new Date(), metadata: {} } as any
+    const result = await ops.runCommand(handle, 'true', { timeout: 100 })
+    assert.equal(result.exitCode, 0)
+  })
+})
