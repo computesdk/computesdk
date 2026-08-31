@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 31.0.0
+
+### Patch Changes
+
+- Updated dependencies [21fb6ed]
+  - @computesdk/freestyle@0.2.0
+
 ## 30.0.9
 
 ### Patch Changes
