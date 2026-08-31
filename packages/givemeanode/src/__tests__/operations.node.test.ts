@@ -544,3 +544,114 @@ describe('snapshots', () => {
     assert.equal(all[0].metadata?.durable, true)
   })
 })
+
+describe('the CPU dimension, which is what a benchmark actually asks for', () => {
+  beforeEach(() => resetFastTokenCache())
+
+  it('maps a vCPU ask onto the SMALLEST named size that fits', () => {
+    // Smallest rather than largest is the whole point: a harness asking
+    // for 8 vCPUs must get the 8-vCPU shape, never a 16-vCPU one that
+    // would flatter a number it did not ask for.
+    assert.equal(ops.sizeFor(1, undefined), 'sandbox-sm')
+    assert.equal(ops.sizeFor(4, undefined), 'sandbox-md')
+    assert.equal(ops.sizeFor(8, undefined), 'sandbox-lg')
+    assert.equal(ops.sizeFor(8, 16), 'sandbox-lg', '8 vCPU / 16 GiB is served by lg, not upgraded to xl')
+    assert.equal(ops.sizeFor(16, undefined), 'sandbox-xl')
+  })
+
+  it('clamps an ask past the top of the range instead of failing locally', () => {
+    // The door owns the refusal, and its message names the customer's own
+    // ceiling; a local throw would replace that with something useless.
+    assert.equal(ops.sizeFor(64, undefined), 'sandbox-xl')
+  })
+
+  it('returns nothing when the caller expressed no preference', () => {
+    assert.equal(ops.sizeFor(undefined, undefined), undefined)
+  })
+
+  it('accepts every spelling of the vCPU option', () => {
+    assert.equal(ops.requestedVcpus({ vcpus: 8 }), 8)
+    assert.equal(ops.requestedVcpus({ resources: { vcpus: 8 } }), 8)
+    assert.equal(ops.requestedVcpus({ cpus: 8 }), 8)
+    assert.equal(ops.requestedVcpus({}), undefined)
+  })
+
+  it('sends `size` for a vCPU ask, and never both size and ram_gib', async () => {
+    // They are mutually exclusive at the door, because a named size
+    // already fixes both dimensions.
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1', ram_gib: 32 } }))
+    await ops.createSandbox(client, undefined, undefined, { vcpus: 8, memory: 16384 })
+    assert.equal(sent[0].body.size, 'sandbox-lg')
+    assert.ok(!('ram_gib' in sent[0].body), 'ram_gib must not accompany a size')
+  })
+
+  it('an explicit size wins over the hints', async () => {
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1' } }))
+    await ops.createSandbox(client, undefined, undefined, { size: 'sandbox-md', vcpus: 16 })
+    assert.equal(sent[0].body.size, 'sandbox-md')
+  })
+
+  it('keeps a bare memory ask on ram_gib rather than rounding it into a bigger shape', async () => {
+    // A caller who wants 6 GiB on one core should get exactly that. Deriving
+    // a size here would hand them 8 cores and the bill for 32 GiB.
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1' } }))
+    await ops.createSandbox(client, undefined, undefined, { memoryMiB: 6144 })
+    assert.equal(sent[0].body.ram_gib, 6)
+    assert.ok(!('size' in sent[0].body), 'no size for a memory-only ask')
+  })
+})
+
+describe('memory units', () => {
+  beforeEach(() => resetFastTokenCache())
+
+  it('treats `memory` as decimal MB, which changes the answer at the boundary', async () => {
+    // 2049 MB is 1.908 GiB, so 2 GiB rounded up. Dividing by 1024 gives 3,
+    // a whole extra GiB the caller did not ask for and is billed for.
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1' } }))
+    await ops.createSandbox(client, undefined, undefined, { memory: 2049 })
+    assert.equal(sent[0].body.ram_gib, 2)
+  })
+
+  it('still rounds a genuinely larger decimal ask up', async () => {
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1' } }))
+    await ops.createSandbox(client, undefined, undefined, { memory: 3000 })
+    assert.equal(sent[0].body.ram_gib, 3)
+  })
+})
+
+describe('a command whose stdout hit the 1 MiB cap', () => {
+  beforeEach(() => resetFastTokenCache())
+
+  it('says so on stderr instead of returning a silent prefix', async () => {
+    // The cap returns a PREFIX. A caller parsing structured output would
+    // otherwise read a clean one and conclude the run finished.
+    const { client } = door(() => ({
+      body: { results: [{ sandbox: 'sbx-1', stdout: 'x'.repeat(1024), exit_code: 0, truncated: true }] },
+    }))
+    const handle = { id: 'sbx-1', client, createdAt: new Date(), metadata: {} } as any
+    const result = await ops.runCommand(handle, 'cat big')
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.truncated, true)
+    assert.match(result.stderr, /TRUNCATED at 1024 bytes/)
+    assert.match(result.stderr, /readFile/, 'and names the remedy')
+  })
+
+  it('leaves stderr alone when nothing was truncated', async () => {
+    const { client } = door(() => ({
+      body: { results: [{ sandbox: 'sbx-1', stdout: 'hi', stderr: 'a warning', exit_code: 0 }] },
+    }))
+    const handle = { id: 'sbx-1', client, createdAt: new Date(), metadata: {} } as any
+    const result = await ops.runCommand(handle, 'echo hi')
+    assert.equal(result.stderr, 'a warning')
+    assert.equal(result.truncated, false)
+  })
+
+  it('preserves real stderr alongside the notice', async () => {
+    const { client } = door(() => ({
+      body: { results: [{ sandbox: 'sbx-1', stdout: 'x', stderr: 'real error', exit_code: 1, truncated: true }] },
+    }))
+    const handle = { id: 'sbx-1', client, createdAt: new Date(), metadata: {} } as any
+    const result = await ops.runCommand(handle, 'noisy')
+    assert.match(result.stderr, /^real error\n\[givemeanode\]/)
+  })
+})

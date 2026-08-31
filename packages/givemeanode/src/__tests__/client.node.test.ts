@@ -262,3 +262,87 @@ describe('refusals', () => {
     }
   })
 })
+
+describe('a signed credential that is refused before its cached expiry', () => {
+  beforeEach(() => {
+    resetFastTokenCache()
+  })
+
+  it('drops it and retries with the service token rather than failing every request', async () => {
+    // First request pays the ordinary cost and absorbs a credential good
+    // for an hour. The door then refuses it anyway - revoked, or its clock
+    // disagrees with ours - and without the fallback every later request
+    // fails until the entry ages out on its own.
+    const { calls, fetchImpl } = stub([
+      { body: { ok: true }, headers: vending(3_600_000) },
+      { status: 401, body: { error: 'signed credential rejected' } },
+      { body: { ok: true }, headers: vending(3_600_000) },
+    ])
+    const client = new GmnClient({ apiKey: KEY, fetch: fetchImpl })
+
+    await client.request('GET', '/preview/sandboxes')
+    assert.equal(client.hasFastToken(), true)
+
+    const result = await client.request<{ ok: boolean }>('POST', '/preview/sandboxes', { image: 'sbx-base' })
+    assert.deepEqual(result, { ok: true })
+
+    assert.equal(calls.length, 3)
+    assert.equal(calls[1].authorization, `Bearer ${SIGNED}`, 'the refused attempt presented the signed credential')
+    assert.equal(calls[2].authorization, `Bearer ${KEY}`, 'the retry fell back to the service token')
+    assert.equal(calls[2].method, 'POST', 'and it retried the original call, not a probe')
+  })
+
+  it('does not retry a 401 that the service token itself earned', async () => {
+    // Nothing to fall back TO, so a second attempt would only double the
+    // latency of every genuinely bad token.
+    const { calls, fetchImpl } = stub([{ status: 401, body: { error: 'bad token' } }])
+    const client = new GmnClient({ apiKey: KEY, fetch: fetchImpl })
+    await assert.rejects(() => client.request('GET', '/preview/sandboxes'), GmnError)
+    assert.equal(calls.length, 1)
+  })
+})
+
+describe('the request deadline', () => {
+  beforeEach(() => {
+    resetFastTokenCache()
+  })
+
+  it('covers the body, not just the headers', async () => {
+    // Headers arrive promptly and the body then never completes. Clearing
+    // the timer when the fetch resolves leaves this hanging forever, which
+    // is the one failure mode a sandbox API must not have: no caller above
+    // can recover from it.
+    const fetchImpl = (async (_url: any, init: any) => {
+      const signal: AbortSignal = init.signal
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"partial":'))
+          signal.addEventListener('abort', () => controller.error(new Error('aborted')), { once: true })
+        },
+      })
+      return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as unknown as typeof fetch
+
+    const client = new GmnClient({ apiKey: KEY, fetch: fetchImpl, timeout: 120 })
+    await assert.rejects(() => client.request('GET', '/preview/sandboxes'))
+  })
+})
+
+describe('the endpoint a bearer token is allowed to travel to', () => {
+  it('refuses plaintext, because every request carries a credential', () => {
+    assert.throws(
+      () => new GmnClient({ apiKey: KEY, baseUrl: 'http://api.example.com' }),
+      /must use https/,
+    )
+  })
+
+  it('allows loopback, which is how a local API is developed against', () => {
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'http://localhost:8080' })
+    assert.equal(client.baseUrl, 'http://localhost:8080')
+  })
+
+  it('allows https', () => {
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://api.example.com' })
+    assert.equal(client.baseUrl, 'https://api.example.com')
+  })
+})

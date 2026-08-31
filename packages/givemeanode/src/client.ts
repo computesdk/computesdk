@@ -132,6 +132,34 @@ export class GmnError extends Error {
   }
 }
 
+/**
+ * Refuse to carry a long-lived bearer over plaintext.
+ *
+ * Every request presents either the `gmnt_` token or a signed credential
+ * minted from it, so an `http://` endpoint hands an organization credential
+ * to anything on the path. A loopback host is exempt because that is how a
+ * local API is developed against, and there is no network to observe.
+ */
+export function requireSecureBaseUrl(baseUrl: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(baseUrl)
+  } catch {
+    throw new Error(`givemeanode baseUrl is not a valid URL: ${baseUrl}`)
+  }
+  if (parsed.protocol === 'https:') return baseUrl
+  const loopback =
+    parsed.hostname === 'localhost' ||
+    parsed.hostname === '127.0.0.1' ||
+    parsed.hostname === '::1' ||
+    parsed.hostname === '[::1]'
+  if (parsed.protocol === 'http:' && loopback) return baseUrl
+  throw new Error(
+    `givemeanode baseUrl must use https (got ${parsed.protocol}//${parsed.hostname}). ` +
+      'Requests carry a bearer token, so plaintext would expose it; only loopback is exempt.',
+  )
+}
+
 export class GmnClient {
   readonly baseUrl: string
   readonly apiKey: string
@@ -150,7 +178,9 @@ export class GmnClient {
       )
     }
     this.apiKey = apiKey
-    this.baseUrl = (options.baseUrl ?? process.env.GMN_API_HOST ?? DEFAULT_BASE_URL).replace(/\/+$/, '')
+    this.baseUrl = requireSecureBaseUrl(
+      (options.baseUrl ?? process.env.GMN_API_HOST ?? DEFAULT_BASE_URL).replace(/\/+$/, ''),
+    )
     this.fastToken = options.fastToken ?? 'absorb'
     this.timeout = options.timeout ?? 120_000
     this.doFetch = options.fetch ?? globalThis.fetch
@@ -244,6 +274,34 @@ export class GmnClient {
     signal?: AbortSignal,
     timeoutMs?: number,
   ): Promise<T> {
+    // A signed credential can be revoked, or its clock can disagree with
+    // ours, before the expiry we cached for it. The 401 that follows is not
+    // the caller's fault and is not retried by anything above us, so every
+    // request would fail until the entry aged out on its own. Drop it and
+    // let the `gmnt_` token answer; that retry also absorbs a fresh
+    // credential, so the burst after it is fast again.
+    //
+    // Retrying a POST is safe HERE specifically because a 401 is refused at
+    // the door: the request had no effect, so there is nothing to duplicate.
+    const presentedSigned = this.hasFastToken()
+    try {
+      return await this.attempt<T>(method, path, body, signal, timeoutMs)
+    } catch (err) {
+      if (presentedSigned && err instanceof GmnError && err.status === 401) {
+        vended.delete(this.cacheKey)
+        return await this.attempt<T>(method, path, body, signal, timeoutMs)
+      }
+      throw err
+    }
+  }
+
+  private async attempt<T = any>(
+    method: string,
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal,
+    timeoutMs?: number,
+  ): Promise<T> {
     const controller = new AbortController()
     const onAbort = () => controller.abort()
     if (signal) {
@@ -252,6 +310,7 @@ export class GmnClient {
     }
     const timer = setTimeout(() => controller.abort(), timeoutMs ?? this.timeout)
     let response: Response
+    let text: string
     try {
       response = await this.doFetch(`${this.baseUrl}${path}`, {
         method,
@@ -262,12 +321,15 @@ export class GmnClient {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
       })
+      this.absorb(response.headers, Date.now())
+      // Inside the try, so the deadline still covers it: a response whose
+      // headers arrive and whose body then stalls would otherwise hang here
+      // with no timer left to abort it.
+      text = await response.text()
     } finally {
       clearTimeout(timer)
       if (signal) signal.removeEventListener('abort', onAbort)
     }
-    this.absorb(response.headers, Date.now())
-    const text = await response.text()
     let parsed: unknown
     if (text) {
       try {

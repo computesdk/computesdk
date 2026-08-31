@@ -45,10 +45,47 @@ await sandbox.destroy()
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
 | `fastToken` | `'absorb' \| 'prime' \| 'off'` | `'absorb'` | See below. |
-| `ramGib` | `number` | 2 | Guest memory. `memoryMiB` / `memMiB` / `memory` on `create` are read too and rounded up to whole GiB. |
+| `ramGib` | `number` | 2 | Guest memory. `memoryMiB` / `memMiB` on `create` are read too and rounded up to whole GiB; `memory` is decimal MB, per the shared options. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. Fixed when the guest image is prepared, not per command. |
 | `execRetries` | `number` | 1 | See "Two behaviours worth knowing about". |
 | `timeout` | `number` | 120000 | Per-request timeout in ms. |
+
+## Asking for more than one core
+
+A sandbox is one vCPU by default. `create` takes a vCPU count under any of
+ComputeSDK's spellings (`vcpus`, `cpus`, `resources.vcpus`), and it is mapped
+onto the **smallest** named instance type that satisfies both dimensions:
+
+```typescript
+// 8 vCPU / 32 GiB (sandbox-lg)
+const sandbox = await compute.sandbox.create({ vcpus: 8, memory: 16384 })
+
+// ...or name the size outright, which wins over the hints
+const xl = await compute.sandbox.create({ size: 'sandbox-xl' })
+```
+
+| Size | vCPU | RAM | Billed as |
+|---|---:|---:|---:|
+| `sandbox-sm` (default) | 1 | 2 GiB | 2 GiB |
+| `sandbox-md` | 4 | 8 GiB | 16 GiB |
+| `sandbox-lg` | 8 | 32 GiB | 32 GiB |
+| `sandbox-xl` | 16 | 64 GiB | 64 GiB |
+
+Smallest-that-fits rather than largest is deliberate: asking for 8 vCPUs gets
+the 8-vCPU shape, never a 16-vCPU one. An ask past the top of the range clamps
+to `sandbox-xl` and lets the door refuse it with a message naming your own
+ceiling, rather than throwing something less useful locally.
+
+**Sizes above the default are opt-in per workspace.** A new workspace's
+`sandbox_vcpus` ceiling is 4 and its `sandbox_ram_gib` ceiling is 8, so
+`sandbox-lg` and `sandbox-xl` are refused until an org admin raises both. The
+refusal names the limit and how to raise it, and this provider surfaces that
+message verbatim.
+
+A named size and `ramGib` are mutually exclusive, because the size already
+fixes both dimensions. A memory-only ask stays on `ramGib`, so wanting 6 GiB on
+one core gets exactly that instead of being rounded up into a shape you would
+be billed more for.
 
 ## Container images
 

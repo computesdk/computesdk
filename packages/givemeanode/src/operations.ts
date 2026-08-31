@@ -80,12 +80,53 @@ export function checkImageReference(image: string): void {
 }
 
 const MIB_PER_GIB = 1024
+const BYTES_PER_GIB = 1024 * 1024 * 1024
+
+/**
+ * The named instance types, mirroring `sbx/sizes.toml` in the givemeanode
+ * repo. Used ONLY to turn ComputeSDK's provider-agnostic `vcpus`/`memory`
+ * hints into a size NAME; the door validates the name against the real
+ * manifest, so this table drifting cannot silently mis-size a guest - it
+ * gets a refusal naming the sizes that exist.
+ */
+const SIZES: ReadonlyArray<{ size: string; vcpus: number; ramGib: number }> = [
+  { size: 'sandbox-sm', vcpus: 1, ramGib: 2 },
+  { size: 'sandbox-md', vcpus: 4, ramGib: 8 },
+  { size: 'sandbox-lg', vcpus: 8, ramGib: 32 },
+  { size: 'sandbox-xl', vcpus: 16, ramGib: 64 },
+]
+
+/** The vCPU count the caller asked for, under any of the accepted spellings. */
+export function requestedVcpus(options?: CreateOptions): number | undefined {
+  return options?.vcpus ?? options?.resources?.vcpus ?? options?.cpus
+}
+
+/**
+ * The smallest named size that satisfies both requested dimensions.
+ *
+ * Smallest rather than largest on purpose: a caller asking for 8 vCPUs gets
+ * the 8-vCPU size, never a bigger one that would flatter a benchmark it did
+ * not ask to run. An ask past the top of the range clamps to the largest
+ * shape we sell rather than failing, because the door's own ceiling check is
+ * the thing that should refuse it, with a message about the customer's limit.
+ */
+export function sizeFor(vcpus: number | undefined, ramGib: number | undefined): string | undefined {
+  if (vcpus === undefined && ramGib === undefined) return undefined
+  const fit = SIZES.find(
+    (candidate) =>
+      (vcpus === undefined || candidate.vcpus >= vcpus) &&
+      (ramGib === undefined || candidate.ramGib >= ramGib),
+  )
+  return (fit ?? SIZES[SIZES.length - 1]).size
+}
 
 export interface CommandResultShape {
   stdout: string
   stderr: string
   exitCode: number
   durationMs: number
+  /** True when stdout hit the door's 1 MiB cap and is a prefix. */
+  truncated?: boolean
 }
 
 export interface FileEntryShape {
@@ -125,6 +166,12 @@ export interface CreateOptions {
   memoryMiB?: number
   memMiB?: number
   memory?: number
+  /** Named instance type, e.g. `sandbox-lg`. Wins over the hints below. */
+  size?: string
+  vcpus?: number
+  /** ComputeSDK's nested form, as `{ resources: { vcpus } }`. */
+  resources?: { vcpus?: number }
+  cpus?: number
   signal?: AbortSignal
 }
 
@@ -161,6 +208,7 @@ interface ExecResult {
   exit_code?: number | null
   duration_ms?: number
   oom_kills?: number
+  truncated?: boolean
   error?: string
 }
 
@@ -190,10 +238,14 @@ export function ramGibFrom(configRamGib: number | undefined, options?: CreateOpt
   if (options?.ramGib !== undefined) return options.ramGib
   const mib = options?.memoryMiB ?? options?.memMiB
   if (typeof mib === 'number' && mib > 0) return Math.ceil(mib / MIB_PER_GIB)
-  // `memory` is MB rather than MiB in the shared options, and that
-  // difference never survives rounding up to whole GiB.
+  // `memory` is MB (decimal) rather than MiB in the shared options, so it
+  // converts through 1000^2 bytes and not 1024^2. Dividing by 1024 instead
+  // overstates the ask right at the boundary that matters: 2049 MB is 1.908
+  // GiB, which is 2 GiB rounded up, but `ceil(2049 / 1024)` is 3 - a whole
+  // extra GiB the caller did not ask for and, on a provider that bills by
+  // GiB-equivalents, is charged for.
   if (typeof options?.memory === 'number' && options.memory > 0) {
-    return Math.ceil(options.memory / MIB_PER_GIB)
+    return Math.ceil((options.memory * 1_000_000) / BYTES_PER_GIB)
   }
   return undefined
 }
@@ -462,12 +514,25 @@ export async function createSandbox(
   }
   if (named) checkImageReference(named)
 
+  // `size` and `ram_gib` are mutually exclusive at the door, because a named
+  // size already fixes both dimensions. An explicit size wins; otherwise a
+  // vCPU ask derives one, and a bare memory ask stays on `ram_gib` so a
+  // caller who wants 6 GiB on one core still gets exactly that rather than
+  // being rounded up into a multi-core shape it would be billed for.
+  const explicitSize = typeof options?.size === 'string' ? options.size : undefined
+  const vcpus = requestedVcpus(options)
+  const derivedSize = explicitSize ?? (vcpus === undefined ? undefined : sizeFor(vcpus, ramGib))
+
   const created = await client.request<CreateResponse>(
     'POST',
     '/preview/sandboxes',
     {
       image: named ?? DEFAULT_IMAGE,
-      ...(ramGib === undefined ? {} : { ram_gib: ramGib }),
+      ...(derivedSize === undefined
+        ? ramGib === undefined
+          ? {}
+          : { ram_gib: ramGib }
+        : { size: derivedSize }),
       ...(egress === undefined ? {} : { egress }),
       ...(options?.setup === undefined ? {} : { setup: options.setup }),
     },
@@ -569,11 +634,23 @@ export async function runCommand(
       if (lastError.includes(RETRYABLE_EXEC_ERROR) && attempt < retries) continue
       throw new Error(lastError)
     }
+    // A command's stdout caps at 1 MiB and past that the door returns a
+    // PREFIX with `truncated: true`. Dropping that flag is how a caller
+    // parsing structured output reads a clean prefix and concludes the run
+    // finished, so it is surfaced on stderr where a human and a log both
+    // see it. Measured: the cap is exactly 1048576 bytes.
+    const truncationNote = result.truncated
+      ? `[givemeanode] stdout was TRUNCATED at ${(result.stdout ?? '').length} bytes ` +
+        "(the door's 1 MiB per-command cap). For output this large, redirect it to a " +
+        'file in the sandbox and read it back with filesystem.readFile.'
+      : undefined
+    const stderr = result.stderr ?? ''
     return {
       stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
+      stderr: truncationNote === undefined ? stderr : stderr ? `${stderr}\n${truncationNote}` : truncationNote,
       exitCode: result.exit_code,
       durationMs: result.duration_ms ?? Date.now() - started,
+      truncated: result.truncated === true,
     }
   }
   throw new Error(lastError ?? `givemeanode exec failed for ${sandbox.id}`)
