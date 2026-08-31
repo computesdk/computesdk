@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/freestyle",
-  "version": "0.1.12",
-  "description": "Freestyle provider for ComputeSDK - cloud sandboxes powered by Freestyle",
+  "version": "0.2.0",
+  "description": "Freestyle provider for ComputeSDK - full Linux VMs for long-running agent tasks, with instant startup and cheap snapshotting",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -28,9 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "freestyle-sandboxes": "^0.1.33",
-    "@freestyle-sh/with-python": "^0.2.8",
-    "@freestyle-sh/with-nodejs": "^0.2.8",
+    "freestyle": "^0.2.7",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
@@ -39,6 +37,10 @@
     "freestyle",
     "sandbox",
     "code-execution",
+    "nodejs",
+    "python",
+    "microvm",
+    "vm",
     "cloud",
     "compute",
     "provider"
