@@ -1,13 +1,10 @@
 /**
  * `@computesdk/givemeanode` - the givemeanode provider for ComputeSDK.
  *
- * givemeanode serves sandboxes from a per-region door backed by a warm
- * pool of pre-forked microVMs. A create the pool covers touches neither a
- * database nor a fork on the host: it hands over a sandbox that was
- * already running. `./client` carries the other half of that, the signed
- * credential that takes the authentication read off the path too.
+ * Very fast microVM sandboxes. `./client` carries the signed credential
+ * that keeps the authentication cost off the path.
  *
- * There is no npm SDK to wrap - the door is a small JSON HTTP surface and
+ * There is no npm SDK to wrap - the API is a small JSON HTTP surface and
  * this package talks to it with `fetch`, which is also one fewer layer
  * between a caller and the measurement.
  *
@@ -41,32 +38,83 @@ export {
   type FastTokenMode,
 } from './client.js'
 
+export {
+  plainSandboxId,
+  sameSandbox,
+  isImageReference,
+  prepareImage,
+  resetPreparedImageCache,
+  CREATE_IMAGE_EXPIRY,
+  PREPARE_IMAGE_TIMEOUT_MS,
+} from './operations.js'
+
 export interface GivemeanodeConfig extends GmnClientOptions {
   /**
-   * Guest memory in GiB. Defaults to the door's own default (2). The
+   * Guest memory in GiB. Defaults to 2. The
    * shared ComputeSDK resource options are in MB or MiB, so `memoryMiB`,
    * `memMiB` and `memory` on `create` are read too and rounded up to whole
    * GiB.
    */
   ramGib?: number
   /**
-   * `open` or `none`. Decided at bake time rather than per exec, because
-   * the guest's network interface is built with the snapshot. Omitted
-   * means whatever the host is configured for.
+   * `open` or `none`. Decided when the guest image is prepared rather
+   * than per command. Omitted means the account default.
    */
   egress?: 'open' | 'none'
   /**
    * How many times to retry an exec whose host RPC did not complete.
-   * Default 1, which is the door's own contract for that error (the exec
-   * lane is reaped when idle and a retry re-dials). Set 0 for a workload
-   * where a command running twice would be worse than failing, since a
-   * dropped channel cannot say whether the host received the request.
+   * Default 1: the connection to a sandbox is re-established on demand,
+   * so a redial is the documented answer to that one error. Set 0 for a
+   * workload where a command running twice would be worse than failing,
+   * since a dropped connection cannot say whether the sandbox received
+   * the request.
    */
   execRetries?: number
 }
 
 export type GivemeanodeSandbox = SandboxHandle
 export type GivemeanodeSnapshot = SnapshotShape
+
+/**
+ * A prepared container image, ready to start sandboxes from.
+ *
+ * `id` is what to pass back as `templateId` on a create. It is the same
+ * kind of id a snapshot has, because for givemeanode a prepared image and
+ * a snapshot are the same thing: something a sandbox can start from
+ * immediately.
+ */
+export interface GivemeanodeTemplate {
+  id: string
+  provider: string
+  createdAt: Date
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * `create` takes a container image reference and prepares it.
+ *
+ * ComputeSDK's `CreateTemplateOptions` is `{ name, description?,
+ * metadata? }`, which is about naming a template rather than saying what
+ * goes in it, so the reference is read from `image` (or `fromImage`).
+ * `name` is accepted and ignored: givemeanode names a prepared image by
+ * its own id, and inventing an alias that only this client knows about
+ * would be a mapping with nothing on the other side of it.
+ */
+export interface GivemeanodeCreateTemplateOptions {
+  name?: string
+  description?: string
+  metadata?: Record<string, string>
+  /** The container image, digest-pinned. */
+  image?: string
+  /** Alias for `image`. */
+  fromImage?: string
+  /** Guest memory for every sandbox started from this template. */
+  ramGib?: number
+  /** Network posture for every sandbox started from this template. */
+  egress?: 'open' | 'none'
+  /** `"24h"`, `"7d"`, `"never"`. Omitted keeps it until deleted. */
+  expiresAfter?: string
+}
 
 type ConfigWithClient = GivemeanodeConfig & { __client?: GmnClient }
 
@@ -81,7 +129,12 @@ type FsRunCommand = (
   options?: RunCommandOptions,
 ) => Promise<CommandResult>
 
-export const givemeanode = defineProvider<GivemeanodeSandbox, ConfigWithClient, never, GivemeanodeSnapshot>({
+export const givemeanode = defineProvider<
+  GivemeanodeSandbox,
+  ConfigWithClient,
+  GivemeanodeTemplate,
+  GivemeanodeSnapshot
+>({
   name: 'givemeanode',
   methods: {
     sandbox: {
@@ -117,9 +170,9 @@ export const givemeanode = defineProvider<GivemeanodeSandbox, ConfigWithClient, 
 
       getUrl: async (_sandbox: GivemeanodeSandbox, _options: { port: number; protocol?: string }) => {
         throw new Error(
-          'givemeanode sandboxes do not expose inbound ports. A sandbox reaches out - its egress posture is ' +
-            'fixed when the guest is baked - and nothing dials in. Use a givemeanode node for a workload that ' +
-            'has to be reachable.',
+          'givemeanode sandboxes do not expose inbound ports. A sandbox reaches out, and whether it has ' +
+            'network at all is fixed when its image is prepared; nothing dials in. Use a givemeanode node ' +
+            'for a workload that has to be reachable.',
         )
       },
 
@@ -139,6 +192,48 @@ export const givemeanode = defineProvider<GivemeanodeSandbox, ConfigWithClient, 
         remove: (sandbox: GivemeanodeSandbox, path: string, run: FsRunCommand) =>
           ops.filesystem.remove(sandbox, path, run),
       },
+    },
+
+    // A TEMPLATE is a container image prepared once so that starting
+    // sandboxes from it is fast (docs: "Container images"). Preparing is
+    // the slow part and it happens here, deliberately, so a caller who
+    // knows the image up front never pays it inside a create.
+    template: {
+      create: async (
+        config: ConfigWithClient,
+        options: GivemeanodeCreateTemplateOptions,
+      ): Promise<GivemeanodeTemplate> => {
+        const reference = options?.image ?? options?.fromImage
+        if (!reference) {
+          throw new Error(
+            'givemeanode builds a template from a container image: pass ' +
+              "image: '<registry>/<repo>@sha256:<64 hex>'. To snapshot a RUNNING sandbox instead, use " +
+              'compute.snapshot.create(sandboxId).',
+          )
+        }
+        const id = await ops.prepareImage(
+          getClient(config),
+          reference,
+          options.ramGib ?? config.ramGib,
+          options.egress ?? config.egress,
+          // No expiry: a caller who asked for a template asked to keep it.
+          options.expiresAfter,
+        )
+        return {
+          id,
+          provider: 'givemeanode',
+          createdAt: new Date(),
+          metadata: { fromImage: reference, ...(options.metadata ?? {}) },
+        }
+      },
+
+      // Templates and snapshots are one kind of thing here, so these are
+      // the same two calls. A template made from a container image carries
+      // no marker distinguishing it, which is honest rather than lossy:
+      // what a caller can do with either is identical.
+      list: (config: ConfigWithClient) => ops.listSnapshots(getClient(config)),
+      delete: (config: ConfigWithClient, templateId: string) =>
+        ops.deleteSnapshot(getClient(config), templateId),
     },
 
     snapshot: {

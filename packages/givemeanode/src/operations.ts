@@ -4,7 +4,7 @@
  *
  * Separate from `index.ts` for the same reason `client.ts` is: this file
  * has no dependencies, so it can be unit tested against a stub `fetch` and
- * smoke tested against the live door without `@computesdk/provider` or a
+ * smoke tested against the live API without `@computesdk/provider` or a
  * package install. `index.ts` is then a thin mapping from ComputeSDK's
  * interface onto these, and the only part that cannot be exercised
  * outside the ComputeSDK workspace is the mapping itself.
@@ -25,8 +25,59 @@ import type { GmnClient } from './client.js'
  */
 export const DEFAULT_IMAGE = 'sbx-base'
 
-/** The door's own default exec deadline. */
+/** The default command deadline. */
 export const DEFAULT_TIMEOUT_MS = 60_000
+
+/**
+ * How long to allow for preparing a container image.
+ *
+ * A container image has to be pulled and converted before anything can
+ * start from it, and a large one (a SWE-bench instance image is ~1.8 GB
+ * over a quarter of a million files) genuinely takes minutes. The ordinary
+ * per-request timeout is sized for a call that should answer in
+ * milliseconds, so using it here would abort work that was going to
+ * succeed - and abort it AFTER paying for most of it.
+ */
+export const PREPARE_IMAGE_TIMEOUT_MS = 900_000
+
+/**
+ * Is this a container image reference rather than a curated image name?
+ *
+ * `@sha256:` is the test because it is also the requirement: givemeanode
+ * refuses a tag, since the prepared image is cached under the image's
+ * identity and a tag is a name whose meaning its owner can change. So
+ * every acceptable container reference contains it, and no curated name
+ * can.
+ */
+export function isImageReference(image: string): boolean {
+  return image.includes('@sha256:')
+}
+
+/**
+ * Refuse, locally, a reference that is CLEARLY meant to be a container
+ * image but cannot be used as one.
+ *
+ * Not validation for its own sake: without this, `ghcr.io/acme/x:latest`
+ * falls through to the curated-name path and comes back as "unknown image,
+ * available: sbx-base; sbx-min; sbx-task", which is true and useless. The
+ * service's own advice for a tag is the advice the caller needs, so say it
+ * here where we can tell the two mistakes apart. A bare `python:3.12` is
+ * NOT caught: it is genuinely ambiguous, and the curated-name refusal that
+ * lists the catalog is the better answer for it.
+ */
+export function checkImageReference(image: string): void {
+  if (isImageReference(image)) return
+  const first = image.split('/')[0] ?? ''
+  const looksLikeRegistry = image.includes('/') && first.includes('.')
+  if (!looksLikeRegistry) return
+  throw new Error(
+    `givemeanode needs a container image pinned by digest, and ${JSON.stringify(image)} is not. ` +
+      'Pass it as <registry>/<repo>@sha256:<64 hex> - read the digest with ' +
+      '`docker buildx imagetools inspect <ref>` or `crane digest <ref>`. A tag can be moved to point at ' +
+      'different bytes, and the prepared image is cached under the image\'s identity, so a tag would ' +
+      'eventually start a sandbox from content that no longer answers to that name.',
+  )
+}
 
 const MIB_PER_GIB = 1024
 
@@ -46,10 +97,9 @@ export interface FileEntryShape {
 /**
  * A sandbox handle.
  *
- * givemeanode's sandbox ids are signed and self-describing - the id itself
- * carries the route to its host and proves its own ownership - so a handle
- * needs nothing but the id and the client that made it. Nothing is cached
- * here that could go stale.
+ * A givemeanode sandbox id is self-describing, so a handle needs nothing
+ * but the id and the client that made it. Nothing is cached here that
+ * could go stale.
  */
 export interface SandboxHandle {
   readonly id: string
@@ -57,7 +107,7 @@ export interface SandboxHandle {
   readonly createdAt: Date
   readonly metadata: Record<string, unknown>
   /**
-   * Retries for the door's reconnect error, carried on the handle rather
+   * Retries for the redial error, carried on the handle rather
    * than read from config at call time: ComputeSDK's `runCommand` is
    * `(sandbox, command, options)` and never sees the provider config, so
    * the handle is the only place a per-provider setting can reach it.
@@ -149,7 +199,7 @@ export function ramGibFrom(configRamGib: number | undefined, options?: CreateOpt
 }
 
 /**
- * Fold the per-command options into the single command string the door
+ * Fold the per-command options into the single command string the API
  * takes.
  *
  * Environment variable NAMES are validated as POSIX identifiers rather
@@ -186,6 +236,192 @@ export function composeCommand(command: string, options?: RunOptions): string {
   return full
 }
 
+/**
+ * How long a template made as a side effect of `create({ image })` lives.
+ *
+ * The caller asked for a sandbox, not for a template to keep, so leaving
+ * these forever would accumulate stored bytes nobody asked to pay for. A
+ * day is long enough that a CI fleet or a training run reuses one all day
+ * and short enough to be self-cleaning. `template.create` is the call for
+ * one that should outlive that, and it sets no expiry.
+ */
+export const CREATE_IMAGE_EXPIRY = '24h'
+
+/**
+ * Start one sandbox from a snapshot or prepared template.
+ */
+async function forkSnapshot(
+  client: GmnClient,
+  from: string,
+  options?: CreateOptions,
+  execRetries?: number,
+  extra?: Record<string, unknown>,
+): Promise<SandboxHandle> {
+  const forked = await client.request<{ sandboxes?: string[]; all_ready_ms?: number }>(
+    'POST',
+    '/preview/sandboxes/forks',
+    { from, count: 1 },
+    options?.signal,
+  )
+  const id = forked.sandboxes?.[0]
+  if (!id) throw new Error(`givemeanode fork of ${from} returned no sandbox`)
+  return {
+    id,
+    client,
+    createdAt: new Date(),
+    execRetries,
+    metadata: { forkedFrom: from, allReadyMs: forked.all_ready_ms, ...(extra ?? {}) },
+  }
+}
+
+/**
+ * Container images already prepared in this process, and the ones being
+ * prepared right now.
+ *
+ * MODULE level and single-flighted, for the same reason the signed
+ * credential's cache is: a prepared image is a property of the (endpoint,
+ * token, reference, shape) tuple rather than of an object, and starting N
+ * sandboxes from one image must prepare it ONCE. Without the single
+ * flight, `Promise.all` over 20 creates from a fresh reference would start
+ * twenty conversions of the same bytes and bill for all of them.
+ *
+ * Keyed on the shape as well as the reference because every sandbox
+ * started from a prepared image inherits its memory size and egress and
+ * cannot change them, so two different shapes are two different prepared
+ * images.
+ */
+const prepared = new Map<string, string>()
+const preparing = new Map<string, Promise<string>>()
+
+/** Test seam, and the escape hatch for a caller that wants a fresh one. */
+export function resetPreparedImageCache(): void {
+  prepared.clear()
+  preparing.clear()
+}
+
+function prepareKey(
+  client: GmnClient,
+  reference: string,
+  ramGib: number | undefined,
+  egress: 'open' | 'none' | undefined,
+): string {
+  return [client.baseUrl, client.apiKey, reference, ramGib ?? '', egress ?? ''].join('\u0000')
+}
+
+/**
+ * Prepare a container image and return the id to start sandboxes from,
+ * reusing an in-flight or completed preparation of the same image.
+ *
+ * `expiresAfter` is the caller's, and the two callers want different
+ * things. An explicit `template.create` is something the caller asked to
+ * keep, so it keeps it. A `create({ image })` produces one as a side
+ * effect the caller never named, and leaving those around forever would
+ * accumulate stored bytes nobody asked to pay for, so that one expires.
+ */
+export async function prepareImage(
+  client: GmnClient,
+  reference: string,
+  ramGib: number | undefined,
+  egress: 'open' | 'none' | undefined,
+  expiresAfter?: string,
+): Promise<string> {
+  checkImageReference(reference)
+  const key = prepareKey(client, reference, ramGib, egress)
+  const done = prepared.get(key)
+  if (done) return done
+  const inFlight = preparing.get(key)
+  if (inFlight) return inFlight
+  const run = client
+    .request<{ snapshot?: string; bake_ms?: number }>(
+      'POST',
+      '/preview/sandboxes/envs',
+      {
+        from_image: reference,
+        ...(ramGib === undefined ? {} : { ram_gib: ramGib }),
+        ...(egress === undefined ? {} : { egress }),
+        ...(expiresAfter === undefined ? {} : { expires_after: expiresAfter }),
+      },
+      undefined,
+      PREPARE_IMAGE_TIMEOUT_MS,
+    )
+    .then(body => {
+      const id = body.snapshot
+      if (!id) throw new Error(`givemeanode prepared ${reference} but returned no id`)
+      prepared.set(key, id)
+      return id
+    })
+    .finally(() => {
+      preparing.delete(key)
+    })
+  preparing.set(key, run)
+  return run
+}
+
+// ------------------------------------------------------------ sandbox ids
+//
+// A givemeanode sandbox id comes back in one of two forms, and a client
+// that assumes one of them is silently wrong about the other.
+//
+//   sbx-<12 hex>   a plain id
+//   sbx-<base64url>  a SIGNED id, carrying its own route and the plain id
+//
+// Which one you get is not a property of the request: a sandbox served
+// from the ready pool - the common, fast case - comes back signed. Both
+// work identically for running commands and for deleting, because the
+// service accepts either. But the workspace LISTING reports plain ids
+// only, so matching a signed id against it by string equality finds
+// nothing, and `getInfo` then reports a perfectly healthy sandbox as
+// stopped. That is what this decode exists to stop.
+
+const SIGNED_VERSION = 1
+const HOSTREF_LEN = 4
+const MAC_LEN = 12
+const PLAIN_BODY_LEN = 12
+
+/**
+ * The plain id inside a signed one, or null for anything else.
+ *
+ * A faithful port of the service's own normaliser, which is a pure
+ * structural decode: no secret, no network, and no attempt to verify the
+ * signature - verifying is the service's job and this is only trying to
+ * learn which sandbox an id refers to. Every unexpected shape returns
+ * null rather than a guess, so if the encoding ever changes this degrades
+ * to "cannot tell" rather than to a wrong answer.
+ */
+export function plainSandboxId(id: string): string | null {
+  if (!id.startsWith('sbx-')) return null
+  const body = id.slice('sbx-'.length)
+  // A plain id is already plain, and is deliberately NOT decoded: 12 hex
+  // characters are also valid base64url and would decode to nonsense.
+  if (body.length === PLAIN_BODY_LEN && /^[0-9a-f]+$/.test(body)) return null
+  let raw: Uint8Array
+  try {
+    const padded = body.replace(/-/g, '+').replace(/_/g, '/')
+    const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4))
+    raw = Uint8Array.from(binary, c => c.charCodeAt(0))
+  } catch {
+    return null
+  }
+  if (raw.length < 4 + HOSTREF_LEN + 1 + MAC_LEN || raw[0] !== SIGNED_VERSION) return null
+  const lenAt = 2 + HOSTREF_LEN
+  const objectLen = raw[lenAt]
+  if (objectLen === undefined) return null
+  const internalLenAt = lenAt + 1 + objectLen
+  const internalLen = raw[internalLenAt]
+  if (internalLen === undefined || internalLen === 0) return null
+  const internalAt = internalLenAt + 1
+  if (raw.length !== internalAt + internalLen + MAC_LEN) return null
+  return new TextDecoder().decode(raw.subarray(internalAt, internalAt + internalLen))
+}
+
+/** Do these two ids name the same sandbox, in either form? */
+export function sameSandbox(a: string, b: string): boolean {
+  if (a === b) return true
+  const pa = plainSandboxId(a) ?? a
+  const pb = plainSandboxId(b) ?? b
+  return pa === pb
+}
+
 /** A snapshot id, which is the only thing a fork can start from. */
 function forkableFrom(options?: CreateOptions): string | undefined {
   const from = options?.snapshotId ?? options?.templateId
@@ -201,37 +437,36 @@ export async function createSandbox(
 ): Promise<SandboxHandle> {
   // Single-flighted, and a no-op unless `fastToken: 'prime'`. When N
   // sandboxes start at once this is what stops all N taking their own
-  // first call down the database path.
+  // first call down the ordinary authentication path.
   await client.prime()
 
-  // Restoring from a snapshot is a fork: a different route, and a
+  // Restoring from a snapshot or a template is a different route, and a
   // different response shape, from a create.
   const from = forkableFrom(options)
-  if (from) {
-    const forked = await client.request<{ sandboxes?: string[]; all_ready_ms?: number }>(
-      'POST',
-      '/preview/sandboxes/forks',
-      { from, count: 1 },
-      options?.signal,
-    )
-    const id = forked.sandboxes?.[0]
-    if (!id) throw new Error(`givemeanode fork of ${from} returned no sandbox`)
-    return {
-      id,
-      client,
-      createdAt: new Date(),
-      execRetries,
-      metadata: { forkedFrom: from, allReadyMs: forked.all_ready_ms },
-    }
-  }
+  if (from) return forkSnapshot(client, from, options, execRetries)
 
   const ramGib = ramGibFrom(configRamGib, options)
   const egress = options?.egress ?? configEgress
+
+  // A CONTAINER IMAGE is prepared once and then started from, because
+  // `create` itself only accepts a curated name. The preparation is
+  // cached and single-flighted, so N creates from one reference prepare it
+  // once; the id it yields expires on its own, because the caller asked
+  // for a sandbox rather than for a template to keep. A caller who wants
+  // to keep it calls `prepareImage` (template.create) and passes the id
+  // back as `templateId`.
+  const named = options?.image ?? options?.templateId
+  if (named && isImageReference(named)) {
+    const templateId = await prepareImage(client, named, ramGib, egress, CREATE_IMAGE_EXPIRY)
+    return forkSnapshot(client, templateId, options, execRetries, { fromImage: named })
+  }
+  if (named) checkImageReference(named)
+
   const created = await client.request<CreateResponse>(
     'POST',
     '/preview/sandboxes',
     {
-      image: options?.image ?? options?.templateId ?? DEFAULT_IMAGE,
+      image: named ?? DEFAULT_IMAGE,
       ...(ramGib === undefined ? {} : { ram_gib: ramGib }),
       ...(egress === undefined ? {} : { egress }),
       ...(options?.setup === undefined ? {} : { setup: options.setup }),
@@ -273,27 +508,33 @@ export async function getSandbox(
   execRetries?: number,
 ): Promise<SandboxHandle | null> {
   const all = await listSandboxes(client, execRetries)
-  return all.find(handle => handle.id === sandboxId) ?? null
+  // `sameSandbox`, not `===`: the caller may hold a signed id while the
+  // listing reports the plain one.
+  const found = all.find(handle => sameSandbox(handle.id, sandboxId))
+  if (!found) return null
+  // Answer with the id the CALLER asked about. It is the one they can use,
+  // and handing back a different string for the same sandbox is the kind
+  // of surprise that shows up much later as a failed lookup.
+  return { ...found, id: sandboxId }
 }
 
 export async function destroySandbox(client: GmnClient, sandboxId: string): Promise<void> {
   // The array route rather than `DELETE /preview/sandboxes/{id}`: the same
-  // effect for one, and it is the shape a teardown of N uses. The door
-  // reports an already-gone sandbox in its per-item result rather than
+  // effect for one, and it is the shape a teardown of N uses. An
+  // already-gone sandbox comes back in the per-item result rather than
   // refusing the call, so destroy is idempotent.
   await client.request('POST', '/preview/sandboxes/deletes', { sandboxes: [sandboxId] })
 }
 
 /**
- * The door's own phrase for an exec whose host RPC did not complete.
+ * The phrase for a command whose delivery did not complete.
  *
- * It is a TRANSPORT failure rather than a command failure: the exec
- * channel is a websocket lane that the host reaps after an idle period,
- * so the first exec after a quiet stretch can find the lane gone. The
- * door's message says "retry - reconnect-after-anything is the exec
- * channel's contract", and a retry re-dials. Matched on the phrase
- * because the door reports it in the result's `error` string and gives no
- * code; anything else with a missing exit code is not retried.
+ * It is a TRANSPORT failure rather than a command failure: the connection
+ * to a sandbox is re-established on demand, so the first command after a
+ * quiet stretch can find it closed. The documented answer is to retry,
+ * and a retry redials. Matched on the phrase because it arrives in the
+ * result's `error` string with no code; anything else with a missing exit
+ * code is not retried.
  */
 const RETRYABLE_EXEC_ERROR = 'did not answer the exec call'
 
@@ -316,7 +557,7 @@ export async function runCommand(
     })
     const result = body.results?.[0]
     if (!result) throw new Error(`givemeanode exec returned no result for ${sandbox.id}`)
-    // The door reports a failed host RPC as `{sandbox, error}` with NO
+    // An undelivered command comes back as `{sandbox, error}` with NO
     // exit_code. Reading a missing exit code as 0 would turn a diagnosed
     // failure into a silent success, which is the exact bug that cost a
     // whole benchmark run once already.
@@ -350,8 +591,8 @@ export async function sandboxInfo(sandbox: SandboxHandle): Promise<{
   return {
     id: sandbox.id,
     provider: 'givemeanode',
-    // The listing is the plane's own routing registry rather than a cache,
-    // so absence means the sandbox is gone, not that the read was stale.
+    // The listing is authoritative rather than a cache, so absence means
+    // the sandbox is gone, not that the read was stale.
     status: found ? 'running' : 'stopped',
     createdAt: found?.createdAt ?? sandbox.createdAt,
     timeout: DEFAULT_TIMEOUT_MS,

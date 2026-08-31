@@ -13,6 +13,8 @@ import { beforeEach, describe, it } from 'node:test'
 import { GmnClient, resetFastTokenCache } from '../client.ts'
 import * as ops from '../operations.ts'
 
+const REF = 'ghcr.io/acme/task@sha256:' + 'a'.repeat(64)
+
 const KEY = 'gmnt_test0000000000000000000000000000000'
 
 interface Recorded {
@@ -97,6 +99,194 @@ describe('create', () => {
       () => ops.createSandbox(client, undefined, undefined, { snapshotId: 'env-abc' }),
       /fork of env-abc returned no sandbox/,
     )
+  })
+})
+
+describe('sandbox ids come back in two forms', () => {
+  // Captured from production: a sandbox served from the ready pool. The
+  // plain id is inside it, and the workspace listing reports only that.
+  const SIGNED = 'sbx-AQGIdogpCnNieC0wMGIyMTEQc2J4LWFjZThkN2IwMDM3YdzoKiL7ZfZt0X4msA'
+  const PLAIN = 'sbx-ace8d7b0037a'
+
+  it('recovers the plain id from a real signed one', () => {
+    assert.equal(ops.plainSandboxId(SIGNED), PLAIN)
+  })
+
+  it('leaves a plain id alone rather than decoding 12 hex as base64', () => {
+    assert.equal(ops.plainSandboxId(PLAIN), null)
+  })
+
+  it('returns null for anything it cannot read, never a guess', () => {
+    for (const bad of ['', 'sbx-', 'not-a-sandbox', 'sbx-!!!!', 'sbx-' + 'A'.repeat(8), 'env-abc']) {
+      assert.equal(ops.plainSandboxId(bad), null, bad)
+    }
+  })
+
+  it('matches the two forms against each other', () => {
+    assert.equal(ops.sameSandbox(SIGNED, PLAIN), true)
+    assert.equal(ops.sameSandbox(PLAIN, SIGNED), true)
+    assert.equal(ops.sameSandbox(SIGNED, SIGNED), true)
+    assert.equal(ops.sameSandbox(PLAIN, 'sbx-000000000000'), false)
+  })
+
+  it('FINDS a pool-served sandbox in the listing', async () => {
+    // The listing reports the plain id, the caller holds the signed one.
+    // String equality answers null here, and `getInfo` then calls a live
+    // sandbox stopped.
+    const { client } = door(() => ({ body: { items: [{ id: PLAIN }] } }))
+    const found = await ops.getSandbox(client, SIGNED)
+    assert.ok(found, 'must find it')
+    assert.equal(found.id, SIGNED, 'and answer with the id the caller asked about')
+  })
+
+  it('reports a pool-served sandbox as RUNNING, not stopped', async () => {
+    const { client } = door(() => ({ body: { items: [{ id: PLAIN }] } }))
+    const info = await ops.sandboxInfo({
+      id: SIGNED,
+      client,
+      createdAt: new Date(),
+      metadata: {},
+    })
+    assert.equal(info.status, 'running')
+  })
+})
+
+describe('container images', () => {
+  beforeEach(() => {
+    resetFastTokenCache()
+    ops.resetPreparedImageCache()
+  })
+
+  it('classifies a digest-pinned reference as an image, a name as a name', () => {
+    assert.equal(ops.isImageReference(REF), true)
+    assert.equal(ops.isImageReference('sbx-base'), false)
+    assert.equal(ops.isImageReference('ghcr.io/acme/task:latest'), false)
+  })
+
+  it('PREPARES the image and then starts from it, rather than sending it as a name', async () => {
+    // `create` only accepts a curated name, so sending a reference there
+    // would come back "unknown image". The image has to be prepared first
+    // and the result started from.
+    const { sent, client } = door((method, path) =>
+      path === '/preview/sandboxes/envs'
+        ? { body: { snapshot: 'env-prepared', bake_ms: 42_000 } }
+        : { body: { sandboxes: ['sbx-1'], all_ready_ms: 30 } },
+    )
+    const handle = await ops.createSandbox(client, undefined, undefined, { image: REF })
+    assert.deepEqual(sent.map(c => c.path), ['/preview/sandboxes/envs', '/preview/sandboxes/forks'])
+    assert.equal(sent[0].body.from_image, REF)
+    assert.equal(sent[1].body.from, 'env-prepared')
+    assert.equal(handle.id, 'sbx-1')
+    assert.equal(handle.metadata.fromImage, REF)
+  })
+
+  it('gives a side-effect template an EXPIRY, so it does not accumulate', async () => {
+    // The caller asked for a sandbox, not for something to keep paying
+    // stored bytes for.
+    const { sent, client } = door((_m, path) =>
+      path === '/preview/sandboxes/envs'
+        ? { body: { snapshot: 'env-prepared' } }
+        : { body: { sandboxes: ['sbx-1'] } },
+    )
+    await ops.createSandbox(client, undefined, undefined, { image: REF })
+    assert.equal(sent[0].body.expires_after, ops.CREATE_IMAGE_EXPIRY)
+  })
+
+  it('prepares an image ONCE for N concurrent creates', async () => {
+    // Without the single flight, Promise.all over 20 creates from a fresh
+    // reference starts twenty conversions of the same bytes and bills for
+    // all of them.
+    let prepares = 0
+    const { client } = door((_m, path) => {
+      if (path === '/preview/sandboxes/envs') {
+        prepares += 1
+        return { body: { snapshot: 'env-prepared' } }
+      }
+      return { body: { sandboxes: ['sbx-n'] } }
+    })
+    await Promise.all(
+      Array.from({ length: 20 }, () => ops.createSandbox(client, undefined, undefined, { image: REF })),
+    )
+    assert.equal(prepares, 1)
+  })
+
+  it('does not re-prepare once it holds one', async () => {
+    let prepares = 0
+    const { client } = door((_m, path) => {
+      if (path === '/preview/sandboxes/envs') {
+        prepares += 1
+        return { body: { snapshot: 'env-prepared' } }
+      }
+      return { body: { sandboxes: ['sbx-n'] } }
+    })
+    await ops.createSandbox(client, undefined, undefined, { image: REF })
+    await ops.createSandbox(client, undefined, undefined, { image: REF })
+    assert.equal(prepares, 1)
+  })
+
+  it('treats a different SHAPE as a different prepared image', async () => {
+    // Every sandbox started from a prepared image inherits its memory and
+    // egress and cannot change them, so one prepared at 2 GiB cannot serve
+    // a caller who asked for 8.
+    let prepares = 0
+    const { client } = door((_m, path) => {
+      if (path === '/preview/sandboxes/envs') {
+        prepares += 1
+        return { body: { snapshot: `env-${prepares}` } }
+      }
+      return { body: { sandboxes: ['sbx-n'] } }
+    })
+    await ops.createSandbox(client, 2, undefined, { image: REF })
+    await ops.createSandbox(client, 8, undefined, { image: REF })
+    assert.equal(prepares, 2)
+  })
+
+  it('allows a longer wait for preparing than for an ordinary call', async () => {
+    // A large image genuinely takes minutes. Aborting at the ordinary
+    // timeout would throw away work already paid for.
+    assert.ok(ops.PREPARE_IMAGE_TIMEOUT_MS > 300_000)
+  })
+
+  it('refuses a registry reference pinned by TAG, with the advice that helps', async () => {
+    // Falling through to the curated-name path would answer "unknown
+    // image, available: sbx-base; sbx-min; sbx-task" - true and useless.
+    const { client } = door(() => ({ body: {} }))
+    await assert.rejects(
+      () => ops.createSandbox(client, undefined, undefined, { image: 'ghcr.io/acme/task:latest' }),
+      /pinned by digest/,
+    )
+  })
+
+  it('leaves a bare name:tag to the curated-name refusal', async () => {
+    // `python:3.12` is genuinely ambiguous, and the catalog listing is the
+    // better answer for it than a lecture about digests.
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1' } }))
+    await ops.createSandbox(client, undefined, undefined, { image: 'python:3.12' })
+    assert.equal(sent[0].path, '/preview/sandboxes')
+    assert.equal(sent[0].body.image, 'python:3.12')
+  })
+
+  it('says so when preparing yields no id', async () => {
+    const { client } = door(() => ({ body: {} }))
+    await assert.rejects(
+      () => ops.prepareImage(client, REF, undefined, undefined),
+      /prepared .* but returned no id/,
+    )
+  })
+
+  it('does not cache a FAILED preparation', async () => {
+    // A conversion that failed for a transient reason must be retryable;
+    // caching the failure would make one bad minute permanent.
+    let attempts = 0
+    const { client } = door(() => {
+      attempts += 1
+      return attempts === 1
+        ? { status: 503, body: { error: 'no host can convert right now' } }
+        : { body: { snapshot: 'env-ok' } }
+    })
+    await assert.rejects(() => ops.prepareImage(client, REF, undefined, undefined))
+    assert.equal(await ops.prepareImage(client, REF, undefined, undefined), 'env-ok')
+    assert.equal(attempts, 2)
   })
 })
 

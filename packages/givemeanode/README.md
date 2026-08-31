@@ -1,9 +1,7 @@
 # @computesdk/givemeanode
 
-[givemeanode](https://givemeanode.com) provider for ComputeSDK. Firecracker
-microVM sandboxes served from a per-region door, with a warm pool of
-pre-forked guests behind it: a create the pool covers hands over a sandbox
-that is already running, so it costs neither a boot nor a fork.
+[givemeanode](https://givemeanode.com) provider for ComputeSDK. Very fast
+microVM sandboxes.
 
 ## Installation & Setup
 
@@ -21,9 +19,9 @@ gman token create --name computesdk --workspace my-workspace
 
 ```bash
 GMN_TOKEN=gmnt_your_token
-# Optional. Defaults to the public door in us-west-2. Point this at the
-# door in YOUR region: the network is the largest term in a sandbox
-# create once the door is fast.
+# Optional. Defaults to us-west-2. givemeanode runs an endpoint per region
+# and they are not interchangeable for latency, so set this to the one
+# nearest your workload.
 GMN_API_HOST=https://api.use1.givemeanode.com
 ```
 
@@ -45,45 +43,82 @@ await sandbox.destroy()
 | Option | Type | Default | What it does |
 |---|---|---|---|
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
-| `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional door to talk to. |
+| `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
 | `fastToken` | `'absorb' \| 'prime' \| 'off'` | `'absorb'` | See below. |
 | `ramGib` | `number` | 2 | Guest memory. `memoryMiB` / `memMiB` / `memory` on `create` are read too and rounded up to whole GiB. |
-| `egress` | `'open' \| 'none'` | host default | Whether the guest can reach the network. Fixed at bake time, not per exec. |
+| `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. Fixed when the guest image is prepared, not per command. |
+| `execRetries` | `number` | 1 | See "Two behaviours worth knowing about". |
 | `timeout` | `number` | 120000 | Per-request timeout in ms. |
+
+## Container images
+
+Pass any container image by digest and givemeanode will run it:
+
+```typescript
+const sandbox = await compute.sandbox.create({
+  image: 'ghcr.io/acme/task@sha256:abc...',
+})
+```
+
+Or prepare it once and start many sandboxes from it, which is much faster
+per sandbox:
+
+```typescript
+const template = await compute.template.create({
+  image: 'ghcr.io/acme/task@sha256:abc...',
+})
+const a = await compute.sandbox.create({ templateId: template.id })
+const b = await compute.sandbox.create({ templateId: template.id })
+```
+
+Three things to know:
+
+- **The reference must be digest-pinned.** `ghcr.io/acme/task:latest` is
+  refused; `ghcr.io/acme/task@sha256:<64 hex>` is accepted. A tag can be
+  moved to point at different bytes, and the prepared image is cached under
+  the image's identity, so a tag would eventually start a sandbox from
+  content that no longer answers to that name. Read a digest with
+  `docker buildx imagetools inspect <ref>` or `crane digest <ref>`.
+- **Write the registry host in full.** `alpine@sha256:...` is refused
+  because it does not say which registry to authenticate to.
+- **The first sandbox from a new image is slow**, because the image has to
+  be prepared before anything can start; every one after it is fast. Use
+  `template.create` when you know the image up front. The provider prepares
+  a given image only once per process and shares the result, so starting N
+  sandboxes from one image does not prepare it N times.
+
+givemeanode's own curated images are also available by name (`sbx-base`,
+the default, has python3, node 24, git, curl and a compiler; `sbx-min` and
+`sbx-task` are smaller). Anything containing `@sha256:` is treated as a
+container image; anything else is treated as a curated name.
 
 ## The signed credential, and why you get it for free
 
-Every authenticated request on the door normally opens with one indexed
-database read that resolves the bearer to its org, workspace, scopes and
-ban state. It is around 15 ms, it can only be served from the primary, and
-a create-then-exec pays it **twice**.
-
-The door removes it for callers that opt in, by handing a **signed**
-credential back on the response of any request made with a `gmnt_` bearer:
+Authenticating a request costs a round trip that presenting a signed
+credential does not. givemeanode hands one back on the response to any
+request made with your `gmnt_` token:
 
 ```
-gmn-fast-token:         gmns_<compact EdDSA JWT>
+gmn-fast-token:         gmns_<compact JWT>
 gmn-fast-token-expires: 2026-08-30T19:48:19Z
 ```
 
-A request presenting that token is verified in CPU - a signature check and
-two in-process hash lookups - and touches no database at all. This package
-absorbs the offer and presents it automatically. There is **nothing to
-configure, nothing new to store, and no extra round trip**: the offer rides
-on a response you were already getting, and your `gmnt_` token stays the
-only secret you hold. Every failure falls back to the ordinary credential,
-so a token that cannot be verified is never worse than not having one.
+This package absorbs that offer and presents it automatically. There is
+**nothing to configure, nothing new to store, and no extra round trip**:
+the offer rides on a response you were already getting, and your `gmnt_`
+token stays the only secret you hold. Every failure falls back to the
+ordinary credential, so a credential that cannot be used is never worse
+than not having one.
 
 Three modes, because the right one depends on your shape:
 
 - **`absorb`** (default) never adds a round trip. Your first request pays
-  the read, its response carries the token, and everything after it -
-  including the exec leg of that very first create - is served in CPU.
-- **`prime`** pays one cheap authenticated request up front, single-flighted
-  across every caller sharing the credential. Use it when you start **N
-  sandboxes at once**: without it all N take their own first call down the
-  database path.
-- **`off`** never presents one. Every request pays the read.
+  the ordinary cost, its response carries the credential, and everything
+  after it is cheaper.
+- **`prime`** pays one cheap request up front, single-flighted across every
+  caller sharing the token. Use it when you start **N sandboxes at once**:
+  without it, all N take the ordinary path.
+- **`off`** never presents one.
 
 ```typescript
 const compute = givemeanode({
@@ -92,17 +127,16 @@ const compute = givemeanode({
 })
 ```
 
-What it costs, stated plainly: a signed token is valid for its own lifetime
-regardless of what happens to the credential behind it, so `gman token
-revoke` stops anything **new** immediately but a token already in a
+What it costs, stated plainly: a signed credential is valid for its own
+lifetime regardless of what happens to the token behind it, so `gman token
+revoke` stops anything **new** immediately, but a credential already in a
 client's hands keeps working until it expires. Bans behave the same way.
-That window is one token lifetime and no longer.
+That window is one credential lifetime and no longer.
 
-## Snapshots and forks
+## Snapshots
 
-A sandbox can be snapshotted, and a snapshot forked. A fork is the fastest
-way to get N copies of a prepared environment, because it skips both the
-boot and the bake:
+A sandbox can be snapshotted, and a snapshot started from. This is the
+fastest way to get N copies of a prepared environment:
 
 ```typescript
 const snapshot = await compute.snapshot.create(sandbox.sandboxId)
@@ -116,6 +150,7 @@ const copy = await compute.sandbox.create({ snapshotId: snapshot.id })
 | `sandbox.create` / `getById` / `list` / `destroy` | yes |
 | `runCommand` (cwd, env, background, timeout) | yes |
 | `filesystem` (read, write, mkdir, readdir, exists, remove) | yes, over `runCommand` |
+| `template.create` / `list` / `destroy` | yes, from a container image |
 | `snapshot.create` / `list` / `delete` | yes |
 | `getUrl` (inbound ports) | **no** - see below |
 | streaming stdout/stderr | not natively; the SDK's bridge applies |
@@ -124,33 +159,29 @@ const copy = await compute.sandbox.create({ snapshotId: snapshot.id })
 
 **Writes go through base64, not a heredoc.** A heredoc's body is every line
 up to its marker, so it can only ever produce a file *ending in a
-newline*: writing `hello` and reading it back gave `hello\n`. Base64 has
-no such rounding, needs no escaping (the alphabet is shell-inert), and
-carries content a heredoc cannot - no trailing newline, a line equal to
-the marker, arbitrary bytes. The cost is that the encoded content rides in
-one argv entry, so **a single `writeFile` is bounded by the guest's
-ARG_MAX**, typically around 1.5 MB of content. Every givemeanode image
-ships coreutils, so `base64` is present in all of them.
+newline*: writing `hello` and reading it back gave `hello\n`. Base64 has no
+such rounding, needs no escaping (the alphabet is shell-inert), and carries
+content a heredoc cannot - no trailing newline, a line equal to the marker,
+arbitrary bytes. The cost is that the encoded content rides in one argv
+entry, so **a single `writeFile` is bounded by the guest's ARG_MAX**,
+typically around 1.5 MB of content. Every givemeanode image ships
+coreutils, so `base64` is present.
 
-**An exec is retried once, and only for one error.** The exec channel is a
-websocket lane the host reaps when idle, so the first command after a
-quiet stretch can find the lane gone; the door answers with "the sandbox's
-host did not answer the exec call; retry" and a retry re-dials. Nothing
-else is retried - a command that ran and failed has an exit code and is
-returned as a result, not an exception. In the rare case where the host
-did receive the request before the channel dropped, the retry means the
-command can run twice, so pass `execRetries: 0` for a workload where that
-matters.
+**A command is retried once, and only for one error.** The connection to a
+sandbox is re-established on demand, so the first command after a quiet
+stretch can find it closed and needs a redial. Nothing else is retried - a
+command that ran and failed has an exit code and is returned as a result,
+not an exception. In the rare case where the sandbox did receive the
+request before the connection dropped, the retry means the command can run
+twice, so pass `execRetries: 0` for a workload where that matters.
 
 ## Limitations
 
 - **No inbound ports.** A givemeanode sandbox reaches out; nothing dials
-  in, and its egress posture is fixed when the guest is baked rather than
-  per exec. `getUrl` throws. A workload that has to be reachable belongs on
-  a givemeanode *node* rather than a sandbox.
-- **Images are curated, not arbitrary.** `image` names one of givemeanode's
-  images (`sbx-base`, `sbx-min`, `sbx-task`), not a Docker reference. The
-  default, `sbx-base`, carries python3, node 24, git, curl and a compiler,
-  so it serves both the `node` and `python` runtimes.
-- **Regional doors are not interchangeable.** Set `baseUrl` to the door in
-  your own region.
+  in, and whether it has network at all is fixed when its image is
+  prepared rather than per command. `getUrl` throws. A workload that has to
+  be reachable belongs on a givemeanode *node* rather than a sandbox.
+- **Container images must be digest-pinned and registry-qualified**, and
+  the first sandbox from a new one is slow. See "Container images".
+- **Regional endpoints are not interchangeable.** Set `baseUrl` to the one
+  nearest your workload.

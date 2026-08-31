@@ -1,16 +1,16 @@
 /**
- * Drive the provider's operations against a LIVE givemeanode door.
+ * Drive the provider's operations against the LIVE givemeanode API.
  *
  * Not a unit test and deliberately not in CI: it creates real sandboxes
  * and needs a real token. It exists because the unit tests prove the
- * package builds the requests it means to, and only this proves the door
+ * package builds the requests it means to, and only this proves the service
  * agrees. Every wire shape this package reads was taken from a run of
  * this script rather than from a handler signature.
  *
  *   GMN_TOKEN=gmnt_... GMN_API_HOST=https://api.use1.givemeanode.com \
  *     node --experimental-strip-types scripts/smoke.ts
  *
- * The last two checks are the point of the package: that the door vends a
+ * The last two checks are the point of the package: that the service issues a
  * signed credential, and that the provider actually presents it.
  */
 
@@ -37,7 +37,7 @@ async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
 
 async function main(): Promise<void> {
   client = new GmnClient({ fastToken: 'prime' })
-  console.log(`door ${client.baseUrl}\n`)
+  console.log(`endpoint ${client.baseUrl}\n`)
 
   assert.equal(client.hasFastToken(), false, 'nothing vended before the first call')
 
@@ -97,11 +97,19 @@ async function main(): Promise<void> {
     return `${cases.length} round trips exact`
   })
 
-  await step('list and getById', async () => {
+  await step('list and getById, in BOTH id forms', async () => {
     const found = await ops.getSandbox(client, sandbox.id)
     assert.ok(found, 'the sandbox we just made must be in the listing')
     assert.equal(await ops.getSandbox(client, 'sbx-000000000000'), null)
-    return `${(await ops.listSandboxes(client)).length} live`
+    // Whichever form this create returned, the OTHER one must find it too.
+    // A pool-served sandbox comes back signed while the listing reports
+    // the plain id, and matching those by string equality answers null -
+    // which is what made getInfo call a live sandbox stopped.
+    const plain = ops.plainSandboxId(sandbox.id)
+    const alsoBy = plain ?? sandbox.id
+    assert.ok(await ops.getSandbox(client, alsoBy), `must also find it by ${alsoBy}`)
+    const form = plain ? 'signed, plain recovered' : 'plain'
+    return `${(await ops.listSandboxes(client)).length} live, id ${form}`
   })
 
   await step('getInfo', async () => {
@@ -135,8 +143,8 @@ async function main(): Promise<void> {
     return `${all.length} snapshots`
   })
 
-  await step('THE POINT: the door vended a signed credential', async () => {
-    assert.equal(client.hasFastToken(), true, 'the door must have vended by now')
+  await step('THE POINT: the service issued a signed credential', async () => {
+    assert.equal(client.hasFastToken(), true, 'one must have been issued by now')
     return 'held'
   })
 
@@ -144,8 +152,8 @@ async function main(): Promise<void> {
     const bearer = client.bearer()
     assert.ok(bearer.startsWith('gmns_'), `expected a signed bearer, got ${bearer.slice(0, 6)}...`)
     assert.notEqual(bearer, client.apiKey)
-    // And the door has to still accept it, which is the half an offline
-    // test cannot reach: a signed token this door will not verify would
+    // And it has to still be accepted, which is the half an offline
+    // test cannot reach: a credential the service will not verify would
     // fall back silently and look identical from here.
     const r = await ops.runCommand(sandbox, 'true')
     assert.equal(r.exitCode, 0)
