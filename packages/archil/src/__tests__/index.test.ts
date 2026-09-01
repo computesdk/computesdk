@@ -13,6 +13,69 @@ afterEach(() => {
   global.fetch = originalFetch;
 });
 
+function successExecResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      success: true,
+      data: {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 0, queueMs: 0, executeMs: 0 },
+      },
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+describe('archil filesystem writeFile chunking', () => {
+  it('splits large writes into commands under the 102400-byte limit', async () => {
+    const fetchMock = vi.fn(async (_input, init) => successExecResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+    const content = 'x'.repeat(100 * 1024); // 100 KiB raw -> >100 KiB base64
+    await sandbox.filesystem.writeFile('/tmp/bench/file.txt', content);
+
+    const execCalls = (fetchMock.mock.calls as any[][]).filter((call) => {
+      const init = call[1] as RequestInit | undefined;
+      return init?.method === 'POST' && String(call[0]).includes('/exec');
+    });
+
+    const commandBodies = execCalls.map(([, init]) => {
+      const body = typeof init?.body === 'string' ? init.body : '';
+      return JSON.parse(body).command as string;
+    });
+
+    const writeCommands = commandBodies.filter((cmd) => cmd.includes('base64 -d'));
+    expect(writeCommands.length).toBeGreaterThan(1);
+    for (const cmd of writeCommands) {
+      expect(cmd.length).toBeLessThanOrEqual(102400);
+    }
+  });
+
+  it('creates or truncates the file for empty content', async () => {
+    const fetchMock = vi.fn(async (_input, init) => successExecResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+    await sandbox.filesystem.writeFile('/tmp/bench/empty.txt', '');
+
+    const execCalls = (fetchMock.mock.calls as any[][]).filter((call) => {
+      const init = call[1] as RequestInit | undefined;
+      return init?.method === 'POST' && String(call[0]).includes('/exec');
+    });
+    expect(execCalls.length).toBeGreaterThanOrEqual(1);
+    const commandBodies = execCalls.map(([, init]) => {
+      const body = typeof init?.body === 'string' ? init.body : '';
+      return JSON.parse(body).command as string;
+    });
+    expect(commandBodies.some((cmd) => cmd.trimEnd().endsWith(`> '/tmp/bench/empty.txt'`))).toBe(true);
+  });
+});
+
 describe('archil export shape', () => {
   it('is resolvable via camelCase conversion of the hyphenated provider name', () => {
     // Workbench resolves provider names by camelCase conversion. 'archil' is

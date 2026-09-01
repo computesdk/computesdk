@@ -167,6 +167,11 @@ function shellEscape(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+// Archil enforces a 102,400-byte command limit on /api/disks/{id}/exec.
+// Keep each base64 chunk well under that limit so the wrapped command string
+// (env prefix + printf + path) still fits.
+const MAX_BASE64_CHUNK_SIZE = 48 * 1024; // must be a multiple of 4
+
 function wrapCommand(command: string, options?: RunCommandOptions): string {
   let wrapped = command;
 
@@ -311,13 +316,27 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             await runCommand(sandbox, `mkdir -p ${shellEscape(parent)}`);
           }
           // base64-pipe to avoid heredoc/quoting hazards on arbitrary content.
+          // The full base64 string can exceed Archil's 102,400-byte command limit,
+          // so split it into fixed-size chunks and write them sequentially.
           const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const result = await runCommand(
-            sandbox,
-            `printf %s ${shellEscape(encoded)} | base64 -d > ${shellEscape(path)}`,
-          );
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to write ${path}: ${result.stderr}`);
+          if (encoded.length === 0) {
+            // Empty content: create or truncate the file without piping.
+            const result = await runCommand(sandbox, `> ${shellEscape(path)}`);
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to write ${path}: ${result.stderr}`);
+            }
+            return;
+          }
+          for (let i = 0; i < encoded.length; i += MAX_BASE64_CHUNK_SIZE) {
+            const chunk = encoded.slice(i, i + MAX_BASE64_CHUNK_SIZE);
+            const redirect = i === 0 ? '>' : '>>';
+            const result = await runCommand(
+              sandbox,
+              `printf %s ${shellEscape(chunk)} | base64 -d ${redirect} ${shellEscape(path)}`,
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to write ${path}: ${result.stderr}`);
+            }
           }
         },
 
