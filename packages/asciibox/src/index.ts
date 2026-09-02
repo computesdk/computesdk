@@ -15,7 +15,7 @@ import {
 } from '@asciidev/box-sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { Box, CommandResponse } from '@asciidev/box-sdk';
+import type { Box, CommandResponse, CreateBoxRequest } from '@asciidev/box-sdk';
 import type {
   CommandResult,
   SandboxInfo,
@@ -184,23 +184,32 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           directory: _directory,
           signal: _signal,
           environment: optEnvironment,
-          ...providerOptions
-        } = options || {};
+          setupScript,
+          noEnv,
+          org,
+          teamId,
+        } = (options || {}) as CreateSandboxOptions & Record<string, unknown>;
 
         const ttlSeconds = optTimeout ? Math.ceil(optTimeout / 1000) : 1800;
         const sandboxTimeout = optTimeout ? optTimeout : 1_800_000;
         let box: Box | undefined;
 
         try {
+          const createBoxRequest: CreateBoxRequest = {
+            type: config.type,
+            ttlSeconds,
+            environment: templateId ?? optEnvironment ?? config.environment,
+            env: envs,
+            from: snapshotId,
+          };
+
+          if (setupScript !== undefined) createBoxRequest.setupScript = setupScript as string;
+          if (noEnv !== undefined) createBoxRequest.noEnv = noEnv as boolean;
+          if (org !== undefined) createBoxRequest.org = org as string;
+          if (teamId !== undefined) createBoxRequest.teamId = teamId as string;
+
           const response = await api.create({
-            createBoxRequest: {
-              type: config.type,
-              ttlSeconds,
-              environment: templateId ?? optEnvironment ?? config.environment,
-              env: envs,
-              from: snapshotId,
-              ...providerOptions,
-            } as any,
+            createBoxRequest,
           });
 
           box = response.box;
@@ -341,6 +350,14 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             durationMs: Date.now() - startTime,
           };
         } catch (error) {
+          // Distinguish sandbox-level failures (auth / missing / not ready) from
+          // command execution, so callers don't confuse API errors with a missing
+          // command exit code.
+          if (isAuthError(error) || isNotFound(error)) {
+            throw new Error(
+              `Failed to run command in ASCII Box sandbox ${sandbox.box.id}: ${formatError(error)}`
+            );
+          }
           return {
             stdout: '',
             stderr: formatError(error),
@@ -460,7 +477,10 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             sandbox.box.id,
             `mkdir -p "${escapeShellArg(path)}"`
           );
-          if (isCommandResponse(result) && result.exitCode !== 0) {
+          if (!isCommandResponse(result)) {
+            throw new Error(`Failed to create directory ${path}: unexpected response from ASCII Box`);
+          }
+          if (result.exitCode !== 0) {
             throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
           }
         },
@@ -476,7 +496,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             `ls -la "${escapeShellArg(path)}"`
           );
           if (!isCommandResponse(result)) {
-            return [];
+            throw new Error(`Failed to list directory ${path}: unexpected response from ASCII Box`);
           }
           if (result.exitCode !== 0) {
             throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
@@ -513,7 +533,10 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             sandbox.box.id,
             `test -e "${escapeShellArg(path)}"`
           );
-          return isCommandResponse(result) && result.exitCode === 0;
+          if (!isCommandResponse(result)) {
+            throw new Error(`Failed to check existence of ${path}: unexpected response from ASCII Box`);
+          }
+          return result.exitCode === 0;
         },
 
         remove: async (
@@ -526,7 +549,10 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             sandbox.box.id,
             `rm -rf "${escapeShellArg(path)}"`
           );
-          if (isCommandResponse(result) && result.exitCode !== 0) {
+          if (!isCommandResponse(result)) {
+            throw new Error(`Failed to remove ${path}: unexpected response from ASCII Box`);
+          }
+          if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
           }
         },
