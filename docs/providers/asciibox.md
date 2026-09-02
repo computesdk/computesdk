@@ -88,4 +88,4 @@ interface AsciiBoxConfig {
 
 ## Limitations
 
-- Snapshot and template (environment) lifecycle management must be done through the ASCII Box dashboard or CLI. ComputeSDK exposes these methods for API completeness but they throw descriptive errors when called.
+- Snapshot and template (environment) lifecycle management must be done through the ASCII Box dashboard or CLI. The ComputeSDK `snapshot` and `template` managers are not registered for this provider, so those operations are unavailable through `compute.snapshot` and `compute.template`.

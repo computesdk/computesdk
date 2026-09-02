@@ -118,6 +118,39 @@ function validateEnvKey(key: string): string {
   return key;
 }
 
+const MONTHS: Record<string, number> = {
+  Jan: 0,
+  Feb: 1,
+  Mar: 2,
+  Apr: 3,
+  May: 4,
+  Jun: 5,
+  Jul: 6,
+  Aug: 7,
+  Sep: 8,
+  Oct: 9,
+  Nov: 10,
+  Dec: 11,
+};
+
+function parseLsDate(parts: string[], fallback: Date): Date {
+  if (parts.length < 8) return fallback;
+  const month = MONTHS[parts[5]];
+  const day = parseInt(parts[6], 10);
+  const timeOrYear = parts[7];
+  if (month === undefined || Number.isNaN(day)) return fallback;
+
+  if (timeOrYear.includes(':')) {
+    const [hours, minutes] = timeOrYear.split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return fallback;
+    return new Date(new Date().getFullYear(), month, day, hours, minutes);
+  }
+
+  const year = parseInt(timeOrYear, 10);
+  if (Number.isNaN(year)) return fallback;
+  return new Date(year, month, day);
+}
+
 export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
   name: 'asciibox',
   methods: {
@@ -426,14 +459,15 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             if (parts.length < 9) continue;
             const rawName = parts.slice(8).join(' ');
             if (rawName === '.' || rawName === '..') continue;
-            const name = rawName.split(' -> ')[0];
+            const isSymlink = parts[0].startsWith('l');
+            const name = isSymlink ? rawName.split(' -> ')[0] : rawName;
             const size = parseInt(parts[4], 10) || 0;
             const isDirectory = parts[0].startsWith('d');
             entries.push({
               name,
               type: isDirectory ? ('directory' as const) : ('file' as const),
               size,
-              modified: new Date(),
+              modified: parseLsDate(parts, new Date()),
             });
           }
           return entries;
