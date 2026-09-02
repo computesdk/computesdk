@@ -12,6 +12,7 @@ import { beforeEach, describe, it } from 'node:test'
 
 import { GmnClient, resetFastTokenCache } from '../client.ts'
 import * as ops from '../operations.ts'
+import { resetPreparedImageCache } from '../operations.ts'
 
 const REF = 'ghcr.io/acme/task@sha256:' + 'a'.repeat(64)
 
@@ -740,5 +741,154 @@ describe('getUrl', () => {
     await ops.unexposePort(handleOn(client), 3000)
     assert.equal(sent[0].path, '/preview/sandboxes/sbx-1/unexpose')
     assert.deepEqual(sent[0].body, { port: 3000 })
+  })
+})
+
+describe("the review's findings on PR 741", () => {
+  beforeEach(() => resetPreparedImageCache())
+
+  const KEEP = undefined // a durable template asks for no expiry
+
+  it('refuses a snapshotId it cannot restore instead of booting a blank sandbox', async () => {
+    // The worst shape of wrong: a create that reports success and hands
+    // back a healthy sandbox with none of the caller's state in it.
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1' } }))
+    await assert.rejects(
+      () => ops.createSandbox(client, undefined, undefined, { snapshotId: 'snap-typo' }),
+      /snapshot id starts with 'env-'/,
+    )
+    assert.equal(sent.length, 0, 'nothing may be created for a restore that cannot happen')
+  })
+
+  it('still lets a templateId name a curated image', async () => {
+    // The refusal above must not catch templateId, which has three
+    // legitimate spellings.
+    const { sent, client } = door(() => ({ body: { sandbox: 'sbx-1' } }))
+    await ops.createSandbox(client, undefined, undefined, { templateId: 'sbx-min' })
+    assert.equal(sent[0].body.image, 'sbx-min')
+  })
+
+  it('an image create carries the requested size to the BAKE', async () => {
+    // The size is fixed at the bake, so a vcpu ask resolved after the
+    // image branch silently gave the caller one core.
+    const { sent, client } = door((_m, path) =>
+      path === '/preview/sandboxes/envs'
+        ? { body: { snapshot: 'env-baked' } }
+        : { body: { sandboxes: ['sbx-1'] } },
+    )
+    await ops.createSandbox(client, undefined, undefined, { image: REF, vcpus: 8 })
+    assert.equal(sent[0].path, '/preview/sandboxes/envs')
+    assert.equal(sent[0].body.size, 'sandbox-lg')
+    assert.ok(!('ram_gib' in sent[0].body), 'size and ram_gib are mutually exclusive')
+  })
+
+  it('a durable template is never served from a throwaway bake, or the reverse', async () => {
+    let bakes = 0
+    const { client } = door((_m, path) => {
+      if (path === '/preview/sandboxes/envs') {
+        bakes += 1
+        return { body: { snapshot: `env-${bakes}` } }
+      }
+      return { body: { sandboxes: ['sbx-1'] } }
+    })
+    // A create's throwaway bake, then an explicit durable template.
+    await ops.createSandbox(client, undefined, undefined, { image: REF })
+    const durable = await ops.prepareImage(client, REF, undefined, undefined, KEEP)
+    assert.equal(bakes, 2, 'the retention policy is part of the cache identity')
+    assert.equal(durable, 'env-2')
+    // And the durable one is reused, because nothing takes it away.
+    assert.equal(await ops.prepareImage(client, REF, undefined, undefined, KEEP), 'env-2')
+    assert.equal(bakes, 2)
+  })
+
+  it('a cached bake is not handed out once its own expiry is in sight', async () => {
+    let bakes = 0
+    const { client } = door(() => {
+      bakes += 1
+      return { body: { snapshot: `env-${bakes}` } }
+    })
+    // A 1-minute expiry is inside the reuse margin from the moment it is
+    // baked, so the second call must bake again rather than hand back an
+    // id that is about to stop existing.
+    assert.equal(await ops.prepareImage(client, REF, undefined, undefined, '1m'), 'env-1')
+    assert.equal(await ops.prepareImage(client, REF, undefined, undefined, '1m'), 'env-2')
+    assert.equal(bakes, 2)
+  })
+
+  it('reads the door duration grammar, and nothing else', () => {
+    assert.equal(ops.expiryToMs('90m'), 90 * 60_000)
+    assert.equal(ops.expiryToMs('24h'), 24 * 3_600_000)
+    assert.equal(ops.expiryToMs('7d'), 7 * 86_400_000)
+    assert.equal(ops.expiryToMs(undefined), undefined)
+    assert.equal(ops.expiryToMs('never'), undefined)
+    assert.equal(ops.expiryToMs('1 week'), undefined)
+  })
+
+  it('deleteSnapshot is idempotent for a missing snapshot and honest about everything else', async () => {
+    const gone = door(() => ({ status: 404, body: { error: 'no such snapshot' } }))
+    await ops.deleteSnapshot(gone.client, 'env-gone') // resolves
+
+    for (const status of [401, 500]) {
+      const bad = door(() => ({ status, body: { error: 'nope' } }))
+      await assert.rejects(
+        () => ops.deleteSnapshot(bad.client, 'env-1'),
+        `a ${status} leaves the snapshot stored and billing`,
+      )
+    }
+  })
+
+  it('a file past the exec output cap is an error, not a silent prefix', async () => {
+    const { client } = door(() => ({ body: {} }))
+    const handle = { id: 'sbx-1', client, createdAt: new Date(), metadata: {} } as any
+    const truncatedRun = async () => ({
+      stdout: 'x'.repeat(16),
+      stderr: '',
+      exitCode: 0,
+      durationMs: 1,
+      truncated: true,
+    })
+    await assert.rejects(
+      () => ops.filesystem.readFile(handle, '/big.bin', truncatedRun as any),
+      /larger than the 1 MiB an exec can return/,
+    )
+    // And an untruncated read is unchanged.
+    const wholeRun = async () => ({ stdout: 'hello', stderr: '', exitCode: 0, durationMs: 1 })
+    assert.equal(await ops.filesystem.readFile(handle, '/small', wholeRun as any), 'hello')
+  })
+
+  it('preserves filenames that whitespace-splitting used to rewrite', () => {
+    const out = [
+      'total 24',
+      'drwxr-xr-x 2 root root 4096 Sep  2 10:00 .',
+      'drwxr-xr-x 3 root root 4096 Sep  2 10:00 ..',
+      '-rw-r--r-- 1 root root   11 Sep  2 10:00 two  spaces.txt',
+      '-rw-r--r-- 1 root root    5 Sep  2 10:00  leading.txt',
+      'drwxr-xr-x 2 root root 4096 Sep  2 10:00 a dir',
+      'lrwxrwxrwx 1 root root    7 Sep  2 10:00 link -> /etc/hosts',
+      '-rw-r--r--. 1 root root  42 Sep  2 10:00 selinux.txt',
+    ].join('\n')
+    const entries = ops.parseLsLong(out)
+    const names = entries.map(e => e.name)
+    assert.deepEqual(names, [
+      'two  spaces.txt',
+      ' leading.txt',
+      'a dir',
+      'link',
+      'selinux.txt',
+    ])
+    assert.equal(entries.find(e => e.name === 'a dir')?.type, 'directory')
+    assert.equal(entries.find(e => e.name === 'link')?.type, 'file')
+    assert.equal(entries.find(e => e.name === 'two  spaces.txt')?.size, 11)
+  })
+
+  it('honours limit, and refuses the snapshot filter it cannot answer', async () => {
+    const snapshots = [1, 2, 3].map(n => ({ id: `env-${n}`, created_at: '2026-09-02T10:00:00Z' }))
+    const { client } = door(() => ({ body: { snapshots } }))
+    assert.equal((await ops.listSnapshots(client)).length, 3)
+    assert.equal((await ops.listSnapshots(client, { limit: 2 })).length, 2)
+    await assert.rejects(
+      () => ops.listSnapshots(client, { sandboxId: 'sbx-1' }),
+      /records its parent snapshot, not the sandbox/,
+    )
   })
 })

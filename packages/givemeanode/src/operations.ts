@@ -354,7 +354,7 @@ async function forkSnapshot(
  * cannot change them, so two different shapes are two different prepared
  * images.
  */
-const prepared = new Map<string, string>()
+const prepared = new Map<string, Prepared>()
 const preparing = new Map<string, Promise<string>>()
 
 /** Test seam, and the escape hatch for a caller that wants a fresh one. */
@@ -363,13 +363,56 @@ export function resetPreparedImageCache(): void {
   preparing.clear()
 }
 
+/**
+ * A cached preparation, and when it stops being usable.
+ *
+ * `expiresAtMs` is undefined for a durable template (nothing takes it
+ * away). For one baked as a side effect of `create({ image })` it is the
+ * instant the door will delete it, so this cache must not hand the id
+ * out past it: a fork of a snapshot that has expired fails, and it fails
+ * long after the create that would have explained why.
+ */
+interface Prepared {
+  id: string
+  expiresAtMs?: number
+}
+
 function prepareKey(
   client: GmnClient,
   reference: string,
   ramGib: number | undefined,
   egress: 'open' | 'none' | undefined,
+  size: string | undefined,
+  expiresAfter: string | undefined,
 ): string {
-  return [client.baseUrl, client.apiKey, reference, ramGib ?? '', egress ?? ''].join('\u0000')
+  // The RETENTION POLICY and the SIZE are part of the identity, not
+  // decoration. Without the policy, a `create({ image })` - which asks
+  // for a throwaway that expires - would populate the cache and a later
+  // `template.create` for the same image would be handed that expiring
+  // id, so a template the caller asked to keep would vanish under them.
+  // Without the size, a create asking for 8 vCPUs would reuse a
+  // single-core bake, and the size is fixed AT THE BAKE.
+  return [
+    client.baseUrl,
+    client.apiKey,
+    reference,
+    ramGib ?? '',
+    egress ?? '',
+    size ?? '',
+    expiresAfter ?? 'keep',
+  ].join('\u0000')
+}
+
+/** How long before a cached id's own expiry we stop handing it out. */
+const PREPARED_REUSE_MARGIN_MS = 60_000
+
+/** Parse the door's duration grammar ("24h", "7d", "90m") to ms. */
+export function expiryToMs(expiresAfter: string | undefined): number | undefined {
+  if (!expiresAfter) return undefined
+  const match = /^(\d+)([mhd])$/.exec(expiresAfter.trim())
+  if (!match) return undefined
+  const n = Number(match[1])
+  return match[2] === 'm' ? n * 60_000 : match[2] === 'h' ? n * 3_600_000 : n * 86_400_000
 }
 
 /**
@@ -388,11 +431,20 @@ export async function prepareImage(
   ramGib: number | undefined,
   egress: 'open' | 'none' | undefined,
   expiresAfter?: string,
+  size?: string,
 ): Promise<string> {
   checkImageReference(reference)
-  const key = prepareKey(client, reference, ramGib, egress)
+  const key = prepareKey(client, reference, ramGib, egress, size, expiresAfter)
   const done = prepared.get(key)
-  if (done) return done
+  if (done) {
+    // Reuse only while it is comfortably alive. A cached id handed out
+    // just before its expiry produces a fork failure minutes later,
+    // with nothing pointing back at the cache.
+    if (done.expiresAtMs === undefined || done.expiresAtMs - PREPARED_REUSE_MARGIN_MS > Date.now()) {
+      return done.id
+    }
+    prepared.delete(key)
+  }
   const inFlight = preparing.get(key)
   if (inFlight) return inFlight
   const run = client
@@ -401,7 +453,10 @@ export async function prepareImage(
       '/preview/sandboxes/envs',
       {
         from_image: reference,
-        ...(ramGib === undefined ? {} : { ram_gib: ramGib }),
+        // `size` and `ram_gib` are mutually exclusive at the door, and
+        // the size is what fixes BOTH dimensions - so a named size wins
+        // and the bare memory ask only travels without one.
+        ...(size === undefined ? (ramGib === undefined ? {} : { ram_gib: ramGib }) : { size }),
         ...(egress === undefined ? {} : { egress }),
         ...(expiresAfter === undefined ? {} : { expires_after: expiresAfter }),
       },
@@ -411,7 +466,8 @@ export async function prepareImage(
     .then(body => {
       const id = body.snapshot
       if (!id) throw new Error(`givemeanode prepared ${reference} but returned no id`)
-      prepared.set(key, id)
+      const ttlMs = expiryToMs(expiresAfter)
+      prepared.set(key, { id, ...(ttlMs === undefined ? {} : { expiresAtMs: Date.now() + ttlMs }) })
       return id
     })
     .finally(() => {
@@ -508,9 +564,34 @@ export async function createSandbox(
   // different response shape, from a create.
   const from = forkableFrom(options)
   if (from) return forkSnapshot(client, from, options, execRetries)
+  // A `snapshotId` that is not forkable is a REFUSAL, never a silent
+  // fresh sandbox. Dropping it started the default image and handed back
+  // a healthy-looking box with none of the caller's state in it - the
+  // one outcome a restore must never produce, because whatever runs next
+  // scores a sandbox that never had the work.
+  //
+  // `templateId` is deliberately NOT included: it has three legitimate
+  // spellings here - an `env-` id, a container image reference, and a
+  // curated image name like "sbx-min" - and the image paths below refuse
+  // a malformed one with a message about images. A snapshot id has
+  // exactly one spelling.
+  if (options?.snapshotId && !options.snapshotId.startsWith('env-')) {
+    throw new Error(
+      `givemeanode cannot restore from ${options.snapshotId}: a snapshot id starts with ` +
+        "'env-' (snapshot.create returns one). Starting a blank sandbox instead would " +
+        'lose the state you asked to restore.',
+    )
+  }
 
   const ramGib = ramGibFrom(configRamGib, options)
   const egress = options?.egress ?? configEgress
+  // Resolved BEFORE the image branch, because the size is fixed at the
+  // bake: an image create that computed it after the branch asked for 8
+  // vCPUs and silently got one (the caller pays for one core and their
+  // build takes eight times as long).
+  const explicitSize = typeof options?.size === 'string' ? options.size : undefined
+  const vcpus = requestedVcpus(options)
+  const derivedSize = explicitSize ?? (vcpus === undefined ? undefined : sizeFor(vcpus, ramGib))
 
   // A CONTAINER IMAGE is prepared once and then started from, because
   // `create` itself only accepts a curated name. The preparation is
@@ -521,7 +602,14 @@ export async function createSandbox(
   // back as `templateId`.
   const named = options?.image ?? options?.templateId
   if (named && isImageReference(named)) {
-    const templateId = await prepareImage(client, named, ramGib, egress, CREATE_IMAGE_EXPIRY)
+    const templateId = await prepareImage(
+      client,
+      named,
+      ramGib,
+      egress,
+      CREATE_IMAGE_EXPIRY,
+      derivedSize,
+    )
     return forkSnapshot(client, templateId, options, execRetries, { fromImage: named })
   }
   if (named) checkImageReference(named)
@@ -531,10 +619,7 @@ export async function createSandbox(
   // vCPU ask derives one, and a bare memory ask stays on `ram_gib` so a
   // caller who wants 6 GiB on one core still gets exactly that rather than
   // being rounded up into a multi-core shape it would be billed for.
-  const explicitSize = typeof options?.size === 'string' ? options.size : undefined
-  const vcpus = requestedVcpus(options)
-  const derivedSize = explicitSize ?? (vcpus === undefined ? undefined : sizeFor(vcpus, ramGib))
-
+  // (Both resolved above, so the image branch gets them too.)
   const created = await client.request<CreateResponse>(
     'POST',
     '/preview/sandboxes',
@@ -781,22 +866,58 @@ export async function createSnapshot(client: GmnClient, sandboxId: string): Prom
   }
 }
 
-export async function listSnapshots(client: GmnClient): Promise<SnapshotShape[]> {
+/**
+ * The workspace's snapshots, newest-first as the door returns them.
+ *
+ * `limit` is applied here because the door has no limit parameter on
+ * this read; honouring it client-side is the difference between a caller
+ * asking for ten and getting ten, and asking for ten and getting all of
+ * them. `sandboxId` CANNOT be honoured and says so instead of filtering
+ * to nothing: a givemeanode snapshot records the snapshot it descends
+ * from, never the sandbox that captured it, so there is no field to
+ * match. Silently returning everything for that filter would be the
+ * worse answer - a caller deleting "this sandbox's snapshots" would
+ * delete the workspace's.
+ */
+export async function listSnapshots(
+  client: GmnClient,
+  options?: { sandboxId?: string; limit?: number },
+): Promise<SnapshotShape[]> {
+  if (options?.sandboxId) {
+    throw new Error(
+      'givemeanode cannot list snapshots by source sandbox: a snapshot records its parent ' +
+        'snapshot, not the sandbox that captured it. List them all and match on your own ' +
+        'metadata instead.',
+    )
+  }
   const stats = await client.request<StatsResponse>('GET', '/preview/sandboxes')
-  return (stats.snapshots ?? []).map(s => ({
+  const all = (stats.snapshots ?? []).map(s => ({
     id: s.id,
     provider: 'givemeanode',
     createdAt: s.created_at ? new Date(s.created_at) : new Date(),
     metadata: { ramGib: s.ram_gib, egress: s.egress, durable: s.durable },
   }))
+  const limit = options?.limit
+  return typeof limit === 'number' && limit >= 0 ? all.slice(0, limit) : all
 }
 
 export async function deleteSnapshot(client: GmnClient, snapshotId: string): Promise<void> {
   try {
     await client.request('DELETE', `/preview/sandboxes/snapshots/${encodeURIComponent(snapshotId)}`)
-  } catch {
-    // Idempotent: a snapshot already deleted, or expired out from under
-    // us, is the state the caller asked for.
+  } catch (err) {
+    // Idempotent for the ONE case that means "already the state the
+    // caller asked for": the snapshot is not there. Everything else -
+    // a rejected credential, a refusal, a 500, a dropped connection -
+    // leaves the snapshot stored AND BILLING, so reporting success for
+    // it tells the caller their storage meter stopped when it did not.
+    // Read the status structurally rather than importing GmnError: this
+    // module is loaded by the node test runner with types stripped, so a
+    // VALUE import of './client.js' would not resolve there (the type
+    // import above is erased). GmnError is the only thing that carries a
+    // numeric `status`.
+    const status = (err as { status?: unknown } | null | undefined)?.status
+    if (status === 404) return
+    throw err
   }
 }
 
@@ -836,6 +957,18 @@ export const filesystem = {
   readFile: async (sandbox: SandboxHandle, path: string, run: Run): Promise<string> => {
     const r = await run(sandbox, `cat "${escapeShellArg(path)}"`)
     if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot read file: ${path}`)
+    // A read that hit the exec channel's 1 MiB output cap is a PREFIX,
+    // and returning it as the file is the worst shape of wrong: a caller
+    // that reads, edits and writes back would silently truncate the
+    // file on disk. The cap is the transport's, so the answer is a
+    // different transport (an export), not a bigger buffer.
+    if (r.truncated) {
+      throw new Error(
+        `${path} is larger than the 1 MiB an exec can return, so reading it here would ` +
+          'give you a prefix rather than the file. Split it in the sandbox, or move it out ' +
+          'with an export instead.',
+      )
+    }
     return r.stdout
   },
 
@@ -867,19 +1000,38 @@ export const filesystem = {
   },
 }
 
-/** `ls -la` output to entries. Exported so a test can feed it real output. */
+/**
+ * `ls -la` output to entries. Exported so a test can feed it real output.
+ *
+ * THE NAME IS TAKEN BY OFFSET, NOT BY REJOINING COLUMNS. Splitting on
+ * whitespace and joining the tail with single spaces rewrites every name
+ * that contains two consecutive spaces, so `readdir` handed back a
+ * string that addresses a different file - or none. The eight metadata
+ * columns are matched with one anchored expression instead, and
+ * everything after them is the name verbatim.
+ *
+ * A symlink's `name -> target` suffix is stripped, because the target is
+ * not part of the name either: `link -> /etc/passwd` is not something a
+ * caller can pass back to readFile.
+ */
 export function parseLsLong(stdout: string): FileEntryShape[] {
+  // mode links owner group size <date, three fields> then the name.
+  const row = /^([bcdlps-][rwxsStT-]{9}[.+]?)\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+\S+\s(.*)$/
   const entries: FileEntryShape[] = []
   for (const line of stdout.split('\n')) {
     if (!line.trim() || line.startsWith('total ')) continue
-    const parts = line.split(/\s+/)
-    if (parts.length < 9) continue
-    const name = parts.slice(8).join(' ')
-    if (name === '.' || name === '..') continue
+    const match = row.exec(line)
+    if (!match) continue
+    const [, mode, size, rest] = match
+    // A link row is `name -> target`; the arrow cannot appear in a real
+    // name at that position because ls would have escaped nothing and
+    // the target follows it.
+    const name = mode.startsWith('l') ? rest.replace(/ -> .*$/, '') : rest
+    if (!name || name === '.' || name === '..') continue
     entries.push({
       name,
-      type: parts[0].startsWith('d') ? 'directory' : 'file',
-      size: Number.parseInt(parts[4], 10) || 0,
+      type: mode.startsWith('d') ? 'directory' : 'file',
+      size: Number.parseInt(size, 10) || 0,
     })
   }
   return entries

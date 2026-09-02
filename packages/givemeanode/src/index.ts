@@ -233,14 +233,16 @@ export const givemeanode = defineProvider<
       // the same two calls. A template made from a container image carries
       // no marker distinguishing it, which is honest rather than lossy:
       // what a caller can do with either is identical.
-      list: (config: ConfigWithClient) => ops.listSnapshots(getClient(config)),
+      list: (config: ConfigWithClient, options?: { limit?: number }) =>
+        ops.listSnapshots(getClient(config), options),
       delete: (config: ConfigWithClient, templateId: string) =>
         ops.deleteSnapshot(getClient(config), templateId),
     },
 
     snapshot: {
       create: (config: ConfigWithClient, sandboxId: string) => ops.createSnapshot(getClient(config), sandboxId),
-      list: (config: ConfigWithClient) => ops.listSnapshots(getClient(config)),
+      list: (config: ConfigWithClient, options?: { sandboxId?: string; limit?: number }) =>
+        ops.listSnapshots(getClient(config), options),
       delete: (config: ConfigWithClient, snapshotId: string) => ops.deleteSnapshot(getClient(config), snapshotId),
     },
   },
