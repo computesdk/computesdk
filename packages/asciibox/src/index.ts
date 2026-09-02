@@ -47,6 +47,7 @@ interface AsciiBoxSandbox {
 const DEFAULT_PROVISION_TIMEOUT_MS = 300000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 60000;
 const MAX_COMMAND_TIMEOUT_SECONDS = 600;
+const ALLOWED_URL_PROTOCOLS = ['http', 'https', 'ws', 'wss', 'tcp'];
 
 function getApiKey(config: AsciiBoxConfig): string | undefined {
   return config.apiKey ?? process.env.ASCIIBOX_API_KEY ?? process.env.BOX_API_KEY;
@@ -187,7 +188,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
         } = options || {};
 
         const ttlSeconds = optTimeout ? Math.ceil(optTimeout / 1000) : 1800;
-        const sandboxTimeout = optTimeout ?? 1_800_000;
+        const sandboxTimeout = optTimeout ? optTimeout : 1_800_000;
         let box: Box | undefined;
 
         try {
@@ -307,7 +308,9 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           fullCommand = `nohup sh -c '${fullCommand.replace(/'/g, "'\\''")}' > /dev/null 2>&1 &`;
         }
 
-        const requestedTimeoutMs = options?.timeout ?? DEFAULT_COMMAND_TIMEOUT_MS;
+        const requestedTimeoutMs = options?.timeout
+          ? options.timeout
+          : DEFAULT_COMMAND_TIMEOUT_MS;
         const timeoutSeconds = Math.min(
           Math.ceil(requestedTimeoutMs / 1000),
           MAX_COMMAND_TIMEOUT_SECONDS
@@ -384,12 +387,22 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
         sandbox: AsciiBoxSandbox,
         options: { port: number; protocol?: string }
       ): Promise<string> => {
+        if (
+          options.protocol &&
+          !ALLOWED_URL_PROTOCOLS.includes(options.protocol)
+        ) {
+          throw new Error(
+            `Unsupported getUrl protocol: ${options.protocol}. ` +
+              `Use one of: ${ALLOWED_URL_PROTOCOLS.join(', ')}`
+          );
+        }
+
         try {
+          // Request a token-protected URL by default, not an ungated public URL.
           const response = await sandbox.api.hostPort({
             boxId: sandbox.box.id,
             hostPortRequest: {
               port: options.port,
-              _public: true,
             },
           });
 
@@ -399,7 +412,9 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           }
 
           if (options.protocol) {
-            return url.replace(/^https?:/, `${options.protocol}:`);
+            const urlObj = new URL(url);
+            urlObj.protocol = `${options.protocol}:`;
+            return urlObj.toString();
           }
 
           return url;
