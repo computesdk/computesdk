@@ -24,6 +24,7 @@
   * [Docker](providers/docker.md)
   * [E2B](providers/e2b.md)
   * [Freestyle](providers/freestyle.md)
+  * [givemeanode](providers/givemeanode.md)
   * [HopX](providers/hopx.md)
   * [Isorun](providers/isorun.md)
   * [Just Bash](providers/just-bash.md)

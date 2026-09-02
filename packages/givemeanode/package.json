@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/freestyle",
-  "version": "0.2.0",
-  "description": "Freestyle provider for ComputeSDK - full Linux VMs for long-running agent tasks, with instant startup and cheap snapshotting",
-  "author": "Garrison",
+  "name": "@computesdk/givemeanode",
+  "version": "1.0.1",
+  "description": "givemeanode for ComputeSDK - sandboxes served from a per-region warm pool, with a signed credential that keeps the database off the create path",
+  "author": "givemeanode",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -22,37 +22,25 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:node": "node --experimental-strip-types --test src/__tests__/*.node.test.ts",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
-  "dependencies": {
-    "freestyle": "^0.2.7",
-    "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
-  },
   "keywords": [
     "computesdk",
-    "freestyle",
+    "provider",
     "sandbox",
     "code-execution",
-    "nodejs",
-    "python",
-    "microvm",
-    "vm",
     "cloud",
     "compute",
-    "provider"
+    "givemeanode",
+    "microvm"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/freestyle"
-  },
-  "homepage": "https://www.computesdk.com",
-  "bugs": {
-    "url": "https://github.com/computesdk/computesdk/issues"
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
@@ -63,5 +51,14 @@
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/givemeanode"
+  },
+  "homepage": "https://givemeanode.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
   }
 }
