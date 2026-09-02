@@ -286,7 +286,7 @@ importers:
   packages/arker:
     dependencies:
       '@arker-ai/sdk':
-        specifier: ^1.2.3
+        specifier: ^1.2.4
         version: 1.2.4(@computesdk/daytona@1.7.33(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.53)(@computesdk/modal@1.9.5)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*

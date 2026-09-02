@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@arker-ai/sdk": "^1.2.3",
+    "@arker-ai/sdk": "^1.2.4",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
