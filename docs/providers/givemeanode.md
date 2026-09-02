@@ -148,6 +148,37 @@ const copy = await compute.sandbox.create({ snapshotId: snapshot.id })
 
 This is the fastest way to get N copies of a prepared environment.
 
+## Preview URLs
+
+`getUrl({ port })` returns a public HTTPS URL that reaches a server
+running inside the sandbox:
+
+```typescript
+await sandbox.runCommand('sh', ['-c', 'cd app && (npm run dev > /tmp/dev.log 2>&1 &)'])
+const url = await sandbox.getUrl({ port: 3000 })
+```
+
+Three things decide whether it works:
+
+- **The server listens on the sandbox's loopback.** `127.0.0.1:3000` is
+  what dev servers bind by default and is exactly right. The host reaches
+  in over vsock and the guest dials its own loopback, so no packet
+  arrives on the guest's network interface, and a sandbox prepared with
+  `egress: 'none'` serves a preview URL all the same.
+- **The server outlives the command that started it.** `runCommand` waits
+  for its command's output to end, so `npm run dev &` on its own holds
+  the call open until its deadline and then dies with it. Redirect the
+  output, as above.
+- **The URL is the secret.** The hostname carries an unguessable
+  capability, so treat it like a password. It expires (24 hours by
+  default) and dies with the sandbox; `unexposePort(sandbox, port)`
+  closes it sooner.
+
+The call is idempotent per port, so the same port returns the same URL
+with a refreshed expiry and there is nothing to cache. Streaming, SSE and
+WebSocket all pass through; `protocol: 'wss'` returns the same URL with
+the scheme swapped.
+
 ## Features
 
 | Feature | Supported |
@@ -157,14 +188,14 @@ This is the fastest way to get N copies of a prepared environment.
 | Filesystem operations | yes |
 | Templates from a container image | yes |
 | Snapshots | yes |
-| Inbound ports (`getUrl`) | no |
+| Preview URLs (`getUrl`) | yes |
 
 ## Limitations
 
-- **No inbound ports.** A sandbox reaches out, and whether it has network
-  at all is fixed when its image is prepared rather than per command.
-  `getUrl` throws. A workload that must be reachable belongs on a
-  givemeanode node.
+- **A preview URL is HTTP(S) only, and it is a preview rather than a
+  CDN.** Requests ride one proxy hop, which suits a dev server or an API
+  you are testing and not production traffic. A raw TCP port cannot be
+  exposed.
 - **Container images must be digest-pinned and registry-qualified**, and
   the first sandbox from a new one is slow.
 - **`writeFile` is bounded** by the guest's ARG_MAX, around 1.5 MB of
