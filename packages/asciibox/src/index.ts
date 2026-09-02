@@ -146,7 +146,17 @@ function parseLsDate(parts: string[], fallback: Date): Date {
   if (timeOrYear.includes(':')) {
     const [hours, minutes] = timeOrYear.split(':').map(Number);
     if (Number.isNaN(hours) || Number.isNaN(minutes)) return fallback;
-    return new Date(new Date().getFullYear(), month, day, hours, minutes);
+    const now = new Date();
+    let year = now.getFullYear();
+    let date = new Date(year, month, day, hours, minutes);
+    // `ls` shows time for files modified within the last ~6 months. If the parsed
+    // date is far in the future, it belongs to the previous year (e.g. a December
+    // file listed in January).
+    if (date.getTime() - now.getTime() > 30 * 24 * 60 * 60 * 1000) {
+      year -= 1;
+      date = new Date(year, month, day, hours, minutes);
+    }
+    return date;
   }
 
   const year = parseInt(timeOrYear, 10);
