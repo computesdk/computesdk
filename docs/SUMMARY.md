@@ -12,6 +12,7 @@
   * [AWS Bedrock AgentCore](providers/agentcore.md)
   * [Agentuity](providers/agentuity.md)
   * [Archil](providers/archil.md)
+  * [ASCII Box](providers/asciibox.md)
   * [Beam](providers/beam.md)
   * [Blaxel](providers/blaxel.md)
   * [Cloud Run](providers/cloud-run.md)
