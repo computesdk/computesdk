@@ -302,6 +302,7 @@ npm install @computesdk/daytona          # Daytona provider
 npm install @computesdk/declaw           # Declaw provider
 npm install @computesdk/e2b              # E2B provider
 npm install @computesdk/freestyle        # Freestyle provider
+npm install @computesdk/givemeanode      # givemeanode provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/lightning        # Lightning AI provider
@@ -341,6 +342,7 @@ See individual provider READMEs for details:
 - **[@computesdk/declaw](./packages/declaw)** - Isolated cloud sandboxes
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
 - **[@computesdk/freestyle](./packages/freestyle)** - Full Linux VMs for long-running agent tasks, with snapshots and persistence
+- **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image
 - **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
