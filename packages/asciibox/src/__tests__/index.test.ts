@@ -14,7 +14,12 @@ vi.mock('@asciidev/box-sdk', async (importOriginal) => {
   });
   const boxesMock = vi.fn().mockResolvedValue({ boxes: [], pageInfo: { hasMore: false } });
   const hostPortMock = vi.fn().mockResolvedValue({ url: 'https://box-123-8080.ascii.dev' });
-  const waitUntilReadyMock = vi.fn().mockResolvedValue(undefined);
+  const waitUntilReadyMock = vi.fn().mockResolvedValue({
+    id: 'box-123',
+    state: 'Ready',
+    name: 'test-box',
+    desktopAvailable: false,
+  });
   const stopAndRemoveMock = vi.fn().mockResolvedValue(undefined);
   const readTextMock = vi.fn().mockResolvedValue('hello');
   const writeTextMock = vi.fn().mockResolvedValue(undefined);

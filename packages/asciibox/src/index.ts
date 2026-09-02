@@ -41,9 +41,12 @@ export interface AsciiBoxConfig {
 interface AsciiBoxSandbox {
   api: BoxApi;
   box: Box;
+  timeout: number;
 }
 
 const DEFAULT_PROVISION_TIMEOUT_MS = 300000;
+const DEFAULT_COMMAND_TIMEOUT_MS = 60000;
+const MAX_COMMAND_TIMEOUT_SECONDS = 600;
 
 function getApiKey(config: AsciiBoxConfig): string | undefined {
   return config.apiKey ?? process.env.ASCIIBOX_API_KEY ?? process.env.BOX_API_KEY;
@@ -174,6 +177,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
         } = options || {};
 
         const ttlSeconds = optTimeout ? Math.ceil(optTimeout / 1000) : 1800;
+        const sandboxTimeout = optTimeout ?? 1_800_000;
         let box: Box | undefined;
 
         try {
@@ -195,7 +199,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           }
 
           try {
-            await waitUntilReady(api, box.id, {
+            box = await waitUntilReady(api, box.id, {
               timeoutMs: DEFAULT_PROVISION_TIMEOUT_MS,
             });
           } catch (waitError) {
@@ -205,7 +209,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           }
 
           return {
-            sandbox: { api, box },
+            sandbox: { api, box, timeout: sandboxTimeout },
             sandboxId: box.id,
           };
         } catch (error) {
@@ -224,7 +228,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           const response = await api.get({ boxId: sandboxId });
           const box = response.box;
           if (!box?.id) return null;
-          return { sandbox: { api, box }, sandboxId: box.id };
+          return { sandbox: { api, box, timeout: getBoxTimeout(box) }, sandboxId: box.id };
         } catch (error) {
           if (isNotFound(error)) return null;
           throw new Error(
@@ -249,7 +253,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           }
 
           return boxes.map((box) => ({
-            sandbox: { api, box },
+            sandbox: { api, box, timeout: getBoxTimeout(box) },
             sandboxId: box.id,
           }));
         } catch (error) {
@@ -293,7 +297,11 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           fullCommand = `nohup sh -c '${fullCommand.replace(/'/g, "'\\''")}' > /dev/null 2>&1 &`;
         }
 
-        const timeoutSeconds = options?.timeout ? Math.ceil(options.timeout / 1000) : 60;
+        const requestedTimeoutMs = options?.timeout ?? DEFAULT_COMMAND_TIMEOUT_MS;
+        const timeoutSeconds = Math.min(
+          Math.ceil(requestedTimeoutMs / 1000),
+          MAX_COMMAND_TIMEOUT_SECONDS
+        );
 
         try {
           const response = await execCommand(
@@ -351,9 +359,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           provider: 'asciibox',
           status: convertBoxState(box.state),
           createdAt: box.createdAt ? new Date(box.createdAt) : new Date(),
-          timeout: box.archiveAfter
-            ? new Date(box.archiveAfter).getTime() - Date.now()
-            : 300000,
+          timeout: sandbox.timeout,
           metadata: {
             name: box.name,
             type: box.type,
@@ -506,6 +512,19 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
     },
   },
 });
+
+function getBoxTimeout(box: Box): number {
+  if (box.archiveAfter && box.createdAt) {
+    return Math.max(
+      0,
+      new Date(box.archiveAfter).getTime() - new Date(box.createdAt).getTime()
+    );
+  }
+  if (box.archiveAfter) {
+    return Math.max(0, new Date(box.archiveAfter).getTime() - Date.now());
+  }
+  return 1_800_000;
+}
 
 function convertBoxState(state?: string): 'running' | 'stopped' | 'error' {
   switch (state?.toLowerCase()) {
