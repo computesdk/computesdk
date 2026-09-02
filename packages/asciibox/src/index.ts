@@ -43,7 +43,7 @@ interface AsciiBoxSandbox {
   box: Box;
 }
 
-const DEFAULT_TIMEOUT_MS = 300000;
+const DEFAULT_PROVISION_TIMEOUT_MS = 300000;
 
 function getApiKey(config: AsciiBoxConfig): string | undefined {
   return config.apiKey ?? process.env.ASCIIBOX_API_KEY ?? process.env.BOX_API_KEY;
@@ -130,12 +130,13 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           envs,
           name: _name,
           metadata: _metadata,
-          templateId: _templateId,
+          templateId,
           snapshotId,
           sandboxId: _sandboxId,
           namespace: _namespace,
           directory: _directory,
           signal: _signal,
+          environment: optEnvironment,
           ...providerOptions
         } = options || {};
 
@@ -147,7 +148,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             createBoxRequest: {
               type: config.type,
               ttlSeconds,
-              environment: config.environment,
+              environment: templateId ?? optEnvironment ?? config.environment,
               env: envs,
               from: snapshotId,
               ...providerOptions,
@@ -162,7 +163,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
 
           try {
             await waitUntilReady(api, box.id, {
-              timeoutMs: optTimeout ?? DEFAULT_TIMEOUT_MS,
+              timeoutMs: DEFAULT_PROVISION_TIMEOUT_MS,
             });
           } catch (waitError) {
             // Best-effort cleanup so a readiness failure does not leak the box
@@ -296,15 +297,21 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
       },
 
       getInfo: async (sandbox: AsciiBoxSandbox): Promise<SandboxInfo> => {
-        let box = sandbox.box;
+        let box: Box | undefined;
         try {
           const response = await sandbox.api.get({ boxId: sandbox.box.id });
-          if (response.box) {
-            box = response.box;
+          box = response.box;
+        } catch (error) {
+          if (isNotFound(error) || isAuthError(error)) {
+            throw new Error(
+              `Failed to get info for ASCII Box sandbox ${sandbox.box.id}: ${formatError(error)}`
+            );
           }
-        } catch {
-          // Fall back to the cached box if the API is unreachable
+          // Fall back to the cached box on transient failures
+          box = sandbox.box;
         }
+
+        box ??= sandbox.box;
 
         return {
           id: box.id,
@@ -422,10 +429,9 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             const name = rawName.split(' -> ')[0];
             const size = parseInt(parts[4], 10) || 0;
             const isDirectory = parts[0].startsWith('d');
-            const isSymlink = parts[0].startsWith('l');
             entries.push({
               name,
-              type: isDirectory ? ('directory' as const) : isSymlink ? ('file' as const) : ('file' as const),
+              type: isDirectory ? ('directory' as const) : ('file' as const),
               size,
               modified: new Date(),
             });
@@ -463,46 +469,6 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
       },
 
       getInstance: (sandbox: AsciiBoxSandbox): AsciiBoxSandbox => sandbox,
-    },
-
-    snapshot: {
-      create: async (
-        _config: AsciiBoxConfig,
-        _sandboxId: string,
-        _options?: { name?: string }
-      ) => {
-        throw new Error(
-          'ASCII Box snapshots are not supported through this provider yet. Use the ASCII Box dashboard or CLI to manage snapshots.'
-        );
-      },
-      list: async (_config: AsciiBoxConfig) => {
-        throw new Error(
-          'ASCII Box snapshots are not supported through this provider yet. Use the ASCII Box dashboard or CLI to manage snapshots.'
-        );
-      },
-      delete: async (_config: AsciiBoxConfig, _snapshotId: string) => {
-        throw new Error(
-          'ASCII Box snapshots are not supported through this provider yet. Use the ASCII Box dashboard or CLI to manage snapshots.'
-        );
-      },
-    },
-
-    template: {
-      create: async (_config: AsciiBoxConfig, _options: { name: string }) => {
-        throw new Error(
-          'ASCII Box templates (environments) must be managed via the ASCII Box dashboard or CLI.'
-        );
-      },
-      list: async (_config: AsciiBoxConfig) => {
-        throw new Error(
-          'ASCII Box templates (environments) must be managed via the ASCII Box dashboard or CLI.'
-        );
-      },
-      delete: async (_config: AsciiBoxConfig, _templateId: string) => {
-        throw new Error(
-          'ASCII Box templates (environments) must be managed via the ASCII Box dashboard or CLI.'
-        );
-      },
     },
   },
 });
