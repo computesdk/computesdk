@@ -413,8 +413,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
 
           if (options.protocol) {
             const urlObj = new URL(url);
-            urlObj.protocol = `${options.protocol}:`;
-            return urlObj.toString();
+            return `${options.protocol}:${urlObj.href.slice(urlObj.protocol.length)}`;
           }
 
           return url;
