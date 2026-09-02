@@ -43,6 +43,8 @@ interface AsciiBoxSandbox {
   box: Box;
 }
 
+const DEFAULT_TIMEOUT_MS = 300000;
+
 function getApiKey(config: AsciiBoxConfig): string | undefined {
   return config.apiKey ?? process.env.ASCIIBOX_API_KEY ?? process.env.BOX_API_KEY;
 }
@@ -75,6 +77,28 @@ function createBoxApi(config: AsciiBoxConfig): BoxApi {
   );
 }
 
+function getErrorStatus(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as { response?: { status?: number } }).response;
+    return response?.status;
+  }
+  return undefined;
+}
+
+function isNotFound(error: unknown): boolean {
+  const status = getErrorStatus(error);
+  return status === 404 || status === 410;
+}
+
+function isAuthError(error: unknown): boolean {
+  const status = getErrorStatus(error);
+  return status === 401 || status === 403;
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function isCommandResponse(response: unknown): response is CommandResponse {
   return (
     typeof response === 'object' &&
@@ -83,6 +107,15 @@ function isCommandResponse(response: unknown): response is CommandResponse {
     'stderr' in response &&
     'exitCode' in response
   );
+}
+
+function validateEnvKey(key: string): string {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+    throw new Error(
+      `Invalid environment variable name: ${key}. Variable names must match /^[a-zA-Z_][a-zA-Z0-9_]*$/.`
+    );
+  }
+  return key;
 }
 
 export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
@@ -96,16 +129,18 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           timeout: optTimeout,
           envs,
           name: _name,
-          metadata,
+          metadata: _metadata,
           templateId: _templateId,
-          snapshotId: _snapshotId,
-          sandboxId: optSandboxId,
+          snapshotId,
+          sandboxId: _sandboxId,
           namespace: _namespace,
           directory: _directory,
+          signal: _signal,
           ...providerOptions
         } = options || {};
 
         const ttlSeconds = optTimeout ? Math.ceil(optTimeout / 1000) : 1800;
+        let box: Box | undefined;
 
         try {
           const response = await api.create({
@@ -114,36 +149,38 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
               ttlSeconds,
               environment: config.environment,
               env: envs,
+              from: snapshotId,
               ...providerOptions,
-            },
+            } as any,
           });
 
-          const box = response.box;
+          box = response.box;
 
           if (!box?.id) {
             throw new Error('ASCII Box create() returned box without an ID');
           }
 
-          await waitUntilReady(api, box.id, {
-            timeoutMs: optTimeout ?? 300000,
-          });
+          try {
+            await waitUntilReady(api, box.id, {
+              timeoutMs: optTimeout ?? DEFAULT_TIMEOUT_MS,
+            });
+          } catch (waitError) {
+            // Best-effort cleanup so a readiness failure does not leak the box
+            await stopAndRemove(api, box.id, { delete: true }).catch(() => {});
+            throw waitError;
+          }
 
           return {
             sandbox: { api, box },
             sandboxId: box.id,
           };
         } catch (error) {
-          const detail = error instanceof Error ? error.message : String(error);
-          if (
-            detail.includes('unauthorized') ||
-            detail.includes('Unauthorized') ||
-            detail.includes('API key')
-          ) {
+          if (isAuthError(error)) {
             throw new Error(
-              `ASCII Box authentication failed. Please check your ASCIIBOX_API_KEY environment variable.`
+              'ASCII Box authentication failed. Please check your ASCIIBOX_API_KEY environment variable.'
             );
           }
-          throw new Error(`Failed to create ASCII Box sandbox: ${detail}`);
+          throw new Error(`Failed to create ASCII Box sandbox: ${formatError(error)}`);
         }
       },
 
@@ -154,21 +191,35 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           const box = response.box;
           if (!box?.id) return null;
           return { sandbox: { api, box }, sandboxId: box.id };
-        } catch {
-          return null;
+        } catch (error) {
+          if (isNotFound(error)) return null;
+          throw new Error(
+            `Failed to get ASCII Box sandbox ${sandboxId}: ${formatError(error)}`
+          );
         }
       },
 
       list: async (config: AsciiBoxConfig) => {
         const api = createBoxApi(config);
         try {
-          const response = await api.boxes({});
-          return (response.boxes || []).map((box) => ({
+          const boxes: Box[] = [];
+          let cursor: string | null | undefined;
+
+          while (true) {
+            const response = await api.boxes({ cursor });
+            boxes.push(...(response.boxes || []));
+
+            const pageInfo = response.pageInfo;
+            if (!pageInfo?.hasMore || !pageInfo?.nextCursor) break;
+            cursor = pageInfo.nextCursor;
+          }
+
+          return boxes.map((box) => ({
             sandbox: { api, box },
             sandboxId: box.id,
           }));
-        } catch {
-          return [];
+        } catch (error) {
+          throw new Error(`Failed to list ASCII Box sandboxes: ${formatError(error)}`);
         }
       },
 
@@ -176,8 +227,11 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
         const api = createBoxApi(config);
         try {
           await stopAndRemove(api, sandboxId, { delete: true });
-        } catch {
-          // Sandbox might already be destroyed or does not exist
+        } catch (error) {
+          if (isNotFound(error)) return;
+          throw new Error(
+            `Failed to destroy ASCII Box sandbox ${sandboxId}: ${formatError(error)}`
+          );
         }
       },
 
@@ -192,7 +246,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
 
         if (options?.env && Object.keys(options.env).length > 0) {
           const envPrefix = Object.entries(options.env)
-            .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
+            .map(([k, v]) => `${validateEnvKey(k)}="${escapeShellArg(String(v))}"`)
             .join(' ');
           fullCommand = `${envPrefix} ${fullCommand}`;
         }
@@ -220,7 +274,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             return {
               stdout: response.stdout || '',
               stderr: response.stderr || '',
-              exitCode: response.exitCode ?? 0,
+              exitCode: response.exitCode ?? (response.timedOut ? 124 : -1),
               durationMs: Date.now() - startTime,
             };
           }
@@ -234,29 +288,41 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
         } catch (error) {
           return {
             stdout: '',
-            stderr: error instanceof Error ? error.message : String(error),
+            stderr: formatError(error),
             exitCode: 127,
             durationMs: Date.now() - startTime,
           };
         }
       },
 
-      getInfo: async (sandbox: AsciiBoxSandbox): Promise<SandboxInfo> => ({
-        id: sandbox.box.id,
-        provider: 'asciibox',
-        status: convertBoxState(sandbox.box.state),
-        createdAt: sandbox.box.createdAt ? new Date(sandbox.box.createdAt) : new Date(),
-        timeout: sandbox.box.archiveAfter
-          ? new Date(sandbox.box.archiveAfter).getTime() - Date.now()
-          : 300000,
-        metadata: {
-          name: sandbox.box.name,
-          type: sandbox.box.type,
-          vcpu: sandbox.box.vcpu,
-          memoryGB: sandbox.box.memoryGB,
-          environment: sandbox.box.environment,
-        },
-      }),
+      getInfo: async (sandbox: AsciiBoxSandbox): Promise<SandboxInfo> => {
+        let box = sandbox.box;
+        try {
+          const response = await sandbox.api.get({ boxId: sandbox.box.id });
+          if (response.box) {
+            box = response.box;
+          }
+        } catch {
+          // Fall back to the cached box if the API is unreachable
+        }
+
+        return {
+          id: box.id,
+          provider: 'asciibox',
+          status: convertBoxState(box.state),
+          createdAt: box.createdAt ? new Date(box.createdAt) : new Date(),
+          timeout: box.archiveAfter
+            ? new Date(box.archiveAfter).getTime() - Date.now()
+            : 300000,
+          metadata: {
+            name: box.name,
+            type: box.type,
+            vcpu: box.vcpu,
+            memoryGB: box.memoryGB,
+            environment: box.environment,
+          },
+        };
+      },
 
       getUrl: async (
         sandbox: AsciiBoxSandbox,
@@ -283,9 +349,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           return url;
         } catch (error) {
           throw new Error(
-            `Failed to get ASCII Box URL for port ${options.port}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
+            `Failed to get ASCII Box URL for port ${options.port}: ${formatError(error)}`
           );
         }
       },
@@ -299,9 +363,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           try {
             return await readText(sandbox.api, sandbox.box.id, path);
           } catch (error) {
-            throw new Error(
-              `Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`
-            );
+            throw new Error(`Failed to read file ${path}: ${formatError(error)}`);
           }
         },
 
@@ -314,9 +376,7 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
           try {
             await writeText(sandbox.api, sandbox.box.id, path, content);
           } catch (error) {
-            throw new Error(
-              `Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`
-            );
+            throw new Error(`Failed to write file ${path}: ${formatError(error)}`);
           }
         },
 
@@ -357,13 +417,15 @@ export const asciiBox = defineProvider<AsciiBoxSandbox, AsciiBoxConfig>({
             if (!line || line.startsWith('total')) continue;
             const parts = line.split(/\s+/);
             if (parts.length < 9) continue;
-            const name = parts.slice(8).join(' ');
-            if (name === '.' || name === '..') continue;
+            const rawName = parts.slice(8).join(' ');
+            if (rawName === '.' || rawName === '..') continue;
+            const name = rawName.split(' -> ')[0];
             const size = parseInt(parts[4], 10) || 0;
             const isDirectory = parts[0].startsWith('d');
+            const isSymlink = parts[0].startsWith('l');
             entries.push({
               name,
-              type: isDirectory ? ('directory' as const) : ('file' as const),
+              type: isDirectory ? ('directory' as const) : isSymlink ? ('file' as const) : ('file' as const),
               size,
               modified: new Date(),
             });
