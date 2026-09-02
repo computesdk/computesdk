@@ -595,6 +595,71 @@ export async function getSandbox(
   return { ...found, id: sandboxId }
 }
 
+/**
+ * `getUrl({port})` - a public HTTPS URL that reaches a port inside the
+ * sandbox.
+ *
+ * Never builds the hostname here. The apex is per-deployment and the
+ * capability secret is minted server-side, so the URL can only come from
+ * the response. Idempotent per (sandbox, port), which is what makes it
+ * safe to call every time a caller needs the URL rather than caching one.
+ *
+ * `protocol` may be `https` (the default) or `wss`, and `wss` only swaps
+ * the scheme on the same URL: the edge splices a 101 upgrade through to
+ * the port, so one endpoint serves both. Anything else is refused rather
+ * than silently answered with an https URL - there is no plaintext door,
+ * and a caller who asked for http has to know that.
+ */
+export async function exposePort(
+  sandbox: SandboxHandle,
+  options: { port: number; protocol?: string },
+): Promise<string> {
+  const { port, protocol } = options
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+    throw new Error(
+      `getUrl: port ${port} is not exposable. Exposable ports are 1024-65535 (a dev server's ` +
+        '3000, 5173, 8000), and the server has to be listening on the sandbox\'s 127.0.0.1.',
+    )
+  }
+  const scheme = (protocol ?? 'https').replace(/:$/, '').toLowerCase()
+  if (scheme !== 'https' && scheme !== 'wss') {
+    throw new Error(
+      `getUrl: protocol ${protocol} is not available. The endpoint is TLS-only at the edge, so ` +
+        "'https' (the default) and 'wss' are the two schemes it answers on.",
+    )
+  }
+  const body = await sandbox.client.request<{ url?: string }>(
+    'POST',
+    `/preview/sandboxes/${encodeURIComponent(plainOrSigned(sandbox.id))}/expose`,
+    { port },
+  )
+  if (!body?.url) {
+    throw new Error('getUrl: the API returned no url for the exposed port')
+  }
+  // The same endpoint, addressed as a websocket. Swapped here rather
+  // than asked of the API, because it is one endpoint either way and the
+  // API should not have to mint two URLs for one door.
+  return scheme === 'wss' ? body.url.replace(/^https:/, 'wss:') : body.url
+}
+
+/** `unexpose`: close the public door again. */
+export async function unexposePort(sandbox: SandboxHandle, port: number): Promise<void> {
+  await sandbox.client.request(
+    'POST',
+    `/preview/sandboxes/${encodeURIComponent(plainOrSigned(sandbox.id))}/unexpose`,
+    { port },
+  )
+}
+
+/**
+ * The id to put in a path. Signed ids are base64url and safe in a path
+ * segment; this exists so that intent is explicit rather than incidental,
+ * and so a future id shape has one place to be handled.
+ */
+function plainOrSigned(id: string): string {
+  return id
+}
+
 export async function destroySandbox(client: GmnClient, sandboxId: string): Promise<void> {
   // The array route rather than `DELETE /preview/sandboxes/{id}`: the same
   // effect for one, and it is the shape a teardown of N uses. An

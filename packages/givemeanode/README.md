@@ -189,7 +189,7 @@ const copy = await compute.sandbox.create({ snapshotId: snapshot.id })
 | `filesystem` (read, write, mkdir, readdir, exists, remove) | yes, over `runCommand` |
 | `template.create` / `list` / `destroy` | yes, from a container image |
 | `snapshot.create` / `list` / `delete` | yes |
-| `getUrl` (inbound ports) | **no** - see below |
+| `getUrl` (a public HTTPS URL for a port) | yes - see below |
 | streaming stdout/stderr | not natively; the SDK's bridge applies |
 
 ## Two behaviours worth knowing about
@@ -212,12 +212,43 @@ not an exception. In the rare case where the sandbox did receive the
 request before the connection dropped, the retry means the command can run
 twice, so pass `execRetries: 0` for a workload where that matters.
 
+## The preview URL
+
+`getUrl({ port })` returns a public HTTPS URL that reaches a server
+running inside the sandbox - the page a coding agent just wrote, looked at
+from outside:
+
+```ts
+const sandbox = await compute.sandbox.create({ templateId: template.id })
+await sandbox.runCommand('sh', ['-c', 'cd app && (npm run dev > /tmp/dev.log 2>&1 &)'])
+const url = await sandbox.getUrl({ port: 3000 })
+```
+
+Three things decide whether it works:
+
+- **The server listens on the sandbox's loopback.** `127.0.0.1:3000` is
+  what dev servers bind by default and is exactly right; the host connects
+  in over vsock and the guest dials its own loopback, so no packet arrives
+  on the guest's network interface. That also means an exposed port works
+  on a sandbox prepared with `egress: 'none'`.
+- **The server survives the command that started it.** `runCommand` waits
+  for its command's output to end, so `npm run dev &` alone hangs the call
+  and then dies with it. Redirect: `(npm run dev > /tmp/dev.log 2>&1 &)`.
+- **The URL is the secret.** The hostname carries an unguessable
+  capability, so treat it like a password; it expires (24h by default) and
+  dies with the sandbox. `unexposePort(sandbox, port)` closes it sooner.
+
+The call is idempotent per port - the same port returns the same URL with
+a refreshed expiry - so there is no reason to cache one.
+
 ## Limitations
 
-- **No inbound ports.** A givemeanode sandbox reaches out; nothing dials
-  in, and whether it has network at all is fixed when its image is
-  prepared rather than per command. `getUrl` throws. A workload that has to
-  be reachable belongs on a givemeanode *node* rather than a sandbox.
+- **An exposed port is HTTP(S) only, and it is a preview URL rather than a
+  CDN.** `getUrl({port})` mints a public HTTPS URL that reaches a port
+  inside the sandbox; requests ride one proxy hop, which is right for a dev
+  server or an API you are testing and not for serving production traffic.
+  Streaming, SSE and WebSocket (`protocol: 'wss'`, same URL) pass through.
+  A raw TCP port cannot be exposed.
 - **Container images must be digest-pinned and registry-qualified**, and
   the first sandbox from a new one is slow. See "Container images".
 - **Regional endpoints are not interchangeable.** Set `baseUrl` to the one

@@ -693,3 +693,52 @@ describe('a command that legitimately runs longer than the client timeout', () =
     assert.equal(result.exitCode, 0)
   })
 })
+
+describe('getUrl', () => {
+  beforeEach(() => resetFastTokenCache())
+
+  const handleOn = (client: GmnClient) =>
+    ({ id: 'sbx-1', client, createdAt: new Date(), metadata: {} }) as any
+
+  it('returns the URL the door minted, and never builds one', async () => {
+    const { sent, client } = door(() => ({
+      body: { url: 'https://sbe-9k2fq-vx7t3m8dk4qwrz2n.ingress.test', port: 3000 },
+    }))
+    const url = await ops.exposePort(handleOn(client), { port: 3000 })
+    assert.equal(url, 'https://sbe-9k2fq-vx7t3m8dk4qwrz2n.ingress.test')
+    assert.equal(sent[0].method, 'POST')
+    assert.equal(sent[0].path, '/preview/sandboxes/sbx-1/expose')
+    assert.deepEqual(sent[0].body, { port: 3000 })
+  })
+
+  it('swaps only the scheme for wss, on the same endpoint', async () => {
+    const { client } = door(() => ({ body: { url: 'https://sbe-9k2fq-abc.ingress.test' } }))
+    const url = await ops.exposePort(handleOn(client), { port: 3000, protocol: 'wss' })
+    assert.equal(url, 'wss://sbe-9k2fq-abc.ingress.test')
+  })
+
+  it('refuses a scheme the edge does not answer on', async () => {
+    const { sent, client } = door(() => ({ body: { url: 'https://x.ingress.test' } }))
+    await assert.rejects(() => ops.exposePort(handleOn(client), { port: 3000, protocol: 'http' }), /TLS-only/)
+    assert.equal(sent.length, 0, 'a refusal must not reach the door')
+  })
+
+  it('refuses a privileged or out-of-range port before the round trip', async () => {
+    const { sent, client } = door(() => ({ body: {} }))
+    await assert.rejects(() => ops.exposePort(handleOn(client), { port: 80 }), /1024-65535/)
+    await assert.rejects(() => ops.exposePort(handleOn(client), { port: 70000 }), /1024-65535/)
+    assert.equal(sent.length, 0)
+  })
+
+  it('says so when the door answers without a url', async () => {
+    const { client } = door(() => ({ body: { port: 3000 } }))
+    await assert.rejects(() => ops.exposePort(handleOn(client), { port: 3000 }), /no url/)
+  })
+
+  it('unexpose posts the port to the sandbox it belongs to', async () => {
+    const { sent, client } = door(() => ({ body: { status: 'removed' } }))
+    await ops.unexposePort(handleOn(client), 3000)
+    assert.equal(sent[0].path, '/preview/sandboxes/sbx-1/unexpose')
+    assert.deepEqual(sent[0].body, { port: 3000 })
+  })
+})

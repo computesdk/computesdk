@@ -39,6 +39,8 @@ export {
 } from './client.js'
 
 export {
+  exposePort,
+  unexposePort,
   plainSandboxId,
   sameSandbox,
   isImageReference,
@@ -168,13 +170,13 @@ export const givemeanode = defineProvider<
 
       getInfo: (sandbox: GivemeanodeSandbox) => ops.sandboxInfo(sandbox) as Promise<SandboxInfo>,
 
-      getUrl: async (_sandbox: GivemeanodeSandbox, _options: { port: number; protocol?: string }) => {
-        throw new Error(
-          'givemeanode sandboxes do not expose inbound ports. A sandbox reaches out, and whether it has ' +
-            'network at all is fixed when its image is prepared; nothing dials in. Use a givemeanode node ' +
-            'for a workload that has to be reachable.',
-        )
-      },
+      // A public HTTPS URL for a port inside the sandbox. The request
+      // never arrives as a packet on the guest's interface: the host
+      // connects INTO the guest over vsock and the guest's agent dials
+      // its own loopback, which is why this works even for a sandbox
+      // prepared with `egress: 'none'`.
+      getUrl: (sandbox: GivemeanodeSandbox, options: { port: number; protocol?: string }) =>
+        ops.exposePort(sandbox, options),
 
       getInstance: (sandbox: GivemeanodeSandbox) => sandbox,
 

@@ -9,9 +9,12 @@ runProviderTestSuite({
     baseUrl: process.env.GMN_API_HOST,
   }),
   supportsFilesystem: true,
-  // A givemeanode sandbox has no inbound ports: it reaches out, and its
-  // egress posture is fixed when the guest is baked. `getUrl` throws with
-  // that explanation, so the suite must not ask for one.
-  supportsGetUrl: false,
+  // `getUrl` mints a public HTTPS URL for a port inside the sandbox. The
+  // request reaches it over vsock rather than as a packet on the guest's
+  // interface, so it works on a sandbox prepared with `egress: 'none'`
+  // too. The suite's case only asks for a URL, which is minted whether
+  // or not anything is listening yet - a port with no server answers 502
+  // when it is actually fetched.
+  supportsGetUrl: true,
   skipIntegration: !process.env.GMN_TOKEN,
 })
