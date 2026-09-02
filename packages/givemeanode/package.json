@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/miosa",
-  "version": "1.0.4",
-  "description": "MIOSA provider for ComputeSDK - hardware-isolated Firecracker microVM sandboxes with snapshots, persistent graduation, and white-label infrastructure",
-  "author": "MIOSA",
+  "name": "@computesdk/givemeanode",
+  "version": "1.0.1",
+  "description": "givemeanode for ComputeSDK - sandboxes served from a per-region warm pool, with a signed credential that keeps the database off the create path",
+  "author": "givemeanode",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -22,6 +22,7 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:node": "node --experimental-strip-types --test src/__tests__/*.node.test.ts",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
@@ -29,16 +30,13 @@
   },
   "keywords": [
     "computesdk",
-    "miosa",
+    "provider",
     "sandbox",
-    "firecracker",
-    "microvm",
-    "snapshot",
     "code-execution",
     "cloud",
     "compute",
-    "provider",
-    "white-label"
+    "givemeanode",
+    "microvm"
   ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
@@ -57,9 +55,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/miosa"
+    "directory": "packages/givemeanode"
   },
-  "homepage": "https://miosa.ai",
+  "homepage": "https://givemeanode.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

@@ -11,16 +11,22 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { RunOptions } from '@arker-ai/sdk';
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
+/** Provider used when none is configured. */
+const DEFAULT_PROVIDER = 'aws';
 /** Region used when none is configured. */
-const DEFAULT_REGION = 'aws-us-east-1';
+const DEFAULT_REGION = 'us-east-1';
 /** Golden forked when none is requested — small Ubuntu VM with node + python. */
 const DEFAULT_SOURCE = 'ubuntu-small';
 
 export interface ArkerConfig {
   /** Arker API key (starts with `ark_`). Falls back to the ARKER_API_KEY environment variable. */
   apiKey?: string;
-  /** Region, e.g. `aws-us-east-1`. Falls back to ARKER_REGION, then the us-east-1 default. */
+  /** Region, e.g. `us-east-1`. Falls back to ARKER_REGION, then the us-east-1 default.
+   *  A combined `"<provider>-<region>"` value (e.g. `aws-us-east-1`) is still accepted. */
   region?: string;
+  /** Compute provider, e.g. `aws`. Falls back to ARKER_PROVIDER, then `aws`.
+   *  The SDK requires provider and region together. */
+  provider?: string;
   /** Golden source VM to fork on create(). Falls back to ARKER_SOURCE, then `ubuntu-small`. */
   source?: string;
   /** Compute platforms to fork onto, e.g. `['graviton4']`. Falls back to ARKER_PLATFORMS (comma-separated). */
@@ -32,15 +38,34 @@ const env = (key: string): string | undefined => {
   return value && value.trim() ? value.trim() : undefined;
 };
 
+/** Known compute providers, used to split a combined `<provider>-<region>` value. */
+const PROVIDER_PREFIXES = ['aws', 'gcp', 'azure', 'arker'] as const;
+
 /**
- * Build an Arker SDK client. Region precedence: config, then ARKER_REGION,
- * then the us-east-1 default — the SDK itself requires a region, so an
- * unconfigured caller gets a working default instead of a thrown error.
+ * Split a region that still carries a provider prefix (`aws-us-east-1`) into
+ * its parts. Returns `[undefined, region]` when there is no prefix.
+ */
+function splitPlacement(region: string): [string | undefined, string] {
+  for (const p of PROVIDER_PREFIXES) {
+    if (region.startsWith(`${p}-`)) return [p, region.slice(p.length + 1)];
+  }
+  return [undefined, region];
+}
+
+/**
+ * Build an Arker SDK client. The SDK requires `provider` and `region`
+ * together, so both always resolve to a value: config, then env
+ * (ARKER_PROVIDER / ARKER_REGION), then the aws/us-east-1 default. A
+ * combined `aws-us-east-1` region is split so older callers keep working.
  */
 function makeClient(config: ArkerConfig): Arker {
+  const rawRegion = config.region ?? env('ARKER_REGION') ?? DEFAULT_REGION;
+  const [prefixed, region] = splitPlacement(rawRegion);
+  const provider = config.provider ?? env('ARKER_PROVIDER') ?? prefixed ?? DEFAULT_PROVIDER;
   return new Arker({
     apiKey: config.apiKey ?? env('ARKER_API_KEY'),
-    region: config.region ?? env('ARKER_REGION') ?? DEFAULT_REGION,
+    provider,
+    region,
   });
 }
 
@@ -79,9 +104,14 @@ export const arker = defineProvider<VM, ArkerConfig>({
           config.platforms ??
           env('ARKER_PLATFORMS')?.split(',').map((p) => p.trim()).filter(Boolean);
 
+        // SDK 1.x takes a single options object keyed by the wire schema
+        // (`source_vm_id` / `source_vm_name`); the old `fork(name, opts)`
+        // overload is gone.
         const vm = options?.snapshotId
-          ? await client.fork({ sourceVmId: options.snapshotId, name })
-          : await client.fork(options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE, {
+          ? await client.fork({ source_vm_id: options.snapshotId, name })
+          : await client.fork({
+              source_vm_name:
+                options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE,
               name,
               ...(platforms?.length ? { platforms } : {}),
             });
@@ -140,9 +170,10 @@ export const arker = defineProvider<VM, ArkerConfig>({
         // a bare `nohup cd … && …` would run only `cd` under nohup.
         if (options?.background) fullCommand = `nohup sh -c ${singleQuote(fullCommand)} > /dev/null 2>&1 &`;
 
-        // `background: false` picks the SDK's synchronous overload, which polls a
-        // backgrounded run to completion itself and always yields CompletedRunResult.
-        const runOptions: RunOptions & { background?: false } = { background: false };
+        // Leaving `time_to_background` unset selects the SDK's synchronous
+        // overload: the SDK polls the run to completion itself and resolves
+        // `CompletedRunResult`, so there is nothing to poll or narrow here.
+        const runOptions: Omit<RunOptions, 'time_to_background'> = {};
         // ComputeSDK's timeout is milliseconds; Arker's is seconds (rounded up so a
         // sub-second timeout stays non-zero — 0 means "no limit" to Arker).
         if (options?.timeout) runOptions.timeout = Math.max(1, Math.ceil(options.timeout / 1000));
