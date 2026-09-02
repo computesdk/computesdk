@@ -311,6 +311,7 @@ npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provider
 npm install @computesdk/runloop          # Runloop provider
+npm install @computesdk/sandbox-as-a-service # Sandbox as a Service provider
 npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
@@ -351,6 +352,7 @@ See individual provider READMEs for details:
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/run-cloud](./packages/run-cloud)** - Fast Firecracker microVM sandboxes with filesystem and snapshot support
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
+- **[@computesdk/sandbox-as-a-service](./packages/sandbox-as-a-service)** - Full cloud VMs with preview URLs, billed by the second
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
 - **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
