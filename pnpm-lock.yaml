@@ -286,8 +286,8 @@ importers:
   packages/arker:
     dependencies:
       '@arker-ai/sdk':
-        specifier: ^0.9.0
-        version: 0.9.0(@computesdk/daytona@1.7.33(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.53)(@computesdk/modal@1.9.5)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        specifier: ^1.2.4
+        version: 1.2.4(@computesdk/daytona@1.7.33(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.53)(@computesdk/modal@1.9.5)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2567,8 +2567,8 @@ packages:
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
     engines: {node: '>=6.0.0'}
 
-  '@arker-ai/sdk@0.9.0':
-    resolution: {integrity: sha512-fwtQmS4MQH7fvctM1jGtfGauVYsz8vS380oJmWKh+iEjWJUKyc9O18tujqHR/aljfusNCR1ILY3ZBKbJz5nsKg==}
+  '@arker-ai/sdk@1.2.4':
+    resolution: {integrity: sha512-mH6UKRfzQSIzDm+pdroe7+uArqJ8RQssUknx5i2q9IXRZpdua5pZpD6HLdr9sCRQCbF96c03vpiO1ijti1qgRQ==}
     engines: {node: '>=18'}
     hasBin: true
     peerDependencies:
@@ -9461,8 +9461,9 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.12
       '@jridgewell/trace-mapping': 0.3.29
 
-  '@arker-ai/sdk@0.9.0(@computesdk/daytona@1.7.33(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.53)(@computesdk/modal@1.9.5)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.33(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.53)(@computesdk/modal@1.9.5)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
+      dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
