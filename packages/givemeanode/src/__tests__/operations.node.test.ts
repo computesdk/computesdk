@@ -881,6 +881,32 @@ describe("the review's findings on PR 741", () => {
     assert.equal(entries.find(e => e.name === 'two  spaces.txt')?.size, 11)
   })
 
+  it('parses REAL ls -la output, not a hand-written approximation', () => {
+    // Captured verbatim from GNU coreutils on Amazon Linux, which is
+    // what the sandbox images ship. It carries the four things a
+    // hand-written fixture tends to miss: the SELinux `.` on the mode,
+    // several spaces between metadata columns, the year form of the date
+    // (`Jan 30  2023`, where a recent file shows `17:45`), and a name
+    // whose own leading space follows the single separator space.
+    const real = [
+      'total 0',
+      '-rw-r--r--.  1 ec2-user ec2-user    0 Sep  2 17:45  leading.txt',
+      'drwxr-xr-x.  3 ec2-user ec2-user  140 Sep  2 17:45 .',
+      'drwxrwxrwt. 22 root     root     2820 Sep  2 17:45 ..',
+      'drwxr-xr-x.  2 ec2-user ec2-user   40 Sep  2 17:45 a dir',
+      'lrwxrwxrwx.  1 ec2-user ec2-user   10 Sep  2 17:45 link -> /etc/hosts',
+      '-rw-r--r--.  1 ec2-user ec2-user    0 Sep  2 17:45 two  spaces.txt',
+      'lrwxrwxrwx.  1 root     root         7 Jan 30  2023 bin -> usr/bin',
+    ].join('\n')
+    const entries = ops.parseLsLong(real)
+    assert.deepEqual(
+      entries.map(e => e.name),
+      [' leading.txt', 'a dir', 'link', 'two  spaces.txt', 'bin'],
+      'every row must parse, and . and .. must not appear',
+    )
+    assert.equal(entries.find(e => e.name === 'a dir')?.size, 40)
+  })
+
   it('honours limit, and refuses the snapshot filter it cannot answer', async () => {
     const snapshots = [1, 2, 3].map(n => ({ id: `env-${n}`, created_at: '2026-09-02T10:00:00Z' }))
     const { client } = door(() => ({ body: { snapshots } }))
