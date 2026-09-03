@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@tenkicloud/sandbox": "^0.5.4",
+    "@tenkicloud/sandbox": "^1.0.3",
     "computesdk": "workspace:*"
   },
   "keywords": [
