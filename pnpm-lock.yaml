@@ -2238,8 +2238,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@tenkicloud/sandbox':
-        specifier: ^1.0.3
-        version: 1.0.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^1.0.4
+        version: 1.0.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -5441,8 +5441,8 @@ packages:
   '@superserve/sdk@0.7.6':
     resolution: {integrity: sha512-ovJG1hIoOolhMeKUl/j0y8awaexvHFTjYjkk7/HnrN5olpqeHDyLQT++6SJmnL3/94XFd2g2DPvc8VWABlOBqw==}
 
-  '@tenkicloud/sandbox@1.0.3':
-    resolution: {integrity: sha512-4ILe57lRDfwD73yBIG2WcJsqoplWZEa6vJWM4oLLu9EzDQNJo7tzAHKZzY5hdpIhgTVgkAdQn9Ib2fx7YqdAYQ==}
+  '@tenkicloud/sandbox@1.0.4':
+    resolution: {integrity: sha512-YynN84EEPfm9YeYIX6tMJ/qI2RCp0xmg1W8WIS8VO4df69IRlBaONgVgiak0ZB77hDQhj5nYHnkeEnvWOb+QPg==}
     engines: {node: '>=18'}
 
   '@tigrisdata/storage@3.6.0':
@@ -12779,7 +12779,7 @@ snapshots:
 
   '@superserve/sdk@0.7.6': {}
 
-  '@tenkicloud/sandbox@1.0.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@tenkicloud/sandbox@1.0.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
