@@ -94,9 +94,9 @@ const SETUP_HINT =
   'Create a token with the SANDBOX_MANAGE scope at ' +
   'https://app.buddy.works/my-id/tokens';
 
-/** Maps our tunnel-spelled region to the SDK's API host table (`AS` → `AP`). */
+/** The SDK's API host table is keyed by the same region names we use. */
 export function apiUrlForRegion(region: BuddyRegion): string {
-  return region === 'AS' ? API_URLS.AP : API_URLS[region];
+  return API_URLS[region];
 }
 
 /**

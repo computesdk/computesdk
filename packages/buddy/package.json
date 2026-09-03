@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@buddy-works/sandbox-sdk": "^0.1.7",
+    "@buddy-works/sandbox-sdk": "^0.1.8",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
