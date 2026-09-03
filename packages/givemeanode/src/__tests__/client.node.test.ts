@@ -252,6 +252,77 @@ describe('refusals', () => {
     )
   })
 
+  it('reads the message out of the structured body the door actually sends', async () => {
+    // The door answers `{"error": {"code", "message"}}`, not a bare
+    // string. Stringifying that object yields `[object Object]` and loses
+    // the one part written to be read - which is how a 422 naming
+    // `sandbox_vcpus` reached a benchmark runner as no reason at all.
+    const { fetchImpl } = stub([
+      {
+        status: 422,
+        body: {
+          error: {
+            code: 'refused',
+            message: 'size sandbox-lg needs 8 vCPU; this org\'s sandbox_vcpus ceiling is 4',
+          },
+        },
+      },
+    ])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('POST', '/preview/sandboxes', { size: 'sandbox-lg' }),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.equal(err.status, 422)
+        assert.match(err.message, /sandbox_vcpus ceiling is 4/)
+        assert.match(err.message, /refused/)
+        assert.doesNotMatch(err.message, /\[object Object\]/)
+        return true
+      },
+    )
+  })
+
+  it('falls back to the code when the body carries no message', async () => {
+    const { fetchImpl } = stub([{ status: 403, body: { error: { code: 'forbidden' } } }])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('GET', '/preview/sandboxes'),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.match(err.message, /forbidden/)
+        assert.doesNotMatch(err.message, /\[object Object\]/)
+        return true
+      },
+    )
+  })
+
+  it('shows an unrecognised error body as JSON rather than as [object Object]', async () => {
+    const { fetchImpl } = stub([{ status: 500, body: { error: { unexpected: 'shape' } } }])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('GET', '/preview/sandboxes'),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.match(err.message, /unexpected/)
+        assert.doesNotMatch(err.message, /\[object Object\]/)
+        return true
+      },
+    )
+  })
+
+  it('keeps the whole body on the error for a caller that wants to branch on it', async () => {
+    const { fetchImpl } = stub([{ status: 422, body: { error: { code: 'refused', message: 'no' } } }])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('POST', '/preview/sandboxes', {}),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.deepEqual(err.body, { error: { code: 'refused', message: 'no' } })
+        return true
+      },
+    )
+  })
+
   it('names the environment variable when no credential was given', () => {
     const saved = process.env.GMN_TOKEN
     delete process.env.GMN_TOKEN
