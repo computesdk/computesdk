@@ -1,5 +1,12 @@
 # @computesdk/tenki
 
+## 0.1.5
+
+### Patch Changes
+
+- 67676e8: Update the Tenki sandbox SDK to 1.0.3.
+- 6431e9f: Update the Tenki sandbox SDK to 1.0.4.
+
 ## 0.1.4
 
 ### Patch Changes
