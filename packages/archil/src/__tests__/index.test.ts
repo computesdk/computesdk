@@ -127,7 +127,12 @@ describe('archil filesystem mapping', () => {
   }
 
   it('maps public filesystem paths to the Archil mount', async () => {
-    const fetchMock = vi.fn(async () => execResponse('hello'));
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { command: string };
+      return body.command.includes('wc -c')
+        ? execResponse('5\n')
+        : execResponse(Buffer.from('hello').toString('base64'));
+    });
     global.fetch = fetchMock as typeof fetch;
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
@@ -138,7 +143,10 @@ describe('archil filesystem mapping', () => {
     );
 
     expect(commands(fetchMock)[0]).toContain(
-      "cat '/mnt/archil/tmp/hello.txt'",
+      "wc -c < '/mnt/archil/tmp/hello.txt'",
+    );
+    expect(commands(fetchMock)[1]).toContain(
+      "dd if='/mnt/archil/tmp/hello.txt' bs=1 skip=0 count=5",
     );
   });
 
@@ -167,6 +175,9 @@ describe('archil filesystem mapping', () => {
     );
     expect(mutationCommands[1]).toContain(
       "'/mnt/archil/tmp/data/hello.txt'",
+    );
+    expect(mutationCommands[1]).toContain(
+      "if [ -d '/mnt/archil/tmp/data/hello.txt' ]; then",
     );
     expect(mutationCommands[2]).toContain(
       "rm -rf '/mnt/archil/tmp/data/hello.txt'",
@@ -200,6 +211,52 @@ describe('archil filesystem mapping', () => {
     );
   });
 
+  it('reads files larger than the Archil response limit in chunks', async () => {
+    const content = '0123456789abcdef'.repeat(400_000);
+    const bytes = Buffer.from(content, 'utf8');
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { command: string };
+      if (body.command.includes('wc -c')) {
+        return execResponse(`${bytes.length}\n`);
+      }
+
+      const match = body.command.match(/skip=(\d+) count=(\d+)/);
+      if (!match) throw new Error(`Unexpected read command: ${body.command}`);
+      const offset = Number(match[1]);
+      const count = Number(match[2]);
+      return execResponse(
+        bytes.subarray(offset, offset + count).toString('base64'),
+      );
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await expect(
+      sandbox.filesystem.readFile('/tmp/large.txt'),
+    ).resolves.toBe(content);
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(2);
+    expect(commands(fetchMock)[0]).toContain('wc -c');
+    expect(
+      commands(fetchMock).filter((command) => command.includes('dd if=')).length,
+    ).toBeGreaterThan(1);
+  });
+
+  it('reads empty files without issuing a chunk command', async () => {
+    const fetchMock = vi.fn(async () => execResponse('0\n'));
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await expect(sandbox.filesystem.readFile('/tmp/empty.txt')).resolves.toBe(
+      '',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('writes empty files without emitting a base64 chunk', async () => {
     const fetchMock = vi.fn(async () => execResponse());
     global.fetch = fetchMock as typeof fetch;
@@ -216,6 +273,52 @@ describe('archil filesystem mapping', () => {
     );
     expect(command).toContain(" '/mnt/archil/tmp/empty.txt'");
     expect(command).not.toContain('base64 -d');
+  });
+
+  it('rejects non-empty writes to existing directories', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(execResponse('', 1, 'destination is a directory'))
+      .mockResolvedValueOnce(execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await expect(
+      sandbox.filesystem.writeFile('/tmp/existing-dir', 'hello'),
+    ).rejects.toThrow(
+      'Failed to write /tmp/existing-dir: destination is a directory',
+    );
+    expect(commands(fetchMock)[0]).toContain(
+      "if [ -d '/mnt/archil/tmp/existing-dir' ]; then",
+    );
+    expect(commands(fetchMock)[0]).toContain(
+      "mv '/mnt/archil/tmp/existing-dir.computesdk-write-",
+    );
+  });
+
+  it('rejects empty writes to existing directories', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(execResponse('', 1, 'destination is a directory'))
+      .mockResolvedValueOnce(execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await expect(
+      sandbox.filesystem.writeFile('/tmp/existing-dir', ''),
+    ).rejects.toThrow(
+      'Failed to write /tmp/existing-dir: destination is a directory',
+    );
+    expect(commands(fetchMock)[0]).toContain(
+      "if [ -d '/mnt/archil/tmp/existing-dir' ]; then",
+    );
+    expect(commands(fetchMock)[0]).toContain(
+      "mv '/mnt/archil/tmp/existing-dir.computesdk-write-",
+    );
   });
 
   it('stops after a failed chunk and cleans up the staged file', async () => {

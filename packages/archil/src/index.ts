@@ -21,6 +21,9 @@ import type {
 
 const ARCHIL_MOUNT_ROOT = '/mnt/archil';
 const ARCHIL_MAX_EXEC_COMMAND_BYTES = 102_400;
+// Base64 expands the file data and adds line wrapping. Keep the raw chunk
+// comfortably below Archil's roughly 4 MiB response cap.
+const ARCHIL_MAX_READ_CHUNK_BYTES = 2 * 1024 * 1024;
 
 // Per-region color overrides. Default is "green" for any region not listed here.
 const REGION_COLORS: Record<string, string> = {
@@ -217,9 +220,20 @@ function buildWriteChunkCommand(
     ...(isFirst ? [`mkdir -p ${shellEscape(parent)}`] : []),
     writeCommand,
     ...(isFinal
-      ? [`mv ${shellEscape(tempPath)} ${shellEscape(diskPath)}`]
+      ? [finalizeStagedFileCommand(tempPath, diskPath)]
       : []),
   ].join(' && ');
+}
+
+function finalizeStagedFileCommand(tempPath: string, diskPath: string): string {
+  const quotedDestination = shellEscape(diskPath);
+  return [
+    `if [ -d ${quotedDestination} ]; then`,
+    `printf '%s\\n' ${shellEscape(`Refusing to overwrite directory ${diskPath}`)} >&2;`,
+    'exit 1;',
+    'fi;',
+    `mv ${shellEscape(tempPath)} ${quotedDestination}`,
+  ].join(' ');
 }
 
 function maxWriteChunkSize(
@@ -391,11 +405,68 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       filesystem: {
         readFile: async (sandbox, path, runCommand) => {
           const diskPath = mapFilesystemPath(path);
-          const result = await runCommand(sandbox, `cat ${shellEscape(diskPath)}`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to read ${path}: ${result.stderr}`);
+          const sizeResult = await runCommand(
+            sandbox,
+            `wc -c < ${shellEscape(diskPath)}`,
+          );
+          if (sizeResult.exitCode !== 0) {
+            throw new Error(`Failed to read ${path}: ${sizeResult.stderr}`);
           }
-          return result.stdout;
+
+          const sizeText = sizeResult.stdout.trim();
+          if (!/^\d+$/.test(sizeText)) {
+            throw new Error(
+              `Failed to read ${path}: Archil returned an invalid file size.`,
+            );
+          }
+
+          const size = Number(sizeText);
+          if (!Number.isSafeInteger(size)) {
+            throw new Error(
+              `Failed to read ${path}: file size exceeds JavaScript's safe integer range.`,
+            );
+          }
+          if (size === 0) return '';
+
+          const chunks: Buffer[] = [];
+          for (
+            let offset = 0;
+            offset < size;
+            offset += ARCHIL_MAX_READ_CHUNK_BYTES
+          ) {
+            const expectedBytes = Math.min(
+              ARCHIL_MAX_READ_CHUNK_BYTES,
+              size - offset,
+            );
+            const result = await runCommand(
+              sandbox,
+              `dd if=${shellEscape(diskPath)} bs=1 skip=${offset} count=${expectedBytes} 2>/dev/null | base64`,
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to read ${path}: ${result.stderr}`);
+            }
+
+            const encoded = result.stdout.replace(/\s/g, '');
+            if (
+              encoded.length === 0 ||
+              encoded.length % 4 !== 0 ||
+              !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)
+            ) {
+              throw new Error(
+                `Failed to read ${path}: Archil returned an incomplete file chunk at byte ${offset}.`,
+              );
+            }
+
+            const chunk = Buffer.from(encoded, 'base64');
+            if (chunk.length !== expectedBytes) {
+              throw new Error(
+                `Failed to read ${path}: Archil returned an incomplete file chunk at byte ${offset}.`,
+              );
+            }
+            chunks.push(chunk);
+          }
+
+          return Buffer.concat(chunks).toString('utf8');
         },
 
         writeFile: async (sandbox, path, content, runCommand) => {
@@ -414,7 +485,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                   [
                     `mkdir -p ${shellEscape(parent)}`,
                     `: > ${shellEscape(tempPath)}`,
-                    `mv ${shellEscape(tempPath)} ${shellEscape(diskPath)}`,
+                    finalizeStagedFileCommand(tempPath, diskPath),
                   ].join(' && '),
                 ),
               );

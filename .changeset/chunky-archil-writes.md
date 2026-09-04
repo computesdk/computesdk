@@ -2,4 +2,4 @@
 '@computesdk/archil': patch
 ---
 
-Chunk large filesystem writes to stay within Archil exec command limits.
+Support large filesystem reads, chunk large writes, and reject writes to directory paths.
