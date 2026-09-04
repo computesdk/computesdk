@@ -9,6 +9,7 @@
  */
 
 import { defineProvider } from '@computesdk/provider';
+import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import type {
   CommandResult,
@@ -19,6 +20,7 @@ import type {
 } from 'computesdk';
 
 const ARCHIL_MOUNT_ROOT = '/mnt/archil';
+const ARCHIL_MAX_EXEC_COMMAND_BYTES = 102_400;
 
 // Per-region color overrides. Default is "green" for any region not listed here.
 const REGION_COLORS: Record<string, string> = {
@@ -196,6 +198,67 @@ function withDiskWriteLock(command: string): string {
   ].join(' && ');
 }
 
+function execCommandBytes(command: string): number {
+  return Buffer.byteLength(wrapCommand(command), 'utf8');
+}
+
+function buildWriteChunkCommand(
+  parent: string,
+  tempPath: string,
+  diskPath: string,
+  encodedChunk: string,
+  isFirst: boolean,
+  isFinal: boolean,
+): string {
+  const writeCommand =
+    `printf %s ${shellEscape(encodedChunk)} | base64 -d ` +
+    `${isFirst ? '>' : '>>'} ${shellEscape(tempPath)}`;
+  return [
+    ...(isFirst ? [`mkdir -p ${shellEscape(parent)}`] : []),
+    writeCommand,
+    ...(isFinal
+      ? [`mv ${shellEscape(tempPath)} ${shellEscape(diskPath)}`]
+      : []),
+  ].join(' && ');
+}
+
+function maxWriteChunkSize(
+  parent: string,
+  tempPath: string,
+  diskPath: string,
+): number {
+  let low = 0;
+  let high = ARCHIL_MAX_EXEC_COMMAND_BYTES;
+
+  while (low < high) {
+    const candidate = Math.ceil((low + high) / 2);
+    const command = withDiskWriteLock(
+      buildWriteChunkCommand(
+        parent,
+        tempPath,
+        diskPath,
+        'A'.repeat(candidate),
+        true,
+        true,
+      ),
+    );
+
+    if (execCommandBytes(command) <= ARCHIL_MAX_EXEC_COMMAND_BYTES) {
+      low = candidate;
+    } else {
+      high = candidate - 1;
+    }
+  }
+
+  const chunkSize = low - (low % 4);
+  if (chunkSize < 4) {
+    throw new Error(
+      `Archil filesystem path is too long to write within the ${ARCHIL_MAX_EXEC_COMMAND_BYTES}-byte exec command limit.`,
+    );
+  }
+  return chunkSize;
+}
+
 function wrapCommand(command: string, options?: RunCommandOptions): string {
   let wrapped = command;
 
@@ -338,17 +401,67 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         writeFile: async (sandbox, path, content, runCommand) => {
           const diskPath = mapFilesystemPath(path);
           const parent = posix.dirname(diskPath);
-          // base64-pipe to avoid heredoc/quoting hazards on arbitrary content.
           const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const result = await runCommand(
-            sandbox,
-            withDiskWriteLock(
-              `mkdir -p ${shellEscape(parent)} && ` +
-                `printf %s ${shellEscape(encoded)} | base64 -d > ${shellEscape(diskPath)}`,
-            ),
-          );
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to write ${path}: ${result.stderr}`);
+          const tempPath = `${diskPath}.computesdk-write-${randomUUID()}`;
+          let started = false;
+
+          try {
+            if (encoded.length === 0) {
+              started = true;
+              const result = await runCommand(
+                sandbox,
+                withDiskWriteLock(
+                  [
+                    `mkdir -p ${shellEscape(parent)}`,
+                    `: > ${shellEscape(tempPath)}`,
+                    `mv ${shellEscape(tempPath)} ${shellEscape(diskPath)}`,
+                  ].join(' && '),
+                ),
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(result.stderr);
+              }
+              return;
+            }
+
+            const chunkSize = maxWriteChunkSize(parent, tempPath, diskPath);
+            for (let offset = 0; offset < encoded.length; offset += chunkSize) {
+              const isFirst = offset === 0;
+              const isFinal = offset + chunkSize >= encoded.length;
+              started = true;
+              const result = await runCommand(
+                sandbox,
+                withDiskWriteLock(
+                  buildWriteChunkCommand(
+                    parent,
+                    tempPath,
+                    diskPath,
+                    encoded.slice(offset, offset + chunkSize),
+                    isFirst,
+                    isFinal,
+                  ),
+                ),
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(result.stderr);
+              }
+            }
+          } catch (error) {
+            if (started) {
+              try {
+                await runCommand(
+                  sandbox,
+                  withDiskWriteLock(`rm -f ${shellEscape(tempPath)}`),
+                );
+              } catch {
+                // Preserve the original write error if cleanup fails.
+              }
+            }
+            throw new Error(
+              `Failed to write ${path}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
           }
         },
 

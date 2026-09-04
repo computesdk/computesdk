@@ -98,13 +98,17 @@ describe('archil create semantics', () => {
 });
 
 describe('archil filesystem mapping', () => {
-  function execResponse(stdout = '', exitCode = 0): Response {
+  function execResponse(
+    stdout = '',
+    exitCode = 0,
+    stderr = '',
+  ): Response {
     return new Response(
       JSON.stringify({
         success: true,
         data: {
           stdout,
-          stderr: '',
+          stderr,
           exitCode,
           timing: { totalMs: 0, queueMs: 0, executeMs: 0 },
         },
@@ -159,10 +163,84 @@ describe('archil filesystem mapping', () => {
       "mkdir -p '/mnt/archil/tmp/data'",
     );
     expect(mutationCommands[1]).toContain(
-      "printf %s 'aGVsbG8=' | base64 -d > '/mnt/archil/tmp/data/hello.txt'",
+      "printf %s 'aGVsbG8=' | base64 -d > '/mnt/archil/tmp/data/hello.txt.computesdk-write-",
+    );
+    expect(mutationCommands[1]).toContain(
+      "'/mnt/archil/tmp/data/hello.txt'",
     );
     expect(mutationCommands[2]).toContain(
       "rm -rf '/mnt/archil/tmp/data/hello.txt'",
+    );
+  });
+
+  it('chunks large writes within Archil exec limits', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await sandbox.filesystem.writeFile('/tmp/large.txt', 'x'.repeat(100_000));
+
+    const writeCommands = commands(fetchMock);
+    const chunkCommands = writeCommands.filter((command) =>
+      command.includes('base64 -d'),
+    );
+    expect(chunkCommands.length).toBeGreaterThan(1);
+    expect(
+      writeCommands.every(
+        (command) => Buffer.byteLength(command, 'utf8') <= 102_400,
+      ),
+    ).toBe(true);
+    expect(writeCommands.at(-1)).toContain(
+      "mv '/mnt/archil/tmp/large.txt.computesdk-write-",
+    );
+    expect(writeCommands.at(-1)).toContain(
+      " '/mnt/archil/tmp/large.txt'",
+    );
+  });
+
+  it('writes empty files without emitting a base64 chunk', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await sandbox.filesystem.writeFile('/tmp/empty.txt', '');
+
+    const [command] = commands(fetchMock);
+    expect(command).toContain(": > '/mnt/archil/tmp/empty.txt.computesdk-write-");
+    expect(command).toContain(
+      "mv '/mnt/archil/tmp/empty.txt.computesdk-write-",
+    );
+    expect(command).toContain(" '/mnt/archil/tmp/empty.txt'");
+    expect(command).not.toContain('base64 -d');
+  });
+
+  it('stops after a failed chunk and cleans up the staged file', async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn(async () => {
+      callCount += 1;
+      return callCount === 2
+        ? execResponse('', 1, 'chunk failed')
+        : execResponse();
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await expect(
+      sandbox.filesystem.writeFile('/tmp/partial.txt', 'x'.repeat(200_000)),
+    ).rejects.toThrow('Failed to write /tmp/partial.txt: chunk failed');
+
+    const writeCommands = commands(fetchMock);
+    expect(
+      writeCommands.filter((command) => command.includes('base64 -d')),
+    ).toHaveLength(2);
+    expect(writeCommands.at(-1)).toContain(
+      "rm -f '/mnt/archil/tmp/partial.txt.computesdk-write-",
     );
   });
 

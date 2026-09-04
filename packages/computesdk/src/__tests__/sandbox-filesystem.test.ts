@@ -124,26 +124,17 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
     config: () =>
       envConfig({
         sandboxUrl: env('CLOUDFLARE_SANDBOX_URL'),
-        sandboxApiKey: env('CLOUDFLARE_SANDBOX_API_KEY'),
+        sandboxSecret: env('CLOUDFLARE_SANDBOX_SECRET'),
       }),
     isConfigured: () =>
       Boolean(
         env('CLOUDFLARE_SANDBOX_URL') &&
-          env('CLOUDFLARE_SANDBOX_API_KEY')
+          env('CLOUDFLARE_SANDBOX_SECRET')
       ),
   },
   codesandbox: {
     config: () => envConfig({ apiKey: env('CSB_API_KEY') }),
     isConfigured: () => Boolean(env('CSB_API_KEY')),
-  },
-  collimate: {
-    config: () =>
-      envConfig({
-        serverUrl: env('COLLIMATE_API_URL') || 'https://api.collimate.ai',
-        apiKey: env('COLLIMATE_API_KEY'),
-        templateId: env('COLLIMATE_TEMPLATE_ID') || 'node',
-      }),
-    isConfigured: () => Boolean(env('COLLIMATE_API_KEY')),
   },
   'createos-sandbox': {
     config: () =>
@@ -214,16 +205,6 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
     config: () => ({}),
     isConfigured: () => true,
   },
-  leap0: {
-    config: () =>
-      envConfig({
-        apiKey: env('LEAP0_API_KEY'),
-        baseUrl: env('LEAP0_API_URL'),
-        sandboxDomain: env('LEAP0_SANDBOX_DOMAIN'),
-        template: env('LEAP0_TEMPLATE'),
-      }),
-    isConfigured: () => Boolean(env('LEAP0_API_KEY')),
-  },
   lelantos: {
     config: () =>
       envConfig({
@@ -286,15 +267,6 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
     isConfigured: () =>
       Boolean(env('MOSAIC_API_URL') && env('MOSAIC_API_TOKEN')),
     filesystemBasePath: '/workspace/computesdk-fs-test',
-  },
-  neevcloud: {
-    config: () =>
-      envConfig({
-        apiKey: env('NEEV_API_KEY'),
-        orgId: env('NEEV_ORG_ID'),
-        projectId: env('NEEV_PROJECT_ID'),
-      }),
-    isConfigured: () => Boolean(env('NEEV_API_KEY')),
   },
   northflank: {
     config: () =>
@@ -481,7 +453,6 @@ async function loadProviderFactory(
     'cloud-run': 'cloudRun',
     cloudflare: 'cloudflare',
     codesandbox: 'codesandbox',
-    collimate: 'collimate',
     'createos-sandbox': 'createosSandbox',
     daytona: 'daytona',
     declaw: 'declaw',
@@ -492,14 +463,12 @@ async function loadProviderFactory(
     hopx: 'hopx',
     isorun: 'isorun',
     'just-bash': 'justBash',
-    leap0: 'leap0',
     lelantos: 'lelantos',
     lightning: 'lightning',
     microsandbox: 'microsandbox',
     miosa: 'miosa',
     modal: 'modal',
     mosaic: 'mosaic',
-    neevcloud: 'neevcloud',
     northflank: 'northflank',
     opencomputer: 'opencomputer',
     quilt: 'quilt',
