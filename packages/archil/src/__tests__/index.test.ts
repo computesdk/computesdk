@@ -97,6 +97,85 @@ describe('archil create semantics', () => {
   });
 });
 
+describe('archil filesystem mapping', () => {
+  function execResponse(stdout = '', exitCode = 0): Response {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          stdout,
+          stderr: '',
+          exitCode,
+          timing: { totalMs: 0, queueMs: 0, executeMs: 0 },
+        },
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
+  function commands(fetchMock: { mock: { calls: any[][] } }): string[] {
+    return (fetchMock.mock.calls as any[][]).map((call) => {
+      const body = JSON.parse(String((call[1] as RequestInit).body)) as {
+        command: string;
+      };
+      return body.command;
+    });
+  }
+
+  it('maps public filesystem paths to the Archil mount', async () => {
+    const fetchMock = vi.fn(async () => execResponse('hello'));
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await expect(sandbox.filesystem.readFile('/tmp/hello.txt')).resolves.toBe(
+      'hello',
+    );
+
+    expect(commands(fetchMock)[0]).toContain(
+      "cat '/mnt/archil/tmp/hello.txt'",
+    );
+  });
+
+  it('checks out and checks in mutating filesystem operations', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await sandbox.filesystem.mkdir('/tmp/data');
+    await sandbox.filesystem.writeFile('/tmp/data/hello.txt', 'hello');
+    await sandbox.filesystem.remove('/tmp/data/hello.txt');
+
+    const mutationCommands = commands(fetchMock);
+    expect(mutationCommands).toHaveLength(3);
+    for (const command of mutationCommands) {
+      expect(command).toContain("archil checkout --force --yes '/mnt/archil'");
+      expect(command).toContain("archil checkin '/mnt/archil'");
+    }
+    expect(mutationCommands[0]).toContain(
+      "mkdir -p '/mnt/archil/tmp/data'",
+    );
+    expect(mutationCommands[1]).toContain(
+      "printf %s 'aGVsbG8=' | base64 -d > '/mnt/archil/tmp/data/hello.txt'",
+    );
+    expect(mutationCommands[2]).toContain(
+      "rm -rf '/mnt/archil/tmp/data/hello.txt'",
+    );
+  });
+
+  it('refuses to remove the disk mount root', async () => {
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await expect(sandbox.filesystem.remove('/')).rejects.toThrow(
+      /refusing to remove the Archil disk mount root/i,
+    );
+  });
+});
+
 runProviderTestSuite({
   name: 'archil',
   provider: (() => {
@@ -129,11 +208,7 @@ runProviderTestSuite({
 
     return provider;
   })(),
-  // Archil filesystem mount points vary by account/runtime and are not yet
-  // stable enough for generic provider-test-suite path assumptions.
-  // Keep command/runtime integration coverage on, and add dedicated filesystem
-  // integration once mount-path behavior is standardized.
-  supportsFilesystem: false,
+  supportsFilesystem: true,
   supportsGetUrl: false,
   skipIntegration:
     !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION || !process.env.ARCHIL_DISK_ID,

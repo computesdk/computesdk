@@ -9,6 +9,7 @@
  */
 
 import { defineProvider } from '@computesdk/provider';
+import { posix } from 'node:path';
 import type {
   CommandResult,
   SandboxInfo,
@@ -16,6 +17,8 @@ import type {
   FileEntry,
   RunCommandOptions,
 } from 'computesdk';
+
+const ARCHIL_MOUNT_ROOT = '/mnt/archil';
 
 // Per-region color overrides. Default is "green" for any region not listed here.
 const REGION_COLORS: Record<string, string> = {
@@ -167,6 +170,32 @@ function shellEscape(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function mapFilesystemPath(path: string): string {
+  const normalized = posix.normalize(path.startsWith('/') ? path : `/${path}`);
+
+  if (normalized === '/') {
+    return ARCHIL_MOUNT_ROOT;
+  }
+
+  if (
+    normalized === ARCHIL_MOUNT_ROOT ||
+    normalized.startsWith(`${ARCHIL_MOUNT_ROOT}/`)
+  ) {
+    return normalized;
+  }
+
+  return `${ARCHIL_MOUNT_ROOT}${normalized}`;
+}
+
+function withDiskWriteLock(command: string): string {
+  const mountRoot = shellEscape(ARCHIL_MOUNT_ROOT);
+  return [
+    `archil checkout --force --yes ${mountRoot}`,
+    `{ ${command}; status=$?; archil checkin ${mountRoot}; checkin_status=$?; ` +
+      `if [ $status -ne 0 ]; then exit $status; fi; exit $checkin_status; }`,
+  ].join(' && ');
+}
+
 function wrapCommand(command: string, options?: RunCommandOptions): string {
   let wrapped = command;
 
@@ -298,7 +327,8 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       filesystem: {
         readFile: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `cat ${shellEscape(path)}`);
+          const diskPath = mapFilesystemPath(path);
+          const result = await runCommand(sandbox, `cat ${shellEscape(diskPath)}`);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to read ${path}: ${result.stderr}`);
           }
@@ -306,15 +336,16 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         writeFile: async (sandbox, path, content, runCommand) => {
-          const parent = path.substring(0, path.lastIndexOf('/'));
-          if (parent) {
-            await runCommand(sandbox, `mkdir -p ${shellEscape(parent)}`);
-          }
+          const diskPath = mapFilesystemPath(path);
+          const parent = posix.dirname(diskPath);
           // base64-pipe to avoid heredoc/quoting hazards on arbitrary content.
           const encoded = Buffer.from(content, 'utf8').toString('base64');
           const result = await runCommand(
             sandbox,
-            `printf %s ${shellEscape(encoded)} | base64 -d > ${shellEscape(path)}`,
+            withDiskWriteLock(
+              `mkdir -p ${shellEscape(parent)} && ` +
+                `printf %s ${shellEscape(encoded)} | base64 -d > ${shellEscape(diskPath)}`,
+            ),
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to write ${path}: ${result.stderr}`);
@@ -322,17 +353,22 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         mkdir: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `mkdir -p ${shellEscape(path)}`);
+          const diskPath = mapFilesystemPath(path);
+          const result = await runCommand(
+            sandbox,
+            withDiskWriteLock(`mkdir -p ${shellEscape(diskPath)}`),
+          );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
           }
         },
 
         readdir: async (sandbox, path, runCommand) => {
+          const diskPath = mapFilesystemPath(path);
           // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
           const result = await runCommand(
             sandbox,
-            `find ${shellEscape(path)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
+            `find ${shellEscape(diskPath)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
@@ -353,12 +389,20 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         exists: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `test -e ${shellEscape(path)}`);
+          const diskPath = mapFilesystemPath(path);
+          const result = await runCommand(sandbox, `test -e ${shellEscape(diskPath)}`);
           return result.exitCode === 0;
         },
 
         remove: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `rm -rf ${shellEscape(path)}`);
+          const diskPath = mapFilesystemPath(path);
+          if (diskPath === ARCHIL_MOUNT_ROOT) {
+            throw new Error('Refusing to remove the Archil disk mount root.');
+          }
+          const result = await runCommand(
+            sandbox,
+            withDiskWriteLock(`rm -rf ${shellEscape(diskPath)}`),
+          );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
           }

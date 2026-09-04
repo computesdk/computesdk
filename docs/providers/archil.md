@@ -95,11 +95,12 @@ interface ArchilConfig {
 | `runCommand` | ✅         | Calls Archil's HTTP `exec` endpoint and waits for completion.      |
 | `getInfo`    | ✅         |                                                                    |
 | `getUrl`     | ❌         | Each exec runs in a fresh ephemeral container — no port to expose. |
-| `filesystem` | ✅         | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.).     |
+| `filesystem` | ✅         | Accepts normal paths and maps them into `/mnt/archil`; shared-mode checkout/checkin is automatic. |
 
 ### Limitations
 
 * Each `exec` call provisions a fresh container — no persistent state between calls beyond what is written to the disk.
 * Responses are truncated to \~5 MB by the Archil control plane.
 * `getUrl` is not supported — each exec runs in a fresh ephemeral container, so there is no long-lived process to expose a port on.
-* Filesystem operations are implemented as shell commands, so each call costs one HTTP round trip.
+* Filesystem operations accept normal absolute paths and map them into `/mnt/archil` internally.
+* Raw `runCommand` strings are not rewritten. Commands that access the disk directly must use `/mnt/archil` themselves.
