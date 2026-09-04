@@ -111,10 +111,13 @@ function clientFor(resolved: ResolvedConfig): Freestyle {
 }
 
 /**
- * The snapshot every sandbox boots from: the configured one if given, else a
- * Node + Python snapshot baked once and cached per (apiKey, baseUrl). The bake
- * is de-duplicated by an in-flight promise, and persisted across processes by
- * the snapshot's slug — a fresh process finds it and skips baking.
+ * Bake the Node + Python runtime snapshot, once per (apiKey, baseUrl).
+ *
+ * This is the fallback, not the common path: `create` names the snapshot by its
+ * slug and only lands here when the API says no such snapshot exists, which is
+ * once per account. The in-flight promise keeps a burst of sandboxes that all
+ * miss from baking a snapshot each, and the slug persists the result across
+ * processes — a later run resolves it on the create itself.
  */
 const runtimeSnapshotCache = new Map<string, Promise<string>>();
 function ensureSnapshot(resolved: ResolvedConfig): Promise<string> {
@@ -197,6 +200,23 @@ function isNotFound(error: unknown): boolean {
 }
 
 /**
+ * Whether a create failed because the snapshot it named is not there.
+ *
+ * A create that names a missing snapshot is a `400 BAD_REQUEST`, not a 404 —
+ * the API documents that status as "invalid slug, metadata, or a snapshot that
+ * does not exist" — so {@link isNotFound} does not cover it. The slug has to
+ * appear in the message too: a 400 is also how a malformed request is refused,
+ * and baking a runtime image in response to that would be nonsense.
+ */
+function isMissingSnapshot(error: unknown, slug: string): boolean {
+  if (isNotFound(error)) return true;
+  if (!(error instanceof FreestyleApiError)) return false;
+  const status = (error as { status?: number }).status;
+  if (status !== 400 && error.code !== 'BAD_REQUEST') return false;
+  return error.message.includes(slug) && /does not exist/i.test(error.message);
+}
+
+/**
  * Commands run as root. Freestyle's base image logs in as an unprivileged
  * `ubuntu` user with no `HOME`; asking for root gives a normal sandbox — a set
  * `HOME`, working `apt`/`npm`/`pip`, and the write access sandboxed code expects.
@@ -255,21 +275,20 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
           return { sandbox: client.vms.ref(options.sandboxId), sandboxId: options.sandboxId };
         }
 
-        const snapshotId =
-          options?.snapshotId || options?.templateId || (await ensureSnapshot(resolved));
+        // `snapshotId` accepts an id, your own slug, or a public `{owner}/{slug}`,
+        // so the runtime snapshot needs no lookup: name it and let the create
+        // resolve it. Only if it is genuinely absent do we pay for a bake, and
+        // then only once — `ensureSnapshot` de-duplicates concurrent callers.
+        const requested = options?.snapshotId || options?.templateId || resolved.snapshotId;
+        const snapshotId = requested ?? RUNTIME_SNAPSHOT_SLUG;
         try {
-          const { vm, vmId } = await client.vms.create({
-            snapshotId,
-            autoDeleteSeconds: config.persistent ? AUTO_DELETE_NEVER : AUTO_DELETE_EPHEMERAL,
-            automaticRestart: false,
-            idleTimeoutSeconds: config.idleTimeoutSeconds ?? DEFAULT_IDLE_TIMEOUT_SECS,
-            // Marker last, so a caller's own metadata can never overwrite it and
-            // hide the sandbox from `list`.
-            metadata: { ...(options?.metadata ?? {}), purpose: SANDBOX_METADATA_MARKER },
-            firewall: config.firewall ?? ALLOW_ALL_OUTBOUND,
-          });
-          return { sandbox: vm, sandboxId: vmId };
+          return await boot(snapshotId);
         } catch (error) {
+          // A caller who named a snapshot gets the error; only our own slug
+          // fallback means "not baked yet".
+          if (!requested && isMissingSnapshot(error, RUNTIME_SNAPSHOT_SLUG)) {
+            return await boot(await ensureSnapshot(resolved));
+          }
           if (
             error instanceof FreestyleApiError &&
             (error.code === 'UNAUTHORIZED' || (error as { status?: number }).status === 401)
@@ -281,6 +300,20 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
           throw new Error(
             `Failed to create Freestyle sandbox: ${error instanceof Error ? error.message : String(error)}`,
           );
+        }
+
+        async function boot(snapshot: string) {
+          const { vm, vmId } = await client.vms.create({
+            snapshotId: snapshot,
+            autoDeleteSeconds: config.persistent ? AUTO_DELETE_NEVER : AUTO_DELETE_EPHEMERAL,
+            automaticRestart: false,
+            idleTimeoutSeconds: config.idleTimeoutSeconds ?? DEFAULT_IDLE_TIMEOUT_SECS,
+            // Marker last, so a caller's own metadata can never overwrite it and
+            // hide the sandbox from `list`.
+            metadata: { ...(options?.metadata ?? {}), purpose: SANDBOX_METADATA_MARKER },
+            firewall: config.firewall ?? ALLOW_ALL_OUTBOUND,
+          });
+          return { sandbox: vm, sandboxId: vmId };
         }
       },
 
