@@ -120,6 +120,38 @@ export function resetFastTokenCache(): void {
   priming.clear()
 }
 
+/**
+ * The readable half of a refusal.
+ *
+ * The door answers a refusal with `{"error": {"code", "message"}}`, and
+ * the `message` is written to be read - it names the limit that refused,
+ * or the alternative that should have been passed instead. Stringifying
+ * the object loses exactly that, so a 422 that explained itself arrives as
+ * `[object Object]` and the caller has to reconstruct from the outside
+ * what the door already said.
+ *
+ * The string form is still accepted because older deployments answer that
+ * way, and an unrecognised shape falls back to its JSON rather than to
+ * `[object Object]`: a body we cannot read is still worth showing.
+ */
+function refusalDetail(parsed: unknown, text: string): string {
+  const fallback = () => text.slice(0, 400)
+  if (!parsed || typeof parsed !== 'object' || !('error' in parsed)) return fallback()
+  const error = (parsed as { error: unknown }).error
+  if (typeof error === 'string') return error || fallback()
+  if (!error || typeof error !== 'object') return fallback()
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  const hasMessage = typeof message === 'string' && message !== ''
+  const hasCode = typeof code === 'string' && code !== ''
+  if (hasMessage) return hasCode ? `${code}: ${message}` : (message as string)
+  if (hasCode) return code as string
+  try {
+    return JSON.stringify(error)?.slice(0, 400) ?? fallback()
+  } catch {
+    return fallback()
+  }
+}
+
 export class GmnError extends Error {
   readonly status: number
   readonly body: unknown
@@ -339,10 +371,7 @@ export class GmnClient {
       }
     }
     if (!response.ok) {
-      const detail =
-        parsed && typeof parsed === 'object' && 'error' in parsed
-          ? String((parsed as { error: unknown }).error)
-          : text.slice(0, 400)
+      const detail = refusalDetail(parsed, text)
       throw new GmnError(
         `givemeanode ${method} ${path} failed (${response.status}): ${detail}`,
         response.status,

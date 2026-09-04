@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/givemeanode",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "givemeanode for ComputeSDK - sandboxes served from a per-region warm pool, with a signed credential that keeps the database off the create path",
   "author": "givemeanode",
   "license": "MIT",
