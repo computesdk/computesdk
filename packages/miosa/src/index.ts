@@ -114,16 +114,14 @@ interface MiosaHttpResponse {
   text(): Promise<string>;
 }
 
-// A bounded HTTP/2 pool prevents 100 independent TLS handshakes without
-// serializing the complete burst behind one connection. Production sweeps
-// found 16 sessions to be the best balance for the public endpoint. Keep the
-// override private to the transport so operators can reproduce runner-specific
-// measurements without changing the ComputeSDK create contract.
+// One HTTP/2 session multiplexes the complete ComputeSDK burst without making
+// the first timed request race a pool of independent TLS handshakes. Keep the
+// override private so operators can test a larger pool deliberately.
 const HTTP2_SESSION_COUNT = (() => {
   const configured = Number.parseInt(
     (typeof process !== "undefined"
       ? process.env.MIOSA_HTTP2_SESSION_COUNT
-      : undefined) ?? "16",
+      : undefined) ?? "1",
     10,
   );
 
@@ -258,6 +256,41 @@ function preconnectMiosa(config: MiosaConfig): void {
 
   if (canUseNodeHttp2(url)) {
     void ensureHttp2Sessions(url.origin).catch(() => undefined);
+  }
+}
+
+/**
+ * Resolve only after the MIOSA transport is ready for a timed create request.
+ *
+ * Benchmark harnesses should await this during provider setup, before starting
+ * their TTI clock. This opens no sandbox and performs no authenticated API
+ * request. It only completes the client-side TLS and HTTP/2 handshake.
+ */
+export async function readyMiosaConnections(
+  config: MiosaConfig,
+): Promise<void> {
+  const auth = resolveAuth(config);
+  const url = new URL(auth.baseUrl);
+
+  if (!canUseNodeHttp2(url)) return;
+
+  const pool = await ensureHttp2Sessions(url.origin);
+  if (pool.ready.size > 0) return;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await Promise.race([
+      pool.firstReady,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("MIOSA HTTP/2 transport readiness timed out")),
+          5_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 

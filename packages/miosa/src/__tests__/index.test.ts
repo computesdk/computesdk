@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { closeMiosaConnections, miosa, DEFAULT_BASE_URL } from "../index";
+import {
+  closeMiosaConnections,
+  miosa,
+  readyMiosaConnections,
+  DEFAULT_BASE_URL,
+} from "../index";
 import type { MiosaSandboxRecord } from "../index";
 
 const API_KEY = "msk_test_0123456789abcdef";
@@ -58,6 +63,25 @@ describe("miosa provider", () => {
   });
 
   describe("configuration", () => {
+    it("validates credentials before preparing the transport", async () => {
+      await expect(readyMiosaConnections({})).rejects.toThrow(
+        /Missing MIOSA API key/,
+      );
+
+      await expect(
+        readyMiosaConnections({ apiKey: "not-a-miosa-key" }),
+      ).rejects.toThrow(/start with 'msk_'/);
+    });
+
+    it("treats non-HTTP2 transports as ready after validation", async () => {
+      await expect(
+        readyMiosaConnections({
+          apiKey: API_KEY,
+          baseUrl: "http://localhost:4000/api/v1",
+        }),
+      ).resolves.toBeUndefined();
+    });
+
     it("should reject a missing API key when creating", async () => {
       const provider = miosa({});
       delete process.env.MIOSA_API_KEY;
