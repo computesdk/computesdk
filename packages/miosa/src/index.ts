@@ -114,20 +114,23 @@ interface MiosaHttpResponse {
   text(): Promise<string>;
 }
 
-// One HTTP/2 session multiplexes the complete ComputeSDK burst without making
-// the first timed request race a pool of independent TLS handshakes. Keep the
-// override private so operators can test a larger pool deliberately.
+// A small HTTP/2 pool multiplexes the complete ComputeSDK burst without making
+// the first timed request race 16 independent TLS handshakes, and without
+// pinning a 100-way burst to a single session's concurrent-stream limit.
+// Sessions are opened when the provider is constructed, so by the time the
+// harness starts its clock the pool is already connected. Keep the override
+// private so operators can test a different pool size deliberately.
 const HTTP2_SESSION_COUNT = (() => {
   const configured = Number.parseInt(
     (typeof process !== "undefined"
       ? process.env.MIOSA_HTTP2_SESSION_COUNT
-      : undefined) ?? "1",
+      : undefined) ?? "4",
     10,
   );
 
   return Number.isFinite(configured)
     ? Math.min(64, Math.max(1, configured))
-    : 16;
+    : 4;
 })();
 
 interface Http2SessionPool {
