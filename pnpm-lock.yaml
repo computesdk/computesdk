@@ -1020,8 +1020,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       freestyle:
-        specifier: ^0.2.7
-        version: 0.2.7(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.2.11
+        version: 0.2.11(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -6838,8 +6838,8 @@ packages:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
 
-  freestyle@0.2.7:
-    resolution: {integrity: sha512-fTISd4+LyrGB1so1HNhtbfUSaqbMue95lu9Pov7xap3WPNC+NLsXATwpsYuy7dJa7pcj/qIum/aXGgUSV+/CPg==}
+  freestyle@0.2.11:
+    resolution: {integrity: sha512-nZuWvjMH/Yjnf//DYl6Do0rNNr+wtNPT/c8AvZNzRaTZI4cifK05JU3g22onncu5Fwnr2ytV+LtwpC/vFlifMw==}
     hasBin: true
 
   fresh@2.0.0:
@@ -14608,11 +14608,13 @@ snapshots:
 
   forwarded@0.2.0: {}
 
-  freestyle@0.2.7(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  freestyle@0.2.11(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       dotenv: 17.4.2
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yargs: 17.7.2
+    optionalDependencies:
+      undici: 8.3.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate

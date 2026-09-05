@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "freestyle": "^0.2.7",
+    "freestyle": "^0.2.11",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
