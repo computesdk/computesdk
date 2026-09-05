@@ -164,11 +164,17 @@ describe('archil filesystem mapping', () => {
     const mutationCommands = commands(fetchMock);
     expect(mutationCommands).toHaveLength(3);
     for (const command of mutationCommands) {
-      expect(command).toContain("archil checkout --force --yes '/mnt/archil'");
-      expect(command).toContain("archil checkin '/mnt/archil'");
+      expect(command).toContain('archil checkout --force --yes');
+      expect(command).toContain('archil checkin');
     }
     expect(mutationCommands[0]).toContain(
       "mkdir -p '/mnt/archil/tmp/data'",
+    );
+    expect(mutationCommands[0]).toContain(
+      "archil checkout --force --yes '/mnt/archil/tmp'",
+    );
+    expect(mutationCommands[0]).toContain(
+      "archil checkin '/mnt/archil/tmp'",
     );
     expect(mutationCommands[1]).toContain(
       "printf %s 'aGVsbG8=' | base64 -d > '/mnt/archil/tmp/data/hello.txt.computesdk-write-",
@@ -179,12 +185,21 @@ describe('archil filesystem mapping', () => {
     expect(mutationCommands[1]).toContain(
       "if [ -d '/mnt/archil/tmp/data/hello.txt' ]; then",
     );
+    expect(mutationCommands[1]).toContain(
+      "archil checkout --force --yes '/mnt/archil/tmp/data'",
+    );
+    expect(mutationCommands[1]).toContain(
+      "archil checkin '/mnt/archil/tmp/data'",
+    );
     expect(mutationCommands[2]).toContain(
       "rm -rf '/mnt/archil/tmp/data/hello.txt'",
     );
+    expect(mutationCommands[2]).toContain(
+      "archil checkout --force --yes '/mnt/archil/tmp/data'",
+    );
   });
 
-  it('chunks large writes within Archil exec limits', async () => {
+  it('writes compressible large files in a single gzip command within Archil exec limits', async () => {
     const fetchMock = vi.fn(async () => execResponse());
     global.fetch = fetchMock as typeof fetch;
 
@@ -192,6 +207,32 @@ describe('archil filesystem mapping', () => {
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await sandbox.filesystem.writeFile('/tmp/large.txt', 'x'.repeat(100_000));
+
+    const writeCommands = commands(fetchMock);
+    expect(writeCommands).toHaveLength(1);
+    expect(Buffer.byteLength(writeCommands[0], 'utf8')).toBeLessThanOrEqual(
+      102_400,
+    );
+    expect(writeCommands[0]).toContain('base64 -d | gzip -d');
+    expect(writeCommands[0]).toContain(
+      "mv '/mnt/archil/tmp/large.txt.computesdk-write-",
+    );
+    expect(writeCommands[0]).toContain(" '/mnt/archil/tmp/large.txt'");
+  });
+
+  it('falls back to base64 chunks for incompressible data within Archil exec limits', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    // Incompressible random ASCII avoids the gzip short-circuit.
+    const randomContent = Array.from({ length: 200_000 }, () =>
+      String.fromCharCode(33 + Math.floor(Math.random() * 94)),
+    ).join('');
+
+    await sandbox.filesystem.writeFile('/tmp/large.bin', randomContent);
 
     const writeCommands = commands(fetchMock);
     const chunkCommands = writeCommands.filter((command) =>
@@ -204,11 +245,9 @@ describe('archil filesystem mapping', () => {
       ),
     ).toBe(true);
     expect(writeCommands.at(-1)).toContain(
-      "mv '/mnt/archil/tmp/large.txt.computesdk-write-",
+      "mv '/mnt/archil/tmp/large.bin.computesdk-write-",
     );
-    expect(writeCommands.at(-1)).toContain(
-      " '/mnt/archil/tmp/large.txt'",
-    );
+    expect(writeCommands.at(-1)).toContain(" '/mnt/archil/tmp/large.bin'");
   });
 
   it('reads files larger than the Archil response limit in chunks', async () => {
@@ -334,8 +373,13 @@ describe('archil filesystem mapping', () => {
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
+    // Incompressible random ASCII forces uncompressed base64 chunking.
+    const randomContent = Array.from({ length: 200_000 }, () =>
+      String.fromCharCode(33 + Math.floor(Math.random() * 94)),
+    ).join('');
+
     await expect(
-      sandbox.filesystem.writeFile('/tmp/partial.txt', 'x'.repeat(200_000)),
+      sandbox.filesystem.writeFile('/tmp/partial.txt', randomContent),
     ).rejects.toThrow('Failed to write /tmp/partial.txt: chunk failed');
 
     const writeCommands = commands(fetchMock);
@@ -375,13 +419,18 @@ describe('archil filesystem mapping', () => {
       command.includes('base64 -d'),
     );
 
-    // A 100 KiB raw payload base64-encodes to ~136 KiB. With the temp-path
-    // staging from the main implementation that is included in the chunk-size
-    // calculation, the exact number of chunks can vary; the key invariant is that
-    // every write begins with a truncate ('>') and completes all of its append
-    // ('>>') chunks before the next write's truncate begins.
+    // Composable data is gzip'd in a single command, so the key invariant is
+    // that each write is a discrete command and the two writes do not interleave.
+    expect(mutationCommands.length).toBe(2);
+    for (const command of mutationCommands) {
+      expect(command).toContain('base64 -d | gzip -d');
+      expect(command).toContain("'/mnt/archil/tmp/collide.txt'");
+    }
+
+    // Extract the redirect ('>' or '>>') used for the temp file so the test
+    // still verifies per-write isolation if chunking is ever reintroduced.
     const redirects = mutationCommands.map((command) => {
-      const match = command.match(/base64 -d (>>?) /);
+      const match = command.match(/(>>?) '\/mnt\/archil\/tmp\/collide\.txt\.computesdk-write-/);
       return match ? (match[1] === '>' ? 'truncate' : 'append') : 'unknown';
     });
 
