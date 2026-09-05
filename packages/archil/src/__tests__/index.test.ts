@@ -55,6 +55,30 @@ describe('archil filesystem writeFile chunking', () => {
     }
   });
 
+  it('serializes concurrent disk commands so they do not race on shared state', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchMock = vi.fn(async (_input, init) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return successExecResponse();
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    // Concurrent runCommand calls to the same disk should be queued.
+    await Promise.all([
+      sandbox.runCommand('mkdir -p /tmp/bench/dir'),
+      sandbox.runCommand('touch /tmp/bench/dir/file.txt'),
+    ]);
+
+    expect(maxInFlight).toBe(1);
+  });
+
   it('creates or truncates the file for empty content', async () => {
     const fetchMock = vi.fn(async (_input, init) => successExecResponse());
     global.fetch = fetchMock as typeof fetch;

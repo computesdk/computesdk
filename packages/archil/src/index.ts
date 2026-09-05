@@ -195,13 +195,25 @@ function wrapCommand(command: string, options?: RunCommandOptions): string {
   return wrapped;
 }
 
+// Archil disks are single-writer / exec-only. Concurrent POSTs to /exec on the
+// same disk race against the filesystem state (e.g. a mkdir from one command is
+// not visible to the next), so serialize all commands per disk id.
+const execQueues = new Map<string, Promise<unknown>>();
+
 async function execOnDisk(sandbox: ArchilSandbox, command: string): Promise<ExecResponse> {
-  return callApi<ExecResponse>(
-    sandbox.resolved,
-    'POST',
-    `/api/disks/${encodeURIComponent(sandbox.disk.id)}/exec`,
-    { command },
-  );
+  const diskId = sandbox.disk.id;
+  const chain = execQueues.get(diskId) ?? Promise.resolve();
+  const run = (): Promise<ExecResponse> =>
+    callApi<ExecResponse>(
+      sandbox.resolved,
+      'POST',
+      `/api/disks/${encodeURIComponent(diskId)}/exec`,
+      { command },
+    );
+  const next = chain.then(run, run);
+  // Keep the queue moving even if this command fails.
+  execQueues.set(diskId, next.catch(() => undefined));
+  return next;
 }
 
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
