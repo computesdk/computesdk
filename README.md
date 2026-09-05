@@ -78,6 +78,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 |----------|----------------------|-----------|
 | **Archil** | `ARCHIL_API_KEY` | Disk-attached command execution |
 | **Arker** | `ARKER_API_KEY` | Sandboxed VMs with persistent filesystems, forked from golden images |
+| **ASCII Box** | `ASCIIBOX_API_KEY` or `BOX_API_KEY` | Cloud sandboxes with command execution, filesystem access, and port forwarding |
 | **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
 | **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
 | **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
@@ -290,6 +291,7 @@ Install the provider packages you need and pass their instances into `compute.se
 
 ```bash
 npm install @computesdk/archil           # Archil provider
+npm install @computesdk/asciibox         # ASCII Box provider
 npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
 npm install @computesdk/cloud-run        # Google Cloud Run provider
