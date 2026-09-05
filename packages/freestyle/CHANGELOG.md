@@ -1,5 +1,11 @@
 # @computesdk/freestyle
 
+## 0.2.1
+
+### Patch Changes
+
+- 01733f6: Update the Freestyle SDK dependency to ^0.2.11.
+
 ## 0.2.0
 
 ### Minor Changes
