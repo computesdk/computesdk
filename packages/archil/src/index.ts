@@ -8,6 +8,7 @@
  * existing disk id.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
@@ -197,23 +198,45 @@ function wrapCommand(command: string, options?: RunCommandOptions): string {
 
 // Archil disks are single-writer / exec-only. Concurrent POSTs to /exec on the
 // same disk race against the filesystem state (e.g. a mkdir from one command is
-// not visible to the next), so serialize all commands per disk id.
-const execQueues = new Map<string, Promise<unknown>>();
+// not visible to the next). We therefore run every command (and every multi-
+// command filesystem operation) under a per-disk lock.
+const diskQueues = new Map<string, Promise<unknown>>();
+const diskQueueStore = new AsyncLocalStorage<{ diskId: string }>();
+
+function withDiskLock<T>(sandbox: ArchilSandbox, fn: () => Promise<T>): Promise<T> {
+  const diskId = sandbox.disk.id;
+  const prev = diskQueues.get(diskId) ?? Promise.resolve();
+  const run = async (): Promise<T> => diskQueueStore.run({ diskId }, fn);
+  const next = prev.then(run, run);
+  const settled = next.catch(() => undefined);
+  settled.then(() => {
+    if (diskQueues.get(diskId) === settled) {
+      diskQueues.delete(diskId);
+    }
+  });
+  diskQueues.set(diskId, settled);
+  return next;
+}
 
 async function execOnDisk(sandbox: ArchilSandbox, command: string): Promise<ExecResponse> {
   const diskId = sandbox.disk.id;
-  const chain = execQueues.get(diskId) ?? Promise.resolve();
-  const run = (): Promise<ExecResponse> =>
-    callApi<ExecResponse>(
+  const ctx = diskQueueStore.getStore();
+  if (ctx?.diskId === diskId) {
+    return callApi<ExecResponse>(
       sandbox.resolved,
       'POST',
       `/api/disks/${encodeURIComponent(diskId)}/exec`,
       { command },
     );
-  const next = chain.then(run, run);
-  // Keep the queue moving even if this command fails.
-  execQueues.set(diskId, next.catch(() => undefined));
-  return next;
+  }
+  return withDiskLock(sandbox, () =>
+    callApi<ExecResponse>(
+      sandbox.resolved,
+      'POST',
+      `/api/disks/${encodeURIComponent(diskId)}/exec`,
+      { command },
+    ),
+  );
 }
 
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
@@ -315,84 +338,96 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       filesystem: {
         readFile: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `cat ${shellEscape(path)}`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to read ${path}: ${result.stderr}`);
-          }
-          return result.stdout;
+          return withDiskLock(sandbox, async () => {
+            const result = await runCommand(sandbox, `cat ${shellEscape(path)}`);
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to read ${path}: ${result.stderr}`);
+            }
+            return result.stdout;
+          });
         },
 
         writeFile: async (sandbox, path, content, runCommand) => {
-          const parent = path.substring(0, path.lastIndexOf('/'));
-          if (parent) {
-            await runCommand(sandbox, `mkdir -p ${shellEscape(parent)}`);
-          }
-          // base64-pipe to avoid heredoc/quoting hazards on arbitrary content.
-          // The full base64 string can exceed Archil's 102,400-byte command limit,
-          // so split it into fixed-size chunks and write them sequentially.
-          const encoded = Buffer.from(content, 'utf8').toString('base64');
-          if (encoded.length === 0) {
-            // Empty content: create or truncate the file without piping.
-            const result = await runCommand(sandbox, `> ${shellEscape(path)}`);
-            if (result.exitCode !== 0) {
-              throw new Error(`Failed to write ${path}: ${result.stderr}`);
+          return withDiskLock(sandbox, async () => {
+            const parent = path.substring(0, path.lastIndexOf('/'));
+            if (parent) {
+              await runCommand(sandbox, `mkdir -p ${shellEscape(parent)}`);
             }
-            return;
-          }
-          for (let i = 0; i < encoded.length; i += MAX_BASE64_CHUNK_SIZE) {
-            const chunk = encoded.slice(i, i + MAX_BASE64_CHUNK_SIZE);
-            const redirect = i === 0 ? '>' : '>>';
-            const result = await runCommand(
-              sandbox,
-              `printf %s ${shellEscape(chunk)} | base64 -d ${redirect} ${shellEscape(path)}`,
-            );
-            if (result.exitCode !== 0) {
-              throw new Error(`Failed to write ${path}: ${result.stderr}`);
+            // base64-pipe to avoid heredoc/quoting hazards on arbitrary content.
+            // The full base64 string can exceed Archil's 102,400-byte command limit,
+            // so split it into fixed-size chunks and write them sequentially.
+            const encoded = Buffer.from(content, 'utf8').toString('base64');
+            if (encoded.length === 0) {
+              // Empty content: create or truncate the file without piping.
+              const result = await runCommand(sandbox, `> ${shellEscape(path)}`);
+              if (result.exitCode !== 0) {
+                throw new Error(`Failed to write ${path}: ${result.stderr}`);
+              }
+              return;
             }
-          }
+            for (let i = 0; i < encoded.length; i += MAX_BASE64_CHUNK_SIZE) {
+              const chunk = encoded.slice(i, i + MAX_BASE64_CHUNK_SIZE);
+              const redirect = i === 0 ? '>' : '>>';
+              const result = await runCommand(
+                sandbox,
+                `printf %s ${shellEscape(chunk)} | base64 -d ${redirect} ${shellEscape(path)}`,
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(`Failed to write ${path}: ${result.stderr}`);
+              }
+            }
+          });
         },
 
         mkdir: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `mkdir -p ${shellEscape(path)}`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
-          }
+          return withDiskLock(sandbox, async () => {
+            const result = await runCommand(sandbox, `mkdir -p ${shellEscape(path)}`);
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
+            }
+          });
         },
 
         readdir: async (sandbox, path, runCommand) => {
-          // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
-          const result = await runCommand(
-            sandbox,
-            `find ${shellEscape(path)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
-          );
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
-          }
-          const entries: FileEntry[] = [];
-          for (const line of result.stdout.split('\n')) {
-            if (!line) continue;
-            const [typeChar, sizeStr, mtimeStr, ...nameParts] = line.split('\t');
-            const name = nameParts.join('\t');
-            entries.push({
-              name,
-              type: typeChar === 'd' ? 'directory' : 'file',
-              size: parseInt(sizeStr, 10) || 0,
-              modified: new Date(parseFloat(mtimeStr) * 1000),
-            });
-          }
-          return entries;
+          return withDiskLock(sandbox, async () => {
+            // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
+            const result = await runCommand(
+              sandbox,
+              `find ${shellEscape(path)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
+            }
+            const entries: FileEntry[] = [];
+            for (const line of result.stdout.split('\n')) {
+              if (!line) continue;
+              const [typeChar, sizeStr, mtimeStr, ...nameParts] = line.split('\t');
+              const name = nameParts.join('\t');
+              entries.push({
+                name,
+                type: typeChar === 'd' ? 'directory' : 'file',
+                size: parseInt(sizeStr, 10) || 0,
+                modified: new Date(parseFloat(mtimeStr) * 1000),
+              });
+            }
+            return entries;
+          });
         },
 
         exists: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `test -e ${shellEscape(path)}`);
-          return result.exitCode === 0;
+          return withDiskLock(sandbox, async () => {
+            const result = await runCommand(sandbox, `test -e ${shellEscape(path)}`);
+            return result.exitCode === 0;
+          });
         },
 
         remove: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `rm -rf ${shellEscape(path)}`);
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to remove ${path}: ${result.stderr}`);
-          }
+          return withDiskLock(sandbox, async () => {
+            const result = await runCommand(sandbox, `rm -rf ${shellEscape(path)}`);
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to remove ${path}: ${result.stderr}`);
+            }
+          });
         },
       },
 

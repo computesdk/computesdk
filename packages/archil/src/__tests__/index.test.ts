@@ -79,6 +79,65 @@ describe('archil filesystem writeFile chunking', () => {
     expect(maxInFlight).toBe(1);
   });
 
+  it('does not interleave chunks from concurrent large writes', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchMock = vi.fn(async (_input, init) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      inFlight -= 1;
+      return successExecResponse();
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    // Two concurrent writes to the same path must be atomic at the operation
+    // level; chunks from one write must not interleave with the other.
+    await Promise.all([
+      sandbox.filesystem.writeFile('/tmp/bench/collide.txt', 'a'.repeat(100 * 1024)),
+      sandbox.filesystem.writeFile('/tmp/bench/collide.txt', 'b'.repeat(100 * 1024)),
+    ]);
+
+    expect(maxInFlight).toBe(1);
+
+    const commandBodies = (fetchMock.mock.calls as any[][])
+      .filter((call) => {
+        const init = call[1] as RequestInit | undefined;
+        return init?.method === 'POST' && String(call[0]).includes('/exec');
+      })
+      .map(([, init]) => {
+        const body = typeof init?.body === 'string' ? init.body : '';
+        return JSON.parse(body).command as string;
+      });
+
+    const writes = commandBodies.filter((cmd) => cmd.includes('base64 -d'));
+    const redirects = writes.map((cmd) => {
+      const match = cmd.match(/base64 -d (>>?) /);
+      return match ? (match[1] === '>' ? 'truncate' : 'append') : 'unknown';
+    });
+
+    // A 100 KiB raw payload base64-encodes to ~136 KB, so it is written as
+    // one truncate (>) and two appends (>>). With two concurrent writes to
+    // the same path, the command sequence must be [T, A, A, T, A, A]; any
+    // interleaving of chunks breaks that grouping.
+    const groups: string[][] = [];
+    for (const redirect of redirects) {
+      if (redirect === 'truncate') {
+        groups.push([redirect]);
+      } else {
+        expect(groups.length).toBeGreaterThan(0);
+        groups[groups.length - 1].push(redirect);
+      }
+    }
+    expect(groups.length).toBe(2);
+    for (const group of groups) {
+      expect(group).toEqual(['truncate', 'append', 'append']);
+    }
+  });
+
   it('creates or truncates the file for empty content', async () => {
     const fetchMock = vi.fn(async (_input, init) => successExecResponse());
     global.fetch = fetchMock as typeof fetch;
