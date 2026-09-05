@@ -355,6 +355,52 @@ describe('archil filesystem mapping', () => {
       /refusing to remove the Archil disk mount root/i,
     );
   });
+
+  it('serializes concurrent disk writes so chunks do not interleave', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      return execResponse();
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await Promise.all([
+      sandbox.filesystem.writeFile('/tmp/collide.txt', 'a'.repeat(100_000)),
+      sandbox.filesystem.writeFile('/tmp/collide.txt', 'b'.repeat(100_000)),
+    ]);
+
+    const mutationCommands = commands(fetchMock).filter((command) =>
+      command.includes('base64 -d'),
+    );
+
+    // A 100 KiB raw payload base64-encodes to ~136 KiB. With the temp-path
+    // staging from the main implementation that is included in the chunk-size
+    // calculation, the exact number of chunks can vary; the key invariant is that
+    // every write begins with a truncate ('>') and completes all of its append
+    // ('>>') chunks before the next write's truncate begins.
+    const redirects = mutationCommands.map((command) => {
+      const match = command.match(/base64 -d (>>?) /);
+      return match ? (match[1] === '>' ? 'truncate' : 'append') : 'unknown';
+    });
+
+    const groups: string[][] = [];
+    for (const redirect of redirects) {
+      if (redirect === 'truncate') {
+        groups.push([redirect]);
+      } else {
+        expect(groups.length).toBeGreaterThan(0);
+        groups[groups.length - 1].push(redirect);
+      }
+    }
+
+    expect(groups.length).toBe(2);
+    for (const group of groups) {
+      expect(group[0]).toBe('truncate');
+      expect(group.slice(1).every((r) => r === 'append')).toBe(true);
+    }
+  });
 });
 
 runProviderTestSuite({

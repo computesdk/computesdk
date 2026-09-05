@@ -8,6 +8,7 @@
  * existing disk id.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { defineProvider } from '@computesdk/provider';
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
@@ -296,12 +297,46 @@ function wrapCommand(command: string, options?: RunCommandOptions): string {
   return wrapped;
 }
 
+// Archil disks are single-writer / exec-only. Concurrent POSTs to /exec on the
+// same disk race against the filesystem state (e.g. a mkdir from one command is
+// not visible to the next). We therefore run every command (and every multi-
+// command filesystem operation) under a per-disk lock.
+const diskQueues = new Map<string, Promise<unknown>>();
+const diskQueueStore = new AsyncLocalStorage<{ diskId: string }>();
+
+function withDiskLock<T>(sandbox: ArchilSandbox, fn: () => Promise<T>): Promise<T> {
+  const diskId = sandbox.disk.id;
+  const prev = diskQueues.get(diskId) ?? Promise.resolve();
+  const run = async (): Promise<T> => diskQueueStore.run({ diskId }, fn);
+  const next = prev.then(run, run);
+  const settled = next.catch(() => undefined);
+  settled.then(() => {
+    if (diskQueues.get(diskId) === settled) {
+      diskQueues.delete(diskId);
+    }
+  });
+  diskQueues.set(diskId, settled);
+  return next;
+}
+
 async function execOnDisk(sandbox: ArchilSandbox, command: string): Promise<ExecResponse> {
-  return callApi<ExecResponse>(
-    sandbox.resolved,
-    'POST',
-    `/api/disks/${encodeURIComponent(sandbox.disk.id)}/exec`,
-    { command },
+  const diskId = sandbox.disk.id;
+  const ctx = diskQueueStore.getStore();
+  if (ctx?.diskId === diskId) {
+    return callApi<ExecResponse>(
+      sandbox.resolved,
+      'POST',
+      `/api/disks/${encodeURIComponent(diskId)}/exec`,
+      { command },
+    );
+  }
+  return withDiskLock(sandbox, () =>
+    callApi<ExecResponse>(
+      sandbox.resolved,
+      'POST',
+      `/api/disks/${encodeURIComponent(diskId)}/exec`,
+      { command },
+    ),
   );
 }
 
@@ -404,192 +439,204 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       filesystem: {
         readFile: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
-          const sizeResult = await runCommand(
-            sandbox,
-            `wc -c < ${shellEscape(diskPath)}`,
-          );
-          if (sizeResult.exitCode !== 0) {
-            throw new Error(`Failed to read ${path}: ${sizeResult.stderr}`);
-          }
-
-          const sizeText = sizeResult.stdout.trim();
-          if (!/^\d+$/.test(sizeText)) {
-            throw new Error(
-              `Failed to read ${path}: Archil returned an invalid file size.`,
-            );
-          }
-
-          const size = Number(sizeText);
-          if (!Number.isSafeInteger(size)) {
-            throw new Error(
-              `Failed to read ${path}: file size exceeds JavaScript's safe integer range.`,
-            );
-          }
-          if (size === 0) return '';
-
-          const chunks: Buffer[] = [];
-          for (
-            let offset = 0;
-            offset < size;
-            offset += ARCHIL_MAX_READ_CHUNK_BYTES
-          ) {
-            const expectedBytes = Math.min(
-              ARCHIL_MAX_READ_CHUNK_BYTES,
-              size - offset,
-            );
-            const result = await runCommand(
+          return withDiskLock(sandbox, async () => {
+            const diskPath = mapFilesystemPath(path);
+            const sizeResult = await runCommand(
               sandbox,
-              `dd if=${shellEscape(diskPath)} bs=1 skip=${offset} count=${expectedBytes} 2>/dev/null | base64`,
+              `wc -c < ${shellEscape(diskPath)}`,
             );
-            if (result.exitCode !== 0) {
-              throw new Error(`Failed to read ${path}: ${result.stderr}`);
+            if (sizeResult.exitCode !== 0) {
+              throw new Error(`Failed to read ${path}: ${sizeResult.stderr}`);
             }
 
-            const encoded = result.stdout.replace(/\s/g, '');
-            if (
-              encoded.length === 0 ||
-              encoded.length % 4 !== 0 ||
-              !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)
+            const sizeText = sizeResult.stdout.trim();
+            if (!/^\d+$/.test(sizeText)) {
+              throw new Error(
+                `Failed to read ${path}: Archil returned an invalid file size.`,
+              );
+            }
+
+            const size = Number(sizeText);
+            if (!Number.isSafeInteger(size)) {
+              throw new Error(
+                `Failed to read ${path}: file size exceeds JavaScript's safe integer range.`,
+              );
+            }
+            if (size === 0) return '';
+
+            const chunks: Buffer[] = [];
+            for (
+              let offset = 0;
+              offset < size;
+              offset += ARCHIL_MAX_READ_CHUNK_BYTES
             ) {
-              throw new Error(
-                `Failed to read ${path}: Archil returned an incomplete file chunk at byte ${offset}.`,
+              const expectedBytes = Math.min(
+                ARCHIL_MAX_READ_CHUNK_BYTES,
+                size - offset,
               );
+              const result = await runCommand(
+                sandbox,
+                `dd if=${shellEscape(diskPath)} bs=1 skip=${offset} count=${expectedBytes} 2>/dev/null | base64`,
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(`Failed to read ${path}: ${result.stderr}`);
+              }
+
+              const encoded = result.stdout.replace(/\s/g, '');
+              if (
+                encoded.length === 0 ||
+                encoded.length % 4 !== 0 ||
+                !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)
+              ) {
+                throw new Error(
+                  `Failed to read ${path}: Archil returned an incomplete file chunk at byte ${offset}.`,
+                );
+              }
+
+              const chunk = Buffer.from(encoded, 'base64');
+              if (chunk.length !== expectedBytes) {
+                throw new Error(
+                  `Failed to read ${path}: Archil returned an incomplete file chunk at byte ${offset}.`,
+                );
+              }
+              chunks.push(chunk);
             }
 
-            const chunk = Buffer.from(encoded, 'base64');
-            if (chunk.length !== expectedBytes) {
-              throw new Error(
-                `Failed to read ${path}: Archil returned an incomplete file chunk at byte ${offset}.`,
-              );
-            }
-            chunks.push(chunk);
-          }
-
-          return Buffer.concat(chunks).toString('utf8');
+            return Buffer.concat(chunks).toString('utf8');
+          });
         },
 
         writeFile: async (sandbox, path, content, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
-          const parent = posix.dirname(diskPath);
-          const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const tempPath = `${diskPath}.computesdk-write-${randomUUID()}`;
-          let started = false;
+          return withDiskLock(sandbox, async () => {
+            const diskPath = mapFilesystemPath(path);
+            const parent = posix.dirname(diskPath);
+            const encoded = Buffer.from(content, 'utf8').toString('base64');
+            const tempPath = `${diskPath}.computesdk-write-${randomUUID()}`;
+            let started = false;
 
-          try {
-            if (encoded.length === 0) {
-              started = true;
-              const result = await runCommand(
-                sandbox,
-                withDiskWriteLock(
-                  [
-                    `mkdir -p ${shellEscape(parent)}`,
-                    `: > ${shellEscape(tempPath)}`,
-                    finalizeStagedFileCommand(tempPath, diskPath),
-                  ].join(' && '),
-                ),
-              );
-              if (result.exitCode !== 0) {
-                throw new Error(result.stderr);
-              }
-              return;
-            }
-
-            const chunkSize = maxWriteChunkSize(parent, tempPath, diskPath);
-            for (let offset = 0; offset < encoded.length; offset += chunkSize) {
-              const isFirst = offset === 0;
-              const isFinal = offset + chunkSize >= encoded.length;
-              started = true;
-              const result = await runCommand(
-                sandbox,
-                withDiskWriteLock(
-                  buildWriteChunkCommand(
-                    parent,
-                    tempPath,
-                    diskPath,
-                    encoded.slice(offset, offset + chunkSize),
-                    isFirst,
-                    isFinal,
-                  ),
-                ),
-              );
-              if (result.exitCode !== 0) {
-                throw new Error(result.stderr);
-              }
-            }
-          } catch (error) {
-            if (started) {
-              try {
-                await runCommand(
+            try {
+              if (encoded.length === 0) {
+                started = true;
+                const result = await runCommand(
                   sandbox,
-                  withDiskWriteLock(`rm -f ${shellEscape(tempPath)}`),
+                  withDiskWriteLock(
+                    [
+                      `mkdir -p ${shellEscape(parent)}`,
+                      `: > ${shellEscape(tempPath)}`,
+                      finalizeStagedFileCommand(tempPath, diskPath),
+                    ].join(' && '),
+                  ),
                 );
-              } catch {
-                // Preserve the original write error if cleanup fails.
+                if (result.exitCode !== 0) {
+                  throw new Error(result.stderr);
+                }
+                return;
               }
+
+              const chunkSize = maxWriteChunkSize(parent, tempPath, diskPath);
+              for (let offset = 0; offset < encoded.length; offset += chunkSize) {
+                const isFirst = offset === 0;
+                const isFinal = offset + chunkSize >= encoded.length;
+                started = true;
+                const result = await runCommand(
+                  sandbox,
+                  withDiskWriteLock(
+                    buildWriteChunkCommand(
+                      parent,
+                      tempPath,
+                      diskPath,
+                      encoded.slice(offset, offset + chunkSize),
+                      isFirst,
+                      isFinal,
+                    ),
+                  ),
+                );
+                if (result.exitCode !== 0) {
+                  throw new Error(result.stderr);
+                }
+              }
+            } catch (error) {
+              if (started) {
+                try {
+                  await runCommand(
+                    sandbox,
+                    withDiskWriteLock(`rm -f ${shellEscape(tempPath)}`),
+                  );
+                } catch {
+                  // Preserve the original write error if cleanup fails.
+                }
+              }
+              throw new Error(
+                `Failed to write ${path}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
             }
-            throw new Error(
-              `Failed to write ${path}: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
-          }
+          });
         },
 
         mkdir: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
-          const result = await runCommand(
-            sandbox,
-            withDiskWriteLock(`mkdir -p ${shellEscape(diskPath)}`),
-          );
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
-          }
+          return withDiskLock(sandbox, async () => {
+            const diskPath = mapFilesystemPath(path);
+            const result = await runCommand(
+              sandbox,
+              withDiskWriteLock(`mkdir -p ${shellEscape(diskPath)}`),
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
+            }
+          });
         },
 
         readdir: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
-          // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
-          const result = await runCommand(
-            sandbox,
-            `find ${shellEscape(diskPath)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
-          );
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
-          }
-          const entries: FileEntry[] = [];
-          for (const line of result.stdout.split('\n')) {
-            if (!line) continue;
-            const [typeChar, sizeStr, mtimeStr, ...nameParts] = line.split('\t');
-            const name = nameParts.join('\t');
-            entries.push({
-              name,
-              type: typeChar === 'd' ? 'directory' : 'file',
-              size: parseInt(sizeStr, 10) || 0,
-              modified: new Date(parseFloat(mtimeStr) * 1000),
-            });
-          }
-          return entries;
+          return withDiskLock(sandbox, async () => {
+            const diskPath = mapFilesystemPath(path);
+            // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
+            const result = await runCommand(
+              sandbox,
+              `find ${shellEscape(diskPath)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
+            }
+            const entries: FileEntry[] = [];
+            for (const line of result.stdout.split('\n')) {
+              if (!line) continue;
+              const [typeChar, sizeStr, mtimeStr, ...nameParts] = line.split('\t');
+              const name = nameParts.join('\t');
+              entries.push({
+                name,
+                type: typeChar === 'd' ? 'directory' : 'file',
+                size: parseInt(sizeStr, 10) || 0,
+                modified: new Date(parseFloat(mtimeStr) * 1000),
+              });
+            }
+            return entries;
+          });
         },
 
         exists: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
-          const result = await runCommand(sandbox, `test -e ${shellEscape(diskPath)}`);
-          return result.exitCode === 0;
+          return withDiskLock(sandbox, async () => {
+            const diskPath = mapFilesystemPath(path);
+            const result = await runCommand(sandbox, `test -e ${shellEscape(diskPath)}`);
+            return result.exitCode === 0;
+          });
         },
 
         remove: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
-          if (diskPath === ARCHIL_MOUNT_ROOT) {
-            throw new Error('Refusing to remove the Archil disk mount root.');
-          }
-          const result = await runCommand(
-            sandbox,
-            withDiskWriteLock(`rm -rf ${shellEscape(diskPath)}`),
-          );
-          if (result.exitCode !== 0) {
-            throw new Error(`Failed to remove ${path}: ${result.stderr}`);
-          }
+          return withDiskLock(sandbox, async () => {
+            const diskPath = mapFilesystemPath(path);
+            if (diskPath === ARCHIL_MOUNT_ROOT) {
+              throw new Error('Refusing to remove the Archil disk mount root.');
+            }
+            const result = await runCommand(
+              sandbox,
+              withDiskWriteLock(`rm -rf ${shellEscape(diskPath)}`),
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to remove ${path}: ${result.stderr}`);
+            }
+          });
         },
       },
 
