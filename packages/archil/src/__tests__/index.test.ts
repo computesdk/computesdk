@@ -164,17 +164,11 @@ describe('archil filesystem mapping', () => {
     const mutationCommands = commands(fetchMock);
     expect(mutationCommands).toHaveLength(3);
     for (const command of mutationCommands) {
-      expect(command).toContain('archil checkout --force --yes');
-      expect(command).toContain('archil checkin');
+      expect(command).toContain("archil checkout --force --yes '/mnt/archil'");
+      expect(command).toContain("archil checkin '/mnt/archil'");
     }
     expect(mutationCommands[0]).toContain(
       "mkdir -p '/mnt/archil/tmp/data'",
-    );
-    expect(mutationCommands[0]).toContain(
-      "archil checkout --force --yes '/mnt/archil/tmp'",
-    );
-    expect(mutationCommands[0]).toContain(
-      "archil checkin '/mnt/archil/tmp'",
     );
     expect(mutationCommands[1]).toContain(
       "printf %s 'aGVsbG8=' | base64 -d > '/mnt/archil/tmp/data/hello.txt.computesdk-write-",
@@ -185,17 +179,8 @@ describe('archil filesystem mapping', () => {
     expect(mutationCommands[1]).toContain(
       "if [ -d '/mnt/archil/tmp/data/hello.txt' ]; then",
     );
-    expect(mutationCommands[1]).toContain(
-      "archil checkout --force --yes '/mnt/archil/tmp/data'",
-    );
-    expect(mutationCommands[1]).toContain(
-      "archil checkin '/mnt/archil/tmp/data'",
-    );
     expect(mutationCommands[2]).toContain(
       "rm -rf '/mnt/archil/tmp/data/hello.txt'",
-    );
-    expect(mutationCommands[2]).toContain(
-      "archil checkout --force --yes '/mnt/archil/tmp/data'",
     );
   });
 
@@ -449,6 +434,43 @@ describe('archil filesystem mapping', () => {
       expect(group[0]).toBe('truncate');
       expect(group.slice(1).every((r) => r === 'append')).toBe(true);
     }
+  });
+
+  it('recursively creates missing parents when writing a nested file', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await sandbox.filesystem.writeFile(
+      '/tmp/a/b/c/file.txt',
+      'nested content',
+    );
+
+    const writeCommands = commands(fetchMock);
+    expect(writeCommands.length).toBe(1);
+    expect(writeCommands[0]).toContain(
+      "mkdir -p '/mnt/archil/tmp/a/b/c'",
+    );
+    expect(writeCommands[0]).toContain("archil checkout --force --yes '/mnt/archil'");
+  });
+
+  it('removing a path whose parent does not exist succeeds', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = fetchMock as typeof fetch;
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await sandbox.filesystem.remove('/tmp/missing-parent/file.txt');
+
+    const removeCommands = commands(fetchMock);
+    expect(removeCommands.length).toBe(1);
+    expect(removeCommands[0]).toContain(
+      "rm -rf '/mnt/archil/tmp/missing-parent/file.txt'",
+    );
+    expect(removeCommands[0]).toContain("archil checkout --force --yes '/mnt/archil'");
   });
 });
 

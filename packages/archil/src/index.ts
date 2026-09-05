@@ -202,8 +202,13 @@ function checkinCommand(path: string): string {
   return `archil checkin ${shellEscape(path)}`;
 }
 
-function withParentCheckout(path: string, command: string): string {
-  return `${checkoutCommand(path)} && { ${command}; status=$?; ${checkinCommand(path)}; checkin_status=$?; if [ $status -ne 0 ]; then exit $status; fi; exit $checkin_status; }`;
+function withDiskWriteLock(command: string): string {
+  const mountRoot = shellEscape(ARCHIL_MOUNT_ROOT);
+  return [
+    `archil checkout --force --yes ${mountRoot}`,
+    `{ ${command}; status=$?; archil checkin ${mountRoot}; checkin_status=$?; ` +
+      `if [ $status -ne 0 ]; then exit $status; fi; exit $checkin_status; }`,
+  ].join(' && ');
 }
 
 function execCommandBytes(command: string): number {
@@ -251,8 +256,7 @@ function maxWriteChunkSize(
 
   while (low < high) {
     const candidate = Math.ceil((low + high) / 2);
-    const command = withParentCheckout(
-      parent,
+    const command = withDiskWriteLock(
       buildWriteChunkCommand(
         parent,
         tempPath,
@@ -537,8 +541,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                 started = true;
                 const result = await runCommand(
                   sandbox,
-                  withParentCheckout(
-                    parent,
+                  withDiskWriteLock(
                     writeCommand(`: > ${shellEscape(tempPath)}`),
                   ),
                 );
@@ -559,10 +562,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                 const compressed = gzipSync(raw);
                 const candidate = compressed.toString('base64');
                 if (candidate.length < encoded.length) {
-                  const command = withParentCheckout(
-                    parent,
-                    gzipWriteCommand(candidate),
-                  );
+                  const command = withDiskWriteLock(gzipWriteCommand(candidate));
                   if (execCommandBytes(command) <= ARCHIL_MAX_EXEC_COMMAND_BYTES) {
                     gzipBase64 = candidate;
                   }
@@ -575,7 +575,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                 started = true;
                 const result = await runCommand(
                   sandbox,
-                  withParentCheckout(parent, gzipWriteCommand(gzipBase64)),
+                  withDiskWriteLock(gzipWriteCommand(gzipBase64)),
                 );
                 if (result.exitCode !== 0) {
                   throw new Error(result.stderr);
@@ -589,8 +589,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                 started = true;
                 const result = await runCommand(
                   sandbox,
-                  withParentCheckout(
-                    parent,
+                  withDiskWriteLock(
                     buildWriteChunkCommand(
                       parent,
                       tempPath,
@@ -615,7 +614,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
                 if (isFirst) {
                   chunks.push(
-                    `${checkoutCommand(parent)} && ${buildWriteChunkCommand(
+                    `${checkoutCommand(ARCHIL_MOUNT_ROOT)} && ${buildWriteChunkCommand(
                       parent,
                       tempPath,
                       diskPath,
@@ -633,7 +632,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                       chunk,
                       false,
                       true,
-                    )} && ${checkinCommand(parent)}`,
+                    )} && ${checkinCommand(ARCHIL_MOUNT_ROOT)}`,
                   );
                 } else {
                   chunks.push(
@@ -661,10 +660,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                 try {
                   await runCommand(
                     sandbox,
-                    withParentCheckout(
-                      parent,
-                      `rm -f ${shellEscape(tempPath)}`,
-                    ),
+                    withDiskWriteLock(`rm -f ${shellEscape(tempPath)}`),
                   );
                 } catch {
                   // Preserve the original write error if cleanup fails.
@@ -682,13 +678,9 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         mkdir: async (sandbox, path, runCommand) => {
           return withDiskLock(sandbox, async () => {
             const diskPath = mapFilesystemPath(path);
-            const parent = posix.dirname(diskPath);
             const result = await runCommand(
               sandbox,
-              withParentCheckout(
-                parent,
-                `mkdir -p ${shellEscape(diskPath)}`,
-              ),
+              withDiskWriteLock(`mkdir -p ${shellEscape(diskPath)}`),
             );
             if (result.exitCode !== 0) {
               throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
@@ -737,13 +729,9 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             if (diskPath === ARCHIL_MOUNT_ROOT) {
               throw new Error('Refusing to remove the Archil disk mount root.');
             }
-            const parent = posix.dirname(diskPath);
             const result = await runCommand(
               sandbox,
-              withParentCheckout(
-                parent,
-                `rm -rf ${shellEscape(diskPath)}`,
-              ),
+              withDiskWriteLock(`rm -rf ${shellEscape(diskPath)}`),
             );
             if (result.exitCode !== 0) {
               throw new Error(`Failed to remove ${path}: ${result.stderr}`);
