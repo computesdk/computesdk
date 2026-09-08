@@ -120,8 +120,16 @@ describe('paths', () => {
     expect(normalizeSandboxPath('/etc//hosts')).toBe('/etc/hosts');
   });
 
-  it('rejects the root', () => {
+  it('resolves dot segments', () => {
+    expect(normalizeSandboxPath('./app/../lib/./x.js')).toBe('/buddy/lib/x.js');
+    expect(normalizeSandboxPath('/buddy/../etc/hosts')).toBe('/etc/hosts');
+    expect(normalizeSandboxPath('/../../etc')).toBe('/etc');
+  });
+
+  it('rejects the root, also when reached through dot segments', () => {
     expect(() => normalizeSandboxPath('/')).toThrow();
+    expect(() => normalizeSandboxPath('/tmp/..')).toThrow();
+    expect(() => normalizeSandboxPath('/./')).toThrow();
   });
 
   it('drops the leading slash for content endpoints', () => {

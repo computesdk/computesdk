@@ -264,10 +264,19 @@ export function isAuthError(error: unknown): boolean {
   return status === 401 || status === 403;
 }
 
-/** Resolves a caller-supplied path to an absolute one and collapses slashes. */
+/**
+ * Resolves a caller-supplied path to an absolute one: relative paths are taken
+ * from the sandbox home, `.` and `..` are resolved, and repeated slashes are
+ * collapsed, so `/tmp/..` is rejected the same way `/` is.
+ */
 export function normalizeSandboxPath(path: string): string {
   const absolute = path.startsWith('/') ? path : `${SANDBOX_HOME}/${path}`;
-  const segments = absolute.split('/').filter(Boolean);
+  const segments: string[] = [];
+  for (const segment of absolute.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') segments.pop();
+    else segments.push(segment);
+  }
   if (segments.length === 0) {
     throw new Error('Path must not be empty or the filesystem root.');
   }
