@@ -24,13 +24,28 @@ export interface BuddyRunCommandOptions extends RunCommandOptions {
   runtime?: BuddyCommandRuntime;
 }
 
-/** Prepends `cd` and `export` when the caller asked for a cwd or env. */
+/** What a POSIX shell accepts as a variable name. */
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Prepends `cd` and `export` when the caller asked for a cwd or env. Values are
+ * escaped; names cannot be, so a name that is not a valid identifier is
+ * rejected instead of being spliced into the shell line.
+ */
 export function buildShellCommand(command: string, options: RunCommandOptions = {}): string {
   let line = command;
 
   if (options.env && Object.keys(options.env).length > 0) {
     const exports = Object.entries(options.env)
-      .map(([key, value]) => `${key}="${escapeShellArg(String(value))}"`)
+      .map(([key, value]) => {
+        if (!ENV_NAME.test(key)) {
+          throw new TypeError(
+            `Invalid environment variable name ${JSON.stringify(key)}: `
+            + 'names must match /^[A-Za-z_][A-Za-z0-9_]*$/.',
+          );
+        }
+        return `${key}="${escapeShellArg(String(value))}"`;
+      })
       .join(' ');
     line = `export ${exports} && ${line}`;
   }
@@ -78,8 +93,8 @@ export async function runCommand(
   const payload = runtime === 'BASH' ? buildShellCommand(command, options) : command;
 
   const deadline = options.timeout ? startedAt + options.timeout : undefined;
-  const timedOutResult = () => ({
-    stdout: '', stderr: '', exitCode: TIMEOUT_EXIT_CODE, durationMs: Date.now() - startedAt,
+  const timedOutResult = (stdout = '', stderr = '') => ({
+    stdout, stderr, exitCode: TIMEOUT_EXIT_CODE, durationMs: Date.now() - startedAt,
   });
 
   // Buddy may hold the submission while the sandbox boots (up to the client's
@@ -147,15 +162,16 @@ export async function runCommand(
   })();
 
   // The SDK stream cannot be aborted, so on timeout the result is returned
-  // right away and the reader is left to finish on its own once the kill (best
-  // effort, retried) closes it or the next record arrives.
+  // right away — with whatever output arrived before the deadline — and the
+  // reader is left to finish on its own once the kill (best effort, retried)
+  // closes it or the next record arrives.
   try {
     const outcome = deadline ? await raceDeadline(drain, deadline) : await drain;
     if (outcome === DEADLINE_PASSED) {
       timedOut = true;
       void killCommand(running);
       drain.catch(() => {});
-      return timedOutResult();
+      return timedOutResult(stdout.join(''), stderr.join(''));
     }
   } catch (error) {
     // The stream broke mid-command. Buddy keeps running it, so stop it — best

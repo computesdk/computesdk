@@ -143,6 +143,15 @@ describe('command building', () => {
     expect(buildShellCommand('echo hi', { env: { A: 'a"b' } })).not.toBe('export A="a"b" && echo hi');
   });
 
+  it('rejects env names that are not shell identifiers', () => {
+    for (const name of ['A; rm -rf /', 'FOO=bar', '$(id)', '1ABC', 'a-b', '']) {
+      expect(() => buildShellCommand('echo hi', { env: { [name]: 'x' } }))
+        .toThrow(/Invalid environment variable name/);
+    }
+    expect(buildShellCommand('echo hi', { env: { _OK_1: 'x', lower: 'y' } }))
+      .toBe('export _OK_1="x" lower="y" && echo hi');
+  });
+
   it('rejects the outdated argument-array call shape', async () => {
     await expect(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -264,6 +273,21 @@ describe('command execution', () => {
     release();
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(onStdout).not.toHaveBeenCalled();
+  });
+
+  it('keeps the output collected before the deadline in the timeout result', async () => {
+    const { sandbox } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
+      yield { type: 'STDOUT', data: 'step 1' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      yield { type: 'STDERR', data: 'warn' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      await new Promise(() => {}); // the command never finishes
+    });
+
+    const result = await runCommand(sandbox, 'sleep 60', { timeout: 30 });
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+    expect(result.stdout).toBe('step 1\n');
+    expect(result.stderr).toBe('warn\n');
   });
 
   it('retries a failed kill before giving up', async () => {
