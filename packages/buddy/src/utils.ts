@@ -449,6 +449,11 @@ export interface BuddySandboxData {
   ssh_port?: number;
 }
 
+/**
+ * Buddy's sandbox resource carries no creation date (only projects and
+ * snapshots do), so a handle rebuilt by `getById` or `list` can only record
+ * when it was reconnected. `create` passes the real moment.
+ */
 export function toHandle(
   config: ResolvedBuddyConfig,
   sandbox: BuddySandboxData,

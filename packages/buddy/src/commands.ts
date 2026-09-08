@@ -13,7 +13,7 @@ import { Command } from '@buddy-works/sandbox-sdk';
 import { escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, RunCommandOptions } from '@computesdk/provider';
 
-import type { BuddyCommandRuntime, BuddySandboxHandle } from './utils.js';
+import { sleep, type BuddyCommandRuntime, type BuddySandboxHandle } from './utils.js';
 
 export interface BuddyRunCommandOptions extends RunCommandOptions {
   /**
@@ -38,6 +38,23 @@ export function buildShellCommand(command: string, options: RunCommandOptions = 
     line = `cd "${escapeShellArg(options.cwd)}" && ${line}`;
   }
   return line;
+}
+
+/** A termination that fails leaves the command running remotely, so retry. */
+const KILL_ATTEMPTS = 3;
+const KILL_RETRY_DELAY_MS = 500;
+
+/** Best-effort kill: never throws, gives up after `KILL_ATTEMPTS`. */
+export async function killCommand(running: Pick<Command, 'kill'>): Promise<boolean> {
+  for (let attempt = 1; attempt <= KILL_ATTEMPTS; attempt++) {
+    try {
+      await running.kill();
+      return true;
+    } catch {
+      if (attempt < KILL_ATTEMPTS) await sleep(KILL_RETRY_DELAY_MS);
+    }
+  }
+  return false;
 }
 
 export async function runCommand(
@@ -103,16 +120,19 @@ export async function runCommand(
 
   // The SDK stream cannot be aborted, so on timeout the result is returned
   // right away and the reader is left to finish on its own once the kill (best
-  // effort — it may fail or take the client's request timeout) closes it.
+  // effort — it may fail or take the client's request timeout) closes it. The
+  // deadline counts from the call, so time spent submitting the command (which
+  // Buddy may hold while the sandbox boots) is not added on top.
   let timedOut = false;
   let killTimer: ReturnType<typeof setTimeout> | undefined;
   const timeout = options.timeout
     ? new Promise<void>(resolve => {
+      const remaining = Math.max(0, options.timeout! - (Date.now() - startedAt));
       killTimer = setTimeout(() => {
         timedOut = true;
-        void running.kill().catch(() => {});
+        void killCommand(running);
         resolve();
-      }, options.timeout);
+      }, remaining);
     })
     : undefined;
 
@@ -121,7 +141,7 @@ export async function runCommand(
   } catch (error) {
     // The stream broke mid-command. Buddy keeps running it, so stop it — best
     // effort and not awaited, so a hanging kill cannot delay the error.
-    void running.kill().catch(() => {});
+    void killCommand(running);
     throw error;
   } finally {
     if (killTimer) clearTimeout(killTimer);

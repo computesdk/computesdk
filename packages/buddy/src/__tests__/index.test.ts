@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 
 import { buddy, ensureTimeout, toSeconds } from '../index';
-import { TIMEOUT_EXIT_CODE, buildShellCommand, runCommand, waitForExitCode } from '../commands';
+import { TIMEOUT_EXIT_CODE, buildShellCommand, killCommand, runCommand, waitForExitCode } from '../commands';
 import {
   getClient,
   isInstanceNotRunning,
@@ -215,6 +215,35 @@ describe('command execution', () => {
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
   });
 
+  it('counts a slow submission against the timeout', async () => {
+    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    // Buddy holds the submission (e.g. while the sandbox boots) past the deadline.
+    client.executeCommand.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 60));
+      return { id: 'cmd-1' };
+    });
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await new Promise(() => {}); });
+
+    const started = Date.now();
+    const result = await runCommand(sandbox, 'sleep 60', { timeout: 30 });
+
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it('retries a failed kill before giving up', async () => {
+    const kill = vi.fn()
+      .mockRejectedValueOnce(new Error('gateway timeout'))
+      .mockResolvedValue(undefined);
+    await expect(killCommand({ kill })).resolves.toBe(true);
+    expect(kill).toHaveBeenCalledTimes(2);
+
+    const hopeless = vi.fn().mockRejectedValue(new Error('gateway timeout'));
+    await expect(killCommand({ kill: hopeless })).resolves.toBe(false);
+    expect(hopeless).toHaveBeenCalledTimes(3);
+  });
+
   it('kills the command when its log stream breaks mid-run', async () => {
     const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
     const { Command } = await import('@buddy-works/sandbox-sdk');
@@ -296,11 +325,15 @@ describe('sandbox creation', () => {
     vi.spyOn(BuddyApiClient.prototype, 'getSandboxById')
       .mockResolvedValue({ id: 'sb-new', status: 'RUNNING', setup_status: 'SUCCESS' } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
     vi.spyOn(BuddyApiClient.prototype, 'updateSandbox').mockRejectedValue(new Error('quota exceeded'));
-    const remove = vi.spyOn(BuddyApiClient.prototype, 'deleteSandboxById').mockRejectedValue(new Error('gone'));
+    // The cleanup retries transient failures the same way destroy does.
+    const remove = vi.spyOn(BuddyApiClient.prototype, 'deleteSandboxById')
+      .mockRejectedValueOnce(Object.assign(new Error('HTTP 503'), { status: 503 }))
+      .mockResolvedValue(undefined as any); // eslint-disable-line @typescript-eslint/no-explicit-any
 
     const provider = buddy({ token: 't', workspace: 'w', project: 'p' });
     await expect(provider.sandbox.create({ snapshotId: 'snap', timeout: 300_000 }))
       .rejects.toThrow(/quota exceeded/);
+    expect(remove).toHaveBeenCalledTimes(2);
     expect(remove).toHaveBeenCalledWith({ path: { id: 'sb-new' } });
   });
 });

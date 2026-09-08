@@ -21,6 +21,7 @@ import type {
 } from '@computesdk/provider';
 import type { Snapshot } from 'computesdk';
 
+import type { BuddyApiClient } from '@buddy-works/sandbox-sdk';
 import { whenBooted } from './boot.js';
 import { runCommand, type BuddyRunCommandOptions } from './commands.js';
 import * as fs from './filesystem.js';
@@ -60,6 +61,25 @@ const DESTROY_RETRY_DELAY_MS = 500;
 const URL_WAIT_TIMEOUT_MS = 15_000;
 const URL_WAIT_POLL_MS = 250;
 
+/**
+ * Deletes a sandbox, retrying transient server failures. "Already gone" is the
+ * state the caller asked for, so it counts as success.
+ */
+export async function deleteSandbox(client: BuddyApiClient, sandboxId: string): Promise<void> {
+  for (let attempt = 1; attempt <= DESTROY_ATTEMPTS; attempt++) {
+    try {
+      await client.deleteSandboxById({ path: { id: sandboxId } });
+      return;
+    } catch (error) {
+      if (isNotFound(error)) return;
+      const status = statusOf(error);
+      const retryable = status !== undefined && status >= 500;
+      if (!retryable || attempt === DESTROY_ATTEMPTS) throw error;
+      await sleep(DESTROY_RETRY_DELAY_MS);
+    }
+  }
+}
+
 export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapshot>({
   name: PROVIDER,
 
@@ -76,8 +96,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
           await ensureTimeout(sandbox, options?.timeout ?? resolved.timeout);
         } catch (error) {
           // The framework has no id yet, so nothing else could clean this up.
-          await sandbox.client.deleteSandboxById({ path: { id: sandbox.sandboxId } })
-            .catch(() => {});
+          await deleteSandbox(sandbox.client, sandbox.sandboxId).catch(() => {});
           throw error;
         }
         return { sandbox, sandboxId: sandbox.sandboxId };
@@ -109,24 +128,8 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
           });
       },
 
-      destroy: async (config: BuddyConfig, sandboxId: string) => {
-        const resolved = resolveConfig(config);
-        const client = getClient(resolved);
-
-        for (let attempt = 1; attempt <= DESTROY_ATTEMPTS; attempt++) {
-          try {
-            await client.deleteSandboxById({ path: { id: sandboxId } });
-            return;
-          } catch (error) {
-            // Already gone is the state the caller asked for.
-            if (isNotFound(error)) return;
-            const status = statusOf(error);
-            const retryable = status !== undefined && status >= 500;
-            if (!retryable || attempt === DESTROY_ATTEMPTS) throw error;
-            await sleep(DESTROY_RETRY_DELAY_MS);
-          }
-        }
-      },
+      destroy: async (config: BuddyConfig, sandboxId: string) =>
+        deleteSandbox(getClient(resolveConfig(config)), sandboxId),
 
       runCommand: async (
         sandbox: BuddySandboxHandle,
