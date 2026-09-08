@@ -73,7 +73,7 @@ buddy({
   project: 'sandboxes',             // project the sandboxes belong to
   os: 'ubuntu:24.04',               // or 'ubuntu:22.04'
   resources: '4x8',                 // vCPU x RAM preset, 1x2 through 12x24
-  region: 'US',                     // installation: 'US', 'EU' or 'AS'
+  region: 'US',                     // installation: 'US' or 'EU'      
   timeout: 3_600_000,               // sandbox lifetime in ms
   ports: [3000],                    // ports exposed on every sandbox
   apiUrl: undefined,                // overrides region, for on-premise
@@ -88,7 +88,6 @@ Buddy runs independent installations rather than regions within one API, each wi
 | -------------- | ------------------------------ |
 | `US` (default) | `https://api.buddy.works`      |
 | `EU`           | `https://api.eu.buddy.works`   |
-| `AS`           | `https://api.asia.buddy.works` |
 
 A token issued by one installation is not valid on the others.
 

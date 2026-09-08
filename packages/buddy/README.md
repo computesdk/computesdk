@@ -65,7 +65,7 @@ interface BuddyConfig {
   os?: string;
   /** Resource preset, `"{vCPU}x{RAM GB}"` from `1x2` to `12x24`. Buddy's own default applies when omitted. */
   resources?: BuddyResources;
-  /** Buddy installation — `'US'` (default), `'EU'` or `'AS'`. */
+  /** Buddy installation — `'US'` (default) or `'EU'`. */
   region?: BuddyRegion;
   /** Sandbox lifetime in milliseconds, after which Buddy stops it. Defaults to 1 hour. */
   timeout?: number;
@@ -90,7 +90,6 @@ const compute = buddy({ region: 'EU' });
 | ------------ | ------------------------------ |
 | `US` (default) | `https://api.buddy.works`     |
 | `EU`         | `https://api.eu.buddy.works`   |
-| `AS`         | `https://api.asia.buddy.works` |
 
 A token issued by one installation is not valid on the others. For an on-premise
 installation, set `apiUrl` instead.

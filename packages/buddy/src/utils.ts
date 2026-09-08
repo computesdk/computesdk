@@ -24,7 +24,7 @@ export const SANDBOX_HOME = '/buddy';
  * a separate deployment with its own API host, workspaces and tokens — `US` is
  * not a placement hint within one API.
  */
-export type BuddyRegion = 'US' | 'EU' | 'AS';
+export type BuddyRegion = 'US' | 'EU';
 
 /** Interpreter Buddy runs a command with. `BASH` is the default. */
 export type BuddyCommandRuntime = 'BASH' | 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON';
@@ -352,7 +352,8 @@ export interface BuddyEndpoint {
   name?: string;
   endpoint?: string;
   type?: BuddyTunnelType;
-  region?: BuddyRegion;
+  /** As reported by the API, which may know installations this provider does not offer. */
+  region?: string;
   endpoint_url?: string;
   active?: boolean;
   whitelist?: string[];

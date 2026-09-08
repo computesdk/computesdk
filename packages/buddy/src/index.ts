@@ -125,6 +125,11 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
         options?: BuddyRunCommandOptions,
       ) => runCommand(sandbox, command, options),
 
+      // `runCommand` already forwards `onStdout`/`onStderr` from Buddy's own
+      // log stream. Without this the factory would ignore that and bootstrap
+      // its Node-based streaming daemon inside the sandbox instead.
+      streamCommand: runCommand,
+
       getInfo: async (sandbox: BuddySandboxHandle): Promise<SandboxInfo> => {
         const data = await getSandboxData(sandbox.config, sandbox.sandboxId);
         sandbox.endpoints = data.endpoints ?? sandbox.endpoints;

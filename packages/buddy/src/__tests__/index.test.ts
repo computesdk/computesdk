@@ -4,7 +4,6 @@ import { runProviderTestSuite } from '@computesdk/test-utils';
 import { buddy } from '../index';
 import { TIMEOUT_EXIT_CODE, buildShellCommand, runCommand, waitForExitCode } from '../commands';
 import {
-  apiUrlForRegion,
   isInstanceNotRunning,
   isNotFound,
   isUnroutableId,
@@ -56,7 +55,6 @@ describe('config resolution', () => {
     const base = { token: 't', workspace: 'w', project: 'p' };
     expect(resolveConfig({ ...base }).apiUrl).toBe('https://api.buddy.works');
     expect(resolveConfig({ ...base, region: 'EU' }).apiUrl).toBe('https://api.eu.buddy.works');
-    expect(apiUrlForRegion('AS')).toBe('https://api.asia.buddy.works');
   });
 
   it('lets apiUrl override the region and strips trailing slashes', () => {
@@ -148,6 +146,11 @@ function fakeCommandClient(
 }
 
 describe('command execution', () => {
+  it('streams over its own API instead of the daemon fallback', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((buddy({}).sandbox as any).methods.streamCommand).toBe(runCommand);
+  });
+
   it('terminates every log record with a newline', async () => {
     const { sandbox, logs } = fakeCommandClient(
       [{ type: 'STDOUT', data: 'one' }, { type: 'STDOUT', data: 'two' }, { type: 'STDERR', data: 'warn' }],
