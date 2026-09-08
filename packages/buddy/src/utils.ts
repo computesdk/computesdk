@@ -169,6 +169,14 @@ function buildConfig(config: BuddyConfig): ResolvedBuddyConfig {
  */
 const clients = new WeakMap<ResolvedBuddyConfig, BuddyApiClient>();
 
+/**
+ * Per-request timeout for the SDK client. Its default is 30 s, which is too
+ * short for `POST /commands`: Buddy holds that request until the sandbox has
+ * booted, and a drained warm pool has been measured to take over 10 s. On a
+ * timeout the SDK retries the POST, which would submit the command twice.
+ */
+export const CLIENT_REQUEST_TIMEOUT_MS = 120_000;
+
 export function getClient(config: ResolvedBuddyConfig): BuddyApiClient {
   let client = clients.get(config);
   if (!client) {
@@ -177,6 +185,7 @@ export function getClient(config: ResolvedBuddyConfig): BuddyApiClient {
       project_name: config.project,
       apiUrl: config.apiUrl,
       token: config.token,
+      timeout: CLIENT_REQUEST_TIMEOUT_MS,
     });
     clients.set(config, client);
   }
