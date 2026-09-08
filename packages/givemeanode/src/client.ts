@@ -65,16 +65,24 @@ export const DEFAULT_BASE_URL = 'https://api.givemeanode.com'
 /**
  * How this client treats the offer of a signed credential.
  *
- * - `absorb` (default): use a signed credential whenever one has been
- *   handed to us, and never add a round trip to get one. The first request
- *   of a process pays the ordinary cost, its response carries the
- *   credential, and every request after it - including the command that
- *   follows that very first create - is cheaper.
- * - `prime`: pay ONE cheap authenticated request per token, up front and
- *   single-flighted, so even the first burst's creates are cheap. Right
- *   when N sandboxes start at once, because otherwise all N take the
- *   ordinary path.
+ * - `prime` (default): pay ONE cheap authenticated request per token, up
+ *   front and single-flighted, so even the first burst's creates present
+ *   the signed credential. When N sandboxes start at once this is the
+ *   difference between one authentication read and N of them queued behind
+ *   each other; for a single create it costs one small request before it
+ *   and saves the same read inside it, so it is close to free.
+ * - `absorb`: never add a round trip to get one. The first request of a
+ *   process pays the ordinary cost, its response carries the credential,
+ *   and every request after it - including the command that follows that
+ *   very first create - is cheaper. The right choice when a process makes
+ *   one request and exits.
  * - `off`: never present a signed credential.
+ *
+ * The default was `absorb` through 1.0.x. It moved to `prime` because the
+ * shape this package is mostly used in is N creates at once from a cold
+ * process, and under `absorb` every one of those N paid the authentication
+ * read - measured at ~600 ms of a 767 ms create at N=100 against the
+ * us-east door, all of it that read queued.
  */
 export type FastTokenMode = 'absorb' | 'prime' | 'off'
 
@@ -83,7 +91,7 @@ export interface GmnClientOptions {
   apiKey?: string
   /** Base URL. Falls back to `GMN_API_HOST`, then the public endpoint. */
   baseUrl?: string
-  /** See {@link FastTokenMode}. Default `absorb`. */
+  /** See {@link FastTokenMode}. Default `prime`. */
   fastToken?: FastTokenMode
   /** Per-request timeout in ms. Default 120000. */
   timeout?: number
@@ -213,7 +221,7 @@ export class GmnClient {
     this.baseUrl = requireSecureBaseUrl(
       (options.baseUrl ?? process.env.GMN_API_HOST ?? DEFAULT_BASE_URL).replace(/\/+$/, ''),
     )
-    this.fastToken = options.fastToken ?? 'absorb'
+    this.fastToken = options.fastToken ?? 'prime'
     this.timeout = options.timeout ?? 120_000
     this.doFetch = options.fetch ?? globalThis.fetch
     // A NUL cannot appear in a URL or in a bearer token, so no pair of
