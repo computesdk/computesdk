@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 
-import { buddy } from '../index';
+import { buddy, ensureTimeout } from '../index';
 import { TIMEOUT_EXIT_CODE, buildShellCommand, runCommand, waitForExitCode } from '../commands';
 import {
+  getClient,
   isInstanceNotRunning,
   isNotFound,
   isUnroutableId,
@@ -64,6 +65,27 @@ describe('config resolution', () => {
     expect(config.apiUrl).toBe('https://buddy.internal');
     // The region still decides where tunnels terminate.
     expect(config.region).toBe('EU');
+  });
+
+  it('re-reads the environment when called without a config', () => {
+    const saved = {
+      BUDDY_TOKEN: process.env.BUDDY_TOKEN,
+      BUDDY_WORKSPACE: process.env.BUDDY_WORKSPACE,
+      BUDDY_PROJECT: process.env.BUDDY_PROJECT,
+    };
+    try {
+      Object.assign(process.env, { BUDDY_TOKEN: 'first', BUDDY_WORKSPACE: 'w', BUDDY_PROJECT: 'p' });
+      const first = resolveConfig();
+      expect(first.token).toBe('first');
+      expect(resolveConfig()).toBe(first);
+      process.env.BUDDY_TOKEN = 'rotated';
+      expect(resolveConfig().token).toBe('rotated');
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it('reuses the resolved config for the same config object', () => {
@@ -168,17 +190,28 @@ describe('command execution', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it('reports a timed-out command as failed even when Buddy still says in progress', async () => {
+  it('returns the timeout exit code without waiting for the stream to close', async () => {
     const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
     const { Command } = await import('@buddy-works/sandbox-sdk');
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
-    client.terminateCommand.mockImplementation(async () => { release(); });
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await gate; });
+    // The stream never ends: the kill is what would normally close it.
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await new Promise(() => {}); });
 
+    const started = Date.now();
     const result = await runCommand(sandbox, 'sleep 60', { timeout: 20 });
 
+    expect(Date.now() - started).toBeLessThan(1_000);
     expect(client.terminateCommand).toHaveBeenCalledTimes(1);
+    expect(client.getCommandDetails).not.toHaveBeenCalled();
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+  });
+
+  it('still times out when the kill itself fails', async () => {
+    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    client.terminateCommand.mockImplementation(async () => { throw new Error('gateway timeout'); });
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await new Promise(() => {}); });
+
+    const result = await runCommand(sandbox, 'sleep 60', { timeout: 20 });
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
   });
 
@@ -195,6 +228,47 @@ describe('command execution', () => {
   it('gives up on a command that never reports a result', async () => {
     const { sandbox } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
     await expect(waitForExitCode(sandbox, 'cmd-1', 0)).rejects.toThrow(/no exit code/);
+  });
+});
+
+describe('snapshots as templates', () => {
+  it('honours the limit on template.list', async () => {
+    const { BuddyApiClient } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(BuddyApiClient.prototype, 'getProjectSnapshots').mockResolvedValue({
+      snapshots: [{ id: 's1', name: 'a' }, { id: 's2', name: 'b' }, { id: 's3', name: 'c' }],
+    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    const provider = buddy({ token: 't', workspace: 'w', project: 'p' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const templates = await (provider.template as any).list({ limit: 2 });
+    expect(templates.map((t: { id: string }) => t.id)).toEqual(['s1', 's2']);
+  });
+});
+
+describe('sandbox timeout', () => {
+  const config = resolveConfig({ token: 't', workspace: 'w', project: 'p' });
+  const handle = (timeoutMs: number) => ({
+    sandboxId: 'sb-1', timeout: timeoutMs, config, client: getClient(config),
+  }) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  it('leaves a sandbox alone when Buddy already applied the requested timeout', async () => {
+    const { BuddyApiClient } = await import('@buddy-works/sandbox-sdk');
+    const update = vi.spyOn(BuddyApiClient.prototype, 'updateSandbox');
+    await ensureTimeout(handle(300_000), 300_000);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('patches the timeout a snapshot restore did not accept', async () => {
+    const { BuddyApiClient } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(BuddyApiClient.prototype, 'getSandboxById')
+      .mockResolvedValue({ id: 'sb-1', status: 'RUNNING', setup_status: 'SUCCESS' } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const update = vi.spyOn(BuddyApiClient.prototype, 'updateSandbox')
+      .mockImplementation(async ({ body }: any) => ({ timeout: body.timeout }) as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    const sandbox = handle(3_600_000);
+    await ensureTimeout(sandbox, 300_000);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ body: { timeout: 300 } }));
+    expect(sandbox.timeout).toBe(300_000);
   });
 });
 

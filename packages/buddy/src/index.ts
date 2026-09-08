@@ -16,6 +16,7 @@ import { defineProvider } from '@computesdk/provider';
 import type {
   CreateSandboxOptions,
   ListSnapshotsOptions,
+  ListTemplatesOptions,
   SandboxInfo,
 } from '@computesdk/provider';
 import type { Snapshot } from 'computesdk';
@@ -71,6 +72,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
         });
 
         const sandbox = toHandle(resolved, created);
+        await ensureTimeout(sandbox, options?.timeout ?? resolved.timeout);
         return { sandbox, sandboxId: sandbox.sandboxId };
       },
 
@@ -199,7 +201,8 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
           'then boot from it with compute.sandbox.create({ snapshotId: snapshot.id }).',
         );
       },
-      list: (config: BuddyConfig) => listSnapshots(resolveConfig(config)),
+      list: (config: BuddyConfig, options?: ListTemplatesOptions) =>
+        listSnapshots(resolveConfig(config), options),
       delete: (config: BuddyConfig, templateId: string) =>
         deleteSnapshot(resolveConfig(config), templateId),
     },
@@ -242,19 +245,49 @@ function buildCreateBody(config: ResolvedBuddyConfig, options: CreateSandboxOpti
 }
 
 /**
- * Endpoint updates in flight, per sandbox. Buddy replaces the whole endpoint
- * list on update, so two concurrent `getUrl` calls built from the same list
- * would each drop the other's port — they run one after another instead.
+ * Buddy's create-from-snapshot request has no `timeout` field (the SDK schema
+ * strips it), so a sandbox booted from a snapshot comes back with whatever the
+ * snapshot carried. Patch it afterwards when it differs from what was asked.
  */
-const endpointUpdates = new WeakMap<BuddySandboxHandle, Promise<unknown>>();
+export async function ensureTimeout(
+  sandbox: BuddySandboxHandle,
+  timeoutMs: number,
+): Promise<void> {
+  const seconds = Math.max(1, Math.round(timeoutMs / 1000));
+  if (Math.round(sandbox.timeout / 1000) === seconds) return;
+  const updated = await whenBooted(sandbox, () => sandbox.client.updateSandbox({
+    path: { id: sandbox.sandboxId },
+    body: { timeout: seconds } as any,
+  }));
+  sandbox.timeout = updated.timeout != null ? updated.timeout * 1000 : seconds * 1000;
+}
+
+/**
+ * Endpoint updates in flight, per remote sandbox. Buddy replaces the whole
+ * endpoint list on update, so two concurrent `getUrl` calls built from the same
+ * list would each drop the other's port — they run one after another instead.
+ * Keyed by installation + sandbox id rather than by handle: `getById` and
+ * `list` hand out a fresh handle each time for the same remote sandbox.
+ */
+const endpointUpdates = new Map<string, Promise<unknown>>();
+
+function endpointUpdateKey(sandbox: BuddySandboxHandle): string {
+  return `${sandbox.config.apiUrl}|${sandbox.config.workspace}|${sandbox.sandboxId}`;
+}
 
 function getUrl(
   sandbox: BuddySandboxHandle,
   options: { port: number; protocol?: string },
 ): Promise<string> {
-  const previous = endpointUpdates.get(sandbox) ?? Promise.resolve();
+  const key = endpointUpdateKey(sandbox);
+  const previous = endpointUpdates.get(key) ?? Promise.resolve();
   const next = previous.catch(() => {}).then(() => openPort(sandbox, options));
-  endpointUpdates.set(sandbox, next);
+  endpointUpdates.set(key, next);
+  // Drop the entry once nothing newer is queued behind it, so the map only
+  // ever holds sandboxes with an update actually in flight.
+  next.catch(() => {}).finally(() => {
+    if (endpointUpdates.get(key) === next) endpointUpdates.delete(key);
+  });
   return next;
 }
 

@@ -84,20 +84,10 @@ export async function runCommand(
   const stdout: string[] = [];
   const stderr: string[] = [];
 
-  // Killing the command ends the followed stream, which is what unblocks the
-  // loop below — there is no way to abort the HTTP read itself.
-  let timedOut = false;
-  const killTimer = options.timeout
-    ? setTimeout(() => {
-      timedOut = true;
-      void running.kill().catch(() => {});
-    }, options.timeout)
-    : undefined;
-
-  try {
-    // `follow: true` holds the connection open until the command exits, so this
-    // loop is the wait — nothing is polled. Each record is one line without its
-    // terminator, so the newline goes back on here.
+  // `follow: true` holds the connection open until the command exits, so this
+  // loop is the wait — nothing is polled. Each record is one line without its
+  // terminator, so the newline goes back on here.
+  const drain = (async () => {
     for await (const log of running.logs({ follow: true })) {
       if (log.data == null) continue;
       const chunk = `${log.data}\n`;
@@ -109,8 +99,28 @@ export async function runCommand(
         options.onStdout?.(chunk);
       }
     }
+  })();
+
+  // The SDK stream cannot be aborted, so on timeout the result is returned
+  // right away and the reader is left to finish on its own once the kill (best
+  // effort — it may fail or take the client's request timeout) closes it.
+  let timedOut = false;
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = options.timeout
+    ? new Promise<void>(resolve => {
+      killTimer = setTimeout(() => {
+        timedOut = true;
+        void running.kill().catch(() => {});
+        resolve();
+      }, options.timeout);
+    })
+    : undefined;
+
+  try {
+    await (timeout ? Promise.race([drain, timeout]) : drain);
   } finally {
     if (killTimer) clearTimeout(killTimer);
+    if (timedOut) drain.catch(() => {});
   }
 
   const exitCode = timedOut

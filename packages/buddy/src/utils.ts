@@ -107,10 +107,26 @@ export function apiUrlForRegion(region: BuddyRegion): string {
  * first command.
  */
 const resolved = new WeakMap<BuddyConfig, ResolvedBuddyConfig>();
-/** Stands in for `buddy()` called with no config, so that case caches too. */
-const ENV_ONLY: BuddyConfig = {};
+/**
+ * `buddy()` with no config reads the environment on every call, so a token
+ * rotated in `process.env` is picked up; the result is cached by value so the
+ * SDK client (and its connection pool) is still shared while nothing changed.
+ */
+const resolvedFromEnv = new Map<string, ResolvedBuddyConfig>();
 
-export function resolveConfig(config: BuddyConfig = ENV_ONLY): ResolvedBuddyConfig {
+export function resolveConfig(config?: BuddyConfig): ResolvedBuddyConfig {
+  if (!config) {
+    const key = [
+      process.env.BUDDY_TOKEN, process.env.BUDDY_WORKSPACE, process.env.BUDDY_PROJECT,
+    ].join('\u0000');
+    let value = resolvedFromEnv.get(key);
+    if (!value) {
+      value = buildConfig({});
+      resolvedFromEnv.clear();
+      resolvedFromEnv.set(key, value);
+    }
+    return value;
+  }
   const cached = resolved.get(config);
   if (cached) return cached;
   const value = buildConfig(config);
