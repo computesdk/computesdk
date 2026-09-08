@@ -138,7 +138,7 @@ await sandbox.filesystem.exists('/buddy/app/index.js');
 await sandbox.filesystem.remove('/buddy/app');
 ```
 
-Filesystem calls go through Buddy's content endpoints rather than the shell, so content is never squeezed through command-line quoting and each call costs one round trip. As with every provider, `readFile` and `writeFile` handle UTF-8 text; use `getInstance().fs` for raw bytes. Relative paths resolve against `/buddy`, the home directory of the default `buddy` user.
+Filesystem calls go through Buddy's content endpoints rather than the shell, so content is never squeezed through command-line quoting and each call costs one round trip. As with every provider, `readFile` and `writeFile` handle UTF-8 text; for raw bytes use `getInstance().fs`, which talks to the SDK directly and skips the first-boot wait described below, so on a fresh sandbox make one `sandbox.filesystem` call first. Relative paths resolve against `/buddy`, the home directory of the default `buddy` user.
 
 The first filesystem call on a sandbox waits for first-boot setup to finish. Buddy queues *commands* against a starting sandbox, but the content endpoints do not: during setup they either refuse the request or accept a write and discard it. The wait costs a few hundred milliseconds once per sandbox.
 
@@ -164,6 +164,8 @@ Buddy creates snapshots asynchronously and they cannot be restored until they tu
 const { client, fs, sandboxId } = sandbox.getInstance();
 await client.startSandboxApp({ path: { sandbox_id: sandboxId, app_id: 'web' } });
 ```
+
+The handle's `fs` and `client` call the API directly, without the provider's first-boot wait: on a sandbox that has just been created, make one `sandbox.filesystem` call (even `exists`) before uploading through them.
 
 ## Supported Operations
 

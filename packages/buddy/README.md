@@ -180,6 +180,8 @@ const { client, fs, sandboxId } = sandbox.getInstance();
 await client.getSandboxAppLogs({ path: { sandbox_id: sandboxId, app_id: 'web' } });
 ```
 
+The handle's `fs` and `client` call the API directly, without the provider's first-boot wait: on a sandbox that has just been created, make one `sandbox.filesystem` call (even `exists`) before uploading through them.
+
 ## Supported Operations
 
 | Method       | Supported | Notes                                                                                        |
