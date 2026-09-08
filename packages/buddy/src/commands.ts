@@ -118,6 +118,11 @@ export async function runCommand(
 
   try {
     await (timeout ? Promise.race([drain, timeout]) : drain);
+  } catch (error) {
+    // The stream broke mid-command. Buddy keeps running it, so stop it — best
+    // effort and not awaited, so a hanging kill cannot delay the error.
+    void running.kill().catch(() => {});
+    throw error;
   } finally {
     if (killTimer) clearTimeout(killTimer);
     if (timedOut) drain.catch(() => {});

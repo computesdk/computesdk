@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 
-import { buddy, ensureTimeout } from '../index';
+import { buddy, ensureTimeout, toSeconds } from '../index';
 import { TIMEOUT_EXIT_CODE, buildShellCommand, runCommand, waitForExitCode } from '../commands';
 import {
   getClient,
@@ -215,6 +215,16 @@ describe('command execution', () => {
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
   });
 
+  it('kills the command when its log stream breaks mid-run', async () => {
+    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { throw new Error('stream reset'); });
+
+    await expect(runCommand(sandbox, 'sleep 60', { timeout: 5_000 })).rejects.toThrow(/stream reset/);
+    expect(client.terminateCommand).toHaveBeenCalledTimes(1);
+    expect(client.getCommandDetails).not.toHaveBeenCalled();
+  });
+
   it('waits for the exit code instead of assuming success while in progress', async () => {
     const { sandbox, client } = fakeCommandClient([], [
       { status: 'INPROGRESS' },
@@ -258,6 +268,12 @@ describe('sandbox timeout', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('never shortens a lifetime when converting to whole seconds', () => {
+    expect(toSeconds(1_499)).toBe(2);
+    expect(toSeconds(300_000)).toBe(300);
+    expect(toSeconds(1)).toBe(1);
+  });
+
   it('patches the timeout a snapshot restore did not accept', async () => {
     const { BuddyApiClient } = await import('@buddy-works/sandbox-sdk');
     vi.spyOn(BuddyApiClient.prototype, 'getSandboxById')
@@ -269,6 +285,23 @@ describe('sandbox timeout', () => {
     await ensureTimeout(sandbox, 300_000);
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ body: { timeout: 300 } }));
     expect(sandbox.timeout).toBe(300_000);
+  });
+});
+
+describe('sandbox creation', () => {
+  it('deletes the sandbox when post-create setup fails, keeping the original error', async () => {
+    const { BuddyApiClient } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(BuddyApiClient.prototype, 'addSandbox')
+      .mockResolvedValue({ id: 'sb-new', identifier: 'sb-new', timeout: 3600 } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    vi.spyOn(BuddyApiClient.prototype, 'getSandboxById')
+      .mockResolvedValue({ id: 'sb-new', status: 'RUNNING', setup_status: 'SUCCESS' } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    vi.spyOn(BuddyApiClient.prototype, 'updateSandbox').mockRejectedValue(new Error('quota exceeded'));
+    const remove = vi.spyOn(BuddyApiClient.prototype, 'deleteSandboxById').mockRejectedValue(new Error('gone'));
+
+    const provider = buddy({ token: 't', workspace: 'w', project: 'p' });
+    await expect(provider.sandbox.create({ snapshotId: 'snap', timeout: 300_000 }))
+      .rejects.toThrow(/quota exceeded/);
+    expect(remove).toHaveBeenCalledWith({ path: { id: 'sb-new' } });
   });
 });
 

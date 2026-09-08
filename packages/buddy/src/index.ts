@@ -72,7 +72,14 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
         });
 
         const sandbox = toHandle(resolved, created);
-        await ensureTimeout(sandbox, options?.timeout ?? resolved.timeout);
+        try {
+          await ensureTimeout(sandbox, options?.timeout ?? resolved.timeout);
+        } catch (error) {
+          // The framework has no id yet, so nothing else could clean this up.
+          await sandbox.client.deleteSandboxById({ path: { id: sandbox.sandboxId } })
+            .catch(() => {});
+          throw error;
+        }
         return { sandbox, sandboxId: sandbox.sandboxId };
       },
 
@@ -209,6 +216,11 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
   },
 });
 
+/** Buddy takes whole seconds; rounding up keeps the sandbox alive at least as long as asked. */
+export function toSeconds(ms: number): number {
+  return Math.max(1, Math.ceil(ms / 1000));
+}
+
 function buildCreateBody(config: ResolvedBuddyConfig, options: CreateSandboxOptions = {}) {
   const name = options.name ?? generateSandboxName();
   const timeoutMs = options.timeout ?? config.timeout;
@@ -220,7 +232,7 @@ function buildCreateBody(config: ResolvedBuddyConfig, options: CreateSandboxOpti
     name,
     identifier: toIdentifier(name),
     os: options.image ?? config.os,
-    timeout: Math.max(1, Math.round(timeoutMs / 1000)),
+    timeout: toSeconds(timeoutMs),
   };
 
   const resources = resolveResources(options, config.resources);
@@ -253,8 +265,8 @@ export async function ensureTimeout(
   sandbox: BuddySandboxHandle,
   timeoutMs: number,
 ): Promise<void> {
-  const seconds = Math.max(1, Math.round(timeoutMs / 1000));
-  if (Math.round(sandbox.timeout / 1000) === seconds) return;
+  const seconds = toSeconds(timeoutMs);
+  if (toSeconds(sandbox.timeout) === seconds) return;
   const updated = await whenBooted(sandbox, () => sandbox.client.updateSandbox({
     path: { id: sandbox.sandboxId },
     body: { timeout: seconds } as any,
