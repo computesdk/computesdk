@@ -86,45 +86,80 @@ export async function runCommand(
 
   // Killing the command ends the followed stream, which is what unblocks the
   // loop below — there is no way to abort the HTTP read itself.
+  let timedOut = false;
   const killTimer = options.timeout
-    ? setTimeout(() => { void running.kill().catch(() => {}); }, options.timeout)
+    ? setTimeout(() => {
+      timedOut = true;
+      void running.kill().catch(() => {});
+    }, options.timeout)
     : undefined;
 
   try {
     // `follow: true` holds the connection open until the command exits, so this
-    // loop is the wait — nothing is polled.
+    // loop is the wait — nothing is polled. Each record is one line without its
+    // terminator, so the newline goes back on here.
     for await (const log of running.logs({ follow: true })) {
       if (log.data == null) continue;
+      const chunk = `${log.data}\n`;
       if (log.type === 'STDERR') {
-        stderr.push(log.data);
-        options.onStderr?.(log.data);
+        stderr.push(chunk);
+        options.onStderr?.(chunk);
       } else {
-        stdout.push(log.data);
-        options.onStdout?.(log.data);
+        stdout.push(chunk);
+        options.onStdout?.(chunk);
       }
     }
   } finally {
     if (killTimer) clearTimeout(killTimer);
   }
 
-  const details = await sandbox.client.getCommandDetails({
-    path: { sandbox_id: sandbox.sandboxId, id: commandId },
-  });
+  const exitCode = timedOut
+    ? TIMEOUT_EXIT_CODE
+    : await waitForExitCode(sandbox, commandId);
 
   return {
     stdout: stdout.join(''),
     stderr: stderr.join(''),
-    exitCode: resolveExitCode(details),
+    exitCode,
     durationMs: Date.now() - startedAt,
   };
 }
 
+/** What a shell reports for a command killed by `timeout(1)`. */
+export const TIMEOUT_EXIT_CODE = 124;
+
+const EXIT_CODE_WAIT_MS = 5_000;
+const EXIT_CODE_POLL_MS = 200;
+
+export interface BuddyCommandDetails {
+  exit_code?: number;
+  status?: string;
+}
+
 /**
- * `exit_code` is missing while a command is still in progress, which happens
- * when the log stream ends before Buddy has recorded the result. Reporting a
- * failure there would be wrong, so the status decides.
+ * The log stream can close a moment before Buddy records the result, so the
+ * details may still say `INPROGRESS` without an `exit_code`. Treating that as
+ * success would hide failures; poll briefly until a terminal state shows up.
  */
-function resolveExitCode(details: { exit_code?: number; status?: string }): number {
-  if (typeof details.exit_code === 'number') return details.exit_code;
-  return details.status === 'FAILED' ? 1 : 0;
+export async function waitForExitCode(
+  sandbox: Pick<BuddySandboxHandle, 'client' | 'sandboxId'>,
+  commandId: string,
+  deadlineMs = EXIT_CODE_WAIT_MS,
+): Promise<number> {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const details: BuddyCommandDetails = await sandbox.client.getCommandDetails({
+      path: { sandbox_id: sandbox.sandboxId, id: commandId },
+    });
+    if (typeof details.exit_code === 'number') return details.exit_code;
+    if (details.status === 'FAILED') return 1;
+    if (details.status === 'SUCCESSFUL') return 0;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Buddy command ${commandId} on sandbox ${sandbox.sandboxId} reported no exit code `
+        + `within ${deadlineMs / 1000}s of its log stream closing (status: ${details.status ?? 'unknown'}).`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, EXIT_CODE_POLL_MS));
+  }
 }

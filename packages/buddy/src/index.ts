@@ -41,6 +41,7 @@ import {
   sleep,
   statusOf,
   toEndpointPayload,
+  toEndpointUpdate,
   toHandle,
   toIdentifier,
   type BuddyConfig,
@@ -235,7 +236,24 @@ function buildCreateBody(config: ResolvedBuddyConfig, options: CreateSandboxOpti
   return body as any;
 }
 
-async function getUrl(
+/**
+ * Endpoint updates in flight, per sandbox. Buddy replaces the whole endpoint
+ * list on update, so two concurrent `getUrl` calls built from the same list
+ * would each drop the other's port — they run one after another instead.
+ */
+const endpointUpdates = new WeakMap<BuddySandboxHandle, Promise<unknown>>();
+
+function getUrl(
+  sandbox: BuddySandboxHandle,
+  options: { port: number; protocol?: string },
+): Promise<string> {
+  const previous = endpointUpdates.get(sandbox) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(() => openPort(sandbox, options));
+  endpointUpdates.set(sandbox, next);
+  return next;
+}
+
+async function openPort(
   sandbox: BuddySandboxHandle,
   options: { port: number; protocol?: string },
 ): Promise<string> {
@@ -279,17 +297,6 @@ async function findEndpointUrl(
   sandbox.endpoints = data.endpoints ?? [];
   const match = sandbox.endpoints.find(endpoint => endpointMatchesPort(endpoint, port));
   return match ? endpointPublicUrl(match) : undefined;
-}
-
-/** Strips the read-only fields Buddy rejects when an endpoint is sent back. */
-function toEndpointUpdate(endpoint: BuddyEndpoint): BuddyEndpoint {
-  return {
-    name: endpoint.name,
-    endpoint: endpoint.endpoint,
-    type: endpoint.type,
-    region: endpoint.region,
-    ...(endpoint.whitelist ? { whitelist: endpoint.whitelist } : {}),
-  };
 }
 
 export type { BuddyConfig, BuddySandboxHandle as BuddySandbox } from './utils.js';

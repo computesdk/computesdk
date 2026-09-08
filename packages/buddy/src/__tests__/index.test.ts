@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 
 import { buddy } from '../index';
-import { buildShellCommand, runCommand } from '../commands';
+import { TIMEOUT_EXIT_CODE, buildShellCommand, runCommand, waitForExitCode } from '../commands';
 import {
   apiUrlForRegion,
   isInstanceNotRunning,
@@ -14,6 +14,7 @@ import {
   resolveConfig,
   resolveResources,
   toContentPath,
+  toEndpointUpdate,
   toIdentifier,
 } from '../utils';
 
@@ -130,6 +131,70 @@ describe('command building', () => {
   });
 });
 
+/** Fakes the SDK client surface `runCommand` touches. */
+function fakeCommandClient(
+  logs: Array<{ type: 'STDOUT' | 'STDERR'; data: string }>,
+  details: Array<{ exit_code?: number; status?: string }>,
+) {
+  const pending = [...details];
+  const client = {
+    executeCommand: vi.fn(async () => ({ id: 'cmd-1' })),
+    getCommandLogs: vi.fn(),
+    getCommandDetails: vi.fn(async () => pending.length > 1 ? pending.shift()! : pending[0]),
+    terminateCommand: vi.fn(async () => {}),
+  };
+  const sandbox = { sandboxId: 'sb-1', client } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  return { client, sandbox, logs };
+}
+
+describe('command execution', () => {
+  it('terminates every log record with a newline', async () => {
+    const { sandbox, logs } = fakeCommandClient(
+      [{ type: 'STDOUT', data: 'one' }, { type: 'STDOUT', data: 'two' }, { type: 'STDERR', data: 'warn' }],
+      [{ exit_code: 0, status: 'SUCCESSFUL' }],
+    );
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { yield* logs; });
+
+    const chunks: string[] = [];
+    const result = await runCommand(sandbox, 'printf "one\\ntwo"', { onStdout: chunk => chunks.push(chunk) });
+
+    expect(result.stdout).toBe('one\ntwo\n');
+    expect(result.stderr).toBe('warn\n');
+    expect(chunks.join('')).toBe(result.stdout);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('reports a timed-out command as failed even when Buddy still says in progress', async () => {
+    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    client.terminateCommand.mockImplementation(async () => { release(); });
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await gate; });
+
+    const result = await runCommand(sandbox, 'sleep 60', { timeout: 20 });
+
+    expect(client.terminateCommand).toHaveBeenCalledTimes(1);
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+  });
+
+  it('waits for the exit code instead of assuming success while in progress', async () => {
+    const { sandbox, client } = fakeCommandClient([], [
+      { status: 'INPROGRESS' },
+      { status: 'INPROGRESS' },
+      { exit_code: 3, status: 'FAILED' },
+    ]);
+    await expect(waitForExitCode(sandbox, 'cmd-1', 5_000)).resolves.toBe(3);
+    expect(client.getCommandDetails).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives up on a command that never reports a result', async () => {
+    const { sandbox } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    await expect(waitForExitCode(sandbox, 'cmd-1', 0)).rejects.toThrow(/no exit code/);
+  });
+});
+
 describe('status mapping', () => {
   it('treats a starting sandbox as running, because commands queue', () => {
     expect(mapStatus('STARTING')).toBe('running');
@@ -170,11 +235,29 @@ describe('ports', () => {
       port: 3000, name: 'p3000', type: 'HTTP', region: 'EU',
     });
   });
+
+  it('keeps writable tunnel settings and drops read-only ones when sending endpoints back', () => {
+    expect(toEndpointUpdate({
+      name: 'web', endpoint: '3000', type: 'HTTP', region: 'EU',
+      whitelist: ['10.0.0.0/8'], timeout: 30, http: { auth_type: 'BASIC' }, tls: { tls_ca: 'x' },
+      endpoint_url: 'https://web.example', active: true, target_latency: 12,
+    })).toEqual({
+      name: 'web', endpoint: '3000', type: 'HTTP', region: 'EU',
+      whitelist: ['10.0.0.0/8'], timeout: 30, http: { auth_type: 'BASIC' }, tls: { tls_ca: 'x' },
+    });
+  });
 });
 
 describe('identifiers', () => {
   it('follows the identifier rules Buddy enforces', () => {
     expect(toIdentifier('ComputeSDK Test #1')).toBe('computesdk-test-1');
     expect(toIdentifier('!!!')).toBe('computesdk');
+  });
+
+  it('never leaves a hyphen at the end after truncating', () => {
+    const name = `${'a'.repeat(59)}-tail`;
+    const identifier = toIdentifier(name);
+    expect(identifier).toBe('a'.repeat(59));
+    expect(identifier.length).toBeLessThanOrEqual(60);
   });
 });

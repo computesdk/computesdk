@@ -328,8 +328,9 @@ function memoryToGb(options: Record<string, unknown>): number | undefined {
 
 /** Buddy identifiers allow alphanumerics, `_` and inner `-` only. */
 export function toIdentifier(value: string): string {
-  const cleaned = value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
-  return cleaned.slice(0, 60) || 'computesdk';
+  const cleaned = value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  // Trim after truncating, or the cut can leave a hyphen in the last position.
+  return cleaned.slice(0, 60).replace(/^-+|-+$/g, '') || 'computesdk';
 }
 
 export function generateSandboxName(): string {
@@ -374,6 +375,20 @@ export function endpointPublicUrl(endpoint: BuddyEndpoint): string | undefined {
 
 export function endpointMatchesPort(endpoint: BuddyEndpoint, port: number): boolean {
   return Number(endpoint.endpoint) === port;
+}
+
+/** Fields Buddy reports but rejects when an endpoint is sent back in an update. */
+const READ_ONLY_ENDPOINT_FIELDS = ['endpoint_url', 'active', 'target_latency'] as const;
+
+/**
+ * Prepares an existing endpoint for the replace-all update. Everything
+ * writable — `whitelist`, `timeout`, `http`, `tls` and whatever Buddy adds
+ * later — has to survive, or opening a new port would reset those tunnels.
+ */
+export function toEndpointUpdate(endpoint: BuddyEndpoint): BuddyEndpoint {
+  const update: BuddyEndpoint = { ...endpoint };
+  for (const field of READ_ONLY_ENDPOINT_FIELDS) delete update[field];
+  return update;
 }
 
 /** Swaps the scheme of a URL, for callers asking for `wss` on an HTTP tunnel. */
