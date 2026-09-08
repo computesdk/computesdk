@@ -191,7 +191,7 @@ await client.getSandboxAppLogs({ path: { sandbox_id: sandboxId, app_id: 'web' } 
 | `runCommand` | ✅        | Streams stdout/stderr separately as the command runs, with real exit codes.                   |
 | `getInfo`    | ✅        | Reports Buddy's own status and setup status, plus every tunnel, in `metadata`.                 |
 | `getUrl`     | ✅        | Opens a tunnel if the port has none yet, keeping the existing ones.                           |
-| `filesystem` | ✅        | Uses Buddy's native content endpoints, not the shell — binary-safe and one round trip each.    |
+| `filesystem` | ✅        | Uses Buddy's native content endpoints, not the shell — no quoting or size limits of a command line, one round trip each. |
 | `snapshot`   | ✅        | `create` / `list` / `delete`; `create` waits until the snapshot is restorable.                 |
 | `template`   | ⚠️        | No template entity in Buddy — `list`/`delete` alias snapshots, `create` throws with a hint.    |
 

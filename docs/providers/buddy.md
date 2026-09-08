@@ -138,7 +138,7 @@ await sandbox.filesystem.exists('/buddy/app/index.js');
 await sandbox.filesystem.remove('/buddy/app');
 ```
 
-Filesystem calls go through Buddy's content endpoints rather than the shell, so they are binary-safe and cost one round trip each. Relative paths resolve against `/buddy`, the home directory of the default `buddy` user.
+Filesystem calls go through Buddy's content endpoints rather than the shell, so content is never squeezed through command-line quoting and each call costs one round trip. As with every provider, `readFile` and `writeFile` handle UTF-8 text; use `getInstance().fs` for raw bytes. Relative paths resolve against `/buddy`, the home directory of the default `buddy` user.
 
 The first filesystem call on a sandbox waits for first-boot setup to finish. Buddy queues *commands* against a starting sandbox, but the content endpoints do not: during setup they either refuse the request or accept a write and discard it. The wait costs a few hundred milliseconds once per sandbox.
 
@@ -176,7 +176,7 @@ await client.startSandboxApp({ path: { sandbox_id: sandboxId, app_id: 'web' } })
 | `runCommand` | ✅         | Streams stdout and stderr separately, with real exit codes.                                  |
 | `getInfo`    | ✅         | Reports Buddy's status, setup status and every tunnel in `metadata`.                          |
 | `getUrl`     | ✅         | Opens a tunnel if the port has none yet, keeping the existing ones.                          |
-| `filesystem` | ✅         | Native content endpoints — binary-safe, one round trip each.                                 |
+| `filesystem` | ✅         | Native content endpoints — no shell quoting, one round trip each.                            |
 | `snapshot`   | ✅         | `create` / `list` / `delete`; `create` waits until the snapshot is restorable.                |
 | `template`   | ⚠️        | No template entity in Buddy — `list`/`delete` alias snapshots, `create` throws with a hint.  |
 
