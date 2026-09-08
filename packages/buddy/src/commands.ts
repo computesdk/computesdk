@@ -77,10 +77,34 @@ export async function runCommand(
   const runtime = options.runtime ?? 'BASH';
   const payload = runtime === 'BASH' ? buildShellCommand(command, options) : command;
 
-  const commandResponse = await sandbox.client.executeCommand({
+  const deadline = options.timeout ? startedAt + options.timeout : undefined;
+  const timedOutResult = () => ({
+    stdout: '', stderr: '', exitCode: TIMEOUT_EXIT_CODE, durationMs: Date.now() - startedAt,
+  });
+
+  // Buddy may hold the submission while the sandbox boots (up to the client's
+  // request timeout), so the deadline applies here too: when it passes first,
+  // the timeout result is returned and the command is killed once (if ever)
+  // Buddy reports it accepted.
+  const submission = sandbox.client.executeCommand({
     path: { sandbox_id: sandbox.sandboxId },
     body: { command: payload, runtime },
   });
+  const commandResponse = deadline ? await raceDeadline(submission, deadline) : await submission;
+  if (commandResponse === DEADLINE_PASSED) {
+    void submission.then(
+      response => {
+        if (!response.id) return;
+        void killCommand(new Command({
+          commandResponse: response,
+          client: sandbox.client,
+          sandboxId: sandbox.sandboxId,
+        }));
+      },
+      () => {},
+    );
+    return timedOutResult();
+  }
 
   const commandId = commandResponse.id;
   if (!commandId) {
@@ -103,9 +127,13 @@ export async function runCommand(
 
   // `follow: true` holds the connection open until the command exits, so this
   // loop is the wait — nothing is polled. Each record is one line without its
-  // terminator, so the newline goes back on here.
+  // terminator, so the newline goes back on here. Once the caller has been
+  // given the timeout result the loop stops at the next record instead of
+  // buffering output and firing callbacks for a result nobody will read.
+  let timedOut = false;
   const drain = (async () => {
     for await (const log of running.logs({ follow: true })) {
+      if (timedOut) break;
       if (log.data == null) continue;
       const chunk = `${log.data}\n`;
       if (log.type === 'STDERR') {
@@ -120,44 +148,43 @@ export async function runCommand(
 
   // The SDK stream cannot be aborted, so on timeout the result is returned
   // right away and the reader is left to finish on its own once the kill (best
-  // effort — it may fail or take the client's request timeout) closes it. The
-  // deadline counts from the call, so time spent submitting the command (which
-  // Buddy may hold while the sandbox boots) is not added on top.
-  let timedOut = false;
-  let killTimer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = options.timeout
-    ? new Promise<void>(resolve => {
-      const remaining = Math.max(0, options.timeout! - (Date.now() - startedAt));
-      killTimer = setTimeout(() => {
-        timedOut = true;
-        void killCommand(running);
-        resolve();
-      }, remaining);
-    })
-    : undefined;
-
+  // effort, retried) closes it or the next record arrives.
   try {
-    await (timeout ? Promise.race([drain, timeout]) : drain);
+    const outcome = deadline ? await raceDeadline(drain, deadline) : await drain;
+    if (outcome === DEADLINE_PASSED) {
+      timedOut = true;
+      void killCommand(running);
+      drain.catch(() => {});
+      return timedOutResult();
+    }
   } catch (error) {
     // The stream broke mid-command. Buddy keeps running it, so stop it — best
     // effort and not awaited, so a hanging kill cannot delay the error.
     void killCommand(running);
     throw error;
-  } finally {
-    if (killTimer) clearTimeout(killTimer);
-    if (timedOut) drain.catch(() => {});
   }
-
-  const exitCode = timedOut
-    ? TIMEOUT_EXIT_CODE
-    : await waitForExitCode(sandbox, commandId);
 
   return {
     stdout: stdout.join(''),
     stderr: stderr.join(''),
-    exitCode,
+    exitCode: await waitForExitCode(sandbox, commandId),
     durationMs: Date.now() - startedAt,
   };
+}
+
+const DEADLINE_PASSED = Symbol('deadline passed');
+
+/** Resolves to `DEADLINE_PASSED` if `deadline` (epoch ms) arrives first. */
+async function raceDeadline<T>(work: Promise<T>, deadline: number): Promise<T | typeof DEADLINE_PASSED> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<typeof DEADLINE_PASSED>(resolve => {
+    timer = setTimeout(() => resolve(DEADLINE_PASSED), Math.max(0, deadline - Date.now()));
+  });
+  try {
+    return await Promise.race([work, expiry]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** What a shell reports for a command killed by `timeout(1)`. */

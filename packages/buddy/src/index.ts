@@ -91,7 +91,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
           body: buildCreateBody(resolved, options),
         });
 
-        const sandbox = toHandle(resolved, created);
+        const sandbox = toHandle(resolved, created, new Date(), false);
         try {
           await ensureTimeout(sandbox, options?.timeout ?? resolved.timeout);
         } catch (error) {
@@ -153,6 +153,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
           createdAt: sandbox.createdAt,
           timeout: data.timeout != null ? data.timeout * 1000 : sandbox.timeout,
           metadata: {
+            createdAtIsReconnectTime: sandbox.createdAtIsReconnectTime,
             identifier: data.identifier ?? sandbox.identifier,
             name: data.name,
             os: data.os,

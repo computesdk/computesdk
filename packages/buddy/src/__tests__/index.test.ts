@@ -232,6 +232,40 @@ describe('command execution', () => {
     expect(Date.now() - started).toBeLessThan(500);
   });
 
+  it('returns the timeout result while Buddy still holds the submission', async () => {
+    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    let accept!: (value: { id: string }) => void;
+    client.executeCommand.mockImplementation(() => new Promise<{ id: string }>(resolve => { accept = resolve; }));
+
+    const started = Date.now();
+    const result = await runCommand(sandbox, 'sleep 60', { timeout: 20 });
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+    expect(Date.now() - started).toBeLessThan(500);
+
+    // Once Buddy finally reports the command, it is killed.
+    accept({ id: 'cmd-late' });
+    await vi.waitFor(() => expect(client.terminateCommand).toHaveBeenCalledTimes(1));
+  });
+
+  it('stops forwarding output after the timeout result was returned', async () => {
+    const { sandbox } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    let release!: () => void;
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
+      await new Promise<void>(resolve => { release = resolve; });
+      yield { type: 'STDOUT', data: 'late' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      yield { type: 'STDOUT', data: 'later' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
+
+    const onStdout = vi.fn();
+    const result = await runCommand(sandbox, 'sleep 60', { timeout: 20, onStdout });
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+
+    release();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(onStdout).not.toHaveBeenCalled();
+  });
+
   it('retries a failed kill before giving up', async () => {
     const kill = vi.fn()
       .mockRejectedValueOnce(new Error('gateway timeout'))

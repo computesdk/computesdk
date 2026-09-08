@@ -427,6 +427,8 @@ export interface BuddySandboxHandle {
   client: BuddyApiClient;
   fs: FileSystem;
   createdAt: Date;
+  /** True unless this process created the sandbox; Buddy reports no creation date. */
+  createdAtIsReconnectTime: boolean;
   timeout: number;
   os?: string;
   resources?: string;
@@ -451,13 +453,15 @@ export interface BuddySandboxData {
 
 /**
  * Buddy's sandbox resource carries no creation date (only projects and
- * snapshots do), so a handle rebuilt by `getById` or `list` can only record
- * when it was reconnected. `create` passes the real moment.
+ * snapshots do), and `SandboxInfo.createdAt` is a required `Date`, so a handle
+ * rebuilt by `getById` or `list` can only record when it was reconnected.
+ * `getInfo` marks that case with `metadata.createdAtIsReconnectTime`.
  */
 export function toHandle(
   config: ResolvedBuddyConfig,
   sandbox: BuddySandboxData,
   createdAt = new Date(),
+  createdAtIsReconnectTime = true,
 ): BuddySandboxHandle {
   const sandboxId = sandbox.id;
   if (!sandboxId) {
@@ -472,6 +476,7 @@ export function toHandle(
     client,
     fs: new FileSystem(client, sandboxId),
     createdAt,
+    createdAtIsReconnectTime,
     timeout: sandbox.timeout != null ? sandbox.timeout * 1000 : config.timeout,
     os: sandbox.os,
     resources: sandbox.resources,
