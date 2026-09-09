@@ -4,10 +4,10 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance, initialize } from '@blaxel/core';
+import { SandboxInstance, VolumeInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, Volume, CreateVolumeOptions, ListVolumesOptions, AttachVolumeOptions } from '@computesdk/provider';
 
 /**
  * Blaxel-specific configuration options
@@ -47,6 +47,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					sandboxId: optSandboxId,
 					namespace: _namespace,
 					directory: _directory,
+					volumeIds,
 					...providerOptions
 				} = options || {};
 
@@ -99,6 +100,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
 						...providerOptions, // Spread provider-specific options
+						...(volumeIds && volumeIds.length > 0 ? {
+							volumes: volumeIds.map((volumeName: string, index: number) => ({
+								name: volumeName,
+								mountPath: `/mnt/volume-${index}`,
+								readOnly: false,
+							})),
+						} : {}),
 					});
 				}
 
@@ -420,6 +428,88 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			}
 		},
 
+		volume: {
+			create: async (config: BlaxelConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+				initializeBlaxel(config);
+
+				const labels = options?.metadata
+					? Object.fromEntries(Object.entries(options.metadata).map(([k, v]) => [k, String(v)]))
+					: undefined;
+
+				const native = await VolumeInstance.create({
+					name: options?.name,
+					displayName: options?.name,
+					size: options?.size,
+					...(labels && { labels }),
+					...(config.region && { region: config.region }),
+				});
+
+				return mapVolume(native);
+			},
+
+			list: async (config: BlaxelConfig, options?: ListVolumesOptions): Promise<Volume[]> => {
+				initializeBlaxel(config);
+
+				const query: any = {};
+				if (options?.limit) query.limit = options.limit;
+				if (options?.cursor) query.cursor = options.cursor;
+				if (options?.q) query.q = options.q;
+
+				const volumes: Volume[] = [];
+				for await (const volume of await VolumeInstance.list(query)) {
+					volumes.push(mapVolume(volume));
+				}
+				return volumes;
+			},
+
+			getById: async (config: BlaxelConfig, volumeId: string): Promise<Volume | null> => {
+				initializeBlaxel(config);
+				try {
+					return mapVolume(await VolumeInstance.get(volumeId));
+				} catch {
+					return null;
+				}
+			},
+
+			delete: async (config: BlaxelConfig, volumeId: string): Promise<void> => {
+				initializeBlaxel(config);
+				await VolumeInstance.delete(volumeId);
+			},
+
+			attach: async (config: BlaxelConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+				initializeBlaxel(config);
+				const sandbox = await SandboxInstance.get(sandboxId);
+				if (!sandbox) {
+					throw new Error(`Sandbox ${sandboxId} not found`);
+				}
+				const mountPath = options?.mountPath || `/mnt/${volumeId}`;
+				await sandbox.drives.mount({
+					driveName: volumeId,
+					mountPath,
+					...(options?.readOnly !== undefined && { readOnly: options.readOnly }),
+				});
+			},
+
+			detach: async (config: BlaxelConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+				initializeBlaxel(config);
+				const sandbox = await SandboxInstance.get(sandboxId);
+				if (!sandbox) {
+					throw new Error(`Sandbox ${sandboxId} not found`);
+				}
+
+				let mountPath = options?.mountPath;
+				if (!mountPath) {
+					const mounts = await sandbox.drives.list();
+					const mount = mounts.find(m => m.driveName === volumeId);
+					mountPath = mount?.mountPath;
+				}
+				if (!mountPath) {
+					throw new Error(`Volume ${volumeId} is not mounted on sandbox ${sandboxId}`);
+				}
+				await sandbox.drives.unmount(mountPath);
+			},
+		},
+
 		// Templates in Blaxel are pre-configured images
 		template: {
 			create: async (_config: BlaxelConfig, _options: { name: string }) => {
@@ -453,6 +543,25 @@ async function listAllSandboxes(): Promise<SandboxInstance[]> {
 		sandboxes.push(sandbox);
 	}
 	return sandboxes;
+}
+
+/**
+ * Map a Blaxel VolumeInstance to the ComputeSDK universal Volume shape.
+ */
+function mapVolume(native: VolumeInstance): Volume {
+	return {
+		id: native.name,
+		provider: 'blaxel',
+		name: native.displayName || native.name,
+		createdAt: native.metadata?.createdAt ? new Date(native.metadata.createdAt) : new Date(),
+		size: native.size,
+		metadata: {
+			...native.metadata?.labels,
+			status: native.status,
+			region: native.region,
+		},
+		native,
+	};
 }
 
 /**
