@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, Volume, CreateVolumeOptions, ListVolumesOptions } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -54,6 +54,12 @@ const API_ENDPOINTS = {
 
 const COMMAND_SERVICE = {
   RUN_COMMAND_SYNC: '/namespace.cloud.compute.v1beta.CommandService/RunCommandSync',
+};
+
+const STORAGE_SERVICE = {
+  LIST_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumes',
+  DESCRIBE_PERSISTENT_VOLUME: '/namespace.cloud.compute.v1beta.StorageService/DescribePersistentVolume',
+  DESTROY_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumes',
 };
 
 /**
@@ -120,6 +126,39 @@ export const fetchNamespace = async (
   return data;
 };
 
+function parseNamespaceTimestamp(value?: string): Date {
+  if (!value) return new Date(0);
+  try { return new Date(value); } catch { return new Date(0); }
+}
+
+function persistentVolumeToVolume(data: any): Volume {
+  return {
+    id: data.id,
+    provider: 'namespace',
+    name: data.tag || data.id,
+    createdAt: parseNamespaceTimestamp(data.created_at),
+    size: typeof data.size_mb === 'number' ? data.size_mb : undefined,
+    metadata: {
+      tag: data.tag,
+      site: data.site,
+      attachedTo: data.attached_to,
+      releasedReason: data.released_reason,
+    },
+    native: data,
+  };
+}
+
+async function resolveVolumeTag(token: string, volumeId: string, baseUrl?: string): Promise<string> {
+  try {
+    const response = await fetchNamespace(token, STORAGE_SERVICE.DESCRIBE_PERSISTENT_VOLUME, {
+      method: 'POST',
+      body: JSON.stringify({ id: volumeId })
+    }, baseUrl);
+    if (response.volume?.tag) return response.volume.tag;
+  } catch { /* volumeId may already be a tag */ }
+  return volumeId;
+}
+
 /**
  * Namespace provider
  *
@@ -136,7 +175,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const image = options?.image;
 
         try {
-          const requestBody = {
+          const requestBody: Record<string, any> = {
             shape: {
               virtual_cpu: config.virtualCpu || 2,
               memory_megabytes: config.memoryMegabytes || 4096,
@@ -156,6 +195,19 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             documented_purpose: config.documentedPurpose || 'ComputeSDK sandbox',
             deadline: new Date(Date.now() + 60 * 60 * 1000).toISOString()
           };
+
+          if (options?.volumeIds && options.volumeIds.length > 0) {
+            requestBody.volumes = await Promise.all(
+              options.volumeIds.map(async (volumeId, index) => {
+                const tag = await resolveVolumeTag(token, volumeId);
+                return {
+                  mount_point: `/mnt/volume-${index}`,
+                  tag,
+                  persistency_kind: 'PERSISTENT',
+                };
+              })
+            );
+          }
 
           const responseData = await fetchNamespace(token, API_ENDPOINTS.CREATE_INSTANCE, {
             method: 'POST',
@@ -352,6 +404,52 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       getInstance: (sandbox: NamespaceSandbox): NamespaceSandbox => sandbox,
-    }
+    },
+
+    volume: {
+      create: async (_config: NamespaceConfig, _options?: CreateVolumeOptions): Promise<Volume> => {
+        throw new Error('Namespace persistent volumes cannot be created independently. Create a sandbox with volumeIds to provision persistent storage.');
+      },
+      list: async (config: NamespaceConfig, options?: ListVolumesOptions): Promise<Volume[]> => {
+        const { token } = await getAndValidateCredentials(config);
+        try {
+          const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+            method: 'POST',
+            body: JSON.stringify({ max_entries: options?.limit })
+          });
+          return (response.volumes || []).map(persistentVolumeToVolume);
+        } catch (error) {
+          throw new Error(`Failed to list Namespace persistent volumes: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      getById: async (config: NamespaceConfig, volumeId: string): Promise<Volume | null> => {
+        const { token } = await getAndValidateCredentials(config);
+        try {
+          const response = await fetchNamespace(token, STORAGE_SERVICE.DESCRIBE_PERSISTENT_VOLUME, {
+            method: 'POST',
+            body: JSON.stringify({ id: volumeId })
+          });
+          if (!response.volume) return null;
+          return persistentVolumeToVolume(response.volume);
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('404')) return null;
+          throw new Error(`Failed to get Namespace persistent volume: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      delete: async (config: NamespaceConfig, volumeId: string): Promise<void> => {
+        const { token } = await getAndValidateCredentials(config);
+        try {
+          await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUMES, {
+            method: 'POST',
+            body: JSON.stringify({
+              id: { values: [volumeId], op: 'IS_ANY_OF' }
+            })
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('404')) return;
+          throw new Error(`Failed to delete Namespace persistent volume: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+    },
   }
 });
