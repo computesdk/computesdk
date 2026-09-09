@@ -8,6 +8,7 @@ Install the provider package for the platform you want to use:
 # Pick one (or more) providers
 npm install @computesdk/archil
 npm install @computesdk/blaxel
+npm install @computesdk/buddy
 npm install @computesdk/cloudflare
 npm install @computesdk/codesandbox
 npm install @computesdk/daytona
@@ -39,6 +40,13 @@ ARCHIL_DISK_ID=your_archil_disk_id
 ```bash
 BL_API_KEY=your_blaxel_api_key
 BL_WORKSPACE=your_blaxel_workspace
+```
+
+### Buddy
+```bash
+BUDDY_TOKEN=your_buddy_api_token
+BUDDY_WORKSPACE=your_buddy_workspace_domain
+BUDDY_PROJECT=your_buddy_project_name
 ```
 
 ### Cloudflare
