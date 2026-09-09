@@ -414,6 +414,20 @@ describe('compute multi-provider', () => {
     expect(secondGetById).toHaveBeenCalledWith('vol-1');
   });
 
+  it('treats a volume-specific not-found message as absence and continues lookup', async () => {
+    const firstGetById = vi.fn(async () => {
+      throw new Error(`Volume vol-1 doesn't exist`);
+    });
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    const volume = await sdk.volume.getById('vol-1');
+    expect(volume).toEqual(expect.objectContaining({ id: 'vol-1', provider: 'second' }));
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
   it('enforces options.limit across providers in volume.list', async () => {
     const firstList = vi.fn(async () => [
       { id: 'vol-1', provider: 'first', createdAt: new Date() },

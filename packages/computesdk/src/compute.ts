@@ -128,7 +128,7 @@ function isVolumeNotFoundError(error: unknown): boolean {
   if (typeof e.message === 'string') {
     // Only classify messages that explicitly refer to the volume object itself,
     // not parent resources (workspace, endpoint, etc.) being missing.
-    return /volume[^.]*not found|volume[^.]*does not exist|no such volume|volume not found/i.test(e.message);
+    return /volume[^.]*(?:not found|does not exist|doesn't exist)|no such volume/i.test(e.message);
   }
   return false;
 }
