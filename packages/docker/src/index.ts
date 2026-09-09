@@ -53,8 +53,8 @@ function isComputeVolume(info: import('dockerode').VolumeInspectInfo): boolean {
 
 function parseDockerBind(bind: string): { source: string; target: string; options: string } {
   const parts = bind.split(':');
-  let targetIndex = parts.findIndex((part) => part.startsWith('/'));
-  if (targetIndex <= 0) {
+  let targetIndex = parts.findIndex((part, index) => index > 0 && part.startsWith('/'));
+  if (targetIndex < 0) {
     // No absolute container path detected; fall back to last segment as target.
     targetIndex = parts.length - 1;
   }
