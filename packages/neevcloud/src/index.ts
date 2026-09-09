@@ -1,4 +1,9 @@
-import { type SandboxMethods, defineProvider } from "@computesdk/provider";
+import {
+  type SandboxMethods,
+  type VolumeMethods,
+  defineProvider,
+} from "@computesdk/provider";
+import type { Volume } from "@computesdk/provider";
 import {
   Neev,
   type FileEntry as NeevFileEntry,
@@ -77,6 +82,11 @@ const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
   // (mutually exclusive; image wins, else templateId, else platform default). Name is left
   // unset so the server generates one.
   create: async (config, options) => {
+    if (options?.volumeIds && options.volumeIds.length > 0) {
+      throw new Error(
+        "NeevCloud sandbox creation does not support volume mounts through the ComputeSDK provider.",
+      );
+    }
     const source = options?.image
       ? { image: options.image }
       : { sandbox_template_id: options?.templateId };
@@ -178,9 +188,36 @@ const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
   },
 };
 
+// NeevCloud's sandbox SDK does not expose volume primitives. This adapter keeps
+// the provider's volume methods available in the universal API while routing
+// callers to the platform console for real volume management.
+const volumeMethods: VolumeMethods<Volume, NeevCloudConfig> = {
+  create: async () => {
+    throw new Error(
+      "NeevCloud volumes are not managed through the ComputeSDK NeevCloud provider. " +
+        "Create volumes in the NeevCloud console and use provider-specific options if the sandbox API adds support.",
+    );
+  },
+  list: async () => {
+    throw new Error(
+      "NeevCloud volume listing is not exposed by the @neevcloud/sdk sandbox client.",
+    );
+  },
+  getById: async () => {
+    throw new Error(
+      "NeevCloud volume lookup is not exposed by the @neevcloud/sdk sandbox client.",
+    );
+  },
+  delete: async () => {
+    throw new Error(
+      "NeevCloud volumes cannot be deleted through the ComputeSDK NeevCloud provider.",
+    );
+  },
+};
+
 // ComputeSDK provider for NeevCloud sandboxes.
 // Usage: `createCompute({ defaultProvider: neevcloud({ apiKey }) })`.
 export const neevcloud = defineProvider<Sandbox, NeevCloudConfig>({
   name: "neevcloud",
-  methods: { sandbox: sandboxMethods },
+  methods: { sandbox: sandboxMethods, volume: volumeMethods },
 });
