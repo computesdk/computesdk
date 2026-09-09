@@ -122,13 +122,19 @@ function getProviderErrorDetail(error: unknown): string {
 
 function isVolumeNotFoundError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const e = error as { statusCode?: number; code?: number; message?: string };
+  const e = error as { statusCode?: number; code?: number; name?: string; message?: string };
   if (e.statusCode === 404 || e.code === 404) return true;
+  if (e.name === 'NotFoundError') return true;
   if (typeof e.message === 'string') {
-    return /not found|no such|does not exist|doesn't exist|was not found/i.test(e.message);
+    // Only classify messages that explicitly refer to the volume object itself,
+    // not parent resources (workspace, endpoint, etc.) being missing.
+    return /volume[^.]*not found|volume[^.]*does not exist|no such volume|volume not found/i.test(e.message);
   }
   return false;
 }
+
+class VolumeAmbiguityError extends Error {}
+class VolumeLookupAggregateError extends Error {}
 
 function resolveProviders(config: ExplicitComputeConfig): DirectProvider[] {
   const candidates: unknown[] = [];
@@ -281,13 +287,13 @@ class ComputeManager {
         const volume = await provider.volume!.getById!(volumeId);
         if (volume) {
           if (owner) {
-            throw new Error(
+            throw new VolumeAmbiguityError(
               `Volume id "${volumeId}" is ambiguous: found on providers "${getProviderLabel(owner.provider, 0)}" and "${getProviderLabel(provider, 1)}". ` +
               'Pass the provider name in options to disambiguate.'
             );
           }
           if (errors.length > 0) {
-            throw new Error(
+            throw new VolumeLookupAggregateError(
               `Volume id "${volumeId}" owner lookup could not be established because other providers reported errors: ` +
               errors.map((e) => e.message).join('; ')
             );
@@ -295,7 +301,7 @@ class ComputeManager {
           owner = { provider, volume };
         }
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith(`Volume id "${volumeId}"`)) {
+        if (error instanceof VolumeAmbiguityError || error instanceof VolumeLookupAggregateError) {
           throw error;
         }
         if (isVolumeNotFoundError(error)) {
@@ -307,7 +313,7 @@ class ComputeManager {
     }
 
     if (errors.length > 0) {
-      throw new Error(
+      throw new VolumeLookupAggregateError(
         `Volume id "${volumeId}" owner lookup failed: ` + errors.map((e) => e.message).join('; ')
       );
     }
