@@ -7,15 +7,20 @@
  * @see https://isorun.ai
  */
 
+import { randomUUID } from 'node:crypto'
 import { Isorun, Sandbox } from 'isorun'
 import { defineProvider, escapeShellArg } from '@computesdk/provider'
 
+import type { CreateOptions } from 'isorun'
 import type {
   CommandResult,
   CreateSandboxOptions,
+  CreateVolumeOptions,
   FileEntry,
+  ListVolumesOptions,
   RunCommandOptions,
   SandboxInfo,
+  Volume,
 } from '@computesdk/provider'
 
 export interface IsorunConfig {
@@ -55,7 +60,35 @@ export interface IsorunSnapshot {
   metadata?: Record<string, unknown>
 }
 
-export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({
+interface IsorunVolume extends Volume {
+  native?: unknown
+}
+
+interface IsorunCreateOptions extends CreateOptions {
+  disk?: string
+}
+
+interface IsorunDiskRecord {
+  id?: string
+  name: string
+  sizeGb?: number
+  createdAt?: string
+  [key: string]: any
+}
+
+function diskRecordToVolume(disk: IsorunDiskRecord): IsorunVolume {
+  return {
+    id: disk.id ?? disk.name,
+    provider: 'isorun',
+    name: disk.name,
+    createdAt: disk.createdAt ? new Date(disk.createdAt) : new Date(),
+    size: typeof disk.sizeGb === 'number' ? disk.sizeGb * 1024 : undefined,
+    metadata: disk,
+    native: disk,
+  }
+}
+
+export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot, IsorunVolume>({
   name: 'isorun',
   methods: {
     sandbox: {
@@ -63,13 +96,24 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         const client = getClient(config)
         const runtime = (options?.runtime as Runtime | undefined) ?? 'node'
         const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
-        const sandbox = await client.create({
+
+        if (options?.volumeIds && options.volumeIds.length > 1) {
+          throw new Error('Isorun supports one persistent disk per sandbox. Pass a single volumeId in volumeIds.')
+        }
+
+        const createOptions: IsorunCreateOptions = {
           image: options?.image || defaultImage(runtime),
           vcpus: options?.vcpus,
           memMiB: options?.memMiB,
           diskMiB: options?.diskMiB,
           timeoutSec: Math.max(1, Math.ceil(timeoutMs / 1000)),
-        })
+        }
+
+        if (options?.volumeIds?.length) {
+          createOptions.disk = options.volumeIds[0]
+        }
+
+        const sandbox = await client.create(createOptions)
         sandboxTimeouts.set(sandbox, timeoutMs)
         return { sandbox, sandboxId: sandbox.id }
       },
@@ -221,6 +265,71 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         try {
           await getClient(config).deleteSnapshot(snapshotId)
         } catch { /* idempotent: snapshot may already be gone */ }
+      },
+    },
+
+    volume: {
+      create: async (config: ConfigWithClient, options?: CreateVolumeOptions): Promise<IsorunVolume> => {
+        const client = getClient(config) as any
+        if (typeof client.createDisk !== 'function') {
+          throw new Error(
+            'Isorun persistent disk creation is not available in the installed SDK. ' +
+              'Create disks via the Isorun dashboard or upgrade the isorun package.'
+          )
+        }
+
+        const name = options?.name ?? `computesdk-volume-${randomUUID()}`
+        const sizeGb = options?.size ? Math.max(1, Math.ceil(options.size / 1024)) : undefined
+        const disk = await client.createDisk({ name, sizeGb })
+        return diskRecordToVolume(disk as IsorunDiskRecord)
+      },
+
+      list: async (config: ConfigWithClient, _options?: ListVolumesOptions): Promise<IsorunVolume[]> => {
+        const client = getClient(config) as any
+        if (typeof client.listDisks !== 'function') {
+          return []
+        }
+
+        const result = await client.listDisks()
+        const disks: IsorunDiskRecord[] = Array.isArray(result) ? result : (result?.disks ?? [])
+        return disks.map(diskRecordToVolume)
+      },
+
+      getById: async (config: ConfigWithClient, volumeId: string): Promise<IsorunVolume | null> => {
+        const client = getClient(config) as any
+
+        if (typeof client.getDisk === 'function') {
+          try {
+            const disk = await client.getDisk(volumeId)
+            return disk ? diskRecordToVolume(disk as IsorunDiskRecord) : null
+          } catch {
+            return null
+          }
+        }
+
+        if (typeof client.listDisks !== 'function') {
+          throw new Error(
+            'Isorun persistent disk lookup is not available in the installed SDK. ' +
+              'Upgrade the isorun package or use provider.sandbox.create({ volumeIds: [volumeId] }).'
+          )
+        }
+
+        const result = await client.listDisks()
+        const disks: IsorunDiskRecord[] = Array.isArray(result) ? result : (result?.disks ?? [])
+        const disk = disks.find((d) => d.id === volumeId || d.name === volumeId)
+        return disk ? diskRecordToVolume(disk) : null
+      },
+
+      delete: async (config: ConfigWithClient, volumeId: string): Promise<void> => {
+        const client = getClient(config) as any
+        if (typeof client.deleteDisk !== 'function') {
+          throw new Error(
+            'Isorun persistent disk deletion is not available in the installed SDK. ' +
+              'Delete disks via the Isorun dashboard or upgrade the isorun package.'
+          )
+        }
+
+        await client.deleteDisk(volumeId)
       },
     },
   },
