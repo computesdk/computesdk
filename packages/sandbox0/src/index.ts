@@ -11,9 +11,12 @@ import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateSandboxOptions,
+  CreateVolumeOptions,
   FileEntry,
+  ListVolumesOptions,
   RunCommandOptions,
   SandboxInfo,
+  Volume,
 } from '@computesdk/provider';
 
 export interface Sandbox0Config {
@@ -56,6 +59,7 @@ interface Sandbox0ClaimOptions {
   };
   snapshotId?: string;
   memory?: string;
+  mounts?: Array<{ sandboxvolumeId: string; mountPoint: string }>;
 }
 
 const observations = new WeakMap<Sandbox0Sandbox, SandboxObservation>();
@@ -142,6 +146,13 @@ function buildClaimOptions(
         : {}
     ),
   };
+
+  if (options?.volumeIds && options.volumeIds.length > 0) {
+    claimOptions.mounts = options.volumeIds.map((volumeId, index) => ({
+      sandboxvolumeId: volumeId,
+      mountPoint: `/mnt/volume-${index}`,
+    }));
+  }
 
   return Object.keys(claimOptions).length > 0 ? claimOptions : undefined;
 }
@@ -378,7 +389,41 @@ async function createSandbox(config: Sandbox0Config, options?: CreateSandboxOpti
   return { sandbox, sandboxId: sandbox.id };
 }
 
-const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
+type Sandbox0NativeVolume = Awaited<ReturnType<Client['volumes']['create']>>;
+
+interface Sandbox0Volume extends Volume {
+  native: Sandbox0NativeVolume;
+}
+
+function mapVolume(
+  nativeVolume: Sandbox0NativeVolume,
+  options?: { name?: string; metadata?: Record<string, any> },
+): Sandbox0Volume {
+  const sizeBytes = nativeVolume.meteredStorageBytes;
+  const { name, metadata } = options ?? {};
+  return {
+    id: nativeVolume.id,
+    provider: 'sandbox0',
+    name: name ?? metadata?.name,
+    createdAt: nativeVolume.createdAt,
+    size: typeof sizeBytes === 'number' ? Math.round(sizeBytes / (1024 * 1024)) : undefined,
+    metadata: {
+      ...metadata,
+      backend: nativeVolume.backend,
+      teamId: nativeVolume.teamId,
+      userId: nativeVolume.userId,
+      sourceVolumeId: nativeVolume.sourceVolumeId,
+      accessMode: nativeVolume.accessMode,
+      s3: nativeVolume.s3,
+      defaultPosixUid: nativeVolume.defaultPosixUid,
+      defaultPosixGid: nativeVolume.defaultPosixGid,
+      meteredStorageBytes: nativeVolume.meteredStorageBytes,
+    },
+    native: nativeVolume,
+  };
+}
+
+const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config, any, any, Sandbox0Volume>({
   name: 'sandbox0',
   methods: {
     sandbox: {
@@ -556,6 +601,63 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
       },
 
       getInstance: (sandbox): Sandbox0Sandbox => sandbox,
+    },
+
+    volume: {
+      create: async (
+        config: Sandbox0Config,
+        options?: CreateVolumeOptions,
+      ): Promise<Sandbox0Volume> => {
+        const client = createClient(config);
+        const metadata = options?.metadata ?? {};
+        const snapshotId = options?.snapshotId ?? metadata.snapshotId;
+        const volume = await client.volumes.create({
+          ...(snapshotId ? { snapshotId } : {}),
+          ...('backend' in metadata ? { backend: metadata.backend } : {}),
+          ...('s3' in metadata ? { s3: metadata.s3 } : {}),
+          ...('defaultPosixUid' in metadata ? { defaultPosixUid: metadata.defaultPosixUid } : {}),
+          ...('defaultPosixGid' in metadata ? { defaultPosixGid: metadata.defaultPosixGid } : {}),
+          ...('accessMode' in metadata ? { accessMode: metadata.accessMode } : {}),
+        });
+        return mapVolume(volume, options);
+      },
+
+      list: async (
+        config: Sandbox0Config,
+        options?: ListVolumesOptions,
+      ): Promise<Sandbox0Volume[]> => {
+        const client = createClient(config);
+        const volumes = await client.volumes.list();
+        const result = volumes.map((volume) => mapVolume(volume));
+        if (options?.limit !== undefined) {
+          return result.slice(0, options.limit);
+        }
+        return result;
+      },
+
+      getById: async (
+        config: Sandbox0Config,
+        volumeId: string,
+      ): Promise<Sandbox0Volume | null> => {
+        const client = createClient(config);
+        try {
+          const volume = await client.volumes.get(volumeId);
+          return mapVolume(volume);
+        } catch (error) {
+          if (isNotFound(error)) return null;
+          throw error;
+        }
+      },
+
+      delete: async (config: Sandbox0Config, volumeId: string): Promise<void> => {
+        const client = createClient(config);
+        try {
+          await client.volumes.delete(volumeId);
+        } catch (error) {
+          if (isNotFound(error)) return;
+          throw error;
+        }
+      },
     },
   },
 });
