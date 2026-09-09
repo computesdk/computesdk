@@ -10,8 +10,16 @@
 import { Sandbox, SandboxNotFoundError } from 'railway';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, RunCommandOptions, SandboxInfo } from '@computesdk/provider';
-import type { CreateSandboxOptions, FileEntry } from 'computesdk';
+import type {
+  CommandResult,
+  RunCommandOptions,
+  SandboxInfo,
+  Volume,
+  CreateSandboxOptions,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+} from '@computesdk/provider';
+import type { FileEntry } from 'computesdk';
 
 type RailwaySandbox = Sandbox;
 
@@ -117,6 +125,13 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
   methods: {
     sandbox: {
       create: async (config: RailwayConfig, options?: CreateSandboxOptions) => {
+        if (options?.volumeIds?.length) {
+          throw new Error(
+            'Railway sandboxes do not support attaching volumes at creation time. ' +
+              'Use Railway project volumes and service volumeMounts via the Railway dashboard instead.'
+          );
+        }
+
         const client = resolveClientOptions(config);
 
         try {
@@ -285,6 +300,23 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
       },
 
       getInstance: (sandbox: RailwaySandbox): RailwaySandbox => sandbox,
+    },
+
+    volume: {
+      create: async (_config: RailwayConfig, _options?: CreateVolumeOptions): Promise<Volume> => {
+        throw new Error(
+          'Railway does not support creating volumes through ComputeSDK. ' +
+            'Railway volumes are project-level resources managed via the Railway dashboard or IaC, not ephemeral sandboxes.'
+        );
+      },
+      list: async (_config: RailwayConfig, _options?: ListVolumesOptions): Promise<Volume[]> => [],
+      getById: async (_config: RailwayConfig, _volumeId: string): Promise<Volume | null> => null,
+      delete: async (_config: RailwayConfig, _volumeId: string): Promise<void> => {
+        throw new Error(
+          'Railway volumes cannot be deleted through ComputeSDK. ' +
+            'Delete them in the Railway dashboard or via Railway IaC.'
+        );
+      },
     },
   },
 });
