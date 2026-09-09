@@ -13,9 +13,6 @@ managed by Archil. `getById` requires a disk id.
 npm install @computesdk/archil
 ```
 
-The provider talks to the Archil control plane directly over HTTP — no
-additional Archil SDK is required.
-
 ## Configuration
 
 | Option    | Env var            | Required | Description                                |

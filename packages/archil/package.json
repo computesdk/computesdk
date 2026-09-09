@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "computesdk": "workspace:*",
-    "@computesdk/provider": "workspace:*"
+    "@computesdk/provider": "workspace:*",
+    "disk": "^1.1.2"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
