@@ -25,7 +25,7 @@ import type {
   CreateVolumeOptions,
   ListVolumesOptions,
   AttachVolumeOptions,
-} from "computesdk";
+} from "@computesdk/provider";
 import { randomUUID } from "node:crypto";
 import {
   TenkiSandbox,
