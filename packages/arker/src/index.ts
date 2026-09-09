@@ -5,11 +5,12 @@
  * filesystems.
  */
 
+import { randomUUID } from 'node:crypto';
 import { Arker, ArkerError, VM } from '@arker-ai/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { RunOptions } from '@arker-ai/sdk';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { RunOptions, Filesystem, Sync } from '@arker-ai/sdk';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, Volume, CreateVolumeOptions, ListVolumesOptions, AttachVolumeOptions } from '@computesdk/provider';
 
 /** Provider used when none is configured. */
 const DEFAULT_PROVIDER = 'aws';
@@ -37,6 +38,18 @@ const env = (key: string): string | undefined => {
   const value = typeof process !== 'undefined' ? process.env?.[key] : undefined;
   return value && value.trim() ? value.trim() : undefined;
 };
+
+function toVolume(filesystem: Filesystem): Volume {
+  return {
+    id: filesystem.filesystem_id,
+    provider: 'arker',
+    name: filesystem.name,
+    createdAt: new Date(filesystem.created_at),
+    size: filesystem.size_bytes != null ? Math.round(filesystem.size_bytes / (1024 * 1024)) : undefined,
+    metadata: { region: filesystem.region, provider: filesystem.provider },
+    native: filesystem,
+  };
+}
 
 /** Known compute providers, used to split a combined `<provider>-<region>` value. */
 const PROVIDER_PREFIXES = ['aws', 'gcp', 'azure', 'arker'] as const;
@@ -115,6 +128,20 @@ export const arker = defineProvider<VM, ArkerConfig>({
               name,
               ...(platforms?.length ? { platforms } : {}),
             });
+
+        if (options?.volumeIds && options.volumeIds.length > 0) {
+          try {
+            await Promise.all(
+              options.volumeIds.map((volumeId, index) =>
+                vm.createSync({ filesystemId: volumeId, path: `/mnt/volume-${index}` })
+              )
+            );
+          } catch (err) {
+            // Mount failures leave the VM in an unusable state for the caller.
+            try { await vm.delete(); } catch { /* ignore cleanup failure */ }
+            throw err;
+          }
+        }
 
         return { sandbox: vm, sandboxId: vm.id };
       },
@@ -263,6 +290,58 @@ export const arker = defineProvider<VM, ArkerConfig>({
           const result = await runCommand(sandbox, `rm -rf "${escapeShellArg(path)}"`);
           if (result.exitCode !== 0) throw new Error(`Arker remove failed for ${path}: ${result.stderr || `exit ${result.exitCode}`}`);
         },
+      },
+    },
+
+    // --- Volume management ---
+
+    volume: {
+      create: async (config: ArkerConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const client = makeClient(config);
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
+        const filesystem = await client.createFilesystem({ name });
+        return toVolume(filesystem);
+      },
+
+      list: async (config: ArkerConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const client = makeClient(config);
+        const { filesystems } = await client.listFilesystems();
+        return filesystems.map(toVolume);
+      },
+
+      getById: async (config: ArkerConfig, volumeId: string): Promise<Volume | null> => {
+        const client = makeClient(config);
+        try {
+          const filesystem = await client.getFilesystem(volumeId);
+          return toVolume(filesystem);
+        } catch (err) {
+          if (err instanceof ArkerError && err.status === 404) return null;
+          throw err;
+        }
+      },
+
+      delete: async (config: ArkerConfig, volumeId: string): Promise<void> => {
+        const client = makeClient(config);
+        try {
+          await client.deleteFilesystem(volumeId);
+        } catch (err) {
+          if (err instanceof ArkerError && err.status === 404) return;
+          throw err;
+        }
+      },
+
+      attach: async (config: ArkerConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+        const client = makeClient(config);
+        await client.vm(sandboxId).createSync({
+          filesystemId: volumeId,
+          path: options?.mountPath || '/mnt/volume',
+        });
+      },
+
+      detach: async (config: ArkerConfig, volumeId: string, sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {
+        const client = makeClient(config);
+        const { syncs } = await client.vm(sandboxId).listSyncs({ filesystemId: volumeId });
+        await Promise.all(syncs.map((sync) => client.vm(sandboxId).deleteSync(sync.sync_id)));
       },
     },
   },
