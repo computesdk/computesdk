@@ -36,7 +36,10 @@ function door(handler: (method: string, path: string, body: any) => { status?: n
       headers: { 'content-type': 'application/json' },
     })
   }) as unknown as typeof fetch
-  const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+  // `absorb`, not the `prime` default: these cases pin the exact requests an
+  // operation sends, and the warm-up `prime` adds is the client's business,
+  // covered in client.node.test.ts.
+  const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fastToken: 'absorb', fetch: fetchImpl })
   return { sent, client }
 }
 
