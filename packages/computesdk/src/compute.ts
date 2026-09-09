@@ -303,18 +303,32 @@ class ComputeManager {
 
   private async identifyVolumeOwner(volumeId: string): Promise<DirectProvider | undefined> {
     const providers = this.getProviders().filter((p) => typeof p.volume?.getById === 'function');
+    let owner: DirectProvider | undefined;
+
     for (const provider of providers) {
       try {
         const volume = await provider.volume!.getById!(volumeId);
         if (volume) {
-          this.setVolumeProvider(volumeId, provider);
-          return provider;
+          if (owner) {
+            throw new Error(
+              `Volume id "${volumeId}" is ambiguous: found on providers "${getProviderLabel(owner, 0)}" and "${getProviderLabel(provider, 1)}". ` +
+              'Pass the provider name in options to disambiguate.'
+            );
+          }
+          owner = provider;
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith(`Volume id "${volumeId}" is ambiguous`)) {
+          throw error;
+        }
         // continue searching
       }
     }
-    return undefined;
+
+    if (owner) {
+      this.setVolumeProvider(volumeId, owner);
+    }
+    return owner;
   }
 
   private getVolumeProviderCandidates(volumeId: string): DirectProvider[] {

@@ -342,4 +342,14 @@ describe('compute multi-provider', () => {
     expect(secondGetById).toHaveBeenCalledWith('vol-1');
     expect(secondDelete).toHaveBeenCalledWith('vol-1');
   });
+
+  it('throws when a volume id exists on multiple providers', async () => {
+    const firstGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'first', createdAt: new Date() }));
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById, delete: vi.fn() });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById, delete: vi.fn() });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.delete('vol-1')).rejects.toThrow(/ambiguous/);
+  });
 });
