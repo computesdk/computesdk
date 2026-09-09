@@ -120,7 +120,7 @@ function getProviderErrorDetail(error: unknown): string {
   return String(error);
 }
 
-const VOLUME_WORDS = new Set(['volume', 'vol', 'disk', 'pvc', 'persistentvolume']);
+const VOLUME_WORDS = new Set(['volume', 'volumes', 'vol', 'disk', 'disks', 'pvc', 'persistentvolume']);
 const PARENT_RESOURCE_WORDS = new Set([
   'workspace', 'endpoint', 'namespace', 'pod', 'node', 'cluster', 'container', 'deployment',
   'service', 'secret', 'configmap', 'config', 'job', 'cronjob', 'persistentvolumeclaim',
