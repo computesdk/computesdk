@@ -120,15 +120,63 @@ function getProviderErrorDetail(error: unknown): string {
   return String(error);
 }
 
+const VOLUME_WORDS = new Set(['volume', 'vol', 'disk', 'pvc', 'persistentvolume']);
+const PARENT_RESOURCE_WORDS = new Set([
+  'workspace', 'endpoint', 'namespace', 'pod', 'node', 'cluster', 'container', 'deployment',
+  'service', 'secret', 'configmap', 'config', 'job', 'cronjob', 'persistentvolumeclaim',
+  'sandbox', 'template', 'snapshot', 'account', 'project', 'organization', 'team',
+  'subscription', 'billing', 'network', 'subnet', 'firewall', 'loadbalancer', 'route',
+  'database', 'instance', 'vm', 'server', 'host', 'credential', 'token', 'permission',
+]);
+const ABSENCE_PHRASES = ['not found', 'does not exist', 'doesn\'t exist'];
+
+function normalizeResourceToken(token: string): string {
+  return token.toLowerCase().replace(/[^a-z0-9\-]/g, '');
+}
+
+function isVolumeWord(token: string): boolean {
+  const normalized = normalizeResourceToken(token);
+  if (VOLUME_WORDS.has(normalized)) return true;
+  // Common volume id prefixes (e.g. "vol-123", "pvc-abc") indicate the missing object is a volume.
+  return /^vol-/.test(normalized) || /^pvc-/.test(normalized) || /^disk-/.test(normalized);
+}
+
+function messageRefersToVolumeAbsence(message: string): boolean {
+  const lower = message.toLowerCase();
+  if (/\bno such volume\b/.test(lower)) return true;
+
+  for (const phrase of ABSENCE_PHRASES) {
+    let index = 0;
+    while ((index = lower.indexOf(phrase, index)) !== -1) {
+      const before = lower.slice(0, index).trimEnd();
+      const tokens = before.split(/\s+/);
+
+      // Walk backwards from the phrase to find the nearest resource word. If it's a
+      // volume word, the absence refers to the volume; if a parent resource word is
+      // closer, the message is about that parent resource being missing.
+      for (let i = tokens.length - 1; i >= 0; i--) {
+        const token = normalizeResourceToken(tokens[i]);
+        if (!token) continue;
+        if (isVolumeWord(token) || VOLUME_WORDS.has(token)) {
+          return true;
+        }
+        if (PARENT_RESOURCE_WORDS.has(token)) {
+          break;
+        }
+      }
+      index += phrase.length;
+    }
+  }
+  return false;
+}
+
 function isVolumeNotFoundError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const e = error as { statusCode?: number; code?: number; name?: string; message?: string };
   if (e.statusCode === 404 || e.code === 404) return true;
   if (e.name === 'NotFoundError') return true;
   if (typeof e.message === 'string') {
-    // Only classify messages that explicitly refer to the volume object itself,
-    // not parent resources (workspace, endpoint, etc.) being missing.
-    return /volume[^.]*(?:not found|does not exist|doesn't exist)|no such volume/i.test(e.message);
+    return messageRefersToVolumeAbsence(e.message);
   }
   return false;
 }

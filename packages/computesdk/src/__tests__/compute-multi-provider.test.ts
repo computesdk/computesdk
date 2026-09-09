@@ -428,6 +428,19 @@ describe('compute multi-provider', () => {
     expect(secondGetById).toHaveBeenCalledWith('vol-1');
   });
 
+  it('does not treat a parent resource absence masquerading as a volume failure as absence', async () => {
+    const firstGetById = vi.fn(async () => {
+      throw new Error(`volume lookup failed because workspace doesn't exist`);
+    });
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.getById('vol-1')).rejects.toThrow('workspace');
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
   it('enforces options.limit across providers in volume.list', async () => {
     const firstList = vi.fn(async () => [
       { id: 'vol-1', provider: 'first', createdAt: new Date() },
