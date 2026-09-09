@@ -44,7 +44,7 @@ await sandbox.destroy()
 |---|---|---|---|
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
-| `fastToken` | `'absorb' \| 'prime' \| 'off'` | `'absorb'` | See below. |
+| `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | See below. |
 | `ramGib` | `number` | 2 | Guest memory. `memoryMiB` / `memMiB` on `create` are read too and rounded up to whole GiB; `memory` is decimal MB, per the shared options. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. Fixed when the guest image is prepared, not per command. |
 | `execRetries` | `number` | 1 | See "Two behaviours worth knowing about". |
@@ -149,20 +149,28 @@ than not having one.
 
 Three modes, because the right one depends on your shape:
 
-- **`absorb`** (default) never adds a round trip. Your first request pays
-  the ordinary cost, its response carries the credential, and everything
-  after it is cheaper.
-- **`prime`** pays one cheap request up front, single-flighted across every
-  caller sharing the token. Use it when you start **N sandboxes at once**:
-  without it, all N take the ordinary path.
+- **`prime`** (default) pays one cheap request up front, single-flighted
+  across every caller sharing the token, so even the first creates of a
+  burst present the credential. When you start **N sandboxes at once** this
+  is one authentication read instead of N queued behind each other; for a
+  single create it is one small request before it and the same read saved
+  inside it, so close to free.
+- **`absorb`** never adds a round trip. Your first request pays the
+  ordinary cost, its response carries the credential, and everything after
+  it is cheaper. Pick it for a process that makes one request and exits.
 - **`off`** never presents one.
 
 ```typescript
 const compute = givemeanode({
   apiKey: process.env.GMN_TOKEN,
-  fastToken: 'prime', // starting a burst
+  fastToken: 'absorb', // one request, then exit
 })
 ```
+
+The default was `absorb` through 1.0.x and is `prime` from 1.1.0: measured
+at 100 concurrent creates against the us-east door, `absorb` had every
+create paying the authentication read, about 600 ms of a 767 ms create
+leg, all of it that read queued.
 
 What it costs, stated plainly: a signed credential is valid for its own
 lifetime regardless of what happens to the token behind it, so `gman token

@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/freestyle",
-  "version": "0.2.0",
-  "description": "Freestyle provider for ComputeSDK - full Linux VMs for long-running agent tasks, with instant startup and cheap snapshotting",
-  "author": "Garrison",
+  "name": "@computesdk/buddy",
+  "version": "1.0.0",
+  "description": "Buddy provider for ComputeSDK - Ubuntu sandboxes served from a pre-warmed hot pool, with public HTTP tunnels and snapshots",
+  "author": "Lucas Czulak",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -28,27 +28,27 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "freestyle": "^0.2.11",
+    "@buddy-works/sandbox-sdk": "^0.1.8",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "keywords": [
     "computesdk",
-    "freestyle",
+    "buddy",
     "sandbox",
     "code-execution",
-    "nodejs",
-    "python",
-    "microvm",
-    "vm",
     "cloud",
     "compute",
-    "provider"
+    "provider",
+    "ubuntu"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/freestyle"
+    "directory": "packages/buddy"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {
