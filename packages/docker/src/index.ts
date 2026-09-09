@@ -44,11 +44,24 @@ function volumeInfoToVolume(info: import('dockerode').VolumeInspectInfo): Volume
 }
 
 function isNotFoundError(error: any): boolean {
-  return error?.statusCode === 404 || (typeof error?.message === 'string' && /not found|no such volume|404/i.test(error.message));
+  return error?.statusCode === 404 || (typeof error?.message === 'string' && /no such volume/i.test(error.message));
 }
 
 function isComputeVolume(info: import('dockerode').VolumeInspectInfo): boolean {
   return info.Labels?.[LABEL_VOLUME] === 'true';
+}
+
+function parseDockerBind(bind: string): { source: string; target: string; options: string } {
+  const parts = bind.split(':');
+  let targetIndex = parts.findIndex((part) => part.startsWith('/'));
+  if (targetIndex <= 0) {
+    // No absolute container path detected; fall back to last segment as target.
+    targetIndex = parts.length - 1;
+  }
+  const source = parts.slice(0, targetIndex).join(':');
+  const target = parts[targetIndex];
+  const options = parts.slice(targetIndex + 1).join(':');
+  return { source, target, options };
 }
 
 async function ensureImage(docker: Docker, image: DockerImage): Promise<void> {
@@ -178,8 +191,8 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         const baseBinds = [...(cfg.container?.binds || []), ...(userHostConfig.Binds || []), ...volumeBinds];
         const bindByTarget = new Map<string, string>();
         for (const bind of baseBinds) {
-          const parts = bind.split(':');
-          if (parts.length >= 2) bindByTarget.set(parts[1], bind);
+          const parsed = parseDockerBind(bind);
+          if (parsed.target) bindByTarget.set(parsed.target, bind);
         }
         const finalBinds = Array.from(bindByTarget.values());
 
