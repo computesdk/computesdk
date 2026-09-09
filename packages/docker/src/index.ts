@@ -1,4 +1,5 @@
 import Docker from 'dockerode';
+import { randomUUID } from 'node:crypto';
 import { PassThrough } from 'stream';
 import { defineProvider } from '@computesdk/provider';
 import type {
@@ -7,6 +8,9 @@ import type {
   CreateSandboxOptions,
   SandboxInfo,
   FileEntry,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
 } from '@computesdk/provider';
 
 import { defaultDockerConfig } from './types/types';
@@ -19,11 +23,24 @@ import type {
 
 const PROVIDER = 'docker' as const;
 const LABEL_KEY = 'com.computesdk.sandbox';
+const LABEL_VOLUME = 'com.computesdk.volume';
 const LABEL_RUNTIME = 'com.computesdk.runtime';
 const KEEPALIVE_CMD = ['/bin/sh', '-c', 'while :; do sleep 3600; done'];
 
 function pick<T>(val: T | undefined, fallback: T): T {
   return typeof val === 'undefined' ? fallback : val;
+}
+
+function volumeInfoToVolume(info: import('dockerode').VolumeInspectInfo): Volume {
+  return {
+    id: info.Name,
+    provider: PROVIDER,
+    name: info.Name,
+    createdAt: new Date(),
+    size: info.UsageData?.Size ? Math.ceil(info.UsageData.Size / (1024 * 1024)) : undefined,
+    metadata: { driver: info.Driver, scope: info.Scope, labels: info.Labels },
+    native: info,
+  };
 }
 
 async function ensureImage(docker: Docker, image: DockerImage): Promise<void> {
@@ -141,6 +158,13 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
 
         const mergedEnv = { ...cfg.container?.env, ...options?.envs };
         const hb = toHostBindings(cfg.container?.ports);
+        const volumeBinds: string[] = [];
+        if (options?.volumeIds) {
+          for (let i = 0; i < options.volumeIds.length; i++) {
+            volumeBinds.push(`${options.volumeIds[i]}:/mnt/volume-${i}`);
+          }
+        }
+        const binds = [...(cfg.container?.binds || []), ...volumeBinds];
         const createOptions = {
           Image: chosenImage.name,
           Tty: pick(cfg.container?.tty, false),
@@ -159,7 +183,7 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
           Cmd: KEEPALIVE_CMD,
           HostConfig: {
             AutoRemove: cfg.container?.autoRemove ?? false,
-            Binds: cfg.container?.binds,
+            Binds: binds,
             NetworkMode: cfg.container?.networkMode,
             Privileged: cfg.container?.privileged,
             CapAdd: cfg.container?.capabilities?.add,
@@ -303,6 +327,45 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
       },
 
       getInstance: (handle: DockerSandboxHandle): DockerSandboxHandle => handle,
+    },
+
+    volume: {
+      create: async (config: DockerConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
+        const created = await docker.createVolume({
+          Name: name,
+          Labels: { [LABEL_VOLUME]: 'true', ...(options?.metadata || {}) },
+          Driver: options?.metadata?.driver,
+          DriverOpts: options?.metadata?.driverOpts,
+        } as import('dockerode').VolumeCreateOptions);
+        const info = await docker.getVolume(created.Name).inspect();
+        return volumeInfoToVolume(info);
+      },
+      list: async (config: DockerConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        try {
+          const result = await docker.listVolumes();
+          return (result.Volumes || [])
+            .filter((info) => info.Labels?.[LABEL_VOLUME] === 'true')
+            .map(volumeInfoToVolume);
+        } catch { return []; }
+      },
+      getById: async (config: DockerConfig, volumeId: string): Promise<Volume | null> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        try {
+          const info = await docker.getVolume(volumeId).inspect();
+          return volumeInfoToVolume(info);
+        } catch { return null; }
+      },
+      delete: async (config: DockerConfig, volumeId: string): Promise<void> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        try { await docker.getVolume(volumeId).remove({ force: true } as import('dockerode').VolumeRemoveOptions); } catch { /* ignore */ }
+      },
     },
   },
 });
