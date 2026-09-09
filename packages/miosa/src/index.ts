@@ -9,6 +9,8 @@
  * Auth: MIOSA API keys (`msk_*`) via `Authorization: Bearer <key>`.
  */
 
+import { randomUUID } from "node:crypto";
+
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
 
 import type {
@@ -18,6 +20,10 @@ import type {
   CreateSnapshotOptions,
   FileEntry,
   RunCommandOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+  AttachVolumeOptions,
 } from "@computesdk/provider";
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -47,6 +53,19 @@ export interface MiosaSandboxRecord {
   preview_url: string | null;
   preview_domain: string | null;
   created_at: string;
+  [key: string]: unknown;
+}
+
+interface MiosaVolumeRecord {
+  id: string;
+  name?: string | null;
+  created_at?: string;
+  size_gb?: number;
+  size_mb?: number;
+  size_bytes?: number;
+  backend?: string;
+  region?: string;
+  status?: string;
   [key: string]: unknown;
 }
 
@@ -469,6 +488,55 @@ function unwrapSandbox(payload: unknown): MiosaSandboxRecord {
     : asRecord;
 }
 
+function unwrapVolume(payload: unknown): MiosaVolumeRecord {
+  const asRecord = payload as {
+    data?: MiosaVolumeRecord;
+  } & MiosaVolumeRecord;
+  return asRecord.data &&
+    typeof asRecord.data === "object" &&
+    "id" in asRecord.data
+    ? asRecord.data
+    : asRecord;
+}
+
+function unwrapVolumeList(payload: unknown): MiosaVolumeRecord[] {
+  if (Array.isArray(payload)) return payload as MiosaVolumeRecord[];
+  const asRecord = payload as {
+    data?: unknown;
+    volumes?: unknown;
+    items?: unknown;
+  };
+  for (const key of ["data", "volumes", "items"] as const) {
+    const value = asRecord[key];
+    if (Array.isArray(value)) return value as MiosaVolumeRecord[];
+  }
+  return [];
+}
+
+function volumeRecordToVolume(record: MiosaVolumeRecord): Volume {
+  const sizeMb =
+    typeof record.size_mb === "number"
+      ? record.size_mb
+      : typeof record.size_gb === "number"
+      ? record.size_gb * 1024
+      : typeof record.size_bytes === "number"
+      ? Math.ceil(record.size_bytes / (1024 * 1024))
+      : undefined;
+  return {
+    id: record.id,
+    provider: "miosa",
+    name: record.name ?? undefined,
+    createdAt: toCreatedAt(record.created_at),
+    size: sizeMb,
+    metadata: {
+      backend: record.backend,
+      region: record.region,
+      status: record.status,
+    },
+    native: record,
+  };
+}
+
 function toCreatedAt(value: string | null | undefined): Date {
   const parsed = value ? new Date(value) : undefined;
   // A compact create response may omit created_at. Returning an Invalid Date
@@ -606,6 +674,12 @@ const createMiosaProvider = defineProvider<
         if (options?.name !== undefined) body.name = options.name;
         if (options?.envs !== undefined) body.env = options.envs;
         if (options?.metadata !== undefined) body.metadata = options.metadata;
+        if (options?.volumeIds?.length) {
+          throw new Error(
+            "Miosa sandboxes do not support creation-time volume mounts. " +
+              "Create the volume and attach it after the sandbox is running, or use MIOSA computers/services for persistent volumes."
+          );
+        }
 
         const payload = await miosaRequest<unknown>(
           auth,
@@ -830,6 +904,75 @@ const createMiosaProvider = defineProvider<
             `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
           );
         },
+      },
+    },
+
+    volume: {
+      create: async (config: MiosaConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const auth = resolveAuth(config);
+        if (options?.size === undefined) {
+          throw new Error("Miosa volume.create requires options.size (in megabytes).");
+        }
+        const sizeGb = Math.max(1, Math.ceil(options.size / 1024));
+        const name = options.name ?? `computesdk-volume-${randomUUID()}`;
+        const body: Record<string, unknown> = {
+          ...options.metadata,
+          name,
+          size_gb: sizeGb,
+          backend: "local",
+        };
+        const payload = await miosaRequest<unknown>(auth, "POST", "/volumes", body);
+        const record = unwrapVolume(payload);
+        if (!record.id) {
+          throw new Error("MIOSA create volume returned a record without an id");
+        }
+        return volumeRecordToVolume(record);
+      },
+      list: async (config: MiosaConfig, options?: ListVolumesOptions): Promise<Volume[]> => {
+        const auth = resolveAuth(config);
+        const query = new URLSearchParams();
+        if (options?.sandboxId) query.set("sandbox_id", options.sandboxId);
+        if (options?.limit !== undefined) query.set("limit", String(options.limit));
+        const queryString = query.toString();
+        const payload = await miosaRequest<unknown>(
+          auth,
+          "GET",
+          `/volumes${queryString ? `?${queryString}` : ""}`,
+        );
+        const records = unwrapVolumeList(payload);
+        return records.map(volumeRecordToVolume);
+      },
+      getById: async (config: MiosaConfig, volumeId: string): Promise<Volume | null> => {
+        const auth = resolveAuth(config);
+        try {
+          const payload = await miosaRequest<unknown>(auth, "GET", `/volumes/${volumeId}`);
+          const record = unwrapVolume(payload);
+          return record.id ? volumeRecordToVolume(record) : null;
+        } catch (error) {
+          if (error instanceof MiosaApiError && error.status === 404) return null;
+          throw error;
+        }
+      },
+      delete: async (config: MiosaConfig, volumeId: string): Promise<void> => {
+        const auth = resolveAuth(config);
+        try {
+          await miosaRequest<unknown>(auth, "DELETE", `/volumes/${volumeId}`);
+        } catch (error) {
+          if (error instanceof MiosaApiError && error.status === 404) return;
+          throw error;
+        }
+      },
+      attach: async (config: MiosaConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error(
+          "Miosa volume attach is not supported for sandboxes. " +
+            "Use MIOSA computers or services with volume mounts instead."
+        );
+      },
+      detach: async (config: MiosaConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error(
+          "Miosa volume detach is not supported for sandboxes. " +
+            "Use MIOSA computers or services with volume mounts instead."
+        );
       },
     },
 
