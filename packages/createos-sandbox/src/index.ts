@@ -355,7 +355,12 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           // (or hits a terminal state) must not be reported as success.
           await forked.waitUntilRunning();
           if (opts.volumeIds && opts.volumeIds.length > 0) {
-            await attachVolumeIds(forked, opts.volumeIds, options);
+            try {
+              await attachVolumeIds(forked, opts.volumeIds, options);
+            } catch (error) {
+              try { await forked.destroy(); } catch { /* ignore cleanup failure */ }
+              throw error;
+            }
           }
           sandboxConfig.set(forked, config);
           return { sandbox: forked, sandboxId: forked.id };
@@ -366,7 +371,12 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const sandbox = await client.createSandbox(toCreateRequest(opts, shape, rootfs));
         await sandbox.waitUntilRunning();
         if (opts.volumeIds && opts.volumeIds.length > 0) {
-          await attachVolumeIds(sandbox, opts.volumeIds, options);
+          try {
+            await attachVolumeIds(sandbox, opts.volumeIds, options);
+          } catch (error) {
+            try { await sandbox.destroy(); } catch { /* ignore cleanup failure */ }
+            throw error;
+          }
         }
         sandboxConfig.set(sandbox, config);
         return { sandbox, sandboxId: sandbox.id };

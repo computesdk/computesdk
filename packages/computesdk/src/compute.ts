@@ -40,6 +40,11 @@ export interface ListVolumesOptions extends UniversalListVolumesOptions {
   provider?: string;
 }
 
+export interface DeleteVolumeOptions {
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
 interface ProviderSandboxManager {
   create(options?: CreateSandboxOptions): Promise<SandboxInterface>;
   getById(sandboxId: string): Promise<SandboxInterface | null>;
@@ -517,26 +522,64 @@ class ComputeManager {
       return null;
     },
 
-    delete: async (volumeId: string): Promise<void> => {
-      const candidates = this.getVolumeProviderCandidates(volumeId);
-      const errors: string[] = [];
+    delete: async (volumeId: string, options?: DeleteVolumeOptions): Promise<void> => {
+      const preferredProviderName = options?.provider;
+      let owner: DirectProvider | undefined;
 
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.volume?.delete) continue;
+      if (preferredProviderName) {
+        owner = this.getProviderByName(preferredProviderName);
+      } else {
+        owner = this.volumeProviders.get(volumeId);
+      }
 
-        try {
-          await provider.volume.delete(volumeId);
-          this.volumeProviders.delete(volumeId);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+      if (!owner) {
+        const providers = this.getProviders().filter((p) => typeof p.volume?.getById === 'function');
+        const errors: string[] = [];
+        for (const [index, provider] of providers.entries()) {
+          try {
+            const volume = await provider.volume!.getById!(volumeId);
+            if (volume) {
+              owner = provider;
+              this.volumeProviders.set(volumeId, owner);
+              break;
+            }
+          } catch (error) {
+            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          }
+        }
+
+        if (!owner) {
+          if (providers.length === 0) {
+            throw new Error(
+              `Cannot determine which provider owns volume "${volumeId}". ` +
+              'No configured provider exposes volume lookup. Pass the provider name in options: ' +
+              '`compute.volume.delete("' + volumeId + '", { provider: "e2b" })`'
+            );
+          }
+          throw new Error(
+            `Cannot determine which provider owns volume "${volumeId}". ` +
+            'The volume was not found by any configured provider that supports lookup. ' +
+            'Either reference the volume through compute.volume.create/list/getById first, ' +
+            'or pass the provider name in options: ' +
+            '`compute.volume.delete("' + volumeId + '", { provider: "e2b" })`'
+          );
         }
       }
 
-      throw new Error(
-        `Failed to delete volume "${volumeId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+      if (!owner.volume?.delete) {
+        throw new Error(`Provider "${owner.name ?? 'unknown'}" does not support volume deletion.`);
+      }
+
+      try {
+        await owner.volume.delete(volumeId);
+      } catch (error) {
+        throw new Error(
+          `Failed to delete volume "${volumeId}" with provider "${owner.name ?? 'unknown'}".\n` +
+          `${getProviderErrorDetail(error)}`
+        );
+      }
+
+      this.volumeProviders.delete(volumeId);
     },
 
     attach: async (volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {

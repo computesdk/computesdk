@@ -6,8 +6,9 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, Volume, CreateVolumeOptions, ListVolumesOptions } from '@computesdk/provider';
 
+import { randomUUID } from 'node:crypto';
 import { ModalClient } from 'modal';
-import type { Sandbox, App, Image, SandboxCreateParams, Volume as ModalVolume } from 'modal';
+import type { Sandbox, App, Image, SandboxCreateParams, Volume as ModalVolume, VolumeMountOptions } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
 
@@ -116,11 +117,12 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           if (volumeIds && volumeIds.length > 0) {
             const volumes: Record<string, ModalVolume> = {};
+            const mountOptions = (options as any)?.volumeMountOptions as Record<string, VolumeMountOptions> | undefined;
             for (let i = 0; i < volumeIds.length; i++) {
               const volumeId = volumeIds[i];
-              let volume = await client.volumes.fromName(volumeId, { createIfMissing: true });
-              if (options?.volumeMountOptions?.[volumeId]) {
-                volume = volume.withMountOptions(options.volumeMountOptions[volumeId]);
+              let volume = await client.volumes.fromName(volumeId, { createIfMissing: false });
+              if (mountOptions?.[volumeId]) {
+                volume = volume.withMountOptions(mountOptions[volumeId]);
               }
               volumes[`/mnt/volume-${i}`] = volume;
             }
@@ -306,14 +308,15 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
     volume: {
       create: async (config: ModalInternalConfig, options?: CreateVolumeOptions): Promise<Volume> => {
         const client = config._client;
-        const name = options?.name || 'computesdk-volume';
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
         const volume = await client.volumes.fromName(name, { createIfMissing: true });
+        const stableId = volume.name || name;
         return {
-          id: volume.volumeId,
+          id: stableId,
           provider: 'modal',
-          name: volume.name || name,
+          name: stableId,
           createdAt: new Date(),
-          metadata: options?.metadata,
+          metadata: { ...options?.metadata, volumeId: volume.volumeId },
           native: volume,
         };
       },
@@ -324,18 +327,20 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
           const volume = await client.volumes.fromName(volumeId, { createIfMissing: false });
+          const stableId = volume.name || volumeId;
           return {
-            id: volume.volumeId,
+            id: stableId,
             provider: 'modal',
-            name: volume.name || volumeId,
+            name: stableId,
             createdAt: new Date(),
+            metadata: { volumeId: volume.volumeId },
             native: volume,
           };
         } catch { return null; }
       },
       delete: async (config: ModalInternalConfig, volumeId: string): Promise<void> => {
         const client = config._client;
-        try { await client.volumes.delete(volumeId); } catch { /* ignore */ }
+        try { await client.volumes.delete(volumeId, { allowMissing: true }); } catch { /* ignore */ }
       },
     }
   }
@@ -347,13 +352,21 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
   const appName = config.appName ?? DEFAULT_APP_NAME;
   const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
-  const appPromise = client.apps.fromName(appName, { createIfMissing: true });
+
+  // Lazily start the app lookup so that constructing the provider does not
+  // trigger unhandled promise rejections when credentials are missing.
+  let appPromise: Promise<App> | undefined;
 
   return _modal({
     ...config,
     appName,
     _client: client,
-    _appPromise: appPromise,
+    get _appPromise() {
+      if (!appPromise) {
+        appPromise = client.apps.fromName(appName, { createIfMissing: true });
+      }
+      return appPromise;
+    },
     _imageCache: new Map(),
   });
 }
