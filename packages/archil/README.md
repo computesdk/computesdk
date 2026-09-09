@@ -58,7 +58,7 @@ await provider.sandbox.destroy(sandbox.sandboxId);
 | `runCommand`  | ✅        | Executes shell commands through Archil's HTTP `exec` endpoint. |
 | `getInfo`     | ✅        |                                                             |
 | `getUrl`      | ❌        | Each exec runs in a fresh ephemeral container — no port to expose. |
-| `filesystem`  | ✅        | Implemented via shell commands (`cat`, `find`, `mkdir`, etc.). |
+| `filesystem`  | ✅        | Maps paths into `/mnt/archil` and manages shared-mode checkout/checkin automatically. |
 
 ## Limitations
 
@@ -67,5 +67,8 @@ await provider.sandbox.destroy(sandbox.sandboxId);
 - Responses are truncated to ~5 MB by the Archil control plane.
 - `getUrl` is not supported — each exec runs in a fresh ephemeral container,
   so there is no long-lived process to expose a port on.
-- Filesystem operations are implemented as shell commands, so each call
-  costs one HTTP round trip.
+- Filesystem operations accept normal absolute paths and map them into the
+  `/mnt/archil` disk mount internally. Each mutating operation checks out and
+  checks in the disk automatically.
+- Raw `runCommand` strings are not rewritten. Commands that access the disk
+  directly must use `/mnt/archil` themselves.

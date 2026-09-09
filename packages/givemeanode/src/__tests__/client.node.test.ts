@@ -130,6 +130,25 @@ describe('the signed credential the door hands back', () => {
     await client.request('GET', '/preview/sandboxes')
     assert.equal(calls[1].authorization, `Bearer ${KEY}`)
   })
+
+  it('primes by default, so even the first create of a burst presents the credential', async () => {
+    // The default moved from `absorb` to `prime` in 1.1.0. Under `absorb`
+    // every create in a cold burst paid the authentication read; the door
+    // measured that at ~600 ms of a 767 ms create at N=100. One warm-up
+    // request, single-flighted, and the creates that follow are signed.
+    const { calls, fetchImpl } = stub([
+      { body: { sandboxes: [] }, headers: vending(600_000) },
+      { body: { sandbox: 'sbx-1' } },
+    ])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    assert.equal(client.fastToken, 'prime')
+    await client.prime()
+    assert.equal(calls.length, 1, 'the prime is one request')
+    assert.equal(calls[0].method, 'GET')
+    assert.equal(calls[0].authorization, `Bearer ${KEY}`, 'the warm-up pays the ordinary cost')
+    await client.request('POST', '/preview/sandboxes', {})
+    assert.equal(calls[1].authorization, `Bearer ${SIGNED}`, 'the first create is already signed')
+  })
 })
 
 describe('the cache key, which is what makes a per-task runner benefit', () => {
@@ -199,9 +218,16 @@ describe('priming, for the burst that starts N sandboxes at once', () => {
     assert.equal(client.hasFastToken(), true)
   })
 
-  it('adds no round trip at all in the default mode', async () => {
+  it('adds no round trip at all in absorb mode', async () => {
+    // The mode for a process that makes one request and exits: nothing is
+    // sent until the caller's own first request.
     const { calls, fetchImpl } = stub([{ body: {} }])
-    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    const client = new GmnClient({
+      apiKey: KEY,
+      baseUrl: 'https://door.test',
+      fastToken: 'absorb',
+      fetch: fetchImpl,
+    })
     await client.prime()
     assert.equal(calls.length, 0)
   })
@@ -247,6 +273,77 @@ describe('refusals', () => {
         assert.ok(err instanceof GmnError)
         assert.equal(err.status, 429)
         assert.match(err.message, /slow down/)
+        return true
+      },
+    )
+  })
+
+  it('reads the message out of the structured body the door actually sends', async () => {
+    // The door answers `{"error": {"code", "message"}}`, not a bare
+    // string. Stringifying that object yields `[object Object]` and loses
+    // the one part written to be read - which is how a 422 naming
+    // `sandbox_vcpus` reached a benchmark runner as no reason at all.
+    const { fetchImpl } = stub([
+      {
+        status: 422,
+        body: {
+          error: {
+            code: 'refused',
+            message: 'size sandbox-lg needs 8 vCPU; this org\'s sandbox_vcpus ceiling is 4',
+          },
+        },
+      },
+    ])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('POST', '/preview/sandboxes', { size: 'sandbox-lg' }),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.equal(err.status, 422)
+        assert.match(err.message, /sandbox_vcpus ceiling is 4/)
+        assert.match(err.message, /refused/)
+        assert.doesNotMatch(err.message, /\[object Object\]/)
+        return true
+      },
+    )
+  })
+
+  it('falls back to the code when the body carries no message', async () => {
+    const { fetchImpl } = stub([{ status: 403, body: { error: { code: 'forbidden' } } }])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('GET', '/preview/sandboxes'),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.match(err.message, /forbidden/)
+        assert.doesNotMatch(err.message, /\[object Object\]/)
+        return true
+      },
+    )
+  })
+
+  it('shows an unrecognised error body as JSON rather than as [object Object]', async () => {
+    const { fetchImpl } = stub([{ status: 500, body: { error: { unexpected: 'shape' } } }])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('GET', '/preview/sandboxes'),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.match(err.message, /unexpected/)
+        assert.doesNotMatch(err.message, /\[object Object\]/)
+        return true
+      },
+    )
+  })
+
+  it('keeps the whole body on the error for a caller that wants to branch on it', async () => {
+    const { fetchImpl } = stub([{ status: 422, body: { error: { code: 'refused', message: 'no' } } }])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    await assert.rejects(
+      () => client.request('POST', '/preview/sandboxes', {}),
+      (err: unknown) => {
+        assert.ok(err instanceof GmnError)
+        assert.deepEqual(err.body, { error: { code: 'refused', message: 'no' } })
         return true
       },
     )

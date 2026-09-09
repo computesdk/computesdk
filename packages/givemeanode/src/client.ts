@@ -65,16 +65,24 @@ export const DEFAULT_BASE_URL = 'https://api.givemeanode.com'
 /**
  * How this client treats the offer of a signed credential.
  *
- * - `absorb` (default): use a signed credential whenever one has been
- *   handed to us, and never add a round trip to get one. The first request
- *   of a process pays the ordinary cost, its response carries the
- *   credential, and every request after it - including the command that
- *   follows that very first create - is cheaper.
- * - `prime`: pay ONE cheap authenticated request per token, up front and
- *   single-flighted, so even the first burst's creates are cheap. Right
- *   when N sandboxes start at once, because otherwise all N take the
- *   ordinary path.
+ * - `prime` (default): pay ONE cheap authenticated request per token, up
+ *   front and single-flighted, so even the first burst's creates present
+ *   the signed credential. When N sandboxes start at once this is the
+ *   difference between one authentication read and N of them queued behind
+ *   each other; for a single create it costs one small request before it
+ *   and saves the same read inside it, so it is close to free.
+ * - `absorb`: never add a round trip to get one. The first request of a
+ *   process pays the ordinary cost, its response carries the credential,
+ *   and every request after it - including the command that follows that
+ *   very first create - is cheaper. The right choice when a process makes
+ *   one request and exits.
  * - `off`: never present a signed credential.
+ *
+ * The default was `absorb` through 1.0.x. It moved to `prime` because the
+ * shape this package is mostly used in is N creates at once from a cold
+ * process, and under `absorb` every one of those N paid the authentication
+ * read - measured at ~600 ms of a 767 ms create at N=100 against the
+ * us-east door, all of it that read queued.
  */
 export type FastTokenMode = 'absorb' | 'prime' | 'off'
 
@@ -83,7 +91,7 @@ export interface GmnClientOptions {
   apiKey?: string
   /** Base URL. Falls back to `GMN_API_HOST`, then the public endpoint. */
   baseUrl?: string
-  /** See {@link FastTokenMode}. Default `absorb`. */
+  /** See {@link FastTokenMode}. Default `prime`. */
   fastToken?: FastTokenMode
   /** Per-request timeout in ms. Default 120000. */
   timeout?: number
@@ -118,6 +126,38 @@ const priming = new Map<string, Promise<void>>()
 export function resetFastTokenCache(): void {
   vended.clear()
   priming.clear()
+}
+
+/**
+ * The readable half of a refusal.
+ *
+ * The door answers a refusal with `{"error": {"code", "message"}}`, and
+ * the `message` is written to be read - it names the limit that refused,
+ * or the alternative that should have been passed instead. Stringifying
+ * the object loses exactly that, so a 422 that explained itself arrives as
+ * `[object Object]` and the caller has to reconstruct from the outside
+ * what the door already said.
+ *
+ * The string form is still accepted because older deployments answer that
+ * way, and an unrecognised shape falls back to its JSON rather than to
+ * `[object Object]`: a body we cannot read is still worth showing.
+ */
+function refusalDetail(parsed: unknown, text: string): string {
+  const fallback = () => text.slice(0, 400)
+  if (!parsed || typeof parsed !== 'object' || !('error' in parsed)) return fallback()
+  const error = (parsed as { error: unknown }).error
+  if (typeof error === 'string') return error || fallback()
+  if (!error || typeof error !== 'object') return fallback()
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  const hasMessage = typeof message === 'string' && message !== ''
+  const hasCode = typeof code === 'string' && code !== ''
+  if (hasMessage) return hasCode ? `${code}: ${message}` : (message as string)
+  if (hasCode) return code as string
+  try {
+    return JSON.stringify(error)?.slice(0, 400) ?? fallback()
+  } catch {
+    return fallback()
+  }
 }
 
 export class GmnError extends Error {
@@ -181,7 +221,7 @@ export class GmnClient {
     this.baseUrl = requireSecureBaseUrl(
       (options.baseUrl ?? process.env.GMN_API_HOST ?? DEFAULT_BASE_URL).replace(/\/+$/, ''),
     )
-    this.fastToken = options.fastToken ?? 'absorb'
+    this.fastToken = options.fastToken ?? 'prime'
     this.timeout = options.timeout ?? 120_000
     this.doFetch = options.fetch ?? globalThis.fetch
     // A NUL cannot appear in a URL or in a bearer token, so no pair of
@@ -339,10 +379,7 @@ export class GmnClient {
       }
     }
     if (!response.ok) {
-      const detail =
-        parsed && typeof parsed === 'object' && 'error' in parsed
-          ? String((parsed as { error: unknown }).error)
-          : text.slice(0, 400)
+      const detail = refusalDetail(parsed, text)
       throw new GmnError(
         `givemeanode ${method} ${path} failed (${response.status}): ${detail}`,
         response.status,

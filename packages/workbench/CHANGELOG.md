@@ -1,5 +1,13 @@
 # @computesdk/workbench
 
+## 31.0.1
+
+### Patch Changes
+
+- Updated dependencies [67676e8]
+- Updated dependencies [6431e9f]
+  - @computesdk/tenki@0.1.5
+
 ## 31.0.0
 
 ### Patch Changes

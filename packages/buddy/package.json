@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/tenki",
-  "version": "0.1.5",
-  "description": "Tenki Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH",
-  "author": "Tenki Cloud <support@tenki.cloud>",
+  "name": "@computesdk/buddy",
+  "version": "1.0.0",
+  "description": "Buddy provider for ComputeSDK - Ubuntu sandboxes served from a pre-warmed hot pool, with public HTTP tunnels and snapshots",
+  "author": "Lucas Czulak",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -17,9 +17,6 @@
   "files": [
     "dist"
   ],
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "build": "tsup",
     "clean": "rimraf dist",
@@ -31,25 +28,29 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@buddy-works/sandbox-sdk": "^0.1.8",
     "@computesdk/provider": "workspace:*",
-    "@tenkicloud/sandbox": "^1.0.4",
     "computesdk": "workspace:*"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   },
   "keywords": [
     "computesdk",
-    "tenki",
+    "buddy",
     "sandbox",
     "code-execution",
+    "cloud",
     "compute",
     "provider",
-    "microvm"
+    "ubuntu"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/tenki"
+    "directory": "packages/buddy"
   },
-  "homepage": "https://tenki.cloud",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
