@@ -155,6 +155,12 @@ export function serviceParams(config: NorthflankConfig, serviceId: string) {
     : { projectId: config.projectId, serviceId };
 }
 
+export function volumeParams(config: NorthflankConfig, volumeId: string) {
+  return config.teamId
+    ? { teamId: config.teamId, projectId: config.projectId, volumeId }
+    : { projectId: config.projectId, volumeId };
+}
+
 export function mapStatus(
   deploymentStatus: string | undefined,
   paused: boolean | undefined,

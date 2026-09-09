@@ -13,6 +13,10 @@ import type {
   SandboxInfo,
   CreateSandboxOptions,
   RunCommandOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+  AttachVolumeOptions,
 } from '@computesdk/provider';
 import {
   PROVIDER,
@@ -37,6 +41,7 @@ import {
   prefix,
   projectParams,
   serviceParams,
+  volumeParams,
   withExecRetry,
 } from './utils';
 
@@ -84,6 +89,25 @@ interface NorthflankCreateOptions extends CreateSandboxOptions {
 
 function readCreateOptions(options?: CreateSandboxOptions): NorthflankCreateOptions {
   return (options ?? {}) as NorthflankCreateOptions;
+}
+
+const DEFAULT_VOLUME_SIZE_MB = 1024;
+
+function toVolume(native: any): Volume {
+  return {
+    id: native.id,
+    provider: PROVIDER,
+    name: native.name,
+    createdAt: new Date(native.createdAt ?? Date.now()),
+    size: native.spec?.storageSize,
+    metadata: {
+      status: native.status,
+      accessMode: native.spec?.accessMode,
+      storageClassName: native.spec?.storageClassName,
+      attachedObjects: native.attachedObjects,
+    },
+    native,
+  };
 }
 
 const agentOptions = {
@@ -212,6 +236,10 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
             public: port.public ?? true,
             protocol: port.protocol ?? 'HTTP',
           }));
+        }
+
+        if (opts.volumeIds && opts.volumeIds.length > 0) {
+          data.createOptions = { volumesToAttach: opts.volumeIds };
         }
 
         const created = await client.create.service.deployment({
@@ -516,6 +544,102 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           const r = await execArgv(sandbox, ['rm', '-rf', '--', path]);
           if (r.exitCode !== 0) throw new Error(`Failed to remove: ${path}`);
         },
+      },
+    },
+
+    volume: {
+      create: async (config: NorthflankConfig, options?: CreateVolumeOptions) => {
+        const client = buildClient(config);
+        const name = options?.name ?? `computesdk-volume-${Date.now()}`;
+        const size = options?.size ?? DEFAULT_VOLUME_SIZE_MB;
+        const mountPath = options?.mountPath ?? '/mnt/volume';
+
+        const data: Parameters<typeof client.create.volume>[0]['data'] = {
+          name,
+          mounts: [{ containerMountPath: mountPath }],
+          spec: { accessMode: 'ReadWriteOnce', storageSize: size },
+        };
+
+        if (options?.sourceId) {
+          data.source = {
+            type: options.sourceId.includes('backup') ? 'backup' : 'volume',
+            sourceId: options.sourceId,
+          };
+        }
+
+        if (options?.sandboxId) {
+          data.attachedObjects = [{ id: options.sandboxId, type: 'service' }];
+        }
+
+        const res = await client.create.volume({ parameters: projectParams(config), data });
+        return toVolume(res.data);
+      },
+
+      list: async (config: NorthflankConfig, options?: ListVolumesOptions) => {
+        const client = buildClient(config);
+        const res = await client.list.volumes.all({ parameters: projectParams(config) });
+        let volumes = (res.data ?? []).map(toVolume);
+
+        if (options?.sandboxId) {
+          volumes = volumes.filter(v =>
+            (v.native as any)?.attachedObjects?.some(
+              (obj: any) => obj.type === 'service' && obj.id === options.sandboxId,
+            ),
+          );
+        }
+
+        if (options?.limit) {
+          volumes = volumes.slice(0, options.limit);
+        }
+
+        return volumes;
+      },
+
+      getById: async (config: NorthflankConfig, volumeId: string) => {
+        const client = buildClient(config);
+        try {
+          const res = await client.get.volume({ parameters: volumeParams(config, volumeId) });
+          return toVolume(res.data);
+        } catch (error) {
+          if (is404(error)) return null;
+          throw error;
+        }
+      },
+
+      delete: async (config: NorthflankConfig, volumeId: string) => {
+        const client = buildClient(config);
+        try {
+          await client.delete.volume({ parameters: volumeParams(config, volumeId) });
+        } catch (error) {
+          if (is404(error)) return;
+          throw error;
+        }
+      },
+
+      attach: async (
+        config: NorthflankConfig,
+        volumeId: string,
+        sandboxId: string,
+        options?: AttachVolumeOptions,
+      ) => {
+        const client = buildClient(config);
+        await client.attach.volume({
+          parameters: volumeParams(config, volumeId),
+          data: { nfObject: { id: sandboxId, type: 'service' } },
+        });
+      },
+
+      detach: async (
+        config: NorthflankConfig,
+        volumeId: string,
+        sandboxId: string,
+        options?: AttachVolumeOptions,
+      ) => {
+        const client = buildClient(config);
+        await client.detach.volume({
+          parameters: volumeParams(config, volumeId),
+          data: { nfObject: { id: sandboxId, type: 'service' } },
+        });
       },
     },
   },
