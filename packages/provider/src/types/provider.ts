@@ -4,7 +4,7 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { CreateSandboxOptions, SandboxInterface } from 'computesdk';
+import type { CreateSandboxOptions, SandboxInterface, Volume, CreateVolumeOptions, AttachVolumeOptions, ListVolumesOptions } from 'computesdk';
 
 /**
  * Provider Sandbox - what provider implementations return
@@ -109,9 +109,37 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
 }
 
 /**
+ * Provider volume manager interface - handles volume lifecycle
+ */
+export interface ProviderVolumeManager<TVolume = any> {
+  /** Create a new volume */
+  create(options?: CreateVolumeOptions): Promise<TVolume>;
+  /** List all volumes */
+  list(options?: ListVolumesOptions): Promise<TVolume[]>;
+  /** Get an existing volume by ID */
+  getById(volumeId: string): Promise<TVolume | null>;
+  /** Delete a volume */
+  delete(volumeId: string): Promise<void>;
+  /** Attach a volume to a sandbox */
+  attach(volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void>;
+  /** Detach a volume from a sandbox */
+  detach(volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void>;
+}
+
+/**
+ * Extract the volume type from a provider using generic inference
+ */
+export type ExtractProviderVolumeType<TProvider> = TProvider extends Provider<any, any, any, infer TVolume> ? TVolume : any;
+
+/**
+ * Typed provider volume interface that preserves the provider's native volume type
+ */
+export type TypedProviderVolume<TProvider extends Provider> = ProviderVolumeManager<ExtractProviderVolumeType<TProvider>>;
+
+/**
  * Provider interface - creates and manages resources
  */
-export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
+export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any, TVolume = any> {
   /** Provider name/type */
   readonly name: string;
 
@@ -123,6 +151,9 @@ export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
 
   /** Optional snapshot management operations */
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
+
+  /** Optional volume management operations */
+  readonly volume?: ProviderVolumeManager<TVolume>;
 
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;
@@ -188,6 +219,9 @@ export interface ComputeAPI {
     destroy(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<void>;
   };
 
+  /** Optional volume management operations */
+  volume?: ProviderVolumeManager;
+
   // Future resource APIs will be added here:
   // blob: ProviderBlobAPI;
   // git: ProviderGitAPI;
@@ -215,6 +249,9 @@ export interface TypedComputeAPI<TProvider extends Provider> extends Omit<Comput
     /** Destroy a sandbox via the configured provider */
     destroy(sandboxId: string): Promise<void>;
   };
+
+  /** Optional typed volume management operations */
+  volume?: TypedProviderVolume<TProvider>;
 }
 
 /**

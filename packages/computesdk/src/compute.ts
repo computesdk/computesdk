@@ -7,6 +7,10 @@
 import type {
   Sandbox as SandboxInterface,
   CreateSandboxOptions as UniversalCreateSandboxOptions,
+  Volume,
+  CreateVolumeOptions as UniversalCreateVolumeOptions,
+  AttachVolumeOptions as UniversalAttachVolumeOptions,
+  ListVolumesOptions as UniversalListVolumesOptions,
 } from './types/universal-sandbox';
 
 export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
@@ -17,6 +21,21 @@ export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
 export interface CreateSnapshotOptions {
   name?: string;
   metadata?: Record<string, any>;
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
+export interface CreateVolumeOptions extends UniversalCreateVolumeOptions {
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
+export interface AttachVolumeOptions extends UniversalAttachVolumeOptions {
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
+export interface ListVolumesOptions extends UniversalListVolumesOptions {
   /** Optional provider name override (must match provider.name) */
   provider?: string;
 }
@@ -34,10 +53,20 @@ interface ProviderSnapshotManager {
   delete(snapshotId: string): Promise<void>;
 }
 
+interface ProviderVolumeManager {
+  create?(options?: CreateVolumeOptions): Promise<Volume>;
+  list?(options?: ListVolumesOptions): Promise<Volume[]>;
+  getById?(volumeId: string): Promise<Volume | null>;
+  delete?(volumeId: string): Promise<void>;
+  attach?(volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void>;
+  detach?(volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void>;
+}
+
 export interface DirectProvider {
   readonly name?: string;
   readonly sandbox: ProviderSandboxManager;
   readonly snapshot?: ProviderSnapshotManager;
+  readonly volume?: ProviderVolumeManager;
 }
 
 /**
@@ -135,6 +164,7 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private sandboxProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
+  private volumeProviders = new Map<string, DirectProvider>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
       throw new Error(
@@ -211,6 +241,41 @@ class ComputeManager {
     return providers;
   }
 
+  private getVolumeCreateCandidates(preferredProviderName?: string): DirectProvider[] {
+    const providers = this.getProviders().filter((p) => typeof p.volume?.create === 'function');
+    if (preferredProviderName) {
+      const preferred = this.getProviderByName(preferredProviderName);
+      if (typeof preferred.volume?.create !== 'function') {
+        throw new Error(`Provider "${preferredProviderName}" does not support volume creation.`);
+      }
+      return [preferred];
+    }
+    return providers;
+  }
+
+  private getVolumeListProviders(): DirectProvider[] {
+    return this.getProviders().filter((p) => typeof p.volume?.list === 'function');
+  }
+
+  private getVolumeProviderCandidates(volumeId: string): DirectProvider[] {
+    const known = this.volumeProviders.get(volumeId);
+    const providers = this.getProviders().filter((p) => p.volume);
+    if (!known) return providers;
+    return [known, ...providers.filter((p) => p !== known)];
+  }
+
+  private getVolumeAttachCandidates(volumeId: string, sandboxId?: string): DirectProvider[] {
+    const knownVolume = this.volumeProviders.get(volumeId);
+    const knownSandbox = sandboxId ? this.sandboxProviders.get(sandboxId) : undefined;
+    const providers = this.getProviders().filter((p) =>
+      typeof p.volume?.attach === 'function' || typeof p.volume?.detach === 'function'
+    );
+    const priority = new Set<DirectProvider>();
+    if (knownVolume) priority.add(knownVolume);
+    if (knownSandbox && knownSandbox !== knownVolume) priority.add(knownSandbox);
+    return [...priority, ...providers.filter((p) => !priority.has(p))];
+  }
+
   private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
     const preferredProviderName = options?.provider;
     const { provider: _providerName, ...providerOptions } = options || {};
@@ -248,6 +313,7 @@ class ComputeManager {
     this.roundRobinCursor = 0;
     this.sandboxProviders.clear();
     this.snapshotProviders.clear();
+    this.volumeProviders.clear();
   }
 
   sandbox = {
@@ -373,6 +439,152 @@ class ComputeManager {
 
       throw new Error(
         `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+  };
+
+  volume = {
+    create: async (options?: CreateVolumeOptions): Promise<Volume> => {
+      const preferredProviderName = options?.provider;
+      const { provider: _providerName, ...providerOptions } = options || {};
+      const candidates = this.getVolumeCreateCandidates(preferredProviderName);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume?.create) continue;
+
+        try {
+          const volume = await provider.volume.create(providerOptions);
+          this.volumeProviders.set(volume.id, provider);
+          return volume;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          if (preferredProviderName) throw error;
+        }
+      }
+
+      throw new Error(
+        `Failed to create volume across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+
+    list: async (options?: ListVolumesOptions): Promise<Volume[]> => {
+      const preferredProviderName = options?.provider;
+      const { provider: _providerName, ...providerOptions } = options || {};
+      const providers = preferredProviderName
+        ? [this.getProviderByName(preferredProviderName)]
+        : this.getVolumeListProviders();
+      const volumes: Volume[] = [];
+      const errors: string[] = [];
+
+      for (const [index, provider] of providers.entries()) {
+        if (!provider.volume?.list) continue;
+
+        try {
+          const listed = await provider.volume.list(providerOptions);
+          for (const volume of listed) {
+            this.volumeProviders.set(volume.id, provider);
+            volumes.push(volume);
+          }
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      return volumes;
+    },
+
+    getById: async (volumeId: string): Promise<Volume | null> => {
+      const candidates = this.getVolumeProviderCandidates(volumeId);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume?.getById) continue;
+
+        try {
+          const volume = await provider.volume.getById(volumeId);
+          if (volume) {
+            this.volumeProviders.set(volume.id, provider);
+            return volume;
+          }
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      return null;
+    },
+
+    delete: async (volumeId: string): Promise<void> => {
+      const candidates = this.getVolumeProviderCandidates(volumeId);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume?.delete) continue;
+
+        try {
+          await provider.volume.delete(volumeId);
+          this.volumeProviders.delete(volumeId);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to delete volume "${volumeId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+
+    attach: async (volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+      const preferredProviderName = options?.provider;
+      const { provider: _providerName, ...providerOptions } = options || {};
+      const candidates = preferredProviderName
+        ? [this.getProviderByName(preferredProviderName)]
+        : this.getVolumeAttachCandidates(volumeId, sandboxId);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume?.attach) continue;
+
+        try {
+          await provider.volume.attach(volumeId, sandboxId, providerOptions);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to attach volume "${volumeId}" to sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+
+    detach: async (volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+      const preferredProviderName = options?.provider;
+      const { provider: _providerName, ...providerOptions } = options || {};
+      const candidates = preferredProviderName
+        ? [this.getProviderByName(preferredProviderName)]
+        : this.getVolumeAttachCandidates(volumeId, sandboxId);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume?.detach) continue;
+
+        try {
+          await provider.volume.detach(volumeId, sandboxId, providerOptions);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to detach volume "${volumeId}" from sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
         errors.map((error) => `- ${error}`).join('\n')
       );
     },

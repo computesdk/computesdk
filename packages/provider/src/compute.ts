@@ -23,6 +23,8 @@ export interface CreateComputeConfig<TInstance = any> {
 export interface ComputeAPI<TInstance = any> {
   /** Sandbox management methods */
   sandbox: Provider<TInstance>['sandbox'];
+  /** Volume management methods, when the provider supports them */
+  volume?: Provider<TInstance>['volume'];
   /** Get current configuration */
   getConfig(): CreateComputeConfig<TInstance> | null;
   /** Update configuration and return new compute instance */
@@ -62,6 +64,7 @@ export function createCompute<TInstance = any>(
 
   return {
     sandbox: provider.sandbox,
+    volume: provider.volume,
     
     getConfig() {
       return currentConfig;

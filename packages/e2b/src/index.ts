@@ -2,10 +2,10 @@
  * E2B Provider - Factory-based Implementation
  */
 
-import { Sandbox as E2BSandbox } from 'e2b';
+import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, Volume, CreateVolumeOptions, ListVolumesOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 type E2BFileEntry = {
@@ -54,10 +54,18 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
           const {
             timeout: _timeout, envs, name: _name, metadata, templateId, snapshotId,
-            sandboxId: _sandboxId, namespace: _namespace, directory: _directory, ...providerOptions
+            sandboxId: _sandboxId, namespace: _namespace, directory: _directory, volumeIds,
+            ...providerOptions
           } = options || {};
 
           const createOpts: Record<string, any> = { apiKey, timeoutMs: timeout, envs, metadata, ...providerOptions };
+
+          if (volumeIds && volumeIds.length > 0) {
+            createOpts.volumeMounts = volumeIds.reduce<Record<string, string>>((acc, id, index) => {
+              acc[`/mnt/volume-${index}`] = id;
+              return acc;
+            }, {});
+          }
 
           const templateOrSnapshot = templateId || snapshotId;
           if (templateOrSnapshot) {
@@ -220,6 +228,56 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           if (typeof e2bStatic.deleteTemplate === 'function') await e2bStatic.deleteTemplate(templateId, { apiKey });
         } catch { /* ignore */ }
       }
+    },
+
+    volume: {
+      create: async (config: E2BConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY;
+        if (!apiKey) throw new Error('Missing E2B API key. Provide apiKey or set E2B_API_KEY.');
+        const name = options?.name || 'computesdk-volume';
+        const volume = await E2BVolume.create(name, { apiKey });
+        return {
+          id: volume.volumeId,
+          provider: 'e2b',
+          name: volume.name || name,
+          createdAt: new Date(),
+          metadata: options?.metadata,
+          native: volume,
+        };
+      },
+      list: async (config: E2BConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY;
+        if (!apiKey) return [];
+        try {
+          const items = await E2BVolume.list({ apiKey });
+          return items.map((item) => ({
+            id: item.volumeId,
+            provider: 'e2b',
+            name: item.name || item.volumeId,
+            createdAt: new Date(),
+            native: item,
+          }));
+        } catch { return []; }
+      },
+      getById: async (config: E2BConfig, volumeId: string): Promise<Volume | null> => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY;
+        if (!apiKey) return null;
+        try {
+          const volume = await E2BVolume.connect(volumeId, { apiKey });
+          return {
+            id: volume.volumeId,
+            provider: 'e2b',
+            name: volume.name || volumeId,
+            createdAt: new Date(),
+            native: volume,
+          };
+        } catch { return null; }
+      },
+      delete: async (config: E2BConfig, volumeId: string): Promise<void> => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY;
+        if (!apiKey) return;
+        try { await E2BVolume.destroy(volumeId, { apiKey }); } catch { /* ignore */ }
+      },
     }
   }
 });

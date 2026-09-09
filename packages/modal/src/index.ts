@@ -4,10 +4,10 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, Volume, CreateVolumeOptions, ListVolumesOptions } from '@computesdk/provider';
 
 import { ModalClient } from 'modal';
-import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
+import type { Sandbox, App, Image, SandboxCreateParams, Volume as ModalVolume } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
 
@@ -91,6 +91,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
+            volumeIds,
             ports: optPorts,
             daemonSsePort: optDaemonSsePort,
             scalableSandboxes: optScalableSandboxes,
@@ -112,6 +113,19 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           const sandboxOptions: SandboxCreateParams = {
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
+
+          if (volumeIds && volumeIds.length > 0) {
+            const volumes: Record<string, ModalVolume> = {};
+            for (let i = 0; i < volumeIds.length; i++) {
+              const volumeId = volumeIds[i];
+              let volume = await client.volumes.fromName(volumeId, { createIfMissing: true });
+              if (options?.volumeMountOptions?.[volumeId]) {
+                volume = volume.withMountOptions(options.volumeMountOptions[volumeId]);
+              }
+              volumes[`/mnt/volume-${i}`] = volume;
+            }
+            sandboxOptions.volumes = volumes;
+          }
 
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;
@@ -287,6 +301,42 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
       list: async (_config: ModalConfig) => [],
       delete: async (_config: ModalConfig, _snapshotId: string) => { /* No-op */ }
+    },
+
+    volume: {
+      create: async (config: ModalInternalConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const client = config._client;
+        const name = options?.name || 'computesdk-volume';
+        const volume = await client.volumes.fromName(name, { createIfMissing: true });
+        return {
+          id: volume.volumeId,
+          provider: 'modal',
+          name: volume.name || name,
+          createdAt: new Date(),
+          metadata: options?.metadata,
+          native: volume,
+        };
+      },
+      list: async (_config: ModalInternalConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        throw new Error('Modal does not support listing volumes.');
+      },
+      getById: async (config: ModalInternalConfig, volumeId: string): Promise<Volume | null> => {
+        try {
+          const client = config._client;
+          const volume = await client.volumes.fromName(volumeId, { createIfMissing: false });
+          return {
+            id: volume.volumeId,
+            provider: 'modal',
+            name: volume.name || volumeId,
+            createdAt: new Date(),
+            native: volume,
+          };
+        } catch { return null; }
+      },
+      delete: async (config: ModalInternalConfig, volumeId: string): Promise<void> => {
+        const client = config._client;
+        try { await client.volumes.delete(volumeId); } catch { /* ignore */ }
+      },
     }
   }
 });

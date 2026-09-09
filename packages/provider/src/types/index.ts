@@ -17,6 +17,10 @@ export type {
   SandboxResourceOptions,
   RunloopLaunchParameters,
   VercelSandboxResources,
+  Volume,
+  CreateVolumeOptions,
+  AttachVolumeOptions,
+  ListVolumesOptions,
 } from 'computesdk';
 
 // Provider-specific types (defined in this package)
