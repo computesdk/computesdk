@@ -366,7 +366,16 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         };
 
         await core.createNamespacedPod({ namespace, body: pod });
-        await waitForPodRunning(core, namespace, podName, timeout);
+        try {
+          await waitForPodRunning(core, namespace, podName, timeout);
+        } catch (error) {
+          try {
+            await core.deleteNamespacedPod({ namespace, name: podName });
+          } catch {
+            // Ignore cleanup failures; propagate the original pod readiness error.
+          }
+          throw error;
+        }
         if (config.kubeConfigRaw) {
           rawKubeConfigBySandboxId.set(`${namespace}/${podName}`, config.kubeConfigRaw);
         }
@@ -574,6 +583,9 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
 
         try {
           const pvc = await core.readNamespacedPersistentVolumeClaim({ namespace, name });
+          if (pvc.metadata?.labels?.[LABEL_MANAGED] !== 'true') {
+            return null;
+          }
           return pvcToVolume(pvc, namespace);
         } catch (error) {
           if (isNotFound(error)) return null;
@@ -586,10 +598,22 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         const kc = loadKubeConfig(config);
         const core = kc.makeApiClient(CoreV1Api);
 
-        await core.deleteNamespacedPersistentVolumeClaim({ namespace, name }).catch(error => {
+        try {
+          const pvc = await core.readNamespacedPersistentVolumeClaim({ namespace, name });
+          if (pvc.metadata?.labels?.[LABEL_MANAGED] !== 'true') {
+            throw new Error(`Volume ${namespace}/${name} is not a ComputeSDK-managed Kubernetes volume`);
+          }
+        } catch (error) {
           if (isNotFound(error)) return;
-          throw error;
-        });
+          throw new Error(`Failed to verify Kubernetes volume ${namespace}/${name} before deletion: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        try {
+          await core.deleteNamespacedPersistentVolumeClaim({ namespace, name });
+        } catch (error) {
+          if (isNotFound(error)) return;
+          throw new Error(`Failed to delete Kubernetes volume ${namespace}/${name}: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
 
       attach: async (_config: K8sConfig, _volumeId: string, _sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {

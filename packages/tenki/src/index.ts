@@ -411,11 +411,20 @@ export const tenki = defineProvider<Session, TenkiConfig>({
           sizeBytes: options.size * 1024 * 1024,
         } as TenkiCreateVolumeOptions);
         if (options?.sandboxId) {
-          await client.waitVolumeReady(native.id, 120_000);
-          const session = await client.get(options.sandboxId);
-          await session.attachVolume(native.id, options.mountPath ?? "/mnt/volume", {
-            readOnly: options?.readOnly,
-          });
+          try {
+            await client.waitVolumeReady(native.id, 120_000);
+            const session = await client.get(options.sandboxId);
+            await session.attachVolume(native.id, options.mountPath ?? "/mnt/volume", {
+              readOnly: options?.readOnly,
+            });
+          } catch (error) {
+            try {
+              await client.deleteVolume(native.id);
+            } catch {
+              // Ignore cleanup failures; propagate the original error.
+            }
+            throw error;
+          }
         }
         return mapVolume(native);
       },

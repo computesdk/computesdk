@@ -374,4 +374,36 @@ describe('compute multi-provider', () => {
     const sdk = compute({ providers: [first, second] });
     await expect(sdk.volume.delete('vol-1')).rejects.toThrow(/ambiguous/);
   });
+
+  it('aggregates volume getById errors instead of returning undefined', async () => {
+    const firstGetById = vi.fn(async (id: string) => {
+      throw new Error(`custom error for ${id}`);
+    });
+    const secondGetById = vi.fn(async () => null);
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.getById('vol-1')).rejects.toThrow('custom error for vol-1');
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
+  it('enforces options.limit across providers in volume.list', async () => {
+    const firstList = vi.fn(async () => [
+      { id: 'vol-1', provider: 'first', createdAt: new Date() },
+      { id: 'vol-2', provider: 'first', createdAt: new Date() },
+    ]);
+    const secondList = vi.fn(async () => [
+      { id: 'vol-3', provider: 'second', createdAt: new Date() },
+    ]);
+    const first = makeProvider('first', {}, undefined, { list: firstList });
+    const second = makeProvider('second', {}, undefined, { list: secondList });
+
+    const sdk = compute({ providers: [first, second] });
+    const volumes = await sdk.volume.list({ limit: 2 });
+
+    expect(volumes).toHaveLength(2);
+    expect(firstList).toHaveBeenCalledWith(expect.objectContaining({ limit: 2 }));
+    expect(secondList).not.toHaveBeenCalled();
+  });
 });

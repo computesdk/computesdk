@@ -495,8 +495,8 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
         } = options || {};
 
         if (snapshotId) {
-          const unsupportedKeys = ['envs', 'templateId', 'directory'];
-          if (envs || templateId || directory) {
+          const unsupportedKeys = ['envs', 'templateId', 'directory', 'volumeIds'];
+          if (envs || templateId || directory || (volumeIds && volumeIds.length > 0)) {
             throw new Error(
               `Quilt snapshot clone does not support ${unsupportedKeys.join(', ')} create options in one request.`
             );

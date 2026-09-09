@@ -85,6 +85,9 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				
 				if (existingId) {
 					// Resume existing sandbox or snapshot
+					if (volumeIds && volumeIds.length > 0) {
+						throw new Error(`Blaxel does not support mounting volumeIds when resuming an existing sandbox or snapshot (${existingId}).`);
+					}
 					sandbox = await SandboxInstance.get(existingId);
 					if (!sandbox) {
 						throw new Error(`Sandbox ${existingId} not found`);

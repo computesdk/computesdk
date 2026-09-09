@@ -120,6 +120,16 @@ function getProviderErrorDetail(error: unknown): string {
   return String(error);
 }
 
+function isVolumeNotFoundError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const e = error as { statusCode?: number; code?: number; message?: string };
+  if (e.statusCode === 404 || e.code === 404) return true;
+  if (typeof e.message === 'string') {
+    return /not found|no such|does not exist|doesn't exist|was not found/i.test(e.message);
+  }
+  return false;
+}
+
 function resolveProviders(config: ExplicitComputeConfig): DirectProvider[] {
   const candidates: unknown[] = [];
 
@@ -264,6 +274,7 @@ class ComputeManager {
   private async identifyVolumeOwner(volumeId: string): Promise<{ provider: DirectProvider; volume: Volume } | undefined> {
     const providers = this.getProviders().filter((p) => typeof p.volume?.getById === 'function');
     let owner: { provider: DirectProvider; volume: Volume } | undefined;
+    const errors: Error[] = [];
 
     for (const provider of providers) {
       try {
@@ -275,14 +286,30 @@ class ComputeManager {
               'Pass the provider name in options to disambiguate.'
             );
           }
+          if (errors.length > 0) {
+            throw new Error(
+              `Volume id "${volumeId}" owner lookup could not be established because other providers reported errors: ` +
+              errors.map((e) => e.message).join('; ')
+            );
+          }
           owner = { provider, volume };
         }
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith(`Volume id "${volumeId}" is ambiguous`)) {
+        if (error instanceof Error && error.message.startsWith(`Volume id "${volumeId}"`)) {
           throw error;
         }
-        // continue searching
+        if (isVolumeNotFoundError(error)) {
+          // Volume is absent on this provider; keep searching.
+          continue;
+        }
+        errors.push(error instanceof Error ? error : new Error(String(error)));
       }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(
+        `Volume id "${volumeId}" owner lookup failed: ` + errors.map((e) => e.message).join('; ')
+      );
     }
 
     return owner;
@@ -507,14 +534,28 @@ class ComputeManager {
         : this.getVolumeListProviders();
       const volumes: Volume[] = [];
       const errors: string[] = [];
+      const limit = options?.limit;
+      let remaining = typeof limit === 'number' && limit >= 0 ? limit : undefined;
 
       for (const [index, provider] of providers.entries()) {
         if (!provider.volume?.list) continue;
+        if (remaining !== undefined && remaining <= 0) break;
+
+        const callOptions = { ...providerOptions };
+        if (remaining !== undefined) {
+          callOptions.limit = remaining;
+        }
 
         try {
-          const listed = await provider.volume.list(providerOptions);
+          const listed = await provider.volume.list(callOptions);
           for (const volume of listed) {
             volumes.push(volume);
+            if (remaining !== undefined) {
+              remaining--;
+              if (remaining <= 0) {
+                return volumes.slice(0, limit);
+              }
+            }
           }
         } catch (error) {
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
