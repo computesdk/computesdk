@@ -434,11 +434,12 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           client,
           mintIfMissing: true,
         });
+        const mapped = toVolume(volume);
         return {
-          ...toVolume(volume),
+          ...mapped,
           metadata: {
+            ...mapped.metadata,
             ...options?.metadata,
-            ...toVolume(volume).metadata,
           },
         };
       },
