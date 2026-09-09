@@ -1,5 +1,11 @@
 # @computesdk/archil
 
+## 0.4.10
+
+### Patch Changes
+
+- 3a3cfa7: Support large filesystem reads, chunk large writes, and reject writes to directory paths.
+
 ## 0.4.9
 
 ### Patch Changes

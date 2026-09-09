@@ -73,7 +73,7 @@ await sandbox.destroy()
 |---|---|---|---|
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
-| `fastToken` | `'absorb' \| 'prime' \| 'off'` | `'absorb'` | How to use the signed credential. |
+| `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | How to use the signed credential. |
 | `ramGib` | `number` | `2` | Guest memory in GiB. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. |
 | `execRetries` | `number` | `1` | Retries for an undelivered command. |
@@ -121,17 +121,21 @@ else as a curated name.
 
 Authenticating a request costs a round trip that presenting a signed
 credential does not. givemeanode hands one back on the response to any
-request made with your token, and this provider absorbs and presents it
-automatically: nothing to configure, nothing new to store, no extra round
-trip, and a fallback to the ordinary token on any failure.
+request made with your token, and this provider presents it automatically:
+nothing to configure, nothing new to store, and a fallback to the ordinary
+token on any failure.
 
-Set `fastToken: 'prime'` when you start many sandboxes at once, so the
-burst does not send every one of them down the ordinary path:
+By default (`fastToken: 'prime'`) the provider pays one small warm-up
+request per process, single-flighted, so even the first creates of a burst
+present the credential rather than each paying the authentication read.
+Set `fastToken: 'absorb'` for a process that makes one request and exits:
+no warm-up, the first request pays the ordinary cost, and its response
+carries the credential for everything after it.
 
 ```typescript
 const compute = givemeanode({
   apiKey: process.env.GMN_TOKEN,
-  fastToken: 'prime',
+  fastToken: 'absorb',
 })
 ```
 
