@@ -6,8 +6,13 @@
  * Uses the official tensorlake npm SDK (0.5.7).
  */
 
-import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
-import type { SandboxInfo } from "tensorlake";
+import { randomUUID } from "node:crypto";
+import { Sandbox, SandboxStatus, OutputMode, FilesystemClient } from "tensorlake";
+import type {
+  AttachFileSystemOptions,
+  FileSystemMount,
+  SandboxInfo,
+} from "tensorlake";
 import { defineProvider } from "@computesdk/provider";
 import { streamTensorlakeCommand } from "./streaming";
 import type {
@@ -17,6 +22,10 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+  AttachVolumeOptions,
 } from "@computesdk/provider";
 
 export interface TensorlakeConfig {
@@ -85,6 +94,14 @@ export const tensorlake = defineProvider<
           }),
           ...(options?.name && { name: options.name }),
           ...(options?.snapshotId && { snapshotId: options.snapshotId }),
+          ...(options?.volumeIds && options.volumeIds.length > 0
+            ? {
+                fileSystems: options.volumeIds.map((id, i) => ({
+                  fileSystemId: id,
+                  mountPath: `/mnt/volume-${i}`,
+                })),
+              }
+            : {}),
           proxyUrl: config.proxyUrl,
           apiKey,
           apiUrl,
@@ -399,6 +416,103 @@ export const tensorlake = defineProvider<
         } catch {
           // Ignore
         }
+      },
+    },
+
+    volume: {
+      create: async (
+        config: TensorlakeConfig,
+        options?: CreateVolumeOptions,
+      ): Promise<Volume> => {
+        const { apiKey, apiUrl } = resolveAuth(config);
+        const client = new FilesystemClient({ apiKey, apiUrl });
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
+        const fs = await client.create(name);
+        return {
+          id: fs.name,
+          provider: "tensorlake",
+          name: fs.name,
+          createdAt: new Date(),
+          metadata: options?.metadata,
+          native: fs,
+        };
+      },
+
+      list: async (
+        config: TensorlakeConfig,
+        _options?: ListVolumesOptions,
+      ): Promise<Volume[]> => {
+        const { apiKey, apiUrl } = resolveAuth(config);
+        const client = new FilesystemClient({ apiKey, apiUrl });
+        const filesystems = await client.list();
+        return filesystems.map((fs) => ({
+          id: fs.name,
+          provider: "tensorlake",
+          name: fs.name,
+          createdAt: new Date(),
+          native: fs,
+        }));
+      },
+
+      getById: async (
+        config: TensorlakeConfig,
+        volumeId: string,
+      ): Promise<Volume | null> => {
+        try {
+          const { apiKey, apiUrl } = resolveAuth(config);
+          const client = new FilesystemClient({ apiKey, apiUrl });
+          const fs = await client.get(volumeId);
+          return {
+            id: fs.name,
+            provider: "tensorlake",
+            name: fs.name,
+            createdAt: new Date(),
+            native: fs,
+          };
+        } catch {
+          return null;
+        }
+      },
+
+      delete: async (
+        config: TensorlakeConfig,
+        volumeId: string,
+      ): Promise<void> => {
+        const { apiKey, apiUrl } = resolveAuth(config);
+        const client = new FilesystemClient({ apiKey, apiUrl });
+        await client.delete(volumeId);
+      },
+
+      attach: async (
+        config: TensorlakeConfig,
+        volumeId: string,
+        sandboxId: string,
+        options?: AttachVolumeOptions,
+      ): Promise<void> => {
+        if (!options?.mountPath) {
+          throw new Error("Tensorlake attach requires a mountPath");
+        }
+        const { apiKey, apiUrl } = resolveAuth(config);
+        const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+        const attachOptions: AttachFileSystemOptions = {};
+        if (options?.readOnly !== undefined) {
+          attachOptions.readOnly = options.readOnly;
+        }
+        await sandbox.attachFileSystem(volumeId, options.mountPath, attachOptions);
+      },
+
+      detach: async (
+        config: TensorlakeConfig,
+        _volumeId: string,
+        sandboxId: string,
+        options?: AttachVolumeOptions,
+      ): Promise<void> => {
+        if (!options?.mountPath) {
+          throw new Error("Tensorlake detach requires a mountPath");
+        }
+        const { apiKey, apiUrl } = resolveAuth(config);
+        const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+        await sandbox.detachFileSystem(options.mountPath);
       },
     },
   },
