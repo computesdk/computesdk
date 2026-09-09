@@ -170,6 +170,7 @@ class ComputeManager {
   private sandboxProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
   private volumeProviders = new Map<string, DirectProvider>();
+  private volumeProviderResolutions = new Map<string, string | null>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
       throw new Error(
@@ -262,23 +263,65 @@ class ComputeManager {
     return this.getProviders().filter((p) => typeof p.volume?.list === 'function');
   }
 
+  private qualifiedVolumeKey(provider: DirectProvider, volumeId: string): string {
+    return `${provider.name ?? 'unknown'}:${volumeId}`;
+  }
+
+  private setVolumeProvider(volumeId: string, provider: DirectProvider): void {
+    const qualifiedKey = this.qualifiedVolumeKey(provider, volumeId);
+    this.volumeProviders.set(qualifiedKey, provider);
+
+    const existing = this.volumeProviderResolutions.get(volumeId);
+    if (existing === undefined) {
+      this.volumeProviderResolutions.set(volumeId, provider.name ?? null);
+    } else if (existing !== provider.name) {
+      this.volumeProviderResolutions.set(volumeId, null);
+    }
+  }
+
+  private getVolumeProvider(volumeId: string): DirectProvider | undefined {
+    const ownerName = this.volumeProviderResolutions.get(volumeId);
+    if (ownerName === null) return undefined;
+    if (ownerName) {
+      return this.volumeProviders.get(`${ownerName}:${volumeId}`);
+    }
+    return undefined;
+  }
+
+  private removeVolumeProvider(volumeId: string): void {
+    const ownerName = this.volumeProviderResolutions.get(volumeId);
+    if (ownerName) {
+      this.volumeProviders.delete(`${ownerName}:${volumeId}`);
+    }
+    for (const key of Array.from(this.volumeProviders.keys())) {
+      if (key.endsWith(`:${volumeId}`)) {
+        this.volumeProviders.delete(key);
+      }
+    }
+    this.volumeProviderResolutions.delete(volumeId);
+  }
+
+  private async identifyVolumeOwner(volumeId: string): Promise<DirectProvider | undefined> {
+    const providers = this.getProviders().filter((p) => typeof p.volume?.getById === 'function');
+    for (const provider of providers) {
+      try {
+        const volume = await provider.volume!.getById!(volumeId);
+        if (volume) {
+          this.setVolumeProvider(volumeId, provider);
+          return provider;
+        }
+      } catch {
+        // continue searching
+      }
+    }
+    return undefined;
+  }
+
   private getVolumeProviderCandidates(volumeId: string): DirectProvider[] {
-    const known = this.volumeProviders.get(volumeId);
+    const known = this.getVolumeProvider(volumeId);
     const providers = this.getProviders().filter((p) => p.volume);
     if (!known) return providers;
     return [known, ...providers.filter((p) => p !== known)];
-  }
-
-  private getVolumeAttachCandidates(volumeId: string, sandboxId?: string): DirectProvider[] {
-    const knownVolume = this.volumeProviders.get(volumeId);
-    const knownSandbox = sandboxId ? this.sandboxProviders.get(sandboxId) : undefined;
-    const providers = this.getProviders().filter((p) =>
-      typeof p.volume?.attach === 'function' || typeof p.volume?.detach === 'function'
-    );
-    const priority = new Set<DirectProvider>();
-    if (knownVolume) priority.add(knownVolume);
-    if (knownSandbox && knownSandbox !== knownVolume) priority.add(knownSandbox);
-    return [...priority, ...providers.filter((p) => !priority.has(p))];
   }
 
   private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
@@ -319,6 +362,7 @@ class ComputeManager {
     this.sandboxProviders.clear();
     this.snapshotProviders.clear();
     this.volumeProviders.clear();
+    this.volumeProviderResolutions.clear();
   }
 
   sandbox = {
@@ -461,7 +505,7 @@ class ComputeManager {
 
         try {
           const volume = await provider.volume.create(providerOptions);
-          this.volumeProviders.set(volume.id, provider);
+          this.setVolumeProvider(volume.id, provider);
           return volume;
         } catch (error) {
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -490,7 +534,7 @@ class ComputeManager {
         try {
           const listed = await provider.volume.list(providerOptions);
           for (const volume of listed) {
-            this.volumeProviders.set(volume.id, provider);
+            this.setVolumeProvider(volume.id, provider);
             volumes.push(volume);
           }
         } catch (error) {
@@ -511,7 +555,7 @@ class ComputeManager {
         try {
           const volume = await provider.volume.getById(volumeId);
           if (volume) {
-            this.volumeProviders.set(volume.id, provider);
+            this.setVolumeProvider(volumeId, provider);
             return volume;
           }
         } catch (error) {
@@ -529,41 +573,19 @@ class ComputeManager {
       if (preferredProviderName) {
         owner = this.getProviderByName(preferredProviderName);
       } else {
-        owner = this.volumeProviders.get(volumeId);
+        owner = this.getVolumeProvider(volumeId);
       }
 
       if (!owner) {
-        const providers = this.getProviders().filter((p) => typeof p.volume?.getById === 'function');
-        const errors: string[] = [];
-        for (const [index, provider] of providers.entries()) {
-          try {
-            const volume = await provider.volume!.getById!(volumeId);
-            if (volume) {
-              owner = provider;
-              this.volumeProviders.set(volumeId, owner);
-              break;
-            }
-          } catch (error) {
-            errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
-          }
-        }
+        owner = await this.identifyVolumeOwner(volumeId);
+      }
 
-        if (!owner) {
-          if (providers.length === 0) {
-            throw new Error(
-              `Cannot determine which provider owns volume "${volumeId}". ` +
-              'No configured provider exposes volume lookup. Pass the provider name in options: ' +
-              '`compute.volume.delete("' + volumeId + '", { provider: "e2b" })`'
-            );
-          }
-          throw new Error(
-            `Cannot determine which provider owns volume "${volumeId}". ` +
-            'The volume was not found by any configured provider that supports lookup. ' +
-            'Either reference the volume through compute.volume.create/list/getById first, ' +
-            'or pass the provider name in options: ' +
-            '`compute.volume.delete("' + volumeId + '", { provider: "e2b" })`'
-          );
-        }
+      if (!owner) {
+        throw new Error(
+          `Cannot determine which provider owns volume "${volumeId}". ` +
+          'Pass the provider name in options: ' +
+          '`compute.volume.delete("' + volumeId + '", { provider: "e2b" })`'
+        );
       }
 
       if (!owner.volume?.delete) {
@@ -579,57 +601,79 @@ class ComputeManager {
         );
       }
 
-      this.volumeProviders.delete(volumeId);
+      this.removeVolumeProvider(volumeId);
     },
 
     attach: async (volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
       const preferredProviderName = options?.provider;
       const { provider: _providerName, ...providerOptions } = options || {};
-      const candidates = preferredProviderName
-        ? [this.getProviderByName(preferredProviderName)]
-        : this.getVolumeAttachCandidates(volumeId, sandboxId);
-      const errors: string[] = [];
+      let owner: DirectProvider | undefined;
 
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.volume?.attach) continue;
-
-        try {
-          await provider.volume.attach(volumeId, sandboxId, providerOptions);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+      if (preferredProviderName) {
+        owner = this.getProviderByName(preferredProviderName);
+      } else {
+        owner = this.getVolumeProvider(volumeId);
+        if (!owner) {
+          owner = await this.identifyVolumeOwner(volumeId);
         }
       }
 
-      throw new Error(
-        `Failed to attach volume "${volumeId}" to sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+      if (!owner) {
+        throw new Error(
+          `Cannot determine which provider owns volume "${volumeId}". ` +
+          'Pass the provider name in options: ' +
+          '`compute.volume.attach("' + volumeId + '", "' + sandboxId + '", { provider: "createos-sandbox" })`'
+        );
+      }
+
+      if (!owner.volume?.attach) {
+        throw new Error(`Provider "${owner.name ?? 'unknown'}" does not support volume attachment.`);
+      }
+
+      try {
+        await owner.volume.attach(volumeId, sandboxId, providerOptions);
+      } catch (error) {
+        throw new Error(
+          `Failed to attach volume "${volumeId}" to sandbox "${sandboxId}" with provider "${owner.name ?? 'unknown'}".\n` +
+          `${getProviderErrorDetail(error)}`
+        );
+      }
     },
 
     detach: async (volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
       const preferredProviderName = options?.provider;
       const { provider: _providerName, ...providerOptions } = options || {};
-      const candidates = preferredProviderName
-        ? [this.getProviderByName(preferredProviderName)]
-        : this.getVolumeAttachCandidates(volumeId, sandboxId);
-      const errors: string[] = [];
+      let owner: DirectProvider | undefined;
 
-      for (const [index, provider] of candidates.entries()) {
-        if (!provider.volume?.detach) continue;
-
-        try {
-          await provider.volume.detach(volumeId, sandboxId, providerOptions);
-          return;
-        } catch (error) {
-          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+      if (preferredProviderName) {
+        owner = this.getProviderByName(preferredProviderName);
+      } else {
+        owner = this.getVolumeProvider(volumeId);
+        if (!owner) {
+          owner = await this.identifyVolumeOwner(volumeId);
         }
       }
 
-      throw new Error(
-        `Failed to detach volume "${volumeId}" from sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
-        errors.map((error) => `- ${error}`).join('\n')
-      );
+      if (!owner) {
+        throw new Error(
+          `Cannot determine which provider owns volume "${volumeId}". ` +
+          'Pass the provider name in options: ' +
+          '`compute.volume.detach("' + volumeId + '", "' + sandboxId + '", { provider: "createos-sandbox" })`'
+        );
+      }
+
+      if (!owner.volume?.detach) {
+        throw new Error(`Provider "${owner.name ?? 'unknown'}" does not support volume detachment.`);
+      }
+
+      try {
+        await owner.volume.detach(volumeId, sandboxId, providerOptions);
+      } catch (error) {
+        throw new Error(
+          `Failed to detach volume "${volumeId}" from sandbox "${sandboxId}" with provider "${owner.name ?? 'unknown'}".\n` +
+          `${getProviderErrorDetail(error)}`
+        );
+      }
     },
   };
 }

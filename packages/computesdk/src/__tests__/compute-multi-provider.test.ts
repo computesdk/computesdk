@@ -26,7 +26,8 @@ function makeSandbox(id: string, provider: string) {
 function makeProvider(
   name: string,
   handlers: Partial<DirectProvider['sandbox']> = {},
-  snapshotHandlers?: Partial<NonNullable<DirectProvider['snapshot']>>
+  snapshotHandlers?: Partial<NonNullable<DirectProvider['snapshot']>>,
+  volumeHandlers?: Partial<NonNullable<DirectProvider['volume']>>
 ): DirectProvider {
   return {
     name,
@@ -49,6 +50,7 @@ function makeProvider(
           delete: snapshotHandlers.delete || (async () => {}),
         }
       : undefined,
+    volume: volumeHandlers as DirectProvider['volume'],
   };
 }
 
@@ -302,5 +304,42 @@ describe('compute multi-provider', () => {
     const sandbox = await sdk.sandbox.create();
     expect(sandbox.provider).toBe('e2b');
     expect(e2bCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves volume ownership before delete to avoid idempotent misses', async () => {
+    const firstDelete = vi.fn(async () => {});
+    const firstGetById = vi.fn(async () => null);
+    const first = makeProvider(
+      'first',
+      {},
+      undefined,
+      {
+        getById: firstGetById,
+        delete: firstDelete,
+      }
+    );
+
+    const secondDelete = vi.fn(async () => {});
+    const secondGetById = vi.fn(async (id: string) => ({
+      id,
+      provider: 'second',
+      createdAt: new Date(),
+    }));
+    const second = makeProvider(
+      'second',
+      {},
+      undefined,
+      {
+        getById: secondGetById,
+        delete: secondDelete,
+      }
+    );
+
+    const sdk = compute({ providers: [first, second] });
+    await sdk.volume.delete('vol-1');
+
+    expect(firstDelete).not.toHaveBeenCalled();
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+    expect(secondDelete).toHaveBeenCalledWith('vol-1');
   });
 });
