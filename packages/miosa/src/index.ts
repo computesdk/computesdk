@@ -945,7 +945,7 @@ const createMiosaProvider = defineProvider<
       getById: async (config: MiosaConfig, volumeId: string): Promise<Volume | null> => {
         const auth = resolveAuth(config);
         try {
-          const payload = await miosaRequest<unknown>(auth, "GET", `/volumes/${volumeId}`);
+          const payload = await miosaRequest<unknown>(auth, "GET", `/volumes/${encodeURIComponent(volumeId)}`);
           const record = unwrapVolume(payload);
           return record.id ? volumeRecordToVolume(record) : null;
         } catch (error) {
@@ -956,7 +956,7 @@ const createMiosaProvider = defineProvider<
       delete: async (config: MiosaConfig, volumeId: string): Promise<void> => {
         const auth = resolveAuth(config);
         try {
-          await miosaRequest<unknown>(auth, "DELETE", `/volumes/${volumeId}`);
+          await miosaRequest<unknown>(auth, "DELETE", `/volumes/${encodeURIComponent(volumeId)}`);
         } catch (error) {
           if (error instanceof MiosaApiError && error.status === 404) return;
           throw error;

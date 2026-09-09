@@ -623,7 +623,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       getById: async (config: ArchilConfig, volumeId: string): Promise<Volume | null> => {
         const resolved = resolveConfig(config);
         try {
-          const disk = await callApi<DiskResponse>(resolved, 'GET', `/api/disks/${volumeId}`);
+          const disk = await callApi<DiskResponse>(resolved, 'GET', `/api/disks/${encodeURIComponent(volumeId)}`);
           return {
             id: disk.id,
             provider: 'archil',
