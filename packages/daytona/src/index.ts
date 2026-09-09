@@ -5,7 +5,7 @@
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, Volume, CreateVolumeOptions, ListVolumesOptions, AttachVolumeOptions } from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -51,6 +51,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
+            volumeIds,
             ...providerOptions
           } = options || {};
 
@@ -78,6 +79,13 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           const sourceId = templateId || snapshotId;
           if (sourceId) {
             createParams.snapshot = sourceId;
+          }
+
+          if (volumeIds && volumeIds.length > 0) {
+            createParams.volumes = volumeIds.map((volumeId, index) => ({
+              volumeId,
+              mountPath: `/mnt/volume-${index}`,
+            }));
           }
 
           const createOptions = timeout
@@ -283,6 +291,83 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const daytona = new Daytona({ apiKey: apiKey });
         try { await (daytona as any).snapshot.delete(templateId); } catch { /* ignore */ }
       }
+    },
+    volume: {
+      create: async (config: DaytonaConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey });
+        const name = options?.name || `computesdk-volume-${Date.now()}`;
+        try {
+          const nativeVolume = await daytona.volume.create(name);
+          return {
+            id: nativeVolume.id,
+            provider: 'daytona',
+            name: nativeVolume.name || name,
+            createdAt: new Date(nativeVolume.createdAt || Date.now()),
+            metadata: { state: nativeVolume.state, ...(options?.metadata || {}) },
+            native: nativeVolume,
+          };
+        } catch (error) {
+          throw new Error(`Failed to create Daytona volume: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      list: async (config: DaytonaConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey });
+        try {
+          const nativeVolumes = await daytona.volume.list();
+          return nativeVolumes.map((v) => ({
+            id: v.id,
+            provider: 'daytona',
+            name: v.name,
+            createdAt: new Date(v.createdAt || Date.now()),
+            metadata: { state: v.state },
+            native: v,
+          }));
+        } catch (error) {
+          throw new Error(`Failed to list Daytona volumes: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      getById: async (config: DaytonaConfig, volumeId: string): Promise<Volume | null> => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey });
+        try {
+          const nativeVolumes = await daytona.volume.list();
+          const found = nativeVolumes.find((v) => v.id === volumeId);
+          if (!found) return null;
+          return {
+            id: found.id,
+            provider: 'daytona',
+            name: found.name,
+            createdAt: new Date(found.createdAt || Date.now()),
+            metadata: { state: found.state },
+            native: found,
+          };
+        } catch (error) {
+          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
+            return null;
+          }
+          throw new Error(`Failed to get Daytona volume ${volumeId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      delete: async (config: DaytonaConfig, volumeId: string): Promise<void> => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const daytona = new Daytona({ apiKey });
+        try {
+          await daytona.volume.delete({ id: volumeId } as any);
+        } catch (error) {
+          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
+            return;
+          }
+          throw new Error(`Failed to delete Daytona volume ${volumeId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      attach: async (_config: DaytonaConfig, _volumeId: string, _sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error('Daytona does not support attaching volumes after sandbox creation. Use volumeIds in CreateSandboxOptions instead.');
+      },
+      detach: async (_config: DaytonaConfig, _volumeId: string, _sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error('Daytona does not support detaching volumes after sandbox creation.');
+      },
     }
   }
 });
