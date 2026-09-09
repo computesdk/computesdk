@@ -64,6 +64,40 @@ function parseDockerBind(bind: string): { source: string; target: string; option
   return { source, target, options };
 }
 
+function assertValidVolumeName(volumeId: string): void {
+  if (!volumeId) throw new Error('Docker volume ID is required');
+  if (volumeId === '.' || volumeId === '..') {
+    throw new Error(`Invalid Docker volume ID: ${volumeId}`);
+  }
+  if (/[\/\\:\s]/.test(volumeId)) {
+    throw new Error(`Docker volume ID contains path/bind separators: ${volumeId}`);
+  }
+  if (volumeId.includes('..')) {
+    throw new Error(`Docker volume ID contains traversal segments: ${volumeId}`);
+  }
+}
+
+async function resolveVolumeBinds(docker: Docker, volumeIds: string[]): Promise<string[]> {
+  const binds: string[] = [];
+  for (let i = 0; i < volumeIds.length; i++) {
+    const volumeId = volumeIds[i];
+    assertValidVolumeName(volumeId);
+    try {
+      const info = await docker.getVolume(volumeId).inspect();
+      if (!isComputeVolume(info)) {
+        throw new Error(`Volume ${volumeId} is not a ComputeSDK-managed Docker volume`);
+      }
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new Error(`Volume ${volumeId} not found or is not a ComputeSDK-managed Docker volume`);
+      }
+      throw error;
+    }
+    binds.push(`${volumeId}:/mnt/volume-${i}`);
+  }
+  return binds;
+}
+
 async function ensureImage(docker: Docker, image: DockerImage): Promise<void> {
   const policy = image.pullPolicy ?? 'ifNotPresent';
   if (policy === 'never') return;
@@ -181,12 +215,9 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         const hb = toHostBindings(cfg.container?.ports);
         const { HostConfig: userHostConfigRaw, ...userCreateRest } = cfg.createOptions || {};
         const userHostConfig = userHostConfigRaw || {};
-        const volumeBinds: string[] = [];
-        if (options?.volumeIds) {
-          for (let i = 0; i < options.volumeIds.length; i++) {
-            volumeBinds.push(`${options.volumeIds[i]}:/mnt/volume-${i}`);
-          }
-        }
+        const volumeBinds = options?.volumeIds && options.volumeIds.length > 0
+          ? await resolveVolumeBinds(docker, options.volumeIds)
+          : [];
 
         const baseBinds = [...(cfg.container?.binds || []), ...(userHostConfig.Binds || []), ...volumeBinds];
         const bindByTarget = new Map<string, string>();
