@@ -53,12 +53,14 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          # Publishing uses npm Trusted Publisher OIDC. Every package in this
-          # monorepo must have a trusted publisher configured on npmjs.com
-          # (repo: computesdk/computesdk, workflow: release.yml) before it can
-          # be released. --provenance signs the attestation.
+          # Publishing uses npm Trusted Publisher OIDC where configured.
+          # Packages without a trusted publisher on npmjs.com fall back to the
+          # long-lived NPM_TOKEN. --provenance signs the attestation.
+          # TODO: once every package has a trusted publisher configured, remove
+          # NPM_TOKEN entirely.
           publish: pnpm changeset publish --provenance
           title: "Version Packages"
           commit: "Version Packages"
         env:
           GITHUB_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
