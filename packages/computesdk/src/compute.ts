@@ -169,8 +169,6 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private sandboxProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
-  private volumeProviders = new Map<string, DirectProvider>();
-  private volumeProviderResolutions = new Map<string, string | null>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
       throw new Error(
@@ -263,44 +261,6 @@ class ComputeManager {
     return this.getProviders().filter((p) => typeof p.volume?.list === 'function');
   }
 
-  private qualifiedVolumeKey(provider: DirectProvider, volumeId: string): string {
-    return `${provider.name ?? 'unknown'}:${volumeId}`;
-  }
-
-  private setVolumeProvider(volumeId: string, provider: DirectProvider): void {
-    const qualifiedKey = this.qualifiedVolumeKey(provider, volumeId);
-    this.volumeProviders.set(qualifiedKey, provider);
-
-    const existing = this.volumeProviderResolutions.get(volumeId);
-    if (existing === undefined) {
-      this.volumeProviderResolutions.set(volumeId, provider.name ?? null);
-    } else if (existing !== provider.name) {
-      this.volumeProviderResolutions.set(volumeId, null);
-    }
-  }
-
-  private getVolumeProvider(volumeId: string): DirectProvider | undefined {
-    const ownerName = this.volumeProviderResolutions.get(volumeId);
-    if (ownerName === null) return undefined;
-    if (ownerName) {
-      return this.volumeProviders.get(`${ownerName}:${volumeId}`);
-    }
-    return undefined;
-  }
-
-  private removeVolumeProvider(volumeId: string): void {
-    const ownerName = this.volumeProviderResolutions.get(volumeId);
-    if (ownerName) {
-      this.volumeProviders.delete(`${ownerName}:${volumeId}`);
-    }
-    for (const key of Array.from(this.volumeProviders.keys())) {
-      if (key.endsWith(`:${volumeId}`)) {
-        this.volumeProviders.delete(key);
-      }
-    }
-    this.volumeProviderResolutions.delete(volumeId);
-  }
-
   private async identifyVolumeOwner(volumeId: string): Promise<{ provider: DirectProvider; volume: Volume } | undefined> {
     const providers = this.getProviders().filter((p) => typeof p.volume?.getById === 'function');
     let owner: { provider: DirectProvider; volume: Volume } | undefined;
@@ -310,7 +270,6 @@ class ComputeManager {
         const volume = await provider.volume!.getById!(volumeId);
         if (volume) {
           if (owner) {
-            this.volumeProviderResolutions.set(volumeId, null);
             throw new Error(
               `Volume id "${volumeId}" is ambiguous: found on providers "${getProviderLabel(owner.provider, 0)}" and "${getProviderLabel(provider, 1)}". ` +
               'Pass the provider name in options to disambiguate.'
@@ -326,9 +285,6 @@ class ComputeManager {
       }
     }
 
-    if (owner) {
-      this.setVolumeProvider(volumeId, owner.provider);
-    }
     return owner;
   }
 
@@ -343,19 +299,9 @@ class ComputeManager {
       }
       const volume = await provider.volume.getById(volumeId);
       if (volume) {
-        this.setVolumeProvider(volumeId, provider);
         return { provider, volume };
       }
       return undefined;
-    }
-
-    const known = this.getVolumeProvider(volumeId);
-    if (known && known.volume?.getById) {
-      const volume = await known.volume.getById(volumeId);
-      if (volume) {
-        return { provider: known, volume };
-      }
-      this.removeVolumeProvider(volumeId);
     }
 
     return this.identifyVolumeOwner(volumeId);
@@ -398,8 +344,6 @@ class ComputeManager {
     this.roundRobinCursor = 0;
     this.sandboxProviders.clear();
     this.snapshotProviders.clear();
-    this.volumeProviders.clear();
-    this.volumeProviderResolutions.clear();
   }
 
   sandbox = {
@@ -542,7 +486,6 @@ class ComputeManager {
 
         try {
           const volume = await provider.volume.create(providerOptions);
-          this.setVolumeProvider(volume.id, provider);
           return volume;
         } catch (error) {
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -571,7 +514,6 @@ class ComputeManager {
         try {
           const listed = await provider.volume.list(providerOptions);
           for (const volume of listed) {
-            this.setVolumeProvider(volume.id, provider);
             volumes.push(volume);
           }
         } catch (error) {
@@ -613,8 +555,6 @@ class ComputeManager {
           `${getProviderErrorDetail(error)}`
         );
       }
-
-      this.removeVolumeProvider(volumeId);
     },
 
     attach: async (volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {

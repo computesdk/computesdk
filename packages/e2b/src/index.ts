@@ -2,6 +2,7 @@
  * E2B Provider - Factory-based Implementation
  */
 
+import { randomUUID } from 'node:crypto';
 import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
@@ -61,10 +62,12 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           const createOpts: Record<string, any> = { apiKey, timeoutMs: timeout, envs, metadata, ...providerOptions };
 
           if (volumeIds && volumeIds.length > 0) {
-            createOpts.volumeMounts = volumeIds.reduce<Record<string, string>>((acc, id, index) => {
-              acc[`/mnt/volume-${index}`] = id;
-              return acc;
-            }, {});
+            const mounts: Record<string, E2BVolume> = {};
+            for (let index = 0; index < volumeIds.length; index++) {
+              const id = volumeIds[index];
+              mounts[`/mnt/volume-${index}`] = await E2BVolume.connect(id, { apiKey });
+            }
+            createOpts.volumeMounts = mounts;
           }
 
           const templateOrSnapshot = templateId || snapshotId;
@@ -234,7 +237,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
       create: async (config: E2BConfig, options?: CreateVolumeOptions): Promise<Volume> => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY;
         if (!apiKey) throw new Error('Missing E2B API key. Provide apiKey or set E2B_API_KEY.');
-        const name = options?.name || 'computesdk-volume';
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
         const volume = await E2BVolume.create(name, { apiKey });
         return {
           id: volume.volumeId,
