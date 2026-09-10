@@ -333,7 +333,7 @@ See individual provider READMEs for details:
 - **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
-- **[@computesdk/buddy](./packages/buddy)** - Ubuntu sandboxes from a pre-warmed pool, with tunnels and snapshots
+- **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
 - **[@computesdk/cloud-run](./packages/cloud-run)** - Google Cloud Run sandboxes
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
