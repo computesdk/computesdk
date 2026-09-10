@@ -568,50 +568,25 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
                 return;
               }
 
-              const chunks: string[] = [];
+              started = true;
               for (let offset = 0; offset < encoded.length; offset += chunkSize) {
                 const isFirst = offset === 0;
                 const isFinal = offset + chunkSize >= encoded.length;
                 const chunk = encoded.slice(offset, offset + chunkSize);
-
+                let command = buildWriteChunkCommand(
+                  parent,
+                  tempPath,
+                  diskPath,
+                  chunk,
+                  isFirst,
+                  isFinal,
+                );
                 if (isFirst) {
-                  chunks.push(
-                    `${checkoutCommand(ARCHIL_MOUNT_ROOT)} && ${buildWriteChunkCommand(
-                      parent,
-                      tempPath,
-                      diskPath,
-                      chunk,
-                      true,
-                      false,
-                    )}`,
-                  );
-                } else if (isFinal) {
-                  chunks.push(
-                    `${buildWriteChunkCommand(
-                      parent,
-                      tempPath,
-                      diskPath,
-                      chunk,
-                      false,
-                      true,
-                    )} && ${checkinCommand(ARCHIL_MOUNT_ROOT)}`,
-                  );
-                } else {
-                  chunks.push(
-                    buildWriteChunkCommand(
-                      parent,
-                      tempPath,
-                      diskPath,
-                      chunk,
-                      false,
-                      false,
-                    ),
-                  );
+                  command = `${checkoutCommand(ARCHIL_MOUNT_ROOT)} && ${command}`;
                 }
-              }
-
-              started = true;
-              for (const command of chunks) {
+                if (isFinal) {
+                  command = `${command} && ${checkinCommand(ARCHIL_MOUNT_ROOT)}`;
+                }
                 const result = await runCommand(sandbox, command);
                 if (result.exitCode !== 0) {
                   throw new Error(result.stderr);
