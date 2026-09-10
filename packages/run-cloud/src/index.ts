@@ -79,6 +79,36 @@ export interface RunCloudSnapshot {
   metadata: Record<string, unknown>;
 }
 
+// Serialize writeFile calls targeting the same path on the same sandbox.
+// This keeps chunk assembly and finalization from interleaving across
+// concurrent calls while still allowing writes to different paths to run
+// in parallel.
+const writeFileLocks = new WeakMap<RunCloudSandbox, Map<string, Promise<void>>>();
+
+function queueWrite(
+  handle: RunCloudSandbox,
+  targetPath: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  let locks = writeFileLocks.get(handle);
+  if (!locks) {
+    locks = new Map();
+    writeFileLocks.set(handle, locks);
+  }
+
+  const previous = locks.get(targetPath) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => write())
+    .finally(() => {
+      if (locks!.get(targetPath) === next) {
+        locks!.delete(targetPath);
+      }
+    });
+  locks.set(targetPath, next);
+  return next;
+}
+
 function env(name: string): string | undefined {
   const value = typeof process !== 'undefined' ? process.env?.[name] : undefined;
   return value && value.trim() ? value.trim() : undefined;
@@ -555,45 +585,16 @@ const _provider = defineProvider<
 
         writeFile: async (handle, filePath, content, runCommand): Promise<void> => {
           const normalizedPath = normalizeShellPath(filePath);
-          const escapedPath = shellQuotePath(normalizedPath);
-          const dir = path.posix.dirname(normalizedPath);
-          const escapedDir = shellQuotePath(dir);
 
-          if (content.length === 0) {
-            const result = await runCommand(
-              handle,
-              `mkdir -p ${escapedDir} && : > ${escapedPath}`,
-            );
-            if (result.exitCode !== 0) {
-              throw new Error(
-                `Run Cloud writeFile failed for ${filePath}: ` +
-                  (result.stderr || `exit ${result.exitCode}`),
-              );
-            }
-            return;
-          }
+          return queueWrite(handle, normalizedPath, async () => {
+            const escapedPath = shellQuotePath(normalizedPath);
+            const dir = path.posix.dirname(normalizedPath);
+            const escapedDir = shellQuotePath(dir);
 
-          const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const chunks: string[] = [];
-          for (let offset = 0; offset < encoded.length; offset += FILESYSTEM_BASE64_CHUNK_SIZE) {
-            chunks.push(encoded.slice(offset, offset + FILESYSTEM_BASE64_CHUNK_SIZE));
-          }
-
-          // Build a short, unique staging file in the destination directory.
-          // Keeping the staging basename independent of the destination avoids
-          // ENAMETOOLONG for valid filenames that are near the component limit.
-          const stagingBasename = `.computesdk-tmp.${crypto.randomBytes(4).toString('hex')}`;
-          const stagingPath = path.posix.join(dir, stagingBasename);
-          const escapedStagingPath = shellQuotePath(stagingPath);
-
-          try {
-            let first = true;
-            for (const chunk of chunks) {
-              const redirect = first ? '>' : '>>';
+            if (content.length === 0) {
               const result = await runCommand(
                 handle,
-                `mkdir -p ${escapedDir} && ` +
-                  `printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} ${escapedStagingPath}`,
+                `mkdir -p ${escapedDir} && : > ${escapedPath}`,
               );
               if (result.exitCode !== 0) {
                 throw new Error(
@@ -601,29 +602,61 @@ const _provider = defineProvider<
                     (result.stderr || `exit ${result.exitCode}`),
                 );
               }
-              first = false;
+              return;
             }
 
-            // Copy the completed staging content into the destination and
-            // remove the staging file. Using shell redirection preserves the
-            // destination's existing inode, permissions, and links, and
-            // fails when the destination is an existing directory.
-            const result = await runCommand(
-              handle,
-              `cat < ${escapedStagingPath} > ${escapedPath} && rm -f -- ${escapedStagingPath}`,
-            );
-            if (result.exitCode !== 0) {
-              throw new Error(
-                `Run Cloud writeFile failed for ${filePath}: ` +
-                  (result.stderr || `exit ${result.exitCode}`),
-              );
+            const encoded = Buffer.from(content, 'utf8').toString('base64');
+            const chunks: string[] = [];
+            for (let offset = 0; offset < encoded.length; offset += FILESYSTEM_BASE64_CHUNK_SIZE) {
+              chunks.push(encoded.slice(offset, offset + FILESYSTEM_BASE64_CHUNK_SIZE));
             }
-          } catch (error) {
-            await runCommand(handle, `rm -f -- ${escapedStagingPath}`).catch(
-              () => {},
-            );
-            throw error;
-          }
+
+            // Build a short, unique staging file in the destination directory.
+            // Keeping the staging basename independent of the destination avoids
+            // ENAMETOOLONG for valid filenames that are near the component limit.
+            const stagingBasename = `.computesdk-tmp.${crypto.randomBytes(4).toString('hex')}`;
+            const stagingPath = path.posix.join(dir, stagingBasename);
+            const escapedStagingPath = shellQuotePath(stagingPath);
+
+            try {
+              let first = true;
+              for (const chunk of chunks) {
+                const redirect = first ? '>' : '>>';
+                const result = await runCommand(
+                  handle,
+                  `mkdir -p ${escapedDir} && ` +
+                    `printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} ${escapedStagingPath}`,
+                );
+                if (result.exitCode !== 0) {
+                  throw new Error(
+                    `Run Cloud writeFile failed for ${filePath}: ` +
+                      (result.stderr || `exit ${result.exitCode}`),
+                  );
+                }
+                first = false;
+              }
+
+              // Copy the completed staging content into the destination and
+              // remove the staging file. Using shell redirection preserves the
+              // destination's existing inode, permissions, and links, and
+              // fails when the destination is an existing directory.
+              const result = await runCommand(
+                handle,
+                `cat < ${escapedStagingPath} > ${escapedPath} && rm -f -- ${escapedStagingPath}`,
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(
+                  `Run Cloud writeFile failed for ${filePath}: ` +
+                    (result.stderr || `exit ${result.exitCode}`),
+                );
+              }
+            } catch (error) {
+              await runCommand(handle, `rm -f -- ${escapedStagingPath}`).catch(
+                () => {},
+              );
+              throw error;
+            }
+          });
         },
 
         mkdir: async (handle, dirPath, runCommand): Promise<void> => {
