@@ -13,6 +13,8 @@ type ModalNativeSandbox = Sandbox;
 
 
 const DEFAULT_IMAGE = 'node:20';
+// Matches the chunk size the modal SDK uses for its own stdin-backed file writes.
+const STDIN_WRITE_CHUNK_SIZE = 4 * 1024 * 1024;
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
 
@@ -246,15 +248,23 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             // V2 sandboxes do not support Sandbox.open; stream the content via stdin instead.
             if (!(error instanceof Error) || !error.message.includes('not supported for V2')) throw error;
           }
-          const process = await modalSandbox.sandbox.exec(['sh', '-c', `cat > "${escapeShellArg(path)}"`], { stdout: 'pipe', stderr: 'pipe' });
+          const process = await modalSandbox.sandbox.exec(['sh', '-c', `cat > "${escapeShellArg(path)}"`], { mode: 'binary', stdout: 'pipe', stderr: 'pipe' });
+          const bytes = new TextEncoder().encode(content);
           const writer = process.stdin.getWriter();
           try {
-            await writer.write(content);
-          } finally {
+            for (let offset = 0; offset < bytes.length; offset += STDIN_WRITE_CHUNK_SIZE) {
+              await writer.write(bytes.subarray(offset, offset + STDIN_WRITE_CHUNK_SIZE));
+            }
             await writer.close();
+          } catch (err) {
+            await writer.abort(err).catch(() => {});
+            await process.closeStdin().catch(() => {});
+            throw err;
+          } finally {
+            writer.releaseLock();
           }
-          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`Failed to write file ${path}: ${stderr}`);
+          const [, stderr, exitCode] = await Promise.all([process.stdout.readBytes(), process.stderr.readBytes(), process.wait()]);
+          if (exitCode !== 0) throw new Error(`Failed to write file ${path}: ${new TextDecoder().decode(stderr)}`);
         },
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], { stdout: 'pipe', stderr: 'pipe' });
