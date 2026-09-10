@@ -233,20 +233,10 @@ function basename(path: string): string {
 // workdir. Map absolute paths outside /home/tenki so they fall under it.
 const TENKI_WORKDIR = "/home/tenki";
 function mapFilesystemPath(path: string): string {
-  if (path === "" || path === "/") return TENKI_WORKDIR;
-  // Treat relative paths as absolute from the workdir root so `..` segments
-  // are normalized against that root and cannot escape into `/etc/passwd`.
-  const normalized = posix.normalize(path.startsWith("/") ? path : `/${path}`);
-  if (
-    normalized === TENKI_WORKDIR ||
-    normalized.startsWith(`${TENKI_WORKDIR}/`)
-  ) {
-    return normalized;
-  }
-  if (normalized.startsWith("/")) {
-    return `${TENKI_WORKDIR}${normalized}`;
-  }
-  return posix.join(TENKI_WORKDIR, normalized);
+  const abs = posix.resolve("/", path);
+  return abs === TENKI_WORKDIR || abs.startsWith(`${TENKI_WORKDIR}/`)
+    ? abs
+    : posix.resolve(TENKI_WORKDIR, `.${abs}`);
 }
 
 // ---------------------------------------------------------------------------
