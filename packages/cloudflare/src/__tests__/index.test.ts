@@ -442,6 +442,34 @@ describe('Standardized Test Suite', () => {
     }
   });
 
+  it('relocates bridge filesystem paths outside /workspace into the workspace', async () => {
+    if (skipIntegration) {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(bridgeCreateResponse())
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 0 }) }]))
+        .mockResolvedValueOnce(new Response('x', { status: 200 }));
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
+        const created = await remoteProvider.sandbox.create();
+
+        await created.filesystem.writeFile('/tmp/bench/a.txt', 'x');
+        await created.filesystem.mkdir('/tmp/bench/../bench');
+        await created.filesystem.readFile('../../etc/passwd');
+
+        expect(fetchMock.mock.calls[1]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/tmp/bench/a.txt`);
+        const body = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string) as { argv: string[] };
+        expect(body.argv[2]).toBe("mkdir -p '/workspace/tmp/bench'");
+        expect(fetchMock.mock.calls[3]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/etc/passwd`);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+  });
+
   it('uses a bridge-compatible cwd for filesystem shell helpers', async () => {
     if (skipIntegration) {
       const fetchMock = vi.fn()
