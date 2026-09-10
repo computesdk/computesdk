@@ -13,6 +13,11 @@ class SessionNotFoundError extends Error {}
 let lastCreateOptions: any = null;
 let lastExec: { command: string; args?: string[]; env?: Record<string, string> } | null = null;
 let execOutputChunks: Array<{ data: Uint8Array; isStderr: boolean }> | null = null;
+let lastWritePath: string | null = null;
+let lastReadPath: string | null = null;
+let lastListPath: string | null = null;
+let lastMkdirPath: string | null = null;
+let lastRemovePath: string | null = null;
 
 class FakeSession {
   id = 'sbx_123';
@@ -62,17 +67,21 @@ class FakeSession {
   }
 
   async writeFile(path: string, data: Uint8Array | string) {
+    lastWritePath = path;
     this.files.set(path, typeof data === 'string' ? enc.encode(data) : data);
   }
   async readFile(path: string): Promise<Uint8Array> {
+    lastReadPath = path;
     const v = this.files.get(path);
     if (!v) throw new Error('not found');
     return v;
   }
   async mkdir(path: string) {
+    lastMkdirPath = path;
     this.dirs.add(path);
   }
   async remove(path: string) {
+    lastRemovePath = path;
     this.files.delete(path);
     this.dirs.delete(path);
   }
@@ -87,6 +96,7 @@ class FakeSession {
     };
   }
   async list(_path: string) {
+    lastListPath = _path;
     return [
       { path: '/work/a.txt', size: 5n, mode: 0o644, isDir: false, modifiedUnixNs: 1_700_000_000_000_000_000n },
       { path: '/work/sub', size: 0n, mode: 0o755, isDir: true, modifiedUnixNs: 1_700_000_000_000_000_000n },
@@ -139,6 +149,11 @@ describe('tenki provider (mocked SDK)', () => {
     lastCreateOptions = null;
     lastExec = null;
     execOutputChunks = null;
+    lastWritePath = null;
+    lastReadPath = null;
+    lastListPath = null;
+    lastMkdirPath = null;
+    lastRemovePath = null;
     shouldNotFind = false;
     sharedSession.closed = false;
   });
@@ -295,6 +310,34 @@ describe('tenki provider (mocked SDK)', () => {
 
     shouldNotFind = true;
     await expect(provider.sandbox.destroy('gone')).resolves.toBeUndefined();
+  });
+
+  it('maps filesystem paths outside /home/tenki into the workdir and contains .. traversal', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    const sandbox = await provider.sandbox.create();
+
+    await sandbox.filesystem.writeFile('/tmp/bench/file.txt', 'data');
+    expect(lastWritePath).toBe('/home/tenki/tmp/bench/file.txt');
+
+    await sandbox.filesystem.readFile('/tmp/bench/file.txt');
+    expect(lastReadPath).toBe('/home/tenki/tmp/bench/file.txt');
+
+    await sandbox.filesystem.mkdir('/tmp/bench/sub');
+    expect(lastMkdirPath).toBe('/home/tenki/tmp/bench/sub');
+
+    await sandbox.filesystem.readdir('/tmp/bench');
+    expect(lastListPath).toBe('/home/tenki/tmp/bench');
+
+    await sandbox.filesystem.remove('/tmp/bench/file.txt');
+    expect(lastRemovePath).toBe('/home/tenki/tmp/bench/file.txt');
+
+    await sandbox.filesystem.exists('../../../etc/passwd');
+    const testPath = lastExec?.args?.[1]?.match(/^test -e "(.+)"$/)?.[1];
+    expect(testPath).toBe('/home/tenki/etc/passwd');
+
+    await expect(sandbox.filesystem.remove('/')).rejects.toThrow(
+      /Refusing to remove the Tenki workdir/
+    );
   });
 
   it('throws a helpful error when no API key is configured', async () => {

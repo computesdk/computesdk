@@ -16,6 +16,7 @@
 
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
 import type { RunCommandOptions, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from "computesdk";
+import { posix } from "node:path";
 import {
   TenkiSandbox,
   Session,
@@ -228,6 +229,26 @@ function basename(path: string): string {
   return idx >= 0 ? trimmed.slice(idx + 1) : trimmed;
 }
 
+// Tenki sandboxes restrict data-plane filesystem operations to the guest
+// workdir. Map absolute paths outside /home/tenki so they fall under it.
+const TENKI_WORKDIR = "/home/tenki";
+function mapFilesystemPath(path: string): string {
+  if (path === "" || path === "/") return TENKI_WORKDIR;
+  // Treat relative paths as absolute from the workdir root so `..` segments
+  // are normalized against that root and cannot escape into `/etc/passwd`.
+  const normalized = posix.normalize(path.startsWith("/") ? path : `/${path}`);
+  if (
+    normalized === TENKI_WORKDIR ||
+    normalized.startsWith(`${TENKI_WORKDIR}/`)
+  ) {
+    return normalized;
+  }
+  if (normalized.startsWith("/")) {
+    return `${TENKI_WORKDIR}${normalized}`;
+  }
+  return posix.join(TENKI_WORKDIR, normalized);
+}
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
@@ -307,17 +328,17 @@ export const tenki = defineProvider<Session, TenkiConfig>({
       // hazards). The runCommand parameter is intentionally unused.
       filesystem: {
         readFile: async (sandbox, path) => {
-          const bytes = await sandbox.readFile(path);
+          const bytes = await sandbox.readFile(mapFilesystemPath(path));
           return new TextDecoder().decode(bytes);
         },
         writeFile: async (sandbox, path, content) => {
-          await sandbox.writeFile(path, content);
+          await sandbox.writeFile(mapFilesystemPath(path), content);
         },
         mkdir: async (sandbox, path) => {
-          await sandbox.mkdir(path);
+          await sandbox.mkdir(mapFilesystemPath(path));
         },
         readdir: async (sandbox, path): Promise<FileEntry[]> => {
-          const entries = await sandbox.list(path);
+          const entries = await sandbox.list(mapFilesystemPath(path));
           return entries.map((entry) => ({
             name: basename(entry.path),
             type: entry.isDir ? ("directory" as const) : ("file" as const),
@@ -329,11 +350,15 @@ export const tenki = defineProvider<Session, TenkiConfig>({
         // report a just-removed file as present, while `test -e` is always
         // consistent with the guest filesystem.
         exists: async (sandbox, path, runCommand) => {
-          const result = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`);
+          const result = await runCommand(sandbox, `test -e "${escapeShellArg(mapFilesystemPath(path))}"`);
           return result.exitCode === 0;
         },
         remove: async (sandbox, path) => {
-          await sandbox.remove(path);
+          const mappedPath = mapFilesystemPath(path);
+          if (mappedPath === TENKI_WORKDIR) {
+            throw new Error("Refusing to remove the Tenki workdir.");
+          }
+          await sandbox.remove(mappedPath);
         },
       },
     },
