@@ -2,4 +2,4 @@
 "@computesdk/modal": patch
 ---
 
-Fall back to a stdin-fed shell write in filesystem.writeFile when Sandbox.open is unsupported (V2 / scalable sandboxes), and stop trimming content in the shell-backed readFile fallback.
+Use Sandbox.filesystem readText/writeText for filesystem.readFile/writeFile so they work on V2 (scalable) sandboxes, where the deprecated Sandbox.open is unsupported.

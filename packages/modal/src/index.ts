@@ -13,8 +13,6 @@ type ModalNativeSandbox = Sandbox;
 
 
 const DEFAULT_IMAGE = 'node:20';
-// Matches the chunk size the modal SDK uses for its own stdin-backed file writes.
-const STDIN_WRITE_CHUNK_SIZE = 4 * 1024 * 1024;
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
 
@@ -216,55 +214,17 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       filesystem: {
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
           try {
-            const file = await modalSandbox.sandbox.open(path);
-            try {
-              const data = await file.read();
-              const content = new TextDecoder().decode(data);
-              return content;
-            } finally {
-              await file.close();
-            }
+            return await modalSandbox.sandbox.filesystem.readText(path);
           } catch (error) {
-            try {
-              const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-              const [content, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-              if (exitCode !== 0) throw new Error(`cat failed: ${stderr}`);
-              return content;
-            } catch {
-              throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
           try {
-            const file = await modalSandbox.sandbox.open(path, 'w');
-            try {
-              await file.write(new TextEncoder().encode(content));
-            } finally {
-              await file.close();
-            }
-            return;
+            await modalSandbox.sandbox.filesystem.writeText(content, path);
           } catch (error) {
-            // V2 sandboxes do not support Sandbox.open; stream the content via stdin instead.
-            if (!(error instanceof Error) || !error.message.includes('not supported for V2')) throw error;
+            throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
-          const process = await modalSandbox.sandbox.exec(['sh', '-c', `cat > "${escapeShellArg(path)}"`], { mode: 'binary', stdout: 'pipe', stderr: 'pipe' });
-          const bytes = new TextEncoder().encode(content);
-          const writer = process.stdin.getWriter();
-          try {
-            for (let offset = 0; offset < bytes.length; offset += STDIN_WRITE_CHUNK_SIZE) {
-              await writer.write(bytes.subarray(offset, offset + STDIN_WRITE_CHUNK_SIZE));
-            }
-            await writer.close();
-          } catch (err) {
-            await writer.abort(err).catch(() => {});
-            await process.closeStdin().catch(() => {});
-            throw err;
-          } finally {
-            writer.releaseLock();
-          }
-          const [, stderr, exitCode] = await Promise.all([process.stdout.readBytes(), process.stderr.readBytes(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`Failed to write file ${path}: ${new TextDecoder().decode(stderr)}`);
         },
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
           const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], { stdout: 'pipe', stderr: 'pipe' });

@@ -1,36 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-interface ExecRecord { command: string[]; mode?: string; chunks: Uint8Array[]; closedStdin: boolean }
-const execCalls: ExecRecord[] = [];
-let openSupported = true;
-let failStdinWrite = false;
-
-class FakeProcess {
-  stdin: WritableStream<Uint8Array>;
-  stdout = { readText: async () => '', readBytes: async () => new Uint8Array() };
-  stderr = { readText: async () => '', readBytes: async () => new Uint8Array() };
-  constructor(private record: ExecRecord) {
-    this.stdin = new WritableStream<Uint8Array>({
-      write: (chunk) => {
-        if (failStdinWrite) throw new Error('rpc failed');
-        record.chunks.push(chunk);
-      },
-    });
-  }
-  async closeStdin() { this.record.closedStdin = true; }
-  async wait() { return 0; }
-}
+const files = new Map<string, string>();
+let openCalls = 0;
 
 class FakeSandbox {
   sandboxId = 'sb-test';
+  filesystem = {
+    writeText: async (data: string, path: string) => { files.set(path, data); },
+    readText: async (path: string) => {
+      const v = files.get(path);
+      if (v === undefined) throw new Error(`SandboxFilesystemNotFoundError: ${path}`);
+      return v;
+    },
+  };
   async open() {
-    if (!openSupported) throw new Error('Sandbox.open is not supported for V2 sandboxes');
-    return { write: async () => {}, close: async () => {} };
-  }
-  async exec(command: string[], params?: { mode?: string }) {
-    const record: ExecRecord = { command, mode: params?.mode, chunks: [], closedStdin: false };
-    execCalls.push(record);
-    return new FakeProcess(record);
+    openCalls++;
+    throw new Error('Sandbox.open is not supported for V2 sandboxes');
   }
 }
 
@@ -49,54 +34,26 @@ vi.mock('modal', () => ({
 
 import { modal } from '../index';
 
-const decode = (chunks: Uint8Array[]) => chunks.map((c) => new TextDecoder().decode(c)).join('');
+describe('modal filesystem read/write', () => {
+  beforeEach(() => { files.clear(); openCalls = 0; });
 
-describe('modal filesystem.writeFile', () => {
-  beforeEach(() => { execCalls.length = 0; openSupported = true; failStdinWrite = false; });
-
-  it('falls back to a stdin-fed shell write when Sandbox.open is unsupported (V2)', async () => {
-    openSupported = false;
+  it('uses Sandbox.filesystem (V1 and V2 compatible) instead of the deprecated Sandbox.open', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's', scalableSandboxes: true });
     const sandbox = await provider.sandbox.create();
 
-    await sandbox.filesystem.writeFile('/tmp/bench/file.txt', 'hello world');
+    const content = '  x'.repeat(50_000) + '\n';
+    await sandbox.filesystem.writeFile('/tmp/bench/file.txt', content);
+    expect(files.get('/tmp/bench/file.txt')).toBe(content);
 
-    expect(execCalls).toHaveLength(1);
-    expect(execCalls[0].command).toEqual(['sh', '-c', 'cat > "/tmp/bench/file.txt"']);
-    expect(execCalls[0].mode).toBe('binary');
-    expect(decode(execCalls[0].chunks)).toBe('hello world');
+    // Content round-trips untouched (no trimming).
+    expect(await sandbox.filesystem.readFile('/tmp/bench/file.txt')).toBe(content);
+    expect(openCalls).toBe(0);
   });
 
-  it('streams large V2 writes in bounded chunks', async () => {
-    openSupported = false;
-    const provider = modal({ tokenId: 't', tokenSecret: 's', scalableSandboxes: true });
-    const sandbox = await provider.sandbox.create();
-    const content = 'x'.repeat(9 * 1024 * 1024);
-
-    await sandbox.filesystem.writeFile('/tmp/big.txt', content);
-
-    const { chunks } = execCalls[0];
-    expect(chunks).toHaveLength(3);
-    expect(Math.max(...chunks.map((c) => c.length))).toBe(4 * 1024 * 1024);
-    expect(decode(chunks)).toBe(content);
-  });
-
-  it('closes stdin so cat exits when a V2 stdin write fails', async () => {
-    openSupported = false;
-    failStdinWrite = true;
-    const provider = modal({ tokenId: 't', tokenSecret: 's', scalableSandboxes: true });
-    const sandbox = await provider.sandbox.create();
-
-    await expect(sandbox.filesystem.writeFile('/tmp/file.txt', 'data')).rejects.toThrow('rpc failed');
-    expect(execCalls[0].closedStdin).toBe(true);
-  });
-
-  it('uses Sandbox.open when it is supported', async () => {
+  it('surfaces a descriptive error when a read fails', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's' });
     const sandbox = await provider.sandbox.create();
 
-    await sandbox.filesystem.writeFile('/tmp/file.txt', 'data');
-
-    expect(execCalls).toHaveLength(0);
+    await expect(sandbox.filesystem.readFile('/missing.txt')).rejects.toThrow(/Failed to read file \/missing\.txt/);
   });
 });
