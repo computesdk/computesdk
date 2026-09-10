@@ -414,12 +414,11 @@ describe('run-cloud provider', () => {
     expect(await sandbox.filesystem.exists('/tmp/a b/result.txt')).toBe(true);
 
     expect(readFileMock).toHaveBeenCalledWith('sbx_123', '/tmp/result.txt');
-    expect(execMock.mock.calls[0][1]).toContain(
-      'mkdir -p "$(dirname "/tmp/a b/result.txt")"',
-    );
+    expect(execMock.mock.calls[0][1]).toContain('mkdir -p "/tmp/a b"');
     expect(execMock.mock.calls[0][1]).toContain(
       'printf \'%s\' "aGVsbG8=" | base64 -d',
     );
+    expect(execMock.mock.calls[0][1]).toContain('> "/tmp/a b/result.txt"');
     expect(entries).toEqual([
       {
         name: 'app.ts',
@@ -434,6 +433,39 @@ describe('run-cloud provider', () => {
         modified: new Date('2026-01-01T00:00:01.000Z'),
       },
     ]);
+  });
+
+  it('chunks large writeFile payloads into multiple runCommand calls', async () => {
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+    const content = 'x'.repeat(100 * 1024);
+    await sandbox.filesystem.writeFile('/tmp/bench/file.txt', content);
+
+    const encoded = Buffer.from(content, 'utf8').toString('base64');
+    // 48,000-character base64 chunks; 100 KiB raw yields three commands.
+    expect(execMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+
+    const reconstructed = execMock.mock.calls
+      .map((call) => {
+        const cmd = call[1] as string;
+        const match = cmd.match(/printf '%s' "(.*?)" \| base64 -d/);
+        return match?.[1] ?? '';
+      })
+      .join('');
+    expect(reconstructed).toBe(encoded);
+  });
+
+  it('normalizes dash-leading paths for filesystem commands', async () => {
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+    await sandbox.filesystem.mkdir('-v');
+    expect(execMock.mock.calls[0][1]).toBe('mkdir -p "./-v"');
+
+    execMock.mockClear();
+    await sandbox.filesystem.exists('-v');
+    expect(execMock.mock.calls[0][1]).toBe('test -e "./-v"');
+
+    execMock.mockClear();
+    await sandbox.filesystem.remove('-v');
+    expect(execMock.mock.calls[0][1]).toBe('rm -rf "./-v"');
   });
 
   it('creates, lists, limits, and idempotently deletes snapshots', async () => {
