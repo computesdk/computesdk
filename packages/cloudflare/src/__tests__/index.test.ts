@@ -464,6 +464,10 @@ describe('Standardized Test Suite', () => {
         const body = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string) as { argv: string[] };
         expect(body.argv[2]).toBe("mkdir -p '/workspace/tmp/bench'");
         expect(fetchMock.mock.calls[3]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/etc/passwd`);
+
+        await expect(created.filesystem.remove('/tmp/..')).rejects.toThrow('Refusing to remove /workspace root');
+        await expect(created.filesystem.remove('/workspace')).rejects.toThrow('Refusing to remove /workspace root');
+        expect(fetchMock).toHaveBeenCalledTimes(4);
       } finally {
         vi.unstubAllGlobals();
       }

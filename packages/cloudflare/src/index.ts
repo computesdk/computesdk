@@ -595,7 +595,9 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         },
         remove: async (cfSandbox: CloudflareSandbox, path: string): Promise<void> => {
           if (cfSandbox.remote) {
-            const result = await bridgeExec(cfSandbox, `rm -rf ${shellQuote(toWorkspacePath(path))}`, { cwd: '/workspace' });
+            const target = toWorkspacePath(path);
+            if (target === BRIDGE_WORKSPACE) throw new Error(`Refusing to remove ${BRIDGE_WORKSPACE} root`);
+            const result = await bridgeExec(cfSandbox, `rm -rf ${shellQuote(target)}`, { cwd: '/workspace' });
             if (result.exitCode !== 0) throw new Error(`File removal failed: ${result.stderr}`);
             return;
           }
