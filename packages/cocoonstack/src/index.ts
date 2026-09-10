@@ -19,6 +19,7 @@ const DEFAULT_TTL_SECONDS = 300;
 const MAX_TTL_SECONDS = 86_400;
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const COMMAND_HTTP_TIMEOUT_BUFFER_MS = 5_000;
+const MAX_RESPONSE_BYTES = 16 << 20;
 const SIZES = [
   { size: 'small', cpu: 1, memoryMb: 512 },
   { size: 'medium', cpu: 2, memoryMb: 1024 },
@@ -107,6 +108,11 @@ interface Frame {
   message?: string;
 }
 
+interface Claim {
+  token: string;
+  deadline: number;
+}
+
 interface RelayOptions {
   timeoutMs?: number;
   detach?: boolean;
@@ -118,8 +124,8 @@ type Exec = (sandbox: CocoonstackSandbox, command: string, options?: RunCommandO
 
 type Lane = 'main' | 'release';
 
-// sandboxd scopes a sandbox to its claim token; by-id calls look it up here.
-const claimTokens = new Map<string, string>();
+// sandboxd scopes a sandbox to its claim token; by-id calls look it up here, keyed per endpoint
+const claimTokens = new Map<string, Claim>();
 // one HTTP/2 session per origin and lane: a burst multiplexes over one TLS connection,
 // and releases ride their own session so a slow teardown never queues a claim or exec
 const sessions = new Map<string, http2.ClientHttp2Session>();
@@ -149,6 +155,29 @@ function resolve(config: CocoonstackConfig): Resolved {
     ttlSeconds: config.ttlSeconds ?? DEFAULT_TTL_SECONDS,
     requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
   };
+}
+
+function claimKey(resolved: Resolved, id: string): string {
+  return `${resolved.baseUrl} ${id}`;
+}
+
+function rememberClaim(resolved: Resolved, id: string, token: string, deadline: Date): void {
+  const now = Date.now();
+  for (const [key, claim] of claimTokens) {
+    if (claim.deadline < now) claimTokens.delete(key);
+  }
+  claimTokens.set(claimKey(resolved, id), { token, deadline: deadline.getTime() });
+}
+
+function retainedToken(resolved: Resolved, id: string): string | undefined {
+  const key = claimKey(resolved, id);
+  const claim = claimTokens.get(key);
+  if (!claim) return undefined;
+  if (claim.deadline < Date.now()) {
+    claimTokens.delete(key);
+    return undefined;
+  }
+  return claim.token;
 }
 
 function detail(body: string): string {
@@ -224,6 +253,10 @@ function h2Request(
     });
     stream.on('data', (chunk: string) => {
       text += chunk;
+      if (text.length > MAX_RESPONSE_BYTES) {
+        stream.close(http2.constants.NGHTTP2_CANCEL);
+        reject(new Error(`sandboxd response exceeds ${MAX_RESPONSE_BYTES >> 20} MiB`));
+      }
     });
     stream.on('end', () => {
       done();
@@ -265,6 +298,9 @@ function h1Request(
         response.setEncoding('utf8');
         response.on('data', (chunk: string) => {
           text += chunk;
+          if (text.length > MAX_RESPONSE_BYTES) {
+            client.destroy(new Error(`sandboxd response exceeds ${MAX_RESPONSE_BYTES >> 20} MiB`));
+          }
         });
         response.on('error', reject);
         response.on('end', () => fulfill({ status: response.statusCode ?? 0, text }));
@@ -333,10 +369,10 @@ function ttlFor(resolved: Resolved, options?: CreateSandboxOptions): number {
   return Math.min(MAX_TTL_SECONDS, Math.ceil(options.timeout / 1000));
 }
 
-function fromRow(config: CocoonstackConfig, row: SandboxRow): CocoonstackSandbox {
+function fromRow(config: CocoonstackConfig, row: SandboxRow, token: string): CocoonstackSandbox {
   return {
     id: row.id,
-    token: claimTokens.get(row.id) ?? '',
+    token,
     template: row.key.template,
     net: row.key.net,
     size: row.key.size,
@@ -482,7 +518,7 @@ async function exec(sandbox: CocoonstackSandbox, command: string, options?: RunC
         ...(options.background ? { detach: true } : {}),
       },
       {
-        timeoutMs: options.timeout,
+        timeoutMs: options.timeout ?? resolved.requestTimeoutMs,
         detach: options.background,
         onStdout: options.onStdout,
         onStderr: options.onStderr,
@@ -548,7 +584,8 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
             `sandboxd redirected the claim to ${claimed.redirect.join(', ')}; point baseUrl at a node that serves the pool.`,
           );
         }
-        claimTokens.set(claimed.id, claimed.token);
+        const deadline = new Date(claimed.deadline);
+        rememberClaim(resolved, claimed.id, claimed.token, deadline);
         const sandbox: CocoonstackSandbox = {
           id: claimed.id,
           token: claimed.token,
@@ -556,26 +593,34 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
           net: resolved.net,
           size,
           createdAt: new Date(),
-          deadline: new Date(claimed.deadline),
+          deadline,
           config,
         };
         return { sandbox, sandboxId: sandbox.id };
       },
 
       getById: async (config, sandboxId) => {
-        const row = (await index(resolve(config))).find((candidate) => candidate.id === sandboxId);
-        return row ? { sandbox: fromRow(config, row), sandboxId } : null;
+        const resolved = resolve(config);
+        const token = retainedToken(resolved, sandboxId);
+        if (token === undefined) return null;
+        const row = (await index(resolved)).find((candidate) => candidate.id === sandboxId);
+        return row ? { sandbox: fromRow(config, row, token), sandboxId } : null;
       },
 
-      list: async (config) =>
-        (await index(resolve(config))).map((row) => ({ sandbox: fromRow(config, row), sandboxId: row.id })),
+      list: async (config) => {
+        const resolved = resolve(config);
+        return (await index(resolved)).flatMap((row) => {
+          const token = retainedToken(resolved, row.id);
+          return token === undefined ? [] : [{ sandbox: fromRow(config, row, token), sandboxId: row.id }];
+        });
+      },
 
       destroy: async (config, sandboxId) => {
         const resolved = resolve(config);
         try {
           await request<void>(
             resolved,
-            claimTokens.get(sandboxId) ?? resolved.apiKey,
+            retainedToken(resolved, sandboxId) ?? resolved.apiKey,
             'POST',
             `/v1/sandboxes/${encodeURIComponent(sandboxId)}/release`,
             undefined,
@@ -585,9 +630,8 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
           );
         } catch (error: unknown) {
           if (!(error instanceof CocoonstackApiError && error.status === 404)) throw error;
-        } finally {
-          claimTokens.delete(sandboxId);
         }
+        claimTokens.delete(claimKey(resolved, sandboxId));
       },
 
       runCommand: exec,

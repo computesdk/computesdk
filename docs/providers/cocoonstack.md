@@ -111,6 +111,7 @@ A claim is served from the node's warm pool for `(template, net, size)`; a reque
 
 ## Limitations
 
-- sandboxd scopes a sandbox to the token minted at claim time, so `destroy` and `runCommand` on a sandbox obtained through `getById` or `list` work only for sandboxes this process created.
+- sandboxd scopes a sandbox to the token minted at claim time, so `getById` and `list` return only the sandboxes this process claimed; `destroy` by id also works with a node token.
+- A command without an explicit `timeout` is bounded by `requestTimeoutMs` (120 s by default); tokens travel as bearer headers, so use an `https://` endpoint outside a private network.
 - A clustered node may redirect a claim to a peer; the provider refuses the redirect. Point `baseUrl` at a node that serves the pool.
 - Snapshots and templates are managed through sandboxd's own API and are not exposed here.

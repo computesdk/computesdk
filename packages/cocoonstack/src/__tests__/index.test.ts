@@ -34,6 +34,7 @@ interface Outcome {
 }
 
 const TOKEN = 'tok_1';
+let flakyReleases = 0;
 
 function frame(value: Record<string, unknown>): string {
   return `${JSON.stringify(value)}\n`;
@@ -83,9 +84,10 @@ async function fakeSandboxd(): Promise<Fake> {
       if (body?.template === 'missing:24.04') return respond(res, 404, { error: 'unknown template' });
       const ttl = Number(body?.ttl_seconds ?? 300);
       const stale = body?.template === 'stale:24.04';
+      const flaky = body?.template === 'flaky:24.04';
       return respond(res, 200, {
-        id: stale ? 'sb_2' : 'sb_1',
-        token: stale ? 'tok_2' : TOKEN,
+        id: flaky ? 'sb_flaky' : stale ? 'sb_2' : 'sb_1',
+        token: flaky ? 'tok_flaky' : stale ? 'tok_2' : TOKEN,
         deadline: new Date(Date.now() + ttl * 1000).toISOString(),
         owner_addr: '10.0.0.5:7777',
       });
@@ -99,17 +101,26 @@ async function fakeSandboxd(): Promise<Fake> {
         return;
       }
       if (result.error) return respond(res, 502, { error: result.error });
+      if ((body?.argv as string[])[2] === 'huge') {
+        return respond(res, 200, { exit_code: 0, stdout: 'x'.repeat(17 << 20), stderr: '' });
+      }
       return respond(res, 200, { exit_code: result.exit ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' });
     }
     if (req.method === 'POST' && path.endsWith('/exec')) return respond(res, 404, { error: 'unknown sandbox' });
     if (req.method === 'POST' && path === '/v1/sandboxes/sb_1/release') {
       return respond(res, req.headers.authorization === `Bearer ${TOKEN}` ? 204 : 404, undefined);
     }
+    if (req.method === 'POST' && path === '/v1/sandboxes/sb_flaky/release') {
+      flakyReleases += 1;
+      if (flakyReleases === 1) return respond(res, 503, { error: 'node busy' });
+      return respond(res, req.headers.authorization === 'Bearer tok_flaky' ? 204 : 404, undefined);
+    }
     if (req.method === 'POST' && path.endsWith('/release')) return respond(res, 404, { error: 'unknown sandbox' });
     if (req.method === 'GET' && path === '/v1/sandboxes') {
       return respond(res, 200, {
         sandboxes: [
           { id: 'sb_1', key: { template: 'node-rt:24.04', net: 'none', size: 'small' }, deadline: '2026-01-01T00:05:00Z', hibernated: false },
+          { id: 'sb_9', key: { template: 'node-rt:24.04', net: 'none', size: 'small' }, deadline: '2026-01-01T00:05:00Z', hibernated: false },
         ],
       });
     }
@@ -355,15 +366,48 @@ describe('Cocoon Stack ComputeSDK provider', () => {
     expect(fake.calls[0].auth).toBe('Bearer node-token');
   });
 
-  it('finds a live sandbox through the tenant index', async () => {
+  it('finds only the sandboxes this process claimed', async () => {
     const provider = cocoonstack(config());
+    await provider.sandbox.create();
     const found = await provider.sandbox.getById('sb_1');
-    const missing = await provider.sandbox.getById('sb_2');
+    const foreign = await provider.sandbox.getById('sb_9');
     const listed = await provider.sandbox.list();
 
     expect(found?.sandboxId).toBe('sb_1');
-    expect(missing).toBeNull();
+    expect(foreign).toBeNull();
     expect(listed.map((entry) => entry.sandboxId)).toEqual(['sb_1']);
+    expect(fake.calls.filter((call) => call.path === '/v1/sandboxes')).toHaveLength(2);
+  });
+
+  it('forgets a claim once its lease has passed', async () => {
+    const provider = cocoonstack(config());
+    await provider.sandbox.create({ timeout: 1_000 });
+    await new Promise((fulfill) => setTimeout(fulfill, 1_100));
+
+    expect(await provider.sandbox.getById('sb_1')).toBeNull();
+  });
+
+  it('keeps the claim token when a release fails', async () => {
+    const sandbox = await cocoonstack(config()).sandbox.create({ templateId: 'flaky:24.04' });
+
+    await expect(sandbox.destroy()).rejects.toSatisfy((error: unknown) => error instanceof CocoonstackApiError && error.status === 503);
+    await expect(sandbox.destroy()).resolves.toBeUndefined();
+    expect(fake.calls.filter((call) => call.path === '/v1/sandboxes/sb_flaky/release').map((call) => call.auth)).toEqual([
+      'Bearer tok_flaky',
+      'Bearer tok_flaky',
+    ]);
+  });
+
+  it('bounds a streamed command by the request timeout when none is given', async () => {
+    const sandbox = await cocoonstack({ ...config(), requestTimeoutMs: 200 }).sandbox.create();
+
+    await expect(sandbox.runCommand('hang', { onStdout: () => undefined })).rejects.toThrow(/timed out after 200 ms/);
+  });
+
+  it('refuses a response larger than 16 MiB', async () => {
+    const sandbox = await cocoonstack(config()).sandbox.create();
+
+    await expect(sandbox.runCommand('huge')).rejects.toThrow(/exceeds 16 MiB/);
   });
 
   it('refuses a claim the node redirected to a peer', async () => {
