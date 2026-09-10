@@ -428,7 +428,9 @@ describe('run-cloud provider', () => {
         expect.stringContaining(
           'printf \'%s\' "aGVsbG8=" | base64 -d',
         ),
-        expect.stringMatching(/mv -- ".*\/result\.txt\.tmp\.\w+" ".*\/result\.txt"/),
+        expect.stringMatching(
+          /cat < ".*\.computesdk-tmp\.\w+" > ".*\/result\.txt" && rm -f -- ".*\.computesdk-tmp\.\w+"/,
+        ),
         expect.stringContaining('find "/tmp/a b" -mindepth 1 -maxdepth 1'),
         expect.stringContaining('test -e "/tmp/a b/result.txt"'),
       ]),
@@ -438,7 +440,7 @@ describe('run-cloud provider', () => {
     const base64Command = commands.find((cmd) =>
       cmd.includes('printf \'%s\' "aGVsbG8=" | base64 -d'),
     );
-    expect(base64Command).toMatch(/\.tmp\.\w+"?$/);
+    expect(base64Command).toMatch(/\.computesdk-tmp\.\w+"?$/);
     expect(base64Command).not.toContain('> "/tmp/a b/result.txt"');
 
     expect(entries).toEqual([
@@ -477,8 +479,10 @@ describe('run-cloud provider', () => {
       .join('');
     expect(reconstructed).toBe(encoded);
 
-    const mvCommand = commands.find((cmd) => cmd.startsWith('mv --'));
-    expect(mvCommand).toMatch(/mv -- ".*\/file\.txt\.tmp\.\w+" ".*\/file\.txt"/);
+    const finalizeCommand = commands.find((cmd) => cmd.includes('cat <'));
+    expect(finalizeCommand).toMatch(
+      /cat < ".*\.computesdk-tmp\.\w+" > ".*\/file\.txt" && rm -f -- ".*\.computesdk-tmp\.\w+"/,
+    );
   });
 
   it('normalizes dash-leading paths for filesystem commands', async () => {

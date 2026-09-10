@@ -579,10 +579,11 @@ const _provider = defineProvider<
             chunks.push(encoded.slice(offset, offset + FILESYSTEM_BASE64_CHUNK_SIZE));
           }
 
-          // Write each call's chunks to a unique staging file so concurrent
-          // writeFile calls cannot interleave chunks in the destination.
-          const stagingSuffix = `.tmp.${crypto.randomBytes(4).toString('hex')}`;
-          const stagingPath = `${normalizedPath}${stagingSuffix}`;
+          // Build a short, unique staging file in the destination directory.
+          // Keeping the staging basename independent of the destination avoids
+          // ENAMETOOLONG for valid filenames that are near the component limit.
+          const stagingBasename = `.computesdk-tmp.${crypto.randomBytes(4).toString('hex')}`;
+          const stagingPath = path.posix.join(dir, stagingBasename);
           const escapedStagingPath = shellQuotePath(stagingPath);
 
           try {
@@ -603,9 +604,13 @@ const _provider = defineProvider<
               first = false;
             }
 
+            // Copy the completed staging content into the destination and
+            // remove the staging file. Using shell redirection preserves the
+            // destination's existing inode, permissions, and links, and
+            // fails when the destination is an existing directory.
             const result = await runCommand(
               handle,
-              `mv -- ${escapedStagingPath} ${escapedPath}`,
+              `cat < ${escapedStagingPath} > ${escapedPath} && rm -f -- ${escapedStagingPath}`,
             );
             if (result.exitCode !== 0) {
               throw new Error(
