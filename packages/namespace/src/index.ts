@@ -6,8 +6,9 @@
  */
 
 import * as fs from 'fs/promises';
+import path from 'node:path';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, FileEntry } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -55,6 +56,11 @@ const API_ENDPOINTS = {
 const COMMAND_SERVICE = {
   RUN_COMMAND_SYNC: '/namespace.cloud.compute.v1beta.CommandService/RunCommandSync',
 };
+
+// Chunk base64-encoded file writes so each runCommand stays under typical
+// shell argument / command-length limits. Must be a multiple of 4 to keep
+// base64 padding aligned across chunks.
+const FILESYSTEM_BASE64_CHUNK_SIZE = 48_000;
 
 /**
  * Load bearer token from a JSON token file (e.g. from `nsc login`)
@@ -333,6 +339,112 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         }
       },
 
+      filesystem: {
+        mkdir: async (sandbox, dirPath, runCommand) => {
+          const result = await namespaceRunCommand(
+            sandbox,
+            runCommand,
+            `mkdir -p "${escapeShellArg(dirPath)}"`,
+          );
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to create directory ${dirPath}: ${result.stderr}`);
+          }
+        },
+
+        writeFile: async (sandbox, filePath, content, runCommand) => {
+          const dir = path.posix.dirname(filePath);
+          const escapedPath = escapeShellArg(filePath);
+          const escapedDir = escapeShellArg(dir);
+
+          if (content.length === 0) {
+            const result = await namespaceRunCommand(
+              sandbox,
+              runCommand,
+              `mkdir -p "${escapedDir}" && : > "${escapedPath}"`,
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to write ${filePath}: ${result.stderr}`);
+            }
+            return;
+          }
+
+          const encoded = Buffer.from(content, 'utf8').toString('base64');
+          const chunks: string[] = [];
+          for (let offset = 0; offset < encoded.length; offset += FILESYSTEM_BASE64_CHUNK_SIZE) {
+            chunks.push(encoded.slice(offset, offset + FILESYSTEM_BASE64_CHUNK_SIZE));
+          }
+
+          let first = true;
+          for (const chunk of chunks) {
+            const redirect = first ? '>' : '>>';
+            const result = await namespaceRunCommand(
+              sandbox,
+              runCommand,
+              `mkdir -p "${escapedDir}" && printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} "${escapedPath}"`,
+            );
+            if (result.exitCode !== 0) {
+              throw new Error(`Failed to write ${filePath}: ${result.stderr}`);
+            }
+            first = false;
+          }
+        },
+
+        readFile: async (sandbox, filePath, runCommand) => {
+          const result = await namespaceRunCommand(
+            sandbox,
+            runCommand,
+            `cat "${escapeShellArg(filePath)}"`,
+          );
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to read ${filePath}: ${result.stderr}`);
+          }
+          return result.stdout ?? '';
+        },
+
+        readdir: async (sandbox, dirPath, runCommand): Promise<FileEntry[]> => {
+          const result = await namespaceRunCommand(
+            sandbox,
+            runCommand,
+            `find "${escapeShellArg(dirPath)}" -mindepth 1 -maxdepth 1 -type d -printf 'd\\t%f\\n' -o -type f -printf 'f\\t%f\\n'`,
+          );
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to list directory ${dirPath}: ${result.stderr}`);
+          }
+          const entries: FileEntry[] = [];
+          for (const line of result.stdout.split('\n')) {
+            if (!line) continue;
+            const [typeChar, ...nameParts] = line.split('\t');
+            const name = nameParts.join('\t');
+            if (!name) continue;
+            entries.push({
+              name,
+              type: typeChar === 'd' ? 'directory' : 'file',
+            });
+          }
+          return entries;
+        },
+
+        exists: async (sandbox, filePath, runCommand) => {
+          const result = await namespaceRunCommand(
+            sandbox,
+            runCommand,
+            `test -e "${escapeShellArg(filePath)}"`,
+          );
+          return result.exitCode === 0;
+        },
+
+        remove: async (sandbox, targetPath, runCommand) => {
+          const result = await namespaceRunCommand(
+            sandbox,
+            runCommand,
+            `rm -rf "${escapeShellArg(targetPath)}"`,
+          );
+          if (result.exitCode !== 0) {
+            throw new Error(`Failed to remove ${targetPath}: ${result.stderr}`);
+          }
+        },
+      },
+
       getInfo: async (sandbox: NamespaceSandbox): Promise<SandboxInfo> => {
         return {
           id: sandbox.instanceId,
@@ -355,3 +467,19 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
     }
   }
 });
+
+/**
+ * Thin wrapper around the provider's runCommand that re-throws friendly errors
+ * when the command service endpoint is unavailable.
+ */
+async function namespaceRunCommand(
+  sandbox: NamespaceSandbox,
+  runCommand: (sandbox: NamespaceSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  if (!sandbox.commandServiceEndpoint) {
+    throw new Error('Command service endpoint not available. Filesystem operations require command execution support.');
+  }
+  return runCommand(sandbox, command, options);
+}
