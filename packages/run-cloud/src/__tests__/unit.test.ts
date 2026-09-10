@@ -391,6 +391,12 @@ describe('run-cloud provider', () => {
         exitCode: 0,
       })
       .mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+        exit_code: 0,
+        exitCode: 0,
+      })
+      .mockResolvedValueOnce({
         stdout:
           'app.ts\tf\t10\t1767225600.0000000000\n' +
           'src\td\t0\t1767225601.0000000000\n',
@@ -414,11 +420,27 @@ describe('run-cloud provider', () => {
     expect(await sandbox.filesystem.exists('/tmp/a b/result.txt')).toBe(true);
 
     expect(readFileMock).toHaveBeenCalledWith('sbx_123', '/tmp/result.txt');
-    expect(execMock.mock.calls[0][1]).toContain('mkdir -p "/tmp/a b"');
-    expect(execMock.mock.calls[0][1]).toContain(
-      'printf \'%s\' "aGVsbG8=" | base64 -d',
+
+    const commands = execMock.mock.calls.map((call) => call[1] as string);
+    expect(commands).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('mkdir -p "/tmp/a b"'),
+        expect.stringContaining(
+          'printf \'%s\' "aGVsbG8=" | base64 -d',
+        ),
+        expect.stringMatching(/mv -- ".*\/result\.txt\.tmp\.\w+" ".*\/result\.txt"/),
+        expect.stringContaining('find "/tmp/a b" -mindepth 1 -maxdepth 1'),
+        expect.stringContaining('test -e "/tmp/a b/result.txt"'),
+      ]),
     );
-    expect(execMock.mock.calls[0][1]).toContain('> "/tmp/a b/result.txt"');
+
+    // The base64 payload must be written to a staging file, not the final path.
+    const base64Command = commands.find((cmd) =>
+      cmd.includes('printf \'%s\' "aGVsbG8=" | base64 -d'),
+    );
+    expect(base64Command).toMatch(/\.tmp\.\w+"?$/);
+    expect(base64Command).not.toContain('> "/tmp/a b/result.txt"');
+
     expect(entries).toEqual([
       {
         name: 'app.ts',
@@ -441,17 +463,22 @@ describe('run-cloud provider', () => {
     await sandbox.filesystem.writeFile('/tmp/bench/file.txt', content);
 
     const encoded = Buffer.from(content, 'utf8').toString('base64');
-    // 48,000-character base64 chunks; 100 KiB raw yields three commands.
-    expect(execMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+    const commands = execMock.mock.calls.map((call) => call[1] as string);
 
-    const reconstructed = execMock.mock.calls
-      .map((call) => {
-        const cmd = call[1] as string;
+    // 48,000-character base64 chunks; 100 KiB raw yields three chunk commands
+    // plus one mv command.
+    expect(commands.length).toBeGreaterThanOrEqual(4);
+
+    const reconstructed = commands
+      .map((cmd) => {
         const match = cmd.match(/printf '%s' "(.*?)" \| base64 -d/);
         return match?.[1] ?? '';
       })
       .join('');
     expect(reconstructed).toBe(encoded);
+
+    const mvCommand = commands.find((cmd) => cmd.startsWith('mv --'));
+    expect(mvCommand).toMatch(/mv -- ".*\/file\.txt\.tmp\.\w+" ".*\/file\.txt"/);
   });
 
   it('normalizes dash-leading paths for filesystem commands', async () => {

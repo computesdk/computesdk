@@ -11,6 +11,7 @@ import type {
   SandboxTunnel as NativeTunnel,
   Snapshot as NativeSnapshot,
 } from '@run-cloud/sdk';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
@@ -578,13 +579,33 @@ const _provider = defineProvider<
             chunks.push(encoded.slice(offset, offset + FILESYSTEM_BASE64_CHUNK_SIZE));
           }
 
-          let first = true;
-          for (const chunk of chunks) {
-            const redirect = first ? '>' : '>>';
+          // Write each call's chunks to a unique staging file so concurrent
+          // writeFile calls cannot interleave chunks in the destination.
+          const stagingSuffix = `.tmp.${crypto.randomBytes(4).toString('hex')}`;
+          const stagingPath = `${normalizedPath}${stagingSuffix}`;
+          const escapedStagingPath = shellQuotePath(stagingPath);
+
+          try {
+            let first = true;
+            for (const chunk of chunks) {
+              const redirect = first ? '>' : '>>';
+              const result = await runCommand(
+                handle,
+                `mkdir -p ${escapedDir} && ` +
+                  `printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} ${escapedStagingPath}`,
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(
+                  `Run Cloud writeFile failed for ${filePath}: ` +
+                    (result.stderr || `exit ${result.exitCode}`),
+                );
+              }
+              first = false;
+            }
+
             const result = await runCommand(
               handle,
-              `mkdir -p ${escapedDir} && ` +
-                `printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} ${escapedPath}`,
+              `mv -- ${escapedStagingPath} ${escapedPath}`,
             );
             if (result.exitCode !== 0) {
               throw new Error(
@@ -592,7 +613,11 @@ const _provider = defineProvider<
                   (result.stderr || `exit ${result.exitCode}`),
               );
             }
-            first = false;
+          } catch (error) {
+            await runCommand(handle, `rm -f -- ${escapedStagingPath}`).catch(
+              () => {},
+            );
+            throw error;
           }
         },
 
