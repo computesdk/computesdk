@@ -344,7 +344,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           const result = await namespaceRunCommand(
             sandbox,
             runCommand,
-            `mkdir -p "${escapeShellArg(dirPath)}"`,
+            `mkdir -p ${shellQuotePath(dirPath)}`,
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to create directory ${dirPath}: ${result.stderr}`);
@@ -353,14 +353,14 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
         writeFile: async (sandbox, filePath, content, runCommand) => {
           const dir = path.posix.dirname(filePath);
-          const escapedPath = escapeShellArg(filePath);
-          const escapedDir = escapeShellArg(dir);
+          const escapedPath = shellQuotePath(filePath);
+          const escapedDir = shellQuotePath(dir);
 
           if (content.length === 0) {
             const result = await namespaceRunCommand(
               sandbox,
               runCommand,
-              `mkdir -p "${escapedDir}" && : > "${escapedPath}"`,
+              `mkdir -p ${escapedDir} && : > ${escapedPath}`,
             );
             if (result.exitCode !== 0) {
               throw new Error(`Failed to write ${filePath}: ${result.stderr}`);
@@ -380,7 +380,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             const result = await namespaceRunCommand(
               sandbox,
               runCommand,
-              `mkdir -p "${escapedDir}" && printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} "${escapedPath}"`,
+              `mkdir -p ${escapedDir} && printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} ${escapedPath}`,
             );
             if (result.exitCode !== 0) {
               throw new Error(`Failed to write ${filePath}: ${result.stderr}`);
@@ -393,7 +393,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           const result = await namespaceRunCommand(
             sandbox,
             runCommand,
-            `cat "${escapeShellArg(filePath)}"`,
+            `cat ${shellQuotePath(filePath)}`,
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to read ${filePath}: ${result.stderr}`);
@@ -402,22 +402,26 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         },
 
         readdir: async (sandbox, dirPath, runCommand): Promise<FileEntry[]> => {
-          const result = await namespaceRunCommand(
-            sandbox,
-            runCommand,
-            `find "${escapeShellArg(dirPath)}" -mindepth 1 -maxdepth 1 -type d -printf 'd\\t%f\\n' -o -type f -printf 'f\\t%f\\n'`,
-          );
+          const script =
+            "find " + shellQuotePath(dirPath) + " -mindepth 1 -maxdepth 1 -exec sh -c '" +
+            "for f; do " +
+            '[ -d "$f" ] && t=d || t=f; ' +
+            "name=${f##*/}; " +
+            'name64=$(printf "%s" "$name" | base64); ' +
+            'printf "%s\\t%s\\0" "$t" "$name64"; ' +
+            "done' _ {} +";
+          const result = await namespaceRunCommand(sandbox, runCommand, script);
           if (result.exitCode !== 0) {
             throw new Error(`Failed to list directory ${dirPath}: ${result.stderr}`);
           }
           const entries: FileEntry[] = [];
-          for (const line of result.stdout.split('\n')) {
-            if (!line) continue;
-            const [typeChar, ...nameParts] = line.split('\t');
-            const name = nameParts.join('\t');
-            if (!name) continue;
+          for (const record of result.stdout.split('\0')) {
+            if (!record) continue;
+            const [typeChar, ...name64Parts] = record.split('\t');
+            const name64 = name64Parts.join('\t').replace(/\n/g, '');
+            if (!name64) continue;
             entries.push({
-              name,
+              name: Buffer.from(name64, 'base64').toString('utf8'),
               type: typeChar === 'd' ? 'directory' : 'file',
             });
           }
@@ -428,7 +432,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           const result = await namespaceRunCommand(
             sandbox,
             runCommand,
-            `test -e "${escapeShellArg(filePath)}"`,
+            `test -e ${shellQuotePath(filePath)}`,
           );
           return result.exitCode === 0;
         },
@@ -437,7 +441,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           const result = await namespaceRunCommand(
             sandbox,
             runCommand,
-            `rm -rf "${escapeShellArg(targetPath)}"`,
+            `rm -rf ${shellQuotePath(targetPath)}`,
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${targetPath}: ${result.stderr}`);
@@ -472,6 +476,20 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
  * Thin wrapper around the provider's runCommand that re-throws friendly errors
  * when the command service endpoint is unavailable.
  */
+function normalizeShellPath(input: string): string {
+  if (input === '' || input.startsWith('/') || input.startsWith('./') || input.startsWith('../')) {
+    return input;
+  }
+  if (input.startsWith('-')) {
+    return `./${input}`;
+  }
+  return input;
+}
+
+function shellQuotePath(input: string): string {
+  return `"${escapeShellArg(normalizeShellPath(input))}"`;
+}
+
 async function namespaceRunCommand(
   sandbox: NamespaceSandbox,
   runCommand: (sandbox: NamespaceSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>,
