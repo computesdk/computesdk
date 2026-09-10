@@ -130,6 +130,25 @@ describe('the signed credential the door hands back', () => {
     await client.request('GET', '/preview/sandboxes')
     assert.equal(calls[1].authorization, `Bearer ${KEY}`)
   })
+
+  it('primes by default, so even the first create of a burst presents the credential', async () => {
+    // The default moved from `absorb` to `prime` in 1.1.0. Under `absorb`
+    // every create in a cold burst paid the authentication read; the door
+    // measured that at ~600 ms of a 767 ms create at N=100. One warm-up
+    // request, single-flighted, and the creates that follow are signed.
+    const { calls, fetchImpl } = stub([
+      { body: { sandboxes: [] }, headers: vending(600_000) },
+      { body: { sandbox: 'sbx-1' } },
+    ])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    assert.equal(client.fastToken, 'prime')
+    await client.prime()
+    assert.equal(calls.length, 1, 'the prime is one request')
+    assert.equal(calls[0].method, 'GET')
+    assert.equal(calls[0].authorization, `Bearer ${KEY}`, 'the warm-up pays the ordinary cost')
+    await client.request('POST', '/preview/sandboxes', {})
+    assert.equal(calls[1].authorization, `Bearer ${SIGNED}`, 'the first create is already signed')
+  })
 })
 
 describe('the cache key, which is what makes a per-task runner benefit', () => {
@@ -199,9 +218,16 @@ describe('priming, for the burst that starts N sandboxes at once', () => {
     assert.equal(client.hasFastToken(), true)
   })
 
-  it('adds no round trip at all in the default mode', async () => {
+  it('adds no round trip at all in absorb mode', async () => {
+    // The mode for a process that makes one request and exits: nothing is
+    // sent until the caller's own first request.
     const { calls, fetchImpl } = stub([{ body: {} }])
-    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    const client = new GmnClient({
+      apiKey: KEY,
+      baseUrl: 'https://door.test',
+      fastToken: 'absorb',
+      fetch: fetchImpl,
+    })
     await client.prime()
     assert.equal(calls.length, 0)
   })

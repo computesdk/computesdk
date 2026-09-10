@@ -1,8 +1,8 @@
 {
-  "name": "@computesdk/givemeanode",
-  "version": "1.1.0",
-  "description": "givemeanode for ComputeSDK - sandboxes served from a per-region warm pool, with a signed credential that keeps the database off the create path",
-  "author": "givemeanode",
+  "name": "@computesdk/buddy",
+  "version": "1.0.1",
+  "description": "Buddy provider for ComputeSDK - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots",
+  "author": "Lucas Czulak",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -22,25 +22,37 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "test:node": "node --experimental-strip-types --test src/__tests__/*.node.test.ts",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
   },
+  "dependencies": {
+    "@buddy-works/sandbox-sdk": "^0.1.9",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "keywords": [
     "computesdk",
-    "provider",
+    "buddy",
     "sandbox",
     "code-execution",
     "cloud",
     "compute",
-    "givemeanode",
-    "microvm"
+    "provider",
+    "ubuntu"
   ],
-  "dependencies": {
-    "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/buddy"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
@@ -51,14 +63,5 @@
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/givemeanode"
-  },
-  "homepage": "https://givemeanode.com",
-  "bugs": {
-    "url": "https://github.com/computesdk/computesdk/issues"
   }
 }

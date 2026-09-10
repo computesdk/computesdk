@@ -292,6 +292,7 @@ Install the provider packages you need and pass their instances into `compute.se
 npm install @computesdk/archil           # Archil provider
 npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
+npm install @computesdk/buddy            # Buddy provider
 npm install @computesdk/cloud-run        # Google Cloud Run provider
 npm install @computesdk/cloudflare       # Cloudflare provider
 npm install @computesdk/codesandbox      # CodeSandbox provider
@@ -332,6 +333,7 @@ See individual provider READMEs for details:
 - **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
+- **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
 - **[@computesdk/cloud-run](./packages/cloud-run)** - Google Cloud Run sandboxes
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development

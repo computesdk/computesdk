@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 import * as indexExports from '../index';
 import { archil } from '../index';
+import { adaptFetchMock } from './fetch-mock';
 
 const originalFetch = global.fetch;
 
@@ -46,7 +47,7 @@ describe('archil getById semantics', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     );
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.getById('disk_123');
@@ -64,7 +65,7 @@ describe('archil getById semantics', () => {
         headers: { 'Content-Type': 'application/json' },
       }),
     );
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.getById('my-workspace');
@@ -85,7 +86,7 @@ describe('archil create semantics', () => {
 
   it('uses an existing disk id without fetching it', async () => {
     const fetchMock = vi.fn();
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const created = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -133,7 +134,7 @@ describe('archil filesystem mapping', () => {
         ? execResponse('5\n')
         : execResponse(Buffer.from('hello').toString('base64'));
     });
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -152,7 +153,7 @@ describe('archil filesystem mapping', () => {
 
   it('checks out and checks in mutating filesystem operations', async () => {
     const fetchMock = vi.fn(async () => execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -186,7 +187,7 @@ describe('archil filesystem mapping', () => {
 
   it('writes compressible large files in a single gzip command within Archil exec limits', async () => {
     const fetchMock = vi.fn(async () => execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -207,7 +208,7 @@ describe('archil filesystem mapping', () => {
 
   it('falls back to base64 chunks for incompressible data within Archil exec limits', async () => {
     const fetchMock = vi.fn(async () => execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -252,7 +253,7 @@ describe('archil filesystem mapping', () => {
         bytes.subarray(offset, offset + count).toString('base64'),
       );
     });
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -270,7 +271,7 @@ describe('archil filesystem mapping', () => {
 
   it('reads empty files without issuing a chunk command', async () => {
     const fetchMock = vi.fn(async () => execResponse('0\n'));
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -283,7 +284,7 @@ describe('archil filesystem mapping', () => {
 
   it('writes empty files without emitting a base64 chunk', async () => {
     const fetchMock = vi.fn(async () => execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -304,7 +305,7 @@ describe('archil filesystem mapping', () => {
       .fn()
       .mockResolvedValueOnce(execResponse('', 1, 'destination is a directory'))
       .mockResolvedValueOnce(execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -327,7 +328,7 @@ describe('archil filesystem mapping', () => {
       .fn()
       .mockResolvedValueOnce(execResponse('', 1, 'destination is a directory'))
       .mockResolvedValueOnce(execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -353,7 +354,7 @@ describe('archil filesystem mapping', () => {
         ? execResponse('', 1, 'chunk failed')
         : execResponse();
     });
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -390,7 +391,7 @@ describe('archil filesystem mapping', () => {
       await new Promise((resolve) => setTimeout(resolve, 2));
       return execResponse();
     });
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -438,7 +439,7 @@ describe('archil filesystem mapping', () => {
 
   it('recursively creates missing parents when writing a nested file', async () => {
     const fetchMock = vi.fn(async () => execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -458,7 +459,7 @@ describe('archil filesystem mapping', () => {
 
   it('removing a path whose parent does not exist succeeds', async () => {
     const fetchMock = vi.fn(async () => execResponse());
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });

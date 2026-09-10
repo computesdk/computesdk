@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/freestyle",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Freestyle provider for ComputeSDK - full Linux VMs for long-running agent tasks, with instant startup and cheap snapshotting",
   "author": "Garrison",
   "license": "MIT",

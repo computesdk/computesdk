@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/archil",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "description": "Archil provider for ComputeSDK - exec commands against an Archil disk",
   "author": "ComputeSDK",
   "license": "MIT",
@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "computesdk": "workspace:*",
-    "@computesdk/provider": "workspace:*"
+    "@computesdk/provider": "workspace:*",
+    "disk": "^1.1.2"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",

@@ -14,6 +14,7 @@
   * [Archil](providers/archil.md)
   * [Beam](providers/beam.md)
   * [Blaxel](providers/blaxel.md)
+  * [Buddy](providers/buddy.md)
   * [Cloud Run](providers/cloud-run.md)
   * [Cloudflare](providers/cloudflare.md)
   * [CodeSandbox](providers/codesandbox.md)

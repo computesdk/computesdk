@@ -10,6 +10,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { defineProvider } from '@computesdk/provider';
+import { Archil as ArchilClient } from 'disk';
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -85,6 +86,7 @@ interface ResolvedConfig {
 }
 
 interface ArchilSandbox {
+  client: ArchilClient;
   disk: DiskHandle | DiskResponse;
   resolved: ResolvedConfig;
   createdAt: Date;
@@ -122,41 +124,9 @@ function resolveConfig(config: ArchilConfig): ResolvedConfig {
   return { apiKey, baseUrl };
 }
 
-function authHeader(apiKey: string): string {
-  return `key-${apiKey.replace(/^key-/, '')}`;
-}
-
-async function callApi<T>(
-  resolved: ResolvedConfig,
-  method: 'GET' | 'POST' | 'DELETE',
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  const response = await fetch(`${resolved.baseUrl}${path}`, {
-    method,
-    headers: {
-      Authorization: authHeader(resolved.apiKey),
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  type Envelope = { success?: boolean; data?: T; error?: string };
-  let payload: Envelope | null = null;
-  try {
-    payload = (await response.json()) as Envelope;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok || !payload || payload.success === false) {
-    const message =
-      (payload && payload.error) ||
-      `Archil API ${method} ${path} failed with status ${response.status}`;
-    throw new Error(message);
-  }
-
-  return payload.data as T;
+function createClient(config: ArchilConfig, resolved: ResolvedConfig): ArchilClient {
+  const region = config.region ?? process.env.ARCHIL_REGION ?? 'aws-us-east-1';
+  return new ArchilClient({ ...resolved, region });
 }
 
 function resolveCreateDiskId(options?: ArchilCreateOptions): string {
@@ -332,21 +302,9 @@ async function execOnDisk(sandbox: ArchilSandbox, command: string): Promise<Exec
   const diskId = sandbox.disk.id;
   const ctx = diskQueueStore.getStore();
   if (ctx?.diskId === diskId) {
-    return callApi<ExecResponse>(
-      sandbox.resolved,
-      'POST',
-      `/api/disks/${encodeURIComponent(diskId)}/exec`,
-      { command },
-    );
+    return sandbox.client.disks.exec(diskId, command);
   }
-  return withDiskLock(sandbox, () =>
-    callApi<ExecResponse>(
-      sandbox.resolved,
-      'POST',
-      `/api/disks/${encodeURIComponent(diskId)}/exec`,
-      { command },
-    ),
-  );
+  return withDiskLock(sandbox, () => sandbox.client.disks.exec(diskId, command));
 }
 
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
@@ -355,23 +313,26 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     sandbox: {
       create: async (config: ArchilConfig, options?: ArchilCreateOptions) => {
         const resolved = resolveConfig(config);
+        const client = createClient(config, resolved);
         const diskId = resolveCreateDiskId(options);
         return {
-          sandbox: { disk: { id: diskId }, resolved, createdAt: new Date() },
+          sandbox: {
+            client,
+            disk: { id: diskId },
+            resolved,
+            createdAt: new Date(),
+          },
           sandboxId: diskId,
         };
       },
 
       getById: async (config: ArchilConfig, sandboxId: string) => {
         const resolved = resolveConfig(config);
+        const client = createClient(config, resolved);
         try {
-          const disk = await callApi<DiskResponse>(
-            resolved,
-            'GET',
-            `/api/disks/${encodeURIComponent(sandboxId)}`,
-          );
+          const disk = await client.disks.get(sandboxId);
           return {
-            sandbox: { disk, resolved, createdAt: new Date() },
+            sandbox: { client, disk, resolved, createdAt: new Date() },
             sandboxId: disk.id,
           };
         } catch {
@@ -381,9 +342,10 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       list: async (config: ArchilConfig) => {
         const resolved = resolveConfig(config);
-        const disks = await callApi<DiskResponse[]>(resolved, 'GET', '/api/disks');
+        const client = createClient(config, resolved);
+        const disks = await client.disks.list();
         return disks.map((disk) => ({
-          sandbox: { disk, resolved, createdAt: new Date() },
+          sandbox: { client, disk, resolved, createdAt: new Date() },
           sandboxId: disk.id,
         }));
       },
