@@ -1,0 +1,68 @@
+{
+  "name": "@computesdk/runtools",
+  "version": "0.1.0",
+  "description": "RunTools provider for ComputeSDK — Firecracker sandboxes for agents and code execution",
+  "author": "RunTools <hello@runtools.ai>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "computesdk",
+    "runtools",
+    "sandbox",
+    "firecracker",
+    "microvm",
+    "code-execution",
+    "ai-agent",
+    "compute",
+    "provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/runtools"
+  },
+  "homepage": "https://runtools.ai",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "dependencies": {
+    "@runtools-ai/sdk": "^0.3.1",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
