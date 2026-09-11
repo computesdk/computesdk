@@ -26,7 +26,8 @@ function makeSandbox(id: string, provider: string) {
 function makeProvider(
   name: string,
   handlers: Partial<DirectProvider['sandbox']> = {},
-  snapshotHandlers?: Partial<NonNullable<DirectProvider['snapshot']>>
+  snapshotHandlers?: Partial<NonNullable<DirectProvider['snapshot']>>,
+  volumeHandlers?: Partial<NonNullable<DirectProvider['volume']>>
 ): DirectProvider {
   return {
     name,
@@ -49,6 +50,7 @@ function makeProvider(
           delete: snapshotHandlers.delete || (async () => {}),
         }
       : undefined,
+    volume: volumeHandlers as DirectProvider['volume'],
   };
 }
 
@@ -302,5 +304,159 @@ describe('compute multi-provider', () => {
     const sandbox = await sdk.sandbox.create();
     expect(sandbox.provider).toBe('e2b');
     expect(e2bCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves volume ownership before delete to avoid idempotent misses', async () => {
+    const firstDelete = vi.fn(async () => {});
+    const firstGetById = vi.fn(async () => null);
+    const first = makeProvider(
+      'first',
+      {},
+      undefined,
+      {
+        getById: firstGetById,
+        delete: firstDelete,
+      }
+    );
+
+    const secondDelete = vi.fn(async () => {});
+    const secondGetById = vi.fn(async (id: string) => ({
+      id,
+      provider: 'second',
+      createdAt: new Date(),
+    }));
+    const second = makeProvider(
+      'second',
+      {},
+      undefined,
+      {
+        getById: secondGetById,
+        delete: secondDelete,
+      }
+    );
+
+    const sdk = compute({ providers: [first, second] });
+    await sdk.volume.delete('vol-1');
+
+    expect(firstDelete).not.toHaveBeenCalled();
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+    expect(secondDelete).toHaveBeenCalledWith('vol-1');
+  });
+
+  it('throws on getById when a volume id exists on multiple providers', async () => {
+    const first = makeProvider(
+      'first',
+      {},
+      undefined,
+      {
+        getById: vi.fn(async () => ({ id: 'vol-1', provider: 'first', createdAt: new Date() })),
+      }
+    );
+    const second = makeProvider(
+      'second',
+      {},
+      undefined,
+      {
+        getById: vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() })),
+      }
+    );
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.getById('vol-1')).rejects.toThrow(/ambiguous/);
+  });
+
+  it('throws when a volume id exists on multiple providers', async () => {
+    const firstGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'first', createdAt: new Date() }));
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById, delete: vi.fn() });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById, delete: vi.fn() });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.delete('vol-1')).rejects.toThrow(/ambiguous/);
+  });
+
+  it('aggregates volume getById errors instead of returning undefined', async () => {
+    const firstGetById = vi.fn(async (id: string) => {
+      throw new Error(`custom error for ${id}`);
+    });
+    const secondGetById = vi.fn(async () => null);
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.getById('vol-1')).rejects.toThrow('custom error for vol-1');
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
+  it('rejects a successful lookup when another provider lookup fails', async () => {
+    const firstGetById = vi.fn(async (id: string) => {
+      throw new Error(`first provider failed for ${id}`);
+    });
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.getById('vol-1')).rejects.toThrow('first provider failed for vol-1');
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
+  it('does not treat a missing workspace as a volume absence', async () => {
+    const firstGetById = vi.fn(async () => {
+      throw new Error('workspace not found');
+    });
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.getById('vol-1')).rejects.toThrow('workspace not found');
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
+  it('treats a volume-specific not-found message as absence and continues lookup', async () => {
+    const firstGetById = vi.fn(async () => {
+      throw new Error(`Volume vol-1 doesn't exist`);
+    });
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    const volume = await sdk.volume.getById('vol-1');
+    expect(volume).toEqual(expect.objectContaining({ id: 'vol-1', provider: 'second' }));
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
+  it('does not treat a parent resource absence masquerading as a volume failure as absence', async () => {
+    const firstGetById = vi.fn(async () => {
+      throw new Error(`volume lookup failed because workspace doesn't exist`);
+    });
+    const secondGetById = vi.fn(async () => ({ id: 'vol-1', provider: 'second', createdAt: new Date() }));
+    const first = makeProvider('first', {}, undefined, { getById: firstGetById });
+    const second = makeProvider('second', {}, undefined, { getById: secondGetById });
+
+    const sdk = compute({ providers: [first, second] });
+    await expect(sdk.volume.getById('vol-1')).rejects.toThrow('workspace');
+    expect(secondGetById).toHaveBeenCalledWith('vol-1');
+  });
+
+  it('enforces options.limit across providers in volume.list', async () => {
+    const firstList = vi.fn(async () => [
+      { id: 'vol-1', provider: 'first', createdAt: new Date() },
+      { id: 'vol-2', provider: 'first', createdAt: new Date() },
+    ]);
+    const secondList = vi.fn(async () => [
+      { id: 'vol-3', provider: 'second', createdAt: new Date() },
+    ]);
+    const first = makeProvider('first', {}, undefined, { list: firstList });
+    const second = makeProvider('second', {}, undefined, { list: secondList });
+
+    const sdk = compute({ providers: [first, second] });
+    const volumes = await sdk.volume.list({ limit: 2 });
+
+    expect(volumes).toHaveLength(2);
+    expect(firstList).toHaveBeenCalledWith(expect.objectContaining({ limit: 2 }));
+    expect(secondList).not.toHaveBeenCalled();
   });
 });

@@ -11,7 +11,8 @@ export type {
   ProviderConfig, 
   SandboxMethods, 
   TemplateMethods, 
-  SnapshotMethods
+  SnapshotMethods,
+  VolumeMethods
 } from './factory';
 
 export { defineInfraProvider } from './infra-factory';

@@ -15,6 +15,7 @@ import type {
   ProviderSandboxManager,
   ProviderTemplateManager,
   ProviderSnapshotManager,
+  ProviderVolumeManager,
   ProviderSandbox,
   SandboxInfo,
   CommandResult,
@@ -22,6 +23,10 @@ import type {
   ListSnapshotsOptions,
   CreateTemplateOptions,
   ListTemplatesOptions,
+  Volume,
+  CreateVolumeOptions,
+  AttachVolumeOptions,
+  ListVolumesOptions,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
@@ -216,14 +221,27 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
 }
 
 /**
+ * Volume method implementations
+ */
+export interface VolumeMethods<TVolume extends Volume = Volume, TConfig = any> {
+  create: (config: TConfig, options?: CreateVolumeOptions) => Promise<TVolume>;
+  list: (config: TConfig, options?: ListVolumesOptions) => Promise<TVolume[]>;
+  getById: (config: TConfig, volumeId: string) => Promise<TVolume | null>;
+  delete: (config: TConfig, volumeId: string) => Promise<void>;
+  attach?: (config: TConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions) => Promise<void>;
+  detach?: (config: TConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions) => Promise<void>;
+}
+
+/**
  * Provider configuration for defineProvider()
  */
-export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, TSnapshot = any> {
+export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume> {
   name: string;
   methods: {
     sandbox: SandboxMethods<TSandbox, TConfig>;
     template?: TemplateMethods<TTemplate, TConfig>;
     snapshot?: SnapshotMethods<TSnapshot, TConfig>;
+    volume?: VolumeMethods<TVolume, TConfig>;
   };
 }
 
@@ -667,15 +685,56 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
 }
 
 /**
+ * Auto-generated Volume Manager implementation
+ */
+class GeneratedVolumeManager<TVolume extends Volume, TConfig> implements ProviderVolumeManager<TVolume> {
+  constructor(
+    private config: TConfig,
+    private methods: VolumeMethods<TVolume, TConfig>
+  ) {}
+
+  async create(options?: CreateVolumeOptions): Promise<TVolume> {
+    return await this.methods.create(this.config, options);
+  }
+
+  async list(options?: ListVolumesOptions): Promise<TVolume[]> {
+    return await this.methods.list(this.config, options);
+  }
+
+  async getById(volumeId: string): Promise<TVolume | null> {
+    return await this.methods.getById(this.config, volumeId);
+  }
+
+  async delete(volumeId: string): Promise<void> {
+    return await this.methods.delete(this.config, volumeId);
+  }
+
+  async attach(volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> {
+    if (!this.methods.attach) {
+      throw new Error(`Provider does not support attaching volumes.`);
+    }
+    return await this.methods.attach(this.config, volumeId, sandboxId, options);
+  }
+
+  async detach(volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> {
+    if (!this.methods.detach) {
+      throw new Error(`Provider does not support detaching volumes.`);
+    }
+    return await this.methods.detach(this.config, volumeId, sandboxId, options);
+  }
+}
+
+/**
  * Auto-generated Provider implementation
  */
-class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Provider<TSandbox, TTemplate, TSnapshot> {
+class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot, TVolume extends Volume = Volume> implements Provider<TSandbox, TTemplate, TSnapshot, TVolume> {
   readonly name: string;
   readonly sandbox: ProviderSandboxManager<TSandbox>;
   readonly template?: ProviderTemplateManager<TTemplate>;
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
+  readonly volume?: ProviderVolumeManager<TVolume>;
 
-  constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>) {
+  constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot, TVolume>) {
     this.name = providerConfig.name;
     this.sandbox = new GeneratedSandboxManager(
       config,
@@ -692,6 +751,10 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
     if (providerConfig.methods.snapshot) {
       this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
     }
+
+    if (providerConfig.methods.volume) {
+      this.volume = new GeneratedVolumeManager(config, providerConfig.methods.volume);
+    }
   }
 }
 
@@ -701,9 +764,9 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
  * Auto-generates all boilerplate classes and provides feature detection
  * based on which methods are implemented.
  */
-export function defineProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
-  providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>
-): (config: TConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
+export function defineProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume>(
+  providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot, TVolume>
+): (config: TConfig) => Provider<TSandbox, TTemplate, TSnapshot, TVolume> {
   return (config: TConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };

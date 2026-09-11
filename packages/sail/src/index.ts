@@ -9,9 +9,12 @@ import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateSandboxOptions,
+  CreateVolumeOptions,
   FileEntry,
+  ListVolumesOptions,
   RunCommandOptions,
   SandboxInfo,
+  Volume,
 } from '@computesdk/provider';
 import {
   App,
@@ -19,6 +22,7 @@ import {
   Image,
   NotFoundError,
   Sailbox,
+  Volume as SailVolume,
   resolveConfig,
   type ExecOptions,
   type ImageSpec,
@@ -185,6 +189,7 @@ function validateCreateOptions(options: CreateSandboxOptions | undefined): void 
     'signal',
     'size',
     'timeout',
+    'volumeIds',
   ]);
   const unsupported = Object.keys(options ?? {}).filter(
     (key) => options?.[key] !== undefined && !supported.has(key),
@@ -253,6 +258,21 @@ function toExecOptions(options?: RunCommandOptions): ExecOptions {
   };
 }
 
+/** Map a Sail volume handle onto the ComputeSDK universal volume shape. */
+function toVolume(volume: SailVolume): Volume {
+  return {
+    id: volume.id,
+    provider: PROVIDER,
+    name: volume.name,
+    createdAt: volume.createdAt ?? new Date(0),
+    metadata: {
+      backend: volume.backend,
+      status: volume.status,
+    },
+    native: volume,
+  };
+}
+
 export const sail = defineProvider<Sailbox, SailConfig>({
   name: PROVIDER,
   methods: {
@@ -264,6 +284,15 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         const app = await resolveApp(config);
         if (options?.signal?.aborted) throw abortError(options.signal);
 
+        const volumes = options?.volumeIds
+          ? Object.fromEntries(
+              options.volumeIds.map((volumeId, index) => [
+                `/mnt/volume-${index}`,
+                volumeId,
+              ]),
+            )
+          : undefined;
+
         const creation = Sailbox.create({
           app,
           name: options?.name ?? `csdk-${crypto.randomUUID().slice(0, 8)}`,
@@ -271,6 +300,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           image: config.image ?? Image.devbox('arm64'),
           size: sailboxSize(options?.size) ?? DEFAULT_SIZE,
           memoryGib: options?.memoryGib,
+          volumes,
         });
         const sandbox = await createWithAbortCleanup(creation, options?.signal, client);
         return { sandbox, sandboxId: sandbox.sailboxId };
@@ -390,6 +420,56 @@ export const sail = defineProvider<Sailbox, SailConfig>({
       },
 
       getInstance: (sandbox) => sandbox,
+    },
+
+    volume: {
+      create: async (
+        config: SailConfig,
+        options?: CreateVolumeOptions,
+      ): Promise<Volume> => {
+        const { client } = resolve(config);
+        const name =
+          options?.name ?? `csdk-volume-${crypto.randomUUID().slice(0, 8)}`;
+        const volume = await SailVolume.find(name, {
+          client,
+          mintIfMissing: true,
+        });
+        const mapped = toVolume(volume);
+        return {
+          ...mapped,
+          metadata: {
+            ...mapped.metadata,
+            ...options?.metadata,
+          },
+        };
+      },
+
+      list: async (
+        config: SailConfig,
+        options?: ListVolumesOptions,
+      ): Promise<Volume[]> => {
+        const { client } = resolve(config);
+        const volumes = await SailVolume.list({
+          client,
+          maxObjects: options?.limit,
+        });
+        return volumes.map(toVolume);
+      },
+
+      getById: async (
+        config: SailConfig,
+        volumeId: string,
+      ): Promise<Volume | null> => {
+        const { client } = resolve(config);
+        const volumes = await SailVolume.list({ client });
+        const match = volumes.find((volume) => volume.id === volumeId);
+        return match ? toVolume(match) : null;
+      },
+
+      delete: async (config: SailConfig, volumeId: string): Promise<void> => {
+        const { client } = resolve(config);
+        await client.deleteVolume(volumeId, true);
+      },
     },
   },
 });

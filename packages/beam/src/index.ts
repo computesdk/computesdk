@@ -6,8 +6,8 @@
  * and port exposure capabilities.
  */
 
-import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { Sandbox, SandboxInstance, beamOpts, Image, Volume as BeamVolume } from '@beamcloud/beam-js';
+import { defineProvider, escapeShellArg, type Volume, type CreateVolumeOptions, type ListVolumesOptions } from '@computesdk/provider';
 import type {
   CommandResult,
   SandboxInfo,
@@ -169,6 +169,15 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxConfig.env = envs;
           }
 
+          const volumeIds = options?.volumeIds;
+          if (volumeIds?.length) {
+            const existingVolumes = Array.isArray(sandboxConfig.volumes) ? sandboxConfig.volumes : [];
+            sandboxConfig.volumes = [
+              ...existingVolumes,
+              ...volumeIds.map((volumeId, index) => new BeamVolume(volumeId, `/mnt/volume-${index}`)),
+            ];
+          }
+
           cacheKey = sandboxCacheKey(sandboxConfig);
           const sandbox = getCachedSandbox(cacheKey, sandboxConfig);
           const instance = await sandbox.create({ waitForReady: false });
@@ -300,6 +309,60 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       getInstance: (sandbox: SandboxInstance): SandboxInstance => sandbox,
+    },
+
+    volume: {
+      create: async (config: BeamConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        configureBeamOpts(config);
+
+        if (!beamOpts.token) {
+          throw new Error(
+            `Missing Beam token. Provide 'token' in config or set BEAM_TOKEN environment variable. Get your token from https://app.beam.cloud`
+          );
+        }
+
+        if (!beamOpts.workspaceId) {
+          throw new Error(
+            `Missing Beam workspace ID. Provide 'workspaceId' in config or set BEAM_WORKSPACE_ID environment variable.`
+          );
+        }
+
+        const name = options?.name || `computesdk-volume-${Date.now()}`;
+        const mountPath = options?.mountPath || '/mnt/volume-0';
+        const beamVolume = new BeamVolume(name, mountPath);
+        const ok = await beamVolume.getOrCreate();
+
+        if (!ok) {
+          throw new Error(`Failed to create Beam volume '${name}'.`);
+        }
+
+        return {
+          id: beamVolume.volumeId || name,
+          provider: 'beam',
+          name,
+          createdAt: new Date(),
+          size: options?.size,
+          metadata: {
+            ...options?.metadata,
+            mountPath: beamVolume.mountPath,
+          },
+          native: beamVolume,
+        };
+      },
+
+      list: async (_config: BeamConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        // The Beam JS SDK does not expose a volume list endpoint.
+        return [];
+      },
+
+      getById: async (_config: BeamConfig, _volumeId: string): Promise<Volume | null> => {
+        // The Beam JS SDK does not expose a get-by-id endpoint for volumes.
+        return null;
+      },
+
+      delete: async (_config: BeamConfig, _volumeId: string): Promise<void> => {
+        throw new Error('Beam volume deletion is not supported by the Beam JS SDK.');
+      },
     },
   },
 });

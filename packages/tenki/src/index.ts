@@ -15,7 +15,18 @@
  */
 
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
-import type { RunCommandOptions, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from "computesdk";
+import type {
+  RunCommandOptions,
+  CommandResult,
+  SandboxInfo,
+  CreateSandboxOptions,
+  FileEntry,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+  AttachVolumeOptions,
+} from "@computesdk/provider";
+import { randomUUID } from "node:crypto";
 import {
   TenkiSandbox,
   Session,
@@ -23,8 +34,14 @@ import {
   type CreateOptions,
   type Output,
   SessionNotFoundError,
+  VolumeNotFoundError,
   stdoutText,
   stderrText,
+  type Volume as TenkiVolume,
+  type CreateVolumeOptions as TenkiCreateVolumeOptions,
+  type VolumeMountConfig as TenkiVolumeMountConfig,
+  type DetachVolumeOptions as TenkiDetachVolumeOptions,
+  type WorkspaceScopeOptions as TenkiWorkspaceScopeOptions,
 } from "@tenkicloud/sandbox";
 
 export interface TenkiConfig {
@@ -104,6 +121,34 @@ function rememberSession(session: Session, config: TenkiConfig): Session {
   return session;
 }
 
+function resolveWorkspaceId(config: TenkiConfig): string | undefined {
+  return config.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
+}
+
+function mapVolume(native: TenkiVolume): Volume {
+  return {
+    id: native.id,
+    provider: "tenki",
+    name: native.name,
+    createdAt: native.createdAt,
+    size:
+      typeof native.sizeBytes === "number" && native.sizeBytes > 0
+        ? Math.ceil(native.sizeBytes / 1024 / 1024)
+        : undefined,
+    metadata: {
+      state: native.state,
+      workspaceId: native.workspaceId,
+      tags: native.tags,
+      activeAttachments: native.activeAttachments,
+    },
+    native,
+  };
+}
+
+function isVolumeNotFound(err: unknown): boolean {
+  return err instanceof VolumeNotFoundError;
+}
+
 function mapStatus(state: SessionState): SandboxInfo["status"] {
   switch (state) {
     case "RUNNING":
@@ -143,6 +188,17 @@ function toCreateOptions(config: TenkiConfig, options?: CreateSandboxOptions): C
   if (typeof cpuCores === "number") opts.cpuCores = cpuCores;
   if (typeof memoryMb === "number") opts.memoryMb = memoryMb;
   if (typeof diskSizeGb === "number") opts.diskSizeGb = diskSizeGb;
+
+  if (options?.volumeIds && options.volumeIds.length > 0) {
+    const mountOptions = (options as any)?.volumeMountOptions as
+      | Record<string, { mountPath?: string; readOnly?: boolean }>
+      | undefined;
+    opts.volumes = options.volumeIds.map<TenkiVolumeMountConfig>((volumeId, i) => ({
+      volumeId,
+      mountPath: mountOptions?.[volumeId]?.mountPath ?? `/mnt/volume-${i}`,
+      readOnly: mountOptions?.[volumeId]?.readOnly,
+    }));
+  }
 
   return opts;
 }
@@ -335,6 +391,115 @@ export const tenki = defineProvider<Session, TenkiConfig>({
         remove: async (sandbox, path) => {
           await sandbox.remove(path);
         },
+      },
+    },
+
+    volume: {
+      create: async (config, options?: CreateVolumeOptions): Promise<Volume> => {
+        const client = getClient(config);
+        const workspaceId = resolveWorkspaceId(config);
+        const name = options?.name ?? `computesdk-volume-${randomUUID()}`;
+        if (options?.sourceId) {
+          throw new Error("Creating a Tenki volume from a source snapshot/disk is not supported.");
+        }
+        if (typeof options?.size !== "number") {
+          throw new Error("Creating a Tenki volume requires a size in MB.");
+        }
+        const native = await client.createVolume({
+          workspaceId,
+          name,
+          sizeBytes: options.size * 1024 * 1024,
+        } as TenkiCreateVolumeOptions);
+        if (options?.sandboxId) {
+          try {
+            await client.waitVolumeReady(native.id, 120_000);
+            const session = await client.get(options.sandboxId);
+            await session.attachVolume(native.id, options.mountPath ?? "/mnt/volume", {
+              readOnly: options?.readOnly,
+            });
+          } catch (error) {
+            try {
+              await client.deleteVolume(native.id);
+            } catch {
+              // Ignore cleanup failures; propagate the original error.
+            }
+            throw error;
+          }
+        }
+        return mapVolume(native);
+      },
+
+      list: async (config, options?: ListVolumesOptions): Promise<Volume[]> => {
+        const client = getClient(config);
+        const workspaceId = resolveWorkspaceId(config);
+        try {
+          const volumes = await client.listVolumes({ workspaceId } as TenkiWorkspaceScopeOptions);
+          let result = volumes.map(mapVolume);
+          const sandboxId = options?.sandboxId;
+          if (sandboxId) {
+            result = result.filter((volume) =>
+              volume.metadata?.activeAttachments?.some(
+                (attachment: any) => attachment.sessionId === sandboxId,
+              ),
+            );
+          }
+          if (typeof options?.limit === "number") {
+            result = result.slice(0, options.limit);
+          }
+          return result;
+        } catch {
+          return [];
+        }
+      },
+
+      getById: async (config, volumeId: string): Promise<Volume | null> => {
+        const client = getClient(config);
+        try {
+          const volume = await client.getVolume(volumeId);
+          return mapVolume(volume);
+        } catch (err) {
+          if (isVolumeNotFound(err)) return null;
+          throw err;
+        }
+      },
+
+      delete: async (config, volumeId: string): Promise<void> => {
+        const client = getClient(config);
+        try {
+          await client.deleteVolume(volumeId);
+        } catch (err) {
+          if (isVolumeNotFound(err)) return;
+          throw err;
+        }
+      },
+
+      attach: async (
+        config,
+        volumeId: string,
+        sandboxId: string,
+        options?: AttachVolumeOptions,
+      ): Promise<void> => {
+        const client = getClient(config);
+        const session = await client.get(sandboxId);
+        await client.waitVolumeReady(volumeId, 120_000);
+        await session.attachVolume(volumeId, options?.mountPath ?? "/mnt/volume", {
+          readOnly: options?.readOnly,
+        });
+      },
+
+      detach: async (
+        config,
+        volumeId: string,
+        sandboxId: string,
+        options?: AttachVolumeOptions,
+      ): Promise<void> => {
+        const client = getClient(config);
+        const session = await client.get(sandboxId);
+        await session.detachVolume(volumeId, {
+          force: (options as any)?.force,
+          waitTimeoutMs: (options as any)?.waitTimeoutMs,
+          signal: (options as any)?.signal,
+        } as TenkiDetachVolumeOptions);
       },
     },
   },

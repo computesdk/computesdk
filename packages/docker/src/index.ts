@@ -1,4 +1,5 @@
 import Docker from 'dockerode';
+import { randomUUID } from 'node:crypto';
 import { PassThrough } from 'stream';
 import { defineProvider } from '@computesdk/provider';
 import type {
@@ -7,6 +8,9 @@ import type {
   CreateSandboxOptions,
   SandboxInfo,
   FileEntry,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
 } from '@computesdk/provider';
 
 import { defaultDockerConfig } from './types/types';
@@ -19,11 +23,79 @@ import type {
 
 const PROVIDER = 'docker' as const;
 const LABEL_KEY = 'com.computesdk.sandbox';
+const LABEL_VOLUME = 'com.computesdk.volume';
 const LABEL_RUNTIME = 'com.computesdk.runtime';
 const KEEPALIVE_CMD = ['/bin/sh', '-c', 'while :; do sleep 3600; done'];
 
 function pick<T>(val: T | undefined, fallback: T): T {
   return typeof val === 'undefined' ? fallback : val;
+}
+
+function volumeInfoToVolume(info: import('dockerode').VolumeInspectInfo): Volume {
+  return {
+    id: info.Name,
+    provider: PROVIDER,
+    name: info.Name,
+    createdAt: new Date(),
+    size: info.UsageData?.Size ? Math.ceil(info.UsageData.Size / (1024 * 1024)) : undefined,
+    metadata: { driver: info.Driver, scope: info.Scope, labels: info.Labels },
+    native: info,
+  };
+}
+
+function isNotFoundError(error: any): boolean {
+  return error?.statusCode === 404 || (typeof error?.message === 'string' && /no such volume/i.test(error.message));
+}
+
+function isComputeVolume(info: import('dockerode').VolumeInspectInfo): boolean {
+  return info.Labels?.[LABEL_VOLUME] === 'true';
+}
+
+function parseDockerBind(bind: string): { source: string; target: string; options: string } {
+  const parts = bind.split(':');
+  let targetIndex = parts.findIndex((part, index) => index > 0 && part.startsWith('/'));
+  if (targetIndex < 0) {
+    // No absolute container path detected; fall back to last segment as target.
+    targetIndex = parts.length - 1;
+  }
+  const source = parts.slice(0, targetIndex).join(':');
+  const target = parts[targetIndex];
+  const options = parts.slice(targetIndex + 1).join(':');
+  return { source, target, options };
+}
+
+function assertValidVolumeName(volumeId: string): void {
+  if (!volumeId) throw new Error('Docker volume ID is required');
+  if (volumeId === '.' || volumeId === '..') {
+    throw new Error(`Invalid Docker volume ID: ${volumeId}`);
+  }
+  if (/[\/\\:\s]/.test(volumeId)) {
+    throw new Error(`Docker volume ID contains path/bind separators: ${volumeId}`);
+  }
+  if (volumeId.includes('..')) {
+    throw new Error(`Docker volume ID contains traversal segments: ${volumeId}`);
+  }
+}
+
+async function resolveVolumeBinds(docker: Docker, volumeIds: string[]): Promise<string[]> {
+  const binds: string[] = [];
+  for (let i = 0; i < volumeIds.length; i++) {
+    const volumeId = volumeIds[i];
+    assertValidVolumeName(volumeId);
+    try {
+      const info = await docker.getVolume(volumeId).inspect();
+      if (!isComputeVolume(info)) {
+        throw new Error(`Volume ${volumeId} is not a ComputeSDK-managed Docker volume`);
+      }
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new Error(`Volume ${volumeId} not found or is not a ComputeSDK-managed Docker volume`);
+      }
+      throw error;
+    }
+    binds.push(`${volumeId}:/mnt/volume-${i}`);
+  }
+  return binds;
 }
 
 async function ensureImage(docker: Docker, image: DockerImage): Promise<void> {
@@ -141,6 +213,40 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
 
         const mergedEnv = { ...cfg.container?.env, ...options?.envs };
         const hb = toHostBindings(cfg.container?.ports);
+        const { HostConfig: userHostConfigRaw, ...userCreateRest } = cfg.createOptions || {};
+        const userHostConfig = userHostConfigRaw || {};
+        const volumeBinds = options?.volumeIds && options.volumeIds.length > 0
+          ? await resolveVolumeBinds(docker, options.volumeIds)
+          : [];
+
+        const baseBinds = [...(cfg.container?.binds || []), ...(userHostConfig.Binds || []), ...volumeBinds];
+        const bindByTarget = new Map<string, string>();
+        for (const bind of baseBinds) {
+          const parsed = parseDockerBind(bind);
+          if (parsed.target) bindByTarget.set(parsed.target, bind);
+        }
+        const finalBinds = Array.from(bindByTarget.values());
+
+        const baseHostConfig = {
+          AutoRemove: cfg.container?.autoRemove ?? false,
+          Binds: finalBinds.length > 0 ? finalBinds : undefined,
+          NetworkMode: cfg.container?.networkMode,
+          Privileged: cfg.container?.privileged,
+          CapAdd: cfg.container?.capabilities?.add,
+          CapDrop: cfg.container?.capabilities?.drop,
+          LogConfig: cfg.container?.logDriver
+            ? { Type: cfg.container.logDriver, Config: cfg.container.logOpts || {} }
+            : undefined,
+          Resources: cfg.container?.resources,
+          DeviceRequests: cfg.container?.gpus ? [{
+            Driver: 'nvidia',
+            Count: cfg.container.gpus === 'all' ? -1 : typeof cfg.container.gpus === 'number' ? cfg.container.gpus : 1,
+            DeviceIDs: typeof cfg.container.gpus === 'string' && cfg.container.gpus !== 'all' ? [String(cfg.container.gpus)] : undefined,
+            Capabilities: [['gpu']],
+          }] : undefined,
+          ...(hb ? { PortBindings: hb.PortBindings } : {}),
+        };
+
         const createOptions = {
           Image: chosenImage.name,
           Tty: pick(cfg.container?.tty, false),
@@ -158,26 +264,13 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
             : undefined,
           Cmd: KEEPALIVE_CMD,
           HostConfig: {
-            AutoRemove: cfg.container?.autoRemove ?? false,
-            Binds: cfg.container?.binds,
-            NetworkMode: cfg.container?.networkMode,
-            Privileged: cfg.container?.privileged,
-            CapAdd: cfg.container?.capabilities?.add,
-            CapDrop: cfg.container?.capabilities?.drop,
-            LogConfig: cfg.container?.logDriver
-              ? { Type: cfg.container.logDriver, Config: cfg.container.logOpts || {} }
-              : undefined,
-            Resources: cfg.container?.resources,
-            DeviceRequests: cfg.container?.gpus ? [{
-              Driver: 'nvidia',
-              Count: cfg.container.gpus === 'all' ? -1 : typeof cfg.container.gpus === 'number' ? cfg.container.gpus : 1,
-              DeviceIDs: typeof cfg.container.gpus === 'string' && cfg.container.gpus !== 'all' ? [String(cfg.container.gpus)] : undefined,
-              Capabilities: [['gpu']],
-            }] : undefined,
-            ...(hb ? { PortBindings: hb.PortBindings } : {}),
+            ...baseHostConfig,
+            ...userHostConfig,
+            Binds: finalBinds.length > 0 ? finalBinds : undefined,
+            PortBindings: { ...baseHostConfig.PortBindings, ...userHostConfig.PortBindings },
           },
           ...(hb ? { ExposedPorts: hb.ExposedPorts } : {}),
-          ...(cfg.createOptions || {}),
+          ...userCreateRest,
         } as import('dockerode').ContainerCreateOptions;
 
         const container = await docker.createContainer(createOptions);
@@ -303,6 +396,65 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
       },
 
       getInstance: (handle: DockerSandboxHandle): DockerSandboxHandle => handle,
+    },
+
+    volume: {
+      create: async (config: DockerConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
+
+        const driver = options?.metadata?.driver as string | undefined;
+        const driverOpts = options?.metadata?.driverOpts as Record<string, string> | undefined;
+        const labels: Record<string, string> = { [LABEL_VOLUME]: 'true' };
+        if (options?.metadata) {
+          for (const [k, v] of Object.entries(options.metadata)) {
+            if (k === 'driver' || k === 'driverOpts') continue;
+            labels[`com.computesdk.meta.${k}`] = typeof v === 'string' ? v : JSON.stringify(v);
+          }
+        }
+
+        const created = await docker.createVolume({
+          Name: name,
+          Labels: labels,
+          Driver: driver,
+          DriverOpts: driverOpts,
+        } as import('dockerode').VolumeCreateOptions);
+        const info = await docker.getVolume(created.Name).inspect();
+        return volumeInfoToVolume(info);
+      },
+      list: async (config: DockerConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        const result = await docker.listVolumes();
+        return (result.Volumes || [])
+          .filter((info) => isComputeVolume(info))
+          .map(volumeInfoToVolume);
+      },
+      getById: async (config: DockerConfig, volumeId: string): Promise<Volume | null> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        try {
+          const info = await docker.getVolume(volumeId).inspect();
+          if (!isComputeVolume(info)) return null;
+          return volumeInfoToVolume(info);
+        } catch (error) {
+          if (isNotFoundError(error)) return null;
+          throw error;
+        }
+      },
+      delete: async (config: DockerConfig, volumeId: string): Promise<void> => {
+        const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
+        const docker = new Docker(cfg.connection as any);
+        try {
+          const info = await docker.getVolume(volumeId).inspect();
+          if (!isComputeVolume(info)) throw new Error(`Volume ${volumeId} is not a ComputeSDK-managed Docker volume`);
+          await docker.getVolume(volumeId).remove({ force: true } as import('dockerode').VolumeRemoveOptions);
+        } catch (error) {
+          if (isNotFoundError(error)) return;
+          throw error;
+        }
+      },
     },
   },
 });

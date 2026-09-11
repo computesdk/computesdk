@@ -4,8 +4,9 @@
  * Wraps `@declaw/sdk` to expose the ComputeSDK provider interface.
  */
 
-import { Sandbox as DeclawSandbox, ConnectionConfig } from '@declaw/sdk';
+import { Sandbox as DeclawSandbox, ConnectionConfig, Volumes } from '@declaw/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { randomUUID } from 'node:crypto';
 
 import type {
   CommandResult,
@@ -13,7 +14,13 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+  AttachVolumeOptions,
 } from '@computesdk/provider';
+
+import type { VolumeInfo, VolumeAttachment } from '@declaw/sdk';
 
 export interface DeclawConfig {
   /** Declaw API key. Falls back to `DECLAW_API_KEY` env var. */
@@ -22,6 +29,18 @@ export interface DeclawConfig {
   domain?: string;
   /** Default create-time timeout in milliseconds. */
   timeout?: number;
+}
+
+function declawVolumeToVolume(info: VolumeInfo): Volume {
+  return {
+    id: info.volumeId,
+    provider: 'declaw',
+    name: info.name,
+    createdAt: new Date(info.createdAt),
+    size: info.sizeBytes ? Math.ceil(info.sizeBytes / (1024 * 1024)) : undefined,
+    metadata: info.metadata,
+    native: info,
+  };
 }
 
 export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
@@ -53,6 +72,7 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
           templateId,
           namespace: _namespace,
           directory: _directory,
+          volumeIds,
           ...providerOptions
         } = options || {};
 
@@ -60,9 +80,25 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         const timeoutSec = Math.max(1, Math.ceil(ttMs / 1000));
         const template = templateId || 'node';
 
+        const volumes: VolumeAttachment[] | undefined = volumeIds && volumeIds.length > 0
+          ? volumeIds.map((volumeId, index) => {
+              const mountOptions = (options as any)?.volumeMountOptions as
+                | Record<string, { mountPath?: string; subPath?: string; mode?: 'copy' | 'mount' | 'mount-ro' }>
+                | undefined;
+              const opts = mountOptions?.[volumeId];
+              const attachment: VolumeAttachment = {
+                volumeId,
+                mountPath: opts?.mountPath ?? `/mnt/volume-${index}`,
+              };
+              if (opts?.mode) attachment.mode = opts.mode;
+              if (opts?.subPath) attachment.subpath = opts.subPath;
+              return attachment;
+            })
+          : undefined;
+
         try {
           const sandbox = await DeclawSandbox.create({
-            template, timeout: timeoutSec, apiKey, domain, metadata, envs, ...providerOptions,
+            template, timeout: timeoutSec, apiKey, domain, metadata, envs, volumes, ...providerOptions,
           });
           const sandboxId = (sandbox as any).sandboxId ?? (sandbox as any).sandbox_id;
           if (!sandboxId) throw new Error('Declaw create() returned sandbox without an ID');
@@ -174,6 +210,86 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         },
         exists: async (sandbox: DeclawSandbox, path: string): Promise<boolean> => (sandbox as any).files.exists(path),
         remove: async (sandbox: DeclawSandbox, path: string): Promise<void> => { await (sandbox as any).files.remove(path); },
+      },
+    },
+
+    volume: {
+      create: async (config: DeclawConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const apiKey =
+          config.apiKey ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_API_KEY) ||
+          '';
+        if (!apiKey) {
+          throw new Error(`Missing Declaw API key. Provide 'apiKey' in config or set DECLAW_API_KEY.`);
+        }
+        const domain =
+          config.domain ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_DOMAIN) ||
+          undefined;
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
+        const info = await Volumes.empty(name, { apiKey, domain });
+        return declawVolumeToVolume(info);
+      },
+
+      list: async (config: DeclawConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const apiKey =
+          config.apiKey ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_API_KEY) ||
+          '';
+        const domain =
+          config.domain ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_DOMAIN) ||
+          undefined;
+        if (!apiKey) return [];
+        try {
+          const infos = await Volumes.list({ apiKey, domain });
+          return infos.map(declawVolumeToVolume);
+        } catch {
+          return [];
+        }
+      },
+
+      getById: async (config: DeclawConfig, volumeId: string): Promise<Volume | null> => {
+        const apiKey =
+          config.apiKey ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_API_KEY) ||
+          '';
+        const domain =
+          config.domain ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_DOMAIN) ||
+          undefined;
+        if (!apiKey || !volumeId) return null;
+        try {
+          const info = await Volumes.get(volumeId, { apiKey, domain });
+          return declawVolumeToVolume(info);
+        } catch {
+          return null;
+        }
+      },
+
+      delete: async (config: DeclawConfig, volumeId: string): Promise<void> => {
+        const apiKey =
+          config.apiKey ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_API_KEY) ||
+          '';
+        const domain =
+          config.domain ||
+          (typeof process !== 'undefined' && process.env?.DECLAW_DOMAIN) ||
+          undefined;
+        if (!apiKey || !volumeId) return;
+        try {
+          await Volumes.delete(volumeId, { apiKey, domain });
+        } catch {
+          // Idempotent: volume may already be gone.
+        }
+      },
+
+      attach: async (_config: DeclawConfig, _volumeId: string, _sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error(`Declaw does not support dynamic volume attach. Volumes must be attached at sandbox creation time via options.volumeIds.`);
+      },
+
+      detach: async (_config: DeclawConfig, _volumeId: string, _sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error(`Declaw does not support dynamic volume detach.`);
       },
     },
   },

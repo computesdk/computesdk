@@ -35,6 +35,10 @@ import type {
   ForkSandboxRequest,
   SandboxStatus,
   Shape,
+  DiskView,
+  DiskCreateRequest,
+  DiskAttachment,
+  DiskConfig,
 } from "@nodeops-createos/sandbox";
 import { defineProvider } from "@computesdk/provider";
 import type {
@@ -45,6 +49,10 @@ import type {
   ListSnapshotsOptions,
   RunCommandOptions,
   SandboxInfo,
+  Volume,
+  CreateVolumeOptions,
+  AttachVolumeOptions,
+  ListVolumesOptions,
 } from "@computesdk/provider";
 
 const PROVIDER_NAME = "createos-sandbox";
@@ -299,6 +307,20 @@ export function buildScript(command: string, options?: RunCommandOptions): strin
   return script;
 }
 
+async function attachVolumeIds(
+  sandbox: Sandbox,
+  volumeIds: string[],
+  options?: CreateSandboxOptions,
+): Promise<void> {
+  const mountOptions = (options as any)?.volumeMountOptions as Record<string, { mountPath?: string; subPath?: string }> | undefined;
+  for (let i = 0; i < volumeIds.length; i++) {
+    const volumeId = volumeIds[i];
+    const opts = mountOptions?.[volumeId];
+    const mountPath = opts?.mountPath ?? `/mnt/volume-${i}`;
+    await sandbox.attachDisk({ diskId: volumeId, mountPath, subPath: opts?.subPath });
+  }
+}
+
 /** Parse `ls -lA --time-style=+%s` output into ComputeSDK FileEntry rows. */
 export function parseLsOutput(stdout: string): FileEntry[] {
   const entries: FileEntry[] = [];
@@ -332,6 +354,14 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           // Surface lifecycle failures: a fork that never reaches "running"
           // (or hits a terminal state) must not be reported as success.
           await forked.waitUntilRunning();
+          if (opts.volumeIds && opts.volumeIds.length > 0) {
+            try {
+              await attachVolumeIds(forked, opts.volumeIds, options);
+            } catch (error) {
+              try { await forked.destroy(); } catch { /* ignore cleanup failure */ }
+              throw error;
+            }
+          }
           sandboxConfig.set(forked, config);
           return { sandbox: forked, sandboxId: forked.id };
         }
@@ -339,6 +369,15 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const shape = await resolveShape(client, opts, config);
         const rootfs = opts.image ?? opts.runtime ?? config.rootfs ?? "devbox:1";
         const sandbox = await client.createSandbox(toCreateRequest(opts, shape, rootfs));
+        await sandbox.waitUntilRunning();
+        if (opts.volumeIds && opts.volumeIds.length > 0) {
+          try {
+            await attachVolumeIds(sandbox, opts.volumeIds, options);
+          } catch (error) {
+            try { await sandbox.destroy(); } catch { /* ignore cleanup failure */ }
+            throw error;
+          }
+        }
         sandboxConfig.set(sandbox, config);
         return { sandbox, sandboxId: sandbox.id };
       },
@@ -501,6 +540,95 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           if (isNotFound(e)) return; // already gone
           throw e;
         }
+      },
+    },
+
+    volume: {
+      create: async (config: CreateosConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const client = resolveClient(config);
+        const name = options?.name;
+        if (!name) {
+          throw new Error("CreateOS volume.create requires a name in options.name.");
+        }
+        const diskConfig = (options?.metadata?.config ?? (options as any)?.config) as Partial<DiskConfig> | undefined;
+        const credentials = (options?.metadata?.credentials ?? (options as any)?.credentials) as { access_key?: string; secret_key?: string } | undefined;
+        if (!diskConfig?.bucket || !diskConfig.endpoint || !credentials?.access_key || !credentials?.secret_key) {
+          throw new Error(
+            "CreateOS volume.create requires a bucket endpoint and credentials. " +
+              "Pass disk config via options.metadata.config and credentials via options.metadata.credentials.",
+          );
+        }
+        const request: DiskCreateRequest = {
+          name,
+          kind: "s3",
+          config: {
+            bucket: diskConfig.bucket,
+            endpoint: diskConfig.endpoint,
+            region: diskConfig.region,
+            use_path_style: diskConfig.use_path_style ?? false,
+          },
+          credentials: {
+            access_key: credentials.access_key,
+            secret_key: credentials.secret_key,
+          },
+        };
+        const disk = await client.disks.create(request);
+        return {
+          id: disk.id,
+          provider: PROVIDER_NAME,
+          name: disk.name,
+          createdAt: new Date(disk.created_at),
+          metadata: { config: disk.config },
+          native: disk,
+        };
+      },
+      list: async (config: CreateosConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const client = resolveClient(config);
+        const disks = await client.disks.list();
+        return disks.map((disk: DiskView) => ({
+          id: disk.id,
+          provider: PROVIDER_NAME,
+          name: disk.name,
+          createdAt: new Date(disk.created_at),
+          metadata: { config: disk.config },
+          native: disk,
+        }));
+      },
+      getById: async (config: CreateosConfig, volumeId: string): Promise<Volume | null> => {
+        const client = resolveClient(config);
+        try {
+          const disk = await client.disks.get(volumeId);
+          return {
+            id: disk.id,
+            provider: PROVIDER_NAME,
+            name: disk.name,
+            createdAt: new Date(disk.created_at),
+            metadata: { config: disk.config },
+            native: disk,
+          };
+        } catch (e) {
+          if (isNotFound(e)) return null;
+          throw e;
+        }
+      },
+      delete: async (config: CreateosConfig, volumeId: string): Promise<void> => {
+        const client = resolveClient(config);
+        try { await client.disks.delete(volumeId); } catch (e) {
+          if (isNotFound(e)) return;
+          throw e;
+        }
+      },
+      attach: async (config: CreateosConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+        const client = resolveClient(config);
+        const sandbox = await client.getSandbox(sandboxId);
+        const mountPath = options?.mountPath ?? `/mnt/${volumeId}`;
+        await sandbox.attachDisk({ diskId: volumeId, mountPath, subPath: options?.subPath });
+      },
+      detach: async (config: CreateosConfig, volumeId: string, sandboxId: string, options?: AttachVolumeOptions): Promise<void> => {
+        const client = resolveClient(config);
+        const sandbox = await client.getSandbox(sandboxId);
+        const mountPath = options?.mountPath ?? `/mnt/${volumeId}`;
+        await sandbox.detachDisk({ diskId: volumeId, mountPath });
       },
     },
   },

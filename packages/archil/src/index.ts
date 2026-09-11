@@ -18,6 +18,9 @@ import type {
   CreateSandboxOptions,
   FileEntry,
   RunCommandOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
 } from 'computesdk';
 
 const ARCHIL_MOUNT_ROOT = '/mnt/archil';
@@ -128,7 +131,7 @@ function createClient(config: ArchilConfig, resolved: ResolvedConfig): ArchilCli
 }
 
 function resolveCreateDiskId(options?: ArchilCreateOptions): string {
-  const diskId = options?.diskId;
+  const diskId = options?.diskId ?? options?.volumeIds?.[0];
 
   if (!diskId) {
     throw new Error(
@@ -563,6 +566,51 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       },
 
       getInstance: (sandbox: ArchilSandbox): ArchilSandbox => sandbox,
+    },
+
+    volume: {
+      create: async (_config: ArchilConfig, _options?: CreateVolumeOptions): Promise<Volume> => {
+        throw new Error('Archil disks are managed outside ComputeSDK. Use an existing disk id and provider.sandbox.create({ diskId }).');
+      },
+      list: async (config: ArchilConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        const resolved = resolveConfig(config);
+        const disks = await callApi<DiskResponse[]>(resolved, 'GET', '/api/disks');
+        return disks.map((disk) => ({
+          id: disk.id,
+          provider: 'archil',
+          name: disk.name,
+          createdAt: new Date(disk.createdAt),
+          metadata: {
+            organization: disk.organization,
+            status: disk.status,
+            region: disk.region,
+            provider: disk.provider,
+          },
+          native: disk,
+        }));
+      },
+      getById: async (config: ArchilConfig, volumeId: string): Promise<Volume | null> => {
+        const resolved = resolveConfig(config);
+        try {
+          const disk = await callApi<DiskResponse>(resolved, 'GET', `/api/disks/${encodeURIComponent(volumeId)}`);
+          return {
+            id: disk.id,
+            provider: 'archil',
+            name: disk.name,
+            createdAt: new Date(disk.createdAt),
+            metadata: {
+              organization: disk.organization,
+              status: disk.status,
+              region: disk.region,
+              provider: disk.provider,
+            },
+            native: disk,
+          };
+        } catch { return null; }
+      },
+      delete: async (_config: ArchilConfig, _volumeId: string): Promise<void> => {
+        throw new Error('Archil disks cannot be deleted through ComputeSDK. Delete them in the Archil console.');
+      },
     },
   },
 });

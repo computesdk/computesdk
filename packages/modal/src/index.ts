@@ -4,10 +4,11 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, Volume, CreateVolumeOptions, ListVolumesOptions } from '@computesdk/provider';
 
-import { ModalClient } from 'modal';
-import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
+import { randomUUID } from 'node:crypto';
+import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
+import type { Sandbox, App, Image, SandboxCreateParams, Volume as ModalVolume, VolumeMountOptions, FileInfo } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
 
@@ -91,6 +92,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
+            volumeIds,
             ports: optPorts,
             daemonSsePort: optDaemonSsePort,
             scalableSandboxes: optScalableSandboxes,
@@ -112,6 +114,20 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           const sandboxOptions: SandboxCreateParams = {
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
+
+          if (volumeIds && volumeIds.length > 0) {
+            const volumes: Record<string, ModalVolume> = {};
+            const mountOptions = (options as any)?.volumeMountOptions as Record<string, VolumeMountOptions> | undefined;
+            for (let i = 0; i < volumeIds.length; i++) {
+              const volumeId = volumeIds[i];
+              let volume = await client.volumes.fromName(volumeId, { createIfMissing: false });
+              if (mountOptions?.[volumeId]) {
+                volume = volume.withMountOptions(mountOptions[volumeId]);
+              }
+              volumes[`/mnt/volume-${i}`] = volume;
+            }
+            sandboxOptions.volumes = volumes;
+          }
 
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;
@@ -214,60 +230,55 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       filesystem: {
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
           try {
-            const file = await modalSandbox.sandbox.open(path);
-            try {
-              const data = await file.read();
-              const content = new TextDecoder().decode(data);
-              return content;
-            } finally {
-              await file.close();
-            }
+            return await modalSandbox.sandbox.filesystem.readText(path);
           } catch (error) {
-            try {
-              const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-              const [content, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-              if (exitCode !== 0) throw new Error(`cat failed: ${stderr}`);
-              return content.trim();
-            } catch {
-              throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
-          const file = await modalSandbox.sandbox.open(path, 'w');
           try {
-            await file.write(new TextEncoder().encode(content));
-          } finally {
-            await file.close();
+            await modalSandbox.sandbox.filesystem.writeText(content, path);
+          } catch (error) {
+            throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
-          const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`mkdir failed: ${stderr}`);
+          try {
+            await modalSandbox.sandbox.filesystem.makeDirectory(path, { createParents: true });
+          } catch (error) {
+            throw new Error(`Failed to create directory ${path}: ${error instanceof Error ? error.message : String(error)}`);
+          }
         },
         readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
-          const process = await modalSandbox.sandbox.exec(['ls', '-la', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [output, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`ls failed: ${stderr}`);
-          const lines = output.split('\n').slice(1);
-          return lines.filter((l: string) => l.trim()).map((line: string) => {
-            const parts = line.trim().split(/\s+/);
-            const permissions = parts[0] || '';
-            const size = parseInt(parts[4]) || 0;
-            const dateStr = (parts[5] || '') + ' ' + (parts[6] || '');
-            const date = dateStr.trim() ? new Date(dateStr) : new Date();
-            const name = parts.slice(8).join(' ') || parts[parts.length - 1] || 'unknown';
-            return { name, type: permissions.startsWith('d') ? 'directory' as const : 'file' as const, size, modified: isNaN(date.getTime()) ? new Date() : date };
-          });
+          try {
+            const entries: FileInfo[] = await modalSandbox.sandbox.filesystem.listFiles(path);
+            return entries.map((entry: FileInfo) => ({
+              name: entry.name,
+              type: entry.type === 'directory' ? 'directory' as const : 'file' as const,
+              size: entry.size,
+              modified: new Date(entry.modifiedTime * 1000),
+            }));
+          } catch (error) {
+            throw new Error(`Failed to list directory ${path}: ${error instanceof Error ? error.message : String(error)}`);
+          }
         },
         exists: async (modalSandbox: ModalSandbox, path: string): Promise<boolean> => {
-          try { const process = await modalSandbox.sandbox.exec(['test', '-e', path]); return await process.wait() === 0; } catch { return false; }
+          try {
+            await modalSandbox.sandbox.filesystem.stat(path);
+            return true;
+          } catch (error) {
+            if (error instanceof SandboxFilesystemNotFoundError) {
+              return false;
+            }
+            throw new Error(`Failed to stat path ${path}: ${error instanceof Error ? error.message : String(error)}`);
+          }
         },
         remove: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
-          const process = await modalSandbox.sandbox.exec(['rm', '-rf', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`rm failed: ${stderr}`);
+          try {
+            await modalSandbox.sandbox.filesystem.remove(path, { recursive: true });
+          } catch (error) {
+            throw new Error(`Failed to remove ${path}: ${error instanceof Error ? error.message : String(error)}`);
+          }
         }
       },
 
@@ -287,6 +298,45 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
       list: async (_config: ModalConfig) => [],
       delete: async (_config: ModalConfig, _snapshotId: string) => { /* No-op */ }
+    },
+
+    volume: {
+      create: async (config: ModalInternalConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const client = config._client;
+        const name = options?.name || `computesdk-volume-${randomUUID()}`;
+        const volume = await client.volumes.fromName(name, { createIfMissing: true });
+        const stableId = volume.name || name;
+        return {
+          id: stableId,
+          provider: 'modal',
+          name: stableId,
+          createdAt: new Date(),
+          metadata: { ...options?.metadata, volumeId: volume.volumeId },
+          native: volume,
+        };
+      },
+      list: async (_config: ModalInternalConfig, _options?: ListVolumesOptions): Promise<Volume[]> => {
+        throw new Error('Modal does not support listing volumes.');
+      },
+      getById: async (config: ModalInternalConfig, volumeId: string): Promise<Volume | null> => {
+        try {
+          const client = config._client;
+          const volume = await client.volumes.fromName(volumeId, { createIfMissing: false });
+          const stableId = volume.name || volumeId;
+          return {
+            id: stableId,
+            provider: 'modal',
+            name: stableId,
+            createdAt: new Date(),
+            metadata: { volumeId: volume.volumeId },
+            native: volume,
+          };
+        } catch { return null; }
+      },
+      delete: async (config: ModalInternalConfig, volumeId: string): Promise<void> => {
+        const client = config._client;
+        try { await client.volumes.delete(volumeId, { allowMissing: true }); } catch { /* ignore */ }
+      },
     }
   }
 });
@@ -297,13 +347,21 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
   const appName = config.appName ?? DEFAULT_APP_NAME;
   const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
-  const appPromise = client.apps.fromName(appName, { createIfMissing: true });
+
+  // Lazily start the app lookup so that constructing the provider does not
+  // trigger unhandled promise rejections when credentials are missing.
+  let appPromise: Promise<App> | undefined;
 
   return _modal({
     ...config,
     appName,
     _client: client,
-    _appPromise: appPromise,
+    get _appPromise() {
+      if (!appPromise) {
+        appPromise = client.apps.fromName(appName, { createIfMissing: true });
+      }
+      return appPromise;
+    },
     _imageCache: new Map(),
   });
 }

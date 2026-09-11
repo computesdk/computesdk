@@ -3,18 +3,23 @@ import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { defineProvider } from '@computesdk/provider';
 import type {
+  AttachVolumeOptions,
   CommandResult,
   CreateSandboxOptions,
   CreateSnapshotOptions,
+  CreateVolumeOptions,
   FileEntry,
   ListSnapshotsOptions,
+  ListVolumesOptions,
   RunCommandOptions,
   SandboxInfo,
+  Volume as UniversalVolume,
 } from '@computesdk/provider';
 import type {
   DefaultBackend,
   Sandbox as NativeSandbox,
   SandboxHandle as NativeSandboxHandle,
+  VolumeHandle as NativeVolumeHandle,
 } from 'microsandbox';
 
 const PROVIDER = 'microsandbox' as const;
@@ -217,6 +222,23 @@ function errorMessage(error: unknown): string {
 
 function isNotFound(error: unknown): boolean {
   return !!error && typeof error === 'object' && (error as { code?: string }).code === 'sandboxNotFound';
+}
+
+function isVolumeNotFound(error: unknown): boolean {
+  return !!error && typeof error === 'object' && (error as { code?: string }).code === 'volumeNotFound';
+}
+
+function volumeFromHandle(handle: NativeVolumeHandle): UniversalVolume {
+  const labels = Object.fromEntries(handle.labels);
+  return {
+    id: handle.name,
+    provider: PROVIDER,
+    name: handle.name,
+    createdAt: handle.createdAt ?? new Date(),
+    size: handle.quotaMib ?? (handle.capacityBytes != null ? Math.ceil(handle.capacityBytes / (1024 * 1024)) : undefined),
+    metadata: decodeMetadata(labels),
+    native: handle,
+  };
 }
 
 function requireLocal(backendKind: 'local' | 'cloud', capability: string): void {
@@ -528,6 +550,12 @@ const _microsandbox = defineProvider<
               : builder.port(port.host, port.guest);
           }
         }
+        if (options?.volumeIds && options.volumeIds.length > 0) {
+          for (let i = 0; i < options.volumeIds.length; i++) {
+            const volumeId = options.volumeIds[i];
+            builder = builder.volume(`/mnt/volume-${i}`, (mount) => mount.named(volumeId));
+          }
+        }
 
         const native = await builder.create();
         if (options?.signal?.aborted) {
@@ -758,6 +786,64 @@ const _microsandbox = defineProvider<
         requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         await sdk.Snapshot.remove(snapshotId);
       }),
+    },
+
+    volume: {
+      create: async (config, options?: CreateVolumeOptions): Promise<UniversalVolume> => withBackend(selectBackend(config), async (sdk) => {
+        const name = options?.name ?? `${config.namePrefix ?? DEFAULT_NAME_PREFIX}volume-${randomUUID()}`;
+        let builder = sdk.Volume.builder(name);
+        if (options?.size) {
+          builder = builder.disk().size(options.size);
+        } else {
+          builder = builder.directory();
+        }
+        if (options?.metadata) {
+          for (const [key, value] of Object.entries(encodeMetadata(options.metadata))) {
+            builder = builder.label(key, value);
+          }
+        }
+        const nativeVolume = await builder.create();
+        return {
+          id: nativeVolume.name,
+          provider: PROVIDER,
+          name: nativeVolume.name,
+          createdAt: new Date(),
+          size: options?.size,
+          metadata: options?.metadata,
+          native: nativeVolume,
+        };
+      }),
+
+      list: async (config, _options?: ListVolumesOptions): Promise<UniversalVolume[]> => withBackend(selectBackend(config), async (sdk) => {
+        const handles = await sdk.Volume.list();
+        return handles.map(volumeFromHandle);
+      }),
+
+      getById: async (config, volumeId) => withBackend(selectBackend(config), async (sdk) => {
+        try {
+          const handle = await sdk.Volume.get(volumeId);
+          return volumeFromHandle(handle);
+        } catch (error) {
+          if (isVolumeNotFound(error)) return null;
+          throw error;
+        }
+      }),
+
+      delete: async (config, volumeId) => withBackend(selectBackend(config), async (sdk) => {
+        try {
+          await sdk.Volume.remove(volumeId);
+        } catch (error) {
+          if (!isVolumeNotFound(error)) throw error;
+        }
+      }),
+
+      attach: async (_config, _volumeId, _sandboxId, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error('Microsandbox does not support runtime volume attach. Mount volumes at sandbox creation time using volumeIds.');
+      },
+
+      detach: async (_config, _volumeId, _sandboxId, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error('Microsandbox does not support runtime volume detach.');
+      },
     },
   },
 });

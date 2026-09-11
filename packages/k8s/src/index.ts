@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { PassThrough } from 'stream';
 import {
   KubeConfig,
   CoreV1Api,
   Exec,
   type V1Pod,
+  type V1PersistentVolumeClaim,
+  type V1Volume,
+  type V1VolumeMount,
 } from '@kubernetes/client-node';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
@@ -11,6 +15,10 @@ import type {
   SandboxInfo,
   CreateSandboxOptions,
   RunCommandOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+  AttachVolumeOptions,
 } from '@computesdk/provider';
 
 const PROVIDER = 'k8s' as const;
@@ -112,6 +120,57 @@ function isNotFound(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const err = error as { statusCode?: number; code?: number };
   return err.statusCode === 404 || err.code === 404;
+}
+
+function parseVolumeId(volumeId: string, configNamespace: string): { namespace: string; name: string } {
+  if (volumeId.includes('/')) {
+    const [namespace, name] = volumeId.split('/', 2);
+    return { namespace, name };
+  }
+  return { namespace: configNamespace, name: volumeId };
+}
+
+function storageQuantityToMB(quantity: string | undefined): number | undefined {
+  if (!quantity) return undefined;
+  const match = quantity.match(/^([0-9.]+)\s*([A-Za-z]*)$/);
+  if (!match) return undefined;
+  const value = Number.parseFloat(match[1]);
+  if (Number.isNaN(value)) return undefined;
+  const suffix = match[2] || '';
+  const bytesPerUnit: Record<string, number> = {
+    '': 1,
+    'B': 1,
+    'Ki': 1024,
+    'Mi': 1024 * 1024,
+    'Gi': 1024 * 1024 * 1024,
+    'Ti': 1024 * 1024 * 1024 * 1024,
+    'Pi': 1024 * 1024 * 1024 * 1024 * 1024,
+    'K': 1000,
+    'M': 1000 * 1000,
+    'G': 1000 * 1000 * 1000,
+    'T': 1000 * 1000 * 1000 * 1000,
+    'P': 1000 * 1000 * 1000 * 1000 * 1000,
+  };
+  const bytes = value * (bytesPerUnit[suffix] ?? 1);
+  return Math.ceil(bytes / (1024 * 1024));
+}
+
+function pvcToVolume(pvc: V1PersistentVolumeClaim, namespace: string): Volume {
+  const storage = pvc.status?.capacity?.storage;
+  return {
+    id: `${namespace}/${pvc.metadata?.name || ''}`,
+    provider: PROVIDER,
+    name: pvc.metadata?.name,
+    createdAt: pvc.metadata?.creationTimestamp || new Date(),
+    size: storageQuantityToMB(storage),
+    metadata: {
+      namespace,
+      phase: pvc.status?.phase,
+      accessModes: pvc.spec?.accessModes,
+      storageClassName: pvc.spec?.storageClassName,
+    },
+    native: pvc,
+  };
 }
 
 async function waitForPodRunning(core: CoreV1Api, namespace: string, podName: string, timeoutMs: number) {
@@ -256,6 +315,29 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           ]),
         );
 
+        const volumes: V1Volume[] = [];
+        const volumeMounts: V1VolumeMount[] = [];
+        if (options?.volumeIds && options.volumeIds.length > 0) {
+          for (let i = 0; i < options.volumeIds.length; i++) {
+            const volumeId = options.volumeIds[i];
+            const { namespace: volNamespace, name: volName } = parseVolumeId(volumeId, namespace);
+            if (volNamespace !== namespace) {
+              throw new Error(
+                `Volume ${volumeId} is not in the same namespace as the sandbox (${namespace}). PersistentVolumeClaims can only be mounted within their own namespace.`,
+              );
+            }
+            const volumeName = `computesdk-volume-${i}`;
+            volumes.push({
+              name: volumeName,
+              persistentVolumeClaim: { claimName: volName },
+            });
+            volumeMounts.push({
+              name: volumeName,
+              mountPath: `/mnt/volume-${i}`,
+            });
+          }
+        }
+
         const pod: V1Pod = {
           metadata: {
             name: podName,
@@ -266,6 +348,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           spec: {
             restartPolicy: 'Never',
             terminationGracePeriodSeconds: 5,
+            volumes: volumes.length > 0 ? volumes : undefined,
             containers: [
               {
                 name: 'sandbox',
@@ -276,13 +359,23 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
                   requests: { cpu: '250m', memory: '256Mi' },
                   limits: { cpu: '1', memory: '1Gi' },
                 },
+                volumeMounts: volumeMounts.length > 0 ? volumeMounts : undefined,
               },
             ],
           },
         };
 
         await core.createNamespacedPod({ namespace, body: pod });
-        await waitForPodRunning(core, namespace, podName, timeout);
+        try {
+          await waitForPodRunning(core, namespace, podName, timeout);
+        } catch (error) {
+          try {
+            await core.deleteNamespacedPod({ namespace, name: podName });
+          } catch {
+            // Ignore cleanup failures; propagate the original pod readiness error.
+          }
+          throw error;
+        }
         if (config.kubeConfigRaw) {
           rawKubeConfigBySandboxId.set(`${namespace}/${podName}`, config.kubeConfigRaw);
         }
@@ -431,6 +524,104 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           .replace('{service}', serviceName)
           .replace('{namespace}', sandbox.namespace)
           .replace('{port}', String(options.port));
+      },
+    },
+    volume: {
+      create: async (config: K8sConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const namespace = config.namespace || 'default';
+        const kc = loadKubeConfig(config);
+        const core = kc.makeApiClient(CoreV1Api);
+
+        const name = options?.name || `computesdk-vol-${randomUUID().slice(0, 8)}`;
+        const sizeInMB = options?.size;
+        const annotations = Object.fromEntries(
+          Object.entries(options?.metadata || {}).map(([key, value]) => [
+            `computesdk.io/meta-${key}`,
+            typeof value === 'string' ? value : JSON.stringify(value),
+          ]),
+        );
+
+        const pvc: V1PersistentVolumeClaim = {
+          metadata: {
+            name,
+            namespace,
+            labels: {
+              [LABEL_MANAGED]: 'true',
+            },
+            annotations,
+          },
+          spec: {
+            accessModes: ['ReadWriteOnce'],
+            resources: {
+              requests: {
+                storage: sizeInMB ? `${sizeInMB}Mi` : '1Gi',
+              },
+            },
+          },
+        };
+
+        const created = await core.createNamespacedPersistentVolumeClaim({ namespace, body: pvc });
+        return pvcToVolume(created, namespace);
+      },
+
+      list: async (config: K8sConfig, options?: ListVolumesOptions): Promise<Volume[]> => {
+        const namespace = options?.namespace || config.namespace || 'default';
+        const kc = loadKubeConfig(config);
+        const core = kc.makeApiClient(CoreV1Api);
+
+        const pvcs = await core.listNamespacedPersistentVolumeClaim({
+          namespace,
+          labelSelector: `${LABEL_MANAGED}=true`,
+        });
+        return (pvcs.items || []).map(pvc => pvcToVolume(pvc, namespace));
+      },
+
+      getById: async (config: K8sConfig, volumeId: string): Promise<Volume | null> => {
+        const { namespace, name } = parseVolumeId(volumeId, config.namespace || 'default');
+        const kc = loadKubeConfig(config);
+        const core = kc.makeApiClient(CoreV1Api);
+
+        try {
+          const pvc = await core.readNamespacedPersistentVolumeClaim({ namespace, name });
+          if (pvc.metadata?.labels?.[LABEL_MANAGED] !== 'true') {
+            return null;
+          }
+          return pvcToVolume(pvc, namespace);
+        } catch (error) {
+          if (isNotFound(error)) return null;
+          throw new Error(`Failed to fetch Kubernetes volume ${namespace}/${name}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+
+      delete: async (config: K8sConfig, volumeId: string): Promise<void> => {
+        const { namespace, name } = parseVolumeId(volumeId, config.namespace || 'default');
+        const kc = loadKubeConfig(config);
+        const core = kc.makeApiClient(CoreV1Api);
+
+        try {
+          const pvc = await core.readNamespacedPersistentVolumeClaim({ namespace, name });
+          if (pvc.metadata?.labels?.[LABEL_MANAGED] !== 'true') {
+            throw new Error(`Volume ${namespace}/${name} is not a ComputeSDK-managed Kubernetes volume`);
+          }
+        } catch (error) {
+          if (isNotFound(error)) return;
+          throw new Error(`Failed to verify Kubernetes volume ${namespace}/${name} before deletion: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        try {
+          await core.deleteNamespacedPersistentVolumeClaim({ namespace, name });
+        } catch (error) {
+          if (isNotFound(error)) return;
+          throw new Error(`Failed to delete Kubernetes volume ${namespace}/${name}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+
+      attach: async (_config: K8sConfig, _volumeId: string, _sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error('k8s provider does not support attaching a volume to a running sandbox. Use volumeIds when creating the sandbox.');
+      },
+
+      detach: async (_config: K8sConfig, _volumeId: string, _sandboxId: string, _options?: AttachVolumeOptions): Promise<void> => {
+        throw new Error('k8s provider does not support detaching a volume from a running sandbox.');
       },
     },
   },

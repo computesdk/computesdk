@@ -93,6 +93,75 @@ export interface CreateSnapshotOptions {
 }
 
 /**
+ * Volume information
+ */
+export interface Volume {
+  /** Unique identifier for the volume */
+  id: string;
+  /** Provider hosting the volume */
+  provider: string;
+  /** Optional human-readable name */
+  name?: string;
+  /** When the volume was created */
+  createdAt: Date;
+  /** Size in megabytes, when known */
+  size?: number;
+  /** Additional provider-specific metadata (may include the native volume object) */
+  metadata?: Record<string, any>;
+  /** Native provider volume object, when available */
+  native?: unknown;
+}
+
+/**
+ * Options for creating a volume
+ */
+export interface CreateVolumeOptions {
+  /** Optional name for the volume */
+  name?: string;
+  /** Optional requested size in megabytes */
+  size?: number;
+  /** Optional metadata for the volume */
+  metadata?: Record<string, any>;
+  /**
+   * Provider-agnostic source snapshot/disk/image id to seed the volume from.
+   * Maps to the native concept where supported (e.g. E2B source snapshot, Modal volume image).
+   */
+  sourceId?: string;
+  /** Optional target sandbox for providers that create-and-attach in one call */
+  sandboxId?: string;
+  /** Optional mount path when creating with an attachment */
+  mountPath?: string;
+  /** Allow provider-specific properties */
+  [key: string]: any;
+}
+
+/**
+ * Options for attaching a volume to a sandbox
+ */
+export interface AttachVolumeOptions {
+  /** Path where the volume should be mounted inside the sandbox */
+  mountPath?: string;
+  /** Mount the volume read-only */
+  readOnly?: boolean;
+  /** Mount only a subdirectory of the volume */
+  subPath?: string;
+  /** Allow provider-specific properties */
+  [key: string]: any;
+}
+
+/**
+ * Options for listing volumes
+ */
+export interface ListVolumesOptions {
+  /** Filter by sandbox ID */
+  sandboxId?: string;
+  /** Limit the number of results */
+  limit?: number;
+  /** Allow provider-specific properties */
+  [key: string]: any;
+}
+
+/**
  * Filesystem operations interface
  */
 export interface SandboxFileSystem {
@@ -208,6 +277,13 @@ export interface CreateSandboxOptions extends SandboxResourceOptions {
    * - Runloop: maps to `snapshot_id` in devbox creation params
    */
   snapshotId?: string;
+  /**
+   * Volume IDs to attach when creating the sandbox.
+   *
+   * Providers with first-class volume support mount these at creation time.
+   * Specific mount paths can be supplied through provider-specific options.
+   */
+  volumeIds?: string[];
   metadata?: Record<string, any>;
   envs?: Record<string, string>;
   name?: string;

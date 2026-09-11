@@ -4,10 +4,13 @@ import type {
   CommandResult,
   CreateSandboxOptions,
   CreateSnapshotOptions,
+  CreateVolumeOptions,
   FileEntry,
   ListSnapshotsOptions,
+  ListVolumesOptions,
   RunCommandOptions,
   SandboxInfo,
+  Volume,
 } from '@computesdk/provider';
 import type { Snapshot } from 'computesdk';
 
@@ -96,6 +99,23 @@ interface QuiltSnapshotRecord {
   created_at?: number | string;
   expires_at?: number | string | null;
   pinned?: boolean;
+}
+
+interface QuiltVolumeInfo {
+  created_at: number;
+  driver: string;
+  labels: Record<string, string>;
+  mountpoint: string;
+  name: string;
+  tenant_id: string;
+}
+
+interface QuiltVolumeListResponse {
+  volumes: QuiltVolumeInfo[];
+  pagination?: {
+    has_next?: boolean;
+    next_cursor?: string | null;
+  };
 }
 
 interface QuiltSandboxHandle {
@@ -466,6 +486,7 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
           templateId,
           snapshotId,
           name,
+          volumeIds,
           namespace: _namespace,
           sandboxId: _sandboxId,
           directory,
@@ -474,8 +495,8 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
         } = options || {};
 
         if (snapshotId) {
-          const unsupportedKeys = ['envs', 'templateId', 'directory'];
-          if (envs || templateId || directory) {
+          const unsupportedKeys = ['envs', 'templateId', 'directory', 'volumeIds'];
+          if (envs || templateId || directory || (volumeIds && volumeIds.length > 0)) {
             throw new Error(
               `Quilt snapshot clone does not support ${unsupportedKeys.join(', ')} create options in one request.`
             );
@@ -532,6 +553,7 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
           ...(envs && Object.keys(envs).length > 0 ? { environment: envs } : {}),
           ...(metadata ? { labels: stringifyRecord(metadata) } : {}),
           ...(directory ? { working_directory: directory } : {}),
+          ...(volumeIds && volumeIds.length > 0 ? { volumes: volumeIds } : {}),
           ...providerOptions,
         };
 
@@ -863,6 +885,93 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
         );
       },
     },
+
+    volume: {
+      create: async (config: QuiltConfig, options?: CreateVolumeOptions): Promise<Volume> => {
+        const resolved = resolveConfig(config);
+        const metadata = options?.metadata ? stringifyRecord(options.metadata) : undefined;
+        const driver = (options as any)?.driver as string | undefined;
+        const nativeOptions = (options as any)?.options as Record<string, string> | undefined;
+
+        const createBody: Record<string, unknown> = {
+          name: options?.name ?? `computesdk-${crypto.randomUUID().slice(0, 8)}`,
+          ...(metadata ? { labels: metadata } : {}),
+          ...(driver ? { driver } : {}),
+          ...(nativeOptions ? { options: nativeOptions } : {}),
+        };
+
+        const volume = await requestJson<QuiltVolumeInfo>(resolved, '/api/volumes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(createBody),
+        });
+
+        if (!volume?.name) {
+          throw new Error('Quilt volume create did not return a name.');
+        }
+
+        return mapVolume(volume);
+      },
+
+      list: async (config: QuiltConfig, options?: ListVolumesOptions): Promise<Volume[]> => {
+        const resolved = resolveConfig(config);
+        const volumes: Volume[] = [];
+        let cursor: string | null | undefined = undefined;
+
+        while (true) {
+          const query = new URLSearchParams();
+          if (cursor) query.set('cursor', cursor);
+          if (options?.limit) query.set('limit', String(options.limit));
+
+          const response = await requestJson<QuiltVolumeListResponse>(
+            resolved,
+            `/api/volumes${query.toString() ? `?${query.toString()}` : ''}`
+          );
+
+          for (const volume of response?.volumes ?? []) {
+            if (!volume.name) continue;
+            volumes.push(mapVolume(volume));
+          }
+
+          if (!response?.pagination?.has_next || !response.pagination.next_cursor) {
+            break;
+          }
+
+          cursor = response.pagination.next_cursor;
+        }
+
+        return volumes;
+      },
+
+      getById: async (config: QuiltConfig, volumeId: string): Promise<Volume | null> => {
+        const resolved = resolveConfig(config);
+        const volume = await requestJson<QuiltVolumeInfo>(
+          resolved,
+          `/api/volumes/${encodeURIComponent(volumeId)}`,
+          undefined,
+          { allow404: true }
+        );
+
+        if (!volume) return null;
+        return mapVolume(volume);
+      },
+
+      delete: async (config: QuiltConfig, volumeId: string): Promise<void> => {
+        const resolved = resolveConfig(config);
+        const envelope = await requestJson<{ operation_id?: string }>(
+          resolved,
+          `/api/volumes/${encodeURIComponent(volumeId)}`,
+          { method: 'DELETE' },
+          { allow404: true }
+        );
+
+        if (!envelope) return;
+        const operationId = requireOperationId(envelope, 'volume delete');
+        await pollOperation(resolved, operationId, resolved.timeout);
+      },
+    },
   },
 });
 
@@ -870,6 +979,22 @@ function stringifyRecord(input: Record<string, unknown>): Record<string, string>
   return Object.fromEntries(
     Object.entries(input).map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])
   );
+}
+
+function mapVolume(volume: QuiltVolumeInfo): Volume {
+  return {
+    id: volume.name,
+    provider: PROVIDER,
+    name: volume.name,
+    createdAt: parseDate(volume.created_at),
+    metadata: {
+      driver: volume.driver,
+      mountpoint: volume.mountpoint,
+      tenantId: volume.tenant_id,
+      labels: volume.labels,
+    },
+    native: volume,
+  };
 }
 
 function mapSnapshot(snapshot: QuiltSnapshotRecord): Snapshot {
