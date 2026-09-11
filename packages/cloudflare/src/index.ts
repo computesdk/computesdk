@@ -557,8 +557,14 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
       filesystem: {
         readFile: async (cfSandbox: CloudflareSandbox, path: string): Promise<string> => {
           if (cfSandbox.remote) {
-            const res = await bridgeRequest(cfSandbox, 'GET', `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/file/${encodeFilePath(toWorkspacePath(path))}`);
-            return await res.text();
+            const target = toWorkspacePath(path);
+            const res = await bridgeRequest(cfSandbox, 'GET', `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/file/${encodeFilePath(target)}`);
+            const content = await res.text();
+            if (content === '') {
+              const check = await bridgeExec(cfSandbox, `test -f ${shellQuote(target)}`, { cwd: '/workspace' });
+              if (check.exitCode !== 0) throw new Error(`File not found: ${path}`);
+            }
+            return content;
           }
           const file = await cfSandbox.sandbox.readFile(path);
           return file.content || '';

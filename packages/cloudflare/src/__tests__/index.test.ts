@@ -474,6 +474,32 @@ describe('Standardized Test Suite', () => {
     }
   });
 
+  it('rejects bridge readFile when the bridge returns an empty body for a missing file', async () => {
+    if (skipIntegration) {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(bridgeCreateResponse())
+        .mockResolvedValueOnce(new Response('', { status: 200 }))
+        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 1 }) }]))
+        .mockResolvedValueOnce(new Response('', { status: 200 }))
+        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 0 }) }]));
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
+        const created = await remoteProvider.sandbox.create();
+
+        await expect(created.filesystem.readFile('/nonexistent/file.txt')).rejects.toThrow('File not found');
+        const body = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string) as { argv: string[] };
+        expect(body.argv[2]).toBe("test -f '/workspace/nonexistent/file.txt'");
+
+        await expect(created.filesystem.readFile('/workspace/empty.txt')).resolves.toBe('');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+  });
+
   it('uses a bridge-compatible cwd for filesystem shell helpers', async () => {
     if (skipIntegration) {
       const fetchMock = vi.fn()
