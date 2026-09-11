@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const files = new Map<string, string>();
 const dirs = new Set<string>();
 let openCalls = 0;
-let readLimit = Infinity;
 const execCalls: string[][] = [];
 
 class FakeSandbox {
@@ -13,7 +12,6 @@ class FakeSandbox {
     readText: async (path: string) => {
       const v = files.get(path);
       if (v === undefined) throw new Error(`SandboxFilesystemNotFoundError: ${path}`);
-      if (v.length > readLimit) throw new FakeFileTooLargeError('too large');
       return v;
     },
     makeDirectory: async (path: string, options?: { createParents?: boolean }) => {
@@ -54,7 +52,6 @@ class FakeSandbox {
 const fsCalls: string[][] = [];
 
 vi.mock('modal', () => ({
-  SandboxFilesystemFileTooLargeError: class extends Error {},
   SandboxFilesystemNotFoundError: class extends Error {},
   ModalClient: class {
     apps = { fromName: async () => ({}) };
@@ -69,13 +66,10 @@ vi.mock('modal', () => ({
 }));
 
 import { modal } from '../index';
-import {
-  SandboxFilesystemFileTooLargeError as FakeFileTooLargeError,
-  SandboxFilesystemNotFoundError as FakeNotFoundError,
-} from 'modal';
+import { SandboxFilesystemNotFoundError as FakeNotFoundError } from 'modal';
 
 describe('modal filesystem read/write', () => {
-  beforeEach(() => { files.clear(); dirs.clear(); openCalls = 0; readLimit = Infinity; execCalls.length = 0; fsCalls.length = 0; });
+  beforeEach(() => { files.clear(); dirs.clear(); openCalls = 0; execCalls.length = 0; fsCalls.length = 0; });
 
   it('uses Sandbox.filesystem (V1 and V2 compatible) instead of the deprecated Sandbox.open', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's', scalableSandboxes: true });
@@ -88,17 +82,6 @@ describe('modal filesystem read/write', () => {
     // Content round-trips untouched (no trimming).
     expect(await sandbox.filesystem.readFile('/tmp/bench/file.txt')).toBe(content);
     expect(openCalls).toBe(0);
-  });
-
-  it('falls back to cat when the file exceeds the filesystem read limit', async () => {
-    const provider = modal({ tokenId: 't', tokenSecret: 's' });
-    const sandbox = await provider.sandbox.create();
-    const content = '  big\n'.repeat(1000);
-    files.set('/big.txt', content);
-    readLimit = 10;
-
-    expect(await sandbox.filesystem.readFile('/big.txt')).toBe(content);
-    expect(execCalls).toEqual([['cat', '/big.txt']]);
   });
 
   it('routes mkdir/readdir/exists/remove through Sandbox.filesystem', async () => {

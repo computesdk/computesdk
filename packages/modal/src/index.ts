@@ -6,7 +6,7 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-import { ModalClient, SandboxFilesystemFileTooLargeError, SandboxFilesystemNotFoundError } from 'modal';
+import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
@@ -216,14 +216,8 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           try {
             return await modalSandbox.sandbox.filesystem.readText(path);
           } catch (error) {
-            if (!(error instanceof SandboxFilesystemFileTooLargeError)) {
-              throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
-          const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [content, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`Failed to read file ${path}: ${stderr}`);
-          return content;
         },
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
           try {
