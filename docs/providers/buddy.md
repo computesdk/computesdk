@@ -1,7 +1,7 @@
 ---
 description: >-
-  Install and use the Buddy provider for ComputeSDK: Ubuntu sandboxes from a
-  pre-warmed pool, public tunnels, native filesystem endpoints and snapshots.
+  Install and use the Buddy provider for ComputeSDK: persistent Ubuntu sandboxes
+  for agents, booting in milliseconds, with preview URLs and snapshots.
 layout:
   width: default
   title:
@@ -34,7 +34,7 @@ Each sandbox is an Ubuntu microVM in your Buddy project, served from a pre-warme
 npm install @computesdk/buddy
 ```
 
-Node 20.19 or newer is required, because the Buddy SDK ships ESM only.
+Node 20.19 or 22.12 and newer is required, matching the Buddy SDK (ESM and CommonJS builds are both shipped).
 
 1. Create an API token in **Buddy → My ID → Access tokens** with the `SANDBOX_MANAGE` scope
 2. Create (or pick) a Buddy project for your sandboxes

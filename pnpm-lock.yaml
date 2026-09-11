@@ -326,8 +326,8 @@ importers:
   packages/beam:
     dependencies:
       '@beamcloud/beam-js':
-        specifier: ^1.0.17
-        version: 1.0.17(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
+        specifier: ^1.0.18
+        version: 1.0.18(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -486,8 +486,8 @@ importers:
   packages/buddy:
     dependencies:
       '@buddy-works/sandbox-sdk':
-        specifier: ^0.1.8
-        version: 0.1.8
+        specifier: ^0.1.9
+        version: 0.1.9
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2925,8 +2925,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@beamcloud/beam-js@1.0.17':
-    resolution: {integrity: sha512-LcgLeUDYZajTOktXXwRiWH6waE7ikWdaM5PjVv0bctjEOxwwFuUEtEc2iyj3SYAXaCJaXDiWs1LSB5frIkzBhQ==}
+  '@beamcloud/beam-js@1.0.18':
+    resolution: {integrity: sha512-G6rAd3PD/jfLvDO+WFoR+Rf7AuzbJ3rgEtTPiK+z0p4CDsTli6vxGA0zy/f8EqZ7i4OeCPlqmlp9sOeVmGE73Q==}
     peerDependencies:
       typescript: ^5.0.0
 
@@ -2940,8 +2940,8 @@ packages:
   '@browserbasehq/sdk@2.9.0':
     resolution: {integrity: sha512-Xzm1+6suzQypXjley4Phqer++pjnYyST6S7CArUn3kWyGA8aruXjAV5wkmqE21lgXo9K3/OQJvCu48bKEZFNDQ==}
 
-  '@buddy-works/sandbox-sdk@0.1.8':
-    resolution: {integrity: sha512-gkgmVDJYkM3IzxtNHOy3FWxuAsDaZQz0Pjm9qXTL12leZTnZAPunTAJxs/B86dwcWLLNPBU85lu32pui1YB57Q==}
+  '@buddy-works/sandbox-sdk@0.1.9':
+    resolution: {integrity: sha512-x9pGTSSRBtYtGwDLWHPAhyCDXnyFe8DQKoLOP9DiwNKBVXuHah8rROnoLW1lNp4USYgS6w8zrnHxjykF2jGIhw==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@bufbuild/protobuf@2.12.1':
@@ -10256,7 +10256,7 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@beamcloud/beam-js@1.0.17(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
+  '@beamcloud/beam-js@1.0.18(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)':
     dependencies:
       axios: 1.18.1
       commander: 12.1.0
@@ -10308,7 +10308,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@buddy-works/sandbox-sdk@0.1.8':
+  '@buddy-works/sandbox-sdk@0.1.9':
     dependencies:
       p-retry: 7.1.1
       zod: 4.3.5

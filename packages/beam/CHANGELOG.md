@@ -1,5 +1,11 @@
 # @computesdk/beam
 
+## 0.3.3
+
+### Patch Changes
+
+- e06b675: Update `@beamcloud/beam-js` to 1.0.18 so deferred sandbox commands complete and their output is read after the process finishes.
+
 ## 0.3.2
 
 ### Patch Changes
