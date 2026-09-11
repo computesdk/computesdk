@@ -725,9 +725,15 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
 
 /** Cocoon Stack provider; on a TLS endpoint the first call finds the HTTP/2 session already open. */
 export const cocoonstack: typeof provider = (config) => {
-  const baseUrl = config.baseUrl || env('COCOONSTACK_API_URL') || '';
-  if (baseUrl.startsWith('https://')) session(new URL(baseUrl).origin, 'main');
+  preopen(config.baseUrl || env('COCOONSTACK_API_URL') || '');
   return provider(config);
 };
 
 export default cocoonstack;
+
+// the first call then skips DNS and the TLS handshake; an idle session never holds the process open
+function preopen(baseUrl: string): void {
+  if (baseUrl.startsWith('https://')) session(new URL(baseUrl).origin, 'main');
+}
+
+preopen(env('COCOONSTACK_API_URL') || '');
