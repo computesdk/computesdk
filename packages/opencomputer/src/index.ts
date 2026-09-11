@@ -106,20 +106,12 @@ interface OpenComputerSandboxStatic {
   createFromCheckpoint(checkpointId: string, opts?: Pick<OpenComputerSandboxOpts, 'apiKey' | 'apiUrl' | 'timeout' | 'envs' | 'secretStore'>): Promise<OpenComputerNativeSandbox>;
 }
 
-// `@opencomputer/sdk` initialises at import. Starting it here rather than in
-// loadSandbox() means that happens before the first create, not during it.
-//
-// Dynamic, not static: the SDK is ESM-only with top-level await, so a static
-// import compiles to require() in the CJS build and fails to load.
-const _sdkPromise: Promise<OpenComputerSandboxStatic> = import('@opencomputer/sdk')
-  .then((mod) => (mod as { Sandbox: OpenComputerSandboxStatic }).Sandbox);
-
-// Nothing has awaited this yet, so an early failure would surface as an
-// unhandled rejection. The real error still reaches loadSandbox()'s caller.
-void _sdkPromise.catch(() => {});
+let sdkPromise: Promise<OpenComputerSandboxStatic> | undefined;
 
 async function loadSandbox(): Promise<OpenComputerSandboxStatic> {
-  return _sdkPromise;
+  sdkPromise ??= import('@opencomputer/sdk')
+    .then((mod) => (mod as { Sandbox: OpenComputerSandboxStatic }).Sandbox);
+  return sdkPromise;
 }
 
 export interface OpenComputerConfig {
