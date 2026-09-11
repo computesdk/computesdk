@@ -12,7 +12,7 @@ Built on [`@buddy-works/sandbox-sdk`](https://www.npmjs.com/package/@buddy-works
 npm install @computesdk/buddy
 ```
 
-Node 20.19 or newer is required, because the Buddy SDK ships ESM only.
+Node 20.19 or 22.12 and newer is required, matching the Buddy SDK (ESM and CommonJS builds are both shipped).
 
 ## Setup
 

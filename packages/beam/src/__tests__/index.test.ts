@@ -88,4 +88,39 @@ describe('lazy sandbox readiness', () => {
 
     expect(connect).not.toHaveBeenCalled();
   });
+
+  test('reads command output after the process finishes', async () => {
+    const instance = mockSandbox();
+    const process = await instance.exec(['true']);
+    let finished = false;
+    vi.mocked(process.wait).mockImplementation(async () => {
+      finished = true;
+      process.exitCode = 0;
+      return 0;
+    });
+    vi.mocked(process.stdout.read).mockImplementation(async () => {
+      expect(finished).toBe(true);
+      return 'complete output\n';
+    });
+    vi.mocked(instance.exec).mockResolvedValue(process);
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.runCommand('sleep 1; echo complete output')).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: 'complete output\n',
+    });
+    expect(process.wait).toHaveBeenCalledOnce();
+  });
+
+  test('reuses the sandbox builder across equivalent provider instances', async () => {
+    mockSandbox();
+    const options = { name: 'computesdk-benchmarks', runtime: 'node' };
+
+    await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create(options);
+    await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create(options);
+
+    const create = vi.mocked(Sandbox.prototype.create);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.instances[0]).toBe(create.mock.instances[1]);
+  });
 });

@@ -1,5 +1,19 @@
 # @computesdk/workbench
 
+## 31.0.4
+
+### Patch Changes
+
+- Updated dependencies [1f0acfe]
+  - @computesdk/modal@1.9.6
+
+## 31.0.3
+
+### Patch Changes
+
+- Updated dependencies [e06b675]
+  - @computesdk/beam@0.3.3
+
 ## 31.0.2
 
 ### Patch Changes
