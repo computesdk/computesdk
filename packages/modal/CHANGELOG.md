@@ -1,5 +1,11 @@
 # @computesdk/modal
 
+## 1.9.6
+
+### Patch Changes
+
+- 1f0acfe: Route filesystem operations through Modal's Sandbox.filesystem API (readText/writeText/makeDirectory/listFiles/stat/remove) so they work on V2 (scalable) sandboxes, where the deprecated Sandbox.open and shell-backed fallbacks are unreliable.
+
 ## 1.9.5
 
 ### Patch Changes
