@@ -66,6 +66,8 @@ interface CocoonstackConfig {
   ttlSeconds?: number;
   /** HTTP request timeout in milliseconds (default 120000) */
   requestTimeoutMs?: number;
+  /** Open the HTTP/2 session at construction; TLS endpoints only (default false) */
+  preconnect?: boolean;
 }
 ```
 
@@ -97,6 +99,6 @@ A claim is served from the node's warm pool for `(template, net, size)`; a reque
 
 - sandboxd scopes a sandbox to the token minted at claim time, so `getById` and `list` return only the sandboxes this process claimed (the node's own index is visible through the sandboxd API). `destroy` by id also works with a node token.
 - A command without an explicit `timeout` is bounded by `requestTimeoutMs` (120 s by default); pass `timeout` for longer builds.
-- Tokens travel as bearer headers: use an `https://` endpoint outside a private network. With an `https://` endpoint the provider opens its HTTP/2 session when the factory runs, or already at import when `COCOONSTACK_API_URL` is set, so the first sandbox call skips DNS and the TLS handshake.
+- Tokens travel as bearer headers: use an `https://` endpoint outside a private network. Nothing connects until the first call; `preconnect: true` opens the HTTP/2 session when the factory runs instead, so the first sandbox call skips DNS and the TLS handshake.
 - A node in a cluster may answer a claim with a redirect to a peer; this provider refuses it. Point `baseUrl` at a node that serves the pool.
 - Snapshots and templates are managed through sandboxd's own API (checkpoints, promote) and are not exposed here.

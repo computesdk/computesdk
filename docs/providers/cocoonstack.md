@@ -92,6 +92,8 @@ interface CocoonstackConfig {
   ttlSeconds?: number;
   /** HTTP request timeout in milliseconds (default 120000) */
   requestTimeoutMs?: number;
+  /** Open the HTTP/2 session at construction; TLS endpoints only (default false) */
+  preconnect?: boolean;
 }
 ```
 

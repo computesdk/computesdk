@@ -46,6 +46,8 @@ export interface CocoonstackConfig {
   ttlSeconds?: number;
   /** HTTP request timeout. */
   requestTimeoutMs?: number;
+  /** Open the HTTP/2 session at construction so the first call skips DNS and the TLS handshake; TLS endpoints only. */
+  preconnect?: boolean;
 }
 
 export interface CocoonstackSandbox {
@@ -190,6 +192,7 @@ function session(origin: string, lane: Lane): http2.ClientHttp2Session {
   const live = sessions.get(key);
   if (live && !live.closed && !live.destroyed) return live;
   const created = http2.connect(origin, { secureContext });
+  applyHold(created);
   const drop = () => {
     if (sessions.get(key) === created) sessions.delete(key);
   };
@@ -233,7 +236,8 @@ function h2Request(
     const release = holdSession(live);
     const stream = live.request({ ':method': method, ':path': path, ...headers });
     let status = 0;
-    let text = '';
+    let bytes = 0;
+    const chunks: Buffer[] = [];
     const abort = () => stream.close(http2.constants.NGHTTP2_CANCEL);
     signal?.addEventListener('abort', abort, { once: true });
     let released = false;
@@ -243,7 +247,6 @@ function h2Request(
       signal?.removeEventListener('abort', abort);
       release();
     };
-    stream.setEncoding('utf8');
     stream.setTimeout(timeoutMs, () => {
       stream.close(http2.constants.NGHTTP2_CANCEL);
       reject(new Error('sandboxd request timed out'));
@@ -251,16 +254,18 @@ function h2Request(
     stream.on('response', (responseHeaders) => {
       status = Number(responseHeaders[':status'] ?? 0);
     });
-    stream.on('data', (chunk: string) => {
-      text += chunk;
-      if (text.length > MAX_RESPONSE_BYTES) {
+    stream.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > MAX_RESPONSE_BYTES) {
         stream.close(http2.constants.NGHTTP2_CANCEL);
         reject(new Error(`sandboxd response exceeds ${MAX_RESPONSE_BYTES >> 20} MiB`));
+        return;
       }
+      chunks.push(chunk);
     });
     stream.on('end', () => {
       done();
-      fulfill({ status, text });
+      fulfill({ status, text: Buffer.concat(chunks).toString('utf8') });
     });
     stream.on('error', (error: Error) => {
       done();
@@ -294,16 +299,18 @@ function h1Request(
         },
       },
       (response) => {
-        let text = '';
-        response.setEncoding('utf8');
-        response.on('data', (chunk: string) => {
-          text += chunk;
-          if (text.length > MAX_RESPONSE_BYTES) {
+        let bytes = 0;
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => {
+          bytes += chunk.length;
+          if (bytes > MAX_RESPONSE_BYTES) {
             client.destroy(new Error(`sandboxd response exceeds ${MAX_RESPONSE_BYTES >> 20} MiB`));
+            return;
           }
+          chunks.push(chunk);
         });
         response.on('error', reject);
-        response.on('end', () => fulfill({ status: response.statusCode ?? 0, text }));
+        response.on('end', () => fulfill({ status: response.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }));
       },
     );
     client.on('timeout', () => client.destroy(new Error('sandboxd request timed out')));
@@ -723,17 +730,22 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
   },
 });
 
-/** Cocoon Stack provider; on a TLS endpoint the first call finds the HTTP/2 session already open. */
+/** Cocoon Stack provider; `preconnect` opens the HTTP/2 session at construction instead of on the first call. */
 export const cocoonstack: typeof provider = (config) => {
-  preopen(config.baseUrl || env('COCOONSTACK_API_URL') || '');
+  if (config.preconnect) preconnect(config.baseUrl || env('COCOONSTACK_API_URL') || '');
   return provider(config);
 };
 
 export default cocoonstack;
 
-// the first call then skips DNS and the TLS handshake; an idle session never holds the process open
-function preopen(baseUrl: string): void {
-  if (baseUrl.startsWith('https://')) session(new URL(baseUrl).origin, 'main');
+// a malformed endpoint is reported by the first call, not by the warm-up
+function preconnect(baseUrl: string): void {
+  if (!baseUrl.startsWith('https://')) return;
+  let origin: string;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    return;
+  }
+  session(origin, 'main');
 }
-
-preopen(env('COCOONSTACK_API_URL') || '');

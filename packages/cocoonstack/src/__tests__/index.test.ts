@@ -1,7 +1,18 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const h2 = vi.hoisted(() => ({ connects: [] as string[] }));
+vi.mock('node:http2', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:http2') & { default?: typeof import('node:http2') }>();
+  const real = actual.connect as (...args: Parameters<typeof actual.connect>) => ReturnType<typeof actual.connect>;
+  const connect = ((...args: Parameters<typeof actual.connect>) => {
+    h2.connects.push(String(args[0]));
+    return real(...args);
+  }) as typeof actual.connect;
+  return { ...actual, connect, default: { ...(actual.default ?? actual), connect } };
+});
 import { compute } from 'computesdk';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 import { cocoonstack, CocoonstackApiError } from '../index.js';
@@ -103,6 +114,9 @@ async function fakeSandboxd(): Promise<Fake> {
       if (result.error) return respond(res, 502, { error: result.error });
       if ((body?.argv as string[])[2] === 'huge') {
         return respond(res, 200, { exit_code: 0, stdout: 'x'.repeat(17 << 20), stderr: '' });
+      }
+      if ((body?.argv as string[])[2] === 'huge-utf8') {
+        return respond(res, 200, { exit_code: 0, stdout: '\u20ac'.repeat(6 << 20), stderr: '' });
       }
       return respond(res, 200, { exit_code: result.exit ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' });
     }
@@ -408,6 +422,17 @@ describe('Cocoon Stack ComputeSDK provider', () => {
     const sandbox = await cocoonstack(config()).sandbox.create();
 
     await expect(sandbox.runCommand('huge')).rejects.toThrow(/exceeds 16 MiB/);
+    await expect(sandbox.runCommand('huge-utf8')).rejects.toThrow(/exceeds 16 MiB/);
+  });
+
+  it('opens no connection at construction unless preconnect is set', () => {
+    h2.connects.length = 0;
+    cocoonstack({ baseUrl: 'https://127.0.0.1:1', apiKey: 'x' });
+    cocoonstack({ baseUrl: 'https://', apiKey: 'x', preconnect: true });
+    expect(h2.connects).toEqual([]);
+
+    cocoonstack({ baseUrl: 'https://127.0.0.1:1', apiKey: 'x', preconnect: true });
+    expect(h2.connects).toEqual(['https://127.0.0.1:1']);
   });
 
   it('refuses a claim the node redirected to a peer', async () => {
