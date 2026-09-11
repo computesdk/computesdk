@@ -22,6 +22,8 @@ import type {
 const PROVIDER = 'cloud-run' as const
 const DEFAULT_SANDBOX_BINARY = '/usr/local/gcp/bin/sandbox'
 const DEFAULT_TIMEOUT_MS = 300_000
+/** Base64 chars per write command; keeps each `/bin/sh -c` argument under Linux's 128 KiB MAX_ARG_STRLEN. */
+const WRITE_CHUNK_CHARS = 64_000
 
 export interface CloudRunMount {
   type?: 'bind'
@@ -291,6 +293,21 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
 
 type FsRunCommand = (sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
 
+/**
+ * Shell commands that write `content` to `escapedPath` in bounded chunks via a
+ * staging file, so no single command argument exceeds the OS argv limit.
+ */
+export function buildWriteFileCommands(escapedPath: string, content: string): { commands: string[]; cleanup: string } {
+  const b64 = Buffer.from(content, 'utf8').toString('base64')
+  const staging = `${escapedPath}.computesdk-tmp.${randomUUID().slice(0, 8)}`
+  const commands: string[] = [`mkdir -p "$(dirname "${escapedPath}")" && : > "${staging}"`]
+  for (let i = 0; i < b64.length; i += WRITE_CHUNK_CHARS) {
+    commands.push(`printf '%s' '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' | base64 -d >> "${staging}"`)
+  }
+  commands.push(`cat < "${staging}" > "${escapedPath}" && rm -f "${staging}"`)
+  return { commands, cleanup: `rm -f "${staging}"` }
+}
+
 export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
   name: PROVIDER,
   methods: {
@@ -403,10 +420,14 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
             await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path, content }))
             return
           }
-          const escapedPath = escapeShellArg(path)
-          const b64 = Buffer.from(content, 'utf8').toString('base64')
-          const r = await runCommand(sandbox, `mkdir -p "$(dirname "${escapedPath}")" && printf '%s' '${b64}' | base64 -d > "${escapedPath}"`)
-          if (r.exitCode !== 0) throw new Error(r.stderr || `Failed to write: ${path}`)
+          const { commands, cleanup } = buildWriteFileCommands(escapeShellArg(path), content)
+          for (const command of commands) {
+            const r = await runCommand(sandbox, command)
+            if (r.exitCode !== 0) {
+              await runCommand(sandbox, cleanup).catch(() => {})
+              throw new Error(r.stderr || `Failed to write: ${path}`)
+            }
+          }
         },
         mkdir: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
