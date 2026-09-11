@@ -1,5 +1,11 @@
 # @computesdk/buddy
 
+## 1.0.2
+
+### Patch Changes
+
+- 9725ad3: Update `@buddy-works/sandbox-sdk` to 0.1.9 and sharpen the package description.
+
 ## 1.0.1
 
 ### Patch Changes
