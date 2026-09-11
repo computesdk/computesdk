@@ -6,7 +6,7 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-import { ModalClient } from 'modal';
+import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
@@ -214,60 +214,54 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       filesystem: {
         readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
           try {
-            const file = await modalSandbox.sandbox.open(path);
-            try {
-              const data = await file.read();
-              const content = new TextDecoder().decode(data);
-              return content;
-            } finally {
-              await file.close();
-            }
+            return await modalSandbox.sandbox.filesystem.readText(path);
           } catch (error) {
-            try {
-              const process = await modalSandbox.sandbox.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-              const [content, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-              if (exitCode !== 0) throw new Error(`cat failed: ${stderr}`);
-              return content.trim();
-            } catch {
-              throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+            throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
-          const file = await modalSandbox.sandbox.open(path, 'w');
           try {
-            await file.write(new TextEncoder().encode(content));
-          } finally {
-            await file.close();
+            await modalSandbox.sandbox.filesystem.writeText(content, path);
+          } catch (error) {
+            throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
         mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
-          const process = await modalSandbox.sandbox.exec(['mkdir', '-p', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`mkdir failed: ${stderr}`);
+          try {
+            await modalSandbox.sandbox.filesystem.makeDirectory(path, { createParents: true });
+          } catch (error) {
+            throw new Error(`mkdir failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
         },
         readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
-          const process = await modalSandbox.sandbox.exec(['ls', '-la', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [output, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`ls failed: ${stderr}`);
-          const lines = output.split('\n').slice(1);
-          return lines.filter((l: string) => l.trim()).map((line: string) => {
-            const parts = line.trim().split(/\s+/);
-            const permissions = parts[0] || '';
-            const size = parseInt(parts[4]) || 0;
-            const dateStr = (parts[5] || '') + ' ' + (parts[6] || '');
-            const date = dateStr.trim() ? new Date(dateStr) : new Date();
-            const name = parts.slice(8).join(' ') || parts[parts.length - 1] || 'unknown';
-            return { name, type: permissions.startsWith('d') ? 'directory' as const : 'file' as const, size, modified: isNaN(date.getTime()) ? new Date() : date };
-          });
+          try {
+            const entries = await modalSandbox.sandbox.filesystem.listFiles(path);
+            return entries.map((entry) => ({
+              name: entry.name,
+              type: entry.type === 'directory' ? 'directory' as const : 'file' as const,
+              size: entry.size,
+              modified: new Date(entry.modifiedTime * 1000),
+            }));
+          } catch (error) {
+            throw new Error(`ls failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
         },
         exists: async (modalSandbox: ModalSandbox, path: string): Promise<boolean> => {
-          try { const process = await modalSandbox.sandbox.exec(['test', '-e', path]); return await process.wait() === 0; } catch { return false; }
+          try {
+            await modalSandbox.sandbox.filesystem.stat(path);
+            return true;
+          } catch (error) {
+            if (error instanceof SandboxFilesystemNotFoundError) return false;
+            throw error;
+          }
         },
         remove: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
-          const process = await modalSandbox.sandbox.exec(['rm', '-rf', path], { stdout: 'pipe', stderr: 'pipe' });
-          const [, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          if (exitCode !== 0) throw new Error(`rm failed: ${stderr}`);
+          try {
+            await modalSandbox.sandbox.filesystem.remove(path, { recursive: true });
+          } catch (error) {
+            if (error instanceof SandboxFilesystemNotFoundError) return;
+            throw new Error(`rm failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
         }
       },
 
