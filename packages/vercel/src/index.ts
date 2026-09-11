@@ -208,15 +208,21 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         writeFile: async (sandbox: VercelSandbox, path: string, content: string): Promise<void> => {
           await sandbox.writeFiles([{ path, content: Buffer.from(content) }]);
         },
-        mkdir: async (sandbox: VercelSandbox, path: string): Promise<void> => { await sandbox.mkDir(path); },
-        readdir: async (_sandbox: VercelSandbox, _path: string): Promise<FileEntry[]> => {
-          throw new Error('Vercel sandbox does not support readdir.');
+        mkdir: async (sandbox: VercelSandbox, path: string): Promise<void> => {
+          await sandbox.fs.mkdir(path, { recursive: true });
         },
-        exists: async (_sandbox: VercelSandbox, _path: string): Promise<boolean> => {
-          throw new Error('Vercel sandbox does not support exists.');
+        readdir: async (sandbox: VercelSandbox, path: string): Promise<FileEntry[]> => {
+          const entries = await sandbox.fs.readdir(path, { withFileTypes: true });
+          return entries.map((entry) => ({
+            name: entry.name,
+            type: entry.isDirectory() ? 'directory' : 'file',
+          }));
         },
-        remove: async (_sandbox: VercelSandbox, _path: string): Promise<void> => {
-          throw new Error('Vercel sandbox does not support remove.');
+        exists: async (sandbox: VercelSandbox, path: string): Promise<boolean> => {
+          return sandbox.fs.exists(path);
+        },
+        remove: async (sandbox: VercelSandbox, path: string): Promise<void> => {
+          await sandbox.fs.rm(path, { recursive: true, force: true });
         }
       },
 
