@@ -1,33 +1,49 @@
-import { describe, expect, it } from 'vitest'
-import { buildWriteFileCommands } from '../index'
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { cloudRun, writeFileCommand } from '../index'
 
-const MAX_ARG_STRLEN = 128 * 1024
+// Stand-in for /usr/local/gcp/bin/sandbox: drops everything up to `--`, then runs
+// the command locally so stdin/argv handling can be exercised without Cloud Run.
+const FAKE_SANDBOX = `#!/bin/sh
+while [ "$1" != "--" ]; do shift; done
+shift
+exec "$@"
+`
 
-describe('buildWriteFileCommands', () => {
-  it('keeps every command under the Linux single-argument limit for a 100 KiB file', () => {
+describe('cloudRun filesystem.writeFile (local CLI mode)', () => {
+  let dir: string
+  let binary: string
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'cloud-run-fs-'))
+    binary = join(dir, 'sandbox')
+    await writeFile(binary, FAKE_SANDBOX)
+    await chmod(binary, 0o755)
+  })
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('pipes the payload through stdin so argv stays small', () => {
+    const command = writeFileCommand('/tmp/bench/file.txt')
+    expect(command).toBe('mkdir -p "$(dirname "/tmp/bench/file.txt")" && base64 -d > "/tmp/bench/file.txt"')
+  })
+
+  it('writes a 100 KiB file and a nested path without spawn E2BIG', async () => {
+    const compute = cloudRun({ sandboxBinary: binary })
+    const sandbox = await compute.sandbox.create()
     const content = 'x'.repeat(100 * 1024)
-    const { commands, cleanup } = buildWriteFileCommands('/tmp/bench/file.txt', content)
+    const target = join(dir, 'nested', 'deep', 'file.txt')
 
-    for (const command of commands) expect(command.length).toBeLessThan(MAX_ARG_STRLEN)
-    expect(commands.length).toBeGreaterThan(3)
-    expect(commands[0]).toMatch(/^mkdir -p "\$\(dirname "\/tmp\/bench\/file\.txt"\)" && : > "\/tmp\/bench\/file\.txt\.computesdk-tmp\.[0-9a-f]{8}"$/)
-    expect(commands.at(-1)).toMatch(/^cat < ".*\.computesdk-tmp\.[0-9a-f]{8}" > "\/tmp\/bench\/file\.txt" && rm -f ".*\.computesdk-tmp\.[0-9a-f]{8}"$/)
-    expect(cleanup).toMatch(/^rm -f "\/tmp\/bench\/file\.txt\.computesdk-tmp\.[0-9a-f]{8}"$/)
-  })
+    await sandbox.filesystem.writeFile(target, content)
+    expect(await readFile(target, 'utf8')).toBe(content)
 
-  it('reassembles the original content from the chunked base64 payloads', () => {
-    const content = 'héllo wörld '.repeat(20_000)
-    const { commands } = buildWriteFileCommands('/tmp/a.txt', content)
-    const b64 = commands
-      .slice(1, -1)
-      .map(command => /printf '%s' '([^']*)'/.exec(command)?.[1] ?? '')
-      .join('')
-    expect(Buffer.from(b64, 'base64').toString('utf8')).toBe(content)
-  })
-
-  it('uses a distinct staging file per call', () => {
-    const a = buildWriteFileCommands('/tmp/a.txt', 'a')
-    const b = buildWriteFileCommands('/tmp/a.txt', 'b')
-    expect(a.cleanup).not.toBe(b.cleanup)
+    const unicode = 'héllo wörld\n'.repeat(1000)
+    await sandbox.filesystem.writeFile(target, unicode)
+    expect(await readFile(target, 'utf8')).toBe(unicode)
+    expect(await sandbox.filesystem.readFile(target)).toBe(unicode)
   })
 })

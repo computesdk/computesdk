@@ -12,8 +12,6 @@ import { randomUUID } from 'node:crypto'
 const SANDBOX_BINARY = process.env.CLOUD_RUN_SANDBOX_BINARY ?? '/usr/local/gcp/bin/sandbox'
 const SANDBOX_SECRET = process.env.SANDBOX_SECRET ?? process.env.CLOUD_RUN_SANDBOX_SECRET
 const DEFAULT_TIMEOUT_MS = 300_000
-/** Base64 chars per write command; keeps each `/bin/sh -c` argument under Linux's 128 KiB MAX_ARG_STRLEN. */
-const WRITE_CHUNK_CHARS = 64_000
 
 type Json = Record<string, any>
 
@@ -48,13 +46,15 @@ async function readBody(req: IncomingMessage): Promise<Json> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 
-async function runSandbox(args: string[], timeout = DEFAULT_TIMEOUT_MS): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+async function runSandbox(args: string[], timeout = DEFAULT_TIMEOUT_MS, stdin?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
   return new Promise((resolve, reject) => {
-    const child = spawn(SANDBOX_BINARY, args, { stdio: ['ignore', 'pipe', 'pipe'], signal: controller.signal })
+    const child = spawn(SANDBOX_BINARY, args, { stdio: ['pipe', 'pipe', 'pipe'], signal: controller.signal })
     let stdout = ''
     let stderr = ''
+    child.stdin.on('error', () => {})
+    child.stdin.end(stdin)
     child.stdout.on('data', chunk => { stdout += chunk.toString('utf8') })
     child.stderr.on('data', chunk => { stderr += chunk.toString('utf8') })
     child.on('error', error => {
@@ -97,24 +97,24 @@ function pushRunArgs(args: string[], body: Json, forceWrite = false): void {
   args.push(...((body.runArgs ?? []) as string[]))
 }
 
-async function doCommand(command: string, body: Json = {}) {
+async function doCommand(command: string, body: Json = {}, stdin?: string) {
   const args = ['do']
   pushRunArgs(args, body, true)
   args.push('--', '/bin/sh', '-c', command)
-  return runSandbox(args, body.timeout)
+  return runSandbox(args, body.timeout, stdin)
 }
 
-async function execCommand(sandboxId: string, command: string, body: Json = {}) {
+async function execCommand(sandboxId: string, command: string, body: Json = {}, stdin?: string) {
   const args = ['exec', sandboxId]
   pushExecArgs(args, body)
   args.push('--', '/bin/sh', '-c', command)
-  return runSandbox(args, body.timeout)
+  return runSandbox(args, body.timeout, stdin)
 }
 
-async function fsCommand(sandboxId: string, command: string, body: Json = {}) {
+async function fsCommand(sandboxId: string, command: string, body: Json = {}, stdin?: string) {
   return body.executionMode === 'stateful'
-    ? execCommand(sandboxId, command, body)
-    : doCommand(command, body)
+    ? execCommand(sandboxId, command, body, stdin)
+    : doCommand(command, body, stdin)
 }
 
 async function handle(pathname: string, body: Json): Promise<unknown> {
@@ -165,19 +165,8 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
     if (body.content === undefined) throw new Error('Missing required field: content')
     const path = shellEscape(String(body.path))
     const b64 = Buffer.from(String(body.content), 'utf8').toString('base64')
-    const staging = `${path}.computesdk-tmp.${randomUUID().slice(0, 8)}`
-    const commands = [`mkdir -p "$(dirname "${path}")" && : > "${staging}"`]
-    for (let i = 0; i < b64.length; i += WRITE_CHUNK_CHARS) {
-      commands.push(`printf '%s' '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' | base64 -d >> "${staging}"`)
-    }
-    commands.push(`cat < "${staging}" > "${path}" && rm -f "${staging}"`)
-    for (const command of commands) {
-      const result = await fsCommand(sandboxId, command, body)
-      if (result.exitCode !== 0) {
-        await fsCommand(sandboxId, `rm -f "${staging}"`, body).catch(() => {})
-        throw new Error(result.stderr || `Failed to write: ${body.path}`)
-      }
-    }
+    const result = await fsCommand(sandboxId, `mkdir -p "$(dirname "${path}")" && base64 -d > "${path}"`, body, b64)
+    if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
     return { success: true }
   }
 
