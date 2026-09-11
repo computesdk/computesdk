@@ -214,6 +214,25 @@ async function bridgeJSONRequest(
   return JSON.parse(text);
 }
 
+const BRIDGE_WORKSPACE = '/workspace';
+
+/**
+ * The bridge Worker only accepts file paths inside /workspace. Resolve the
+ * requested path (including `..` segments) against `/` and relocate anything
+ * outside the workspace underneath it.
+ */
+function toWorkspacePath(path: string): string {
+  const segments: string[] = [];
+  for (const segment of path.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') { segments.pop(); continue; }
+    segments.push(segment);
+  }
+  const abs = `/${segments.join('/')}`;
+  if (abs === BRIDGE_WORKSPACE || abs.startsWith(`${BRIDGE_WORKSPACE}/`)) return abs;
+  return abs === '/' ? BRIDGE_WORKSPACE : `${BRIDGE_WORKSPACE}${abs}`;
+}
+
 function encodeFilePath(path: string): string {
   return path.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
 }
@@ -538,19 +557,25 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
       filesystem: {
         readFile: async (cfSandbox: CloudflareSandbox, path: string): Promise<string> => {
           if (cfSandbox.remote) {
-            const res = await bridgeRequest(cfSandbox, 'GET', `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/file/${encodeFilePath(path)}`);
-            return await res.text();
+            const target = toWorkspacePath(path);
+            const res = await bridgeRequest(cfSandbox, 'GET', `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/file/${encodeFilePath(target)}`);
+            const content = await res.text();
+            if (content === '') {
+              const check = await bridgeExec(cfSandbox, `test -f ${shellQuote(target)}`, { cwd: '/workspace' });
+              if (check.exitCode !== 0) throw new Error(`File not found: ${path}`);
+            }
+            return content;
           }
           const file = await cfSandbox.sandbox.readFile(path);
           return file.content || '';
         },
         writeFile: async (cfSandbox: CloudflareSandbox, path: string, content: string): Promise<void> => {
-          if (cfSandbox.remote) { await bridgeRequest(cfSandbox, 'PUT', `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/file/${encodeFilePath(path)}`, content, { 'Content-Type': 'text/plain; charset=utf-8' }); return; }
+          if (cfSandbox.remote) { await bridgeRequest(cfSandbox, 'PUT', `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/file/${encodeFilePath(toWorkspacePath(path))}`, content, { 'Content-Type': 'text/plain; charset=utf-8' }); return; }
           await cfSandbox.sandbox.writeFile(path, content);
         },
         mkdir: async (cfSandbox: CloudflareSandbox, path: string): Promise<void> => {
           if (cfSandbox.remote) {
-            const result = await bridgeExec(cfSandbox, `mkdir -p ${shellQuote(path)}`, { cwd: '/workspace' });
+            const result = await bridgeExec(cfSandbox, `mkdir -p ${shellQuote(toWorkspacePath(path))}`, { cwd: '/workspace' });
             if (result.exitCode !== 0) throw new Error(`Directory creation failed: ${result.stderr}`);
             return;
           }
@@ -559,7 +584,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         readdir: async (cfSandbox: CloudflareSandbox, path: string): Promise<FileEntry[]> => {
           let result: any;
           if (cfSandbox.remote) {
-            result = await bridgeExec(cfSandbox, `ls -la ${shellQuote(path)}`, { cwd: '/workspace' });
+            result = await bridgeExec(cfSandbox, `ls -la ${shellQuote(toWorkspacePath(path))}`, { cwd: '/workspace' });
           } else {
             result = await cfSandbox.sandbox.exec(`ls -la ${shellQuote(path)}`, { cwd: '/' });
           }
@@ -568,7 +593,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         },
         exists: async (cfSandbox: CloudflareSandbox, path: string): Promise<boolean> => {
           if (cfSandbox.remote) {
-            const result = await bridgeExec(cfSandbox, `test -e ${shellQuote(path)}`, { cwd: '/workspace' });
+            const result = await bridgeExec(cfSandbox, `test -e ${shellQuote(toWorkspacePath(path))}`, { cwd: '/workspace' });
             return result.exitCode === 0;
           }
           const result = await cfSandbox.sandbox.exists(path);
@@ -576,7 +601,9 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         },
         remove: async (cfSandbox: CloudflareSandbox, path: string): Promise<void> => {
           if (cfSandbox.remote) {
-            const result = await bridgeExec(cfSandbox, `rm -rf ${shellQuote(path)}`, { cwd: '/workspace' });
+            const target = toWorkspacePath(path);
+            if (target === BRIDGE_WORKSPACE) throw new Error(`Refusing to remove ${BRIDGE_WORKSPACE} root`);
+            const result = await bridgeExec(cfSandbox, `rm -rf ${shellQuote(target)}`, { cwd: '/workspace' });
             if (result.exitCode !== 0) throw new Error(`File removal failed: ${result.stderr}`);
             return;
           }
