@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { defineProvider } from '@computesdk/provider';
+import { BackendQueue } from './backend-queue.js';
 import type {
   CommandResult,
   CreateSandboxOptions,
@@ -123,7 +124,22 @@ interface RecoveredPorts {
 }
 
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
-let backendQueue = Promise.resolve();
+const backendQueue = new BackendQueue<BackendSelection, MicrosandboxModule>(
+  (left, right) => left.kind === right.kind && JSON.stringify(left.override) === JSON.stringify(right.override),
+  async (selection, operation) => {
+    const sdk = await loadSdk();
+    const run = async () => {
+      if (sdk.defaultBackendKind() !== selection.kind) {
+        throw new Error(
+          `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
+          `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
+        );
+      }
+      await operation(sdk);
+    };
+    await (selection.override ? sdk.withDefaultBackend(selection.override, run) : run());
+  },
+);
 
 /**
  * Keep credential-bearing backend configuration out of the public sandbox
@@ -140,37 +156,12 @@ function loadSdk(): Promise<MicrosandboxModule> {
   return sdkPromise;
 }
 
-/**
- * The SDK's backend scope is process-wide rather than task-local. Serialize all
- * provider static entry points so local and cloud calls cannot observe each
- * other's temporary backend while create/get/list/remove is awaiting I/O.
- */
-async function withBackend<T>(
+/** Share identical backend scopes, excluding other credentials until all work finishes. */
+function withBackend<T>(
   selection: BackendSelection,
   operation: (sdk: MicrosandboxModule) => Promise<T>,
 ): Promise<T> {
-  let release!: () => void;
-  const previous = backendQueue;
-  backendQueue = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await previous;
-  try {
-    const sdk = await loadSdk();
-    const run = async () => {
-      const resolvedKind = sdk.defaultBackendKind();
-      if (resolvedKind !== selection.kind) {
-        throw new Error(
-          `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
-          `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
-        );
-      }
-      return operation(sdk);
-    };
-    return await (selection.override ? sdk.withDefaultBackend(selection.override, run) : run());
-  } finally {
-    release();
-  }
+  return backendQueue.run(selection, operation);
 }
 
 function selectBackend(config: MicrosandboxConfig): BackendSelection {
@@ -236,7 +227,7 @@ function cpusFor(config: MicrosandboxConfig, options?: CreateSandboxOptions): nu
 }
 
 function memoryFor(config: MicrosandboxConfig, options?: CreateSandboxOptions): number {
-  return options?.memoryMiB ?? options?.memMiB ?? options?.memoryMb ?? options?.memory ?? config.memoryMib ?? DEFAULT_MEMORY_MIB;
+  return options?.memoryMiB ?? options?.memoryMib ?? options?.memMiB ?? options?.memoryMb ?? options?.memory ?? config.memoryMib ?? DEFAULT_MEMORY_MIB;
 }
 
 function normalizePorts(
@@ -503,7 +494,8 @@ const _microsandbox = defineProvider<
           builder = builder.fromSnapshot(options.snapshotId);
         } else {
           builder = builder.image(options?.image ?? options?.templateId ?? config.image ?? DEFAULT_IMAGE);
-          if (config.rootDiskMib) builder = builder.rootDisk(config.rootDiskMib);
+          const rootDiskMib = options?.rootDiskMib ?? config.rootDiskMib;
+          if (rootDiskMib !== undefined) builder = builder.rootDisk(rootDiskMib);
         }
 
         builder = builder

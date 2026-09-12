@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
   backendKind: 'local' as 'local' | 'cloud',
+  activeCreates: 0,
+  maxActiveCreates: 0,
   backendScopes: 0,
   maxBackendScopes: 0,
   backendSelections: [] as Array<'local' | { kind: 'cloud'; apiKey?: string; url?: string; profile?: string }>,
@@ -124,7 +126,10 @@ vi.mock('microsandbox', () => {
     port(host: number, guest: number) { (this.config.ports as unknown[]).push({ host, guest }); return this; }
     portBind(bind: string, host: number, guest: number) { (this.config.ports as unknown[]).push({ bind, host, guest }); return this; }
     async create() {
+      mock.activeCreates++;
+      mock.maxActiveCreates = Math.max(mock.maxActiveCreates, mock.activeCreates);
       await new Promise((resolve) => setTimeout(resolve, 5));
+      mock.activeCreates--;
       mock.created.push({ ...this.config, backend: mock.backendKind });
       const sandbox = new FakeSandbox(this.name);
       const handle = new FakeHandle(this.name, {
@@ -178,6 +183,8 @@ import { microsandbox } from '../index.js';
 
 beforeEach(() => {
   mock.backendKind = 'local';
+  mock.activeCreates = 0;
+  mock.maxActiveCreates = 0;
   mock.backendScopes = 0;
   mock.maxBackendScopes = 0;
   mock.backendSelections.length = 0;
@@ -314,6 +321,43 @@ describe('microsandbox provider', () => {
       ['local-concurrent', 'local'],
       ['cloud-concurrent', 'cloud'],
     ]);
+  });
+
+  it('creates concurrently across provider instances sharing the same credentials', async () => {
+    await Promise.all(Array.from({ length: 3 }, (_, index) =>
+      microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: `parallel-${index}` }),
+    ));
+    expect(mock.maxActiveCreates).toBe(3);
+    expect(mock.maxBackendScopes).toBe(1);
+    expect(mock.backendKind).toBe('local');
+  });
+
+  it('accepts memoryMib and per-create root disk overrides', async () => {
+    const provider = microsandbox({ apiKey: 'key', memoryMib: 512, rootDiskMib: 4096 });
+    await provider.sandbox.create({ name: 'dax', cpus: 8, memoryMib: 16384, rootDiskMib: 8192 });
+    expect(mock.created[0]).toMatchObject({ cpus: 8, memory: 16384, rootDisk: 8192 });
+    await provider.sandbox.create({ name: 'canonical', memoryMib: 1024, memoryMiB: 2048 });
+    expect(mock.created[1]).toMatchObject({ memory: 2048, rootDisk: 4096 });
+  });
+
+  it('never creates a sandbox for an already aborted request', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('deadline'));
+    await expect(microsandbox({ apiKey: 'key' }).sandbox.create({ signal: controller.signal })).rejects.toThrow(/aborted/i);
+    expect(mock.created).toEqual([]);
+  });
+
+  it('removes a sandbox when the request aborts during native creation', async () => {
+    const controller = new AbortController();
+    const creation = microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'late', signal: controller.signal });
+    const rejected = expect(creation).rejects.toThrow(/aborted/i);
+    await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+    controller.abort(new Error('deadline'));
+    await rejected;
+    // The framework rejects immediately; wait for the native scope to finish cleanup.
+    await microsandbox({ backend: 'local' }).sandbox.list();
+    expect(mock.created).toHaveLength(1);
+    expect(mock.handles.has('late')).toBe(false);
   });
 
   it('drains paginated sandbox listings and restores metadata and ports', async () => {

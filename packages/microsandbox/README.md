@@ -86,9 +86,11 @@ interface MicrosandboxConfig {
 }
 ```
 
-Per-sandbox `image`, `templateId`, `snapshotId`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB`, `memMiB`, `timeout`, `name`, `envs`, `metadata`, and `ports` options override or extend provider defaults where applicable.
+Per-sandbox `image`, `templateId`, `snapshotId`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB`, `memoryMib`, `memMiB`, `rootDiskMib`, `timeout`, `name`, `envs`, `metadata`, and `ports` options override or extend provider defaults where applicable.
 
 ## Backend support
+
+Operations with identical backend selections share a scope and can run concurrently. Different credentials, endpoints, profiles, or local/cloud selections retain FIFO isolation. Do not change the native SDK default backend externally while provider operations are running.
 
 | Method | Local | Cloud |
 |---|---|---|
