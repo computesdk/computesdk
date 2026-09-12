@@ -167,6 +167,12 @@ async function fakeSandboxd(): Promise<Fake> {
         socket.write(frame({ type: 'stdout', data: b64('two\n') }) + frame({ type: 'exit', code: 0 }));
         return;
       }
+      if (command === 'truncated') {
+        socket.write(frame({ type: 'stdout', data: Buffer.from('é', 'utf8').subarray(0, 1).toString('base64') }));
+        socket.write(frame({ type: 'stderr', data: Buffer.from('ü', 'utf8').subarray(0, 1).toString('base64') }));
+        socket.write(frame({ type: 'exit', code: 0 }));
+        return;
+      }
       if (command === 'split') {
         const bytes = Buffer.from('é', 'utf8');
         socket.write(frame({ type: 'stdout', data: bytes.subarray(0, 1).toString('base64') }));
@@ -327,6 +333,24 @@ describe('Cocoon Stack ComputeSDK provider', () => {
     const result = await sandbox.runCommand('split', { onStdout: () => undefined });
 
     expect(result.stdout).toBe('é');
+  });
+
+  it('streams the bytes flushed at exit to the callbacks too', async () => {
+    const sandbox = await cocoonstack(config()).sandbox.create();
+    let streamedOut = '';
+    let streamedErr = '';
+    const result = await sandbox.runCommand('truncated', {
+      onStdout: (text) => {
+        streamedOut += text;
+      },
+      onStderr: (text) => {
+        streamedErr += text;
+      },
+    });
+
+    expect(streamedOut).toBe(result.stdout);
+    expect(streamedErr).toBe(result.stderr);
+    expect(result.stdout).toBe('\ufffd');
   });
 
   it('starts a background command detached and returns its pid', async () => {

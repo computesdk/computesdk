@@ -466,12 +466,21 @@ function relay(
             if (text) options.onStderr?.(text);
             break;
           }
-          case 'exit':
-            stdout += out.end();
-            stderr += err.end();
+          case 'exit': {
+            const tailOut = out.end();
+            const tailErr = err.end();
+            if (tailOut) {
+              stdout += tailOut;
+              options.onStdout?.(tailOut);
+            }
+            if (tailErr) {
+              stderr += tailErr;
+              options.onStderr?.(tailErr);
+            }
             finish(() => fulfill({ exitCode: frame.code ?? 0, stdout, stderr }));
             socket.destroy();
             break;
+          }
           case 'error':
             finish(() => reject(new Error(`silkd ${frame.kind ?? 'error'}: ${frame.message ?? ''}`)));
             socket.destroy();
