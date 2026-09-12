@@ -445,6 +445,9 @@ function relay(
       const err = new StringDecoder('utf8');
       let stdout = '';
       let stderr = '';
+      let frames = 0;
+      let lastOut = 0;
+      let lastErr = 0;
       let pending = head.toString('utf8');
       const handle = (frame: Frame) => {
         switch (frame.type) {
@@ -455,12 +458,14 @@ function relay(
             }
             break;
           case 'stdout': {
+            lastOut = ++frames;
             const text = out.write(Buffer.from(frame.data ?? '', 'base64'));
             stdout += text;
             if (text) options.onStdout?.(text);
             break;
           }
           case 'stderr': {
+            lastErr = ++frames;
             const text = err.write(Buffer.from(frame.data ?? '', 'base64'));
             stderr += text;
             if (text) options.onStderr?.(text);
@@ -469,13 +474,15 @@ function relay(
           case 'exit': {
             const tailOut = out.end();
             const tailErr = err.end();
-            if (tailOut) {
-              stdout += tailOut;
-              options.onStdout?.(tailOut);
-            }
-            if (tailErr) {
-              stderr += tailErr;
-              options.onStderr?.(tailErr);
+            stdout += tailOut;
+            stderr += tailErr;
+            // each tail came from its stream's last frame, so replay them in that order
+            const tails: [number, string, ((text: string) => void) | undefined][] = [
+              [lastOut, tailOut, options.onStdout],
+              [lastErr, tailErr, options.onStderr],
+            ];
+            for (const [, text, notify] of tails.sort((a, b) => a[0] - b[0])) {
+              if (text) notify?.(text);
             }
             finish(() => fulfill({ exitCode: frame.code ?? 0, stdout, stderr }));
             socket.destroy();
@@ -682,21 +689,22 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
 
       filesystem: {
         readFile: async (sandbox, path, runCommand): Promise<string> =>
-          shell(runCommand, sandbox, `cat "${escapeShellArg(path)}"`, `Failed to read ${path}`),
+          shell(runCommand, sandbox, `cat "${shellPath(path)}"`, `Failed to read ${path}`),
 
         writeFile: async (sandbox, path, content, runCommand): Promise<void> => {
           const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const directory = path.slice(0, path.lastIndexOf('/')) || '/';
+          const cut = path.lastIndexOf('/');
+          const directory = cut < 0 ? '.' : path.slice(0, cut) || '/';
           await shell(
             runCommand,
             sandbox,
-            `mkdir -p "${escapeShellArg(directory)}" && printf %s "${escapeShellArg(encoded)}" | base64 -d > "${escapeShellArg(path)}"`,
+            `mkdir -p "${shellPath(directory)}" && printf %s "${escapeShellArg(encoded)}" | base64 -d > "${shellPath(path)}"`,
             `Failed to write ${path}`,
           );
         },
 
         mkdir: async (sandbox, path, runCommand): Promise<void> => {
-          await shell(runCommand, sandbox, `mkdir -p "${escapeShellArg(path)}"`, `Failed to create ${path}`);
+          await shell(runCommand, sandbox, `mkdir -p "${shellPath(path)}"`, `Failed to create ${path}`);
         },
 
         readdir: async (sandbox, path, runCommand): Promise<FileEntry[]> => {
@@ -704,7 +712,7 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
           const listing = await shell(
             runCommand,
             sandbox,
-            `find "${escapeShellArg(path)}" -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\0'`,
+            `find "${shellPath(path)}" -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\0'`,
             `Failed to list ${path}`,
           );
           return listing.split('\0').flatMap((record) => {
@@ -724,12 +732,12 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
         },
 
         exists: async (sandbox, path, runCommand): Promise<boolean> => {
-          const result = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`);
+          const result = await runCommand(sandbox, `test -e "${shellPath(path)}"`);
           return result.exitCode === 0;
         },
 
         remove: async (sandbox, path, runCommand): Promise<void> => {
-          await shell(runCommand, sandbox, `rm -rf "${escapeShellArg(path)}"`, `Failed to remove ${path}`);
+          await shell(runCommand, sandbox, `rm -rf "${shellPath(path)}"`, `Failed to remove ${path}`);
         },
       },
 
@@ -745,6 +753,11 @@ export const cocoonstack: typeof provider = (config) => {
 };
 
 export default cocoonstack;
+
+// a relative path starting with - or ( reads as an option or a find expression until it is anchored
+function shellPath(path: string): string {
+  return escapeShellArg(path.startsWith('/') ? path : `./${path}`);
+}
 
 // a malformed endpoint is reported by the first call, not by the warm-up
 function preconnect(baseUrl: string): void {

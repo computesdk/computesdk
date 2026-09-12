@@ -173,9 +173,10 @@ async function fakeSandboxd(): Promise<Fake> {
         socket.write(frame({ type: 'stdout', data: b64('two\n') }) + frame({ type: 'exit', code: 0 }));
         return;
       }
-      if (command === 'truncated') {
-        socket.write(frame({ type: 'stdout', data: Buffer.from('é', 'utf8').subarray(0, 1).toString('base64') }));
-        socket.write(frame({ type: 'stderr', data: Buffer.from('ü', 'utf8').subarray(0, 1).toString('base64') }));
+      if (command === 'truncated' || command === 'truncated-err-first') {
+        const outFrame = frame({ type: 'stdout', data: Buffer.from('é', 'utf8').subarray(0, 1).toString('base64') });
+        const errFrame = frame({ type: 'stderr', data: Buffer.from('ü', 'utf8').subarray(0, 1).toString('base64') });
+        socket.write(command === 'truncated' ? outFrame + errFrame : errFrame + outFrame);
         socket.write(frame({ type: 'exit', code: 0 }));
         return;
       }
@@ -238,6 +239,8 @@ describe('Cocoon Stack ComputeSDK provider', () => {
   });
 
   const config = () => ({ baseUrl: fake.url, apiKey: 'node-token' });
+  const execCommands = () =>
+    fake.calls.filter((call) => call.path.endsWith('/exec')).map((call) => (call.body?.argv as string[])[2]);
 
   it('claims, runs node -v as one buffered exec, and releases with the claim token', async () => {
     const sdk = compute({ provider: cocoonstack(config()) });
@@ -485,6 +488,32 @@ describe('Cocoon Stack ComputeSDK provider', () => {
       { name: 'plain.txt', type: 'file', size: 6, modified: new Date(1757000000500) },
       { name: 'sub', type: 'directory', size: 4096, modified: new Date(1757000001000) },
       { name: 'odd\nname.txt', type: 'file', size: 0, modified: new Date(1757000002000) },
+    ]);
+  });
+
+  it('replays the bytes flushed at exit in the order their streams arrived', async () => {
+    const sandbox = await cocoonstack(config()).sandbox.create();
+    const order: string[] = [];
+    await sandbox.runCommand('truncated-err-first', {
+      onStdout: () => order.push('stdout'),
+      onStderr: () => order.push('stderr'),
+    });
+
+    expect(order).toEqual(['stderr', 'stdout']);
+  });
+
+  it('anchors a relative path so a leading dash or paren is not read as an option', async () => {
+    const sandbox = await cocoonstack(config()).sandbox.create();
+    await sandbox.filesystem.mkdir('-dash');
+    await sandbox.filesystem.remove('(');
+    await sandbox.filesystem.writeFile('bar.txt', 'x');
+    await sandbox.filesystem.readFile('/tmp/abs.txt');
+
+    expect(execCommands()).toEqual([
+      'mkdir -p "./-dash"',
+      'rm -rf "./("',
+      'mkdir -p "./." && printf %s "eA==" | base64 -d > "./bar.txt"',
+      'cat "/tmp/abs.txt"',
     ]);
   });
 
