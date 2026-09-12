@@ -432,7 +432,8 @@ describe('Cocoon Stack ComputeSDK provider', () => {
     expect(h2.connects).toEqual([]);
 
     cocoonstack({ baseUrl: 'https://127.0.0.1:1', apiKey: 'x', preconnect: true });
-    expect(h2.connects).toEqual(['https://127.0.0.1:1']);
+    cocoonstack({ baseUrl: 'HTTPS://127.0.0.1:2/', apiKey: 'x', preconnect: true });
+    expect(h2.connects).toEqual(['https://127.0.0.1:1', 'https://127.0.0.1:2']);
   });
 
   it('refuses a claim the node redirected to a peer', async () => {

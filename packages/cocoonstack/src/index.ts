@@ -740,12 +740,11 @@ export default cocoonstack;
 
 // a malformed endpoint is reported by the first call, not by the warm-up
 function preconnect(baseUrl: string): void {
-  if (!baseUrl.startsWith('https://')) return;
-  let origin: string;
+  let url: URL;
   try {
-    origin = new URL(baseUrl).origin;
+    url = new URL(baseUrl);
   } catch {
     return;
   }
-  session(origin, 'main');
+  if (url.protocol === 'https:') session(url.origin, 'main');
 }
