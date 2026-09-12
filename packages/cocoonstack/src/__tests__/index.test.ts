@@ -62,6 +62,12 @@ function outcome(request: Record<string, unknown>): Outcome {
   if (command === 'exit 3') return { stderr: 'boom\n', exit: 3 };
   if (command === 'fail') return { error: 'internal: spawn failed' };
   if (command === 'hang') return { hang: true };
+  if (command.startsWith('find "/list"')) {
+    return {
+      stdout: 'f\t6\t1757000000.5\tplain.txt\0d\t4096\t1757000001\tsub\0f\t0\t1757000002\todd\nname.txt\0',
+      exit: 0,
+    };
+  }
   return { stdout: JSON.stringify({ command, cwd: request.cwd, env: request.env }), exit: 0 };
 }
 
@@ -470,6 +476,16 @@ describe('Cocoon Stack ComputeSDK provider', () => {
     await expect(cocoonstack(config()).sandbox.create({ templateId: 'missing:24.04' })).rejects.toThrow(
       /failed \(404\): unknown template/,
     );
+  });
+
+  it('lists a directory, keeping a name that holds a newline', async () => {
+    const sandbox = await cocoonstack(config()).sandbox.create();
+
+    expect(await sandbox.filesystem.readdir('/list')).toEqual([
+      { name: 'plain.txt', type: 'file', size: 6, modified: new Date(1757000000500) },
+      { name: 'sub', type: 'directory', size: 4096, modified: new Date(1757000001000) },
+      { name: 'odd\nname.txt', type: 'file', size: 0, modified: new Date(1757000002000) },
+    ]);
   });
 
   it('mints a preview URL for a port', async () => {

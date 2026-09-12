@@ -700,28 +700,27 @@ const provider = defineProvider<CocoonstackSandbox, CocoonstackConfig>({
         },
 
         readdir: async (sandbox, path, runCommand): Promise<FileEntry[]> => {
+          // NUL-separated records: a name may hold spaces or newlines, which a line-based listing loses
           const listing = await shell(
             runCommand,
             sandbox,
-            `ls -Ap --time-style=+%s -l "${escapeShellArg(path)}"`,
+            `find "${escapeShellArg(path)}" -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\0'`,
             `Failed to list ${path}`,
           );
-          return listing
-            .split('\n')
-            .slice(1)
-            .flatMap((line) => {
-              const parts = line.trim().split(/\s+/);
-              if (parts.length < 7) return [];
-              const name = parts.slice(6).join(' ');
-              return [
-                {
-                  name: name.replace(/\/$/, ''),
-                  type: name.endsWith('/') ? ('directory' as const) : ('file' as const),
-                  size: Number.parseInt(parts[4], 10) || 0,
-                  modified: new Date(Number.parseInt(parts[5], 10) * 1000),
-                },
-              ];
-            });
+          return listing.split('\0').flatMap((record) => {
+            if (!record) return [];
+            const [kind, size, modified, ...rest] = record.split('\t');
+            const name = rest.join('\t');
+            if (!name) return [];
+            return [
+              {
+                name,
+                type: kind === 'd' ? ('directory' as const) : ('file' as const),
+                size: Number.parseInt(size, 10) || 0,
+                modified: new Date(Number.parseFloat(modified) * 1000),
+              },
+            ];
+          });
         },
 
         exists: async (sandbox, path, runCommand): Promise<boolean> => {
