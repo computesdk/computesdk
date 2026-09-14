@@ -80,9 +80,9 @@ export const tensorlake = defineProvider<
           ...(timeoutSecs && { timeoutSecs }),
           ...(options?.cpus && { cpus: options.cpus }),
           ...(options?.memoryMb && { memoryMb: options.memoryMb }),
-          ...(options?.ephemeralDiskMb && {
-            ephemeralDiskMb: options.ephemeralDiskMb,
-          }),
+          // The SDK's create contract names the root-disk option `diskMb`;
+          // our framework-facing option is `ephemeralDiskMb`.
+          ...(options?.ephemeralDiskMb && { diskMb: options.ephemeralDiskMb }),
           ...(options?.name && { name: options.name }),
           ...(options?.snapshotId && { snapshotId: options.snapshotId }),
           proxyUrl: config.proxyUrl,
