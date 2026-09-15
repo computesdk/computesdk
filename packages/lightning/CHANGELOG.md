@@ -1,5 +1,13 @@
 # @computesdk/lightning
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [3914faa]
+  - computesdk@4.1.5
+  - @computesdk/provider@2.1.6
+
 ## 1.0.3
 
 ### Patch Changes

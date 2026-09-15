@@ -1,5 +1,11 @@
 # @computesdk/createos-sandbox
 
+## 0.1.7
+
+### Patch Changes
+
+- @computesdk/provider@2.1.6
+
 ## 0.1.6
 
 ### Patch Changes

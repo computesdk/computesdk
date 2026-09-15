@@ -1,5 +1,14 @@
 # @computesdk/beam
 
+## 0.3.4
+
+### Patch Changes
+
+- 772bd45: Route `filesystem.writeFile`/`readFile` through Beam's native `sandbox.fs.writeText`/`readText` instead of embedding the base64 payload in a shell command, which failed with `fork/exec /usr/bin/sh: argument list too long` for files over ~100 KiB.
+- Updated dependencies [3914faa]
+  - computesdk@4.1.5
+  - @computesdk/provider@2.1.6
+
 ## 0.3.3
 
 ### Patch Changes
