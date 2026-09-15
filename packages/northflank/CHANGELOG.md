@@ -1,5 +1,13 @@
 # @computesdk/northflank
 
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [3914faa]
+  - computesdk@4.1.5
+  - @computesdk/provider@2.1.6
+
 ## 1.1.4
 
 ### Patch Changes

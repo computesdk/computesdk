@@ -1,5 +1,13 @@
 # @computesdk/modal
 
+## 1.9.7
+
+### Patch Changes
+
+- Updated dependencies [3914faa]
+  - computesdk@4.1.5
+  - @computesdk/provider@2.1.6
+
 ## 1.9.6
 
 ### Patch Changes
