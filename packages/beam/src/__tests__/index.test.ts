@@ -13,7 +13,7 @@
  */
 
 import { runProviderTestSuite } from '@computesdk/test-utils';
-import { Sandbox, type SandboxInstance } from '@beamcloud/beam-js';
+import { Image, Sandbox, type SandboxInstance } from '@beamcloud/beam-js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { beam } from '../index';
 
@@ -148,5 +148,15 @@ describe('lazy sandbox readiness', () => {
     const create = vi.mocked(Sandbox.prototype.create);
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.instances[0]).toBe(create.mock.instances[1]);
+  });
+
+  test('uses the supported Node 24 image by default', async () => {
+    mockSandbox();
+    const fromRegistry = vi.spyOn(Image, 'fromRegistry');
+    const options = { name: 'node-24-default-image', runtime: 'node' };
+
+    await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create(options);
+
+    expect(fromRegistry).toHaveBeenCalledWith('node:24-slim');
   });
 });
