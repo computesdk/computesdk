@@ -199,18 +199,21 @@ function buildBaseArgs(config: CloudRunConfig): string[] {
 async function runSandboxCli(
   config: CloudRunConfig,
   args: string[],
-  options?: { timeout?: number; onStdout?: (data: string) => void; onStderr?: (data: string) => void }
+  options?: { timeout?: number; stdin?: string; onStdout?: (data: string) => void; onStderr?: (data: string) => void }
 ): Promise<SpawnResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), options?.timeout ?? DEFAULT_TIMEOUT_MS)
 
   return new Promise<SpawnResult>((resolve, reject) => {
     const child = spawn(getBinary(config), args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       signal: controller.signal,
     })
     let stdout = ''
     let stderr = ''
+
+    child.stdin.on('error', () => {})
+    child.stdin.end(options?.stdin)
 
     child.stdout.on('data', (chunk: Buffer) => {
       const data = chunk.toString('utf8')
@@ -248,7 +251,7 @@ function withShellOptions(command: string, options?: RunCommandOptions): string 
   return fullCommand
 }
 
-async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
+async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions, stdin?: string): Promise<CommandResult> {
   const start = performance.now()
   if (sandbox.remote) {
     try {
@@ -283,6 +286,7 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
   args.push('--', '/bin/sh', '-c', withShellOptions(command, options))
   const result = await runSandboxCli(sandbox.config, args, {
     timeout: options?.timeout,
+    stdin,
     onStdout: options?.onStdout,
     onStderr: options?.onStderr,
   })
@@ -290,6 +294,11 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
 }
 
 type FsRunCommand = (sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
+
+/** Shell command that decodes base64 from stdin into `escapedPath`; the payload never enters argv. */
+export function writeFileCommand(escapedPath: string): string {
+  return `mkdir -p "$(dirname "${escapedPath}")" && base64 -d > "${escapedPath}"`
+}
 
 export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
   name: PROVIDER,
@@ -403,9 +412,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
             await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path, content }))
             return
           }
-          const escapedPath = escapeShellArg(path)
-          const b64 = Buffer.from(content, 'utf8').toString('base64')
-          const r = await runCommand(sandbox, `mkdir -p "$(dirname "${escapedPath}")" && printf '%s' '${b64}' | base64 -d > "${escapedPath}"`)
+          const r = await execInSandbox(sandbox, writeFileCommand(escapeShellArg(path)), undefined, Buffer.from(content, 'utf8').toString('base64'))
           if (r.exitCode !== 0) throw new Error(r.stderr || `Failed to write: ${path}`)
         },
         mkdir: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<void> => {
