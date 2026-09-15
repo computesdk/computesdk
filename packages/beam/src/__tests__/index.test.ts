@@ -41,6 +41,8 @@ function mockSandbox() {
     exposePort: vi.fn().mockResolvedValue('https://sandbox.example'),
     fs: {
       listFiles: vi.fn().mockResolvedValue([]),
+      writeText: vi.fn().mockResolvedValue(undefined),
+      readText: vi.fn().mockResolvedValue(''),
     },
   } as unknown as SandboxInstance;
   vi.spyOn(Sandbox.prototype, 'create').mockResolvedValue(instance);
@@ -110,6 +112,30 @@ describe('lazy sandbox readiness', () => {
       stdout: 'complete output\n',
     });
     expect(process.wait).toHaveBeenCalledOnce();
+  });
+
+  test('writes and reads files through the native fs API instead of shell arguments', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    const content = 'x'.repeat(100 * 1024);
+    vi.mocked(instance.fs.readText).mockResolvedValue(content);
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await sandbox.filesystem.writeFile('/tmp/bench/file-0.txt', content);
+    await expect(sandbox.filesystem.readFile('/tmp/bench/file-0.txt')).resolves.toBe(content);
+
+    expect(instance.fs.writeText).toHaveBeenCalledWith('/tmp/bench/file-0.txt', content);
+    expect(instance.fs.readText).toHaveBeenCalledWith('/tmp/bench/file-0.txt');
+    expect(instance.exec).not.toHaveBeenCalled();
+  });
+
+  test('wraps native fs errors with the file path', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    vi.mocked(instance.fs.readText).mockRejectedValue(new Error('no such file'));
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile('/missing.txt')).rejects.toThrow('Failed to read file /missing.txt: no such file');
   });
 
   test('reuses the sandbox builder across equivalent provider instances', async () => {

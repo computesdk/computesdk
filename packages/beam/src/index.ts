@@ -265,15 +265,21 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       filesystem: {
-        readFile: async (sandbox: SandboxInstance, path: string, runCommand: RunCommandFn): Promise<string> => {
-          const result = await runCommand(sandbox, `cat ${shellEscape(path)}`);
-          if (result.exitCode !== 0) throw new Error(`Failed to read file ${path}: ${result.stderr}`);
-          return result.stdout;
+        readFile: async (sandbox: SandboxInstance, path: string, _runCommand: RunCommandFn): Promise<string> => {
+          await ensureSandboxReady(sandbox);
+          try {
+            return await sandbox.fs.readText(path);
+          } catch (error) {
+            throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
+          }
         },
-        writeFile: async (sandbox: SandboxInstance, path: string, content: string, runCommand: RunCommandFn): Promise<void> => {
-          const b64 = Buffer.from(content).toString('base64');
-          const result = await runCommand(sandbox, `echo '${b64}' | base64 -d > ${shellEscape(path)}`);
-          if (result.exitCode !== 0) throw new Error(`Failed to write file ${path}: ${result.stderr}`);
+        writeFile: async (sandbox: SandboxInstance, path: string, content: string, _runCommand: RunCommandFn): Promise<void> => {
+          await ensureSandboxReady(sandbox);
+          try {
+            await sandbox.fs.writeText(path, content);
+          } catch (error) {
+            throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
+          }
         },
         mkdir: async (sandbox: SandboxInstance, path: string, runCommand: RunCommandFn): Promise<void> => {
           const result = await runCommand(sandbox, `mkdir -p ${shellEscape(path)}`);
