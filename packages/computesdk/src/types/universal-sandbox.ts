@@ -137,6 +137,8 @@ export interface SandboxResourceOptions {
   memoryMb?: number;
   /** Disk size in MiB (Isorun). */
   diskMiB?: number;
+  /** Root disk size in MB (Tensorlake). `ephemeralDiskMb` is also accepted. */
+  diskMb?: number;
   /**
    * Vercel resource overrides. Vercel only exposes vCPU control; memory is
    * derived from the vCPU count.

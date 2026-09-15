@@ -74,15 +74,16 @@ export const tensorlake = defineProvider<
         const image = options?.image || config.image;
         const timeoutMs = options?.timeout ?? config.timeout;
         const timeoutSecs = timeoutMs ? Math.ceil(timeoutMs / 1000) : undefined;
+        // `diskMb` is the SDK's create-option name; `ephemeralDiskMb` is kept
+        // as an alias for existing callers.
+        const diskMb = options?.diskMb ?? options?.ephemeralDiskMb;
 
         const params = {
           ...(image && { image }),
           ...(timeoutSecs && { timeoutSecs }),
           ...(options?.cpus && { cpus: options.cpus }),
           ...(options?.memoryMb && { memoryMb: options.memoryMb }),
-          ...(options?.ephemeralDiskMb && {
-            ephemeralDiskMb: options.ephemeralDiskMb,
-          }),
+          ...(diskMb && { diskMb }),
           ...(options?.name && { name: options.name }),
           ...(options?.snapshotId && { snapshotId: options.snapshotId }),
           proxyUrl: config.proxyUrl,
