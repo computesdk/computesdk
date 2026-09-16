@@ -1,5 +1,11 @@
 # @computesdk/beam
 
+## 0.3.5
+
+### Patch Changes
+
+- c0658b4: Use Node.js 24 for the default Beam sandbox image so current Node tooling and native dependency installers run on a supported runtime.
+
 ## 0.3.4
 
 ### Patch Changes
