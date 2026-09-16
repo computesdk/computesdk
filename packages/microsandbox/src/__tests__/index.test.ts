@@ -13,6 +13,7 @@ const mock = vi.hoisted(() => ({
   execEvents: [] as Array<Record<string, unknown>>,
   execEventDelayMs: 0,
   execKilled: false,
+  removeError: null as Error | null,
 }));
 
 vi.mock('microsandbox', () => {
@@ -96,7 +97,10 @@ vi.mock('microsandbox', () => {
     async connect() { return this.native; }
     async startDetached() { this.status = 'running'; return this.native; }
     async stopWithTimeout() { this.status = 'stopped'; }
-    async remove() { mock.handles.delete(this.name); }
+    async remove() {
+      if (mock.removeError) throw mock.removeError;
+      mock.handles.delete(this.name);
+    }
   }
 
   class SandboxListBuilder {
@@ -194,6 +198,7 @@ beforeEach(() => {
   mock.execEvents.length = 0;
   mock.execEventDelayMs = 0;
   mock.execKilled = false;
+  mock.removeError = null;
 });
 
 describe('microsandbox provider', () => {
@@ -358,6 +363,27 @@ describe('microsandbox provider', () => {
     await microsandbox({ backend: 'local' }).sandbox.list();
     expect(mock.created).toHaveLength(1);
     expect(mock.handles.has('late')).toBe(false);
+  });
+
+  it('reports failed aborted-create cleanup without exposing SDK error details', async () => {
+    mock.removeError = new Error('permission denied: sensitive SDK details');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const controller = new AbortController();
+      const creation = microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'cleanup-failed', signal: controller.signal });
+      const rejected = expect(creation).rejects.toThrow(/aborted/i);
+      await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+      controller.abort();
+      await rejected;
+      await microsandbox({ backend: 'local' }).sandbox.list();
+      expect(mock.handles.has('cleanup-failed')).toBe(true);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('cleanup-failed');
+      expect(warn.mock.calls[0][0]).not.toContain('sensitive SDK details');
+      expect(mock.backendKind).toBe('local');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('drains paginated sandbox listings and restores metadata and ports', async () => {
