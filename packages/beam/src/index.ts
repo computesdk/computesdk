@@ -162,7 +162,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (timeout) sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
 
           if (runtime === 'node' && !sandboxConfig.image) {
-            sandboxConfig.image = Image.fromRegistry('node:20-slim');
+            sandboxConfig.image = Image.fromRegistry('node:24-slim');
           }
 
           if (envs) {
