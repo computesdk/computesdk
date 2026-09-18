@@ -26,7 +26,7 @@ const SNAPSHOT_LABEL_SANDBOX = 'computesdk.sandbox-id';
 const DEFAULT_IMAGE = 'alpine:3.21';
 const DEFAULT_CPUS = 1;
 const DEFAULT_MEMORY_MIB = 512;
-const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_TIMEOUT_MS = 900_000;
 const DEFAULT_NAME_PREFIX = 'csdk-';
 const DEFAULT_LIST_PAGE_SIZE = 100;
 
@@ -61,7 +61,7 @@ export interface MicrosandboxConfig {
   memoryMib?: number;
   /** Default writable root disk size in MiB. */
   rootDiskMib?: number;
-  /** Delete the sandbox when it stops. Defaults to false. */
+  /** Delete the sandbox when it stops. Defaults to true. */
   ephemeral?: boolean;
   /** Default working directory inside the guest. */
   workdir?: string;
@@ -69,7 +69,7 @@ export interface MicrosandboxConfig {
   namePrefix?: string;
   /** Local TCP port mappings. A number maps the same host and guest port. */
   ports?: Array<number | MicrosandboxPort>;
-  /** Default sandbox lifetime and command timeout in milliseconds. */
+  /** Default sandbox lifetime and command timeout in milliseconds (15 minutes). */
   timeout?: number;
   /** OCI pull policy. */
   pullPolicy?: 'always' | 'if-missing' | 'never';
@@ -511,8 +511,7 @@ const _microsandbox = defineProvider<
           });
 
         const workdir = options?.directory ?? config.workdir;
-        const ephemeral = options?.ephemeral ?? config.ephemeral;
-        if (ephemeral !== undefined) builder = builder.ephemeral(ephemeral);
+        builder = builder.ephemeral(options?.ephemeral ?? config.ephemeral ?? true);
         if (workdir) builder = builder.workdir(workdir);
         if (options?.envs && Object.keys(options.envs).length > 0) builder = builder.envs(options.envs);
         if (config.pullPolicy) builder = builder.pullPolicy(config.pullPolicy);

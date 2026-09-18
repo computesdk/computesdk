@@ -352,12 +352,13 @@ describe('microsandbox provider', () => {
     expect(mock.created[1]).toMatchObject({ memory: 2048, rootDisk: 4096 });
   });
 
-  it('preserves persistent defaults and supports per-create lifecycle overrides', async () => {
+  it('defaults to ephemeral sandboxes with a 15-minute lifetime and supports overrides', async () => {
     await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'default' });
     await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'temporary', ephemeral: true, timeout: 900_000 });
-    await microsandbox({ apiKey: 'key', ephemeral: true }).sandbox.create({ name: 'configured' });
+    await microsandbox({ apiKey: 'key', ephemeral: false }).sandbox.create({ name: 'configured' });
     await microsandbox({ apiKey: 'key', ephemeral: true }).sandbox.create({ name: 'persistent', ephemeral: false });
-    expect(mock.created.map((sandbox) => sandbox.ephemeral)).toEqual([undefined, true, true, false]);
+    expect(mock.created.map((sandbox) => sandbox.ephemeral)).toEqual([true, true, false, false]);
+    expect(mock.created[0].maxDuration).toBe(900);
     expect(mock.created[1].maxDuration).toBe(900);
   });
 

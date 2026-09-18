@@ -77,11 +77,11 @@ interface MicrosandboxConfig {
   cpus?: number;
   memoryMib?: number;
   rootDiskMib?: number;
-  ephemeral?: boolean;         // Delete on stop; defaults to false
+  ephemeral?: boolean;         // Delete on stop; defaults to true
   workdir?: string;
   namePrefix?: string;
   ports?: Array<number | { host: number; guest: number; bind?: string }>;
-  timeout?: number;
+  timeout?: number;           // Milliseconds; defaults to 900_000 (15 minutes)
   pullPolicy?: 'always' | 'if-missing' | 'never';
   networkEnabled?: boolean;
 }
@@ -107,3 +107,5 @@ Local snapshots stop the sandbox, capture its writable root disk, and restart it
 ## License
 
 MIT
+
+Sandboxes are ephemeral by default and are deleted when they stop. Their default maximum lifetime is 15 minutes. Set `ephemeral: false` to retain a sandbox after stopping, and use `timeout` to override its maximum lifetime.
