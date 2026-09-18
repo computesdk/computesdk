@@ -436,11 +436,22 @@ async function streamCommand(
   };
 }
 
+async function retry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (isNotFound(error) || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
+}
+
 async function removeSandbox(handle: NativeSandboxHandle): Promise<void> {
   if (handle.status === 'running' || handle.status === 'draining') {
-    await handle.stopWithTimeout(10_000);
+    await retry(() => handle.stopWithTimeout(10_000));
   }
-  await handle.remove();
+  await retry(() => handle.remove());
 }
 
 function snapshotFromNative(snapshot: {
@@ -518,21 +529,17 @@ const _microsandbox = defineProvider<
         if (options?.signal?.aborted) {
           let stopped = false;
           let handle: NativeSandboxHandle | undefined;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
+          try {
+            await retry(async () => {
               if (!stopped) {
                 await native.stopWithTimeout(5_000);
                 stopped = true;
               }
               handle ??= await sdk.Sandbox.get(name);
               await handle.remove();
-              break;
-            } catch (error) {
-              if (isNotFound(error)) break;
-              if (attempt < 2) {
-                await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
-                continue;
-              }
+            });
+          } catch (error) {
+            if (!isNotFound(error)) {
               // Cancellation has already returned; report exhausted cleanup retries.
               console.warn(`[microsandbox] Aborted sandbox cleanup failed for ${JSON.stringify(name)} after 3 attempts; check and remove it manually.`);
               throw Object.assign(new Error('Aborted sandbox cleanup failed'), { cause: error });
@@ -681,7 +688,7 @@ const _microsandbox = defineProvider<
         requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const handle = await sdk.Sandbox.get(sandboxId);
         const wasRunning = handle.status === 'running' || handle.status === 'draining';
-        if (wasRunning) await handle.stopWithTimeout(10_000);
+        if (wasRunning) await retry(() => handle.stopWithTimeout(10_000));
 
         const name = options?.name ?? `csdk-snapshot-${Date.now().toString(36)}`;
         let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId);

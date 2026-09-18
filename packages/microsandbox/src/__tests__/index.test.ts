@@ -12,6 +12,8 @@ const mock = vi.hoisted(() => ({
   execEventDelayMs: 0,
   execKilled: false,
   removeError: null as Error | null,
+  stopFailures: 0,
+  stopAttempts: 0,
   removeFailures: 0,
   removeAttempts: 0,
 }));
@@ -77,7 +79,10 @@ vi.mock('microsandbox', () => {
       };
     }
     fs() { return this.fsOps; }
-    async stopWithTimeout() {}
+    async stopWithTimeout() {
+      mock.stopAttempts++;
+      if (mock.stopAttempts <= mock.stopFailures) throw new Error('temporary stop failure');
+    }
   }
 
   class FakeHandle {
@@ -96,7 +101,7 @@ vi.mock('microsandbox', () => {
     async refresh() { return this; }
     async connect() { return this.native; }
     async startDetached() { this.status = 'running'; return this.native; }
-    async stopWithTimeout() { this.status = 'stopped'; }
+    async stopWithTimeout() { await this.native.stopWithTimeout(); this.status = 'stopped'; }
     async remove() {
       mock.removeAttempts++;
       if (mock.removeAttempts <= mock.removeFailures) throw new Error('temporary deletion failure');
@@ -191,6 +196,8 @@ beforeEach(() => {
   mock.execEventDelayMs = 0;
   mock.execKilled = false;
   mock.removeError = null;
+  mock.stopFailures = 0;
+  mock.stopAttempts = 0;
   mock.removeFailures = 0;
   mock.removeAttempts = 0;
 });
@@ -333,6 +340,26 @@ describe('microsandbox provider', () => {
     expect(mock.created.map((sandbox) => sandbox.ephemeral)).toEqual([true, true, false, false]);
     expect(mock.created[0].idleTimeout).toBe(900);
     expect(mock.created[1].idleTimeout).toBe(900);
+  });
+
+  it('retries normal shutdown and deletion independently', async () => {
+    const provider = microsandbox({ apiKey: 'key' });
+    await provider.sandbox.create({ name: 'retry-stop' });
+    mock.stopFailures = 1;
+    mock.removeFailures = 1;
+    await provider.sandbox.destroy('retry-stop');
+    expect(mock.stopAttempts).toBe(2);
+    expect(mock.removeAttempts).toBe(2);
+    expect(mock.handles.has('retry-stop')).toBe(false);
+  });
+
+  it('reports exhausted stop retries without attempting deletion', async () => {
+    const provider = microsandbox({ apiKey: 'key' });
+    await provider.sandbox.create({ name: 'stop-failed' });
+    mock.stopFailures = 3;
+    await expect(provider.sandbox.destroy('stop-failed')).rejects.toThrow('temporary stop failure');
+    expect(mock.stopAttempts).toBe(3);
+    expect(mock.removeAttempts).toBe(0);
   });
 
   it('never creates a sandbox for an already aborted request', async () => {
