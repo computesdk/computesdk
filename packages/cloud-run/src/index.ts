@@ -300,6 +300,14 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
           ...config,
           env: { ...config.env, ...options?.envs },
           workdir: options?.directory ?? config.workdir,
+          // Shared `ephemeral` create option overrides the configured
+          // executionMode for this sandbox: true -> ephemeral, false -> stateful.
+          executionMode:
+            options?.ephemeral !== undefined
+              ? options.ephemeral
+                ? 'ephemeral'
+                : 'stateful'
+              : config.executionMode,
         }
         if (isRemote(config)) {
           const sandboxId = options?.name ?? `cloud-run-${randomUUID()}`
