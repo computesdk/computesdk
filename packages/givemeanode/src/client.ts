@@ -79,24 +79,27 @@ export const DEFAULT_BASE_URL = 'https://api.givemeanode.com'
 /**
  * How this client treats the offer of a signed credential.
  *
- * - `prime` (default): pay ONE cheap authenticated request per token, up
- *   front and single-flighted, so even the first burst's creates present
- *   the signed credential. When N sandboxes start at once this is the
- *   difference between one authentication read and N of them queued behind
- *   each other; for a single create it costs one small request before it
- *   and saves the same read inside it, so it is close to free.
- * - `absorb`: never add a round trip to get one. The first request of a
- *   process pays the ordinary cost, its response carries the credential,
- *   and every request after it - including the command that follows that
- *   very first create - is cheaper. The right choice when a process makes
- *   one request and exits.
+ * - `absorb` (default): never add a round trip to get one. The first
+ *   request of a process pays the ordinary cost, its response carries the
+ *   credential, and every request after it - including the command that
+ *   follows that very first create - is cheaper.
+ * - `prime`: pay ONE cheap authenticated request per token, up front and
+ *   single-flighted, before the first create, so even the first burst's
+ *   creates present the signed credential.
  * - `off`: never present a signed credential.
  *
- * The default was `absorb` through 1.0.x. It moved to `prime` because the
- * shape this package is mostly used in is N creates at once from a cold
- * process, and under `absorb` every one of those N paid the authentication
- * read - measured at ~600 ms of a 767 ms create at N=100 against the
- * us-east door, all of it that read queued.
+ * The default was `absorb` through 1.0.x, `prime` in 1.1.x, and is
+ * `absorb` again from 1.2.0. `prime` was chosen on 2026-09-09 against a
+ * door that read its database to validate a `gmnt_` token, so N cold
+ * creates queued N of those reads (~600 ms of a 767 ms create at N=100).
+ * Later that same day the door began answering a `gmnt_` from an
+ * in-memory replica of its token table, and the read the prime avoided
+ * stopped costing anything - while the prime itself, a `GET
+ * /preview/sandboxes`, is a workspace listing that crosses to the
+ * database: 113 to 140 ms on the us-east door with either token. Measured
+ * from us-east-1 on 2026-09-18, c100 over one HTTP/2 session, the median
+ * time-to-interactive read 56 to 106 ms with no prime and 166 ms with the
+ * burst waiting on one.
  */
 export type FastTokenMode = 'absorb' | 'prime' | 'off'
 
@@ -120,10 +123,11 @@ export type TransportMode = 'auto' | 'http2' | 'fetch'
  *   paid while the caller is still setting up. Nothing is sent on it: the
  *   credential first leaves the process with the first operation, which
  *   also pays the `prime`.
- * - `prime`: open the session AND pay the fast-token prime at once, so
- *   even the first create of a burst presents the signed credential. An
- *   authenticated request before any operation was asked for, which is
- *   why it is the opt-in and not the default.
+ * - `prime`: open the session AND pay the fast-token prime at once,
+ *   whatever `fastToken` says short of `off`, so even the first create of
+ *   a burst presents the signed credential. An authenticated request
+ *   before any operation was asked for, which is why it is the opt-in and
+ *   not the default.
  * - `off`: nothing until the first request.
  */
 export type WarmMode = 'connect' | 'prime' | 'off'
@@ -331,7 +335,7 @@ export class GmnClient {
     this.baseUrl = requireSecureBaseUrl(
       (options.baseUrl ?? process.env.GMN_API_HOST ?? DEFAULT_BASE_URL).replace(/\/+$/, ''),
     )
-    this.fastToken = options.fastToken ?? 'prime'
+    this.fastToken = options.fastToken ?? 'absorb'
     this.timeout = options.timeout ?? 120_000
     this.doFetch = options.fetch ?? globalThis.fetch
     // An injected fetch is a test seam or a deliberate choice of wire, and
@@ -391,16 +395,6 @@ export class GmnClient {
   }
 
   /**
-   * Pay one cheap authenticated request so the burst that follows does
-   * not have to, single-flighted across every caller sharing the
-   * credential.
-   *
-   * A no-op unless `fastToken: 'prime'` and we do not already hold a
-   * usable credential. Failure is swallowed by design: this is an
-   * optimisation, and a caller whose prime failed should still get to make
-   * its real request and find out why properly.
-   */
-  /**
    * Do the construction-time work {@link WarmMode} names, ahead of the
    * first real request.
    *
@@ -414,7 +408,7 @@ export class GmnClient {
   warm(): Promise<void> {
     if (this.warmMode === 'off') return Promise.resolve()
     const work: Promise<unknown> =
-      this.warmMode === 'prime' ? Promise.all([this.session(), this.prime()]) : this.session()
+      this.warmMode === 'prime' ? Promise.all([this.session(), this.prime(true)]) : this.session()
     return work.then(
       () => undefined,
       () => undefined,
@@ -501,8 +495,19 @@ export class GmnClient {
     return opening
   }
 
-  async prime(): Promise<void> {
-    if (this.fastToken !== 'prime' || this.hasFastToken()) return
+  /**
+   * Pay one cheap authenticated request so the burst that follows does
+   * not have to, single-flighted across every caller sharing the
+   * credential.
+   *
+   * A no-op unless `fastToken: 'prime'` - or `force`, which is
+   * `warm: 'prime'` asking for it under any mode short of `off` - and we
+   * do not already hold a usable credential. Failure is swallowed by design: this is an
+   * optimisation, and a caller whose prime failed should still get to make
+   * its real request and find out why properly.
+   */
+  async prime(force = false): Promise<void> {
+    if (this.fastToken === 'off' || (!force && this.fastToken !== 'prime') || this.hasFastToken()) return
     const inFlight = priming.get(this.cacheKey)
     if (inFlight) return inFlight
     const run = this.request('GET', '/preview/sandboxes')

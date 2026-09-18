@@ -73,7 +73,7 @@ await sandbox.destroy()
 |---|---|---|---|
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
-| `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | How to use the signed credential. |
+| `fastToken` | `'absorb' \| 'prime' \| 'off'` | `'absorb'` | How to use the signed credential. |
 | `transport` | `'auto' \| 'http2' \| 'fetch'` | `'auto'` | One HTTP/2 session for every request on Node; `fetch` elsewhere or on request. |
 | `warm` | `'connect' \| 'prime' \| 'off'` | `'connect'` | Open the session at construction, also pay the prime, or do nothing until the first request. |
 | `connectTimeout` | `number` | `10000` | How long opening the HTTP/2 session may take, in ms. |
@@ -128,17 +128,18 @@ request made with your token, and this provider presents it automatically:
 nothing to configure, nothing new to store, and a fallback to the ordinary
 token on any failure.
 
-By default (`fastToken: 'prime'`) the provider pays one small warm-up
-request per process, single-flighted, so even the first creates of a burst
-present the credential rather than each paying the authentication read.
-Set `fastToken: 'absorb'` for a process that makes one request and exits:
-no warm-up, the first request pays the ordinary cost, and its response
-carries the credential for everything after it.
+By default (`fastToken: 'absorb'`) the first request of a process pays
+the ordinary cost and its response carries the credential for everything
+after it; the door validates the ordinary token from memory, so a cold
+burst pays no authentication read. Set `fastToken: 'prime'` to pay one
+warm-up request per process, single-flighted, before the first create -
+it is a workspace listing that crosses to the database, about 115 ms on
+the us-east door.
 
 ```typescript
 const compute = givemeanode({
   apiKey: process.env.GMN_TOKEN,
-  fastToken: 'absorb',
+  fastToken: 'prime',
 })
 ```
 
@@ -158,8 +159,8 @@ session the same burst measured a 40 ms median time-to-interactive against
 `transport: 'fetch'` to never open one.
 
 Construction sends nothing on the session: the token first leaves the
-process with the first operation, which also pays the prime. `warm: 'prime'`
-pays the prime at construction as well; `warm: 'off'` opens nothing until
+process with the first operation. `warm: 'prime'` pays the signed
+credential's warm-up at construction; `warm: 'off'` opens nothing until
 the first request. An idle session does not keep the process alive.
 
 ## Snapshots

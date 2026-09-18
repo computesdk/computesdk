@@ -256,7 +256,7 @@ const provider = defineProvider<
  * opens the HTTP/2 session and sends nothing on it, so the handshake is
  * paid while the caller is still setting up and the credential first
  * leaves the process with the first operation; `warm: 'prime'` also pays
- * the fast-token prime up front; `warm: 'off'` does nothing here. It is
+ * the fast-token prime up front, whatever `fastToken` says short of `off`; `warm: 'off'` does nothing here. It is
  * fire-and-forget: a burst that starts a moment later finds the work done,
  * and one that starts before it lands simply waits on the same work. The
  * open session does not keep the process alive between requests. A config
