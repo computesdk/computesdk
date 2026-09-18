@@ -4,8 +4,6 @@ const mock = vi.hoisted(() => ({
   backendKind: 'local' as 'local' | 'cloud',
   activeCreates: 0,
   maxActiveCreates: 0,
-  backendScopes: 0,
-  maxBackendScopes: 0,
   backendSelections: [] as Array<'local' | { kind: 'cloud'; apiKey?: string; url?: string; profile?: string }>,
   created: [] as Array<Record<string, unknown>>,
   handles: new Map<string, any>(),
@@ -153,18 +151,9 @@ vi.mock('microsandbox', () => {
 
   return {
     defaultBackendKind: () => mock.backendKind,
-    withDefaultBackend: async (backend: 'local' | { kind: 'cloud' }, operation: () => Promise<unknown>) => {
-      const previous = mock.backendKind;
+    setDefaultBackend: (backend: 'local' | { kind: 'cloud' }) => {
       mock.backendSelections.push(backend);
       mock.backendKind = backend === 'local' ? 'local' : 'cloud';
-      mock.backendScopes += 1;
-      mock.maxBackendScopes = Math.max(mock.maxBackendScopes, mock.backendScopes);
-      try {
-        return await operation();
-      } finally {
-        mock.backendScopes -= 1;
-        mock.backendKind = previous;
-      }
     },
     Sandbox: {
       builder: (name: string) => new FakeSandboxBuilder(name),
@@ -194,8 +183,6 @@ beforeEach(() => {
   mock.backendKind = 'local';
   mock.activeCreates = 0;
   mock.maxActiveCreates = 0;
-  mock.backendScopes = 0;
-  mock.maxBackendScopes = 0;
   mock.backendSelections.length = 0;
   mock.created.length = 0;
   mock.handles.clear();
@@ -322,26 +309,12 @@ describe('microsandbox provider', () => {
     ).rejects.toThrow(/'apiUrl' requires 'apiKey'/);
   });
 
-  it('serializes process-wide backend scopes across concurrent local and cloud creates', async () => {
-    await Promise.all([
-      microsandbox({ backend: 'local' }).sandbox.create({ name: 'local-concurrent' }),
-      microsandbox({ apiKey: 'secret' }).sandbox.create({ name: 'cloud-concurrent' }),
-    ]);
-
-    expect(mock.maxBackendScopes).toBe(1);
-    expect(mock.created.map((entry) => [entry.name, entry.backend])).toEqual([
-      ['local-concurrent', 'local'],
-      ['cloud-concurrent', 'cloud'],
-    ]);
-  });
-
   it('creates concurrently across provider instances sharing the same credentials', async () => {
     await Promise.all(Array.from({ length: 3 }, (_, index) =>
       microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: `parallel-${index}` }),
     ));
     expect(mock.maxActiveCreates).toBe(3);
-    expect(mock.maxBackendScopes).toBe(1);
-    expect(mock.backendKind).toBe('local');
+    expect(mock.created.every((sandbox) => sandbox.backend === 'cloud')).toBe(true);
   });
 
   it('accepts memoryMib and per-create root disk overrides', async () => {
@@ -376,8 +349,8 @@ describe('microsandbox provider', () => {
     await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
     controller.abort(new Error('deadline'));
     await rejected;
-    // The framework rejects immediately; wait for the native scope to finish cleanup.
-    await microsandbox({ backend: 'local' }).sandbox.list();
+    // Cancellation returns before background cleanup finishes.
+    await vi.waitFor(() => expect(mock.removeAttempts).toBe(1));
     expect(mock.created).toHaveLength(1);
     expect(mock.handles.has('late')).toBe(false);
   });
@@ -390,10 +363,10 @@ describe('microsandbox provider', () => {
     await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
     controller.abort();
     await rejected;
-    await microsandbox({ backend: 'local' }).sandbox.list();
+    await vi.waitFor(() => expect(mock.removeAttempts).toBe(2));
     expect(mock.removeAttempts).toBe(2);
     expect(mock.handles.has('retry-cleanup')).toBe(false);
-    expect(mock.backendKind).toBe('local');
+    expect(mock.backendKind).toBe('cloud');
   });
 
   it('reports failed aborted-create cleanup without exposing SDK error details', async () => {
@@ -406,13 +379,13 @@ describe('microsandbox provider', () => {
       await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
       controller.abort();
       await rejected;
-      await microsandbox({ backend: 'local' }).sandbox.list();
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
       expect(mock.handles.has('cleanup-failed')).toBe(true);
       expect(mock.removeAttempts).toBe(3);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('cleanup-failed');
       expect(warn.mock.calls[0][0]).not.toContain('sensitive SDK details');
-      expect(mock.backendKind).toBe('local');
+      expect(mock.backendKind).toBe('cloud');
     } finally {
       warn.mockRestore();
     }

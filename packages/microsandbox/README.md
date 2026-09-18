@@ -91,7 +91,7 @@ Per-sandbox `image`, `templateId`, `snapshotId`, `cpus`, `vcpus`, `memory`, `mem
 
 ## Backend support
 
-Operations with identical backend selections share a scope and can run concurrently. Different credentials, endpoints, profiles, or local/cloud selections retain FIFO isolation. Do not change the native SDK default backend externally while provider operations are running.
+Operations run concurrently using the selected process-wide backend. Do not change the native SDK default backend while provider operations are running.
 
 | Method | Local | Cloud |
 |---|---|---|
@@ -109,3 +109,5 @@ Local snapshots stop the sandbox, capture its writable root disk, and restart it
 MIT
 
 Sandboxes are ephemeral by default and are deleted when they stop. Their default maximum lifetime is 15 minutes. Set `ephemeral: false` to retain a sandbox after stopping, and use `timeout` to override its maximum lifetime.
+
+Use one backend configuration per process. Concurrent operations share that configuration; mixing cloud credentials or local/cloud backends in one process is unsupported.

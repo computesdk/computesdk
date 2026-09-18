@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { defineProvider } from '@computesdk/provider';
-import { BackendQueue } from './backend-queue.js';
 import type {
   CommandResult,
   CreateSandboxOptions,
@@ -126,23 +125,6 @@ interface RecoveredPorts {
 }
 
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
-const backendQueue = new BackendQueue<BackendSelection, MicrosandboxModule>(
-  (left, right) => left.kind === right.kind && JSON.stringify(left.override) === JSON.stringify(right.override),
-  async (selection, operation) => {
-    const sdk = await loadSdk();
-    const run = async () => {
-      if (sdk.defaultBackendKind() !== selection.kind) {
-        throw new Error(
-          `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
-          `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
-        );
-      }
-      await operation(sdk);
-    };
-    await (selection.override ? sdk.withDefaultBackend(selection.override, run) : run());
-  },
-);
-
 /**
  * Keep credential-bearing backend configuration out of the public sandbox
  * object returned by getInstance(). The mapping is only needed when a sandbox
@@ -158,12 +140,20 @@ function loadSdk(): Promise<MicrosandboxModule> {
   return sdkPromise;
 }
 
-/** Share identical backend scopes, excluding other credentials until all work finishes. */
-function withBackend<T>(
+/** Run against the single backend selected for this process. */
+async function withBackend<T>(
   selection: BackendSelection,
   operation: (sdk: MicrosandboxModule) => Promise<T>,
 ): Promise<T> {
-  return backendQueue.run(selection, operation);
+  const sdk = await loadSdk();
+  if (selection.override) sdk.setDefaultBackend(selection.override);
+  if (sdk.defaultBackendKind() !== selection.kind) {
+    throw new Error(
+      `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
+      `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
+    );
+  }
+  return operation(sdk);
 }
 
 function selectBackend(config: MicrosandboxConfig): BackendSelection {
