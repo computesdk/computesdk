@@ -499,16 +499,64 @@ async function executeWithStreaming(
 	sandbox: SandboxInstance,
 	command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+	const stdoutLines: string[] = [];
+	const stderrLines: string[] = [];
+
+	// Passing callbacks routes exec through @blaxel/core's execWithStreaming
+	// path, which surfaces output via stdout/stderr events, the completed-process
+	// `logs` field, and the streamed `result` event. Reading `stdout` off the
+	// plain POST /process response comes back empty on current Blaxel infra.
 	const processResult = await sandbox.process.exec({
 		command,
 		waitForCompletion: true,
+		onStdout: (line) => stdoutLines.push(line),
+		onStderr: (line) => stderrLines.push(line),
 	});
-	const result = processResult as { stdout?: string; stderr?: string; exitCode?: number };
-	return {
-		stdout: result.stdout || '',
-		stderr: result.stderr || '',
-		exitCode: result.exitCode || 0,
+
+	const result = processResult as {
+		stdout?: string;
+		stderr?: string;
+		logs?: string;
+		exitCode?: number;
+		pid?: string;
+		status?: string;
 	};
+
+	// Streamed callbacks receive arbitrary chunks, not lines — concatenate
+	// exactly; the result fields are authoritative when populated.
+	let stdout = result.stdout || stdoutLines.join('');
+	let stderr = result.stderr || stderrLines.join('');
+
+	// Completed-process output may only be retrievable via the logs endpoint,
+	// which reports stdout and stderr per channel.
+	if (!stdout && result.pid) {
+		try {
+			stdout = (await sandbox.process.logs(result.pid, 'stdout')) || '';
+		} catch {
+			// Logs fetch is best-effort; keep whatever output we already have
+		}
+	}
+	if (!stderr && result.pid) {
+		try {
+			stderr = (await sandbox.process.logs(result.pid, 'stderr')) || '';
+		} catch {
+			// Logs fetch is best-effort; keep whatever output we already have
+		}
+	}
+
+	// Last resort when no per-channel output is retrievable: `logs` is the
+	// combined stream, so only treat it as stdout when stderr is empty —
+	// otherwise it would duplicate stderr content into stdout.
+	if (!stdout && !stderr && result.logs) {
+		stdout = result.logs;
+	}
+
+	let exitCode = result.exitCode ?? 0;
+	if (result.status === 'failed' && exitCode === 0) {
+		exitCode = 1;
+	}
+
+	return { stdout, stderr, exitCode };
 }
 
 // Export the Blaxel SandboxInstance type for explicit typing
