@@ -38,38 +38,34 @@ async function runEcho(sandbox: SandboxInstance) {
 }
 
 describe('blaxel runCommand output capture', () => {
-	it('accumulates stdout/stderr when exec routes through the streaming path', async () => {
+	it('concatenates streamed chunks exactly, without inventing delimiters', async () => {
 		const sandbox = makeSandbox(async (opts) => {
-			opts.onStdout?.('hello');
-			opts.onStdout?.('world');
-			opts.onStderr?.('oops');
+			opts.onStdout?.('hello ');
+			opts.onStdout?.('world\n');
+			opts.onStderr?.('er');
+			opts.onStderr?.('ror');
 			return { status: 'completed', exitCode: 0, pid: 'p1' };
 		});
 
 		const result = await runEcho(sandbox);
 
-		expect(result.stdout).toBe('hello\nworld');
-		expect(result.stderr).toBe('oops');
+		expect(result.stdout).toBe('hello world\n');
+		expect(result.stderr).toBe('error');
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('uses the logs field when the exec response has no stdout', async () => {
-		const sandbox = makeSandbox(async () => ({
-			status: 'completed',
-			exitCode: 0,
-			pid: 'p1',
-			stdout: '',
-			stderr: '',
-			logs: 'hello from logs',
-		}));
+	it('prefers exact result.stdout/stderr fields over streamed chunks', async () => {
+		const sandbox = makeSandbox(async (opts) => {
+			opts.onStdout?.('chunk1');
+			return { status: 'completed', exitCode: 0, pid: 'p1', stdout: 'exact\noutput\n' };
+		});
 
 		const result = await runEcho(sandbox);
 
-		expect(result.stdout).toBe('hello from logs');
-		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toBe('exact\noutput\n');
 	});
 
-	it('fetches process.logs(pid) when the result has neither stdout nor logs', async () => {
+	it('fetches process.logs(pid) when the result has no stdout', async () => {
 		const logs = vi.fn(async (_pid: string, type: string) =>
 			type === 'stdout' ? 'hello from logs endpoint' : ''
 		);
@@ -82,6 +78,53 @@ describe('blaxel runCommand output capture', () => {
 
 		expect(result.stdout).toBe('hello from logs endpoint');
 		expect(logs).toHaveBeenCalledWith('p1', 'stdout');
+	});
+
+	it('still recovers stderr when the stdout logs fetch fails', async () => {
+		const logs = vi.fn(async (_pid: string, type: string) => {
+			if (type === 'stdout') throw new Error('logs endpoint boom');
+			return 'err output';
+		});
+		const sandbox = makeSandbox(
+			async () => ({ status: 'failed', exitCode: 2, pid: 'p1' }),
+			logs
+		);
+
+		const result = await runEcho(sandbox);
+
+		expect(result.stdout).toBe('');
+		expect(result.stderr).toBe('err output');
+		expect(result.exitCode).toBe(2);
+	});
+
+	it('uses combined logs as stdout only when stderr is also empty', async () => {
+		const sandbox = makeSandbox(async () => ({
+			status: 'completed',
+			exitCode: 0,
+			stdout: '',
+			stderr: '',
+			logs: 'hello from logs',
+		}));
+
+		const result = await runEcho(sandbox);
+
+		expect(result.stdout).toBe('hello from logs');
+		expect(result.stderr).toBe('');
+	});
+
+	it('does not duplicate combined logs into stdout when stderr is present', async () => {
+		const sandbox = makeSandbox(async () => ({
+			status: 'failed',
+			exitCode: 1,
+			stdout: '',
+			stderr: 'boom',
+			logs: 'boom',
+		}));
+
+		const result = await runEcho(sandbox);
+
+		expect(result.stdout).toBe('');
+		expect(result.stderr).toBe('boom');
 	});
 
 	it('returns nonzero exit code when the API reports status failed', async () => {

@@ -522,21 +522,33 @@ async function executeWithStreaming(
 		status?: string;
 	};
 
-	let stdout = stdoutLines.join('\n') || result.stdout || result.logs || '';
-	let stderr = stderrLines.join('\n') || result.stderr || '';
+	// Streamed callbacks receive arbitrary chunks, not lines — concatenate
+	// exactly; the result fields are authoritative when populated.
+	let stdout = result.stdout || stdoutLines.join('');
+	let stderr = result.stderr || stderrLines.join('');
 
-	// Completed-process output may only be retrievable via the logs endpoint
-	if ((!stdout || !stderr) && result.pid) {
+	// Completed-process output may only be retrievable via the logs endpoint,
+	// which reports stdout and stderr per channel.
+	if (!stdout && result.pid) {
 		try {
-			if (!stdout) {
-				stdout = (await sandbox.process.logs(result.pid, 'stdout')) || '';
-			}
-			if (!stderr) {
-				stderr = (await sandbox.process.logs(result.pid, 'stderr')) || '';
-			}
+			stdout = (await sandbox.process.logs(result.pid, 'stdout')) || '';
 		} catch {
 			// Logs fetch is best-effort; keep whatever output we already have
 		}
+	}
+	if (!stderr && result.pid) {
+		try {
+			stderr = (await sandbox.process.logs(result.pid, 'stderr')) || '';
+		} catch {
+			// Logs fetch is best-effort; keep whatever output we already have
+		}
+	}
+
+	// Last resort when no per-channel output is retrievable: `logs` is the
+	// combined stream, so only treat it as stdout when stderr is empty —
+	// otherwise it would duplicate stderr content into stdout.
+	if (!stdout && !stderr && result.logs) {
+		stdout = result.logs;
 	}
 
 	let exitCode = result.exitCode ?? 0;
