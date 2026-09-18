@@ -1,5 +1,13 @@
 # @computesdk/anchorbrowser
 
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [0732fed]
+  - computesdk@4.1.6
+  - @computesdk/provider@2.1.7
+
 ## 0.2.8
 
 ### Patch Changes

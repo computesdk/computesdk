@@ -1,5 +1,13 @@
 # @computesdk/namespace
 
+## 1.6.17
+
+### Patch Changes
+
+- Updated dependencies [0732fed]
+  - computesdk@4.1.6
+  - @computesdk/provider@2.1.7
+
 ## 1.6.16
 
 ### Patch Changes
