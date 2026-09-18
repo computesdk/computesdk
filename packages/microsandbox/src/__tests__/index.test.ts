@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
   backendKind: 'local' as 'local' | 'cloud',
-  backendScopes: 0,
-  maxBackendScopes: 0,
+  activeCreates: 0,
+  maxActiveCreates: 0,
   backendSelections: [] as Array<'local' | { kind: 'cloud'; apiKey?: string; url?: string; profile?: string }>,
   created: [] as Array<Record<string, unknown>>,
   handles: new Map<string, any>(),
@@ -11,6 +11,11 @@ const mock = vi.hoisted(() => ({
   execEvents: [] as Array<Record<string, unknown>>,
   execEventDelayMs: 0,
   execKilled: false,
+  removeError: null as Error | null,
+  stopFailures: 0,
+  stopAttempts: 0,
+  removeFailures: 0,
+  removeAttempts: 0,
 }));
 
 vi.mock('microsandbox', () => {
@@ -74,7 +79,10 @@ vi.mock('microsandbox', () => {
       };
     }
     fs() { return this.fsOps; }
-    async stopWithTimeout() {}
+    async stopWithTimeout() {
+      mock.stopAttempts++;
+      if (mock.stopAttempts <= mock.stopFailures) throw new Error('temporary stop failure');
+    }
   }
 
   class FakeHandle {
@@ -93,8 +101,13 @@ vi.mock('microsandbox', () => {
     async refresh() { return this; }
     async connect() { return this.native; }
     async startDetached() { this.status = 'running'; return this.native; }
-    async stopWithTimeout() { this.status = 'stopped'; }
-    async remove() { mock.handles.delete(this.name); }
+    async stopWithTimeout() { await this.native.stopWithTimeout(); this.status = 'stopped'; }
+    async remove() {
+      mock.removeAttempts++;
+      if (mock.removeAttempts <= mock.removeFailures) throw new Error('temporary deletion failure');
+      if (mock.removeError) throw mock.removeError;
+      mock.handles.delete(this.name);
+    }
   }
 
   class SandboxListBuilder {
@@ -115,7 +128,8 @@ vi.mock('microsandbox', () => {
     cpus(value: number) { this.config.cpus = value; return this; }
     memory(value: number) { this.config.memory = value; return this; }
     detached(value: boolean) { this.config.detached = value; return this; }
-    maxDuration(value: number) { this.config.maxDuration = value; return this; }
+    ephemeral(value: boolean) { this.config.ephemeral = value; return this; }
+    idleTimeout(value: number) { this.config.idleTimeout = value; return this; }
     labels(value: Record<string, string>) { this.config.labels = value; return this; }
     workdir(value: string) { this.config.workdir = value; return this; }
     envs(value: Record<string, string>) { this.config.envs = value; return this; }
@@ -124,7 +138,10 @@ vi.mock('microsandbox', () => {
     port(host: number, guest: number) { (this.config.ports as unknown[]).push({ host, guest }); return this; }
     portBind(bind: string, host: number, guest: number) { (this.config.ports as unknown[]).push({ bind, host, guest }); return this; }
     async create() {
+      mock.activeCreates++;
+      mock.maxActiveCreates = Math.max(mock.maxActiveCreates, mock.activeCreates);
       await new Promise((resolve) => setTimeout(resolve, 5));
+      mock.activeCreates--;
       mock.created.push({ ...this.config, backend: mock.backendKind });
       const sandbox = new FakeSandbox(this.name);
       const handle = new FakeHandle(this.name, {
@@ -139,18 +156,9 @@ vi.mock('microsandbox', () => {
 
   return {
     defaultBackendKind: () => mock.backendKind,
-    withDefaultBackend: async (backend: 'local' | { kind: 'cloud' }, operation: () => Promise<unknown>) => {
-      const previous = mock.backendKind;
+    setDefaultBackend: (backend: 'local' | { kind: 'cloud' }) => {
       mock.backendSelections.push(backend);
       mock.backendKind = backend === 'local' ? 'local' : 'cloud';
-      mock.backendScopes += 1;
-      mock.maxBackendScopes = Math.max(mock.maxBackendScopes, mock.backendScopes);
-      try {
-        return await operation();
-      } finally {
-        mock.backendScopes -= 1;
-        mock.backendKind = previous;
-      }
     },
     Sandbox: {
       builder: (name: string) => new FakeSandboxBuilder(name),
@@ -174,12 +182,14 @@ vi.mock('microsandbox', () => {
   };
 });
 
-import { microsandbox } from '../index.js';
+let microsandbox: typeof import('../index.js').microsandbox;
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ microsandbox } = await import('../index.js'));
   mock.backendKind = 'local';
-  mock.backendScopes = 0;
-  mock.maxBackendScopes = 0;
+  mock.activeCreates = 0;
+  mock.maxActiveCreates = 0;
   mock.backendSelections.length = 0;
   mock.created.length = 0;
   mock.handles.clear();
@@ -187,6 +197,11 @@ beforeEach(() => {
   mock.execEvents.length = 0;
   mock.execEventDelayMs = 0;
   mock.execKilled = false;
+  mock.removeError = null;
+  mock.stopFailures = 0;
+  mock.stopAttempts = 0;
+  mock.removeFailures = 0;
+  mock.removeAttempts = 0;
 });
 
 describe('microsandbox provider', () => {
@@ -212,7 +227,7 @@ describe('microsandbox provider', () => {
       image: 'node:22',
       cpus: 2,
       memory: 1024,
-      maxDuration: 60,
+      idleTimeout: 60,
       workdir: '/workspace',
       envs: { MODE: 'test' },
       ports: [{ bind: '127.0.0.1', host: 4300, guest: 3000 }],
@@ -303,17 +318,131 @@ describe('microsandbox provider', () => {
     ).rejects.toThrow(/'apiUrl' requires 'apiKey'/);
   });
 
-  it('serializes process-wide backend scopes across concurrent local and cloud creates', async () => {
-    await Promise.all([
-      microsandbox({ backend: 'local' }).sandbox.create({ name: 'local-concurrent' }),
-      microsandbox({ apiKey: 'secret' }).sandbox.create({ name: 'cloud-concurrent' }),
-    ]);
+  it('creates concurrently across provider instances sharing the same credentials', async () => {
+    await Promise.all(Array.from({ length: 3 }, (_, index) =>
+      microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: `parallel-${index}` }),
+    ));
+    expect(mock.maxActiveCreates).toBe(3);
+    expect(mock.backendSelections).toHaveLength(1);
+    expect(mock.created.every((sandbox) => sandbox.backend === 'cloud')).toBe(true);
+  });
 
-    expect(mock.maxBackendScopes).toBe(1);
-    expect(mock.created.map((entry) => [entry.name, entry.backend])).toEqual([
-      ['local-concurrent', 'local'],
-      ['cloud-concurrent', 'cloud'],
-    ]);
+  it.each([
+    { backend: 'local' as const },
+    { apiKey: 'different-key' },
+    { apiKey: 'same-key', apiUrl: 'https://other.example.test' },
+    { profile: 'other-profile' },
+    {},
+  ])('rejects conflicting backend configuration without rerouting in-flight work: %j', async (conflict) => {
+    const creation = microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: 'original' });
+    await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+    await expect(microsandbox(conflict).sandbox.create({ name: 'conflict' })).rejects.toThrow(/one backend configuration per process/);
+    await creation;
+    // The configuration stays pinned after the first operation finishes too.
+    await expect(microsandbox(conflict).sandbox.list()).rejects.toThrow(/one backend configuration per process/);
+    expect(mock.backendSelections).toEqual([{ kind: 'cloud', apiKey: 'same-key' }]);
+    expect(mock.created).toHaveLength(1);
+    expect(mock.created[0]).toMatchObject({ name: 'original', backend: 'cloud' });
+  });
+
+  it('rejects cloud configuration after selecting local', async () => {
+    await microsandbox({ backend: 'local' }).sandbox.create({ name: 'local' });
+    await expect(microsandbox({ apiKey: 'key' }).sandbox.list()).rejects.toThrow(/one backend configuration per process/);
+    expect(mock.backendSelections).toEqual(['local']);
+  });
+
+  it('accepts memoryMib and per-create root disk overrides', async () => {
+    const provider = microsandbox({ apiKey: 'key', memoryMib: 512, rootDiskMib: 4096 });
+    await provider.sandbox.create({ name: 'dax', cpus: 8, memoryMib: 16384, rootDiskMib: 8192 });
+    expect(mock.created[0]).toMatchObject({ cpus: 8, memory: 16384, rootDisk: 8192 });
+    await provider.sandbox.create({ name: 'canonical', memoryMib: 1024, memoryMiB: 2048 });
+    expect(mock.created[1]).toMatchObject({ memory: 2048, rootDisk: 4096 });
+  });
+
+  it('defaults to ephemeral sandboxes with a 15-minute idle timeout and supports overrides', async () => {
+    await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'default' });
+    await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'temporary', ephemeral: true, timeout: 900_000 });
+    await microsandbox({ apiKey: 'key', ephemeral: false }).sandbox.create({ name: 'configured' });
+    await microsandbox({ apiKey: 'key', ephemeral: true }).sandbox.create({ name: 'persistent', ephemeral: false });
+    expect(mock.created.map((sandbox) => sandbox.ephemeral)).toEqual([true, true, false, false]);
+    expect(mock.created[0].idleTimeout).toBe(900);
+    expect(mock.created[1].idleTimeout).toBe(900);
+  });
+
+  it('retries normal shutdown and deletion independently', async () => {
+    const provider = microsandbox({ apiKey: 'key' });
+    await provider.sandbox.create({ name: 'retry-stop' });
+    mock.stopFailures = 1;
+    mock.removeFailures = 1;
+    await provider.sandbox.destroy('retry-stop');
+    expect(mock.stopAttempts).toBe(2);
+    expect(mock.removeAttempts).toBe(2);
+    expect(mock.handles.has('retry-stop')).toBe(false);
+  });
+
+  it('reports exhausted stop retries without attempting deletion', async () => {
+    const provider = microsandbox({ apiKey: 'key' });
+    await provider.sandbox.create({ name: 'stop-failed' });
+    mock.stopFailures = 3;
+    await expect(provider.sandbox.destroy('stop-failed')).rejects.toThrow('temporary stop failure');
+    expect(mock.stopAttempts).toBe(3);
+    expect(mock.removeAttempts).toBe(0);
+  });
+
+  it('never creates a sandbox for an already aborted request', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('deadline'));
+    await expect(microsandbox({ apiKey: 'key' }).sandbox.create({ signal: controller.signal })).rejects.toThrow(/aborted/i);
+    expect(mock.created).toEqual([]);
+  });
+
+  it('removes a sandbox when the request aborts during native creation', async () => {
+    const controller = new AbortController();
+    const creation = microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'late', signal: controller.signal });
+    const rejected = expect(creation).rejects.toThrow(/aborted/i);
+    await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+    controller.abort(new Error('deadline'));
+    await rejected;
+    // Cancellation returns before background cleanup finishes.
+    await vi.waitFor(() => expect(mock.removeAttempts).toBe(1));
+    expect(mock.created).toHaveLength(1);
+    expect(mock.handles.has('late')).toBe(false);
+  });
+
+  it('retries deletion after a transient aborted-create cleanup failure', async () => {
+    mock.removeFailures = 1;
+    const controller = new AbortController();
+    const creation = microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'retry-cleanup', signal: controller.signal });
+    const rejected = expect(creation).rejects.toThrow(/aborted/i);
+    await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+    controller.abort();
+    await rejected;
+    await vi.waitFor(() => expect(mock.removeAttempts).toBe(2));
+    expect(mock.removeAttempts).toBe(2);
+    expect(mock.handles.has('retry-cleanup')).toBe(false);
+    expect(mock.backendKind).toBe('cloud');
+  });
+
+  it('reports failed aborted-create cleanup without exposing SDK error details', async () => {
+    mock.removeError = new Error('permission denied: sensitive SDK details');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const controller = new AbortController();
+      const creation = microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'cleanup-failed', signal: controller.signal });
+      const rejected = expect(creation).rejects.toThrow(/aborted/i);
+      await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+      controller.abort();
+      await rejected;
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+      expect(mock.handles.has('cleanup-failed')).toBe(true);
+      expect(mock.removeAttempts).toBe(3);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('cleanup-failed');
+      expect(warn.mock.calls[0][0]).not.toContain('sensitive SDK details');
+      expect(mock.backendKind).toBe('cloud');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('drains paginated sandbox listings and restores metadata and ports', async () => {

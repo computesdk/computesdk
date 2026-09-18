@@ -77,18 +77,21 @@ interface MicrosandboxConfig {
   cpus?: number;
   memoryMib?: number;
   rootDiskMib?: number;
+  ephemeral?: boolean;         // Delete on stop; defaults to true
   workdir?: string;
   namePrefix?: string;
   ports?: Array<number | { host: number; guest: number; bind?: string }>;
-  timeout?: number;
+  timeout?: number;           // Idle and command timeout in milliseconds; defaults to 900_000 (15 minutes)
   pullPolicy?: 'always' | 'if-missing' | 'never';
   networkEnabled?: boolean;
 }
 ```
 
-Per-sandbox `image`, `templateId`, `snapshotId`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB`, `memMiB`, `timeout`, `name`, `envs`, `metadata`, and `ports` options override or extend provider defaults where applicable.
+Per-sandbox `image`, `templateId`, `snapshotId`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB`, `memoryMib`, `memMiB`, `rootDiskMib`, `ephemeral`, `timeout`, `name`, `envs`, `metadata`, and `ports` options override or extend provider defaults where applicable.
 
 ## Backend support
+
+Operations run concurrently using the selected process-wide backend. Do not change the native SDK default backend while provider operations are running.
 
 | Method | Local | Cloud |
 |---|---|---|
@@ -104,3 +107,7 @@ Local snapshots stop the sandbox, capture its writable root disk, and restart it
 ## License
 
 MIT
+
+Sandboxes are ephemeral by default and are deleted when they stop. Their default idle timeout is 15 minutes, configured through the native SDK’s `idleTimeout(900)`. Set `ephemeral: false` to retain a sandbox after stopping, and use `timeout` (milliseconds) to override the idle timeout and default command timeout. The adapter does not set a maximum lifetime.
+
+Use one backend configuration per process. Concurrent operations share that configuration; the first successful backend selection is retained for the lifetime of the process. Later requests with different credentials, endpoints, profiles, or backend selection are rejected before changing the SDK backend. Use the same explicit configuration everywhere, or consistently use SDK environment/profile resolution.
