@@ -74,6 +74,7 @@ await sandbox.destroy()
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
 | `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | How to use the signed credential. |
+| `transport` | `'auto' \| 'http2' \| 'fetch'` | `'auto'` | One HTTP/2 session for every request on Node; `fetch` elsewhere or on request. |
 | `ramGib` | `number` | `2` | Guest memory in GiB. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. |
 | `execRetries` | `number` | `1` | Retries for an undelivered command. |
@@ -142,6 +143,17 @@ const compute = givemeanode({
 A signed credential is valid for its own lifetime regardless of what
 happens to the token behind it, so revoking a token stops anything new at
 once, but a credential already issued keeps working until it expires.
+
+## One connection for a burst
+
+On Node the provider speaks HTTP/2 to the door: one session per provider,
+every request a stream on it, opened when the provider is constructed.
+Starting 100 sandboxes at once over `fetch` opens 100 TLS connections whose
+handshakes a single-threaded runtime performs one after another; over one
+session the same burst measured a 40 ms median time-to-interactive against
+211 ms (us-east-1 to the us-east door). `fetch` remains the fallback where
+`node:http2` is not available or a session cannot be opened; set
+`transport: 'fetch'` to never open one.
 
 ## Snapshots
 

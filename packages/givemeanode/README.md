@@ -45,6 +45,7 @@ await sandbox.destroy()
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
 | `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | See below. |
+| `transport` | `'auto' \| 'http2' \| 'fetch'` | `'auto'` | One HTTP/2 session for every request, or `fetch`. See "One connection for a burst". |
 | `ramGib` | `number` | 2 | Guest memory. `memoryMiB` / `memMiB` on `create` are read too and rounded up to whole GiB; `memory` is decimal MB, per the shared options. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. Fixed when the guest image is prepared, not per command. |
 | `execRetries` | `number` | 1 | See "Two behaviours worth knowing about". |
@@ -176,6 +177,30 @@ What it costs, stated plainly: a signed credential is valid for its own
 lifetime regardless of what happens to the token behind it, so `gman token
 revoke` stops anything **new** immediately, but a credential already in a
 client's hands keeps working until it expires. Bans behave the same way.
+
+## One connection for a burst
+
+On Node this provider speaks HTTP/2 to the door: one session per provider,
+every request a stream on it, opened when the provider is constructed
+(together with the `prime` above, so the first create of a burst finds both
+done). Measured from us-east-1 against the us-east door, 100 concurrent
+create-then-command pairs:
+
+| wire | TTI median | p95 | p99 |
+|---|---|---|---|
+| `fetch`, one connection per in-flight request | 211 ms | 315 ms | 338 ms |
+| one HTTP/2 session | 40 ms | 44 ms | 45 ms |
+
+The door answered in about 1 ms either way. The difference is the client:
+`fetch` opens one TLS connection per in-flight request, a single-threaded
+runtime performs those 100 handshakes one after another, and the median
+create waited about 170 ms for its turn before a byte reached the door.
+
+`fetch` stays as the fallback wherever `node:http2` is not available
+(browsers, edge runtimes) or a session cannot be opened, and it is what an
+injected `fetch` selects. Set `transport: 'fetch'` to never open a session,
+or `transport: 'http2'` to use one against a plaintext loopback dev server
+too (h2c).
 That window is one credential lifetime and no longer.
 
 ## Snapshots

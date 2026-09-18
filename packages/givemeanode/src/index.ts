@@ -131,7 +131,7 @@ type FsRunCommand = (
   options?: RunCommandOptions,
 ) => Promise<CommandResult>
 
-export const givemeanode = defineProvider<
+const provider = defineProvider<
   GivemeanodeSandbox,
   ConfigWithClient,
   GivemeanodeTemplate,
@@ -247,5 +247,26 @@ export const givemeanode = defineProvider<
     },
   },
 })
+
+
+/**
+ * The provider, warming its connection as it is constructed.
+ *
+ * `GmnClient.warm` opens the HTTP/2 session and pays the fast-token prime
+ * before the first request, and it is fire-and-forget: a burst that starts
+ * a moment later finds both done, and one that starts before they land
+ * simply waits on the same work. A config the client refuses (no token,
+ * an insecure base URL) is reported by the first operation exactly as
+ * before, not here.
+ */
+export const givemeanode = (config: ConfigWithClient) => {
+  const built = provider(config)
+  try {
+    void getClient(config).warm()
+  } catch {
+    // The first operation surfaces the same error with its own context.
+  }
+  return built
+}
 
 export default givemeanode
