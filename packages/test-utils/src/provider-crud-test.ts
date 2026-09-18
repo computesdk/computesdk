@@ -42,6 +42,7 @@ const CRUD_ENABLED_PROVIDERS = [
   'northflank', // Service-per-sandbox lifecycle is fully stable and listed
   'isorun',   // Isolated Linux VM, full create/getById/list/destroy lifecycle
   'agentcore', // AgentCore Code Interpreter sessions support full CRUD lifecycle
+  'brezel',   // Self-hosted Firecracker sandbox with confirmed project-scoped cleanup
   // Add more providers here as they become stable for CRUD testing
   // 'e2b',      // Add when CRUD implementation is stable
   // 'vercel',   // Skip - ephemeral sandboxes don't support listing operations
