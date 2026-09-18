@@ -39,9 +39,10 @@ type ConfigWithClient = BrezelConfig & { __client?: BrezelClient }
 const DEFAULT_TIMEOUT_MS = 300_000
 const DELETE_TIMEOUT_MS = 120_000
 const POLL_INTERVAL_MS = 100
+const MIN_SANDBOX_TTL_MS = 30_000
+const MAX_SANDBOX_TTL_MS = 2_592_000_000
 
 const sandboxTimeouts = new WeakMap<Sandbox, number>()
-const sandboxEnvironments = new WeakMap<Sandbox, Record<string, string>>()
 const sandboxClients = new WeakMap<Sandbox, BrezelClient>()
 
 function required(value: string | undefined, variable: string): string {
@@ -110,6 +111,35 @@ function validateEnvironment(environment: Record<string, string> | undefined): R
   return result
 }
 
+function createTimeout(options: CreateSandboxOptions | undefined): { timeoutMs: number; ttlSeconds: number } {
+  const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error('Brezel sandbox timeout must be a positive finite number of milliseconds')
+  }
+  if (timeoutMs > MAX_SANDBOX_TTL_MS) {
+    throw new Error(
+      `Brezel sandbox timeout cannot exceed ${MAX_SANDBOX_TTL_MS} milliseconds (30 days)`,
+    )
+  }
+  return {
+    timeoutMs,
+    ttlSeconds: Math.ceil(Math.max(timeoutMs, MIN_SANDBOX_TTL_MS) / 1000),
+  }
+}
+
+function validateCreateOptions(options: CreateSandboxOptions | undefined): void {
+  if (options?.snapshotId) throw new Error('Brezel snapshots are not exposed through ComputeSDK yet')
+  if (options?.image) throw new Error('Use a prequalified Brezel environment revision instead of image')
+
+  const environment = validateEnvironment(options?.envs)
+  if (Object.keys(environment).length > 0) {
+    throw new Error(
+      'Brezel does not support durable create-time envs through ComputeSDK yet; ' +
+      'set environment variables on runCommand instead.',
+    )
+  }
+}
+
 function commandArgv(command: string, background: boolean): string[] {
   if (!background) return ['/bin/sh', '-lc', command]
   // The command is passed as a positional argument rather than interpolated,
@@ -149,24 +179,17 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
   methods: {
     sandbox: {
       create: async (config: ConfigWithClient, options?: CreateSandboxOptions) => {
-        if (options?.snapshotId) throw new Error('Brezel snapshots are not exposed through ComputeSDK yet')
-        if (options?.image) throw new Error('Use a prequalified Brezel environment revision instead of image')
+        validateCreateOptions(options)
+        const { timeoutMs, ttlSeconds } = createTimeout(options)
         if (options?.signal?.aborted) throw options.signal.reason ?? new Error('Sandbox creation aborted')
 
-        const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
         const sandbox = await getClient(config).createSandbox({
           environmentRevision: environmentRevision(config, options),
-          ttlSeconds: Math.max(1, Math.ceil(timeoutMs / 1000)),
+          ttlSeconds,
           allowInternet: allowInternet(config),
         })
         sandboxTimeouts.set(sandbox, timeoutMs)
-        sandboxEnvironments.set(sandbox, validateEnvironment(options?.envs))
         sandboxClients.set(sandbox, getClient(config))
-
-        if (options?.signal?.aborted) {
-          await sandbox.delete().catch(() => {})
-          throw options.signal.reason ?? new Error('Sandbox creation aborted')
-        }
         return { sandbox, sandboxId: sandbox.id }
       },
 
@@ -212,10 +235,7 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
         const stderrDecoder = new TextDecoder()
         const result = await sandbox.run(commandArgv(command, options?.background ?? false), {
           cwd: options?.cwd,
-          env: {
-            ...(sandboxEnvironments.get(sandbox) ?? {}),
-            ...validateEnvironment(options?.env),
-          },
+          env: validateEnvironment(options?.env),
           timeoutSeconds: Math.max(1, Math.ceil(timeoutMs / 1000)),
           onEvent: event => {
             if ((event.type === 'stdout' || event.type === 'stderr') && typeof event.data === 'string') {
