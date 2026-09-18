@@ -420,7 +420,11 @@ describe('Standardized Test Suite', () => {
       const fetchMock = vi.fn()
         .mockResolvedValueOnce(bridgeCreateResponse())
         .mockResolvedValueOnce(new Response('hello', { status: 200 }))
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(bridgeExecResponse([
+          { event: 'stdout', data: btoa('hello') },
+          { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
+        ]));
 
       vi.stubGlobal('fetch', fetchMock);
 
@@ -430,25 +434,33 @@ describe('Standardized Test Suite', () => {
 
         await expect(created.filesystem.readFile('/workspace/tmp/a.txt')).resolves.toBe('hello');
         await created.filesystem.writeFile('/workspace/tmp/a.txt', 'hello');
+        const result = await created.runCommand("cat '/workspace/tmp/a.txt'");
 
         expect(fetchMock.mock.calls[1]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/tmp/a.txt`);
         expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('GET');
         expect(fetchMock.mock.calls[2]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/tmp/a.txt`);
         expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('PUT');
         expect(fetchMock.mock.calls[2]?.[1]?.body).toBe('hello');
+        const execBody = JSON.parse(fetchMock.mock.calls[3]?.[1]?.body as string) as { argv: string[] };
+        expect(execBody.argv[2]).toBe("cat '/workspace/tmp/a.txt'");
+        expect(result.stdout).toBe('hello');
       } finally {
         vi.unstubAllGlobals();
       }
     }
   });
 
-  it('relocates bridge filesystem paths outside /workspace into the workspace', async () => {
+  it('does not relocate bridge filesystem paths outside /workspace', async () => {
     if (skipIntegration) {
       const fetchMock = vi.fn()
         .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(new Response(null, { status: 204 }))
-        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 0 }) }]))
-        .mockResolvedValueOnce(new Response('x', { status: 200 }));
+        .mockResolvedValueOnce(new Response(
+          JSON.stringify({
+            error: 'path must resolve to a location within /workspace',
+            code: 'invalid_request',
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } },
+        ));
 
       vi.stubGlobal('fetch', fetchMock);
 
@@ -456,44 +468,13 @@ describe('Standardized Test Suite', () => {
         const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
         const created = await remoteProvider.sandbox.create();
 
-        await created.filesystem.writeFile('/tmp/bench/a.txt', 'x');
-        await created.filesystem.mkdir('/tmp/bench/../bench');
-        await created.filesystem.readFile('../../etc/passwd');
-
-        expect(fetchMock.mock.calls[1]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/tmp/bench/a.txt`);
-        const body = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string) as { argv: string[] };
-        expect(body.argv[2]).toBe("mkdir -p '/workspace/tmp/bench'");
-        expect(fetchMock.mock.calls[3]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/etc/passwd`);
-
-        await expect(created.filesystem.remove('/tmp/..')).rejects.toThrow('Refusing to remove /workspace root');
-        await expect(created.filesystem.remove('/workspace')).rejects.toThrow('Refusing to remove /workspace root');
-        expect(fetchMock).toHaveBeenCalledTimes(4);
-      } finally {
-        vi.unstubAllGlobals();
-      }
-    }
-  });
-
-  it('rejects bridge readFile when the bridge returns an empty body for a missing file', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(new Response('', { status: 200 }))
-        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 1 }) }]))
-        .mockResolvedValueOnce(new Response('', { status: 200 }))
-        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 0 }) }]));
-
-      vi.stubGlobal('fetch', fetchMock);
-
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const created = await remoteProvider.sandbox.create();
-
-        await expect(created.filesystem.readFile('/nonexistent/file.txt')).rejects.toThrow('File not found');
-        const body = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string) as { argv: string[] };
-        expect(body.argv[2]).toBe("test -f '/workspace/nonexistent/file.txt'");
-
-        await expect(created.filesystem.readFile('/workspace/empty.txt')).resolves.toBe('');
+        await expect(
+          created.filesystem.writeFile('/tmp/bench/a.txt', 'x'),
+        ).rejects.toThrow('path must resolve to a location within /workspace');
+        expect(fetchMock.mock.calls[1]?.[0]).toBe(
+          `https://example.com/v1/sandbox/${created.sandboxId}/file/tmp/bench/a.txt`,
+        );
+        expect(fetchMock).toHaveBeenCalledTimes(2);
       } finally {
         vi.unstubAllGlobals();
       }
@@ -599,6 +580,7 @@ if (skipIntegration) {
       runtime: 'python'
     }),
     supportsFilesystem: true,  // Cloudflare supports full filesystem operations
+    filesystemBasePath: '/workspace',
     timeout: 300000,           // 5 minutes for container operations
     skipIntegration: true     // Always skip for mocked tests
   });
