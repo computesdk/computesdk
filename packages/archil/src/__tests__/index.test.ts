@@ -578,6 +578,34 @@ describe('archil persistent mode', () => {
     ).toBe(true);
   });
 
+  it('honors the ephemeral create option over the configured mode', async () => {
+    const fetchMock = vi.fn(async () => json(sandboxWire()));
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    // Persistent-mode provider, ephemeral sandbox request -> exec handle.
+    const persistent = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const execSandbox = await persistent.sandbox.create({
+      ephemeral: true,
+      diskId: 'disk_abc123',
+    });
+    expect(execSandbox.sandboxId).toBe('disk_abc123');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Exec-mode provider, ephemeral: false -> provisions a sandbox.
+    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const vmSandbox = await exec.sandbox.create({
+      ephemeral: false,
+      name: 'ci-job',
+    });
+    expect(vmSandbox.sandboxId).toBe('sbx_123');
+    const [url] = fetchMock.mock.calls[0] as any[];
+    expect(String(url)).toContain('/api/sandboxes');
+  });
+
   it('keeps exec-mode destroy a no-op', async () => {
     const fetchMock = vi.fn();
     global.fetch = fetchMock as typeof fetch;

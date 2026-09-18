@@ -71,7 +71,8 @@ export interface ArchilConfig {
   /**
    * Which Archil compute surface to use. Defaults to "exec". In
    * "persistent" mode create() provisions a persistent sandbox VM instead of
-   * resolving a disk handle.
+   * resolving a disk handle. Per-sandbox override: `ephemeral` on
+   * create() options (true -> exec handle, false -> persistent VM).
    */
   execution?: ArchilExecutionMode;
 }
@@ -122,8 +123,6 @@ interface ArchilCreateOptions extends CreateSandboxOptions {
    * "exec" mode; ignored in "persistent" mode.
    */
   diskId?: string;
-  /** persistent mode: name for the sandbox. */
-  name?: string;
   /** persistent mode: OCI base image (e.g. "node:24-bookworm"). */
   baseImage?: string;
   /** persistent mode: environment variables baked into the sandbox. */
@@ -349,8 +348,8 @@ function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
   const request: ArchilSandboxRequest = {
     ...options?.sandbox,
     name: options?.name,
-    baseImage: options?.baseImage ?? options?.templateId,
-    env: options?.env,
+    baseImage: options?.baseImage ?? options?.image ?? options?.templateId,
+    env: options?.env ?? options?.envs,
     vcpuCount: options?.vcpus ?? options?.cpu ?? options?.cpus,
     memSizeMiB: options?.memoryMiB ?? options?.memory,
   };
@@ -371,7 +370,16 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
 
-        if (resolved.execution === 'persistent') {
+        // `ephemeral` on create() overrides the configured default for this
+        // sandbox: true -> serverless exec handle, false -> persistent VM.
+        const execution =
+          options?.ephemeral !== undefined
+            ? options.ephemeral
+              ? 'exec'
+              : 'persistent'
+            : resolved.execution;
+
+        if (execution === 'persistent') {
           const vm = await client.sandboxes.create(toSandboxRequest(options), {
             wait: true,
           });

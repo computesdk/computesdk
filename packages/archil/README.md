@@ -82,8 +82,14 @@ await provider.sandbox.destroy(sandbox.sandboxId); // deletes the sandbox
 ```
 
 Sandbox `create` accepts generic `CreateSandboxOptions` fields (`vcpus`/`cpu`/`cpus`,
-`memory`/`memoryMiB`, `templateId`, `timeout` (ms → `maxTtlSeconds`)) plus the
-Archil-specific keys shown above.
+`memory`/`memoryMiB`, `image`/`templateId`, `envs`, `timeout` (ms → `maxTtlSeconds`))
+plus the Archil-specific keys shown above.
+
+The shared `ephemeral` create option overrides the configured mode per sandbox:
+`ephemeral: true` resolves an exec-mode disk handle (requires `diskId`),
+`ephemeral: false` provisions a persistent sandbox — matching the same flag on
+other dual-mode providers like Upstash. `getById`/`list`/`destroy` follow the
+configured `execution` mode.
 
 ### Choosing a mode
 
