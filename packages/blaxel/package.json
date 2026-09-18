@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@blaxel/core": "^0.3.21",
+    "@blaxel/core": "^3.0.5",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
