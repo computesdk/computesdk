@@ -131,23 +131,41 @@ describe('the signed credential the door hands back', () => {
     assert.equal(calls[1].authorization, `Bearer ${KEY}`)
   })
 
-  it('primes by default, so even the first create of a burst presents the credential', async () => {
-    // The default moved from `absorb` to `prime` in 1.1.0. Under `absorb`
-    // every create in a cold burst paid the authentication read; the door
-    // measured that at ~600 ms of a 767 ms create at N=100. One warm-up
-    // request, single-flighted, and the creates that follow are signed.
+  it('absorbs by default: the first request pays the ordinary cost, the next presents the credential', async () => {
+    // The default was `absorb` through 1.0.x and `prime` in 1.1.x; it is
+    // `absorb` again from 1.2.0, because the door stopped reading its
+    // database to validate a `gmnt_` token the same day `prime` became the
+    // default, and the prime itself is a workspace listing that does cross
+    // to the database (FastTokenMode has the numbers).
+    const { calls, fetchImpl } = stub([
+      { body: { sandbox: 'sbx-1' }, headers: vending(600_000) },
+      { body: { sandbox: 'sbx-2' } },
+    ])
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
+    assert.equal(client.fastToken, 'absorb')
+    await client.prime()
+    assert.equal(calls.length, 0, 'no warm-up request under absorb')
+    await client.request('POST', '/preview/sandboxes', {})
+    await client.request('POST', '/preview/sandboxes', {})
+    assert.equal(calls[0].authorization, `Bearer ${KEY}`, 'the first create pays the ordinary cost')
+    assert.equal(calls[1].authorization, `Bearer ${SIGNED}`, 'the second is signed')
+  })
+
+  it("warm: 'prime' asks for the warm-up whatever the mode, short of off", async () => {
     const { calls, fetchImpl } = stub([
       { body: { sandboxes: [] }, headers: vending(600_000) },
       { body: { sandbox: 'sbx-1' } },
     ])
-    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl })
-    assert.equal(client.fastToken, 'prime')
-    await client.prime()
+    const client = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl, warm: 'prime' })
+    await client.warm()
     assert.equal(calls.length, 1, 'the prime is one request')
     assert.equal(calls[0].method, 'GET')
     assert.equal(calls[0].authorization, `Bearer ${KEY}`, 'the warm-up pays the ordinary cost')
     await client.request('POST', '/preview/sandboxes', {})
     assert.equal(calls[1].authorization, `Bearer ${SIGNED}`, 'the first create is already signed')
+    const off = new GmnClient({ apiKey: KEY, baseUrl: 'https://door.test', fetch: fetchImpl, warm: 'prime', fastToken: 'off' })
+    await off.warm()
+    assert.equal(calls.length, 2, 'off means off')
   })
 })
 
