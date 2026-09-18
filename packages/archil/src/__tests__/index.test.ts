@@ -358,7 +358,7 @@ describe('archil filesystem mapping', () => {
   });
 });
 
-describe('archil sandbox mode', () => {
+describe('archil persistent mode', () => {
   const originalWebSocket = globalThis.WebSocket;
 
   function json(data: unknown, status = 200): Response {
@@ -458,7 +458,7 @@ describe('archil sandbox mode', () => {
     const provider = archil({
       apiKey: 'key_test',
       region: 'aws-us-east-1',
-      execution: 'sandbox',
+      execution: 'persistent',
     });
     const sandbox = await provider.sandbox.create({
       name: 'ci-job',
@@ -502,7 +502,7 @@ describe('archil sandbox mode', () => {
     const provider = archil({
       apiKey: 'key_test',
       region: 'aws-us-east-1',
-      execution: 'sandbox',
+      execution: 'persistent',
     });
     const sandbox = await provider.sandbox.getById('sbx_123');
 
@@ -537,7 +537,7 @@ describe('archil sandbox mode', () => {
     const provider = archil({
       apiKey: 'key_test',
       region: 'aws-us-east-1',
-      execution: 'sandbox',
+      execution: 'persistent',
     });
     const sandbox = await provider.sandbox.create({ name: 'ci-job' });
 
@@ -564,7 +564,7 @@ describe('archil sandbox mode', () => {
     const provider = archil({
       apiKey: 'key_test',
       region: 'aws-us-east-1',
-      execution: 'sandbox',
+      execution: 'persistent',
     });
     await provider.sandbox.destroy('sbx_123');
 

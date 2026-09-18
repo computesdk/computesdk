@@ -10,7 +10,7 @@ The provider supports Archil's two compute surfaces, selected by the
   container with that disk attached via the control-plane `exec` endpoint.
   `destroy` is a no-op because disk lifecycle is managed by Archil.
   `getById` requires a disk id.
-- **`sandbox`**: `create` provisions a persistent Archil sandbox — a
+- **`persistent`**: `create` provisions a persistent Archil sandbox — a
   long-running Linux VM with a dedicated disk — and waits until it is
   `running`. `runCommand` uses the sandbox's interactive process API over a
   short-lived WebSocket connection (a fresh connection URL is fetched per
@@ -31,7 +31,7 @@ npm install @computesdk/archil
 | `apiKey`    | `ARCHIL_API_KEY`   | yes      | Archil control-plane API key                    |
 | `region`    | `ARCHIL_REGION`    | yes      | Archil region (e.g. `aws-us-east-1`)            |
 | `baseUrl`   | —                  | no       | Override control-plane URL (for testing)        |
-| `execution` | —                  | no       | `"exec"` (default) or `"sandbox"`                |
+| `execution` | —                  | no       | `"exec"` (default) or `"persistent"`                |
 
 ## Usage
 
@@ -56,10 +56,10 @@ await provider.sandbox.destroy(sandbox.sandboxId);
 
 `create()` requires top-level `diskId` as the target disk id.
 
-### Sandbox mode
+### Persistent mode
 
 ```ts
-const provider = archil({ execution: 'sandbox' });
+const provider = archil({ execution: 'persistent' });
 
 const sandbox = await provider.sandbox.create({
   name: 'ci-job',
@@ -87,7 +87,7 @@ Archil-specific keys shown above.
 
 ### Choosing a mode
 
-|                       | `exec`                          | `sandbox`                                   |
+|                       | `exec`                          | `persistent`                                |
 | --------------------- | ------------------------------- | ------------------------------------------- |
 | Compute               | Ephemeral container per command | Persistent VM                               |
 | `cwd`/`env`/installs  | Lost between commands           | Persist while running                       |
@@ -99,7 +99,7 @@ Archil-specific keys shown above.
 
 ## Supported operations
 
-| Method        | exec mode | sandbox mode |
+| Method        | exec mode | persistent mode |
 | ------------- | --------- | ------------ |
 | `create`      | ✅ Resolves an existing disk from top-level `diskId`. | ✅ Provisions a sandbox, waits for `running`. |
 | `getById`     | ✅ Requires the disk id. | ✅ Fetches the sandbox; resumes if paused/stopped. |
@@ -122,6 +122,6 @@ Archil-specific keys shown above.
   checks out and checks in the disk automatically. Raw `runCommand` strings
   are not rewritten — commands that access the disk must use `/mnt/archil`
   themselves.
-- **sandbox mode**: `pause`/`resume`/`fork` are available on the underlying
+- **persistent mode**: `pause`/`resume`/`fork` are available on the underlying
   `disk`-SDK sandbox via `getInstance()` — the generic provider interface has
   no `pause`/`resume` methods, so only `getById`/`runCommand` auto-resume.

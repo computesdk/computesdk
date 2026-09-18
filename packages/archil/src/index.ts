@@ -7,8 +7,8 @@
  *   container with the configured disk mounted, then returns stdout, stderr,
  *   and exit code. "create" resolves a handle to an existing disk id; env,
  *   cwd, and installs do not persist between commands.
- * - "sandbox": `create` provisions an Archil sandbox — a persistent Linux VM
- *   with a dedicated disk. `runCommand` uses the sandbox's interactive
+ * - "persistent": `create` provisions an Archil sandbox — a persistent Linux
+ *   VM with a dedicated disk. `runCommand` uses the sandbox's interactive
  *   process API (a short-lived WebSocket connection fetched fresh per command
  *   via POST /api/sandboxes/{id}/connections), so filesystem state, installed
  *   tools, and background processes persist across commands.
@@ -57,9 +57,9 @@ function regionToBaseUrl(region: string): string {
 /**
  * Archil execution mode:
  * - "exec": serverless per-command containers on a disk (default).
- * - "sandbox": a persistent sandbox VM run through the process API.
+ * - "persistent": a persistent sandbox VM run through the process API.
  */
-export type ArchilExecutionMode = 'exec' | 'sandbox';
+export type ArchilExecutionMode = 'exec' | 'persistent';
 
 export interface ArchilConfig {
   /** Archil API key. Falls back to ARCHIL_API_KEY env var. */
@@ -69,9 +69,9 @@ export interface ArchilConfig {
   /** Override the control-plane base URL (useful for testing). */
   baseUrl?: string;
   /**
-   * Which Archil compute surface to use. Defaults to "exec". In "sandbox"
-   * mode create() provisions a persistent sandbox VM instead of resolving a
-   * disk handle.
+   * Which Archil compute surface to use. Defaults to "exec". In
+   * "persistent" mode create() provisions a persistent sandbox VM instead of
+   * resolving a disk handle.
    */
   execution?: ArchilExecutionMode;
 }
@@ -110,7 +110,7 @@ interface ResolvedConfig {
 interface ArchilSandbox {
   client: ArchilClient;
   disk: DiskHandle | DiskResponse;
-  /** Set only in "sandbox" execution mode. */
+  /** Set only in "persistent" execution mode. */
   vm?: ArchilVm;
   resolved: ResolvedConfig;
   createdAt: Date;
@@ -119,18 +119,18 @@ interface ArchilSandbox {
 interface ArchilCreateOptions extends CreateSandboxOptions {
   /**
    * exec mode: id of the existing disk to run commands against. Required in
-   * "exec" mode; ignored in "sandbox" mode.
+   * "exec" mode; ignored in "persistent" mode.
    */
   diskId?: string;
-  /** sandbox mode: name for the sandbox. */
+  /** persistent mode: name for the sandbox. */
   name?: string;
-  /** sandbox mode: OCI base image (e.g. "node:24-bookworm"). */
+  /** persistent mode: OCI base image (e.g. "node:24-bookworm"). */
   baseImage?: string;
-  /** sandbox mode: environment variables baked into the sandbox. */
+  /** persistent mode: environment variables baked into the sandbox. */
   env?: Record<string, string>;
-  /** sandbox mode: lifetime budget per powered-on session, in seconds. */
+  /** persistent mode: lifetime budget per powered-on session, in seconds. */
   maxTtlSeconds?: number;
-  /** sandbox mode: extra Archil sandbox fields (network policy, etc.). */
+  /** persistent mode: extra Archil sandbox fields (network policy, etc.). */
   sandbox?: Omit<
     ArchilSandboxRequest,
     'name' | 'vcpuCount' | 'memSizeMiB' | 'baseImage' | 'env' | 'maxTtlSeconds'
@@ -191,7 +191,7 @@ function shellEscape(value: string): string {
 function mapFilesystemPath(sandbox: ArchilSandbox, path: string): string {
   const normalized = posix.normalize(path.startsWith('/') ? path : `/${path}`);
 
-  // In sandbox mode the filesystem is the VM's own filesystem.
+  // In persistent mode the filesystem is the VM's own filesystem.
   if (sandbox.vm) {
     return normalized;
   }
@@ -371,7 +371,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
 
-        if (resolved.execution === 'sandbox') {
+        if (resolved.execution === 'persistent') {
           const vm = await client.sandboxes.create(toSandboxRequest(options), {
             wait: true,
           });
@@ -403,7 +403,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
         try {
-          if (resolved.execution === 'sandbox') {
+          if (resolved.execution === 'persistent') {
             const vm = await client.sandboxes.get(sandboxId);
             await ensureVmRunning(vm);
             return {
@@ -430,7 +430,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       list: async (config: ArchilConfig) => {
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
-        if (resolved.execution === 'sandbox') {
+        if (resolved.execution === 'persistent') {
           const vms = await client.sandboxes.list();
           return vms.map((vm) => ({
             sandbox: {
@@ -452,7 +452,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       destroy: async (config: ArchilConfig, sandboxId: string) => {
         const resolved = resolveConfig(config);
-        if (resolved.execution === 'sandbox') {
+        if (resolved.execution === 'persistent') {
           const client = createClient(config, resolved);
           const vm = await client.sandboxes.get(sandboxId);
           await vm.delete();
