@@ -113,6 +113,24 @@ export type FastTokenMode = 'absorb' | 'prime' | 'off'
  */
 export type TransportMode = 'auto' | 'http2' | 'fetch'
 
+/**
+ * What the provider does with its connection as it is constructed.
+ *
+ * - `connect` (default): open the HTTP/2 session, so the handshake is
+ *   paid while the caller is still setting up. Nothing is sent on it: the
+ *   credential first leaves the process with the first operation, which
+ *   also pays the `prime`.
+ * - `prime`: open the session AND pay the fast-token prime at once, so
+ *   even the first create of a burst presents the signed credential. An
+ *   authenticated request before any operation was asked for, which is
+ *   why it is the opt-in and not the default.
+ * - `off`: nothing until the first request.
+ */
+export type WarmMode = 'connect' | 'prime' | 'off'
+
+/** How long a connection attempt may take, the same bound `fetch` applies. */
+const CONNECT_TIMEOUT_MS = 10_000
+
 export interface GmnClientOptions {
   /** `gmnt_` org service token. Falls back to `GMN_TOKEN`. */
   apiKey?: string
@@ -126,6 +144,10 @@ export interface GmnClientOptions {
   fetch?: typeof fetch
   /** See {@link TransportMode}. Default `auto`, or `fetch` when `fetch` is injected. */
   transport?: TransportMode
+  /** See {@link WarmMode}. Default `connect`. */
+  warm?: WarmMode
+  /** How long opening the HTTP/2 session may take, in ms. Default 10000. */
+  connectTimeout?: number
 }
 
 /** What either wire hands back: enough to absorb the credential and parse. */
@@ -158,6 +180,19 @@ function abortError(): Error {
   const err = new Error('The operation was aborted')
   err.name = 'AbortError'
   return err
+}
+
+/**
+ * `work`, or an abort the moment `signal` fires, whichever comes first.
+ * The work itself is not cancelled: it is shared with whoever else waits.
+ */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortError())
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError())
+    signal.addEventListener('abort', onAbort, { once: true })
+    work.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
 }
 
 interface Vended {
@@ -267,6 +302,8 @@ export class GmnClient {
   readonly fastToken: FastTokenMode
   readonly timeout: number
   readonly transport: TransportMode
+  readonly warmMode: WarmMode
+  readonly connectTimeout: number
 
   private readonly doFetch: typeof fetch
   private readonly cacheKey: string
@@ -274,6 +311,13 @@ export class GmnClient {
   private h2?: Promise<Http2Session | null>
   /** Set once a session could not be opened: `fetch` for this client's life. */
   private h2Unavailable = false
+  /**
+   * Requests in progress, waiting on the session or on the wire. The
+   * session's socket is referenced while this is above zero and
+   * unreferenced when it returns to zero, so an idle session never keeps
+   * a process alive that has nothing left to do.
+   */
+  private inflight = 0
 
   constructor(options: GmnClientOptions = {}) {
     const apiKey = options.apiKey ?? process.env.GMN_TOKEN
@@ -293,6 +337,8 @@ export class GmnClient {
     // An injected fetch is a test seam or a deliberate choice of wire, and
     // either way the requests must go through it.
     this.transport = options.transport ?? (options.fetch ? 'fetch' : 'auto')
+    this.warmMode = options.warm ?? 'connect'
+    this.connectTimeout = options.connectTimeout ?? CONNECT_TIMEOUT_MS
     // A NUL cannot appear in a URL or in a bearer token, so no pair of
     // distinct (endpoint, token) can collide on one key.
     this.cacheKey = `${this.baseUrl}\u0000${this.apiKey}`
@@ -355,17 +401,39 @@ export class GmnClient {
    * its real request and find out why properly.
    */
   /**
-   * Open the connection and pay the prime, ahead of the first real request.
+   * Do the construction-time work {@link WarmMode} names, ahead of the
+   * first real request.
    *
    * Called when the provider is constructed, never awaited by it: the
-   * session handshake and the credential read happen while the caller is
-   * still setting up, so the first create of a burst finds both done. Every
-   * failure is swallowed - the first real request repeats whichever step
-   * did not land and reports the error properly.
+   * session handshake (and, under `warm: 'prime'`, the credential read)
+   * happens while the caller is still setting up, so the first create of a
+   * burst finds it done. Every failure is swallowed - the first real
+   * request repeats whichever step did not land and reports the error
+   * properly. Awaitable, for a caller who wants to know it landed.
    */
   warm(): Promise<void> {
-    return Promise.all([this.session(), this.prime()]).then(
+    if (this.warmMode === 'off') return Promise.resolve()
+    const work: Promise<unknown> =
+      this.warmMode === 'prime' ? Promise.all([this.session(), this.prime()]) : this.session()
+    return work.then(
       () => undefined,
+      () => undefined,
+    )
+  }
+
+  /**
+   * Let the session go. In-flight streams finish first; the next request
+   * opens a fresh session. A session still being opened is closed as soon
+   * as it lands.
+   */
+  close(): void {
+    const opening = this.h2
+    this.h2 = undefined
+    if (!opening) return
+    void opening.then(
+      session => {
+        if (session && !session.destroyed) session.close()
+      },
       () => undefined,
     )
   }
@@ -395,18 +463,30 @@ export class GmnClient {
           if (this.h2 === opening) this.h2 = undefined
         }
         let settled = false
-        session.once('connect', () => {
+        // A handshake that never completes is not a session that failed to
+        // open, so nothing above would ever give up on it: bound it here,
+        // and treat the bound like the connect error it stands in for.
+        const giveUp = () => {
+          if (settled) return
           settled = true
+          forget()
+          this.h2Unavailable = true
+          session.destroy()
+          resolve(null)
+        }
+        const deadline = setTimeout(giveUp, this.connectTimeout)
+        session.once('connect', () => {
+          clearTimeout(deadline)
+          if (settled) return
+          settled = true
+          // Nothing is waiting on it: let the process exit if it wants to.
+          if (this.inflight === 0) session.unref()
           resolve(session)
         })
         session.on('error', () => {
+          clearTimeout(deadline)
           forget()
-          if (!settled) {
-            settled = true
-            this.h2Unavailable = true
-            session.destroy()
-            resolve(null)
-          }
+          giveUp()
         })
         session.on('close', forget)
         // The peer is going away: let in-flight streams finish, and open a
@@ -487,11 +567,16 @@ export class GmnClient {
     const timer = setTimeout(() => controller.abort(), timeoutMs ?? this.timeout)
     const payload = body === undefined ? undefined : JSON.stringify(body)
     let wire: Wire
+    let session: Http2Session | null = null
+    this.inflight += 1
     try {
       // Inside the try, so the deadline covers the body too: a response
       // whose headers arrive and whose body then stalls would otherwise
-      // hang here with no timer left to abort it.
-      const session = await this.session()
+      // hang here with no timer left to abort it. The wait for the session
+      // is under the same deadline, without cancelling the open itself,
+      // which every other request on this client shares.
+      session = await untilAborted(this.session(), controller.signal)
+      if (session) session.ref()
       wire = session
         ? await this.overHttp2(session, method, path, payload, controller.signal)
         : await this.overFetch(method, path, payload, controller.signal)
@@ -499,6 +584,7 @@ export class GmnClient {
     } finally {
       clearTimeout(timer)
       if (signal) signal.removeEventListener('abort', onAbort)
+      this.release(session)
     }
     const { status, text } = wire
     let parsed: unknown
@@ -514,6 +600,24 @@ export class GmnClient {
       throw new GmnError(`givemeanode ${method} ${path} failed (${status}): ${detail}`, status, parsed)
     }
     return parsed as T
+  }
+
+  /**
+   * One request fewer in flight. At zero the session's socket is
+   * unreferenced - the one this request rode, and the current one if the
+   * session turned over underneath it - so a process with nothing left to
+   * do is free to exit.
+   */
+  private release(used: Http2Session | null): void {
+    this.inflight -= 1
+    if (this.inflight !== 0) return
+    if (used && !used.destroyed) used.unref()
+    void this.h2?.then(
+      current => {
+        if (current && current !== used && this.inflight === 0 && !current.destroyed) current.unref()
+      },
+      () => undefined,
+    )
   }
 
   private async overFetch(

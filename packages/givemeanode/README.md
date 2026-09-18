@@ -46,6 +46,8 @@ await sandbox.destroy()
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
 | `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | See below. |
 | `transport` | `'auto' \| 'http2' \| 'fetch'` | `'auto'` | One HTTP/2 session for every request, or `fetch`. See "One connection for a burst". |
+| `warm` | `'connect' \| 'prime' \| 'off'` | `'connect'` | What construction does with the connection. See "One connection for a burst". |
+| `connectTimeout` | `number` | `10000` | How long opening the HTTP/2 session may take, in ms. |
 | `ramGib` | `number` | 2 | Guest memory. `memoryMiB` / `memMiB` on `create` are read too and rounded up to whole GiB; `memory` is decimal MB, per the shared options. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. Fixed when the guest image is prepared, not per command. |
 | `execRetries` | `number` | 1 | See "Two behaviours worth knowing about". |
@@ -181,10 +183,10 @@ client's hands keeps working until it expires. Bans behave the same way.
 ## One connection for a burst
 
 On Node this provider speaks HTTP/2 to the door: one session per provider,
-every request a stream on it, opened when the provider is constructed
-(together with the `prime` above, so the first create of a burst finds both
-done). Measured from us-east-1 against the us-east door, 100 concurrent
-create-then-command pairs:
+every request a stream on it, opened when the provider is constructed so
+the handshake is paid while you are still setting up. Measured from
+us-east-1 against the us-east door, 100 concurrent create-then-command
+pairs:
 
 | wire | TTI median | p95 | p99 |
 |---|---|---|---|
@@ -201,6 +203,16 @@ create waited about 170 ms for its turn before a byte reached the door.
 injected `fetch` selects. Set `transport: 'fetch'` to never open a session,
 or `transport: 'http2'` to use one against a plaintext loopback dev server
 too (h2c).
+
+Construction sends nothing on the session: your token first leaves the
+process with the first operation, which also pays the `prime` above. Set
+`warm: 'prime'` to pay the prime at construction too, so even the first
+create of a burst presents the signed credential, or `warm: 'off'` to open
+nothing until the first request. An idle session does not keep a Node
+process alive, so a script that makes its requests and returns exits as it
+did over `fetch`. A request whose connection never completes fails at its
+own `timeout`, and a connection that takes longer than `connectTimeout`
+is given up on, with `fetch` answering from then on.
 That window is one credential lifetime and no longer.
 
 ## Snapshots

@@ -75,6 +75,8 @@ await sandbox.destroy()
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
 | `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | How to use the signed credential. |
 | `transport` | `'auto' \| 'http2' \| 'fetch'` | `'auto'` | One HTTP/2 session for every request on Node; `fetch` elsewhere or on request. |
+| `warm` | `'connect' \| 'prime' \| 'off'` | `'connect'` | Open the session at construction, also pay the prime, or do nothing until the first request. |
+| `connectTimeout` | `number` | `10000` | How long opening the HTTP/2 session may take, in ms. |
 | `ramGib` | `number` | `2` | Guest memory in GiB. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. |
 | `execRetries` | `number` | `1` | Retries for an undelivered command. |
@@ -154,6 +156,11 @@ session the same burst measured a 40 ms median time-to-interactive against
 211 ms (us-east-1 to the us-east door). `fetch` remains the fallback where
 `node:http2` is not available or a session cannot be opened; set
 `transport: 'fetch'` to never open one.
+
+Construction sends nothing on the session: the token first leaves the
+process with the first operation, which also pays the prime. `warm: 'prime'`
+pays the prime at construction as well; `warm: 'off'` opens nothing until
+the first request. An idle session does not keep the process alive.
 
 ## Snapshots
 

@@ -10,8 +10,11 @@
  * on that wire exactly as it does over `fetch`.
  */
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import http2 from 'node:http2'
+import net from 'node:net'
 import { after, before, beforeEach, describe, it } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import { GmnClient, resetFastTokenCache } from '../client.ts'
 
@@ -135,24 +138,128 @@ describe('one HTTP/2 session for a burst', () => {
     await assert.rejects(pending, (err: Error) => err.name === 'AbortError')
   })
 
-  it('warm() opens the session before the first request, and swallows failure', async () => {
+  it('warm() opens the session before the first request, sends nothing, and swallows failure', async () => {
     const before = d.sessions()
-    const client = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2', fastToken: 'off' })
+    // Default fastToken (prime) and default warm (connect): the handshake
+    // is paid, the credential is not presented until an operation asks.
+    const client = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2' })
     await client.warm()
     assert.equal(d.sessions() - before, 1, 'the session is open with nothing requested yet')
-    assert.equal(d.seen.length, 0, 'fastToken off: warm makes no request')
+    assert.equal(d.seen.length, 0, 'construction sent no request, so no credential')
     // A door that is not there: warm resolves, quietly.
     const dark = new GmnClient({ apiKey: KEY, baseUrl: 'http://127.0.0.1:9', transport: 'http2' })
     await dark.warm()
   })
 
-  it('warm() with fastToken prime pays the prime on the session', async () => {
+  it("warm: 'prime' pays the prime on the session, warm: 'off' opens nothing", async () => {
     d.vending(true)
-    const client = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2' })
-    await client.warm()
+    const before = d.sessions()
+    const primed = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2', warm: 'prime' })
+    await primed.warm()
     assert.equal(d.seen.length, 1)
     assert.equal(d.seen[0].method, 'GET')
-    assert.equal(client.hasFastToken(), true, 'the burst that follows presents the credential')
+    assert.equal(primed.hasFastToken(), true, 'the burst that follows presents the credential')
+    assert.equal(d.sessions() - before, 1)
+    const cold = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2', warm: 'off' })
+    await cold.warm()
+    assert.equal(d.sessions() - before, 1, 'warm off: no session until a request')
+  })
+
+  it('close() lets the session go and the next request opens another', async () => {
+    const before = d.sessions()
+    const client = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2', fastToken: 'off' })
+    await client.request('GET', '/preview/sandboxes')
+    assert.equal(d.sessions() - before, 1)
+    client.close()
+    await client.request('GET', '/preview/sandboxes')
+    assert.equal(d.sessions() - before, 2, 'a fresh session after close')
+    // Closing while the session is still being opened closes it when it lands.
+    const eager = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2', fastToken: 'off' })
+    const opening = eager.warm()
+    eager.close()
+    await opening
+    await eager.request('GET', '/preview/sandboxes')
+    assert.equal(d.sessions() - before, 4, 'the closed-while-opening session and the one the request opened')
+  })
+
+  it('an idle session does not keep a process alive', async () => {
+    // A script constructs the provider's client, makes one request and
+    // returns from main. Over fetch that process exits; over a session
+    // whose socket stayed referenced it would hang until the door closed
+    // the connection, so the test is the exit itself, under a deadline.
+    const clientPath = fileURLToPath(new URL('../client.ts', import.meta.url))
+    const script = `
+      import { GmnClient } from ${JSON.stringify(clientPath)}
+      const client = new GmnClient({ apiKey: ${JSON.stringify(KEY)}, baseUrl: ${JSON.stringify(baseUrl)}, transport: 'http2', fastToken: 'off' })
+      await client.warm()
+      const reply = await client.request('GET', '/preview/sandboxes')
+      console.log('done ' + reply.sandbox)
+    `
+    const flags = process.execArgv.filter(flag => flag.includes('strip-types'))
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(resolve => {
+      execFile(
+        process.execPath,
+        [...flags, '--input-type=module', '-e', script],
+        { timeout: 8_000 },
+        (err, stdout, stderr) => resolve({ code: err ? (err as any).code ?? null : 0, stdout, stderr }),
+      )
+    })
+    assert.equal(result.code, 0, `the process did not exit on its own: ${result.stderr}`)
+    assert.match(result.stdout, /^done sbx-/m)
+  })
+})
+
+describe('a connection that stalls', () => {
+  /**
+   * Accepts TCP and then says nothing. Under an `https:` base URL the
+   * client's TLS handshake waits on a ServerHello that never comes, which
+   * is a connection that never completes, not a request that stalls: the
+   * session's `connect` never fires. (Plaintext h2c would not do: there
+   * `connect` is the TCP connect, which this server does complete.)
+   */
+  const sockets = new Set<net.Socket>()
+  const black = net.createServer(socket => {
+    sockets.add(socket)
+    socket.on('close', () => sockets.delete(socket))
+  })
+  let baseUrl = ''
+  before(async () => {
+    await new Promise<void>(resolve => black.listen(0, '127.0.0.1', resolve))
+    const address = black.address()
+    assert.ok(address && typeof address === 'object')
+    baseUrl = `https://127.0.0.1:${address.port}`
+  })
+  after(async () => {
+    for (const socket of sockets) socket.destroy()
+    await new Promise<void>(resolve => black.close(() => resolve()))
+  })
+  beforeEach(() => resetFastTokenCache())
+
+  it('does not carry a request past its own deadline', async () => {
+    const client = new GmnClient({ apiKey: KEY, baseUrl, transport: 'http2', fastToken: 'off', timeout: 100 })
+    const started = Date.now()
+    await assert.rejects(client.request('GET', '/preview/sandboxes'), (err: Error) => err.name === 'AbortError')
+    assert.ok(Date.now() - started < 5_000, 'the request timeout applied while the session was still opening')
+  })
+
+  it('is given up on after connectTimeout, and fetch answers from then on', async () => {
+    const calls: string[] = []
+    const fetchImpl = (async (url: any) => {
+      calls.push(String(url))
+      return new Response(JSON.stringify({ sandbox: 'sbx-fetch' }), { status: 200 })
+    }) as unknown as typeof fetch
+    const client = new GmnClient({
+      apiKey: KEY,
+      baseUrl,
+      transport: 'http2',
+      fastToken: 'off',
+      fetch: fetchImpl,
+      connectTimeout: 50,
+    })
+    const reply = await client.request<{ sandbox: string }>('GET', '/preview/sandboxes')
+    assert.equal(reply.sandbox, 'sbx-fetch')
+    await client.request('GET', '/preview/sandboxes')
+    assert.equal(calls.length, 2, 'no second connection attempt')
   })
 })
 
