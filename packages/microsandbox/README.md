@@ -110,4 +110,4 @@ MIT
 
 Sandboxes are ephemeral by default and are deleted when they stop. Their default idle timeout is 15 minutes, configured through the native SDK’s `idleTimeout(900)`. Set `ephemeral: false` to retain a sandbox after stopping, and use `timeout` (milliseconds) to override the idle timeout and default command timeout. The adapter does not set a maximum lifetime.
 
-Use one backend configuration per process. Concurrent operations share that configuration; mixing cloud credentials or local/cloud backends in one process is unsupported.
+Use one backend configuration per process. Concurrent operations share that configuration; the first successful backend selection is retained for the lifetime of the process. Later requests with different credentials, endpoints, profiles, or backend selection are rejected before changing the SDK backend. Use the same explicit configuration everywhere, or consistently use SDK environment/profile resolution.

@@ -182,9 +182,11 @@ vi.mock('microsandbox', () => {
   };
 });
 
-import { microsandbox } from '../index.js';
+let microsandbox: typeof import('../index.js').microsandbox;
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ microsandbox } = await import('../index.js'));
   mock.backendKind = 'local';
   mock.activeCreates = 0;
   mock.maxActiveCreates = 0;
@@ -321,7 +323,32 @@ describe('microsandbox provider', () => {
       microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: `parallel-${index}` }),
     ));
     expect(mock.maxActiveCreates).toBe(3);
+    expect(mock.backendSelections).toHaveLength(1);
     expect(mock.created.every((sandbox) => sandbox.backend === 'cloud')).toBe(true);
+  });
+
+  it.each([
+    { backend: 'local' as const },
+    { apiKey: 'different-key' },
+    { apiKey: 'same-key', apiUrl: 'https://other.example.test' },
+    { profile: 'other-profile' },
+    {},
+  ])('rejects conflicting backend configuration without rerouting in-flight work: %j', async (conflict) => {
+    const creation = microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: 'original' });
+    await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+    await expect(microsandbox(conflict).sandbox.create({ name: 'conflict' })).rejects.toThrow(/one backend configuration per process/);
+    await creation;
+    // The configuration stays pinned after the first operation finishes too.
+    await expect(microsandbox(conflict).sandbox.list()).rejects.toThrow(/one backend configuration per process/);
+    expect(mock.backendSelections).toEqual([{ kind: 'cloud', apiKey: 'same-key' }]);
+    expect(mock.created).toHaveLength(1);
+    expect(mock.created[0]).toMatchObject({ name: 'original', backend: 'cloud' });
+  });
+
+  it('rejects cloud configuration after selecting local', async () => {
+    await microsandbox({ backend: 'local' }).sandbox.create({ name: 'local' });
+    await expect(microsandbox({ apiKey: 'key' }).sandbox.list()).rejects.toThrow(/one backend configuration per process/);
+    expect(mock.backendSelections).toEqual(['local']);
   });
 
   it('accepts memoryMib and per-create root disk overrides', async () => {

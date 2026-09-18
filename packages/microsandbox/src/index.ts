@@ -125,6 +125,7 @@ interface RecoveredPorts {
 }
 
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
+let backendSelectionKey: string | undefined;
 /**
  * Keep credential-bearing backend configuration out of the public sandbox
  * object returned by getInstance(). The mapping is only needed when a sandbox
@@ -146,13 +147,22 @@ async function withBackend<T>(
   operation: (sdk: MicrosandboxModule) => Promise<T>,
 ): Promise<T> {
   const sdk = await loadSdk();
-  if (selection.override) sdk.setDefaultBackend(selection.override);
+  const selectionKey = JSON.stringify(selection);
+  if (backendSelectionKey !== undefined && backendSelectionKey !== selectionKey) {
+    throw new Error('Microsandbox supports one backend configuration per process. Use the same backend, credentials, endpoint, and profile for all provider instances.');
+  }
+  if (backendSelectionKey === undefined && selection.override) {
+    sdk.setDefaultBackend(selection.override);
+  }
   if (sdk.defaultBackendKind() !== selection.kind) {
     throw new Error(
       `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
       `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
     );
   }
+  // No await between checking, selecting, and pinning the backend: overlapping
+  // calls cannot change its configuration before another SDK operation resumes.
+  backendSelectionKey = selectionKey;
   return operation(sdk);
 }
 
