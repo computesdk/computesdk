@@ -124,7 +124,7 @@ vi.mock('microsandbox', () => {
     memory(value: number) { this.config.memory = value; return this; }
     detached(value: boolean) { this.config.detached = value; return this; }
     ephemeral(value: boolean) { this.config.ephemeral = value; return this; }
-    maxDuration(value: number) { this.config.maxDuration = value; return this; }
+    idleTimeout(value: number) { this.config.idleTimeout = value; return this; }
     labels(value: Record<string, string>) { this.config.labels = value; return this; }
     workdir(value: string) { this.config.workdir = value; return this; }
     envs(value: Record<string, string>) { this.config.envs = value; return this; }
@@ -218,7 +218,7 @@ describe('microsandbox provider', () => {
       image: 'node:22',
       cpus: 2,
       memory: 1024,
-      maxDuration: 60,
+      idleTimeout: 60,
       workdir: '/workspace',
       envs: { MODE: 'test' },
       ports: [{ bind: '127.0.0.1', host: 4300, guest: 3000 }],
@@ -325,14 +325,14 @@ describe('microsandbox provider', () => {
     expect(mock.created[1]).toMatchObject({ memory: 2048, rootDisk: 4096 });
   });
 
-  it('defaults to ephemeral sandboxes with a 15-minute lifetime and supports overrides', async () => {
+  it('defaults to ephemeral sandboxes with a 15-minute idle timeout and supports overrides', async () => {
     await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'default' });
     await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'temporary', ephemeral: true, timeout: 900_000 });
     await microsandbox({ apiKey: 'key', ephemeral: false }).sandbox.create({ name: 'configured' });
     await microsandbox({ apiKey: 'key', ephemeral: true }).sandbox.create({ name: 'persistent', ephemeral: false });
     expect(mock.created.map((sandbox) => sandbox.ephemeral)).toEqual([true, true, false, false]);
-    expect(mock.created[0].maxDuration).toBe(900);
-    expect(mock.created[1].maxDuration).toBe(900);
+    expect(mock.created[0].idleTimeout).toBe(900);
+    expect(mock.created[1].idleTimeout).toBe(900);
   });
 
   it('never creates a sandbox for an already aborted request', async () => {

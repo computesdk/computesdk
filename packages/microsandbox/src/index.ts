@@ -68,7 +68,7 @@ export interface MicrosandboxConfig {
   namePrefix?: string;
   /** Local TCP port mappings. A number maps the same host and guest port. */
   ports?: Array<number | MicrosandboxPort>;
-  /** Default sandbox lifetime and command timeout in milliseconds (15 minutes). */
+  /** Default sandbox idle timeout and command timeout in milliseconds (15 minutes). */
   timeout?: number;
   /** OCI pull policy. */
   pullPolicy?: 'always' | 'if-missing' | 'never';
@@ -494,7 +494,7 @@ const _microsandbox = defineProvider<
           .cpus(cpusFor(config, options))
           .memory(memoryFor(config, options))
           .detached(true)
-          .maxDuration(Math.max(1, Math.ceil(timeoutMs / 1000)))
+          .idleTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)))
           .labels({
             [LABEL_MARKER]: 'true',
             ...encodeMetadata(metadata),

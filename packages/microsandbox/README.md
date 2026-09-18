@@ -81,7 +81,7 @@ interface MicrosandboxConfig {
   workdir?: string;
   namePrefix?: string;
   ports?: Array<number | { host: number; guest: number; bind?: string }>;
-  timeout?: number;           // Milliseconds; defaults to 900_000 (15 minutes)
+  timeout?: number;           // Idle and command timeout in milliseconds; defaults to 900_000 (15 minutes)
   pullPolicy?: 'always' | 'if-missing' | 'never';
   networkEnabled?: boolean;
 }
@@ -108,6 +108,6 @@ Local snapshots stop the sandbox, capture its writable root disk, and restart it
 
 MIT
 
-Sandboxes are ephemeral by default and are deleted when they stop. Their default maximum lifetime is 15 minutes. Set `ephemeral: false` to retain a sandbox after stopping, and use `timeout` to override its maximum lifetime.
+Sandboxes are ephemeral by default and are deleted when they stop. Their default idle timeout is 15 minutes, configured through the native SDK’s `idleTimeout(900)`. Set `ephemeral: false` to retain a sandbox after stopping, and use `timeout` (milliseconds) to override the idle timeout and default command timeout. The adapter does not set a maximum lifetime.
 
 Use one backend configuration per process. Concurrent operations share that configuration; mixing cloud credentials or local/cloud backends in one process is unsupported.
