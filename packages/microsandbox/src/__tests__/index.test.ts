@@ -14,6 +14,8 @@ const mock = vi.hoisted(() => ({
   execEventDelayMs: 0,
   execKilled: false,
   removeError: null as Error | null,
+  removeFailures: 0,
+  removeAttempts: 0,
 }));
 
 vi.mock('microsandbox', () => {
@@ -98,6 +100,8 @@ vi.mock('microsandbox', () => {
     async startDetached() { this.status = 'running'; return this.native; }
     async stopWithTimeout() { this.status = 'stopped'; }
     async remove() {
+      mock.removeAttempts++;
+      if (mock.removeAttempts <= mock.removeFailures) throw new Error('temporary deletion failure');
       if (mock.removeError) throw mock.removeError;
       mock.handles.delete(this.name);
     }
@@ -199,6 +203,8 @@ beforeEach(() => {
   mock.execEventDelayMs = 0;
   mock.execKilled = false;
   mock.removeError = null;
+  mock.removeFailures = 0;
+  mock.removeAttempts = 0;
 });
 
 describe('microsandbox provider', () => {
@@ -365,6 +371,20 @@ describe('microsandbox provider', () => {
     expect(mock.handles.has('late')).toBe(false);
   });
 
+  it('retries deletion after a transient aborted-create cleanup failure', async () => {
+    mock.removeFailures = 1;
+    const controller = new AbortController();
+    const creation = microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'retry-cleanup', signal: controller.signal });
+    const rejected = expect(creation).rejects.toThrow(/aborted/i);
+    await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
+    controller.abort();
+    await rejected;
+    await microsandbox({ backend: 'local' }).sandbox.list();
+    expect(mock.removeAttempts).toBe(2);
+    expect(mock.handles.has('retry-cleanup')).toBe(false);
+    expect(mock.backendKind).toBe('local');
+  });
+
   it('reports failed aborted-create cleanup without exposing SDK error details', async () => {
     mock.removeError = new Error('permission denied: sensitive SDK details');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -377,6 +397,7 @@ describe('microsandbox provider', () => {
       await rejected;
       await microsandbox({ backend: 'local' }).sandbox.list();
       expect(mock.handles.has('cleanup-failed')).toBe(true);
+      expect(mock.removeAttempts).toBe(3);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('cleanup-failed');
       expect(warn.mock.calls[0][0]).not.toContain('sensitive SDK details');

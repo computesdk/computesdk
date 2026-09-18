@@ -523,15 +523,25 @@ const _microsandbox = defineProvider<
 
         const native = await builder.create();
         if (options?.signal?.aborted) {
-          try {
-            await native.stopWithTimeout(5_000);
-            const handle = await sdk.Sandbox.get(name);
-            await handle.remove();
-          } catch (error) {
-            if (!isNotFound(error)) {
-              // The framework may have already returned AbortError to the caller.
-              // Report the resource needing cleanup without logging SDK credentials.
-              console.warn(`[microsandbox] Aborted sandbox cleanup failed for ${JSON.stringify(name)}; check and remove it manually.`);
+          let stopped = false;
+          let handle: NativeSandboxHandle | undefined;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              if (!stopped) {
+                await native.stopWithTimeout(5_000);
+                stopped = true;
+              }
+              handle ??= await sdk.Sandbox.get(name);
+              await handle.remove();
+              break;
+            } catch (error) {
+              if (isNotFound(error)) break;
+              if (attempt < 2) {
+                await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+                continue;
+              }
+              // Cancellation has already returned; report exhausted cleanup retries.
+              console.warn(`[microsandbox] Aborted sandbox cleanup failed for ${JSON.stringify(name)} after 3 attempts; check and remove it manually.`);
               throw Object.assign(new Error('Aborted sandbox cleanup failed'), { cause: error });
             }
           }
