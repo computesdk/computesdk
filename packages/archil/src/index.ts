@@ -335,8 +335,10 @@ function wrapSandboxCommand(command: string, options?: RunCommandOptions): strin
 }
 
 async function ensureVmRunning(vm: ArchilVm): Promise<void> {
-  if (vm.status === 'running') return;
+  // Refresh first: status on this handle is a local snapshot and goes stale
+  // when the sandbox is paused/stopped remotely or hits its TTL.
   await vm.refresh();
+  if (vm.status === 'running') return;
   if (vm.status === 'paused') {
     await vm.resume();
   } else if (vm.status === 'stopped' || vm.status === 'exited') {
@@ -362,6 +364,11 @@ function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
   return request;
 }
 
+// Records each sandbox's effective execution mode so `destroy` — which only
+// receives an id — deletes persistent VMs even when the mode came from a
+// per-sandbox `ephemeral` override rather than the provider config.
+const sandboxModes = new Map<string, ArchilExecutionMode>();
+
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
   name: 'archil',
   methods: {
@@ -383,6 +390,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
           const vm = await client.sandboxes.create(toSandboxRequest(options), {
             wait: true,
           });
+          sandboxModes.set(vm.id, 'persistent');
           return {
             sandbox: {
               client,
@@ -396,6 +404,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         }
 
         const diskId = resolveCreateDiskId(options);
+        sandboxModes.set(diskId, 'exec');
         return {
           sandbox: {
             client,
@@ -460,14 +469,18 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       destroy: async (config: ArchilConfig, sandboxId: string) => {
         const resolved = resolveConfig(config);
-        if (resolved.execution === 'persistent') {
+        const mode = sandboxModes.get(sandboxId) ?? resolved.execution;
+        if (mode === 'persistent') {
           const client = createClient(config, resolved);
           const vm = await client.sandboxes.get(sandboxId);
           await vm.delete();
-          return;
         }
-        // exec mode: no-op — Archil disks have an independent lifecycle.
+        // exec handles are disk references — Archil disks have an independent
+        // lifecycle, so destroying them is a no-op. Unknown ids fall back to
+        // the configured mode.
+        sandboxModes.delete(sandboxId);
       },
+
 
       runCommand: async (
         sandbox: ArchilSandbox,

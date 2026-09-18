@@ -606,6 +606,43 @@ describe('archil persistent mode', () => {
     expect(String(url)).toContain('/api/sandboxes');
   });
 
+  it('destroys using the mode the sandbox was created with', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      return json(sandboxWire());
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+    const calls = fetchMock.mock.calls as any[][];
+    const deletesFor = (id: string) =>
+      calls.filter(
+        ([url, init]) =>
+          String(url).includes(`/api/sandboxes/${id}`) &&
+          (init as RequestInit)?.method === 'DELETE',
+      );
+
+    // Exec-mode provider, ephemeral:false sandbox -> destroy deletes the VM.
+    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const vmSandbox = await exec.sandbox.create({ ephemeral: false });
+    await exec.sandbox.destroy(vmSandbox.sandboxId);
+    expect(deletesFor('sbx_123').length).toBeGreaterThan(0);
+
+    // Persistent-mode provider, ephemeral:true sandbox -> destroy stays a
+    // no-op on the disk reference instead of fetching it as a sandbox.
+    const persistent = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const execSandbox = await persistent.sandbox.create({
+      ephemeral: true,
+      diskId: 'disk_abc123',
+    });
+    const before = calls.length;
+    await persistent.sandbox.destroy(execSandbox.sandboxId);
+    expect(calls.length).toBe(before);
+  });
+
   it('keeps exec-mode destroy a no-op', async () => {
     const fetchMock = vi.fn();
     global.fetch = fetchMock as typeof fetch;

@@ -358,15 +358,19 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
       list: async (_config: CloudRunConfig) => Array.from(activeSandboxes.entries()).map(([sandboxId, sandbox]) => ({ sandbox, sandboxId })),
 
       destroy: async (config: CloudRunConfig, sandboxId: string) => {
+        // Destroy receives only an id, so resolve the mode the sandbox was
+        // actually created with — a per-sandbox `ephemeral` override beats the
+        // provider's configured executionMode.
+        const effectiveConfig = activeSandboxes.get(sandboxId)?.config ?? config
         if (isRemote(config)) {
           try {
-            if (getExecutionMode(config) === 'stateful') await gatewayRequest(config, '/v1/sandbox/destroy', { sandboxId })
+            if (getExecutionMode(effectiveConfig) === 'stateful') await gatewayRequest(config, '/v1/sandbox/destroy', { sandboxId })
           } finally {
             activeSandboxes.delete(sandboxId)
           }
           return
         }
-        if (getExecutionMode(config) === 'stateful') {
+        if (getExecutionMode(effectiveConfig) === 'stateful') {
           const result = await runSandboxCli(config, [...buildBaseArgs(config), 'delete', sandboxId, '--force', '--stdin=false', '--stdout=false', '--stderr=false'], { timeout: 30_000 })
           if (result.exitCode !== 0 && result.exitCode !== 124 && !/not found|does not exist/i.test(result.stderr)) {
             throw new Error(result.stderr || `Failed to delete Cloud Run sandbox ${sandboxId}`)
