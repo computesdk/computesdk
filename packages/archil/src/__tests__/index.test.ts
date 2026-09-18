@@ -86,7 +86,7 @@ describe('archil create semantics', () => {
 
   it('uses an existing disk id without fetching it', async () => {
     const fetchMock = vi.fn();
-    global.fetch = fetchMock as typeof fetch;
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const created = await provider.sandbox.create({ diskId: 'disk_abc123' });
@@ -185,7 +185,7 @@ describe('archil filesystem mapping', () => {
     );
   });
 
-  it('chunks large writes within Archil exec limits', async () => {
+  it('writes compressible large files in a single gzip command within Archil exec limits', async () => {
     const fetchMock = vi.fn(async () => execResponse());
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
@@ -193,6 +193,32 @@ describe('archil filesystem mapping', () => {
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await sandbox.filesystem.writeFile('/tmp/large.txt', 'x'.repeat(100_000));
+
+    const writeCommands = commands(fetchMock);
+    expect(writeCommands).toHaveLength(1);
+    expect(Buffer.byteLength(writeCommands[0], 'utf8')).toBeLessThanOrEqual(
+      102_400,
+    );
+    expect(writeCommands[0]).toContain('base64 -d | gzip -d');
+    expect(writeCommands[0]).toContain(
+      "mv '/mnt/archil/tmp/large.txt.computesdk-write-",
+    );
+    expect(writeCommands[0]).toContain(" '/mnt/archil/tmp/large.txt'");
+  });
+
+  it('falls back to base64 chunks for incompressible data within Archil exec limits', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    // Incompressible random ASCII avoids the gzip short-circuit.
+    const randomContent = Array.from({ length: 200_000 }, () =>
+      String.fromCharCode(33 + Math.floor(Math.random() * 94)),
+    ).join('');
+
+    await sandbox.filesystem.writeFile('/tmp/large.bin', randomContent);
 
     const writeCommands = commands(fetchMock);
     const chunkCommands = writeCommands.filter((command) =>
@@ -205,11 +231,9 @@ describe('archil filesystem mapping', () => {
       ),
     ).toBe(true);
     expect(writeCommands.at(-1)).toContain(
-      "mv '/mnt/archil/tmp/large.txt.computesdk-write-",
+      "mv '/mnt/archil/tmp/large.bin.computesdk-write-",
     );
-    expect(writeCommands.at(-1)).toContain(
-      " '/mnt/archil/tmp/large.txt'",
-    );
+    expect(writeCommands.at(-1)).toContain(" '/mnt/archil/tmp/large.bin'");
   });
 
   it('reads files larger than the Archil response limit in chunks', async () => {
@@ -335,8 +359,13 @@ describe('archil filesystem mapping', () => {
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
+    // Incompressible random ASCII forces uncompressed base64 chunking.
+    const randomContent = Array.from({ length: 200_000 }, () =>
+      String.fromCharCode(33 + Math.floor(Math.random() * 94)),
+    ).join('');
+
     await expect(
-      sandbox.filesystem.writeFile('/tmp/partial.txt', 'x'.repeat(200_000)),
+      sandbox.filesystem.writeFile('/tmp/partial.txt', randomContent),
     ).rejects.toThrow('Failed to write /tmp/partial.txt: chunk failed');
 
     const writeCommands = commands(fetchMock);
@@ -355,6 +384,94 @@ describe('archil filesystem mapping', () => {
     await expect(sandbox.filesystem.remove('/')).rejects.toThrow(
       /refusing to remove the Archil disk mount root/i,
     );
+  });
+
+  it('serializes concurrent disk writes so chunks do not interleave', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      return execResponse();
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await Promise.all([
+      sandbox.filesystem.writeFile('/tmp/collide.txt', 'a'.repeat(100_000)),
+      sandbox.filesystem.writeFile('/tmp/collide.txt', 'b'.repeat(100_000)),
+    ]);
+
+    const mutationCommands = commands(fetchMock).filter((command) =>
+      command.includes('base64 -d'),
+    );
+
+    // Composable data is gzip'd in a single command, so the key invariant is
+    // that each write is a discrete command and the two writes do not interleave.
+    expect(mutationCommands.length).toBe(2);
+    for (const command of mutationCommands) {
+      expect(command).toContain('base64 -d | gzip -d');
+      expect(command).toContain("'/mnt/archil/tmp/collide.txt'");
+    }
+
+    // Extract the redirect ('>' or '>>') used for the temp file so the test
+    // still verifies per-write isolation if chunking is ever reintroduced.
+    const redirects = mutationCommands.map((command) => {
+      const match = command.match(/(>>?) '\/mnt\/archil\/tmp\/collide\.txt\.computesdk-write-/);
+      return match ? (match[1] === '>' ? 'truncate' : 'append') : 'unknown';
+    });
+
+    const groups: string[][] = [];
+    for (const redirect of redirects) {
+      if (redirect === 'truncate') {
+        groups.push([redirect]);
+      } else {
+        expect(groups.length).toBeGreaterThan(0);
+        groups[groups.length - 1].push(redirect);
+      }
+    }
+
+    expect(groups.length).toBe(2);
+    for (const group of groups) {
+      expect(group[0]).toBe('truncate');
+      expect(group.slice(1).every((r) => r === 'append')).toBe(true);
+    }
+  });
+
+  it('recursively creates missing parents when writing a nested file', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await sandbox.filesystem.writeFile(
+      '/tmp/a/b/c/file.txt',
+      'nested content',
+    );
+
+    const writeCommands = commands(fetchMock);
+    expect(writeCommands.length).toBe(1);
+    expect(writeCommands[0]).toContain(
+      "mkdir -p '/mnt/archil/tmp/a/b/c'",
+    );
+    expect(writeCommands[0]).toContain("archil checkout --force --yes '/mnt/archil'");
+  });
+
+  it('removing a path whose parent does not exist succeeds', async () => {
+    const fetchMock = vi.fn(async () => execResponse());
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
+
+    await sandbox.filesystem.remove('/tmp/missing-parent/file.txt');
+
+    const removeCommands = commands(fetchMock);
+    expect(removeCommands.length).toBe(1);
+    expect(removeCommands[0]).toContain(
+      "rm -rf '/mnt/archil/tmp/missing-parent/file.txt'",
+    );
+    expect(removeCommands[0]).toContain("archil checkout --force --yes '/mnt/archil'");
   });
 });
 
