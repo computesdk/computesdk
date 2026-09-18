@@ -61,6 +61,8 @@ export interface MicrosandboxConfig {
   memoryMib?: number;
   /** Default writable root disk size in MiB. */
   rootDiskMib?: number;
+  /** Delete the sandbox when it stops. Defaults to false. */
+  ephemeral?: boolean;
   /** Default working directory inside the guest. */
   workdir?: string;
   /** Prefix for generated sandbox names. */
@@ -509,6 +511,8 @@ const _microsandbox = defineProvider<
           });
 
         const workdir = options?.directory ?? config.workdir;
+        const ephemeral = options?.ephemeral ?? config.ephemeral;
+        if (ephemeral !== undefined) builder = builder.ephemeral(ephemeral);
         if (workdir) builder = builder.workdir(workdir);
         if (options?.envs && Object.keys(options.envs).length > 0) builder = builder.envs(options.envs);
         if (config.pullPolicy) builder = builder.pullPolicy(config.pullPolicy);

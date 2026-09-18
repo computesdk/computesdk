@@ -125,6 +125,7 @@ vi.mock('microsandbox', () => {
     cpus(value: number) { this.config.cpus = value; return this; }
     memory(value: number) { this.config.memory = value; return this; }
     detached(value: boolean) { this.config.detached = value; return this; }
+    ephemeral(value: boolean) { this.config.ephemeral = value; return this; }
     maxDuration(value: number) { this.config.maxDuration = value; return this; }
     labels(value: Record<string, string>) { this.config.labels = value; return this; }
     workdir(value: string) { this.config.workdir = value; return this; }
@@ -349,6 +350,15 @@ describe('microsandbox provider', () => {
     expect(mock.created[0]).toMatchObject({ cpus: 8, memory: 16384, rootDisk: 8192 });
     await provider.sandbox.create({ name: 'canonical', memoryMib: 1024, memoryMiB: 2048 });
     expect(mock.created[1]).toMatchObject({ memory: 2048, rootDisk: 4096 });
+  });
+
+  it('preserves persistent defaults and supports per-create lifecycle overrides', async () => {
+    await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'default' });
+    await microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'temporary', ephemeral: true, timeout: 900_000 });
+    await microsandbox({ apiKey: 'key', ephemeral: true }).sandbox.create({ name: 'configured' });
+    await microsandbox({ apiKey: 'key', ephemeral: true }).sandbox.create({ name: 'persistent', ephemeral: false });
+    expect(mock.created.map((sandbox) => sandbox.ephemeral)).toEqual([undefined, true, true, false]);
+    expect(mock.created[1].maxDuration).toBe(900);
   });
 
   it('never creates a sandbox for an already aborted request', async () => {

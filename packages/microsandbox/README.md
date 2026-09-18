@@ -77,6 +77,7 @@ interface MicrosandboxConfig {
   cpus?: number;
   memoryMib?: number;
   rootDiskMib?: number;
+  ephemeral?: boolean;         // Delete on stop; defaults to false
   workdir?: string;
   namePrefix?: string;
   ports?: Array<number | { host: number; guest: number; bind?: string }>;
@@ -86,7 +87,7 @@ interface MicrosandboxConfig {
 }
 ```
 
-Per-sandbox `image`, `templateId`, `snapshotId`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB`, `memoryMib`, `memMiB`, `rootDiskMib`, `timeout`, `name`, `envs`, `metadata`, and `ports` options override or extend provider defaults where applicable.
+Per-sandbox `image`, `templateId`, `snapshotId`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB`, `memoryMib`, `memMiB`, `rootDiskMib`, `ephemeral`, `timeout`, `name`, `envs`, `metadata`, and `ports` options override or extend provider defaults where applicable.
 
 ## Backend support
 
