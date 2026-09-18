@@ -1,15 +1,25 @@
 /**
  * Archil Provider
  *
- * Executes commands against an Archil disk via the Archil control-plane HTTP
- * API. Archil is exec-only — each command runs in an Archil-managed container
- * with the configured disk mounted, then returns stdout, stderr, and exit code.
- * There is no sandbox lifecycle to manage; "create" resolves a handle to an
- * existing disk id.
+ * Supports Archil's two compute surfaces, selected by `execution`:
+ *
+ * - "exec" (default): each command runs in an Archil-managed ephemeral
+ *   container with the configured disk mounted, then returns stdout, stderr,
+ *   and exit code. "create" resolves a handle to an existing disk id; env,
+ *   cwd, and installs do not persist between commands.
+ * - "sandbox": `create` provisions an Archil sandbox — a persistent Linux VM
+ *   with a dedicated disk. `runCommand` uses the sandbox's interactive
+ *   process API (a short-lived WebSocket connection fetched fresh per command
+ *   via POST /api/sandboxes/{id}/connections), so filesystem state, installed
+ *   tools, and background processes persist across commands.
  */
 
 import { defineProvider } from '@computesdk/provider';
 import { Archil as ArchilClient } from 'disk';
+import type {
+  CreateSandboxRequest as ArchilSandboxRequest,
+  Sandbox as ArchilVm,
+} from 'disk';
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import type {
@@ -44,6 +54,13 @@ function regionToBaseUrl(region: string): string {
   return `https://control.${color}.${suffix}.${cloud}.prod.archil.com`;
 }
 
+/**
+ * Archil execution mode:
+ * - "exec": serverless per-command containers on a disk (default).
+ * - "sandbox": a persistent sandbox VM run through the process API.
+ */
+export type ArchilExecutionMode = 'exec' | 'sandbox';
+
 export interface ArchilConfig {
   /** Archil API key. Falls back to ARCHIL_API_KEY env var. */
   apiKey?: string;
@@ -51,6 +68,12 @@ export interface ArchilConfig {
   region?: string;
   /** Override the control-plane base URL (useful for testing). */
   baseUrl?: string;
+  /**
+   * Which Archil compute surface to use. Defaults to "exec". In "sandbox"
+   * mode create() provisions a persistent sandbox VM instead of resolving a
+   * disk handle.
+   */
+  execution?: ArchilExecutionMode;
 }
 
 interface DiskResponse {
@@ -81,17 +104,37 @@ interface ExecResponse {
 interface ResolvedConfig {
   apiKey: string;
   baseUrl: string;
+  execution: ArchilExecutionMode;
 }
 
 interface ArchilSandbox {
   client: ArchilClient;
   disk: DiskHandle | DiskResponse;
+  /** Set only in "sandbox" execution mode. */
+  vm?: ArchilVm;
   resolved: ResolvedConfig;
   createdAt: Date;
 }
 
 interface ArchilCreateOptions extends CreateSandboxOptions {
+  /**
+   * exec mode: id of the existing disk to run commands against. Required in
+   * "exec" mode; ignored in "sandbox" mode.
+   */
   diskId?: string;
+  /** sandbox mode: name for the sandbox. */
+  name?: string;
+  /** sandbox mode: OCI base image (e.g. "node:24-bookworm"). */
+  baseImage?: string;
+  /** sandbox mode: environment variables baked into the sandbox. */
+  env?: Record<string, string>;
+  /** sandbox mode: lifetime budget per powered-on session, in seconds. */
+  maxTtlSeconds?: number;
+  /** sandbox mode: extra Archil sandbox fields (network policy, etc.). */
+  sandbox?: Omit<
+    ArchilSandboxRequest,
+    'name' | 'vcpuCount' | 'memSizeMiB' | 'baseImage' | 'env' | 'maxTtlSeconds'
+  >;
 }
 
 function resolveConfig(config: ArchilConfig): ResolvedConfig {
@@ -119,7 +162,7 @@ function resolveConfig(config: ArchilConfig): ResolvedConfig {
     baseUrl = regionToBaseUrl(region);
   }
 
-  return { apiKey, baseUrl };
+  return { apiKey, baseUrl, execution: config.execution ?? 'exec' };
 }
 
 function createClient(config: ArchilConfig, resolved: ResolvedConfig): ArchilClient {
@@ -145,8 +188,13 @@ function shellEscape(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function mapFilesystemPath(path: string): string {
+function mapFilesystemPath(sandbox: ArchilSandbox, path: string): string {
   const normalized = posix.normalize(path.startsWith('/') ? path : `/${path}`);
+
+  // In sandbox mode the filesystem is the VM's own filesystem.
+  if (sandbox.vm) {
+    return normalized;
+  }
 
   if (normalized === '/') {
     return ARCHIL_MOUNT_ROOT;
@@ -162,13 +210,19 @@ function mapFilesystemPath(path: string): string {
   return `${ARCHIL_MOUNT_ROOT}${normalized}`;
 }
 
-function withDiskWriteLock(command: string): string {
+function withDiskWriteLockCommand(command: string): string {
   const mountRoot = shellEscape(ARCHIL_MOUNT_ROOT);
   return [
     `archil checkout --force --yes ${mountRoot}`,
     `{ ${command}; status=$?; archil checkin ${mountRoot}; checkin_status=$?; ` +
       `if [ $status -ne 0 ]; then exit $status; fi; exit $checkin_status; }`,
   ].join(' && ');
+}
+
+function withDiskWriteLock(sandbox: ArchilSandbox, command: string): string {
+  // Sandbox VMs have a dedicated disk — no shared-mode checkout needed.
+  if (sandbox.vm) return command;
+  return withDiskWriteLockCommand(command);
 }
 
 function execCommandBytes(command: string): number {
@@ -216,7 +270,7 @@ function maxWriteChunkSize(
 
   while (low < high) {
     const candidate = Math.ceil((low + high) / 2);
-    const command = withDiskWriteLock(
+    const command = withDiskWriteLockCommand(
       buildWriteChunkCommand(
         parent,
         tempPath,
@@ -270,6 +324,45 @@ async function execOnDisk(sandbox: ArchilSandbox, command: string): Promise<Exec
   return sandbox.client.disks.exec(sandbox.disk.id, command);
 }
 
+function wrapSandboxCommand(command: string, options?: RunCommandOptions): string {
+  let wrapped = command;
+  if (options?.cwd) {
+    wrapped = `cd ${shellEscape(options.cwd)} && ${wrapped}`;
+  }
+  if (options?.background) {
+    wrapped = `nohup sh -c ${shellEscape(wrapped)} > /dev/null 2>&1 &`;
+  }
+  return wrapped;
+}
+
+async function ensureVmRunning(vm: ArchilVm): Promise<void> {
+  if (vm.status === 'running') return;
+  await vm.refresh();
+  if (vm.status === 'paused') {
+    await vm.resume();
+  } else if (vm.status === 'stopped' || vm.status === 'exited') {
+    await vm.start();
+  }
+}
+
+function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
+  const request: ArchilSandboxRequest = {
+    ...options?.sandbox,
+    name: options?.name,
+    baseImage: options?.baseImage ?? options?.templateId,
+    env: options?.env,
+    vcpuCount: options?.vcpus ?? options?.cpu ?? options?.cpus,
+    memSizeMiB: options?.memoryMiB ?? options?.memory,
+  };
+  if (options?.maxTtlSeconds !== undefined) {
+    request.maxTtlSeconds = options.maxTtlSeconds;
+  } else if (options?.timeout !== undefined) {
+    // CreateSandboxOptions.timeout is milliseconds; Archil's TTL is seconds.
+    request.maxTtlSeconds = Math.ceil(options.timeout / 1000);
+  }
+  return request;
+}
+
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
   name: 'archil',
   methods: {
@@ -277,6 +370,23 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       create: async (config: ArchilConfig, options?: ArchilCreateOptions) => {
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
+
+        if (resolved.execution === 'sandbox') {
+          const vm = await client.sandboxes.create(toSandboxRequest(options), {
+            wait: true,
+          });
+          return {
+            sandbox: {
+              client,
+              disk: { id: vm.id },
+              vm,
+              resolved,
+              createdAt: new Date(),
+            },
+            sandboxId: vm.id,
+          };
+        }
+
         const diskId = resolveCreateDiskId(options);
         return {
           sandbox: {
@@ -293,6 +403,20 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
         try {
+          if (resolved.execution === 'sandbox') {
+            const vm = await client.sandboxes.get(sandboxId);
+            await ensureVmRunning(vm);
+            return {
+              sandbox: {
+                client,
+                disk: { id: vm.id },
+                vm,
+                resolved,
+                createdAt: new Date(),
+              },
+              sandboxId: vm.id,
+            };
+          }
           const disk = await client.disks.get(sandboxId);
           return {
             sandbox: { client, disk, resolved, createdAt: new Date() },
@@ -306,6 +430,19 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       list: async (config: ArchilConfig) => {
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
+        if (resolved.execution === 'sandbox') {
+          const vms = await client.sandboxes.list();
+          return vms.map((vm) => ({
+            sandbox: {
+              client,
+              disk: { id: vm.id },
+              vm,
+              resolved,
+              createdAt: new Date(),
+            },
+            sandboxId: vm.id,
+          }));
+        }
         const disks = await client.disks.list();
         return disks.map((disk) => ({
           sandbox: { client, disk, resolved, createdAt: new Date() },
@@ -313,8 +450,15 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         }));
       },
 
-      destroy: async (_config: ArchilConfig, _sandboxId: string) => {
-        // No-op: Archil disks have an independent lifecycle.
+      destroy: async (config: ArchilConfig, sandboxId: string) => {
+        const resolved = resolveConfig(config);
+        if (resolved.execution === 'sandbox') {
+          const client = createClient(config, resolved);
+          const vm = await client.sandboxes.get(sandboxId);
+          await vm.delete();
+          return;
+        }
+        // exec mode: no-op — Archil disks have an independent lifecycle.
       },
 
       runCommand: async (
@@ -324,6 +468,40 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       ): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
+          if (sandbox.vm) {
+            // The process API fetches a fresh short-lived WebSocket
+            // connection URL per process start, so expiry is handled by the
+            // underlying client.
+            await ensureVmRunning(sandbox.vm);
+            const wrapped = wrapSandboxCommand(command, options);
+            if (options?.background) {
+              const proc = await sandbox.vm.processes.start(wrapped, {
+                env: options?.env,
+              });
+              await proc.disconnect();
+              return {
+                stdout: '',
+                stderr: '',
+                exitCode: 0,
+                durationMs: Date.now() - startTime,
+              };
+            }
+            const result = await sandbox.vm.exec(wrapped, {
+              env: options?.env,
+              timeoutSeconds:
+                options?.timeout !== undefined
+                  ? Math.ceil(options.timeout / 1000)
+                  : undefined,
+            });
+            return {
+              stdout: result.stdout,
+              stderr: result.stderr,
+              exitCode:
+                result.exitCode ?? (result.status === 'completed' ? 0 : 1),
+              durationMs: Date.now() - startTime,
+            };
+          }
+
           const result = await execOnDisk(sandbox, wrapCommand(command, options));
           return {
             stdout: result.stdout ?? '',
@@ -342,6 +520,29 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       },
 
       getInfo: async (sandbox: ArchilSandbox): Promise<SandboxInfo> => {
+        if (sandbox.vm) {
+          const vm = sandbox.vm;
+          return {
+            id: vm.id,
+            provider: 'archil',
+            status:
+              vm.status === 'running'
+                ? 'running'
+                : vm.status === 'failed'
+                  ? 'error'
+                  : 'stopped',
+            createdAt: vm.createdAt,
+            timeout: vm.maxTtlSeconds * 1000,
+            metadata: {
+              name: vm.name,
+              archilStatus: vm.status,
+              vcpuCount: vm.vcpuCount,
+              memSizeMiB: vm.memSizeMiB,
+              baseImage: vm.baseImage,
+              platform: vm.platform,
+            },
+          };
+        }
         const diskInfo = 'status' in sandbox.disk ? sandbox.disk : undefined;
         return {
           id: sandbox.disk.id,
@@ -361,9 +562,21 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       },
 
       getUrl: async (
-        _sandbox: ArchilSandbox,
+        sandbox: ArchilSandbox,
         options: { port: number; protocol?: string },
       ): Promise<string> => {
+        if (sandbox.vm) {
+          await sandbox.vm.refresh();
+          const endpoint = sandbox.vm.endpoints?.find(
+            (e) => e.port === options.port,
+          );
+          if (!endpoint) {
+            throw new Error(
+              `No endpoint exposed on port ${options.port} for Archil sandbox ${sandbox.vm.id}.`,
+            );
+          }
+          return `${options.protocol ?? 'https'}://${endpoint.hostname}`;
+        }
         throw new Error(
           `Archil exec runs each command in a fresh ephemeral container that exits when the command returns, ` +
             `so there is no long-lived process to expose port ${options.port} on. ` +
@@ -373,7 +586,22 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       filesystem: {
         readFile: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
+          if (sandbox.vm) {
+            const chunks: Buffer[] = [];
+            try {
+              await sandbox.vm.files.downloadFile(path, (chunk) => {
+                chunks.push(Buffer.from(chunk));
+              });
+            } catch (error) {
+              throw new Error(
+                `Failed to read ${path}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            }
+            return Buffer.concat(chunks).toString('utf8');
+          }
+          const diskPath = mapFilesystemPath(sandbox, path);
           const sizeResult = await runCommand(
             sandbox,
             `wc -c < ${shellEscape(diskPath)}`,
@@ -439,7 +667,22 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         writeFile: async (sandbox, path, content, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
+          if (sandbox.vm) {
+            try {
+              await sandbox.vm.files.uploadFile(
+                Buffer.from(content, 'utf8'),
+                path,
+              );
+            } catch (error) {
+              throw new Error(
+                `Failed to write ${path}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            }
+            return;
+          }
+          const diskPath = mapFilesystemPath(sandbox, path);
           const parent = posix.dirname(diskPath);
           const encoded = Buffer.from(content, 'utf8').toString('base64');
           const tempPath = `${diskPath}.computesdk-write-${randomUUID()}`;
@@ -451,6 +694,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
               const result = await runCommand(
                 sandbox,
                 withDiskWriteLock(
+                  sandbox,
                   [
                     `mkdir -p ${shellEscape(parent)}`,
                     `: > ${shellEscape(tempPath)}`,
@@ -472,6 +716,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
               const result = await runCommand(
                 sandbox,
                 withDiskWriteLock(
+                  sandbox,
                   buildWriteChunkCommand(
                     parent,
                     tempPath,
@@ -491,7 +736,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
               try {
                 await runCommand(
                   sandbox,
-                  withDiskWriteLock(`rm -f ${shellEscape(tempPath)}`),
+                  withDiskWriteLock(sandbox, `rm -f ${shellEscape(tempPath)}`),
                 );
               } catch {
                 // Preserve the original write error if cleanup fails.
@@ -506,10 +751,10 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         mkdir: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
+          const diskPath = mapFilesystemPath(sandbox, path);
           const result = await runCommand(
             sandbox,
-            withDiskWriteLock(`mkdir -p ${shellEscape(diskPath)}`),
+            withDiskWriteLock(sandbox, `mkdir -p ${shellEscape(diskPath)}`),
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
@@ -517,11 +762,11 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         readdir: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
+          const diskPath = mapFilesystemPath(sandbox, path);
           // Tab-separated: type<TAB>size<TAB>mtime-iso<TAB>name. Robust to spaces in names.
           const result = await runCommand(
             sandbox,
-            `find ${shellEscape(diskPath)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
+            `find ${shellEscape(diskPath)} -mindepth 1 -maxdepth 1 -printf '%y\t%s\t%T@\t%f\n'`,
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to list directory ${path}: ${result.stderr}`);
@@ -542,19 +787,19 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         exists: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
+          const diskPath = mapFilesystemPath(sandbox, path);
           const result = await runCommand(sandbox, `test -e ${shellEscape(diskPath)}`);
           return result.exitCode === 0;
         },
 
         remove: async (sandbox, path, runCommand) => {
-          const diskPath = mapFilesystemPath(path);
-          if (diskPath === ARCHIL_MOUNT_ROOT) {
+          const diskPath = mapFilesystemPath(sandbox, path);
+          if (!sandbox.vm && diskPath === ARCHIL_MOUNT_ROOT) {
             throw new Error('Refusing to remove the Archil disk mount root.');
           }
           const result = await runCommand(
             sandbox,
-            withDiskWriteLock(`rm -rf ${shellEscape(diskPath)}`),
+            withDiskWriteLock(sandbox, `rm -rf ${shellEscape(diskPath)}`),
           );
           if (result.exitCode !== 0) {
             throw new Error(`Failed to remove ${path}: ${result.stderr}`);
