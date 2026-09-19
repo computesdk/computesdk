@@ -209,6 +209,22 @@ describe('blaxel runCommand output capture', () => {
 		expect(kill).toHaveBeenCalledWith('p1');
 	});
 
+	it('fails when wait resolves without a terminal status (swallowed poll error)', async () => {
+		const kill = vi.fn(async () => ({}));
+		const sandbox = makeSandbox(
+			async () => ({ status: 'running', pid: 'p1' }),
+			undefined,
+			async () => ({ status: 'running' }) // SDK wait() returns stale data on poll errors
+		);
+		(sandbox.process as unknown as { kill: typeof kill }).kill = kill;
+
+		const result = await runEcho(sandbox);
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain('did not reach a terminal state');
+		expect(kill).toHaveBeenCalledWith('p1');
+	});
+
 	it('surfaces real non-zero exit codes unchanged', async () => {
 		const sandbox = makeSandbox(async (opts) => {
 			opts.onStderr?.('bad');

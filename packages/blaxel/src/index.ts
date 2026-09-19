@@ -541,6 +541,14 @@ async function executeWithStreaming(
 				maxWait: timeoutMs ?? DEFAULT_PROCESS_WAIT_MS,
 				interval: 500,
 			})) as ExecResult;
+			// @blaxel/core's wait() breaks its poll loop on a mid-poll error and
+			// returns the last (possibly still 'running') response, so a resolved
+			// promise doesn't guarantee a terminal state.
+			if (!finished.status || !TERMINAL_PROCESS_STATUSES.has(finished.status)) {
+				throw new Error(
+					`Process ${pid} did not reach a terminal state (status: ${finished.status ?? 'unknown'})`
+				);
+			}
 			result = { ...result, ...finished, pid };
 		} catch (error) {
 			// Best-effort: don't leave the process running past its deadline.
