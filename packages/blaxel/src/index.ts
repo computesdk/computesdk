@@ -536,6 +536,14 @@ async function executeWithStreaming(
 	// process to a terminal state before attempting output recovery.
 	if (result.pid && (!result.status || !TERMINAL_PROCESS_STATUSES.has(result.status))) {
 		const pid = result.pid;
+		// Mark 3 doesn't retain process output for the logs GET after the
+		// process exits — attach the live log stream before waiting so output
+		// produced while the process finishes isn't lost.
+		const logStream = sandbox.process.streamLogs(pid, {
+			onStdout: (line) => stdoutLines.push(line),
+			onStderr: (line) => stderrLines.push(line),
+			onError: () => {},
+		});
 		try {
 			const finished = (await sandbox.process.wait(pid, {
 				maxWait: timeoutMs ?? DEFAULT_PROCESS_WAIT_MS,
@@ -558,6 +566,13 @@ async function executeWithStreaming(
 				// Process may have already exited
 			}
 			throw error instanceof Error ? error : new Error(String(error));
+		} finally {
+			logStream.close();
+			try {
+				await logStream.wait();
+			} catch {
+				// Stream teardown is best-effort; chunks already captured stand
+			}
 		}
 	}
 

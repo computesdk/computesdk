@@ -17,10 +17,18 @@ type ExecOptions = {
 	onLog?: (line: string) => void;
 };
 
+type StreamOptions = {
+	onStdout?: (line: string) => void;
+	onStderr?: (line: string) => void;
+	onLog?: (line: string) => void;
+	onError?: (err: Error) => void;
+};
+
 function makeSandbox(
 	execImpl: (opts: ExecOptions) => Promise<Record<string, unknown>>,
 	logsImpl?: (pid: string, type: string) => Promise<string>,
-	waitImpl?: (pid: string, opts?: { maxWait?: number; interval?: number }) => Promise<Record<string, unknown>>
+	waitImpl?: (pid: string, opts?: { maxWait?: number; interval?: number }) => Promise<Record<string, unknown>>,
+	streamImpl?: (pid: string, opts: StreamOptions) => { close: () => void; wait: () => Promise<void> }
 ): SandboxInstance {
 	return {
 		process: {
@@ -28,6 +36,9 @@ function makeSandbox(
 			logs: vi.fn(logsImpl ?? (async () => '')),
 			wait: vi.fn(waitImpl ?? (async () => ({ status: 'completed' }))),
 			kill: vi.fn(async () => ({})),
+			streamLogs: vi.fn(
+				streamImpl ?? (() => ({ close: () => {}, wait: async () => {} }))
+			),
 		},
 	} as unknown as SandboxInstance;
 }
@@ -177,6 +188,26 @@ describe('blaxel runCommand output capture', () => {
 
 		expect(result.stdout).toBe('recovered after wait');
 		expect(logs).toHaveBeenCalledWith('p1', 'stdout');
+	});
+
+	it('captures output via the live log stream when the process is still running', async () => {
+		const stream = vi.fn((_pid: string, opts: StreamOptions) => {
+			opts.onStdout?.('hello from stream');
+			opts.onStderr?.('warn line');
+			return { close: () => {}, wait: async () => {} };
+		});
+		const sandbox = makeSandbox(
+			async () => ({ status: 'running', pid: 'p1' }),
+			async () => '',
+			async () => ({ status: 'completed', exitCode: 0, stdout: '', stderr: '' }),
+			stream
+		);
+
+		const result = await runEcho(sandbox);
+
+		expect(stream).toHaveBeenCalledWith('p1', expect.any(Object));
+		expect(result.stdout).toBe('hello from stream');
+		expect(result.stderr).toBe('warn line');
 	});
 
 	it('does not wait when exec already returns a terminal status', async () => {
