@@ -1,5 +1,13 @@
 # @computesdk/kernel
 
+## 0.2.13
+
+### Patch Changes
+
+- Updated dependencies [0732fed]
+  - computesdk@4.1.6
+  - @computesdk/provider@2.1.7
+
 ## 0.2.12
 
 ### Patch Changes

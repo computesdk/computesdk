@@ -358,6 +358,300 @@ describe('archil filesystem mapping', () => {
   });
 });
 
+describe('archil persistent mode', () => {
+  const originalWebSocket = globalThis.WebSocket;
+
+  function json(data: unknown, status = 200): Response {
+    return new Response(JSON.stringify({ success: true, data }), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  function sandboxWire(status = 'running', id = 'sbx_123') {
+    return {
+      sandbox_id: id,
+      name: 'test-sandbox',
+      status,
+      vcpu_count: 2,
+      mem_size_mib: 2048,
+      base_image: 'ubuntu:26.04',
+      max_ttl_seconds: 3600,
+      max_concurrent_execs: 8,
+      created_at: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
+    };
+  }
+
+  class FakeWebSocket {
+    static OPEN = 1;
+    readyState = 0;
+    readonly sent: string[] = [];
+    private readonly listeners = new Map<string, Set<(event: any) => void>>();
+
+    constructor(readonly url: string) {
+      queueMicrotask(() => this.emit('open', {}));
+    }
+
+    addEventListener(type: string, fn: (event: any) => void) {
+      let set = this.listeners.get(type);
+      if (!set) {
+        set = new Set();
+        this.listeners.set(type, set);
+      }
+      set.add(fn);
+    }
+
+    removeEventListener(type: string, fn: (event: any) => void) {
+      this.listeners.get(type)?.delete(fn);
+    }
+
+    send(data: unknown) {
+      if (typeof data !== 'string') return;
+      this.sent.push(data);
+      const request = JSON.parse(data) as { type: string };
+      if (request.type !== 'start') return;
+      queueMicrotask(() => {
+        this.emit('message', {
+          data: JSON.stringify({ type: 'started', process_id: 'proc_1' }),
+        });
+        this.emit('message', { data: FakeWebSocket.outputFrame(1, 0, 'hello') });
+        this.emit('message', {
+          data: JSON.stringify({
+            type: 'exit',
+            status: 'completed',
+            exit_code: 0,
+            cursor: 5,
+          }),
+        });
+      });
+    }
+
+    close() {
+      this.readyState = 3;
+      this.emit('close', {});
+    }
+
+    private emit(type: string, event: any) {
+      for (const fn of this.listeners.get(type) ?? []) fn(event);
+    }
+
+    static outputFrame(stream: 1 | 2, offset: number, text: string): ArrayBuffer {
+      const payload = new TextEncoder().encode(text);
+      const buffer = new ArrayBuffer(9 + payload.byteLength);
+      const view = new DataView(buffer);
+      view.setUint8(0, stream);
+      view.setBigUint64(1, BigInt(offset));
+      new Uint8Array(buffer, 9).set(payload);
+      return buffer;
+    }
+  }
+
+  afterEach(() => {
+    globalThis.WebSocket = originalWebSocket;
+  });
+
+  it('provisions a sandbox on create without requiring a disk id', async () => {
+    const fetchMock = vi.fn(async () => json(sandboxWire()));
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const sandbox = await provider.sandbox.create({
+      name: 'ci-job',
+      baseImage: 'node:24-bookworm',
+      vcpus: 4,
+      memoryMiB: 8192,
+      maxTtlSeconds: 600,
+    });
+
+    expect(sandbox.sandboxId).toBe('sbx_123');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as any[];
+    expect(String(url)).toContain('/api/sandboxes');
+    expect(String(url)).toContain('wait=true');
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body).toMatchObject({
+      name: 'ci-job',
+      base_image: 'node:24-bookworm',
+      vcpu_count: 4,
+      mem_size_mib: 8192,
+      max_ttl_seconds: 600,
+    });
+  });
+
+  it('still requires a disk id in exec mode', async () => {
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    await expect(provider.sandbox.create()).rejects.toThrow(/disk id/i);
+  });
+
+  it('resumes a paused sandbox on getById', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url.endsWith('/resume')) {
+        return json(sandboxWire('running'));
+      }
+      return json(sandboxWire('paused'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const sandbox = await provider.sandbox.getById('sbx_123');
+
+    expect(sandbox?.sandboxId).toBe('sbx_123');
+    const calls = fetchMock.mock.calls as any[][];
+    expect(
+      calls.some(
+        ([url, init]) =>
+          String(url).includes('/api/sandboxes/sbx_123/resume') &&
+          (init as RequestInit)?.method === 'POST',
+      ),
+    ).toBe(true);
+  });
+
+  it('runs commands through the process WebSocket and refreshes the connection URL per command', async () => {
+    let connectionCalls = 0;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url.includes('/api/sandboxes')) {
+        if (url.endsWith('/connections')) {
+          connectionCalls += 1;
+          return json({ url: `wss://fake-${connectionCalls}.example.com` });
+        }
+        return json(sandboxWire());
+      }
+      return json(sandboxWire());
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const sandbox = await provider.sandbox.create({ name: 'ci-job' });
+
+    const first = await sandbox.runCommand('echo hello', {
+      cwd: '/app',
+      env: { FOO: 'bar' },
+    });
+    expect(first.stdout).toBe('hello');
+    expect(first.exitCode).toBe(0);
+
+    await sandbox.runCommand('true');
+    // Each command fetches a fresh short-lived connection URL.
+    expect(connectionCalls).toBe(2);
+  });
+
+  it('deletes the sandbox on destroy', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      return json(sandboxWire());
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await provider.sandbox.destroy('sbx_123');
+
+    const calls = fetchMock.mock.calls as any[][];
+    expect(
+      calls.some(
+        ([url, init]) =>
+          String(url).includes('/api/sandboxes/sbx_123') &&
+          (init as RequestInit)?.method === 'DELETE',
+      ),
+    ).toBe(true);
+  });
+
+  it('honors the ephemeral create option over the configured mode', async () => {
+    const fetchMock = vi.fn(async () => json(sandboxWire()));
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    // Persistent-mode provider, ephemeral sandbox request -> exec handle.
+    const persistent = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const execSandbox = await persistent.sandbox.create({
+      ephemeral: true,
+      diskId: 'disk_abc123',
+    });
+    expect(execSandbox.sandboxId).toBe('disk_abc123');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Exec-mode provider, ephemeral: false -> provisions a sandbox.
+    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const vmSandbox = await exec.sandbox.create({
+      ephemeral: false,
+      name: 'ci-job',
+    });
+    expect(vmSandbox.sandboxId).toBe('sbx_123');
+    const [url] = fetchMock.mock.calls[0] as any[];
+    expect(String(url)).toContain('/api/sandboxes');
+  });
+
+  it('destroys using the mode the sandbox was created with', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      return json(sandboxWire());
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+    const calls = fetchMock.mock.calls as any[][];
+    const deletesFor = (id: string) =>
+      calls.filter(
+        ([url, init]) =>
+          String(url).includes(`/api/sandboxes/${id}`) &&
+          (init as RequestInit)?.method === 'DELETE',
+      );
+
+    // Exec-mode provider, ephemeral:false sandbox -> destroy deletes the VM.
+    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const vmSandbox = await exec.sandbox.create({ ephemeral: false });
+    await exec.sandbox.destroy(vmSandbox.sandboxId);
+    expect(deletesFor('sbx_123').length).toBeGreaterThan(0);
+
+    // Persistent-mode provider, ephemeral:true sandbox -> destroy stays a
+    // no-op on the disk reference instead of fetching it as a sandbox.
+    const persistent = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const execSandbox = await persistent.sandbox.create({
+      ephemeral: true,
+      diskId: 'disk_abc123',
+    });
+    const before = calls.length;
+    await persistent.sandbox.destroy(execSandbox.sandboxId);
+    expect(calls.length).toBe(before);
+  });
+
+  it('keeps exec-mode destroy a no-op', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as typeof fetch;
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    await provider.sandbox.destroy('disk_123');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 runProviderTestSuite({
   name: 'archil',
   provider: (() => {
