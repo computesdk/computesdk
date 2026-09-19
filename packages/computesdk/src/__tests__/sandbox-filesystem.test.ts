@@ -131,6 +131,7 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
         env('CLOUDFLARE_SANDBOX_URL') &&
           env('CLOUDFLARE_SANDBOX_SECRET')
       ),
+    filesystemBasePath: '/workspace/computesdk-fs-test',
   },
   codesandbox: {
     config: () => envConfig({ apiKey: env('CSB_API_KEY') }),
@@ -708,6 +709,14 @@ async function runFilesystemAssertions(sandbox: Sandbox): Promise<void> {
   await sandbox.filesystem.remove(filesystemBasePath);
   expect(await sandbox.filesystem.exists(filesystemBasePath)).toBe(false);
 }
+
+describe('filesystem provider paths', () => {
+  it('uses the bridge workspace for Cloudflare', () => {
+    expect(providerDefinitions.cloudflare.filesystemBasePath).toBe(
+      '/workspace/computesdk-fs-test'
+    );
+  });
+});
 
 describe('sandbox filesystem', () => {
   const sdk = compute({ provider: createInMemoryFilesystemProvider() });
