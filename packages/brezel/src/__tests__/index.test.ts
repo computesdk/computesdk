@@ -12,6 +12,7 @@ runProviderTestSuite({
   }),
   supportsFilesystem: true,
   supportsGetUrl: true,
+  supportsStreaming: true,
   ports: [3000, 8080],
   skipIntegration: !process.env.BREZEL_API_KEY,
 })

@@ -24,7 +24,7 @@
     "build": "tsup",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
-    "test": "vitest run",
+    "test": "pnpm build && vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
@@ -44,9 +44,9 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/brezel"
   },
-  "homepage": "https://github.com/infercrane/brezel",
+  "homepage": "https://www.computesdk.com",
   "bugs": {
-    "url": "https://github.com/infercrane/brezel/issues"
+    "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
     "@infercrane/brezel": "^0.1.1",

@@ -31,7 +31,6 @@ Providers are platforms that provide sandboxes. Each package under `@computesdk/
 | `@computesdk/archil`           | Archil       |
 | `@computesdk/beam`             | Beam         |
 | `@computesdk/blaxel`           | Blaxel       |
-| `@computesdk/brezel`           | Brezel       |
 | `@computesdk/buddy`            | Buddy        |
 | `@computesdk/cloud-run`        | Cloud Run    |
 | `@computesdk/cloudflare`       | Cloudflare   |

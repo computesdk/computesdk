@@ -172,8 +172,6 @@ async function waitUntilDeleted(client: BrezelClient, id: string): Promise<void>
   throw new Error(`Timed out waiting for Brezel sandbox deletion: ${id}`)
 }
 
-type FsRunCommand = (sandbox: Sandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
-
 export const brezel = defineProvider<Sandbox, ConfigWithClient>({
   name: 'brezel',
   methods: {
@@ -228,32 +226,12 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
         await waitUntilDeleted(client, sandboxId)
       },
 
-      runCommand: async (sandbox: Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const startedAt = performance.now()
-        const timeoutMs = options?.timeout ?? sandboxTimeouts.get(sandbox) ?? DEFAULT_TIMEOUT_MS
-        const stdoutDecoder = new TextDecoder()
-        const stderrDecoder = new TextDecoder()
-        const result = await sandbox.run(commandArgv(command, options?.background ?? false), {
-          cwd: options?.cwd,
-          env: validateEnvironment(options?.env),
-          timeoutSeconds: Math.max(1, Math.ceil(timeoutMs / 1000)),
-          onEvent: event => {
-            if ((event.type === 'stdout' || event.type === 'stderr') && typeof event.data === 'string') {
-              const chunk = Buffer.from(event.data, 'base64')
-              if (event.type === 'stdout') options?.onStdout?.(stdoutDecoder.decode(chunk, { stream: true }))
-              else options?.onStderr?.(stderrDecoder.decode(chunk, { stream: true }))
-            }
-          },
-        })
-        options?.onStdout?.(stdoutDecoder.decode())
-        options?.onStderr?.(stderrDecoder.decode())
-        return {
-          stdout: result.stdoutText,
-          stderr: result.stderrText,
-          exitCode: result.exitCode,
-          durationMs: performance.now() - startedAt,
-        }
-      },
+      runCommand,
+
+      // Brezel streams command events over its management API. Registering the
+      // same implementation here prevents ComputeSDK from bootstrapping its
+      // generic in-sandbox SSE bridge when callbacks are requested.
+      streamCommand: runCommand,
 
       getInfo: async (sandbox: Sandbox): Promise<SandboxInfo> => {
         const client = sandboxClients.get(sandbox)
@@ -327,3 +305,38 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
     },
   },
 })
+
+async function runCommand(
+  sandbox: Sandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const startedAt = performance.now()
+  const timeoutMs = options?.timeout ?? sandboxTimeouts.get(sandbox) ?? DEFAULT_TIMEOUT_MS
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error('Brezel command timeout must be a positive finite number of milliseconds')
+  }
+
+  const stdoutDecoder = new TextDecoder()
+  const stderrDecoder = new TextDecoder()
+  const result = await sandbox.run(commandArgv(command, options?.background ?? false), {
+    cwd: options?.cwd,
+    env: validateEnvironment(options?.env),
+    timeoutSeconds: Math.max(1, Math.ceil(timeoutMs / 1000)),
+    onEvent: event => {
+      if ((event.type === 'stdout' || event.type === 'stderr') && typeof event.data === 'string') {
+        const chunk = Buffer.from(event.data, 'base64')
+        if (event.type === 'stdout') options?.onStdout?.(stdoutDecoder.decode(chunk, { stream: true }))
+        else options?.onStderr?.(stderrDecoder.decode(chunk, { stream: true }))
+      }
+    },
+  })
+  options?.onStdout?.(stdoutDecoder.decode())
+  options?.onStderr?.(stderrDecoder.decode())
+  return {
+    stdout: result.stdoutText,
+    stderr: result.stderrText,
+    exitCode: result.exitCode,
+    durationMs: performance.now() - startedAt,
+  }
+}

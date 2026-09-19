@@ -32,6 +32,8 @@ vi.mock('@infercrane/brezel', () => {
     },
     run: vi.fn(async (_argv: string[], options: Record<string, unknown> = {}) => {
       h.state.runOptions.push(options)
+      const onEvent = options.onEvent as ((event: Record<string, unknown>) => void) | undefined
+      onEvent?.({ type: 'stdout', data: Buffer.from('ok\n').toString('base64') })
       return {
         stdoutText: 'ok\n',
         stderrText: '',
@@ -150,5 +152,26 @@ describe('Brezel provider lifecycle boundaries', () => {
     expect(h.state.runOptions).toEqual([
       expect.objectContaining({ env: { NODE_ENV: 'production' } }),
     ])
+  })
+
+  it('uses Brezel native command streaming for output callbacks', async () => {
+    const sandbox = await provider().sandbox.getById('sb_existing')
+    const chunks: string[] = []
+
+    const result = await sandbox?.runCommand('printf ok', {
+      onStdout: chunk => chunks.push(chunk),
+    })
+
+    expect(chunks.join('')).toBe('ok\n')
+    expect(result?.stdout).toBe('ok\n')
+  })
+
+  it('rejects invalid command timeouts before contacting Brezel', async () => {
+    const sandbox = await provider().sandbox.getById('sb_existing')
+
+    await expect(
+      sandbox?.runCommand('true', { timeout: Number.NaN }),
+    ).rejects.toThrow(/positive finite number/)
+    expect(h.state.runOptions).toHaveLength(0)
   })
 })

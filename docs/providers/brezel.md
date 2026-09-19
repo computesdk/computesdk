@@ -2,6 +2,24 @@
 description: >-
   Brezel provider for ComputeSDK — self-hosted Firecracker sandboxes backed by
   operator-qualified immutable environments.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
 ---
 
 # Brezel
@@ -45,6 +63,17 @@ console.log(result.stdout);
 await sandbox.destroy();
 ```
 
+## Configuration options
+
+| Option | Environment variable | Description |
+| --- | --- | --- |
+| `apiKey` | `BREZEL_API_KEY` | Project-scoped Brezel service token. |
+| `baseUrl` | `BREZEL_API_URL` | Public HTTPS endpoint for the Brezel deployment. |
+| `project` | `BREZEL_PROJECT_ID` | Project boundary used for sandbox operations. |
+| `environmentRevision` | `BREZEL_ENVIRONMENT_REVISION` | Prequalified immutable environment revision used by default. |
+| `allowInternet` | `BREZEL_ALLOW_INTERNET` | Allows outbound internet access when exactly `true`; defaults to `false`. |
+| `apiTimeoutMs` | — | Timeout for Brezel management API operations, in milliseconds. |
+
 ## Supported operations
 
 | Method       | Supported | Notes |
@@ -62,3 +91,7 @@ await sandbox.destroy();
 `templateId` may override the configured immutable environment revision for a
 single create call. Arbitrary image builds are intentionally outside the
 request path.
+
+Create-time environment variables are not exposed because Brezel cannot yet
+restore them durably after reconnection. Pass environment variables to
+`runCommand` instead.
