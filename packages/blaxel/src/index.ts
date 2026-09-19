@@ -197,7 +197,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 				}
 
-				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand);
+				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand, options?.timeout);
 
 				return {
 					stdout,
@@ -492,12 +492,19 @@ function convertSandboxStatus(status: string | undefined): 'running' | 'stopped'
 	}
 }
 
+/** Process statuses from which no more output will arrive. */
+const TERMINAL_PROCESS_STATUSES = new Set(['completed', 'failed', 'stopped', 'killed']);
+
+/** How long to poll for a still-running process when no command timeout is set. */
+const DEFAULT_PROCESS_WAIT_MS = 5 * 60 * 1000;
+
 /**
  * Execute a command in the sandbox and capture stdout/stderr
  */
 async function executeWithStreaming(
 	sandbox: SandboxInstance,
-	command: string
+	command: string,
+	timeoutMs?: number
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
@@ -513,7 +520,7 @@ async function executeWithStreaming(
 		onStderr: (line) => stderrLines.push(line),
 	});
 
-	const result = processResult as {
+	type ExecResult = {
 		stdout?: string;
 		stderr?: string;
 		logs?: string;
@@ -521,6 +528,38 @@ async function executeWithStreaming(
 		pid?: string;
 		status?: string;
 	};
+
+	let result = processResult as ExecResult;
+
+	// On current Blaxel infra, waitForCompletion is not honored server-side:
+	// exec returns promptly with status 'running' and empty output. Poll the
+	// process to a terminal state before attempting output recovery.
+	if (result.pid && (!result.status || !TERMINAL_PROCESS_STATUSES.has(result.status))) {
+		const pid = result.pid;
+		try {
+			const finished = (await sandbox.process.wait(pid, {
+				maxWait: timeoutMs ?? DEFAULT_PROCESS_WAIT_MS,
+				interval: 500,
+			})) as ExecResult;
+			// @blaxel/core's wait() breaks its poll loop on a mid-poll error and
+			// returns the last (possibly still 'running') response, so a resolved
+			// promise doesn't guarantee a terminal state.
+			if (!finished.status || !TERMINAL_PROCESS_STATUSES.has(finished.status)) {
+				throw new Error(
+					`Process ${pid} did not reach a terminal state (status: ${finished.status ?? 'unknown'})`
+				);
+			}
+			result = { ...result, ...finished, pid };
+		} catch (error) {
+			// Best-effort: don't leave the process running past its deadline.
+			try {
+				await sandbox.process.kill(pid);
+			} catch {
+				// Process may have already exited
+			}
+			throw error instanceof Error ? error : new Error(String(error));
+		}
+	}
 
 	// Streamed callbacks receive arbitrary chunks, not lines — concatenate
 	// exactly; the result fields are authoritative when populated.
