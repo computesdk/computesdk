@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CommandExitError, NotFoundError, Novita } from 'novita-sandbox';
+import { CommandExitError, NotFoundError, Novita, TimeoutError } from 'novita-sandbox';
 import { novita } from '../index';
 
 const api = vi.hoisted(() => ({
@@ -16,10 +16,20 @@ vi.mock('novita-sandbox', async () => {
   return { ...actual, Novita: vi.fn(() => ({ sandbox: api, template: templateApi })) };
 });
 
+function commandHandle(result: { stdout: string; stderr: string; exitCode: number } = { stdout: 'hello\n', stderr: '', exitCode: 0 }) {
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    wait: vi.fn().mockResolvedValue(result),
+    kill: vi.fn().mockResolvedValue(true),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 function nativeSandbox(id = 'sbx-1') {
   return {
     sandboxId: id,
-    commands: { run: vi.fn().mockResolvedValue({ stdout: 'hello\n', stderr: '', exitCode: 0 }) },
+    commands: { run: vi.fn().mockResolvedValue(commandHandle()) },
     getHost: vi.fn((port: number) => `${port}-${id}.example.test`),
     getInfo: vi.fn().mockResolvedValue({
       sandboxId: id, templateId: 'base', state: 'running', metadata: { team: 'test' },
@@ -132,10 +142,25 @@ describe('Novita provider', () => {
 
   it('preserves nonzero command output and distinguishes transport errors', async () => {
     const sandbox = await provider().sandbox.create();
-    native.commands.run.mockRejectedValueOnce(new CommandExitError({ stdout: 'partial', stderr: 'failed', exitCode: 42 }));
+    const failed = commandHandle();
+    failed.wait.mockRejectedValueOnce(new CommandExitError({ stdout: 'partial', stderr: 'failed', exitCode: 42 }));
+    native.commands.run.mockResolvedValueOnce(failed);
     await expect(sandbox.runCommand('exit 42')).resolves.toMatchObject({ stdout: 'partial', stderr: 'failed', exitCode: 42 });
-    native.commands.run.mockRejectedValueOnce(new Error('connection lost'));
+    const lost = commandHandle();
+    lost.wait.mockRejectedValueOnce(new Error('connection lost'));
+    native.commands.run.mockResolvedValueOnce(lost);
     await expect(sandbox.runCommand('echo hi')).rejects.toThrow('connection lost');
+  });
+
+  it('normalizes command timeouts into a nonzero result and kills the remote process', async () => {
+    const sandbox = await provider().sandbox.create();
+    const timedOut = commandHandle({ stdout: 'starting\n', stderr: '', exitCode: 0 });
+    timedOut.wait.mockRejectedValueOnce(new TimeoutError('deadline exceeded'));
+    native.commands.run.mockResolvedValueOnce(timedOut);
+    const result = await sandbox.runCommand(`sh -c 'echo starting; sleep 60'`, { timeout: 5000 });
+    expect(result.exitCode).toBe(124);
+    expect(result.stdout).toBe('starting\n');
+    expect(timedOut.kill).toHaveBeenCalledOnce();
   });
 
   it('streams through the native SDK before the command finishes', async () => {
@@ -144,13 +169,15 @@ describe('Novita provider', () => {
     const onStderr = vi.fn();
     let finish!: () => void;
     const completed = new Promise<void>(resolve => { finish = resolve; });
+    const handle = commandHandle({ stdout: 'first', stderr: 'warning', exitCode: 0 });
+    handle.wait.mockImplementationOnce(async () => { await completed; return { stdout: 'first', stderr: 'warning', exitCode: 0 }; });
     native.commands.run.mockImplementation(async (_command, options) => {
       options.onStdout('first');
       options.onStderr('warning');
-      await completed;
-      return { stdout: 'first', stderr: 'warning', exitCode: 0 };
+      return handle;
     });
     const running = sandbox.runCommand('work', { onStdout, onStderr });
+    await Promise.resolve();
     expect(onStdout).toHaveBeenCalledWith('first');
     expect(onStderr).toHaveBeenCalledWith('warning');
     finish();

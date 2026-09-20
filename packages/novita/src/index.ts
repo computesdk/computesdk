@@ -1,4 +1,4 @@
-import { CommandExitError, FileType, NotFoundError, Novita } from 'novita-sandbox';
+import { CommandExitError, FileType, NotFoundError, Novita, TimeoutError } from 'novita-sandbox';
 import type { BuildOptions, SandboxOpts, SnapshotInfo, TemplateClass, TemplateInfo } from 'novita-sandbox';
 import { defineProvider } from '@computesdk/provider';
 import type {
@@ -75,21 +75,32 @@ async function runCommand(
     onStdout: options?.onStdout,
     onStderr: options?.onStderr,
   };
+  if (options?.background) {
+    const handle = await sandbox.commands.run(command, { ...commandOptions, background: true });
+    // ComputeSDK returns an acknowledgement for background commands, not a process handle.
+    // Disconnect only the output stream; the remote process keeps running.
+    await handle.disconnect();
+    return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - start };
+  }
+  // Start the command in the background so we retain the handle, then await completion
+  // ourselves. This lets us honor the timeout contract: the SDK stops streaming at the
+  // deadline but leaves the remote process running, so we must kill it explicitly.
+  const handle = await sandbox.commands.run(command, { ...commandOptions, background: true });
   try {
-    if (options?.background) {
-      const handle = await sandbox.commands.run(command, { ...commandOptions, background: true });
-      // ComputeSDK returns an acknowledgement for background commands, not a process handle.
-      // Disconnect only the output stream; the remote process keeps running.
-      await handle.disconnect();
-      return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - start };
-    }
-    const result = await sandbox.commands.run(command, commandOptions);
+    const result = await handle.wait();
     return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, durationMs: Date.now() - start };
   } catch (error) {
     if (error instanceof CommandExitError) {
       return { stdout: error.stdout, stderr: error.stderr, exitCode: error.exitCode, durationMs: Date.now() - start };
     }
-    // Authentication, transport and timeout failures are not process exit codes.
+    if (error instanceof TimeoutError) {
+      // Terminate the orphaned remote process; disconnecting the stream alone would leave it running.
+      await handle.kill().catch(() => {});
+      // 124 is the conventional timeout exit code (GNU coreutils `timeout`). Output already
+      // streamed to onStdout/onStderr callbacks is preserved on the handle.
+      return { stdout: handle.stdout, stderr: handle.stderr, exitCode: 124, durationMs: Date.now() - start };
+    }
+    // Authentication and transport failures are not process exit codes.
     throw error;
   }
 }
