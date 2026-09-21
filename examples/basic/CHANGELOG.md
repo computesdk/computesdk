@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.102
+
+### Patch Changes
+
+- Updated dependencies [7415b62]
+  - @computesdk/blaxel@1.6.23
+
 ## 0.4.101
 
 ### Patch Changes
