@@ -798,6 +798,20 @@ program
 
 registerActionsCommands(program);
 
+// ─── bench ───────────────────────────────────────────────────────────────────
+// `compute bench` is the benchmarks-platform CLI (@benchsdk/runner's `bench`
+// binary) folded under compute: run/check/auth/org/benchmarks/runs/results/
+// iterations/artifacts/logs/export all dispatch through it.
+
+program
+  .command('bench')
+  .description('Benchmarks platform CLI (run, auth, org, benchmarks, runs, results, artifacts, export, ...)')
+  .allowUnknownOption()
+  .helpOption(false)
+  .action(() => {
+    // Never reached: bench args are dispatched pre-parse below.
+  });
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildCreateOptions(opts: { timeout?: string; name?: string }) {
@@ -884,7 +898,19 @@ function parseDuration(input: string): number {
 
 // ─── Run ─────────────────────────────────────────────────────────────────────
 
-program.parseAsync(process.argv).catch((error) => {
+// Bench args are opaque to commander (its own --flags, `--` separators, file
+// paths), so they dispatch before parsing. `@benchsdk/runner`'s run() owns the
+// process — it exits itself after dispatch.
+async function main() {
+  if (process.argv[2] === 'bench' || process.argv[2] === 'benchmark') {
+    const { run: benchRun } = await import('@benchsdk/runner');
+    await benchRun(process.argv.slice(3));
+    return;
+  }
+  await program.parseAsync(process.argv);
+}
+
+main().catch((error) => {
   console.error(pc.red(`\nError: ${error.message}`));
   process.exit(1);
 });

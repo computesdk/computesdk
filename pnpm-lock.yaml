@@ -290,7 +290,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.34(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.54)(@computesdk/modal@1.9.7)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.55)(@computesdk/modal@1.9.9)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -559,6 +559,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@benchsdk/runner':
+        specifier: ^0.3.0
+        version: 0.3.0
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
@@ -1841,7 +1844,7 @@ importers:
         version: link:../provider
       '@opencomputer/sdk':
         specifier: latest
-        version: 0.15.7
+        version: 2.1.2
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3007,6 +3010,23 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
+  '@benchsdk/api@0.2.0':
+    resolution: {integrity: sha512-egHyhG3NET/XjqmfT7Pb2Oq77TYegP92jmbmu0cTX3MbHv6VA1bAH/mXOgPjU5naZj1G2CCng+qIPKZIEUrO2w==}
+    engines: {node: '>=18.0.0'}
+
+  '@benchsdk/cli@0.2.0':
+    resolution: {integrity: sha512-bLR2u7E6WEyUjM6hbMIpmp2xGo5Z38BNHJCTaHgT5bxQaR68Sp3ApTDFdamZfcD0hAkMF0iOOfbRgJePSSNRoQ==}
+    engines: {node: '>=18.0.0'}
+
+  '@benchsdk/runner@0.3.0':
+    resolution: {integrity: sha512-OrglX8m+WKgcuJ0wEHyMK0poA4lIVNRw7k2YmHIS834S/IGSuYkm8GaKGDqpFjlOazbsCScXw9GkitbXn2qaeA==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@benchsdk/worker@0.2.0':
+    resolution: {integrity: sha512-lPHh9su6Eohqwq2B/ABxqw8Q0gmq9cB2VTZqaHD5wwD8n00Ot2gw1IlO3mSAaMP9c0uF9VoQy27U6pfp2Z4I+Q==}
+    engines: {node: '>=18.0.0'}
+
   '@blaxel/core@0.3.21':
     resolution: {integrity: sha512-a+JxiT1I6OKcm+6mxPcVjWo9u1LjBwPf8hmspnrGU73UbJYzvG6YeYz7VLQubf+rKocDpiqhzkMjasG/I77b8Q==}
     engines: {node: '>=18'}
@@ -3262,17 +3282,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.34':
-    resolution: {integrity: sha512-BriTWtp7Pksqdssgbuw7/z1Of1uc6F/D6V7GmPfVNNmPrnj+e/TdzvjGP//9Mjs0xE01zwM0URY97Gma25e6iA==}
+  '@computesdk/daytona@1.7.35':
+    resolution: {integrity: sha512-Zynnr6sji1H7/gqa9cy7Ldt/NDFnPpRKneSGZ+ZX1UiiZc3lTSnAuI73VQ5mClAt9mpU7R2vU+vY+Jf/ydOObA==}
 
-  '@computesdk/e2b@1.7.54':
-    resolution: {integrity: sha512-vxI6eMCa5n92rcQsyt9qFUwsMXForusqzYiLAsDi25tDCSx/rGqUakFUb4U77EdVPQ0ZXJ0vHfefH/wBwqD98g==}
+  '@computesdk/e2b@1.7.55':
+    resolution: {integrity: sha512-qP1RSX5pIONEWlmf0gEktxSnpYO+tUi93HJv2O1dX0QUlk2/3YD2ZsrVt0bcImKhyi6SOU3PXNA+gX/yRgnitw==}
 
-  '@computesdk/modal@1.9.7':
-    resolution: {integrity: sha512-xcKm6DPE4EaZj7PQFhFII42+S0Ou4kFxX+8QYO4+zvIpgc0bLVzBn0v5gyuu+893XEfktuATrJ5utpE6Md+UXg==}
+  '@computesdk/modal@1.9.9':
+    resolution: {integrity: sha512-nEbIwhUQpWSE76AGG7ccwVRPfY5iXdqPVXR9HGXfnmeSyZpL5IIzztUaNew3TE+CX5TjtcaF/IWMZCoD5AaVCQ==}
 
-  '@computesdk/provider@2.1.6':
-    resolution: {integrity: sha512-SkZB4/VQPPaI+mf0yvKFikl8yUYbURyZzX51ZBlWlc8mTiLIyQrEtLGwe8FcSb7W8y1vPpqhLRBTo1wS4JAbQg==}
+  '@computesdk/provider@2.1.7':
+    resolution: {integrity: sha512-sTEXZS8dMCibH29UuyCQ/mZftxAjL4HRApTlCzsei36suLjDX6OIFRSokR6/u3HZnT0x7TwmgC+eo8gV8oltmg==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -4616,8 +4636,8 @@ packages:
   '@onkernel/sdk@0.49.0':
     resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
-  '@opencomputer/sdk@0.15.7':
-    resolution: {integrity: sha512-KbwjN0sYbLBnjWJmHpu9nEUIT0gS1Pad58y2bsZ5TP7itm4H5tMsflvkbNi38QjXIn1OdCuR0GyRNcejxyHnEA==}
+  '@opencomputer/sdk@2.1.2':
+    resolution: {integrity: sha512-Yd4R/OPFu0VnaB0ZXBN3gzB53g4Gg2pvF2gUG8y8H2D57bCn+KkwaQij3ZO72JSlhNR3z0rnp5FaEFALvNUlRg==}
     engines: {node: '>=18'}
 
   '@opentelemetry/api-logs@0.214.0':
@@ -6230,6 +6250,7 @@ packages:
 
   charm@0.1.2:
     resolution: {integrity: sha512-syedaZ9cPe7r3hoQA9twWYKu5AIyCswN5+szkmPBe9ccdLrj4bYaCnLVPTLd2kgVRc7+zoX4tyPgRnFKCj5YjQ==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   check-error@1.0.3:
     resolution: {integrity: sha512-iKEoDYaRmd1mxM90a2OEfWhjsjPpYPuQ+lMYsoxB126+t8fw7ySEO48nmDg5COTjxDI65/Y2OWpeEHk3ZOe8zg==}
@@ -6369,8 +6390,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.5:
-    resolution: {integrity: sha512-Znas4CCT9+hk8swVOGiIkOgscj5J4yMcogqh607C8+2qHtjvGkmnZXwcyk57SR/EJZgNv0EFUc99zzTokHFZ4Q==}
+  computesdk@4.1.6:
+    resolution: {integrity: sha512-yNlM5nrFOH6XBqoXcCAXjs1JYSYyeCGL38pY7zXNK/OLDgRX6u+aJlqSQdDfMJvzhPNV9GJmPkEwgJ0SOxJVNQ==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -9678,15 +9699,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.34(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.54)(@computesdk/modal@1.9.7)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.55)(@computesdk/modal@1.9.9)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.34(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@computesdk/e2b': 1.7.54
-      '@computesdk/modal': 1.9.7
+      '@computesdk/daytona': 1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@computesdk/e2b': 1.7.55
+      '@computesdk/modal': 1.9.9
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10357,6 +10378,22 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@benchsdk/api@0.2.0': {}
+
+  '@benchsdk/cli@0.2.0':
+    dependencies:
+      '@benchsdk/api': 0.2.0
+
+  '@benchsdk/runner@0.3.0':
+    dependencies:
+      '@benchsdk/api': 0.2.0
+      '@benchsdk/cli': 0.2.0
+      '@benchsdk/worker': 0.2.0
+
+  '@benchsdk/worker@0.2.0':
+    dependencies:
+      '@benchsdk/api': 0.2.0
+
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
@@ -10691,11 +10728,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.34(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@computesdk/daytona@1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
-      '@computesdk/provider': 2.1.6
+      '@computesdk/provider': 2.1.7
       '@daytonaio/sdk': 0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      computesdk: 4.1.5
+      computesdk: 4.1.6
     transitivePeerDependencies:
       - aws-crt
       - debug
@@ -10703,24 +10740,24 @@ snapshots:
       - ws
     optional: true
 
-  '@computesdk/e2b@1.7.54':
+  '@computesdk/e2b@1.7.55':
     dependencies:
-      '@computesdk/provider': 2.1.6
-      computesdk: 4.1.5
+      '@computesdk/provider': 2.1.7
+      computesdk: 4.1.6
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.7':
+  '@computesdk/modal@1.9.9':
     dependencies:
-      '@computesdk/provider': 2.1.6
-      computesdk: 4.1.5
+      '@computesdk/provider': 2.1.7
+      computesdk: 4.1.6
       modal: 0.7.6
     optional: true
 
-  '@computesdk/provider@2.1.6':
+  '@computesdk/provider@2.1.7':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.5
+      computesdk: 4.1.6
       daemond: 0.1.4
     optional: true
 
@@ -11734,7 +11771,7 @@ snapshots:
 
   '@onkernel/sdk@0.49.0': {}
 
-  '@opencomputer/sdk@0.15.7':
+  '@opencomputer/sdk@2.1.2':
     dependencies:
       undici: 7.28.0
 
@@ -14005,7 +14042,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.5:
+  computesdk@4.1.6:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.4
