@@ -44,7 +44,10 @@ await sandbox.destroy()
 |---|---|---|---|
 | `apiKey` | `string` | `GMN_TOKEN` | The `gmnt_` org service token. |
 | `baseUrl` | `string` | `GMN_API_HOST`, else `https://api.givemeanode.com` | Which regional endpoint to use. |
-| `fastToken` | `'prime' \| 'absorb' \| 'off'` | `'prime'` | See below. |
+| `fastToken` | `'absorb' \| 'prime' \| 'off'` | `'absorb'` | See below. |
+| `transport` | `'auto' \| 'http2' \| 'fetch'` | `'auto'` | One HTTP/2 session for every request, or `fetch`. See "One connection for a burst". |
+| `warm` | `'connect' \| 'prime' \| 'off'` | `'connect'` | What construction does with the connection. See "One connection for a burst". |
+| `connectTimeout` | `number` | `10000` | How long opening the HTTP/2 session may take, in ms. |
 | `ramGib` | `number` | 2 | Guest memory. `memoryMiB` / `memMiB` on `create` are read too and rounded up to whole GiB; `memory` is decimal MB, per the shared options. |
 | `egress` | `'open' \| 'none'` | account default | Whether the guest can reach the network. Fixed when the guest image is prepared, not per command. |
 | `execRetries` | `number` | 1 | See "Two behaviours worth knowing about". |
@@ -149,33 +152,71 @@ than not having one.
 
 Three modes, because the right one depends on your shape:
 
-- **`prime`** (default) pays one cheap request up front, single-flighted
-  across every caller sharing the token, so even the first creates of a
-  burst present the credential. When you start **N sandboxes at once** this
-  is one authentication read instead of N queued behind each other; for a
-  single create it is one small request before it and the same read saved
-  inside it, so close to free.
-- **`absorb`** never adds a round trip. Your first request pays the
-  ordinary cost, its response carries the credential, and everything after
-  it is cheaper. Pick it for a process that makes one request and exits.
+- **`absorb`** (default) never adds a round trip. Your first request pays
+  the ordinary cost, its response carries the credential, and everything
+  after it is cheaper - including the command that follows that very
+  first create.
+- **`prime`** pays one request up front, single-flighted across every
+  caller sharing the token, so even the first creates of a burst present
+  the credential. It is one `GET /preview/sandboxes` before the first
+  create, and that listing crosses to the database: about 115 ms on the
+  us-east door.
 - **`off`** never presents one.
 
 ```typescript
 const compute = givemeanode({
   apiKey: process.env.GMN_TOKEN,
-  fastToken: 'absorb', // one request, then exit
+  fastToken: 'prime', // pay the warm-up before the first burst
 })
 ```
 
-The default was `absorb` through 1.0.x and is `prime` from 1.1.0: measured
-at 100 concurrent creates against the us-east door, `absorb` had every
-create paying the authentication read, about 600 ms of a 767 ms create
-leg, all of it that read queued.
+The default was `absorb` through 1.0.x, `prime` in 1.1.x, and is `absorb`
+again from 1.2.0. `prime` was measured on 2026-09-09 against a door that
+read its database to validate a `gmnt_` token, so 100 cold creates queued
+100 of those reads (about 600 ms of a 767 ms create). Later that day the
+door began answering a `gmnt_` from an in-memory replica of its token
+table and the read stopped costing anything, while the prime kept costing
+its listing: measured from us-east-1 on 2026-09-18 at 100 concurrent
+creates over one HTTP/2 session, the median time-to-interactive read 56 to
+106 ms with no prime against 166 ms waiting on one.
 
 What it costs, stated plainly: a signed credential is valid for its own
 lifetime regardless of what happens to the token behind it, so `gman token
 revoke` stops anything **new** immediately, but a credential already in a
 client's hands keeps working until it expires. Bans behave the same way.
+
+## One connection for a burst
+
+On Node this provider speaks HTTP/2 to the door: one session per provider,
+every request a stream on it, opened when the provider is constructed so
+the handshake is paid while you are still setting up. Measured from
+us-east-1 against the us-east door, 100 concurrent create-then-command
+pairs:
+
+| wire | TTI median | p95 | p99 |
+|---|---|---|---|
+| `fetch`, one connection per in-flight request | 211 ms | 315 ms | 338 ms |
+| one HTTP/2 session | 40 ms | 44 ms | 45 ms |
+
+The door answered in about 1 ms either way. The difference is the client:
+`fetch` opens one TLS connection per in-flight request, a single-threaded
+runtime performs those 100 handshakes one after another, and the median
+create waited about 170 ms for its turn before a byte reached the door.
+
+`fetch` stays as the fallback wherever `node:http2` is not available
+(browsers, edge runtimes) or a session cannot be opened, and it is what an
+injected `fetch` selects. Set `transport: 'fetch'` to never open a session,
+or `transport: 'http2'` to use one against a plaintext loopback dev server
+too (h2c).
+
+Construction sends nothing on the session: your token first leaves the
+process with the first operation. Set `warm: 'prime'` to pay the signed
+credential's warm-up at construction, so even the first create of a burst
+presents it, or `warm: 'off'` to open nothing until the first request. An idle session does not keep a Node
+process alive, so a script that makes its requests and returns exits as it
+did over `fetch`. A request whose connection never completes fails at its
+own `timeout`, and a connection that takes longer than `connectTimeout`
+is given up on, with `fetch` answering from then on.
 That window is one credential lifetime and no longer.
 
 ## Snapshots
