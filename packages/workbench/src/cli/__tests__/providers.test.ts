@@ -2,6 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getProviderConfig, getProviderStatus } from '../providers.js';
 
+describe('Novita Workbench configuration', () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('requires only NOVITA_API_KEY', () => {
+    vi.stubEnv('NOVITA_API_KEY', '');
+    expect(getProviderStatus('novita')).toMatchObject({ isComplete: false, missing: ['NOVITA_API_KEY'] });
+    vi.stubEnv('NOVITA_API_KEY', 'novita-test');
+    expect(getProviderStatus('novita')).toMatchObject({ isComplete: true, missing: [] });
+    expect(getProviderConfig('novita')).toEqual({ apiKey: 'novita-test' });
+  });
+});
+
 describe('microsandbox Workbench configuration', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

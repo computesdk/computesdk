@@ -40,6 +40,7 @@
   * [Namespace](providers/namespace.md)
   * [NeevCloud](providers/neevcloud.md)
   * [Northflank](providers/northflank.md)
+  * [Novita](providers/novita.md)
   * [OpenComputer](providers/opencomputer.md)
   * [Quilt](providers/quilt.md)
   * [Railway](providers/railway.md)
