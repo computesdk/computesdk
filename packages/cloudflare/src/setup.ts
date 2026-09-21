@@ -2,24 +2,24 @@
 /**
  * ComputeSDK Cloudflare Setup CLI
  *
- * Prints instructions for configuring remote mode with the official Cloudflare
- * Sandbox bridge Worker URL and API key.
+ * Prints instructions for configuring remote mode with the Cloudflare sandbox
+ * demo Worker URL and API key.
  */
 
 console.log(`
   ComputeSDK Cloudflare Setup
 
-  1. Deploy the official bridge Worker:
+  1. Deploy the Cloudflare sandbox demo Worker:
 
-     https://developers.cloudflare.com/sandbox/bridge/
+     https://github.com/cloudflare/containers-demos/tree/main/sandbox
 
-  2. Set the bridge Worker's API key secret:
+  2. Set the Worker's API key secret:
 
      npx wrangler secret put SANDBOX_API_KEY
 
-  3. Configure your app with the bridge URL and the same API key:
+  3. Configure your app with the Worker URL and the same API key:
 
-     CLOUDFLARE_SANDBOX_URL=https://<your-bridge-subdomain>.workers.dev
+     CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
      CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 
   4. Use it with ComputeSDK:
@@ -30,7 +30,4 @@ console.log(`
        sandboxUrl: process.env.CLOUDFLARE_SANDBOX_URL,
        sandboxApiKey: process.env.CLOUDFLARE_SANDBOX_API_KEY,
      });
-
-  Warm pool support is configured on the bridge Worker. Set WARM_POOL_TARGET to
-  a positive value, for example WARM_POOL_TARGET=10, to keep sandboxes warm.
 `);

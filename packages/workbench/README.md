@@ -212,8 +212,8 @@ VERCEL_TEAM_ID=xxx
 VERCEL_PROJECT_ID=xxx
 
 # Cloudflare
-CLOUDFLARE_API_TOKEN=xxx
-CLOUDFLARE_ACCOUNT_ID=xxx
+CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_API_KEY=xxx
 
 # CodeSandbox
 CSB_API_KEY=xxx

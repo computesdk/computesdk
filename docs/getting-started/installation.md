@@ -52,8 +52,8 @@ BUDDY_PROJECT=your_buddy_project_name
 ### Cloudflare
 
 ```bash
-CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
-CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_API_KEY=your_sandbox_api_key
 ```
 
 ### CodeSandbox

@@ -70,3 +70,38 @@ describe('microsandbox Workbench configuration', () => {
     });
   });
 });
+
+describe('Cloudflare Workbench configuration', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('uses the sandbox bridge URL and API key', () => {
+    vi.stubEnv('CLOUDFLARE_SANDBOX_URL', 'https://sandbox.example.workers.dev');
+    vi.stubEnv('CLOUDFLARE_SANDBOX_API_KEY', 'sandbox-key');
+
+    expect(getProviderStatus('cloudflare')).toMatchObject({
+      isComplete: true,
+      missing: [],
+    });
+    expect(getProviderConfig('cloudflare')).toEqual({
+      sandboxUrl: 'https://sandbox.example.workers.dev',
+      sandboxApiKey: 'sandbox-key',
+    });
+  });
+
+  it('accepts the deprecated sandbox secret as a fallback', () => {
+    vi.stubEnv('CLOUDFLARE_SANDBOX_URL', 'https://sandbox.example.workers.dev');
+    vi.stubEnv('CLOUDFLARE_SANDBOX_API_KEY', '');
+    vi.stubEnv('CLOUDFLARE_SANDBOX_SECRET', 'legacy-key');
+
+    expect(getProviderStatus('cloudflare')).toMatchObject({
+      isComplete: true,
+      missing: [],
+    });
+    expect(getProviderConfig('cloudflare')).toEqual({
+      sandboxUrl: 'https://sandbox.example.workers.dev',
+      sandboxApiKey: 'legacy-key',
+    });
+  });
+});
