@@ -9,7 +9,7 @@ function sanitizePathPart(name: string): string {
  * `compute actions` — drive the benchmarks-platform Actions API end-to-end:
  * dispatch workflows, watch runs, stream logs, manage artifacts.
  *
- * Auth: BENCHMARKS_PLATFORM_API_KEY (or --api-key); --base-url overrides the
+ * Auth: COMPUTE_API_KEY (or --api-key); --base-url overrides the
  * https://platform.computesdk.com default. Every subcommand takes --json for
  * machine-readable output.
  */
@@ -303,7 +303,7 @@ export function registerActionsCommands(program: Command): void {
 
   const common = (cmd: Command) =>
     cmd
-      .option('--api-key <key>', 'API key (default: $BENCHMARKS_PLATFORM_API_KEY)')
+      .option('--api-key <key>', 'API key (default: $COMPUTE_API_KEY)')
       .option('--base-url <url>', 'API base URL (default: https://platform.computesdk.com)')
       .option('--allow-untrusted-host', 'send the API key to a non-computesdk, non-localhost --base-url')
       .option('--json', 'print machine-readable JSON');

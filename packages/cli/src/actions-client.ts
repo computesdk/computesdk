@@ -267,15 +267,21 @@ export function resolveActionsAuth(opts: {
   baseUrl?: string;
   allowUntrustedHost?: boolean;
 }): ActionsAuth {
-  const apiKey = opts.apiKey ?? process.env.BENCHMARKS_PLATFORM_API_KEY;
+  // `||` not `??`: empty-string env vars (common in CI matrices) should fall
+  // through to the next source, not count as configured.
+  const apiKey =
+    opts.apiKey ||
+    process.env.COMPUTE_API_KEY ||
+    process.env.BENCHMARKS_PLATFORM_API_KEY; // legacy name
   if (!apiKey) {
     throw new Error(
-      'No API key. Set BENCHMARKS_PLATFORM_API_KEY or pass --api-key.',
+      'No API key. Set COMPUTE_API_KEY or pass --api-key.',
     );
   }
   const baseUrl = (
-    opts.baseUrl ??
-    process.env.BENCHMARKS_PLATFORM_URL ??
+    opts.baseUrl ||
+    process.env.COMPUTE_PLATFORM_URL ||
+    process.env.BENCHMARKS_PLATFORM_URL || // legacy name
     DEFAULT_BASE_URL
   ).replace(/\/+$/, '');
 
