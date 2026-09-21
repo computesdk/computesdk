@@ -267,9 +267,11 @@ export function resolveActionsAuth(opts: {
   baseUrl?: string;
   allowUntrustedHost?: boolean;
 }): ActionsAuth {
+  // `||` not `??`: empty-string env vars (common in CI matrices) should fall
+  // through to the next source, not count as configured.
   const apiKey =
-    opts.apiKey ??
-    process.env.COMPUTE_API_KEY ??
+    opts.apiKey ||
+    process.env.COMPUTE_API_KEY ||
     process.env.BENCHMARKS_PLATFORM_API_KEY; // legacy name
   if (!apiKey) {
     throw new Error(
@@ -277,9 +279,9 @@ export function resolveActionsAuth(opts: {
     );
   }
   const baseUrl = (
-    opts.baseUrl ??
-    process.env.COMPUTE_PLATFORM_URL ??
-    process.env.BENCHMARKS_PLATFORM_URL ?? // legacy name
+    opts.baseUrl ||
+    process.env.COMPUTE_PLATFORM_URL ||
+    process.env.BENCHMARKS_PLATFORM_URL || // legacy name
     DEFAULT_BASE_URL
   ).replace(/\/+$/, '');
 

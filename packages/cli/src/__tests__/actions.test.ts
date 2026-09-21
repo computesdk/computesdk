@@ -251,6 +251,20 @@ describe('resolveActionsAuth', () => {
     delete process.env.BENCHMARKS_PLATFORM_URL;
   });
 
+  it('empty new env vars fall through to the legacy aliases', () => {
+    process.env.COMPUTE_API_KEY = '';
+    process.env.COMPUTE_PLATFORM_URL = '';
+    process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
+    process.env.BENCHMARKS_PLATFORM_URL = 'https://staging.computesdk.com';
+    const auth = resolveActionsAuth({});
+    expect(auth.apiKey).toBe('legacy-key');
+    expect(auth.baseUrl).toBe('https://staging.computesdk.com');
+    delete process.env.COMPUTE_API_KEY;
+    delete process.env.COMPUTE_PLATFORM_URL;
+    delete process.env.BENCHMARKS_PLATFORM_API_KEY;
+    delete process.env.BENCHMARKS_PLATFORM_URL;
+  });
+
   it('strips a trailing slash from base-url', () => {
     expect(
       resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://localhost:3000/' }).baseUrl,
