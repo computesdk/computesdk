@@ -197,7 +197,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 				}
 
-				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand);
+				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand, options?.timeout);
 
 				return {
 					stdout,
@@ -492,23 +492,110 @@ function convertSandboxStatus(status: string | undefined): 'running' | 'stopped'
 	}
 }
 
+/** Process statuses from which no more output will arrive. */
+const TERMINAL_PROCESS_STATUSES = new Set(['completed', 'failed', 'stopped', 'killed']);
+
+/** How long to poll for a still-running process when no command timeout is set. */
+const DEFAULT_PROCESS_WAIT_MS = 5 * 60 * 1000;
+
 /**
  * Execute a command in the sandbox and capture stdout/stderr
  */
 async function executeWithStreaming(
 	sandbox: SandboxInstance,
-	command: string
+	command: string,
+	timeoutMs?: number
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+	const stdoutLines: string[] = [];
+	const stderrLines: string[] = [];
+
+	// Passing callbacks routes exec through @blaxel/core's execWithStreaming
+	// path, which surfaces output via stdout/stderr events, the completed-process
+	// `logs` field, and the streamed `result` event. Reading `stdout` off the
+	// plain POST /process response comes back empty on current Blaxel infra.
 	const processResult = await sandbox.process.exec({
 		command,
 		waitForCompletion: true,
+		onStdout: (line) => stdoutLines.push(line),
+		onStderr: (line) => stderrLines.push(line),
 	});
-	const result = processResult as { stdout?: string; stderr?: string; exitCode?: number };
-	return {
-		stdout: result.stdout || '',
-		stderr: result.stderr || '',
-		exitCode: result.exitCode || 0,
+
+	type ExecResult = {
+		stdout?: string;
+		stderr?: string;
+		logs?: string;
+		exitCode?: number;
+		pid?: string;
+		status?: string;
 	};
+
+	let result = processResult as ExecResult;
+
+	// On current Blaxel infra, waitForCompletion is not honored server-side:
+	// exec returns promptly with status 'running' and empty output. Poll the
+	// process to a terminal state before attempting output recovery.
+	if (result.pid && (!result.status || !TERMINAL_PROCESS_STATUSES.has(result.status))) {
+		const pid = result.pid;
+		try {
+			const finished = (await sandbox.process.wait(pid, {
+				maxWait: timeoutMs ?? DEFAULT_PROCESS_WAIT_MS,
+				interval: 500,
+			})) as ExecResult;
+			// @blaxel/core's wait() breaks its poll loop on a mid-poll error and
+			// returns the last (possibly still 'running') response, so a resolved
+			// promise doesn't guarantee a terminal state.
+			if (!finished.status || !TERMINAL_PROCESS_STATUSES.has(finished.status)) {
+				throw new Error(
+					`Process ${pid} did not reach a terminal state (status: ${finished.status ?? 'unknown'})`
+				);
+			}
+			result = { ...result, ...finished, pid };
+		} catch (error) {
+			// Best-effort: don't leave the process running past its deadline.
+			try {
+				await sandbox.process.kill(pid);
+			} catch {
+				// Process may have already exited
+			}
+			throw error instanceof Error ? error : new Error(String(error));
+		}
+	}
+
+	// Streamed callbacks receive arbitrary chunks, not lines — concatenate
+	// exactly; the result fields are authoritative when populated.
+	let stdout = result.stdout || stdoutLines.join('');
+	let stderr = result.stderr || stderrLines.join('');
+
+	// Completed-process output may only be retrievable via the logs endpoint,
+	// which reports stdout and stderr per channel.
+	if (!stdout && result.pid) {
+		try {
+			stdout = (await sandbox.process.logs(result.pid, 'stdout')) || '';
+		} catch {
+			// Logs fetch is best-effort; keep whatever output we already have
+		}
+	}
+	if (!stderr && result.pid) {
+		try {
+			stderr = (await sandbox.process.logs(result.pid, 'stderr')) || '';
+		} catch {
+			// Logs fetch is best-effort; keep whatever output we already have
+		}
+	}
+
+	// Last resort when no per-channel output is retrievable: `logs` is the
+	// combined stream, so only treat it as stdout when stderr is empty —
+	// otherwise it would duplicate stderr content into stdout.
+	if (!stdout && !stderr && result.logs) {
+		stdout = result.logs;
+	}
+
+	let exitCode = result.exitCode ?? 0;
+	if (result.status === 'failed' && exitCode === 0) {
+		exitCode = 1;
+	}
+
+	return { stdout, stderr, exitCode };
 }
 
 // Export the Blaxel SandboxInstance type for explicit typing

@@ -281,6 +281,10 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         // then only once — `ensureSnapshot` de-duplicates concurrent callers.
         const requested = options?.snapshotId || options?.templateId || resolved.snapshotId;
         const snapshotId = requested ?? RUNTIME_SNAPSHOT_SLUG;
+        // Shared `ephemeral` create option overrides config.persistent for this
+        // sandbox: true -> deleted on stop, false -> kept.
+        const persistent =
+          options?.ephemeral !== undefined ? !options.ephemeral : config.persistent;
         try {
           return await boot(snapshotId);
         } catch (error) {
@@ -305,7 +309,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         async function boot(snapshot: string) {
           const { vm, vmId } = await client.vms.create({
             snapshotId: snapshot,
-            autoDeleteSeconds: config.persistent ? AUTO_DELETE_NEVER : AUTO_DELETE_EPHEMERAL,
+            autoDeleteSeconds: persistent ? AUTO_DELETE_NEVER : AUTO_DELETE_EPHEMERAL,
             automaticRestart: false,
             idleTimeoutSeconds: config.idleTimeoutSeconds ?? DEFAULT_IDLE_TIMEOUT_SECS,
             // Marker last, so a caller's own metadata can never overwrite it and

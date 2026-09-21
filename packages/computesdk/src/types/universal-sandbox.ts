@@ -137,6 +137,8 @@ export interface SandboxResourceOptions {
   memoryMb?: number;
   /** Disk size in MiB (Isorun). */
   diskMiB?: number;
+  /** Root disk size in MB (Tensorlake). `ephemeralDiskMb` is also accepted. */
+  diskMb?: number;
   /**
    * Vercel resource overrides. Vercel only exposes vCPU control; memory is
    * derived from the vCPU count.
@@ -194,6 +196,19 @@ export interface VercelSandboxResources {
  * read additional provider-specific keys via the index signature.
  */
 export interface CreateSandboxOptions extends SandboxResourceOptions {
+  /**
+   * Select the provider's ephemeral compute surface when it offers both
+   * ephemeral and persistent sandboxes.
+   *
+   * - `true`: lightweight/ephemeral surface — Upstash `EphemeralBox`,
+   *   Archil serverless exec, Cloud Run `sandbox do`.
+   * - `false`: durable VM/sandbox — Upstash `Box`, Archil persistent
+   *   sandbox, Cloud Run stateful session.
+   * - unset: the provider's configured default.
+   *
+   * Providers that offer only one surface ignore this field.
+   */
+  ephemeral?: boolean;
   timeout?: number;
   /** Provider-agnostic template/image ID to boot from */
   templateId?: string;
