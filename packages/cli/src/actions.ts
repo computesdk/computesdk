@@ -1,3 +1,10 @@
+/** A file/dir name reduced to a safe basename — strips `..` and separators. */
+function sanitizePathPart(name: string): string {
+  const base = basename(name);
+  if (base === '' || base === '.' || base === '..') return 'artifact';
+  return base;
+}
+
 /**
  * `compute actions` — drive the benchmarks-platform Actions API end-to-end:
  * dispatch workflows, watch runs, stream logs, manage artifacts.
@@ -10,7 +17,7 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import {
   ActionsApiError,
   ActionsClient,
@@ -232,19 +239,31 @@ async function* followJobLog(client: ActionsClient, jobId: string, step?: string
   }
 }
 
+/** `--step` CLI value → the watch-cursor step field. */
+export function parseStep(step: string | undefined): number | 'runner' | null {
+  if (step === undefined) return null;
+  if (step === 'runner') return 'runner';
+  const n = Number(step);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`Invalid --step "${step}". Expected a step ordinal or "runner".`);
+  }
+  return n;
+}
+
 /** Follow a run's logs across jobs via the multiplexed run stream. */
 async function* followRunLogs(
   client: ActionsClient,
   runId: string,
   jobs: CiJob[],
+  step?: string,
 ): AsyncGenerator<{ job: CiJob; slice: CiLogSlice }> {
+  const cursorStep = parseStep(step);
   const offsets = new Map<string, number>(jobs.map((j) => [j.id, 0]));
   const byCursor = new Map<string, CiJob>(jobs.map((j, i) => [`j${i}`, j]));
   for (;;) {
-    let reconnect = false;
     let done = false;
     const watch = jobs.map((j, i) =>
-      encodeWatchCursor(`j${i}`, j.id, null, offsets.get(j.id) ?? 0),
+      encodeWatchCursor(`j${i}`, j.id, cursorStep, offsets.get(j.id) ?? 0),
     );
     for await (const raw of client.sse(`/api/v1/actions/runs/${runId}/stream`, { watch })) {
       const msg = raw as
@@ -262,12 +281,14 @@ async function* followRunLogs(
         done = true;
         break;
       } else if (msg.type === 'reconnect') {
-        reconnect = true;
         break;
       }
     }
     if (done) return;
-    if (!reconnect) return; // connection dropped; resume once anyway
+    // Both an explicit `reconnect` event and an unexpected EOF resume from the
+    // offsets we hold; back off briefly so a repeatedly-closing server doesn't
+    // spin the loop.
+    await new Promise((r) => setTimeout(r, 1000));
   }
 }
 
@@ -420,7 +441,7 @@ export function registerActionsCommands(program: Command): void {
       }
 
       // Multiple jobs: one multiplexed stream, each slice tagged by job.
-      for await (const { job, slice } of followRunLogs(c, runId, jobs)) {
+      for await (const { job, slice } of followRunLogs(c, runId, jobs, opts.step)) {
         if (opts.json) {
           process.stdout.write(JSON.stringify({ jobId: job.id, name: job.name, slice }) + '\n');
         } else {
@@ -500,15 +521,17 @@ export function registerActionsCommands(program: Command): void {
       }
 
       if (opts.out) {
-        mkdirSync(opts.out, { recursive: true });
         const written: { jobId: string; id: string; file: string }[] = [];
         for (const { job, artifacts } of entries) {
+          // Per-job directory: artifact names are not unique across jobs.
+          const jobDir = join(opts.out, sanitizePathPart(job.name || job.id));
+          mkdirSync(jobDir, { recursive: true });
           for (const artifact of artifacts) {
             if (artifact.expired || artifact.skippedReason) continue;
             const bytes = await c.download(
               `/api/v1/actions/jobs/${job.id}/artifacts/${artifact.id}`,
             );
-            const file = join(opts.out, artifact.fileName || artifact.name);
+            const file = join(jobDir, sanitizePathPart(artifact.fileName || artifact.name));
             writeFileSync(file, bytes);
             written.push({ jobId: job.id, id: artifact.id, file });
           }

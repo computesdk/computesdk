@@ -8,8 +8,12 @@
  */
 
 interface ProviderEnvSpec {
-  /** Env vars that must all be set for the provider to be usable. */
-  required: string[];
+  /**
+   * Alternative complete credential sets — the provider is usable when every
+   * var in any one set is present (e.g. Vercel: the traditional tuple OR
+   * VERCEL_OIDC_TOKEN; Namespace: NSC_TOKEN or NSC_TOKEN_FILE).
+   */
+  authOptions: string[][];
   /**
    * Maps each env var to the provider's nested config key (the field names in
    * the provider package's config interface, e.g. `apiKey`, `tokenId`).
@@ -18,36 +22,46 @@ interface ProviderEnvSpec {
 }
 
 const PROVIDER_ENV: Record<string, ProviderEnvSpec> = {
-  e2b: { required: ['E2B_API_KEY'], configKeys: { E2B_API_KEY: 'apiKey' } },
-  railway: { required: ['RAILWAY_API_TOKEN'], configKeys: { RAILWAY_API_TOKEN: 'token' } },
+  e2b: { authOptions: [['E2B_API_KEY']], configKeys: { E2B_API_KEY: 'apiKey' } },
+  railway: { authOptions: [['RAILWAY_API_TOKEN']], configKeys: { RAILWAY_API_TOKEN: 'token' } },
   modal: {
-    required: ['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET'],
+    authOptions: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
     configKeys: { MODAL_TOKEN_ID: 'tokenId', MODAL_TOKEN_SECRET: 'tokenSecret' },
   },
   vercel: {
-    required: ['VERCEL_TOKEN'],
+    authOptions: [['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'], ['VERCEL_OIDC_TOKEN']],
     configKeys: {
       VERCEL_TOKEN: 'token',
       VERCEL_TEAM_ID: 'teamId',
       VERCEL_PROJECT_ID: 'projectId',
     },
   },
-  daytona: { required: ['DAYTONA_API_KEY'], configKeys: { DAYTONA_API_KEY: 'apiKey' } },
-  namespace: { required: ['NSC_TOKEN'], configKeys: { NSC_TOKEN: 'token' } },
+  daytona: { authOptions: [['DAYTONA_API_KEY']], configKeys: { DAYTONA_API_KEY: 'apiKey' } },
+  namespace: {
+    authOptions: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
+    configKeys: { NSC_TOKEN: 'token', NSC_TOKEN_FILE: 'tokenFile' },
+  },
   blaxel: {
-    required: ['BL_API_KEY', 'BL_WORKSPACE'],
+    authOptions: [['BL_API_KEY', 'BL_WORKSPACE']],
     configKeys: { BL_API_KEY: 'apiKey', BL_WORKSPACE: 'workspace' },
   },
-  codesandbox: { required: ['CSB_API_KEY'], configKeys: { CSB_API_KEY: 'apiKey' } },
-  render: { required: ['RENDER_API_KEY'], configKeys: { RENDER_API_KEY: 'apiKey' } },
+  codesandbox: { authOptions: [['CSB_API_KEY']], configKeys: { CSB_API_KEY: 'apiKey' } },
+  render: { authOptions: [['RENDER_API_KEY']], configKeys: { RENDER_API_KEY: 'apiKey' } },
 };
 
 const PROVIDER_NAMES = Object.keys(PROVIDER_ENV);
 
+/** Missing vars from whichever auth option is closest to complete. */
 function missingEnvVars(provider: string): string[] {
   const spec = PROVIDER_ENV[provider];
   if (!spec) return [];
-  return spec.required.filter((name) => !process.env[name]);
+  let best: string[] | null = null;
+  for (const option of spec.authOptions) {
+    const missing = option.filter((name) => !process.env[name]);
+    if (missing.length === 0) return [];
+    if (!best || missing.length < best.length) best = missing;
+  }
+  return best ?? [];
 }
 
 function isProviderAuthComplete(provider: string): boolean {
