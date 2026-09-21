@@ -25,7 +25,7 @@ const SNAPSHOT_LABEL_SANDBOX = 'computesdk.sandbox-id';
 const DEFAULT_IMAGE = 'alpine:3.21';
 const DEFAULT_CPUS = 1;
 const DEFAULT_MEMORY_MIB = 512;
-const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_TIMEOUT_MS = 900_000;
 const DEFAULT_NAME_PREFIX = 'csdk-';
 const DEFAULT_LIST_PAGE_SIZE = 100;
 
@@ -60,13 +60,15 @@ export interface MicrosandboxConfig {
   memoryMib?: number;
   /** Default writable root disk size in MiB. */
   rootDiskMib?: number;
+  /** Delete the sandbox when it stops. Defaults to true. */
+  ephemeral?: boolean;
   /** Default working directory inside the guest. */
   workdir?: string;
   /** Prefix for generated sandbox names. */
   namePrefix?: string;
   /** Local TCP port mappings. A number maps the same host and guest port. */
   ports?: Array<number | MicrosandboxPort>;
-  /** Default sandbox lifetime and command timeout in milliseconds. */
+  /** Default sandbox idle timeout and command timeout in milliseconds (15 minutes). */
   timeout?: number;
   /** OCI pull policy. */
   pullPolicy?: 'always' | 'if-missing' | 'never';
@@ -123,8 +125,7 @@ interface RecoveredPorts {
 }
 
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
-let backendQueue = Promise.resolve();
-
+let backendSelectionKey: string | undefined;
 /**
  * Keep credential-bearing backend configuration out of the public sandbox
  * object returned by getInstance(). The mapping is only needed when a sandbox
@@ -140,37 +141,29 @@ function loadSdk(): Promise<MicrosandboxModule> {
   return sdkPromise;
 }
 
-/**
- * The SDK's backend scope is process-wide rather than task-local. Serialize all
- * provider static entry points so local and cloud calls cannot observe each
- * other's temporary backend while create/get/list/remove is awaiting I/O.
- */
+/** Run against the single backend selected for this process. */
 async function withBackend<T>(
   selection: BackendSelection,
   operation: (sdk: MicrosandboxModule) => Promise<T>,
 ): Promise<T> {
-  let release!: () => void;
-  const previous = backendQueue;
-  backendQueue = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await previous;
-  try {
-    const sdk = await loadSdk();
-    const run = async () => {
-      const resolvedKind = sdk.defaultBackendKind();
-      if (resolvedKind !== selection.kind) {
-        throw new Error(
-          `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
-          `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
-        );
-      }
-      return operation(sdk);
-    };
-    return await (selection.override ? sdk.withDefaultBackend(selection.override, run) : run());
-  } finally {
-    release();
+  const sdk = await loadSdk();
+  const selectionKey = JSON.stringify(selection);
+  if (backendSelectionKey !== undefined && backendSelectionKey !== selectionKey) {
+    throw new Error('Microsandbox supports one backend configuration per process. Use the same backend, credentials, endpoint, and profile for all provider instances.');
   }
+  if (backendSelectionKey === undefined && selection.override) {
+    sdk.setDefaultBackend(selection.override);
+  }
+  if (sdk.defaultBackendKind() !== selection.kind) {
+    throw new Error(
+      `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
+      `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
+    );
+  }
+  // No await between checking, selecting, and pinning the backend: overlapping
+  // calls cannot change its configuration before another SDK operation resumes.
+  backendSelectionKey = selectionKey;
+  return operation(sdk);
 }
 
 function selectBackend(config: MicrosandboxConfig): BackendSelection {
@@ -236,7 +229,7 @@ function cpusFor(config: MicrosandboxConfig, options?: CreateSandboxOptions): nu
 }
 
 function memoryFor(config: MicrosandboxConfig, options?: CreateSandboxOptions): number {
-  return options?.memoryMiB ?? options?.memMiB ?? options?.memoryMb ?? options?.memory ?? config.memoryMib ?? DEFAULT_MEMORY_MIB;
+  return options?.memoryMiB ?? options?.memoryMib ?? options?.memMiB ?? options?.memoryMb ?? options?.memory ?? config.memoryMib ?? DEFAULT_MEMORY_MIB;
 }
 
 function normalizePorts(
@@ -453,11 +446,22 @@ async function streamCommand(
   };
 }
 
+async function retry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (isNotFound(error) || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
+}
+
 async function removeSandbox(handle: NativeSandboxHandle): Promise<void> {
   if (handle.status === 'running' || handle.status === 'draining') {
-    await handle.stopWithTimeout(10_000);
+    await retry(() => handle.stopWithTimeout(10_000));
   }
-  await handle.remove();
+  await retry(() => handle.remove());
 }
 
 function snapshotFromNative(snapshot: {
@@ -503,20 +507,22 @@ const _microsandbox = defineProvider<
           builder = builder.fromSnapshot(options.snapshotId);
         } else {
           builder = builder.image(options?.image ?? options?.templateId ?? config.image ?? DEFAULT_IMAGE);
-          if (config.rootDiskMib) builder = builder.rootDisk(config.rootDiskMib);
+          const rootDiskMib = options?.rootDiskMib ?? config.rootDiskMib;
+          if (rootDiskMib !== undefined) builder = builder.rootDisk(rootDiskMib);
         }
 
         builder = builder
           .cpus(cpusFor(config, options))
           .memory(memoryFor(config, options))
           .detached(true)
-          .maxDuration(Math.max(1, Math.ceil(timeoutMs / 1000)))
+          .idleTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)))
           .labels({
             [LABEL_MARKER]: 'true',
             ...encodeMetadata(metadata),
           });
 
         const workdir = options?.directory ?? config.workdir;
+        builder = builder.ephemeral(options?.ephemeral ?? config.ephemeral ?? true);
         if (workdir) builder = builder.workdir(workdir);
         if (options?.envs && Object.keys(options.envs).length > 0) builder = builder.envs(options.envs);
         if (config.pullPolicy) builder = builder.pullPolicy(config.pullPolicy);
@@ -531,12 +537,23 @@ const _microsandbox = defineProvider<
 
         const native = await builder.create();
         if (options?.signal?.aborted) {
+          let stopped = false;
+          let handle: NativeSandboxHandle | undefined;
           try {
-            await native.stopWithTimeout(5_000);
-            const handle = await sdk.Sandbox.get(name);
-            await handle.remove();
-          } catch {
-            // Preserve the caller's abort reason even if best-effort cleanup fails.
+            await retry(async () => {
+              if (!stopped) {
+                await native.stopWithTimeout(5_000);
+                stopped = true;
+              }
+              handle ??= await sdk.Sandbox.get(name);
+              await handle.remove();
+            });
+          } catch (error) {
+            if (!isNotFound(error)) {
+              // Cancellation has already returned; report exhausted cleanup retries.
+              console.warn(`[microsandbox] Aborted sandbox cleanup failed for ${JSON.stringify(name)} after 3 attempts; check and remove it manually.`);
+              throw Object.assign(new Error('Aborted sandbox cleanup failed'), { cause: error });
+            }
           }
           options.signal.throwIfAborted();
         }
@@ -681,7 +698,7 @@ const _microsandbox = defineProvider<
         requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const handle = await sdk.Sandbox.get(sandboxId);
         const wasRunning = handle.status === 'running' || handle.status === 'draining';
-        if (wasRunning) await handle.stopWithTimeout(10_000);
+        if (wasRunning) await retry(() => handle.stopWithTimeout(10_000));
 
         const name = options?.name ?? `csdk-snapshot-${Date.now().toString(36)}`;
         let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId);

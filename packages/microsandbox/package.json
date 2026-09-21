@@ -32,7 +32,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "microsandbox": "^0.6.12"
+    "microsandbox": "^0.6.18"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
