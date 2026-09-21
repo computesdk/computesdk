@@ -32,12 +32,14 @@ const SHARED_PROVIDER_NAMES = [
   'lelantos',
   'tenki',
   'microsandbox',
+  'novita',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
 
 const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string[])[]> = {
   e2b: [['E2B_API_KEY']],
+  novita: [['NOVITA_API_KEY']],
   daytona: [['DAYTONA_API_KEY']],
   modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
   runloop: [['RUNLOOP_API_KEY']],
@@ -79,6 +81,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
 // fallbacks — an ordered list of env var names tried first-match-wins.
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | readonly string[]>> = {
   e2b: { apiKey: 'E2B_API_KEY' },
+  novita: { apiKey: 'NOVITA_API_KEY' },
   daytona: { apiKey: 'DAYTONA_API_KEY' },
   modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
   runloop: { apiKey: 'RUNLOOP_API_KEY' },
@@ -350,6 +353,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
     switch (providerName) {
       case 'e2b':
         return await import('@computesdk/e2b');
+      case 'novita':
+        return await import('@computesdk/novita');
       case 'daytona':
         return await import('@computesdk/daytona');
       case 'modal':
