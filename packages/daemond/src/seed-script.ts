@@ -167,6 +167,9 @@ function nodeBootstrapPrelude(): string {
     '  echo "daemond: sandbox lacks a JavaScript runtime and daemon bootstrap failed: ${__daemond_err:-node not found}" >&2',
     "  exit 127",
     "fi",
+    // $0 is the launcher script, $1 the payload — both arrive as arguments to
+    // the outer `sh -c` so the program itself stays safely quoted.
+    'exec "$__daemond_node" -e "$0" "$1"',
   ].join("\n");
 }
 
@@ -176,7 +179,12 @@ export function daemonSeedScriptCommand(
 ): string {
   const script = daemonSeedScript(config);
   const payloadArg = typeof payload === "string" ? payload : JSON.stringify(payload);
-  return `${nodeBootstrapPrelude()}\nexec "$__daemond_node" -e ${shellQuote(script)} ${shellQuote(payloadArg)}`;
+  // Wrapped as `sh -c '<program>' '<script>' '<payload>'`: a single command
+  // invocation, so providers that prepend `VAR=value` env assignments or a
+  // `cd <dir> &&` prefix to the command (archil, namespace) apply them to a
+  // real command rather than producing a syntax error on the function
+  // definition the prelude opens with.
+  return `sh -c ${shellQuote(nodeBootstrapPrelude())} ${shellQuote(script)} ${shellQuote(payloadArg)}`;
 }
 
 function outputTail(raw: string): string {

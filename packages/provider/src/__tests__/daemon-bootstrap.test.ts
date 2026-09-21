@@ -33,7 +33,7 @@ function runSeedCommand(command: string, env: NodeJS.ProcessEnv) {
  * simulate a minimal sandbox image.
  */
 function minimalPathBin(dir: string): void {
-  for (const tool of ['uname', 'mkdir', 'rm', 'mv', 'tar', 'gzip', 'curl', 'wget', 'busybox', 'python3']) {
+  for (const tool of ['sh', 'uname', 'mkdir', 'rm', 'mv', 'tar', 'gzip', 'curl', 'wget', 'busybox', 'python3']) {
     for (const candidate of [`/usr/bin/${tool}`, `/bin/${tool}`]) {
       if (fs.existsSync(candidate)) {
         fs.symlinkSync(candidate, path.join(dir, tool))
@@ -64,7 +64,10 @@ describe('daemonSeedScriptCommand', () => {
     expect(command).toContain('DAEMOND_NODE_DIST_URL')
     expect(command).toContain(`node-v${NODE_VERSION}-linux-$__daemond_arch`)
     expect(command).toContain('daemon bootstrap failed')
-    expect(command).toContain('exec "$__daemond_node" -e ')
+    // A single `sh -c` invocation: providers may prepend env assignments or a
+    // `cd` prefix to the command, which must land on a real command.
+    expect(command.startsWith('sh -c ')).toBe(true)
+    expect(command).toContain('exec "$__daemond_node" -e "$0" "$1"')
   })
 })
 
