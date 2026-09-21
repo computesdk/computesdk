@@ -72,13 +72,117 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
+/**
+ * Node version fetched when a sandbox ships no JS runtime. Pinned to an LTS
+ * release so the bootstrap is reproducible; the archive layout
+ * (node-v<ver>-linux-<arch>/bin/node) is stable across releases.
+ */
+const BOOTSTRAP_NODE_VERSION = "22.14.0";
+
+/**
+ * One fetch verb for the node download. A minimal image may ship none of the
+ * usual tools (Namespace's base image has no curl), so the chain walks what is
+ * actually installed: curl, then wget, then busybox's wget applet, then
+ * python3's stdlib. HTTPS certificate verification stays on throughout.
+ */
+const NODE_FETCH_FN = [
+  "__daemond_fetch() {",
+  "  if command -v curl >/dev/null 2>&1; then",
+  '    curl -fsSL "$1" -o "$2"; return',
+  "  fi",
+  "  if command -v wget >/dev/null 2>&1; then",
+  '    wget -q -O "$2" "$1"; return',
+  "  fi",
+  // A busybox binary does not imply the wget applet was built in — `--list` is
+  // how to ask, and a busybox-only image may not ship a standalone grep.
+  "  if command -v busybox >/dev/null 2>&1; then",
+  "    for __daemond_applet in $(busybox --list 2>/dev/null); do",
+  '      if [ "$__daemond_applet" = "wget" ]; then',
+  '        busybox wget -q -O "$2" "$1"; return',
+  "      fi",
+  "    done",
+  "  fi",
+  "  if command -v python3 >/dev/null 2>&1; then",
+  "    python3 -c 'import shutil, sys, urllib.request",
+  'with urllib.request.urlopen(sys.argv[1]) as r, open(sys.argv[2], "wb") as f:',
+  '    shutil.copyfileobj(r, f)\' "$1" "$2"; return',
+  "  fi",
+  "  return 1",
+  "}",
+] as const;
+
+/**
+ * Shell prelude resolving a node binary for the seed launcher: PATH first,
+ * then a cached bootstrap under ~/.computesdk/daemond, then a download of the
+ * pinned static build for the sandbox's arch. On total failure it prints a
+ * capability error to stderr and exits 127 rather than letting the launcher
+ * fail silently on a missing interpreter.
+ *
+ * DAEMOND_NODE_DIST_URL overrides the dist base URL (default
+ * https://nodejs.org/dist) — useful for mirrors and tests.
+ */
+function nodeBootstrapPrelude(): string {
+  const v = BOOTSTRAP_NODE_VERSION;
+  return [
+    ...NODE_FETCH_FN,
+    '__daemond_node=""',
+    'if command -v node >/dev/null 2>&1; then __daemond_node=node',
+    'elif command -v nodejs >/dev/null 2>&1; then __daemond_node=nodejs',
+    "fi",
+    '__daemond_home="${HOME:-/tmp}/.computesdk/daemond"',
+    'if [ -z "$__daemond_node" ]; then',
+    '  __daemond_mach="$(uname -m 2>/dev/null || true)"',
+    '  case "$__daemond_mach" in',
+    '    x86_64|amd64) __daemond_arch=x64 ;;',
+    '    aarch64|arm64) __daemond_arch=arm64 ;;',
+    '    *) __daemond_arch="" ;;',
+    "  esac",
+    '  __daemond_err=""',
+    '  if [ -z "$__daemond_arch" ]; then',
+    '    __daemond_err="unsupported machine architecture ${__daemond_mach:-unknown}"',
+    "  else",
+    `    __daemond_dir="$__daemond_home/node-v${v}-linux-$__daemond_arch"`,
+    '    if [ -x "$__daemond_dir/bin/node" ]; then',
+    '      __daemond_node="$__daemond_dir/bin/node"',
+    "    else",
+    `      __daemond_url="\${DAEMOND_NODE_DIST_URL:-https://nodejs.org/dist}/v${v}/node-v${v}-linux-$__daemond_arch.tar.gz"`,
+    '      __daemond_tmp="$__daemond_home/.bootstrap-$$"',
+    '      mkdir -p "$__daemond_tmp" 2>/dev/null',
+    '      if __daemond_fetch "$__daemond_url" "$__daemond_tmp/node.tar.gz"; then',
+    `        if tar -xzf "$__daemond_tmp/node.tar.gz" -C "$__daemond_tmp" 2>/dev/null && [ -f "$__daemond_tmp/node-v${v}-linux-$__daemond_arch/bin/node" ]; then`,
+    '          rm -rf "$__daemond_dir"',
+    `          mv "$__daemond_tmp/node-v${v}-linux-$__daemond_arch" "$__daemond_dir"`,
+    '          __daemond_node="$__daemond_dir/bin/node"',
+    "        else",
+    '          __daemond_err="downloaded node tarball could not be unpacked (missing tar or corrupt archive)"',
+    "        fi",
+    "      else",
+    '        __daemond_err="download of $__daemond_url failed: the image has none of curl, wget, busybox wget or python3, or the network is unreachable"',
+    "      fi",
+    '      rm -rf "$__daemond_tmp"',
+    "    fi",
+    "  fi",
+    "fi",
+    'if [ -z "$__daemond_node" ]; then',
+    '  echo "daemond: sandbox lacks a JavaScript runtime and daemon bootstrap failed: ${__daemond_err:-node not found}" >&2',
+    "  exit 127",
+    "fi",
+  ].join("\n");
+}
+
 export function daemonSeedScriptCommand(
   config: SeedScriptConfig | undefined,
   payload: string | SeedCommandInput,
 ): string {
   const script = daemonSeedScript(config);
   const payloadArg = typeof payload === "string" ? payload : JSON.stringify(payload);
-  return `node -e ${shellQuote(script)} ${shellQuote(payloadArg)}`;
+  return `${nodeBootstrapPrelude()}\nexec "$__daemond_node" -e ${shellQuote(script)} ${shellQuote(payloadArg)}`;
+}
+
+function outputTail(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length <= 200) return trimmed;
+  return `…${trimmed.slice(-200)}`;
 }
 
 export function parseSeedInvocationOutput(raw: string): SeedInvocationResult {
@@ -89,9 +193,15 @@ export function parseSeedInvocationOutput(raw: string): SeedInvocationResult {
     .filter(Boolean);
 
   if (lines.length === 0) {
-    throw new Error("daemond: expected JSON output from seed launcher");
+    throw new Error("daemond: expected JSON output from seed launcher (stdout was empty)");
   }
 
   const last = lines[lines.length - 1];
-  return JSON.parse(last) as SeedInvocationResult;
+  try {
+    return JSON.parse(last) as SeedInvocationResult;
+  } catch {
+    throw new Error(
+      `daemond: expected JSON output from seed launcher (output tail: ${outputTail(raw)})`,
+    );
+  }
 }

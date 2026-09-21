@@ -27,6 +27,7 @@ import {
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
   type SeedCommandInput,
+  type SeedInvocationResult,
 } from 'daemond';
 
 type DaemonStreamState = {
@@ -41,6 +42,33 @@ function createDaemonRequestId(): string {
     return crypto.randomUUID();
   }
   return `req_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+/**
+ * Parses a seed-launcher invocation, turning a failed or empty launcher run
+ * into a `daemond:`-prefixed capability error — e.g. a sandbox that lacks a JS
+ * runtime and could not bootstrap one exits 127 with the reason on stderr —
+ * instead of the opaque "expected JSON output". Callers can match on the
+ * `daemond:` prefix to degrade to plain `runCommand`.
+ */
+function parseDaemonSeedResult(result: CommandResult, phase: string): SeedInvocationResult {
+  const stdout = (result.stdout ?? '').trim();
+  const stderrTail = (result.stderr ?? '').trim().slice(-400);
+  if (!stdout) {
+    throw new Error(
+      `daemond: ${phase} produced no JSON output (exit code ${result.exitCode ?? 'unknown'})` +
+        (stderrTail ? `: ${stderrTail}` : '')
+    );
+  }
+  try {
+    return parseSeedInvocationOutput(result.stdout);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `daemond: ${phase} failed: ${detail}` +
+        (stderrTail ? ` (stderr: ${stderrTail})` : '')
+    );
+  }
 }
 
 function emitMissingOutput(
@@ -409,7 +437,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           bootstrapPayload
         );
         const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
-        const bootstrapInvocation = parseSeedInvocationOutput(bootstrapResult.stdout);
+        const bootstrapInvocation = parseDaemonSeedResult(bootstrapResult, 'daemon bootstrap');
         this.daemonStreamState = {
           token: bootstrapInvocation.token,
           rawSseUrl: bootstrapInvocation.daemon.sseUrl,
@@ -471,7 +499,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       }
       try {
         const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
-        const invocation = parseSeedInvocationOutput(daemonResult.stdout);
+        const invocation = parseDaemonSeedResult(daemonResult, 'daemon command');
         this.daemonStreamState = {
           token: invocation.token,
           rawSseUrl: invocation.daemon.sseUrl,
