@@ -156,6 +156,8 @@ describe('node bootstrap in a sandbox without node', () => {
         PATH: bin,
         HOME: home,
         DAEMOND_NODE_DIST_URL: `http://127.0.0.1:${port}`,
+        // The stub tarball's digest can't match the pinned real one.
+        DAEMOND_NODE_SKIP_SHA256: '1',
       })
       expect(result.status).toBe(0)
       const invocation = parseSeedInvocationOutput(result.stdout)
