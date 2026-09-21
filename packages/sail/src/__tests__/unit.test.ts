@@ -32,7 +32,11 @@ vi.mock('@sailresearch/sdk', () => {
       status,
       createdAt: new Date('2020-01-02T03:04:05Z'),
       client: {},
-      run: vi.fn(async () => ({ stdout: 'out', stderr: 'err', exitCode: 0 })),
+      run: vi.fn(async (command: string) =>
+        command === 'pwd'
+          ? { stdout: '/workspace\n', stderr: '', exitCode: 0 }
+          : { stdout: 'out', stderr: 'err', exitCode: 0 },
+      ),
       exec: vi.fn(async () => ({})),
       fs: {
         read: vi.fn(async () => Buffer.from(h.state.fileContent)),
@@ -292,6 +296,22 @@ describe('sail provider', () => {
         modified: new Date(1_700_000_001_500),
       },
     ]);
+  });
+
+  it('resolves relative filesystem paths against the exec cwd', async () => {
+    const sandbox = await provider().sandbox.create();
+    const box = h.state.lastBox;
+
+    await sandbox.filesystem.writeFile('src/a.txt', 'x');
+    expect(box.fs.write).toHaveBeenCalledWith('/workspace/src/a.txt', 'x');
+    await sandbox.filesystem.exists('a.txt');
+    expect(box.fs.exists).toHaveBeenCalledWith('/workspace/a.txt');
+
+    // Absolute paths pass through untouched and the `pwd` probe ran once.
+    await sandbox.filesystem.readFile('/abs/b.txt');
+    expect(box.fs.read).toHaveBeenCalledWith('/abs/b.txt');
+    expect(box.run).toHaveBeenCalledTimes(1);
+    expect(box.run).toHaveBeenCalledWith('pwd', expect.anything());
   });
 
   it('maps lifecycle states and filters gone Sailboxes', async () => {

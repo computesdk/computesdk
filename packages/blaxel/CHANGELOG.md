@@ -1,5 +1,22 @@
 # @computesdk/blaxel
 
+## 1.6.22
+
+### Patch Changes
+
+- febe062: fix(blaxel): wait for process completion before recovering runCommand output
+
+  On current Blaxel infra, `process.exec` returns promptly with `status: 'running'` even with `waitForCompletion: true`, leaving all output fields empty. `executeWithStreaming` now polls `process.wait(pid)` to a terminal state (bounded by the command timeout, 5 min default) before falling back to `process.logs(pid)`, and best-effort kills the process if the wait times out.
+
+## 1.6.21
+
+### Patch Changes
+
+- a1406e4: Fix `runCommand` returning empty `stdout`: pass `onStdout`/`onStderr` callbacks so `@blaxel/core` uses its `execWithStreaming` path (handles `stdout`, `stderr`, `logs`, and streamed `result` events), fall back to `process.logs(pid)` when output is empty, and report a nonzero exit code when the API returns `status: "failed"`.
+- Updated dependencies [0732fed]
+  - computesdk@4.1.6
+  - @computesdk/provider@2.1.7
+
 ## 1.6.20
 
 ### Patch Changes
