@@ -24,6 +24,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { compute, type SandboxInterface } from 'computesdk';
 import { getProviderStatus } from './providers.js';
+import { registerActionsCommands } from './actions.js';
 import { startREPL } from './repl.js';
 import { clearStoredCredentials } from './auth.js';
 import { ensureAuth, resolveProvider, configureCompute } from './setup.js';
@@ -793,7 +794,10 @@ program
     p.outro(pc.green('Done!'));
   });
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── actions ─────────────────────────────────────────────────────────────────
+
+registerActionsCommands(program);
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildCreateOptions(opts: { timeout?: string; name?: string }) {
