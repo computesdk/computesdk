@@ -151,7 +151,15 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               args: ['sleep', 'infinity'],
               ...(options?.envs && Object.keys(options.envs).length > 0 && {
                 environment: options.envs
-              })
+              }),
+              // Mounts the instance's managed dockerd socket (e.g.
+              // '/var/run/docker.sock') so the container can drive Docker —
+              // the daemon runs on the micro-VM, not inside the container,
+              // which needs no elevated container privileges.
+              ...(typeof options?.dockerSockPath === 'string' &&
+                options.dockerSockPath !== '' && {
+                  docker_sock_path: options.dockerSockPath
+                })
             }],
             documented_purpose: config.documentedPurpose || 'ComputeSDK sandbox',
             deadline: new Date(Date.now() + 60 * 60 * 1000).toISOString()

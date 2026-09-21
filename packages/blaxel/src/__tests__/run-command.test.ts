@@ -19,12 +19,15 @@ type ExecOptions = {
 
 function makeSandbox(
 	execImpl: (opts: ExecOptions) => Promise<Record<string, unknown>>,
-	logsImpl?: (pid: string, type: string) => Promise<string>
+	logsImpl?: (pid: string, type: string) => Promise<string>,
+	waitImpl?: (pid: string, opts?: { maxWait?: number; interval?: number }) => Promise<Record<string, unknown>>
 ): SandboxInstance {
 	return {
 		process: {
 			exec: vi.fn(execImpl),
 			logs: vi.fn(logsImpl ?? (async () => '')),
+			wait: vi.fn(waitImpl ?? (async () => ({ status: 'completed' }))),
+			kill: vi.fn(async () => ({})),
 		},
 	} as unknown as SandboxInstance;
 }
@@ -138,6 +141,88 @@ describe('blaxel runCommand output capture', () => {
 		const result = await runEcho(sandbox);
 
 		expect(result.exitCode).not.toBe(0);
+	});
+
+	it('waits for a still-running process and recovers output from the finished process', async () => {
+		const wait = vi.fn(async () => ({
+			status: 'completed',
+			exitCode: 0,
+			stdout: 'waited output\n',
+			stderr: '',
+		}));
+		const sandbox = makeSandbox(
+			async () => ({ status: 'running', pid: 'p1' }),
+			undefined,
+			wait
+		);
+
+		const result = await runEcho(sandbox);
+
+		expect(wait).toHaveBeenCalledWith('p1', expect.objectContaining({ interval: 500 }));
+		expect(result.stdout).toBe('waited output\n');
+		expect(result.exitCode).toBe(0);
+	});
+
+	it('waits for a still-running process then falls back to logs(pid)', async () => {
+		const logs = vi.fn(async (_pid: string, type: string) =>
+			type === 'stdout' ? 'recovered after wait' : ''
+		);
+		const sandbox = makeSandbox(
+			async () => ({ status: 'running', pid: 'p1' }),
+			logs,
+			async () => ({ status: 'completed', exitCode: 0, stdout: '', stderr: '' })
+		);
+
+		const result = await runEcho(sandbox);
+
+		expect(result.stdout).toBe('recovered after wait');
+		expect(logs).toHaveBeenCalledWith('p1', 'stdout');
+	});
+
+	it('does not wait when exec already returns a terminal status', async () => {
+		const wait = vi.fn(async () => ({ status: 'completed' }));
+		const sandbox = makeSandbox(
+			async () => ({ status: 'completed', exitCode: 0, stdout: 'done', pid: 'p1' }),
+			undefined,
+			wait
+		);
+
+		const result = await runEcho(sandbox);
+
+		expect(wait).not.toHaveBeenCalled();
+		expect(result.stdout).toBe('done');
+	});
+
+	it('fails cleanly and kills the process when the wait times out', async () => {
+		const kill = vi.fn(async () => ({}));
+		const sandbox = makeSandbox(
+			async () => ({ status: 'running', pid: 'p1' }),
+			undefined,
+			async () => { throw new Error('Process did not finish in time'); }
+		);
+		(sandbox.process as unknown as { kill: typeof kill }).kill = kill;
+
+		const result = await runEcho(sandbox);
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain('Process did not finish in time');
+		expect(kill).toHaveBeenCalledWith('p1');
+	});
+
+	it('fails when wait resolves without a terminal status (swallowed poll error)', async () => {
+		const kill = vi.fn(async () => ({}));
+		const sandbox = makeSandbox(
+			async () => ({ status: 'running', pid: 'p1' }),
+			undefined,
+			async () => ({ status: 'running' }) // SDK wait() returns stale data on poll errors
+		);
+		(sandbox.process as unknown as { kill: typeof kill }).kill = kill;
+
+		const result = await runEcho(sandbox);
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain('did not reach a terminal state');
+		expect(kill).toHaveBeenCalledWith('p1');
 	});
 
 	it('surfaces real non-zero exit codes unchanged', async () => {

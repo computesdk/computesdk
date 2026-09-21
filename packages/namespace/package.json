@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/namespace",
-  "version": "1.6.17",
+  "version": "1.6.18",
   "description": "Namespace provider for ComputeSDK - cloud-native sandboxes with optional GPU support",
   "author": "ComputeSDK Team",
   "license": "MIT",
