@@ -79,7 +79,7 @@ jobs:
 
     strategy:
       matrix:
-        provider: [e2b, vercel, daytona, modal, archil]
+        provider: [e2b, vercel, daytona, modal, archil, blaxel]
       fail-fast: false
     
     steps:
@@ -173,6 +173,20 @@ jobs:
            echo "Skipping Archil integration tests - missing required secrets (ARCHIL_API_KEY, ARCHIL_REGION, ARCHIL_DISK_ID)"
          fi
 
+    - name: Run Blaxel Integration Tests
+      if: matrix.provider == 'blaxel'
+      env:
+        BL_API_KEY: ${{ secrets.BL_API_KEY }}
+        BL_WORKSPACE: ${{ secrets.BL_WORKSPACE }}
+        COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
+      run: |
+         if [ -n "$BL_API_KEY" ] && [ -n "$BL_WORKSPACE" ]; then
+           echo "Running Blaxel integration tests with real API..."
+           pnpm --filter @computesdk/blaxel test
+         else
+           echo "Skipping Blaxel integration tests - missing required secrets (BL_API_KEY, BL_WORKSPACE)"
+         fi
+
   computesdk-integration-tests:
     runs-on: namespace-profile-default
     needs: test
@@ -180,7 +194,7 @@ jobs:
 
     strategy:
       matrix:
-        provider: [e2b, vercel, daytona, modal, archil]
+        provider: [e2b, vercel, daytona, modal, archil, blaxel]
       fail-fast: false
 
     steps:
@@ -217,6 +231,8 @@ jobs:
         ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
         ARCHIL_REGION: ${{ secrets.ARCHIL_REGION }}
         ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID }}
+        BL_API_KEY: ${{ secrets.BL_API_KEY }}
+        BL_WORKSPACE: ${{ secrets.BL_WORKSPACE }}
       run: |
         case "$TEST_PROVIDER" in
           e2b)
@@ -246,6 +262,12 @@ jobs:
           archil)
             if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ] || [ -z "$ARCHIL_DISK_ID" ]; then
               echo "Skipping computesdk integration for archil - missing Archil credentials (ARCHIL_API_KEY, ARCHIL_REGION, ARCHIL_DISK_ID)"
+              exit 0
+            fi
+            ;;
+          blaxel)
+            if [ -z "$BL_API_KEY" ] || [ -z "$BL_WORKSPACE" ]; then
+              echo "Skipping computesdk integration for blaxel - missing Blaxel credentials (BL_API_KEY, BL_WORKSPACE)"
               exit 0
             fi
             ;;
