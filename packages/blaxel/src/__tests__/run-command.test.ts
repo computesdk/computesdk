@@ -192,7 +192,8 @@ describe('blaxel runCommand output capture', () => {
 
 	it('captures output via the live log stream when the process is still running', async () => {
 		const stream = vi.fn((_pid: string, opts: StreamOptions) => {
-			opts.onStdout?.('hello from stream');
+			opts.onStdout?.('hello');
+			opts.onStdout?.('world');
 			opts.onStderr?.('warn line');
 			return { close: () => {}, wait: async () => {} };
 		});
@@ -206,8 +207,9 @@ describe('blaxel runCommand output capture', () => {
 		const result = await runEcho(sandbox);
 
 		expect(stream).toHaveBeenCalledWith('p1', expect.any(Object));
-		expect(result.stdout).toBe('hello from stream');
-		expect(result.stderr).toBe('warn line');
+		// streamLogs strips protocol line delimiters; they are restored on join
+		expect(result.stdout).toBe('hello\nworld\n');
+		expect(result.stderr).toBe('warn line\n');
 	});
 
 	it('does not wait when exec already returns a terminal status', async () => {

@@ -498,6 +498,9 @@ const TERMINAL_PROCESS_STATUSES = new Set(['completed', 'failed', 'stopped', 'ki
 /** How long to poll for a still-running process when no command timeout is set. */
 const DEFAULT_PROCESS_WAIT_MS = 5 * 60 * 1000;
 
+/** Grace period for the live log stream to deliver its final bytes after the process goes terminal. */
+const STREAM_DRAIN_MS = 2000;
+
 /**
  * Execute a command in the sandbox and capture stdout/stderr
  */
@@ -508,6 +511,11 @@ async function executeWithStreaming(
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
+	// streamLogs emits whole protocol lines with their delimiters stripped,
+	// unlike the exec callbacks' arbitrary chunks — keep them separate so the
+	// framing can be restored on join.
+	const streamStdoutLines: string[] = [];
+	const streamStderrLines: string[] = [];
 
 	// Passing callbacks routes exec through @blaxel/core's execWithStreaming
 	// path, which surfaces output via stdout/stderr events, the completed-process
@@ -540,8 +548,8 @@ async function executeWithStreaming(
 		// process exits — attach the live log stream before waiting so output
 		// produced while the process finishes isn't lost.
 		const logStream = sandbox.process.streamLogs(pid, {
-			onStdout: (line) => stdoutLines.push(line),
-			onStderr: (line) => stderrLines.push(line),
+			onStdout: (line) => streamStdoutLines.push(line),
+			onStderr: (line) => streamStderrLines.push(line),
 			onError: () => {},
 		});
 		try {
@@ -567,6 +575,17 @@ async function executeWithStreaming(
 			}
 			throw error instanceof Error ? error : new Error(String(error));
 		} finally {
+			// The status poll and the log stream are separate requests — a
+			// terminal status can arrive before the stream's final bytes. Give
+			// the stream a bounded window to drain, then abort it.
+			try {
+				await Promise.race([
+					logStream.wait(),
+					new Promise((resolve) => setTimeout(resolve, STREAM_DRAIN_MS)),
+				]);
+			} catch {
+				// Fall through to abort
+			}
 			logStream.close();
 			try {
 				await logStream.wait();
@@ -578,8 +597,14 @@ async function executeWithStreaming(
 
 	// Streamed callbacks receive arbitrary chunks, not lines — concatenate
 	// exactly; the result fields are authoritative when populated.
-	let stdout = result.stdout || stdoutLines.join('');
-	let stderr = result.stderr || stderrLines.join('');
+	let stdout =
+		result.stdout ||
+		stdoutLines.join('') ||
+		streamStdoutLines.map((line) => `${line}\n`).join('');
+	let stderr =
+		result.stderr ||
+		stderrLines.join('') ||
+		streamStderrLines.map((line) => `${line}\n`).join('');
 
 	// Completed-process output may only be retrievable via the logs endpoint,
 	// which reports stdout and stderr per channel.
