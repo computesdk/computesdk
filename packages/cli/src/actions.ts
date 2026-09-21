@@ -45,6 +45,7 @@ type JsonOpts = { json?: boolean };
 interface CommonOpts extends JsonOpts {
   apiKey?: string;
   baseUrl?: string;
+  allowUntrustedHost?: boolean;
 }
 
 function client(opts: CommonOpts): ActionsClient {
@@ -304,6 +305,7 @@ export function registerActionsCommands(program: Command): void {
     cmd
       .option('--api-key <key>', 'API key (default: $BENCHMARKS_PLATFORM_API_KEY)')
       .option('--base-url <url>', 'API base URL (default: https://platform.computesdk.com)')
+      .option('--allow-untrusted-host', 'send the API key to a non-computesdk, non-localhost --base-url')
       .option('--json', 'print machine-readable JSON');
 
   common(

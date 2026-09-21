@@ -265,6 +265,7 @@ export function encodeWatchCursor(
 export function resolveActionsAuth(opts: {
   apiKey?: string;
   baseUrl?: string;
+  allowUntrustedHost?: boolean;
 }): ActionsAuth {
   const apiKey = opts.apiKey ?? process.env.BENCHMARKS_PLATFORM_API_KEY;
   if (!apiKey) {
@@ -277,5 +278,32 @@ export function resolveActionsAuth(opts: {
     process.env.BENCHMARKS_PLATFORM_URL ??
     DEFAULT_BASE_URL
   ).replace(/\/+$/, '');
+
+  // The bearer key is attached to every request, so an attacker-controlled
+  // --base-url would exfiltrate it. Only trusted hosts are allowed silently;
+  // anything else must be opted into with --allow-untrusted-host.
+  if (!opts.allowUntrustedHost && !isTrustedActionsHost(baseUrl)) {
+    throw new Error(
+      `Refusing to send the API key to ${baseUrl} — it is not a computesdk.com or localhost host. ` +
+        'If this is a self-hosted/dev deployment you trust, pass --allow-untrusted-host.',
+    );
+  }
   return { apiKey, baseUrl };
+}
+
+/** computesdk.com (and subdomains) or localhost — safe to receive the API key. */
+export function isTrustedActionsHost(baseUrl: string): boolean {
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname;
+  } catch {
+    return false;
+  }
+  return (
+    host === 'computesdk.com' ||
+    host.endsWith('.computesdk.com') ||
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1'
+  );
 }

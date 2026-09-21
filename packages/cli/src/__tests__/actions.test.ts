@@ -252,4 +252,22 @@ describe('resolveActionsAuth', () => {
     delete process.env.BENCHMARKS_PLATFORM_URL;
     expect(() => resolveActionsAuth({})).toThrow('BENCHMARKS_PLATFORM_API_KEY');
   });
+
+  it('refuses to send the key to untrusted hosts', () => {
+    expect(() =>
+      resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com' }),
+    ).toThrow('--allow-untrusted-host');
+    expect(
+      resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com', allowUntrustedHost: true })
+        .baseUrl,
+    ).toBe('https://evil.example.com');
+    for (const ok of [
+      'https://platform.computesdk.com',
+      'https://staging.computesdk.com',
+      'http://localhost:3000',
+      'http://127.0.0.1:8787',
+    ]) {
+      expect(resolveActionsAuth({ apiKey: 'k', baseUrl: ok }).baseUrl).toBe(ok);
+    }
+  });
 });
