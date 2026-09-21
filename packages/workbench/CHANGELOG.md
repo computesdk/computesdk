@@ -1,5 +1,51 @@
 # @computesdk/workbench
 
+## 31.0.11
+
+### Patch Changes
+
+- Updated dependencies [4f2394e]
+  - @computesdk/microsandbox@0.1.5
+
+## 31.0.10
+
+### Patch Changes
+
+- 475cdc6: Add the Novita Sandbox provider with sandbox lifecycle, native command streaming,
+  filesystem operations, snapshot and template management, and Workbench configuration support.
+  Include E2B-equivalent shared provider contract tests and enable Novita's shared
+  CRUD integration suite only when NOVITA_RUN_INTEGRATION=1 and NOVITA_API_KEY are configured.
+- Updated dependencies [475cdc6]
+- Updated dependencies [a5b4353]
+- Updated dependencies [64a51b1]
+  - @computesdk/novita@0.0.1
+  - @computesdk/modal@1.9.9
+  - @computesdk/vercel@1.7.36
+  - @computesdk/agentuity@0.0.15
+  - @computesdk/beam@0.3.6
+  - @computesdk/blaxel@1.6.22
+  - @computesdk/cloud-run@0.1.10
+  - @computesdk/cloudflare@1.6.17
+  - @computesdk/codesandbox@1.5.54
+  - @computesdk/collimate@0.1.4
+  - @computesdk/daytona@1.7.35
+  - @computesdk/declaw@0.2.11
+  - @computesdk/e2b@1.7.55
+  - @computesdk/freestyle@0.2.3
+  - @computesdk/hopx@0.2.30
+  - @computesdk/isorun@0.1.4
+  - @computesdk/just-bash@0.4.18
+  - @computesdk/k8s@0.2.7
+  - @computesdk/lelantos@0.2.5
+  - @computesdk/microsandbox@0.1.4
+  - @computesdk/namespace@1.6.18
+  - @computesdk/northflank@1.1.6
+  - @computesdk/runloop@1.3.59
+  - @computesdk/secure-exec@0.1.14
+  - @computesdk/sprites@0.1.17
+  - @computesdk/tenki@0.1.7
+  - @computesdk/upstash@0.3.12
+
 ## 31.0.9
 
 ### Patch Changes
