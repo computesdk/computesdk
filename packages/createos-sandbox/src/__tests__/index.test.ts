@@ -7,6 +7,7 @@ import {
   mapStatus,
   parseLsOutput,
   pickShape,
+  resolveSandboxPath,
   toCreateRequest,
   toForkRequest,
 } from "../index.js";
@@ -111,6 +112,25 @@ describe("buildScript", () => {
     // A `;`/space-laden value must not split the command or inject `rm`.
     expect(buildScript("ls", { cwd: "/tmp/a b; rm -rf /" })).toBe("cd '/tmp/a b; rm -rf /' && ls");
     expect(buildScript("run", { env: { K: "v; rm -rf /" } })).toBe("export K='v; rm -rf /'; run");
+  });
+});
+
+describe("resolveSandboxPath", () => {
+  it("anchors relative paths at the sandbox workdir", () => {
+    expect(resolveSandboxPath("a.txt", "/root")).toBe("/root/a.txt");
+    expect(resolveSandboxPath("src/app.ts", "/home/user")).toBe("/home/user/src/app.ts");
+  });
+  it("normalizes . segments and duplicate slashes", () => {
+    expect(resolveSandboxPath("./x/y", "/home/user")).toBe("/home/user/x/y");
+    expect(resolveSandboxPath("a//b/", "/w")).toBe("/w/a/b");
+    expect(resolveSandboxPath("/tmp//x", "/root")).toBe("/tmp/x");
+  });
+  it("preserves .. segments for the filesystem to resolve physically", () => {
+    // A component before `..` may be a symlink — POSIX resolves `..` against
+    // the target's directory, so collapsing lexically would hit the wrong path.
+    expect(resolveSandboxPath("link/../x", "/work")).toBe("/work/link/../x");
+    expect(resolveSandboxPath("/a/b/../c", "/w")).toBe("/a/b/../c");
+    expect(resolveSandboxPath("../up", "/root")).toBe("/root/../up");
   });
 });
 
