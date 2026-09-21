@@ -170,6 +170,38 @@ describe('node bootstrap in a sandbox without node', () => {
     }
   }, 60_000)
 
+  it('rejects a tarball whose sha256 does not match the pinned digest', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-home-'))
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-bin-'))
+    minimalPathBin(bin)
+    // The host's own sha256sum/openssl serves as the checksum tool.
+    for (const tool of ['sha256sum', 'shasum', 'openssl']) {
+      for (const candidate of [`/usr/bin/${tool}`, `/bin/${tool}`]) {
+        if (fs.existsSync(candidate)) { fs.symlinkSync(candidate, path.join(bin, tool)); break }
+      }
+    }
+
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/gzip' })
+      res.end('not-the-real-node')
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+
+    try {
+      const port = (server.address() as AddressInfo).port
+      const command = daemonSeedScriptCommand({ ssePort: 38989 }, 'ignored')
+      const result = await runSeedCommand(command, {
+        PATH: bin,
+        HOME: home,
+        DAEMOND_NODE_DIST_URL: `http://127.0.0.1:${port}`,
+      })
+      expect(result.status).toBe(127)
+      expect(result.stderr).toContain('failed sha256 verification')
+    } finally {
+      server.close()
+    }
+  }, 60_000)
+
   it('fails with a clear capability error when node cannot be fetched', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-home-'))
     const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-bin-'))

@@ -212,9 +212,16 @@ function nodeBootstrapPrelude(): string {
     '      mkdir -p "$__daemond_tmp" 2>/dev/null',
     '      if __daemond_fetch "$__daemond_url" "$__daemond_tmp/node.tar.gz"; then',
     '        __daemond_sum="$(__daemond_sha256 "$__daemond_tmp/node.tar.gz")"',
-    '        if [ -n "$__daemond_sum" ] && [ "$__daemond_sum" != "$__daemond_sha" ] && [ "${DAEMOND_NODE_SKIP_SHA256:-}" != "1" ]; then',
-    '          __daemond_err="downloaded node tarball failed sha256 verification (got $__daemond_sum)"',
-    `        elif tar -xzf "$__daemond_tmp/node.tar.gz" -C "$__daemond_tmp" 2>/dev/null && [ -f "$__daemond_tmp/node-v${v}-linux-$__daemond_arch/bin/node" ] && "$__daemond_tmp/node-v${v}-linux-$__daemond_arch/bin/node" --version >/dev/null 2>&1; then`,
+    // A non-HTTPS override host carries no transport trust, so it must prove
+    // content by digest — unverifiable plaintext mirrors are rejected outright.
+    '        if [ "${DAEMOND_NODE_SKIP_SHA256:-}" != "1" ]; then',
+    '          if [ -n "$__daemond_sum" ] && [ "$__daemond_sum" != "$__daemond_sha" ]; then',
+    '            __daemond_err="downloaded node tarball failed sha256 verification (got $__daemond_sum)"',
+    '          elif [ -z "$__daemond_sum" ] && [ "${__daemond_url#https://}" = "$__daemond_url" ]; then',
+    '            __daemond_err="no sha256 tool to verify the non-HTTPS download from $__daemond_url"',
+    "          fi",
+    "        fi",
+    `        if [ -z "$__daemond_err" ] && tar -xzf "$__daemond_tmp/node.tar.gz" -C "$__daemond_tmp" 2>/dev/null && [ -f "$__daemond_tmp/node-v${v}-linux-$__daemond_arch/bin/node" ] && "$__daemond_tmp/node-v${v}-linux-$__daemond_arch/bin/node" --version >/dev/null 2>&1; then`,
     // Never delete the shared cache dir — a concurrent bootstrap or running
     // daemon may be using it. Promote only into an absent path; if another
     // installer raced us there, adopt its runtime.
@@ -227,7 +234,7 @@ function nodeBootstrapPrelude(): string {
     "          else",
     '            __daemond_err="could not install node into $__daemond_dir"',
     "          fi",
-    "        else",
+    '        elif [ -z "$__daemond_err" ]; then',
     '          __daemond_err="downloaded node tarball could not be unpacked or does not run on this system"',
     "        fi",
     "      else",
