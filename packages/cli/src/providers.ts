@@ -1,27 +1,72 @@
 /**
  * Provider detection and validation
+ *
+ * Detection is local: each provider declares the env vars its credentials come
+ * from, and "ready" means all of them are set. This used to import helpers from
+ * `computesdk` that the package no longer exports, which made every `compute`
+ * invocation fail at module load.
  */
 
-import {
-  PROVIDER_NAMES,
-  isProviderAuthComplete,
-  getMissingEnvVars,
-  getProviderConfigFromEnv,
-  type ProviderName,
-} from 'computesdk';
+interface ProviderEnvSpec {
+  /**
+   * Alternative complete credential sets — the provider is usable when every
+   * var in any one set is present (e.g. Vercel: the traditional tuple OR
+   * VERCEL_OIDC_TOKEN; Namespace: NSC_TOKEN or NSC_TOKEN_FILE).
+   */
+  authOptions: string[][];
+  /**
+   * Maps each env var to the provider's nested config key (the field names in
+   * the provider package's config interface, e.g. `apiKey`, `tokenId`).
+   */
+  configKeys: Record<string, string>;
+}
 
-// Providers that need additional credentials beyond COMPUTESDK_API_KEY
-const PROVIDERS_NEEDING_CREDS = [
-  'e2b',
-  'railway',
-  'modal',
-  'vercel',
-  'daytona',
-  'render',
-  'namespace',
-  'blaxel',
-  'codesandbox',
-];
+const PROVIDER_ENV: Record<string, ProviderEnvSpec> = {
+  e2b: { authOptions: [['E2B_API_KEY']], configKeys: { E2B_API_KEY: 'apiKey' } },
+  railway: { authOptions: [['RAILWAY_API_TOKEN']], configKeys: { RAILWAY_API_TOKEN: 'token' } },
+  modal: {
+    authOptions: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
+    configKeys: { MODAL_TOKEN_ID: 'tokenId', MODAL_TOKEN_SECRET: 'tokenSecret' },
+  },
+  vercel: {
+    authOptions: [['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_PROJECT_ID'], ['VERCEL_OIDC_TOKEN']],
+    configKeys: {
+      VERCEL_TOKEN: 'token',
+      VERCEL_TEAM_ID: 'teamId',
+      VERCEL_PROJECT_ID: 'projectId',
+    },
+  },
+  daytona: { authOptions: [['DAYTONA_API_KEY']], configKeys: { DAYTONA_API_KEY: 'apiKey' } },
+  namespace: {
+    authOptions: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
+    configKeys: { NSC_TOKEN: 'token', NSC_TOKEN_FILE: 'tokenFile' },
+  },
+  blaxel: {
+    authOptions: [['BL_API_KEY', 'BL_WORKSPACE']],
+    configKeys: { BL_API_KEY: 'apiKey', BL_WORKSPACE: 'workspace' },
+  },
+  codesandbox: { authOptions: [['CSB_API_KEY']], configKeys: { CSB_API_KEY: 'apiKey' } },
+  render: { authOptions: [['RENDER_API_KEY']], configKeys: { RENDER_API_KEY: 'apiKey' } },
+};
+
+const PROVIDER_NAMES = Object.keys(PROVIDER_ENV);
+
+/** Missing vars from whichever auth option is closest to complete. */
+function missingEnvVars(provider: string): string[] {
+  const spec = PROVIDER_ENV[provider];
+  if (!spec) return [];
+  let best: string[] | null = null;
+  for (const option of spec.authOptions) {
+    const missing = option.filter((name) => !process.env[name]);
+    if (missing.length === 0) return [];
+    if (!best || missing.length < best.length) best = missing;
+  }
+  return best ?? [];
+}
+
+function isProviderAuthComplete(provider: string): boolean {
+  return missingEnvVars(provider).length === 0;
+}
 
 /**
  * Provider status info
@@ -46,7 +91,7 @@ export function detectAvailableProviders(): string[] {
 
   // Then check for individual cloud providers (need their own creds)
   for (const provider of PROVIDER_NAMES) {
-    if (PROVIDERS_NEEDING_CREDS.includes(provider as string) && isProviderAuthComplete(provider)) {
+    if (isProviderAuthComplete(provider)) {
       available.push(provider);
     }
   }
@@ -71,13 +116,11 @@ export function getProviderStatus(): ProviderStatus[] {
 
   // Add individual cloud providers (need their own creds)
   for (const provider of PROVIDER_NAMES) {
-    if (PROVIDERS_NEEDING_CREDS.includes(provider as string)) {
-      statuses.push({
-        name: provider,
-        ready: isProviderAuthComplete(provider),
-        missing: getMissingEnvVars(provider),
-      });
-    }
+    statuses.push({
+      name: provider,
+      ready: isProviderAuthComplete(provider),
+      missing: missingEnvVars(provider),
+    });
   }
 
   return statuses;
@@ -104,11 +147,17 @@ export function buildProviderConfig(provider: string): Record<string, unknown> {
     config.computesdk = {
       computesdk_api_key: process.env.COMPUTESDK_API_KEY,
     };
+    return config;
   }
 
-  // Add provider-specific config from env vars (for other providers)
-  if (provider !== 'computesdk') {
-    const providerConfig = getProviderConfigFromEnv(provider as ProviderName);
+  // Add provider-specific config from env vars
+  const spec = PROVIDER_ENV[provider];
+  if (spec) {
+    const providerConfig: Record<string, string> = {};
+    for (const [envVar, key] of Object.entries(spec.configKeys)) {
+      const value = process.env[envVar];
+      if (value) providerConfig[key] = value;
+    }
     if (Object.keys(providerConfig).length > 0) {
       config[provider] = providerConfig;
     }
