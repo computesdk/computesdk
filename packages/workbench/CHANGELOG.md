@@ -1,5 +1,40 @@
 # @computesdk/workbench
 
+## 31.0.13
+
+### Patch Changes
+
+- Updated dependencies [7e65fe7]
+  - @computesdk/provider@2.1.8
+  - computesdk@4.1.7
+  - @computesdk/agentuity@0.0.16
+  - @computesdk/beam@0.3.7
+  - @computesdk/blaxel@1.6.24
+  - @computesdk/cloud-run@0.1.11
+  - @computesdk/cloudflare@1.6.18
+  - @computesdk/codesandbox@1.5.55
+  - @computesdk/collimate@0.1.5
+  - @computesdk/daytona@1.7.36
+  - @computesdk/declaw@0.2.12
+  - @computesdk/e2b@1.7.56
+  - @computesdk/freestyle@0.2.4
+  - @computesdk/hopx@0.2.31
+  - @computesdk/isorun@0.1.5
+  - @computesdk/just-bash@0.4.19
+  - @computesdk/k8s@0.2.8
+  - @computesdk/lelantos@0.2.6
+  - @computesdk/microsandbox@0.1.6
+  - @computesdk/modal@1.9.10
+  - @computesdk/namespace@1.6.19
+  - @computesdk/northflank@1.1.7
+  - @computesdk/novita@0.0.2
+  - @computesdk/runloop@1.3.60
+  - @computesdk/secure-exec@0.1.15
+  - @computesdk/sprites@0.1.18
+  - @computesdk/tenki@0.1.8
+  - @computesdk/upstash@0.3.13
+  - @computesdk/vercel@1.7.37
+
 ## 31.0.12
 
 ### Patch Changes

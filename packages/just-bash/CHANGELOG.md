@@ -1,5 +1,13 @@
 # @computesdk/just-bash
 
+## 0.4.19
+
+### Patch Changes
+
+- Updated dependencies [7e65fe7]
+  - @computesdk/provider@2.1.8
+  - computesdk@4.1.7
+
 ## 0.4.18
 
 ### Patch Changes

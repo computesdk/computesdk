@@ -1,5 +1,13 @@
 # @computesdk/daytona
 
+## 1.7.36
+
+### Patch Changes
+
+- Updated dependencies [7e65fe7]
+  - @computesdk/provider@2.1.8
+  - computesdk@4.1.7
+
 ## 1.7.35
 
 ### Patch Changes
