@@ -115,9 +115,12 @@ describe('modal filesystem read/write', () => {
     await sandbox.filesystem.writeFile('bench/file.txt', 'x');
     expect(files.get('/root/bench/file.txt')).toBe('x');
 
-    // `.`/`..` and duplicate slashes normalize the same way a shell would.
+    // `.` and duplicate slashes normalize; `..` is preserved for the sandbox
+    // filesystem to resolve physically (a preceding component may be a symlink).
     expect(await sandbox.filesystem.readFile('./bench/file.txt')).toBe('x');
-    expect(await sandbox.filesystem.exists('bench/../bench/file.txt')).toBe(true);
+    expect(await sandbox.filesystem.exists('bench//file.txt')).toBe(true);
+    await sandbox.filesystem.writeFile('a/../b.txt', 'y');
+    expect(files.get('/root/a/../b.txt')).toBe('y');
 
     // The workdir is probed once (`pwd`) and cached across operations.
     expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(1);

@@ -120,19 +120,17 @@ describe("resolveSandboxPath", () => {
     expect(resolveSandboxPath("a.txt", "/root")).toBe("/root/a.txt");
     expect(resolveSandboxPath("src/app.ts", "/home/user")).toBe("/home/user/src/app.ts");
   });
-  it("normalizes ., .., and duplicate slashes", () => {
-    expect(resolveSandboxPath("./x/../y", "/home/user")).toBe("/home/user/y");
+  it("normalizes . segments and duplicate slashes", () => {
+    expect(resolveSandboxPath("./x/y", "/home/user")).toBe("/home/user/x/y");
     expect(resolveSandboxPath("a//b/", "/w")).toBe("/w/a/b");
+    expect(resolveSandboxPath("/tmp//x", "/root")).toBe("/tmp/x");
   });
-  it("passes absolute paths through normalized", () => {
-    expect(resolveSandboxPath("/tmp/../etc/x", "/root")).toBe("/etc/x");
-    expect(resolveSandboxPath("/abs/b.txt", "/root")).toBe("/abs/b.txt");
-  });
-  it("lets .. escape the workdir, matching shell semantics", () => {
-    expect(resolveSandboxPath("../tmp/x", "/root")).toBe("/tmp/x");
-  });
-  it("resolves to the filesystem root rather than an empty path", () => {
-    expect(resolveSandboxPath("..", "/root")).toBe("/");
+  it("preserves .. segments for the filesystem to resolve physically", () => {
+    // A component before `..` may be a symlink — POSIX resolves `..` against
+    // the target's directory, so collapsing lexically would hit the wrong path.
+    expect(resolveSandboxPath("link/../x", "/work")).toBe("/work/link/../x");
+    expect(resolveSandboxPath("/a/b/../c", "/w")).toBe("/a/b/../c");
+    expect(resolveSandboxPath("../up", "/root")).toBe("/root/../up");
   });
 });
 

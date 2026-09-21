@@ -269,7 +269,10 @@ function workdirOf(sandbox: Sailbox, runCommand: CommandRunner): Promise<string>
   return probe;
 }
 
-/** Join `path` onto the sandbox workdir, resolving `.`/`..`/duplicate slashes. */
+/** Join `path` onto the sandbox workdir. Absolute paths pass through and skip
+ *  the probe; empty and `.` segments are dropped; `..` segments are preserved
+ *  for the sandbox filesystem to resolve physically — collapsing them
+ *  lexically would mis-resolve when a preceding component is a symlink. */
 async function resolveSandboxPath(
   sandbox: Sailbox,
   path: string,
@@ -281,8 +284,7 @@ async function resolveSandboxPath(
   const segments: string[] = [];
   for (const segment of combined.split('/')) {
     if (segment === '' || segment === '.') continue;
-    if (segment === '..') segments.pop();
-    else segments.push(segment);
+    segments.push(segment);
   }
   return `/${segments.join('/')}`;
 }

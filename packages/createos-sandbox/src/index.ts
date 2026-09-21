@@ -95,17 +95,31 @@ function workdirOf(sandbox: Sandbox, runCommand: CommandRunner): Promise<string>
   return probe;
 }
 
-/** Join `path` onto `workdir`, resolving `.`/`..`/duplicate slashes. Absolute
- *  paths pass through normalized; relative paths anchor at the sandbox workdir. */
+/** Join `path` onto `workdir`. Absolute paths pass through; relative paths
+ *  anchor at the sandbox workdir. Empty and `.` segments are dropped; `..`
+ *  segments are preserved for the sandbox filesystem to resolve physically —
+ *  collapsing them lexically would mis-resolve when a preceding component is
+ *  a symlink. */
 export function resolveSandboxPath(path: string, workdir: string): string {
   const combined = path.startsWith("/") ? path : `${workdir}/${path}`;
   const segments: string[] = [];
   for (const segment of combined.split("/")) {
     if (segment === "" || segment === ".") continue;
-    if (segment === "..") segments.pop();
-    else segments.push(segment);
+    segments.push(segment);
   }
   return `/${segments.join("/")}`;
+}
+
+/** Resolve `path` without forcing a workdir probe for absolute paths. */
+async function resolveFsPath(
+  sandbox: Sandbox,
+  path: string,
+  runCommand: CommandRunner,
+): Promise<string> {
+  return resolveSandboxPath(
+    path,
+    path.startsWith("/") ? "/" : await workdirOf(sandbox, runCommand),
+  );
 }
 
 /** Memory floor (MiB) for the default shape when a create() pins no size. The
@@ -467,34 +481,34 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       filesystem: {
         readFile: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<string> => {
           const buf = await sandbox.files.download(
-            resolveSandboxPath(path, await workdirOf(sandbox, runCommand)),
+            await resolveFsPath(sandbox, path, runCommand),
           );
           return new TextDecoder().decode(buf);
         },
         writeFile: async (sandbox: Sandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
           await sandbox.files.upload(
-            resolveSandboxPath(path, await workdirOf(sandbox, runCommand)),
+            await resolveFsPath(sandbox, path, runCommand),
             content,
           );
         },
         mkdir: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const resolved = await resolveFsPath(sandbox, path, runCommand);
           const r = await runCommand(sandbox, `mkdir -p ${shellQuote(resolved)}`);
           if (r.exitCode !== 0) throw new Error(`mkdir ${path} failed: ${r.stderr}`);
         },
         readdir: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
-          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const resolved = await resolveFsPath(sandbox, path, runCommand);
           const r = await runCommand(sandbox, `ls -lA --time-style=+%s ${shellQuote(resolved)}`);
           if (r.exitCode !== 0) throw new Error(`readdir ${path} failed: ${r.stderr}`);
           return parseLsOutput(r.stdout);
         },
         exists: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
-          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const resolved = await resolveFsPath(sandbox, path, runCommand);
           const r = await runCommand(sandbox, `test -e ${shellQuote(resolved)}`);
           return r.exitCode === 0;
         },
         remove: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const resolved = await resolveFsPath(sandbox, path, runCommand);
           const r = await runCommand(sandbox, `rm -rf ${shellQuote(resolved)}`);
           if (r.exitCode !== 0) throw new Error(`remove ${path} failed: ${r.stderr}`);
         },
