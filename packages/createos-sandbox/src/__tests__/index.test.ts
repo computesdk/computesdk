@@ -7,6 +7,7 @@ import {
   mapStatus,
   parseLsOutput,
   pickShape,
+  resolveSandboxPath,
   toCreateRequest,
   toForkRequest,
 } from "../index.js";
@@ -111,6 +112,27 @@ describe("buildScript", () => {
     // A `;`/space-laden value must not split the command or inject `rm`.
     expect(buildScript("ls", { cwd: "/tmp/a b; rm -rf /" })).toBe("cd '/tmp/a b; rm -rf /' && ls");
     expect(buildScript("run", { env: { K: "v; rm -rf /" } })).toBe("export K='v; rm -rf /'; run");
+  });
+});
+
+describe("resolveSandboxPath", () => {
+  it("anchors relative paths at the sandbox workdir", () => {
+    expect(resolveSandboxPath("a.txt", "/root")).toBe("/root/a.txt");
+    expect(resolveSandboxPath("src/app.ts", "/home/user")).toBe("/home/user/src/app.ts");
+  });
+  it("normalizes ., .., and duplicate slashes", () => {
+    expect(resolveSandboxPath("./x/../y", "/home/user")).toBe("/home/user/y");
+    expect(resolveSandboxPath("a//b/", "/w")).toBe("/w/a/b");
+  });
+  it("passes absolute paths through normalized", () => {
+    expect(resolveSandboxPath("/tmp/../etc/x", "/root")).toBe("/etc/x");
+    expect(resolveSandboxPath("/abs/b.txt", "/root")).toBe("/abs/b.txt");
+  });
+  it("lets .. escape the workdir, matching shell semantics", () => {
+    expect(resolveSandboxPath("../tmp/x", "/root")).toBe("/tmp/x");
+  });
+  it("resolves to the filesystem root rather than an empty path", () => {
+    expect(resolveSandboxPath("..", "/root")).toBe("/");
   });
 });
 

@@ -75,6 +75,39 @@ type CommandRunner = (
   options?: RunCommandOptions,
 ) => Promise<CommandResult>;
 
+const FALLBACK_WORKDIR = "/";
+
+/** Cached `pwd` probes: the `files.*` API demands absolute paths, so relative
+ *  filesystem paths resolve against the cwd a `runCommand` exec would use —
+ *  `writeFile('a.txt')` and `cat a.txt` then agree. */
+const workdirs = new WeakMap<Sandbox, Promise<string>>();
+
+function workdirOf(sandbox: Sandbox, runCommand: CommandRunner): Promise<string> {
+  let probe = workdirs.get(sandbox);
+  if (!probe) {
+    probe = runCommand(sandbox, "pwd").then((r) => {
+      const dir = r.stdout.trim();
+      return r.exitCode === 0 && dir.startsWith("/") ? dir : FALLBACK_WORKDIR;
+    });
+    workdirs.set(sandbox, probe);
+    probe.catch(() => workdirs.delete(sandbox));
+  }
+  return probe;
+}
+
+/** Join `path` onto `workdir`, resolving `.`/`..`/duplicate slashes. Absolute
+ *  paths pass through normalized; relative paths anchor at the sandbox workdir. */
+export function resolveSandboxPath(path: string, workdir: string): string {
+  const combined = path.startsWith("/") ? path : `${workdir}/${path}`;
+  const segments: string[] = [];
+  for (const segment of combined.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") segments.pop();
+    else segments.push(segment);
+  }
+  return `/${segments.join("/")}`;
+}
+
 /** Memory floor (MiB) for the default shape when a create() pins no size. The
  *  control plane names no default shape and `CreateSandboxRequest` requires
  *  one, so the default is a client policy — the smallest *live* catalog shape
@@ -432,28 +465,37 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       getInstance: (sandbox: Sandbox): Sandbox => sandbox,
 
       filesystem: {
-        readFile: async (sandbox: Sandbox, path: string): Promise<string> => {
-          const buf = await sandbox.files.download(path);
+        readFile: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<string> => {
+          const buf = await sandbox.files.download(
+            resolveSandboxPath(path, await workdirOf(sandbox, runCommand)),
+          );
           return new TextDecoder().decode(buf);
         },
-        writeFile: async (sandbox: Sandbox, path: string, content: string): Promise<void> => {
-          await sandbox.files.upload(path, content);
+        writeFile: async (sandbox: Sandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
+          await sandbox.files.upload(
+            resolveSandboxPath(path, await workdirOf(sandbox, runCommand)),
+            content,
+          );
         },
         mkdir: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const r = await runCommand(sandbox, `mkdir -p ${shellQuote(path)}`);
+          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const r = await runCommand(sandbox, `mkdir -p ${shellQuote(resolved)}`);
           if (r.exitCode !== 0) throw new Error(`mkdir ${path} failed: ${r.stderr}`);
         },
         readdir: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
-          const r = await runCommand(sandbox, `ls -lA --time-style=+%s ${shellQuote(path)}`);
+          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const r = await runCommand(sandbox, `ls -lA --time-style=+%s ${shellQuote(resolved)}`);
           if (r.exitCode !== 0) throw new Error(`readdir ${path} failed: ${r.stderr}`);
           return parseLsOutput(r.stdout);
         },
         exists: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
-          const r = await runCommand(sandbox, `test -e ${shellQuote(path)}`);
+          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const r = await runCommand(sandbox, `test -e ${shellQuote(resolved)}`);
           return r.exitCode === 0;
         },
         remove: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<void> => {
-          const r = await runCommand(sandbox, `rm -rf ${shellQuote(path)}`);
+          const resolved = resolveSandboxPath(path, await workdirOf(sandbox, runCommand));
+          const r = await runCommand(sandbox, `rm -rf ${shellQuote(resolved)}`);
           if (r.exitCode !== 0) throw new Error(`remove ${path} failed: ${r.stderr}`);
         },
       },

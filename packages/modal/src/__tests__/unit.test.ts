@@ -36,7 +36,7 @@ class FakeSandbox {
   };
   async exec(command: string[]) {
     execCalls.push(command);
-    const content = files.get(command[1]) ?? '';
+    const content = command[2] === 'pwd' ? '/root\n' : (files.get(command[1]) ?? '');
     return {
       stdout: { readText: async () => content },
       stderr: { readText: async () => '' },
@@ -106,6 +106,21 @@ describe('modal filesystem read/write', () => {
     // Removing a missing path is a no-op, matching `rm -rf`.
     await expect(sandbox.filesystem.remove('/tmp/bench/fs-1')).resolves.toBeUndefined();
     expect(execCalls).toEqual([]);
+  });
+
+  it('resolves relative filesystem paths against the exec cwd', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    const sandbox = await provider.sandbox.create();
+
+    await sandbox.filesystem.writeFile('bench/file.txt', 'x');
+    expect(files.get('/root/bench/file.txt')).toBe('x');
+
+    // `.`/`..` and duplicate slashes normalize the same way a shell would.
+    expect(await sandbox.filesystem.readFile('./bench/file.txt')).toBe('x');
+    expect(await sandbox.filesystem.exists('bench/../bench/file.txt')).toBe(true);
+
+    // The workdir is probed once (`pwd`) and cached across operations.
+    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(1);
   });
 
   it('surfaces a descriptive error when a read fails', async () => {

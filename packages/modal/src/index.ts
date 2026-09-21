@@ -70,6 +70,50 @@ interface ModalSandbox {
   sandboxId: string;
 }
 
+/** The framework-supplied command runner handed to filesystem callbacks. */
+type CommandRunner = (
+  sandbox: ModalSandbox,
+  command: string,
+  options?: RunCommandOptions,
+) => Promise<CommandResult>;
+
+const FALLBACK_WORKDIR = '/';
+
+/** Cached `pwd` probes: relative filesystem paths resolve against the cwd a
+ *  `runCommand` exec would use, so `writeFile('a.txt')` and `cat a.txt` agree. */
+const workdirs = new WeakMap<ModalSandbox, Promise<string>>();
+
+function workdirOf(sandbox: ModalSandbox, runCommand: CommandRunner): Promise<string> {
+  let probe = workdirs.get(sandbox);
+  if (!probe) {
+    probe = runCommand(sandbox, 'pwd').then((result) => {
+      const dir = result.stdout.trim();
+      return result.exitCode === 0 && dir.startsWith('/') ? dir : FALLBACK_WORKDIR;
+    });
+    workdirs.set(sandbox, probe);
+    probe.catch(() => workdirs.delete(sandbox));
+  }
+  return probe;
+}
+
+/** Join `path` onto the sandbox workdir, resolving `.`/`..`/duplicate slashes. */
+async function resolveSandboxPath(
+  sandbox: ModalSandbox,
+  path: string,
+  runCommand: CommandRunner,
+): Promise<string> {
+  const combined = path.startsWith('/')
+    ? path
+    : `${await workdirOf(sandbox, runCommand)}/${path}`;
+  const segments: string[] = [];
+  for (const segment of combined.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') segments.pop();
+    else segments.push(segment);
+  }
+  return `/${segments.join('/')}`;
+}
+
 const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
   name: 'modal',
   methods: {
@@ -212,30 +256,34 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
 
       filesystem: {
-        readFile: async (modalSandbox: ModalSandbox, path: string): Promise<string> => {
+        readFile: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
+          const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            return await modalSandbox.sandbox.filesystem.readText(path);
+            return await modalSandbox.sandbox.filesystem.readText(resolved);
           } catch (error) {
             throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
-        writeFile: async (modalSandbox: ModalSandbox, path: string, content: string): Promise<void> => {
+        writeFile: async (modalSandbox: ModalSandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
+          const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.writeText(content, path);
+            await modalSandbox.sandbox.filesystem.writeText(content, resolved);
           } catch (error) {
             throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
-        mkdir: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
+        mkdir: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.makeDirectory(path, { createParents: true });
+            await modalSandbox.sandbox.filesystem.makeDirectory(resolved, { createParents: true });
           } catch (error) {
             throw new Error(`mkdir failed: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
-        readdir: async (modalSandbox: ModalSandbox, path: string): Promise<FileEntry[]> => {
+        readdir: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
+          const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            const entries = await modalSandbox.sandbox.filesystem.listFiles(path);
+            const entries = await modalSandbox.sandbox.filesystem.listFiles(resolved);
             return entries.map((entry) => ({
               name: entry.name,
               type: entry.type === 'directory' ? 'directory' as const : 'file' as const,
@@ -246,18 +294,20 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             throw new Error(`ls failed: ${error instanceof Error ? error.message : String(error)}`);
           }
         },
-        exists: async (modalSandbox: ModalSandbox, path: string): Promise<boolean> => {
+        exists: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
+          const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.stat(path);
+            await modalSandbox.sandbox.filesystem.stat(resolved);
             return true;
           } catch (error) {
             if (error instanceof SandboxFilesystemNotFoundError) return false;
             throw error;
           }
         },
-        remove: async (modalSandbox: ModalSandbox, path: string): Promise<void> => {
+        remove: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.remove(path, { recursive: true });
+            await modalSandbox.sandbox.filesystem.remove(resolved, { recursive: true });
           } catch (error) {
             if (error instanceof SandboxFilesystemNotFoundError) return;
             throw new Error(`rm failed: ${error instanceof Error ? error.message : String(error)}`);
