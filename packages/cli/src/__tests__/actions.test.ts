@@ -235,10 +235,20 @@ describe('ActionsClient', () => {
 
 describe('resolveActionsAuth', () => {
   it('prefers the flag over the env var', () => {
-    process.env.BENCHMARKS_PLATFORM_API_KEY = 'env-key';
+    process.env.COMPUTE_API_KEY = 'env-key';
     expect(resolveActionsAuth({ apiKey: 'flag-key' }).apiKey).toBe('flag-key');
     expect(resolveActionsAuth({}).apiKey).toBe('env-key');
+    delete process.env.COMPUTE_API_KEY;
+  });
+
+  it('accepts the legacy BENCHMARKS_PLATFORM_* env vars as fallback', () => {
+    process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
+    process.env.BENCHMARKS_PLATFORM_URL = 'https://staging.computesdk.com';
+    const auth = resolveActionsAuth({});
+    expect(auth.apiKey).toBe('legacy-key');
+    expect(auth.baseUrl).toBe('https://staging.computesdk.com');
     delete process.env.BENCHMARKS_PLATFORM_API_KEY;
+    delete process.env.BENCHMARKS_PLATFORM_URL;
   });
 
   it('strips a trailing slash from base-url', () => {
@@ -248,9 +258,11 @@ describe('resolveActionsAuth', () => {
   });
 
   it('throws without a key', () => {
+    delete process.env.COMPUTE_API_KEY;
+    delete process.env.COMPUTE_PLATFORM_URL;
     delete process.env.BENCHMARKS_PLATFORM_API_KEY;
     delete process.env.BENCHMARKS_PLATFORM_URL;
-    expect(() => resolveActionsAuth({})).toThrow('BENCHMARKS_PLATFORM_API_KEY');
+    expect(() => resolveActionsAuth({})).toThrow('COMPUTE_API_KEY');
   });
 
   it('refuses to send the key to untrusted hosts', () => {

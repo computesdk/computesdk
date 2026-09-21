@@ -11,7 +11,7 @@ Add `compute actions` command group — drive the benchmarks-platform Actions v1
 - `actions cancel|rerun <run-id>`
 - `actions artifacts <run-id> [--job] [--out <dir>]` — list or download
 
-Auth via `BENCHMARKS_PLATFORM_API_KEY` or `--api-key`; `--base-url` overrides the platform.computesdk.com default; every subcommand supports `--json`.
+Auth via `COMPUTE_API_KEY` or `--api-key`; `--base-url` overrides the platform.computesdk.com default; every subcommand supports `--json`.
 
 Fold the bench CLI under compute: `compute bench <args>` dispatches to `@benchsdk/runner`'s `run()`, covering the full `bench` surface (`run`, `check`, `auth`, `org`, `benchmarks`, `runs`, `results`, `iterations`, `artifacts`, `logs`, `export`) — one implementation, both bins.
 
