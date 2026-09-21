@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { compute, type DirectProvider } from '../compute';
 
-type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal' | 'archil';
+type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal' | 'archil' | 'blaxel';
 
 const runIntegration = process.env.COMPUTESDK_INTEGRATION === '1';
 const testProvider = process.env.TEST_PROVIDER as SupportedProvider | undefined;
@@ -44,6 +44,7 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
     daytona: resolve(workspaceRoot, 'packages/daytona/dist/index.mjs'),
     modal: resolve(workspaceRoot, 'packages/modal/dist/index.mjs'),
     archil: resolve(workspaceRoot, 'packages/archil/dist/index.mjs'),
+    blaxel: resolve(workspaceRoot, 'packages/blaxel/dist/index.mjs'),
   };
 
   const factoryMap: Record<SupportedProvider, string> = {
@@ -52,6 +53,7 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
     daytona: 'daytona',
     modal: 'modal',
     archil: 'archil',
+    blaxel: 'blaxel',
   };
 
   const moduleUrl = pathToFileURL(modulePaths[provider]).href;
@@ -89,6 +91,11 @@ function getProviderConfig(provider: SupportedProvider): Record<string, string> 
       return {
         apiKey: requireEnv('ARCHIL_API_KEY'),
         region: requireEnv('ARCHIL_REGION'),
+      };
+    case 'blaxel':
+      return {
+        apiKey: requireEnv('BL_API_KEY'),
+        workspace: requireEnv('BL_WORKSPACE'),
       };
     default:
       throw new Error(`Unsupported TEST_PROVIDER: ${String(provider)}`);
