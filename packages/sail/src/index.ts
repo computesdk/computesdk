@@ -242,6 +242,53 @@ function toStatus(status: string): SandboxInfo['status'] {
   }
 }
 
+/** The framework-supplied command runner handed to filesystem callbacks. */
+type CommandRunner = (
+  sandbox: Sailbox,
+  command: string,
+  options?: RunCommandOptions,
+) => Promise<CommandResult>;
+
+const FALLBACK_WORKDIR = '/';
+
+/** Cached `pwd` probes: `fs.*` demands absolute paths, so relative filesystem
+ *  paths resolve against the cwd a `runCommand` exec would use —
+ *  `writeFile('a.txt')` and `cat a.txt` then agree. */
+const workdirs = new WeakMap<Sailbox, Promise<string>>();
+
+function workdirOf(sandbox: Sailbox, runCommand: CommandRunner): Promise<string> {
+  let probe = workdirs.get(sandbox);
+  if (!probe) {
+    probe = runCommand(sandbox, 'pwd').then((result) => {
+      const dir = result.stdout.trim();
+      return result.exitCode === 0 && dir.startsWith('/') ? dir : FALLBACK_WORKDIR;
+    });
+    workdirs.set(sandbox, probe);
+    probe.catch(() => workdirs.delete(sandbox));
+  }
+  return probe;
+}
+
+/** Join `path` onto the sandbox workdir. Absolute paths pass through and skip
+ *  the probe; empty and `.` segments are dropped; `..` segments are preserved
+ *  for the sandbox filesystem to resolve physically — collapsing them
+ *  lexically would mis-resolve when a preceding component is a symlink. */
+async function resolveSandboxPath(
+  sandbox: Sailbox,
+  path: string,
+  runCommand: CommandRunner,
+): Promise<string> {
+  const combined = path.startsWith('/')
+    ? path
+    : `${await workdirOf(sandbox, runCommand)}/${path}`;
+  const segments: string[] = [];
+  for (const segment of combined.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    segments.push(segment);
+  }
+  return `/${segments.join('/')}`;
+}
+
 /** Translate millisecond ComputeSDK command timeouts into Sail seconds. */
 function toExecOptions(options?: RunCommandOptions): ExecOptions {
   return {
@@ -368,24 +415,40 @@ export const sail = defineProvider<Sailbox, SailConfig>({
       },
 
       filesystem: {
-        readFile: async (sandbox, path) =>
-          (await sandbox.fs.read(path)).toString('utf8'),
-        writeFile: async (sandbox, path, content) => {
-          await sandbox.fs.write(path, content);
+        readFile: async (sandbox, path, runCommand: CommandRunner) =>
+          (
+            await sandbox.fs.read(
+              await resolveSandboxPath(sandbox, path, runCommand),
+            )
+          ).toString('utf8'),
+        writeFile: async (sandbox, path, content, runCommand: CommandRunner) => {
+          await sandbox.fs.write(
+            await resolveSandboxPath(sandbox, path, runCommand),
+            content,
+          );
         },
-        mkdir: async (sandbox, path) => {
-          await sandbox.fs.mkdir(path);
+        mkdir: async (sandbox, path, runCommand: CommandRunner) => {
+          await sandbox.fs.mkdir(
+            await resolveSandboxPath(sandbox, path, runCommand),
+          );
         },
-        readdir: async (sandbox, path): Promise<FileEntry[]> =>
-          (await sandbox.fs.ls(path)).map((entry) => ({
+        readdir: async (sandbox, path, runCommand: CommandRunner): Promise<FileEntry[]> =>
+          (
+            await sandbox.fs.ls(
+              await resolveSandboxPath(sandbox, path, runCommand),
+            )
+          ).map((entry) => ({
             name: entry.name,
             type: entry.type === 'directory' ? 'directory' : 'file',
             size: entry.size,
             modified: new Date(entry.modifiedTime * 1_000),
           })),
-        exists: async (sandbox, path) => sandbox.fs.exists(path),
-        remove: async (sandbox, path) => {
-          await sandbox.fs.remove(path);
+        exists: async (sandbox, path, runCommand: CommandRunner) =>
+          sandbox.fs.exists(await resolveSandboxPath(sandbox, path, runCommand)),
+        remove: async (sandbox, path, runCommand: CommandRunner) => {
+          await sandbox.fs.remove(
+            await resolveSandboxPath(sandbox, path, runCommand),
+          );
         },
       },
 

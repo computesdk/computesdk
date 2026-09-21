@@ -70,7 +70,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
 
         const timeout = options?.timeout ?? config.timeout ?? 600000;
         const optRuntime = (options as any)?.runtime as string | undefined;
-        const ephemeral = (options as any)?.ephemeral as boolean | undefined;
+        const ephemeral = options?.ephemeral;
         const ttl = (options as any)?.ttl as number | undefined;
 
         try {
