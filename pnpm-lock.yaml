@@ -1760,6 +1760,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/novita:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+      novita-sandbox:
+        specifier: ^2.1.1
+        version: 2.1.1
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/opencomputer:
     dependencies:
       '@computesdk/provider':
@@ -2581,6 +2618,9 @@ importers:
       '@computesdk/northflank':
         specifier: workspace:*
         version: link:../northflank
+      '@computesdk/novita':
+        specifier: workspace:*
+        version: link:../novita
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -7885,6 +7925,10 @@ packages:
   notte-sdk@0.0.3:
     resolution: {integrity: sha512-zDibN+s5/6DyXpZ304RQmMScZ91bjpVke67N29P5AjKOk4d3l2vJMM+tN5rL2BxtELiA/tmoh8JW5NhwmOna+w==}
 
+  novita-sandbox@2.1.1:
+    resolution: {integrity: sha512-77cL+1nb/IVvJKrR1ePkcfIoeGQxmmhLnej4yyo2eyq5mLEctYcanciwyBY56ZeSApN2oNcqd19WT2//A6nBMg==}
+    engines: {node: '>=20'}
+
   npm-run-path@5.3.0:
     resolution: {integrity: sha512-ppwTtiJZq0O/ai0z7yfudtBpWIoxM8yE6nHi1X47eFR2EWORqfbu6CnPlNsjeN683eT0qG6H/Pyf9fCcvjnnnQ==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -10644,10 +10688,19 @@ snapshots:
       '@bufbuild/protobuf': 2.12.1
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
 
+  '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.12.1))':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.12.1)
+
   '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.7.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.7.0))':
     dependencies:
       '@bufbuild/protobuf': 2.7.0
       '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.7.0)
+
+  '@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.12.1)':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
 
   '@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.7.0)':
     dependencies:
@@ -15764,6 +15817,19 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  novita-sandbox@2.1.1:
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-web': 2.0.0-rc.3(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.12.1))
+      chalk: 5.6.0
+      compare-versions: 6.1.1
+      dockerfile-ast: 0.7.1
+      glob: 11.1.0
+      openapi-fetch: 0.14.1
+      platform: 1.3.6
+      tar: 7.5.22
 
   npm-run-path@5.3.0:
     dependencies:

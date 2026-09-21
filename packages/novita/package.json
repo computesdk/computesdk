@@ -1,12 +1,8 @@
 {
-  "name": "@computesdk/createos-sandbox",
-  "version": "0.1.9",
-  "description": "CreateOS provider for ComputeSDK — NodeOps VM sandboxes with pause/resume/fork snapshots",
-  "author": "NodeOps Inc.",
+  "name": "@computesdk/novita",
+  "version": "0.0.1",
+  "description": "Novita Sandbox provider for ComputeSDK - cloud sandboxes with native streaming, filesystem access, and snapshots",
   "license": "MIT",
-  "engines": {
-    "node": ">=22"
-  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -25,29 +21,34 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:unit": "vitest run src/__tests__/index.test.ts",
+    "test:integration": "vitest run src/__tests__/integration.test.ts src/__tests__/crud.test.ts",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint"
+    "lint": "eslint src --ext .ts"
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@nodeops-createos/sandbox": "^0.8.1"
+    "computesdk": "workspace:*",
+    "novita-sandbox": "^2.1.1"
   },
   "keywords": [
-    "code-execution",
     "computesdk",
-    "createos",
-    "createos-sandbox",
-    "nodeops",
-    "provider",
+    "novita",
     "sandbox",
-    "snapshot"
+    "code-execution",
+    "python",
+    "javascript",
+    "cloud",
+    "compute",
+    "provider",
+    "containers"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/createos-sandbox"
+    "directory": "packages/novita"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {
@@ -57,11 +58,13 @@
     "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
-    "computesdk": "workspace:*",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
