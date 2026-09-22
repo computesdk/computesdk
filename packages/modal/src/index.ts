@@ -88,7 +88,12 @@ function workdirOf(sandbox: ModalSandbox, runCommand: CommandRunner): Promise<st
   if (!probe) {
     probe = runCommand(sandbox, 'pwd').then((result) => {
       const dir = result.stdout.trim();
-      return result.exitCode === 0 && dir.startsWith('/') ? dir : FALLBACK_WORKDIR;
+      if (result.exitCode === 0 && dir.startsWith('/')) return dir;
+      // runCommand reports exec failures as results, not rejections, so a
+      // transient failure must not pin the workdir to the fallback forever —
+      // evict and let the next filesystem op probe again.
+      workdirs.delete(sandbox);
+      return FALLBACK_WORKDIR;
     });
     workdirs.set(sandbox, probe);
     probe.catch(() => workdirs.delete(sandbox));
@@ -307,6 +312,11 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           }
         },
         remove: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          // An empty or dot-only path would resolve to the workdir itself —
+          // refuse it rather than recursively delete the sandbox's whole cwd.
+          if (path.split('/').every((s) => s === '' || s === '.')) {
+            throw new Error(`remove: refusing ambiguous path: ${JSON.stringify(path)}`);
+          }
           const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
             await modalSandbox.sandbox.filesystem.remove(resolved, { recursive: true });
