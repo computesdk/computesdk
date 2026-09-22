@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const files = new Map<string, string>();
 const dirs = new Set<string>();
 let openCalls = 0;
+let pwdFails = false;
 const execCalls: string[][] = [];
 
 class FakeSandbox {
@@ -36,6 +37,13 @@ class FakeSandbox {
   };
   async exec(command: string[]) {
     execCalls.push(command);
+    if (command[2] === 'pwd' && pwdFails) {
+      return {
+        stdout: { readText: async () => '' },
+        stderr: { readText: async () => 'boom' },
+        wait: async () => 1,
+      };
+    }
     const content = command[2] === 'pwd' ? '/root\n' : (files.get(command[1]) ?? '');
     return {
       stdout: { readText: async () => content },
@@ -69,7 +77,7 @@ import { modal } from '../index';
 import { SandboxFilesystemNotFoundError as FakeNotFoundError } from 'modal';
 
 describe('modal filesystem read/write', () => {
-  beforeEach(() => { files.clear(); dirs.clear(); openCalls = 0; execCalls.length = 0; fsCalls.length = 0; });
+  beforeEach(() => { files.clear(); dirs.clear(); openCalls = 0; pwdFails = false; execCalls.length = 0; fsCalls.length = 0; });
 
   it('uses Sandbox.filesystem (V1 and V2 compatible) instead of the deprecated Sandbox.open', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's', scalableSandboxes: true });
@@ -124,6 +132,31 @@ describe('modal filesystem read/write', () => {
 
     // The workdir is probed once (`pwd`) and cached across operations.
     expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(1);
+  });
+
+  it('does not cache a failed workdir probe', async () => {
+    pwdFails = true;
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    const sandbox = await provider.sandbox.create();
+
+    // Failed probe falls back to '/' for this op only — it is not cached.
+    await sandbox.filesystem.writeFile('x.txt', 'x');
+    expect(files.get('/x.txt')).toBe('x');
+
+    pwdFails = false;
+    await sandbox.filesystem.writeFile('y.txt', 'y');
+    expect(files.get('/root/y.txt')).toBe('y');
+    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(2);
+  });
+
+  it('rejects ambiguous paths in remove', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    const sandbox = await provider.sandbox.create();
+
+    for (const p of ['', '.', './', './.']) {
+      await expect(sandbox.filesystem.remove(p)).rejects.toThrow();
+    }
+    expect(fsCalls.filter((c) => c[0] === 'remove')).toHaveLength(0);
   });
 
   it('surfaces a descriptive error when a read fails', async () => {

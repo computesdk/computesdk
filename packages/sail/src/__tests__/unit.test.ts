@@ -314,6 +314,30 @@ describe('sail provider', () => {
     expect(box.run).toHaveBeenCalledWith('pwd', expect.anything());
   });
 
+  it('does not cache a failed workdir probe', async () => {
+    const sandbox = await provider().sandbox.create();
+    const box = h.state.lastBox;
+
+    // Failed probe falls back to '/' for this op only — it is not cached.
+    box.run.mockResolvedValueOnce({ stdout: '', stderr: 'boom', exitCode: 1 });
+    await sandbox.filesystem.writeFile('x.txt', 'x');
+    expect(box.fs.write).toHaveBeenCalledWith('/x.txt', 'x');
+
+    await sandbox.filesystem.writeFile('y.txt', 'y');
+    expect(box.fs.write).toHaveBeenCalledWith('/workspace/y.txt', 'y');
+    expect(box.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects ambiguous paths in remove', async () => {
+    const sandbox = await provider().sandbox.create();
+    const box = h.state.lastBox;
+
+    for (const p of ['', '.', './', './.']) {
+      await expect(sandbox.filesystem.remove(p)).rejects.toThrow();
+    }
+    expect(box.fs.remove).not.toHaveBeenCalled();
+  });
+
   it('maps lifecycle states and filters gone Sailboxes', async () => {
     const sandbox = await provider().sandbox.create();
     for (const [status, expected] of [

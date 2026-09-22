@@ -87,7 +87,12 @@ function workdirOf(sandbox: Sandbox, runCommand: CommandRunner): Promise<string>
   if (!probe) {
     probe = runCommand(sandbox, "pwd").then((r) => {
       const dir = r.stdout.trim();
-      return r.exitCode === 0 && dir.startsWith("/") ? dir : FALLBACK_WORKDIR;
+      if (r.exitCode === 0 && dir.startsWith("/")) return dir;
+      // runCommand reports exec failures as results, not rejections, so a
+      // transient failure must not pin the workdir to the fallback forever —
+      // evict and let the next filesystem op probe again.
+      workdirs.delete(sandbox);
+      return FALLBACK_WORKDIR;
     });
     workdirs.set(sandbox, probe);
     probe.catch(() => workdirs.delete(sandbox));
@@ -508,6 +513,11 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           return r.exitCode === 0;
         },
         remove: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          // An empty or dot-only path would resolve to the workdir itself —
+          // refuse it rather than `rm -rf` the sandbox's whole cwd.
+          if (path.split("/").every((s) => s === "" || s === ".")) {
+            throw new Error(`remove: refusing ambiguous path: ${JSON.stringify(path)}`);
+          }
           const resolved = await resolveFsPath(sandbox, path, runCommand);
           const r = await runCommand(sandbox, `rm -rf ${shellQuote(resolved)}`);
           if (r.exitCode !== 0) throw new Error(`remove ${path} failed: ${r.stderr}`);
