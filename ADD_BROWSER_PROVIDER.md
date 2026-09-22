@@ -224,6 +224,16 @@ function createClient(config: MyBrowserConfig): MyBrowser {
   return new MyBrowser({ apiKey });
 }
 
+/** Adapt to your SDK: a typed NotFoundError, a `status` on the error object, etc. */
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    (error as { status: number }).status === 404
+  );
+}
+
 export const myBrowser = defineBrowserProvider<MyBrowserSession, MyBrowserConfig>({
   name: 'my-browser',
   methods: {
@@ -247,8 +257,12 @@ export const myBrowser = defineBrowserProvider<MyBrowserSession, MyBrowserConfig
             sessionId: session.id,
             connectUrl: session.connectUrl,
           };
-        } catch {
-          return null;
+        } catch (error) {
+          // Only translate the provider's not-found response into null —
+          // rethrow auth, throttling, and network errors so callers can tell
+          // "session doesn't exist" apart from "provider call failed".
+          if (isNotFoundError(error)) return null;
+          throw error;
         }
       },
 
@@ -356,8 +370,10 @@ object — omit what your provider doesn't support rather than stubbing it.
 
 Guidelines:
 
-- **`getById`/`get` style reads should return `null` on missing resources** (catch the
-  provider's not-found error) — see `browserbase`'s `sessions.retrieve` wrapper.
+- **`getById`/`get` style reads should return `null` only for confirmed not-found
+  responses.** Inspect the provider SDK's typed error or status code (e.g. a 404 or
+  `NotFoundError`) and rethrow everything else — a blanket `catch { return null; }`
+  makes auth failures and outages look like missing sessions.
 - **`profile.list` may return `[]`** when the provider has no list endpoint; document
   that in the method.
 - **Extension uploads** take `CreateBrowserExtensionOptions.file` as
@@ -423,7 +439,7 @@ end-to-end flow: create a session, connect over CDP, do something on the page, c
 up. See `packages/steel/example-steel.ts`:
 
 ```typescript
-import { chromium } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
 import { myBrowser } from './src/index';
 import 'dotenv/config';
 
@@ -431,13 +447,19 @@ async function main() {
   const mb = myBrowser({ apiKey: process.env.MY_BROWSER_API_KEY });
 
   const session = await mb.session.create();
-  const browser = await chromium.connectOverCDP(session.connectUrl!);
+  let browser: Browser | undefined;
 
-  const page = browser.contexts()[0]!.pages()[0]!;
-  await page.goto('https://example.com');
+  try {
+    browser = await chromium.connectOverCDP(session.connectUrl!);
 
-  await browser.close();
-  await session.destroy();
+    const page = browser.contexts()[0]!.pages()[0]!;
+    await page.goto('https://example.com');
+  } finally {
+    // Clean up independently: a failed connect still owes the provider a destroy,
+    // and a failed browser.close() must not skip it either.
+    await browser?.close().catch(() => {});
+    await session.destroy();
+  }
 }
 
 main().catch(console.error);
@@ -541,7 +563,17 @@ const apiKey =
 ```
 
 **Return `null`, don't throw, for missing resources.** `getById` and `profile.get` /
-`extension.get` should catch the provider's not-found error and return `null`.
+`extension.get` should return `null` for the provider's not-found response — and only
+that response. Rethrow auth, throttling, and network errors so callers can distinguish
+"doesn't exist" from "the API call failed":
+
+```typescript
+function isNotFoundError(error: unknown): boolean {
+  // Adapt to your SDK: a typed NotFoundError, an HTTP status on the error object,
+  // an error code — whatever the SDK actually exposes.
+  return typeof error === 'object' && error !== null && 'status' in error && (error as { status: number }).status === 404;
+}
+```
 
 **Map statuses, not just IDs.** Populate the `status` field when the provider exposes
 lifecycle state, using the standard union.
