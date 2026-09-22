@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const files = new Map<string, string>();
 const dirs = new Set<string>();
 const runCalls: string[][] = [];
+let probeFails = false;
 
 class FakeSandbox {
   sandboxId = "sb-test";
@@ -13,7 +14,9 @@ class FakeSandbox {
     if (cmd === "sh") {
       // Emulates the writable-workdir probe: pwd is "/", not writable, so the
       // probe falls back to $HOME.
-      return { stdout: "/root", stderr: "", exitCode: 0 };
+      return probeFails
+        ? { stdout: "", stderr: "boom", exitCode: 127 }
+        : { stdout: "/root", stderr: "", exitCode: 0 };
     }
     if (cmd === "mkdir") {
       dirs.add(args[1]);
@@ -73,6 +76,7 @@ describe("tensorlake relative filesystem paths", () => {
     files.clear();
     dirs.clear();
     runCalls.length = 0;
+    probeFails = false;
   });
 
   it("resolves relative paths against a writable workdir", async () => {
@@ -97,6 +101,31 @@ describe("tensorlake relative filesystem paths", () => {
 
     // The workdir is probed once and cached across operations.
     expect(runCalls.filter((c) => c[0] === "sh")).toHaveLength(1);
+  });
+
+  it("does not cache a failed workdir probe", async () => {
+    probeFails = true;
+    const provider = tensorlake({ apiKey: "test" });
+    const sandbox = await provider.sandbox.create();
+
+    // Failed probe falls back to '/' for this op only — it is not cached.
+    await sandbox.filesystem.writeFile("x.txt", "x");
+    expect(files.get("/x.txt")).toBe("x");
+
+    probeFails = false;
+    await sandbox.filesystem.writeFile("y.txt", "y");
+    expect(files.get("/root/y.txt")).toBe("y");
+    expect(runCalls.filter((c) => c[0] === "sh")).toHaveLength(2);
+  });
+
+  it("rejects ambiguous paths in remove", async () => {
+    const provider = tensorlake({ apiKey: "test" });
+    const sandbox = await provider.sandbox.create();
+
+    for (const p of ["", ".", "./", "./."]) {
+      await expect(sandbox.filesystem.remove(p)).rejects.toThrow();
+    }
+    expect(runCalls.filter((c) => c[0] === "rm")).toHaveLength(0);
   });
 
   it("passes absolute paths through without probing", async () => {

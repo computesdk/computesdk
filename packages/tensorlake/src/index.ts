@@ -47,9 +47,8 @@ type CommandRunner = (
 const FALLBACK_WORKDIR = "/";
 
 /** Cached workdir probes. Relative filesystem paths resolve against the cwd a
- *  `runCommand` exec would use — unless that cwd isn't writable (Tensorlake
- *  defaults to "/"), in which case `$HOME` gives relative paths somewhere they
- *  can actually be created. */
+ *  `runCommand` exec would use when it's writable — Tensorlake's default cwd
+ *  is "/", which isn't — falling back to a writable `$HOME`, then `/tmp`. */
 const workdirs = new WeakMap<TensorlakeSandboxContext, Promise<string>>();
 
 function workdirOf(
@@ -60,12 +59,15 @@ function workdirOf(
   if (!probe) {
     probe = runCommand(
       ctx,
-      'd=$(pwd); [ -w "$d" ] || d=${HOME:-$d}; printf %s "$d"',
+      'for d in "$(pwd)" "$HOME" /tmp; do [ -n "$d" ] && [ -d "$d" ] && [ -w "$d" ] && printf %s "$d" && break; done',
     ).then((result) => {
       const dir = result.stdout.trim();
-      return result.exitCode === 0 && dir.startsWith("/")
-        ? dir
-        : FALLBACK_WORKDIR;
+      if (result.exitCode === 0 && dir.startsWith("/")) return dir;
+      // runCommand reports exec failures as results, not rejections, so a
+      // failed probe must not pin the workdir to the fallback forever —
+      // evict and let the next filesystem op probe again.
+      workdirs.delete(ctx);
+      return FALLBACK_WORKDIR;
     });
     workdirs.set(ctx, probe);
     probe.catch(() => workdirs.delete(ctx));
@@ -415,6 +417,13 @@ export const tensorlake = defineProvider<
           path: string,
           runCommand: CommandRunner,
         ): Promise<void> => {
+          // An empty or dot-only path would resolve to the workdir itself —
+          // refuse it rather than `rm -rf` the sandbox's whole cwd.
+          if (path.split("/").every((s) => s === "" || s === ".")) {
+            throw new Error(
+              `remove: refusing ambiguous path: ${JSON.stringify(path)}`,
+            );
+          }
           const resolved = await resolveSandboxPath(ctx, path, runCommand);
           try {
             await ctx.sandbox.deleteFile(resolved);
