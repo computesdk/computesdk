@@ -8,6 +8,10 @@ function mockFetch(respond: (url: string, body: any) => any) {
     if (out instanceof Error) {
       return { ok: false, status: 500, statusText: out.message, json: async () => ({}) } as any;
     }
+    if (out && typeof out === 'object' && '__status' in out) {
+      const { __status, __statusText = '' } = out as any;
+      return { ok: false, status: __status, statusText: __statusText, json: async () => ({}) } as any;
+    }
     return { ok: true, json: async () => out } as any;
   });
   vi.stubGlobal('fetch', spy);
@@ -79,5 +83,38 @@ describe('namespace instance lifecycle status', () => {
     expect(urls.some((u) => u.includes(destroyUrl))).toBe(true);
     expect(urls.some((u) => u.includes(listUrl))).toBe(true);
     expect(urls.some((u) => u.includes(describeUrl))).toBe(true);
+  });
+
+  it('getInfo re-describes the instance so a stale handle sees destruction', async () => {
+    let status: string | number = 'RUNNING';
+    mockFetch(() => ({ metadata: { instanceId: 'inst-1', status } }));
+    const provider = namespace({ token: 'ns_test' });
+    const found = await provider.sandbox.getById('inst-1');
+    expect((await found!.getInfo()).status).toBe('running');
+
+    status = 'DESTROYED';
+    expect((await found!.getInfo()).status).toBe('stopped');
+  });
+
+  it('getInfo maps a describe 404 to stopped once the instance is gone', async () => {
+    let gone = false;
+    mockFetch(() =>
+      gone
+        ? { __status: 404, __statusText: 'Not Found' }
+        : { metadata: { instanceId: 'inst-1', status: 'RUNNING' } },
+    );
+    const provider = namespace({ token: 'ns_test' });
+    const found = await provider.sandbox.getById('inst-1');
+    gone = true;
+    expect((await found!.getInfo()).status).toBe('stopped');
+    // And the refreshed state sticks on the handle.
+    expect(found!.sandbox.status).toBe('destroyed');
+  });
+
+  it('getInfo falls back to running for unrecognized statuses', async () => {
+    mockFetch(() => ({ metadata: { instanceId: 'inst-1', status: 0 } }));
+    const provider = namespace({ token: 'ns_test' });
+    const found = await provider.sandbox.getById('inst-1');
+    expect((await found!.getInfo()).status).toBe('running');
   });
 });
