@@ -38,6 +38,63 @@ export interface TensorlakeSandboxContext {
   sandbox: InstanceType<typeof Sandbox>;
 }
 
+type CommandRunner = (
+  ctx: TensorlakeSandboxContext,
+  command: string,
+  options?: RunCommandOptions,
+) => Promise<CommandResult>;
+
+const FALLBACK_WORKDIR = "/";
+
+/** Cached workdir probes. Relative filesystem paths resolve against the cwd a
+ *  `runCommand` exec would use when it's writable — Tensorlake's default cwd
+ *  is "/", which isn't — falling back to a writable `$HOME`, then `/tmp`. */
+const workdirs = new WeakMap<TensorlakeSandboxContext, Promise<string>>();
+
+function workdirOf(
+  ctx: TensorlakeSandboxContext,
+  runCommand: CommandRunner,
+): Promise<string> {
+  let probe = workdirs.get(ctx);
+  if (!probe) {
+    probe = runCommand(
+      ctx,
+      'for d in "$(pwd)" "$HOME" /tmp; do [ -n "$d" ] && [ -d "$d" ] && [ -w "$d" ] && printf %s "$d" && break; done',
+    ).then((result) => {
+      const dir = result.stdout.trim();
+      if (result.exitCode === 0 && dir.startsWith("/")) return dir;
+      // runCommand reports exec failures as results, not rejections, so a
+      // failed probe must not pin the workdir to the fallback forever —
+      // evict and let the next filesystem op probe again.
+      workdirs.delete(ctx);
+      return FALLBACK_WORKDIR;
+    });
+    workdirs.set(ctx, probe);
+    probe.catch(() => workdirs.delete(ctx));
+  }
+  return probe;
+}
+
+/** Join `path` onto the sandbox workdir. Absolute paths pass through and skip
+ *  the probe; empty and `.` segments are dropped; `..` segments are preserved
+ *  for the sandbox filesystem to resolve physically — collapsing them
+ *  lexically would mis-resolve when a preceding component is a symlink. */
+async function resolveSandboxPath(
+  ctx: TensorlakeSandboxContext,
+  path: string,
+  runCommand: CommandRunner,
+): Promise<string> {
+  const combined = path.startsWith("/")
+    ? path
+    : `${await workdirOf(ctx, runCommand)}/${path}`;
+  const segments: string[] = [];
+  for (const segment of combined.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    segments.push(segment);
+  }
+  return `/${segments.join("/")}`;
+}
+
 function resolveAuth(config: TensorlakeConfig): {
   apiKey: string;
   apiUrl?: string;
@@ -287,8 +344,10 @@ export const tensorlake = defineProvider<
         readFile: async (
           ctx: TensorlakeSandboxContext,
           path: string,
+          runCommand: CommandRunner,
         ): Promise<string> => {
-          const bytes = await ctx.sandbox.readFile(path);
+          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const bytes = await ctx.sandbox.readFile(resolved);
           return Buffer.from(bytes).toString("utf-8");
         },
 
@@ -296,18 +355,27 @@ export const tensorlake = defineProvider<
           ctx: TensorlakeSandboxContext,
           path: string,
           content: string,
+          runCommand: CommandRunner,
         ): Promise<void> => {
-          await ctx.sandbox.writeFile(path, Buffer.from(content, "utf-8"));
+          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          await ctx.sandbox.writeFile(
+            resolved,
+            Buffer.from(content, "utf-8"),
+          );
         },
 
         mkdir: async (
           ctx: TensorlakeSandboxContext,
           path: string,
+          runCommand: CommandRunner,
         ): Promise<void> => {
-          const result = await ctx.sandbox.run("mkdir", { args: ["-p", path] });
+          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const result = await ctx.sandbox.run("mkdir", {
+            args: ["-p", resolved],
+          });
           if (result.exitCode !== 0) {
             throw new Error(
-              `Failed to create directory ${path}: ${result.stderr}`,
+              `Failed to create directory ${resolved}: ${result.stderr}`,
             );
           }
         },
@@ -315,8 +383,10 @@ export const tensorlake = defineProvider<
         readdir: async (
           ctx: TensorlakeSandboxContext,
           path: string,
+          runCommand: CommandRunner,
         ): Promise<FileEntry[]> => {
-          const response = await ctx.sandbox.listDirectory(path);
+          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const response = await ctx.sandbox.listDirectory(resolved);
           return response.entries.map((e) => ({
             name: e.name,
             type: e.isDir ? ("directory" as const) : ("file" as const),
@@ -328,13 +398,15 @@ export const tensorlake = defineProvider<
         exists: async (
           ctx: TensorlakeSandboxContext,
           path: string,
+          runCommand: CommandRunner,
         ): Promise<boolean> => {
+          const resolved = await resolveSandboxPath(ctx, path, runCommand);
           try {
-            await ctx.sandbox.readFile(path);
+            await ctx.sandbox.readFile(resolved);
             return true;
           } catch {}
           try {
-            await ctx.sandbox.listDirectory(path);
+            await ctx.sandbox.listDirectory(resolved);
             return true;
           } catch {}
           return false;
@@ -343,14 +415,27 @@ export const tensorlake = defineProvider<
         remove: async (
           ctx: TensorlakeSandboxContext,
           path: string,
+          runCommand: CommandRunner,
         ): Promise<void> => {
+          // An empty or dot-only path would resolve to the workdir itself —
+          // refuse it rather than `rm -rf` the sandbox's whole cwd.
+          if (path.split("/").every((s) => s === "" || s === ".")) {
+            throw new Error(
+              `remove: refusing ambiguous path: ${JSON.stringify(path)}`,
+            );
+          }
+          const resolved = await resolveSandboxPath(ctx, path, runCommand);
           try {
-            await ctx.sandbox.deleteFile(path);
+            await ctx.sandbox.deleteFile(resolved);
           } catch {
             // May be a directory — fall back to rm -rf
-            const result = await ctx.sandbox.run("rm", { args: ["-rf", path] });
+            const result = await ctx.sandbox.run("rm", {
+              args: ["-rf", resolved],
+            });
             if (result.exitCode !== 0) {
-              throw new Error(`Failed to remove ${path}: ${result.stderr}`);
+              throw new Error(
+                `Failed to remove ${resolved}: ${result.stderr}`,
+              );
             }
           }
         },
