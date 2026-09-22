@@ -146,6 +146,7 @@ export function formatRunDetail(run: CiRun, runUrl?: string): string {
   lines.push(`title: ${run.title}`);
   lines.push(`started: ${run.startedAt}  duration: ${formatDuration(run.durationMs)}`);
   if (run.cancellationReason) lines.push(`cancelled: ${run.cancellationReason}`);
+  if (run.providerOverride) lines.push(`dispatched to: ${run.providerOverride}`);
   if (run.supersededByRunId) lines.push(`superseded by: ${run.supersededByRunId}`);
   if (runUrl) lines.push(`url: ${runUrl}`);
   if (run.jobs.length > 0) {
@@ -315,8 +316,10 @@ export function registerActionsCommands(program: Command): void {
       .argument('<repo>', 'repository in owner/repo format')
       .requiredOption('--workflow <path|name>', 'workflow path or name')
       .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref)')
-      .option('--inputs <pairs...>', 'workflow inputs as key=value'),
-  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[] }) => {
+      .option('--inputs <pairs...>', 'workflow inputs as key=value')
+      .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
+      .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)'),
+  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; provider?: string; providerRegion?: string }) => {
     try {
       const c = client(opts);
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
@@ -332,9 +335,20 @@ export function registerActionsCommands(program: Command): void {
       }
       const ref = opts.ref ?? workflow.refs[0];
       if (!ref) throw new Error('No --ref given and the workflow has no watched refs.');
+      if (opts.providerRegion !== undefined && opts.provider === undefined) {
+        throw new Error('--provider-region requires --provider.');
+      }
       const result = await c.post<{ runId: string; created: boolean; headSha: string }>(
         '/api/v1/actions/dispatch',
-        { workflowId: workflow.id, ref, inputs: parseInputs(opts.inputs) },
+        {
+          workflowId: workflow.id,
+          ref,
+          inputs: parseInputs(opts.inputs),
+          ...(opts.provider !== undefined && {
+            provider: opts.provider,
+            ...(opts.providerRegion !== undefined && { providerRegion: opts.providerRegion }),
+          }),
+        },
       );
       const org = await c.org();
       const url = `${c.baseUrl}/${org.slug}/actions/runs/${result.runId}`;

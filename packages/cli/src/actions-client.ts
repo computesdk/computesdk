@@ -86,6 +86,8 @@ export interface CiRun {
   supersededByRunId: string | null;
   concurrencyGroup: string | null;
   cancellationReason: string | null;
+  /** `provider[:region]` the dispatch pinned this run to, else null. */
+  providerOverride?: string | null;
   jobs: CiJob[];
   logTail: string[];
 }
