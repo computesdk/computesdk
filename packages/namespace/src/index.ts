@@ -387,18 +387,38 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       getInfo: async (sandbox: NamespaceSandbox): Promise<SandboxInfo> => {
+        // The handle's status is a snapshot; describe the instance live so a
+        // long-held handle sees suspensions and destruction as they happen.
+        try {
+          const responseData = await fetchNamespace(sandbox.token, API_ENDPOINTS.DESCRIBE_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: sandbox.instanceId })
+          });
+          sandbox.status = instanceStatus(responseData.metadata);
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('404')) {
+            // DescribeInstance only reaches NotFound once the terminal
+            // statuses have passed — the instance is gone either way.
+            sandbox.status = 'destroyed';
+          } else {
+            throw new Error(
+              `Failed to get Namespace instance info: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+
         return {
           id: sandbox.instanceId,
           provider: 'namespace',
           status:
             sandbox.status === 'error'
               ? 'error'
-              : sandbox.status === undefined ||
-                  sandbox.status === 'pending' ||
-                  sandbox.status === 'creating' ||
-                  sandbox.status === 'running'
-                ? 'running'
-                : 'stopped',
+              : sandbox.status === 'destroyed' ||
+                  sandbox.status === 'destroying' ||
+                  sandbox.status === 'suspended' ||
+                  sandbox.status === 'suspending'
+                ? 'stopped'
+                : 'running',
           createdAt: sandbox.createdAt,
           timeout: 0,
           metadata: {
