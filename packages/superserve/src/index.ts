@@ -52,6 +52,56 @@ function generateSandboxName(): string {
   return `cs-${randomUUID().slice(0, 8)}`;
 }
 
+type CommandRunner = (
+  sandbox: SuperserveSandbox,
+  command: string,
+  options?: RunCommandOptions,
+) => Promise<CommandResult>;
+
+const FALLBACK_WORKDIR = '/';
+
+/** Cached `pwd` probes: relative filesystem paths resolve against the cwd a
+ *  `runCommand` exec would use, so `writeFile('a.txt')` and `cat a.txt` agree. */
+const workdirs = new WeakMap<SuperserveSandbox, Promise<string>>();
+
+function workdirOf(sandbox: SuperserveSandbox, runCommand: CommandRunner): Promise<string> {
+  let probe = workdirs.get(sandbox);
+  if (!probe) {
+    probe = runCommand(sandbox, 'pwd').then((result) => {
+      const dir = result.stdout.trim();
+      if (result.exitCode === 0 && dir.startsWith('/')) return dir;
+      // runCommand reports exec failures as results, not rejections, so a
+      // transient failure must not pin the workdir to the fallback forever —
+      // evict and let the next filesystem op probe again.
+      workdirs.delete(sandbox);
+      return FALLBACK_WORKDIR;
+    });
+    workdirs.set(sandbox, probe);
+    probe.catch(() => workdirs.delete(sandbox));
+  }
+  return probe;
+}
+
+/** Join `path` onto the sandbox workdir. Absolute paths pass through and skip
+ *  the probe; empty and `.` segments are dropped; `..` segments are preserved
+ *  for the sandbox filesystem to resolve physically — collapsing them
+ *  lexically would mis-resolve when a preceding component is a symlink. */
+async function resolveSandboxPath(
+  sandbox: SuperserveSandbox,
+  path: string,
+  runCommand: CommandRunner,
+): Promise<string> {
+  const combined = path.startsWith('/')
+    ? path
+    : `${await workdirOf(sandbox, runCommand)}/${path}`;
+  const segments: string[] = [];
+  for (const segment of combined.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    segments.push(segment);
+  }
+  return `/${segments.join('/')}`;
+}
+
 function rethrowFriendly(error: unknown, fallbackPrefix: string): never {
   if (error instanceof AuthenticationError) {
     throw new Error(
@@ -209,25 +259,27 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       },
 
       filesystem: {
-        readFile: async (sandbox: SuperserveSandbox, path: string): Promise<string> => {
-          return sandbox.files.readText(path);
+        readFile: async (sandbox: SuperserveSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
+          return sandbox.files.readText(await resolveSandboxPath(sandbox, path, runCommand));
         },
 
-        writeFile: async (sandbox: SuperserveSandbox, path: string, content: string): Promise<void> => {
-          await sandbox.files.write(path, content);
+        writeFile: async (sandbox: SuperserveSandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
+          await sandbox.files.write(await resolveSandboxPath(sandbox, path, runCommand), content);
         },
 
-        mkdir: async (sandbox: SuperserveSandbox, path: string): Promise<void> => {
-          const result = await sandbox.commands.run(`mkdir -p "${escapeShellArg(path)}"`);
+        mkdir: async (sandbox: SuperserveSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          const resolved = await resolveSandboxPath(sandbox, path, runCommand);
+          const result = await sandbox.commands.run(`mkdir -p "${escapeShellArg(resolved)}"`);
           if (result.exitCode !== 0) {
             throw new Error(`mkdir failed: ${result.stderr || `exit code ${result.exitCode}`}`);
           }
         },
 
-        readdir: async (sandbox: SuperserveSandbox, path: string): Promise<FileEntry[]> => {
+        readdir: async (sandbox: SuperserveSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
+          const resolved = await resolveSandboxPath(sandbox, path, runCommand);
           // find -printf format: <type>\t<size>\t<mtime-epoch>\t<name>
           const cmd = [
-            `cd "${escapeShellArg(path)}" || exit 2`,
+            `cd "${escapeShellArg(resolved)}" || exit 2`,
             `find . -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n' 2>/dev/null`,
           ].join(' && ');
           const result = await sandbox.commands.run(cmd);
@@ -255,13 +307,20 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
           return entries;
         },
 
-        exists: async (sandbox: SuperserveSandbox, path: string): Promise<boolean> => {
-          const result = await sandbox.commands.run(`test -e "${escapeShellArg(path)}"`);
+        exists: async (sandbox: SuperserveSandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
+          const resolved = await resolveSandboxPath(sandbox, path, runCommand);
+          const result = await sandbox.commands.run(`test -e "${escapeShellArg(resolved)}"`);
           return result.exitCode === 0;
         },
 
-        remove: async (sandbox: SuperserveSandbox, path: string): Promise<void> => {
-          const result = await sandbox.commands.run(`rm -rf "${escapeShellArg(path)}"`);
+        remove: async (sandbox: SuperserveSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
+          // An empty or dot-only path would resolve to the workdir itself —
+          // refuse it rather than `rm -rf` the sandbox's whole cwd.
+          if (path.split('/').every((s) => s === '' || s === '.')) {
+            throw new Error(`remove: refusing ambiguous path: ${JSON.stringify(path)}`);
+          }
+          const resolved = await resolveSandboxPath(sandbox, path, runCommand);
+          const result = await sandbox.commands.run(`rm -rf "${escapeShellArg(resolved)}"`);
           if (result.exitCode !== 0) {
             throw new Error(`remove failed: ${result.stderr || `exit code ${result.exitCode}`}`);
           }
