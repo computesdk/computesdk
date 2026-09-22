@@ -35,8 +35,8 @@ describe('namespace instance lifecycle status', () => {
     const provider = namespace({ token: 'ns_test' });
     const found = await provider.sandbox.getById('inst-1');
     expect(found).not.toBeNull();
-    expect(found!.sandbox.instanceId).toBe('inst-1');
-    expect(found!.sandbox.status).toBe('running');
+    expect(found!.getInstance().instanceId).toBe('inst-1');
+    expect(found!.getInstance().status).toBe('running');
   });
 
   it.each(['DESTROYING', 'DESTROYED', 5, 4])(
@@ -108,7 +108,7 @@ describe('namespace instance lifecycle status', () => {
     gone = true;
     expect((await found!.getInfo()).status).toBe('stopped');
     // And the refreshed state sticks on the handle.
-    expect(found!.sandbox.status).toBe('destroyed');
+    expect(found!.getInstance().status).toBe('destroyed');
   });
 
   it('getInfo falls back to running for unrecognized statuses', async () => {
