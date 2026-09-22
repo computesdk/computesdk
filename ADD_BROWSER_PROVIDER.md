@@ -597,6 +597,23 @@ reads use the catch-and-return-null pattern.
 | Example file | `example-{kebab-case}.ts` | `example-my-browser.ts` |
 | Env var | `{SCREAMING_SNAKE}_API_KEY` | `MY_BROWSER_API_KEY` |
 
+## Benchmark Readiness
+
+A provider implemented to this guide satisfies the interface the browser benchmarks in
+[computesdk/benchmarks](https://github.com/computesdk/benchmarks/tree/master/benchmarks/browser)
+drive: `provider.session.create(options)`, `session.connectUrl`, and
+`provider.session.destroy(sessionId)`. Two things matter beyond the interface:
+
+- **`connectUrl` must be a working CDP endpoint.** The benchmark connects with
+  Playwright's `chromium.connectOverCDP(connectUrl)` and expects a default browser
+  context containing a page — a provider whose sessions aren't Chromium/CDP-compatible
+  can't be benchmarked, or used by most callers.
+- **Onboarding lives in the benchmarks repo, not this one.** Being listed in a run
+  means adding an entry to `benchmarks/browser/providers.ts` (and
+  `throughput-providers.ts`) with `requiredEnvVars` and `sessionCreateOptions`, plus
+  wiring the credentials into CI secrets. That's a separate PR in
+  computesdk/benchmarks — ask a maintainer.
+
 ## Reference Implementations
 
 | Provider | Path | Notable for |
