@@ -41,6 +41,22 @@ compute actions artifacts <run-id> [--job] [--out <dir>]
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
 - Run dashboard URLs: `{base}/{orgSlug}/actions/runs/{runId}`.
 
+## Testing against a PR preview deployment
+
+benchmarks-platform deploys a Vercel preview per branch (`https://benchmarks-platform-git-<branch>-computesdk.vercel.app`, URL in the Vercel bot comment on the PR). The job executor (`app/api/ci/runs/execute`) is a route in that deployment, so a preview executes the PR's code end-to-end — dispatching at the preview genuinely exercises it.
+
+```bash
+PREV="https://benchmarks-platform-git-<branch>-computesdk.vercel.app"
+compute actions dispatch computesdk/ci-test --workflow Smoke --ref main \
+  --base-url "$PREV" --allow-untrusted-host
+```
+
+- `--allow-untrusted-host` is required — the bearer key is only sent to computesdk.com/localhost otherwise.
+- The preview shares the production control-plane DB: runs appear in the prod runs table, provider creds and secrets resolve identically, and jobs land on real provider sandboxes.
+- `--provider <id>` on dispatch pins placement; a refusal is itself a useful signal (the job's `failureReason` says why).
+- Per-job logs: `GET /api/v1/actions/jobs/<jobId>/logs` (`compute actions logs` also works); job ids come from `compute actions run <run-id> --json`.
+- Wait for the Vercel check on the PR to be green before dispatching — dispatching during a build can hit the previous deployment.
+
 ## Testing CLI changes end-to-end
 
 Cheap live loop (no secrets beyond the org API key, ~50s):
