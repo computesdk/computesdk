@@ -27,6 +27,7 @@ import {
   type CiJob,
   type CiLogSlice,
   type CiProviderInfo,
+  type CiProviderKeyResponse,
   type CiProvidersResponse,
   type CiRun,
   type CiWorkflow,
@@ -308,6 +309,14 @@ export function formatProviderRow(p: CiProviderInfo): string {
   return `  ${icon} ${name}  ${flags}`;
 }
 
+export function formatVerifyResult(r: CiProviderKeyResponse): string {
+  const ok = r.verified === true;
+  const head = ok ? pc.green('verified') : pc.red('not verified');
+  const detail = r.key.statusDetail ? pc.dim(`  ${r.key.statusDetail}`) : '';
+  const act = r.key.actCapable ? pc.green('  act-capable') : '';
+  return `${head}  ${r.key.provider}${act}${detail}`;
+}
+
 // ─── Commands ───────────────────────────────────────────────────────────────
 
 export function registerActionsCommands(program: Command): void {
@@ -486,15 +495,88 @@ export function registerActionsCommands(program: Command): void {
     }
   });
 
-  common(
-    actions
-      .command('providers')
-      .description('List the org\'s registered compute providers (regions, act/usable status)'),
-  ).action(async (opts: CommonOpts) => {
+  const providers = actions
+    .command('providers')
+    .description('List the org\'s registered compute providers (regions, act/usable status)');
+  common(providers).action(async (opts: CommonOpts) => {
     try {
       const data = await client(opts).get<CiProvidersResponse>('/api/v1/actions/providers');
       output(opts, data, (d) => {
         for (const p of d.providers) console.log(formatProviderRow(p));
+      });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    providers
+      .command('configure')
+      .description('Save the org\'s credential for a provider (owner/admin API key)')
+      .argument('<provider>', 'provider id (e.g. tensorlake, blaxel)')
+      .option('--key <key>', 'provider API key (single-field credentials)')
+      .option('--field <pair...>', 'credential fields as name=value (multi-field providers)')
+      .option('--verify', 'run the placement probe after saving'),
+  ).action(async (provider: string, opts: CommonOpts & { key?: string; field?: string[]; verify?: boolean }) => {
+    try {
+      const c = client(opts);
+      let body: Record<string, unknown>;
+      if (opts.field !== undefined) {
+        if (opts.key !== undefined) throw new Error('Pass either --key or --field, not both.');
+        body = { fields: parseInputs(opts.field) };
+      } else if (opts.key !== undefined) {
+        body = { key: opts.key };
+      } else {
+        throw new Error('Pass --key <key> or --field name=value.');
+      }
+      const saved = await c.put<CiProviderKeyResponse>(
+        `/api/v1/actions/providers/${provider}/key`,
+        body,
+      );
+      const verification = opts.verify
+        ? await c.post<CiProviderKeyResponse>(
+            `/api/v1/actions/providers/${provider}/verify`,
+          )
+        : undefined;
+      output(opts, verification ? { key: saved.key, verification } : saved, () => {
+        console.log(`saved  ${saved.key.provider}  ${pc.dim(saved.key.keyHint)}  ${saved.key.status}`);
+        if (verification) console.log(formatVerifyResult(verification));
+      });
+      if (verification?.verified === false) process.exitCode = 1;
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    providers
+      .command('verify')
+      .description('Probe the stored provider key with a real sandbox ("Test" in Settings)')
+      .argument('<provider>', 'provider id'),
+  ).action(async (provider: string, opts: CommonOpts) => {
+    try {
+      const result = await client(opts).post<CiProviderKeyResponse>(
+        `/api/v1/actions/providers/${provider}/verify`,
+      );
+      output(opts, result, (r) => console.log(formatVerifyResult(r)));
+      if (result.verified === false) process.exitCode = 1;
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    providers
+      .command('remove')
+      .description('Delete the org\'s stored credential for a provider')
+      .argument('<provider>', 'provider id'),
+  ).action(async (provider: string, opts: CommonOpts) => {
+    try {
+      const result = await client(opts).del<{ provider: string; deleted: boolean }>(
+        `/api/v1/actions/providers/${provider}/key`,
+      );
+      output(opts, result, (r) => {
+        console.log(r.deleted ? `deleted  ${r.provider}` : `no key stored for ${r.provider}`);
       });
     } catch (e) {
       fail(e);
