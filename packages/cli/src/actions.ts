@@ -33,6 +33,7 @@ import {
   type CiRun,
   type CiRunHistory,
   type CiRunInspection,
+  type CiRunSummary,
   type CiWorkflow,
 } from './actions-client.js';
 
@@ -91,6 +92,23 @@ async function listRunJobs(c: ActionsClient, runId: string): Promise<CiJob[]> {
     durationMs: null,
     steps: [],
   }));
+}
+
+/** The run's failure digest; null when the summary cannot be fetched. */
+async function fetchRunSummary(c: ActionsClient, runId: string): Promise<CiRunSummary | null> {
+  try {
+    return await c.get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
+  } catch (e) {
+    // The digest rides along with `actions run`; a deployment without the
+    // route or a summary error must not hide the run detail itself. The
+    // `summary` command fetches directly so its own errors still surface.
+    if (!(e instanceof ActionsApiError && e.status === 404)) {
+      console.error(
+        pc.dim(`summary unavailable: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    }
+    return null;
+  }
 }
 
 function fail(error: unknown): never {
@@ -245,6 +263,34 @@ export function formatRunInspection(run: CiRunInspection): string {
       for (const attempt of job.placementAttempts) {
         lines.push(pc.dim(`    placement failed on ${safeTerm(attempt.provider)}${attempt.region ? `:${safeTerm(attempt.region)}` : ''}: ${safeTerm(attempt.error)}`));
       }
+    }
+  }
+  return lines.join('\n');
+}
+
+/** The failure digest rendered for humans — shared by `run` and `summary`. */
+export function formatRunSummary(summary: CiRunSummary): string {
+  const lines: string[] = [];
+  lines.push(pc.bold(`failures — run ${summary.runId} ${conclusionLabel(summary.conclusion)}`));
+  if (summary.failures.length === 0) {
+    lines.push('  no failed jobs');
+    return lines.join('\n');
+  }
+  for (const job of summary.failures) {
+    const placement = job.provider
+      ? `${safeTerm(job.provider)}${job.region ? `:${safeTerm(job.region)}` : ''}`
+      : '-';
+    lines.push(`  ${job.id}  ${safeTerm(job.name)}  ${conclusionLabel(job.conclusion)}  ${placement}`);
+    if (job.failureReason) lines.push(pc.dim(`    ${safeTerm(job.failureReason)}`));
+    for (const step of job.failedSteps) {
+      const exit = step.exitCode === null ? '' : ` (exit ${step.exitCode})`;
+      lines.push(`    step ${step.ordinal}  ${safeTerm(step.name)}${exit}`);
+    }
+    if (job.excerpt) {
+      const scope = job.excerpt.stepOrdinal === null ? 'job log' : `step ${job.excerpt.stepOrdinal}`;
+      const cut = job.excerpt.truncated ? ', truncated' : '';
+      lines.push(pc.dim(`    ── ${scope} tail${cut} ──`));
+      for (const line of job.excerpt.text.split('\n')) lines.push(`    ${safeTerm(line)}`);
     }
   }
   return lines.join('\n');
@@ -573,7 +619,30 @@ export function registerActionsCommands(program: Command): void {
       const run = await c.get<CiRun>(`/api/v1/actions/runs/${runId}`);
       const org = await c.org();
       const url = `${c.baseUrl}/${org.slug}/actions/runs/${run.id}`;
-      output(opts, { ...run, url }, (r) => console.log(formatRunDetail(r, r.url)));
+      // A failed run's interesting part is its failure digest; on deployments
+      // that have the summary route it prints inline, saving a second command.
+      const summary = run.conclusion === 'failed' ? await fetchRunSummary(c, runId) : null;
+      output(opts, { ...run, url, summary }, (r) => {
+        console.log(formatRunDetail(r, r.url));
+        if (summary && summary.failures.length > 0) {
+          console.log('');
+          console.log(formatRunSummary(summary));
+        }
+      });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    actions
+      .command('summary')
+      .description('Show a run\'s failure digest: failed jobs, failed steps, bounded log tails')
+      .argument('<run-id>', 'run ID'),
+  ).action(async (runId: string, opts: CommonOpts) => {
+    try {
+      const summary = await client(opts).get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
+      output(opts, summary, (s) => console.log(formatRunSummary(s)));
     } catch (e) {
       fail(e);
     }
