@@ -57,6 +57,10 @@
   * [Upstash](providers/upstash.md)
   * [Vercel](providers/vercel.md)
 
+## Actions
+
+* [Actions](actions.md)
+
 ## Reference
 
 * [Sandbox (interface)](reference/Sandbox.md)
