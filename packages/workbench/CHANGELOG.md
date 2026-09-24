@@ -1,5 +1,18 @@
 # @computesdk/workbench
 
+## 32.0.0
+
+### Patch Changes
+
+- 31688c6: Use the Cloudflare sandbox demo Worker for remote and direct Cloudflare sandboxes. Direct mode now calls the Worker's Durable Object RPC API, sandbox IDs use native Durable Object IDs, and filesystem operations run through exec.
+- Updated dependencies [6096b4d]
+- Updated dependencies [e110bfa]
+- Updated dependencies [ea5be06]
+- Updated dependencies [31688c6]
+  - @computesdk/namespace@1.6.20
+  - @computesdk/modal@1.9.11
+  - @computesdk/cloudflare@2.0.0
+
 ## 31.0.13
 
 ### Patch Changes

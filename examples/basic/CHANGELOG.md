@@ -1,5 +1,14 @@
 # @computesdk/example-basic
 
+## 0.4.104
+
+### Patch Changes
+
+- Updated dependencies [ea5be06]
+- Updated dependencies [1f0a8f4]
+  - @computesdk/modal@1.9.11
+  - @computesdk/superserve@0.2.6
+
 ## 0.4.103
 
 ### Patch Changes
