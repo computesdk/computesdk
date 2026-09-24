@@ -4,6 +4,7 @@ import {
   formatProviderRow,
   formatRunDetail,
   formatRunRow,
+  formatVerifyResult,
   matchJob,
   matchWorkflow,
   parseInputs,
@@ -14,6 +15,7 @@ import {
   readSseEvents,
   resolveActionsAuth,
   type CiProviderInfo,
+  type CiProviderKeyResponse,
   type CiRun,
   type CiWorkflow,
 } from '../actions-client.js';
@@ -205,6 +207,36 @@ describe('formatProviderRow', () => {
     expect(row).toContain('no-act');
     expect(row).toContain('no region choice');
     expect(row).toContain('not in provider order');
+  });
+});
+
+describe('formatVerifyResult', () => {
+  const record: CiProviderKeyResponse['key'] = {
+    provider: 'tensorlake',
+    keyHint: '…abcd',
+    lastCheckedAt: null,
+    status: 'connected',
+    statusDetail: 'ok',
+    actCapable: true,
+    credential: 'key',
+    fields: [],
+  };
+
+  it('marks a passing probe verified and act-capable', () => {
+    const line = formatVerifyResult({ key: record, verified: true });
+    expect(line).toContain('verified');
+    expect(line).toContain('tensorlake');
+    expect(line).toContain('act-capable');
+  });
+
+  it('marks a failed probe not verified', () => {
+    const line = formatVerifyResult({
+      key: { ...record, status: 'error', statusDetail: 'provider rejected the key', actCapable: false },
+      verified: false,
+    });
+    expect(line).toContain('not verified');
+    expect(line).toContain('provider rejected the key');
+    expect(line).not.toContain('act-capable');
   });
 });
 

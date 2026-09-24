@@ -140,6 +140,24 @@ export interface CiProvidersResponse {
   providers: CiProviderInfo[];
 }
 
+/** A saved provider credential — never carries key material, only the hint. */
+export interface CiProviderKeyRecord {
+  provider: string;
+  keyHint: string;
+  lastCheckedAt: string | null;
+  status: 'connected' | 'error' | 'unconfigured';
+  statusDetail: string | null;
+  actCapable: boolean;
+  credential: 'key';
+  fields: unknown[];
+}
+
+export interface CiProviderKeyResponse {
+  key: CiProviderKeyRecord;
+  /** Present on the verify response. */
+  verified?: boolean;
+}
+
 export interface ActionsOrg {
   organizationId: string;
   name: string;
@@ -190,6 +208,23 @@ export class ActionsClient {
       method: 'POST',
       headers: { ...this.headers(), 'content-type': 'application/json' },
       body: JSON.stringify(body),
+    });
+    return this.parse<T>(res);
+  }
+
+  async put<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
+    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
+      method: 'PUT',
+      headers: { ...this.headers(), 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return this.parse<T>(res);
+  }
+
+  async del<T>(path: string): Promise<T> {
+    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
+      method: 'DELETE',
+      headers: this.headers(),
     });
     return this.parse<T>(res);
   }
