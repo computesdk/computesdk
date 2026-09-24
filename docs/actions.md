@@ -56,6 +56,18 @@ A job that references a secret that does not exist fails at pre-flight before th
 
 Each job is placed on a ComputeSDK sandbox. The org's **placement order** — an ordered list of `provider` or `provider:region` entries under **Settings → Providers** — decides where jobs land, with fallback down the list when a provider refuses a job. Providers that need credentials take bring-your-own keys on the same page.
 
+### Implemented providers
+
+| Provider | Placement id | Credential (Settings → Providers) | Regions |
+| -------- | ------------ | --------------------------------- | ------- |
+| Vercel | `vercel` | None needed — the platform's own Vercel OIDC credential is used; a stored key is not required | `iad1`, `sfo1`, `cle1`, `cdg1` |
+| Tensorlake | `tensorlake` | API key | — (account default) |
+| Namespace | `namespace` | API token | — (account default) |
+| Archil | `archil` | API key, plus an optional region field (defaults to `aws-us-east-1`) | `aws-us-east-1`, `aws-eu-west-1`, `gcp-us-central1` |
+| Blaxel | `blaxel` | API key, plus an optional workspace field | `us-pdx-1`, `us-was-1`, `eu-lon-1`, `eu-fra-1` |
+
+A provider with no key saved (or a saved key that fails verification) still shows up in the placement order — it just refuses every job, and the refusal lands in the run's placement attempts. Naming a region for a provider that has none (Namespace, Tensorlake) is rejected rather than ignored.
+
 You can also pin a single provider (and optionally a region) per dispatch, which replaces the whole placement order for that run — useful for testing a workflow on one provider:
 
 ```bash
@@ -79,14 +91,20 @@ Actions supports three trigger paths, matching the workflow's `on:` triggers:
 npm i -g @computesdk/cli        # or: pnpm dlx @computesdk/cli <command>
 ```
 
-Authenticate with an org API key:
+Authenticate with an org API key via environment variable (or pass `--api-key`):
+
+| Variable | Required | Purpose |
+| -------- | -------- | ------- |
+| `COMPUTE_API_KEY` | yes | Org API key used as the bearer credential for the CLI and the v1 API (create one under **Settings → API keys**) |
+| `BENCHMARKS_PLATFORM_API_KEY` | no | Legacy name, read as a fallback when `COMPUTE_API_KEY` is unset |
+| `COMPUTE_PLATFORM_URL` | no | API base URL override (default `https://platform.computesdk.com`) — same as `--base-url` |
+| `BENCHMARKS_PLATFORM_URL` | no | Legacy name, read as a fallback when `COMPUTE_PLATFORM_URL` is unset |
 
 ```bash
 export COMPUTE_API_KEY=your_org_api_key
-# legacy fallback: BENCHMARKS_PLATFORM_API_KEY
 ```
 
-The base URL defaults to `https://platform.computesdk.com`; override with `--base-url` or `COMPUTE_PLATFORM_URL` (`BENCHMARKS_PLATFORM_URL` legacy). Every command accepts `--json` for machine-readable output.
+The bearer key is only sent to computesdk.com and localhost base URLs — point the CLI anywhere else and it refuses unless you also pass `--allow-untrusted-host`. Every command accepts `--json` for machine-readable output.
 
 ```bash
 # Dispatch a workflow_dispatch run (matches workflow path, name, or id)
