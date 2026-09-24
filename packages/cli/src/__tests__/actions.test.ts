@@ -182,16 +182,26 @@ describe('formatRunHistory', () => {
     jobs: [
       {
         job: 'test',
+        workflowJobId: 'test',
         runs: 5,
         failedRuns: 3,
         failedBeforeSteps: 0,
-        steps: [{ step: 'npm test', failedRuns: 3 }],
+        steps: [{ step: 'npm test', ordinal: 2, failedRuns: 3 }],
       },
       {
         job: 'deploy',
+        workflowJobId: 'deploy',
         runs: 4,
         failedRuns: 1,
         failedBeforeSteps: 1,
+        steps: [],
+      },
+      {
+        job: 'build',
+        workflowJobId: 'build',
+        runs: 5,
+        failedRuns: 0,
+        failedBeforeSteps: 0,
         steps: [],
       },
     ],
@@ -203,7 +213,7 @@ describe('formatRunHistory', () => {
         runNumber: 42,
         conclusion: 'failed',
         startedAt: '2026-09-24T00:00:00.000Z',
-        failedJobs: [{ job: 'test', workflowJobId: 'test', step: 'npm test' }],
+        failedJobs: [{ job: 'test', workflowJobId: 'test', step: 'npm test', stepOrdinal: 2 }],
       },
       {
         id: 'r2',
@@ -212,7 +222,16 @@ describe('formatRunHistory', () => {
         runNumber: 41,
         conclusion: 'failed',
         startedAt: '2026-09-23T00:00:00.000Z',
-        failedJobs: [{ job: 'deploy', workflowJobId: 'deploy', step: null }],
+        failedJobs: [{ job: 'deploy', workflowJobId: 'deploy', step: null, stepOrdinal: null }],
+      },
+      {
+        id: 'r3',
+        ref: 'refs/heads/main',
+        headSha: 'ccccccc1234567890',
+        runNumber: 40,
+        conclusion: 'failed',
+        startedAt: '2026-09-22T00:00:00.000Z',
+        failedJobs: [],
       },
     ],
   };
@@ -221,9 +240,16 @@ describe('formatRunHistory', () => {
     const out = formatRunHistory(HISTORY);
     expect(out).toContain('last 5 runs: 2 passed, 3 failed');
     expect(out).toContain('test');
-    expect(out).toContain('3/5 runs');
+    expect(out).toContain('3/5 runs failed');
     expect(out).toContain('60%');
     expect(out).toContain('step "npm test" failed in 3 runs');
+  });
+
+  it('does not claim a job passed when nothing in it failed yet', () => {
+    const out = formatRunHistory(HISTORY);
+    const buildLine = out.split('\n').find((l) => l.includes('build'));
+    expect(buildLine).toContain('0/5 runs failed');
+    expect(buildLine).not.toContain('passed');
   });
 
   it('marks platform failures and blames each failed run', () => {
@@ -232,6 +258,12 @@ describe('formatRunHistory', () => {
     expect(out).toContain('abcdef12');
     expect(out).toContain('test:npm test');
     expect(out).toContain('deploy');
+  });
+
+  it('lists a failed run even when no failed job was recorded', () => {
+    const out = formatRunHistory(HISTORY);
+    expect(out).toContain('ccccccc1');
+    expect(out).toContain('(no failed job recorded)');
   });
 
   it('handles an empty window', () => {

@@ -163,6 +163,7 @@ export interface CiRunJobFailure {
   job: string;
   workflowJobId: string | null;
   step: string | null;
+  stepOrdinal: number | null;
 }
 
 export interface CiRunHistoryEntry {
@@ -177,12 +178,14 @@ export interface CiRunHistoryEntry {
 
 export interface CiJobHistory {
   job: string;
+  /** The workflow job key, when recorded; disambiguates same-named jobs. */
+  workflowJobId: string | null;
   /** Runs in the window that contained this job. */
   runs: number;
   failedRuns: number;
   /** Runs where the job failed with no step blamed (platform failures). */
   failedBeforeSteps: number;
-  steps: { step: string; failedRuns: number }[];
+  steps: { step: string; ordinal: number; failedRuns: number }[];
 }
 
 /** `GET /api/v1/actions/history` — the window plus the rollup over it. */

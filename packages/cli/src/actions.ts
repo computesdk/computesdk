@@ -310,18 +310,24 @@ export function formatRunHistory(history: CiRunHistory): string {
     for (const job of history.jobs) {
       const rate = job.runs > 0 ? Math.round((job.failedRuns / job.runs) * 100) : 0;
       const platform = job.failedBeforeSteps > 0 ? pc.dim(`  (${job.failedBeforeSteps} failed before steps)`) : '';
-      lines.push(`  ${job.job}  ${conclusionLabel(job.failedRuns > 0 ? 'failed' : 'passed')} ${job.failedRuns}/${job.runs} runs  ${rate}%${platform}`);
+      const count = `${job.failedRuns}/${job.runs} runs failed`;
+      const label = job.failedRuns > 0 ? pc.red(count) : pc.green(count);
+      lines.push(`  ${job.job}  ${label}  ${rate}%${platform}`);
       for (const step of job.steps) {
         lines.push(pc.dim(`    step "${step.step}" failed in ${step.failedRuns} run${step.failedRuns === 1 ? '' : 's'}`));
       }
     }
   }
-  const failed = history.runs.filter((r) => r.failedJobs.length > 0);
+  const failed = history.runs.filter(
+    (r) => r.conclusion === 'failed' || r.failedJobs.length > 0,
+  );
   if (failed.length > 0) {
     lines.push('');
     lines.push(pc.bold('failed runs'));
     for (const run of failed) {
-      const blame = run.failedJobs.map((j) => (j.step === null ? j.job : `${j.job}:${j.step}`)).join(', ');
+      const blame = run.failedJobs.length > 0
+        ? run.failedJobs.map((j) => (j.step === null ? j.job : `${j.job}:${j.step}`)).join(', ')
+        : pc.dim('(no failed job recorded)');
       lines.push(`  ${shortSha(run.headSha)}  ${pc.dim(run.startedAt)}  ${blame}`);
     }
   }
