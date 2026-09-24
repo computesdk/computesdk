@@ -3,6 +3,7 @@ import {
   formatDuration,
   formatProviderRow,
   formatRunDetail,
+  formatRunHistory,
   formatRunRow,
   formatVerifyResult,
   matchJob,
@@ -17,6 +18,7 @@ import {
   type CiProviderInfo,
   type CiProviderKeyResponse,
   type CiRun,
+  type CiRunHistory,
   type CiWorkflow,
 } from '../actions-client.js';
 
@@ -170,6 +172,71 @@ describe('formatRunDetail', () => {
     expect(detail).toContain('e2b:us-west-1');
     expect(detail).toContain('placement failed on vercel:iad: capacity exhausted');
     expect(detail).toContain('url: https://x/y');
+  });
+});
+
+describe('formatRunHistory', () => {
+  const HISTORY: CiRunHistory = {
+    runCount: 5,
+    conclusions: { passed: 2, failed: 3 },
+    jobs: [
+      {
+        job: 'test',
+        runs: 5,
+        failedRuns: 3,
+        failedBeforeSteps: 0,
+        steps: [{ step: 'npm test', failedRuns: 3 }],
+      },
+      {
+        job: 'deploy',
+        runs: 4,
+        failedRuns: 1,
+        failedBeforeSteps: 1,
+        steps: [],
+      },
+    ],
+    runs: [
+      {
+        id: 'r1',
+        ref: 'refs/heads/main',
+        headSha: 'abcdef1234567890',
+        runNumber: 42,
+        conclusion: 'failed',
+        startedAt: '2026-09-24T00:00:00.000Z',
+        failedJobs: [{ job: 'test', workflowJobId: 'test', step: 'npm test' }],
+      },
+      {
+        id: 'r2',
+        ref: 'refs/heads/main',
+        headSha: 'bbbbbbb1234567890',
+        runNumber: 41,
+        conclusion: 'failed',
+        startedAt: '2026-09-23T00:00:00.000Z',
+        failedJobs: [{ job: 'deploy', workflowJobId: 'deploy', step: null }],
+      },
+    ],
+  };
+
+  it('shows per-job failure rates and the flaky step', () => {
+    const out = formatRunHistory(HISTORY);
+    expect(out).toContain('last 5 runs: 2 passed, 3 failed');
+    expect(out).toContain('test');
+    expect(out).toContain('3/5 runs');
+    expect(out).toContain('60%');
+    expect(out).toContain('step "npm test" failed in 3 runs');
+  });
+
+  it('marks platform failures and blames each failed run', () => {
+    const out = formatRunHistory(HISTORY);
+    expect(out).toContain('(1 failed before steps)');
+    expect(out).toContain('abcdef12');
+    expect(out).toContain('test:npm test');
+    expect(out).toContain('deploy');
+  });
+
+  it('handles an empty window', () => {
+    const out = formatRunHistory({ runCount: 0, conclusions: {}, jobs: [], runs: [] });
+    expect(out).toContain('last 0 runs: none');
   });
 });
 
