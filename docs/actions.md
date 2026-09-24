@@ -1,7 +1,8 @@
 ---
 description: >-
   Run GitHub Actions–compatible workflows on ComputeSDK-managed sandboxes with
-  Actions, the managed CI product on the ComputeSDK platform.
+  Actions, the managed Agent Actions & CI product on the ComputeSDK
+  platform.
 layout:
   width: default
   title:
@@ -24,7 +25,7 @@ layout:
 
 # Actions
 
-Actions is the managed CI product on the [ComputeSDK platform](https://platform.computesdk.com). It runs ordinary GitHub Actions workflow files (`.github/workflows/*.yml`) on ComputeSDK-managed sandboxes: every job executes under [act](https://github.com/nektos/act) inside an isolated sandbox on one of your org's compute providers.
+Actions is the managed Agent Actions & CI product on the [ComputeSDK platform](https://platform.computesdk.com). It runs ordinary GitHub Actions workflow files (`.github/workflows/*.yml`) on ComputeSDK-managed sandboxes: every job executes under [act](https://github.com/nektos/act) inside an isolated sandbox on one of your org's compute providers.
 
 Because jobs run on the same sandbox providers ComputeSDK benchmarks, Actions doubles as a live compatibility surface for every provider — and you can pin a run to any registered provider when you dispatch it.
 
