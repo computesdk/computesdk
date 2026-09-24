@@ -26,6 +26,8 @@ import {
   type CiArtifactListItem,
   type CiJob,
   type CiLogSlice,
+  type CiProviderInfo,
+  type CiProvidersResponse,
   type CiRun,
   type CiWorkflow,
 } from './actions-client.js';
@@ -294,6 +296,18 @@ async function* followRunLogs(
   }
 }
 
+export function formatProviderRow(p: CiProviderInfo): string {
+  const icon = p.usable ? pc.green('●') : pc.gray('○');
+  const name = p.usable ? pc.white(p.provider) : pc.gray(p.provider);
+  const flags = [
+    p.credential,
+    p.actCapable ? pc.green('act') : pc.gray('no-act'),
+    p.regions.length > 0 ? `regions: ${p.regions.join(',')}` : 'no region choice',
+    p.position === null ? pc.gray('not in provider order') : `order #${p.position}`,
+  ].join('  ');
+  return `  ${icon} ${name}  ${flags}`;
+}
+
 // ─── Commands ───────────────────────────────────────────────────────────────
 
 export function registerActionsCommands(program: Command): void {
@@ -467,6 +481,21 @@ export function registerActionsCommands(program: Command): void {
           }
         }
       }
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    actions
+      .command('providers')
+      .description('List the org\'s registered compute providers (regions, act/usable status)'),
+  ).action(async (opts: CommonOpts) => {
+    try {
+      const data = await client(opts).get<CiProvidersResponse>('/api/v1/actions/providers');
+      output(opts, data, (d) => {
+        for (const p of d.providers) console.log(formatProviderRow(p));
+      });
     } catch (e) {
       fail(e);
     }

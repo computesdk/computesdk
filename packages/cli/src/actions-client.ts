@@ -122,6 +122,24 @@ export interface CiLogSlice {
   truncated: boolean;
 }
 
+export interface CiProviderInfo {
+  provider: string;
+  /** Selectable regions for `provider:region` order entries; empty when unknown. */
+  regions: string[];
+  credential: 'ambient' | 'configured' | 'not-configured';
+  /** In the effective act set: built-ins, CI_ACT_PROVIDERS override, act-probe-verified keys. */
+  actCapable: boolean;
+  /** A placement reaching the provider finds credentials. */
+  usable: boolean;
+  /** 1-based position in the effective provider order, null when absent. */
+  position: number | null;
+}
+
+export interface CiProvidersResponse {
+  providerOrder: string[];
+  providers: CiProviderInfo[];
+}
+
 export interface ActionsOrg {
   organizationId: string;
   name: string;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatDuration,
+  formatProviderRow,
   formatRunDetail,
   formatRunRow,
   matchJob,
@@ -12,6 +13,7 @@ import {
   encodeWatchCursor,
   readSseEvents,
   resolveActionsAuth,
+  type CiProviderInfo,
   type CiRun,
   type CiWorkflow,
 } from '../actions-client.js';
@@ -166,6 +168,43 @@ describe('formatRunDetail', () => {
     expect(detail).toContain('e2b:us-west-1');
     expect(detail).toContain('placement failed on vercel:iad: capacity exhausted');
     expect(detail).toContain('url: https://x/y');
+  });
+});
+
+describe('formatProviderRow', () => {
+  const base: CiProviderInfo = {
+    provider: 'vercel',
+    regions: ['iad1', 'sfo1'],
+    credential: 'ambient',
+    actCapable: true,
+    usable: true,
+    position: 1,
+  };
+
+  it('renders credential, act, regions, and order position', () => {
+    const row = formatProviderRow(base);
+    expect(row).toContain('vercel');
+    expect(row).toContain('ambient');
+    expect(row).toContain('act');
+    expect(row).toContain('iad1,sfo1');
+    expect(row).toContain('order #1');
+  });
+
+  it('marks unusable and unordered providers', () => {
+    const row = formatProviderRow({
+      ...base,
+      provider: 'namespace',
+      regions: [],
+      credential: 'not-configured',
+      actCapable: false,
+      usable: false,
+      position: null,
+    });
+    expect(row).toContain('namespace');
+    expect(row).toContain('not-configured');
+    expect(row).toContain('no-act');
+    expect(row).toContain('no region choice');
+    expect(row).toContain('not in provider order');
   });
 });
 
