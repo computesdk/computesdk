@@ -533,17 +533,16 @@ export function registerActionsCommands(program: Command): void {
         `/api/v1/actions/providers/${provider}/key`,
         body,
       );
-      output(opts, saved, (r) => {
-        console.log(`saved  ${r.key.provider}  ${pc.dim(r.key.keyHint)}  ${r.key.status}`);
+      const verification = opts.verify
+        ? await c.post<CiProviderKeyResponse>(
+            `/api/v1/actions/providers/${provider}/verify`,
+          )
+        : undefined;
+      output(opts, verification ? { key: saved.key, verification } : saved, () => {
+        console.log(`saved  ${saved.key.provider}  ${pc.dim(saved.key.keyHint)}  ${saved.key.status}`);
+        if (verification) console.log(formatVerifyResult(verification));
       });
-      if (opts.verify) {
-        const result = await c.post<CiProviderKeyResponse>(
-          `/api/v1/actions/providers/${provider}/verify`,
-        );
-        output(opts, result, (r) => {
-          console.log(formatVerifyResult(r));
-        });
-      }
+      if (verification?.verified === false) process.exitCode = 1;
     } catch (e) {
       fail(e);
     }
@@ -560,6 +559,7 @@ export function registerActionsCommands(program: Command): void {
         `/api/v1/actions/providers/${provider}/verify`,
       );
       output(opts, result, (r) => console.log(formatVerifyResult(r)));
+      if (result.verified === false) process.exitCode = 1;
     } catch (e) {
       fail(e);
     }
