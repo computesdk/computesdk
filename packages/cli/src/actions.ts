@@ -277,18 +277,20 @@ export function formatRunSummary(summary: CiRunSummary): string {
     return lines.join('\n');
   }
   for (const job of summary.failures) {
-    const placement = job.provider ? `${job.provider}${job.region ? `:${job.region}` : ''}` : '-';
-    lines.push(`  ${job.id}  ${job.name}  ${conclusionLabel(job.conclusion)}  ${placement}`);
-    if (job.failureReason) lines.push(pc.dim(`    ${job.failureReason}`));
+    const placement = job.provider
+      ? `${safeTerm(job.provider)}${job.region ? `:${safeTerm(job.region)}` : ''}`
+      : '-';
+    lines.push(`  ${job.id}  ${safeTerm(job.name)}  ${conclusionLabel(job.conclusion)}  ${placement}`);
+    if (job.failureReason) lines.push(pc.dim(`    ${safeTerm(job.failureReason)}`));
     for (const step of job.failedSteps) {
       const exit = step.exitCode === null ? '' : ` (exit ${step.exitCode})`;
-      lines.push(`    step ${step.ordinal}  ${step.name}${exit}`);
+      lines.push(`    step ${step.ordinal}  ${safeTerm(step.name)}${exit}`);
     }
     if (job.excerpt) {
       const scope = job.excerpt.stepOrdinal === null ? 'job log' : `step ${job.excerpt.stepOrdinal}`;
       const cut = job.excerpt.truncated ? ', truncated' : '';
       lines.push(pc.dim(`    ── ${scope} tail${cut} ──`));
-      for (const line of job.excerpt.text.split('\n')) lines.push(`    ${line}`);
+      for (const line of job.excerpt.text.split('\n')) lines.push(`    ${safeTerm(line)}`);
     }
   }
   return lines.join('\n');
