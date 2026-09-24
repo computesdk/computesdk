@@ -180,22 +180,22 @@ export function formatRunInspection(run: CiRunInspection): string {
   const lines: string[] = [];
   lines.push(`${pc.bold('run')}  ${conclusionLabel(run.conclusion)}${run.runNumber === null ? '' : `  #${run.runNumber}`}`);
   lines.push(pc.dim(run.id));
-  lines.push(`${run.ref}  ${shortSha(run.headSha)}  ${run.event}`);
+  lines.push(`${safeTerm(run.ref)}  ${shortSha(run.headSha)}  ${safeTerm(run.event)}`);
   lines.push(`queued: ${run.queuedAt}  started: ${run.startedAt}  finished: ${run.finishedAt}`);
   if (run.cancellationReason) lines.push(`cancelled: ${run.cancellationReason}`);
   if (run.supersededByRunId) lines.push(`superseded by: ${run.supersededByRunId}`);
-  if (run.blockedReason) lines.push(pc.red(`blocked: ${run.blockedReason}`));
-  if (run.concurrencyGroup) lines.push(`concurrency: ${run.concurrencyGroup}`);
-  if (run.providerOverride) lines.push(`dispatched to: ${run.providerOverride}`);
+  if (run.blockedReason) lines.push(pc.red(`blocked: ${safeTerm(run.blockedReason)}`));
+  if (run.concurrencyGroup) lines.push(`concurrency: ${safeTerm(run.concurrencyGroup)}`);
+  if (run.providerOverride) lines.push(`dispatched to: ${safeTerm(run.providerOverride)}`);
   if (run.definitionStale) {
     const parsed = run.workflowParsedFromSha ? shortSha(run.workflowParsedFromSha) : 'unknown';
     lines.push(pc.yellow(`definition: stored parse is from ${parsed}, not this head — context may be newer than the run`));
   }
   if (run.dispatchInputs && Object.keys(run.dispatchInputs).length > 0) {
-    lines.push(`inputs: ${Object.entries(run.dispatchInputs).map(([k, v]) => `${k}=${v}`).join('  ')}`);
+    lines.push(`inputs: ${Object.entries(run.dispatchInputs).map(([k, v]) => `${safeTerm(k)}=${safeTerm(v)}`).join('  ')}`);
   }
   if (run.secrets) {
-    const names = run.secrets.names.length > 0 ? run.secrets.names.join(', ') : 'none';
+    const names = run.secrets.names.length > 0 ? run.secrets.names.map(safeTerm).join(', ') : 'none';
     lines.push(`secrets (${run.secrets.access}${run.secrets.env ? ', exported to env' : ''}): ${names}`);
   }
   if (run.caches.length > 0) {
@@ -205,7 +205,7 @@ export function formatRunInspection(run: CiRunInspection): string {
       const action = [cache.restoredAt ? 'restored' : null, cache.savedAt ? 'saved' : null]
         .filter(Boolean)
         .join('+');
-      lines.push(`  ${cache.key}  ${pc.dim(`${action}  ${cache.scopeRef}  ${cache.sizeBytes}B`)}`);
+      lines.push(`  ${safeTerm(cache.key)}  ${pc.dim(`${action}  ${safeTerm(cache.scopeRef)}  ${cache.sizeBytes}B`)}`);
     }
   }
   if (run.jobs.length > 0) {
@@ -213,25 +213,25 @@ export function formatRunInspection(run: CiRunInspection): string {
     lines.push(pc.bold('jobs'));
     for (const job of run.jobs) {
       const placement = job.provider
-        ? `${job.provider}${job.region ? `:${job.region}` : ''}`
+        ? `${safeTerm(job.provider)}${job.region ? `:${safeTerm(job.region)}` : ''}`
         : '-';
-      lines.push(`  ${job.name}  ${conclusionLabel(job.state)}  ${placement}`);
+      lines.push(`  ${safeTerm(job.name)}  ${conclusionLabel(job.state)}  ${placement}`);
       lines.push(pc.dim(`    ${job.id}`));
       if (job.runsOn.length > 0 || job.resolvedRunsOn !== null) {
         const resolved =
           job.resolvedRunsOn !== null && job.resolvedRunsOn.join(',') !== job.runsOn.join(',')
-            ? ` → ${job.resolvedRunsOn.join(', ')}`
+            ? ` → ${job.resolvedRunsOn.map(safeTerm).join(', ')}`
             : '';
-        lines.push(`    runs-on: ${job.runsOn.join(', ') || '(none)'}${resolved}`);
+        lines.push(`    runs-on: ${job.runsOn.map(safeTerm).join(', ') || '(none)'}${resolved}`);
       }
       if (job.runsOnHasExpression) lines.push(pc.dim('    runs-on resolves at runtime (expression)'));
-      if (job.container) lines.push(`    container: ${job.container}`);
-      if (job.runnerImage) lines.push(`    image: ${job.runnerImage}`);
+      if (job.container) lines.push(`    container: ${safeTerm(job.container)}`);
+      if (job.runnerImage) lines.push(`    image: ${safeTerm(job.runnerImage)}`);
       if (job.placementHint) {
-        lines.push(`    pinned: ${job.placementHint.label}`);
+        lines.push(`    pinned: ${safeTerm(job.placementHint.label)}`);
       }
       if (job.concurrencyGroup) {
-        lines.push(`    concurrency: ${job.concurrencyGroup}${job.concurrencyCancelInProgress ? ' (cancel-in-progress)' : ''}`);
+        lines.push(`    concurrency: ${safeTerm(job.concurrencyGroup)}${job.concurrencyCancelInProgress ? ' (cancel-in-progress)' : ''}`);
       }
       const overrides = [
         job.timeoutMinutes !== null ? `timeout ${job.timeoutMinutes}m` : null,
@@ -239,11 +239,11 @@ export function formatRunInspection(run: CiRunInspection): string {
       ].filter(Boolean);
       if (overrides.length > 0) lines.push(`    ${overrides.join('  ')}`);
       if (job.matrix) {
-        lines.push(`    matrix: ${Object.entries(job.matrix).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+        lines.push(`    matrix: ${Object.entries(job.matrix).map(([k, v]) => `${safeTerm(k)}=${safeTerm(v)}`).join(' ')}`);
       }
-      if (job.failureReason) lines.push(pc.red(`    failed: ${job.failureReason}`));
+      if (job.failureReason) lines.push(pc.red(`    failed: ${safeTerm(job.failureReason)}`));
       for (const attempt of job.placementAttempts) {
-        lines.push(pc.dim(`    placement failed on ${attempt.provider}${attempt.region ? `:${attempt.region}` : ''}: ${attempt.error}`));
+        lines.push(pc.dim(`    placement failed on ${safeTerm(attempt.provider)}${attempt.region ? `:${safeTerm(attempt.region)}` : ''}: ${safeTerm(attempt.error)}`));
       }
     }
   }

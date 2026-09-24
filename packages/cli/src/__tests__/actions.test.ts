@@ -393,6 +393,20 @@ describe('formatRunInspection', () => {
     expect(out).toContain('definition: stored parse is from fffff123');
     expect(formatRunInspection(INSPECTION)).not.toContain('definition:');
   });
+
+  it('neutralizes control characters in workflow-controlled strings', () => {
+    const evil: CiRunInspection = {
+      ...INSPECTION,
+      concurrencyGroup: 'ci\x1b[2J-main',
+      secrets: { access: 'declared', env: false, names: ['TOK\x07EN'] },
+      caches: [{ ...INSPECTION.caches[0], key: 'node\x1b[K-modules' }],
+      jobs: [{ ...INSPECTION.jobs[0], name: 'build\x1b[2J\x08uild' }],
+    };
+    const out = formatRunInspection(evil);
+    expect(out).not.toContain('\x1b');
+    expect(out).not.toContain('\x07');
+    expect(out).toContain('build�[2J�uild');
+  });
 });
 
 describe('formatProviderRow', () => {
