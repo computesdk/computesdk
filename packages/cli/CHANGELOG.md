@@ -1,5 +1,33 @@
 # @computesdk/cli
 
+## 1.0.10
+
+### Patch Changes
+
+- f0a227a: `compute actions history <repo> --workflow <path|name>` — recent run history with per-job/step failure rates (the flakiness signal from `GET /api/v1/actions/history`), with `--branch`, `--job`, `--limit`, and `--json`.
+- b3020fb: feat(cli): `compute actions providers` gains `configure`, `verify`, `remove`
+
+  `configure <provider>` saves the org's provider credential via
+  `PUT /api/v1/actions/providers/{provider}/key` (`--key` or `--field
+name=value`), `--verify` runs the placement probe,
+  `verify <provider>` re-runs it, and `remove <provider>` deletes the stored
+  key. Requires an owner/admin-level org API key.
+
+- 4c9bf19: feat(cli): `compute actions providers` lists the org's registered providers
+
+  Reads `GET /api/v1/actions/providers` and prints each registered ComputeSDK
+  provider with its credential state, act capability, selectable regions, and
+  position in the org's provider order — so CI tooling can enumerate provider
+  ids instead of hardcoding them. `--json` prints the raw response.
+
+- 1067ad4: feat(cli): `compute actions dispatch` accepts `--provider`/`--provider-region`
+
+  Passes the run's provider override through to the v1 dispatch API (`provider`,
+  `providerRegion`) so a manually dispatched run can be pinned to one provider
+  (and optionally one region) instead of following the org provider order.
+  `compute actions run` also prints `dispatched to: provider[:region]` when the
+  run carries an override.
+
 ## 1.0.9
 
 ### Patch Changes

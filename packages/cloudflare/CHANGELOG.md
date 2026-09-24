@@ -1,5 +1,11 @@
 # @computesdk/cloudflare
 
+## 2.0.0
+
+### Major Changes
+
+- 31688c6: Use the Cloudflare sandbox demo Worker for remote and direct Cloudflare sandboxes. Direct mode now calls the Worker's Durable Object RPC API, sandbox IDs use native Durable Object IDs, and filesystem operations run through exec.
+
 ## 1.6.18
 
 ### Patch Changes
