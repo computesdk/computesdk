@@ -1,547 +1,701 @@
-/**
- * Cloudflare Provider Tests with Real Miniflare Integration
- */
-
-import { vi, describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { runProviderTestSuite } from '@computesdk/test-utils';
+import { describe, expect, it, vi } from 'vitest';
 import { cloudflare } from '../index.js';
-import { getSandbox } from '@cloudflare/sandbox';
-import { Miniflare } from 'miniflare';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+
+const SANDBOX_ID = '0123456789abcdef'.repeat(4);
+const OTHER_SANDBOX_ID = 'fedcba9876543210'.repeat(4);
 
 function sse(events: Array<{ event: string; data: string }>): string {
-  return events.map(({ event, data }) => `event: ${event}\ndata: ${data}\n`).join('\n');
+  return events
+    .map(({ event, data }) => `event: ${event}\ndata: ${data}\n`)
+    .join('\n');
 }
 
-function bridgeCreateResponse(id = 'abcde'): Response {
-  return new Response(JSON.stringify({ id }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+function bridgeCreateResponse(id = SANDBOX_ID): Response {
+  return Response.json({ id });
 }
 
-function bridgeExecResponse(events: Array<{ event: string; data: string }>): Response {
+function bridgeExecResponse(
+  events: Array<{ event: string; data: string }>
+): Response {
   return new Response(sse(events), {
-    status: 200,
     headers: { 'Content-Type': 'text/event-stream' },
   });
 }
 
-function createWarmPoolBinding(options: { physicalId?: string | null } = {}) {
-  const physicalId = Object.prototype.hasOwnProperty.call(options, 'physicalId')
-    ? options.physicalId
-    : 'physicalabcde';
-  const pool = {
-    configure: vi.fn().mockResolvedValue(undefined),
-    getContainer: vi.fn().mockResolvedValue(physicalId),
-    lookupContainer: vi.fn().mockResolvedValue(physicalId),
-    reportStopped: vi.fn().mockResolvedValue(undefined),
+function bytes(value: string): ArrayBuffer {
+  return new TextEncoder().encode(value).buffer as ArrayBuffer;
+}
+
+function directOutput(stdout = '', stderr = '', exitCode = 0) {
+  return {
+    stdout: bytes(stdout),
+    stderr: bytes(stderr),
+    exitCode,
+  };
+}
+
+function createDirectBinding(
+  execImplementation: (
+    argv: string[],
+    cwd: string | undefined,
+    timeoutMs: number
+  ) => Promise<ReturnType<typeof directOutput>> = async (argv) => {
+    const command = argv[2] || '';
+    if (command.includes('nonexistent-command')) {
+      return directOutput('', 'command not found', 127);
+    }
+    if (command.includes('find --')) {
+      return directOutput(
+        [
+          'f',
+          '4',
+          '1735732800.25',
+          'test\nfile.txt',
+          'd',
+          '4096',
+          '1735736400.5',
+          'subdir',
+          '',
+        ].join('\0')
+      );
+    }
+    if (command.includes('cat --')) return directOutput('Mock file content');
+    return directOutput();
+  }
+) {
+  let nextId = 0;
+  const sandbox = {
+    start: vi.fn().mockResolvedValue(undefined),
+    exec: vi.fn(execImplementation),
+    destroy: vi.fn().mockResolvedValue(undefined),
   };
   const binding = {
-    idFromName: vi.fn((name: string) => ({ name })),
-    get: vi.fn(() => pool),
+    newUniqueId: vi.fn(() => {
+      const id = (nextId++).toString(16).padStart(64, '0');
+      return { toString: () => id };
+    }),
+    idFromString: vi.fn((id: string) => {
+      if (!/^[0-9a-f]{64}$/.test(id)) throw new TypeError('invalid id');
+      return { toString: () => id };
+    }),
+    get: vi.fn(() => sandbox),
   };
 
-  return { binding, pool };
+  return { binding, sandbox };
 }
 
-// Determine if we're running integration tests
-const hasCredentials = !!(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
-const skipIntegration = !hasCredentials;
+describe('Cloudflare direct mode', () => {
+  it('creates and starts a sandbox through the Durable Object binding', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
 
-let mf: Miniflare | null = null;
+    const created = await provider.sandbox.create();
 
-// Setup Miniflare for tests that need real Workers runtime
-beforeAll(async () => {
-  if (!skipIntegration) {
-    // Only setup Miniflare for integration tests
-    const workerScript = readFileSync(resolve(__dirname, '../../test-worker.js'), 'utf8');
-
-    mf = new Miniflare({
-      modules: true,
-      script: workerScript,
-      compatibilityDate: '2024-01-01',
-      compatibilityFlags: ['nodejs_compat'],
-      durableObjects: {
-        SandboxDO: 'SandboxDO'
-      },
-      bindings: {
-        NODE_ENV: 'test',
-        MINIFLARE_TEST: 'true'
-      }
-    });
-  }
-});
-
-afterAll(async () => {
-  if (mf) {
-    await mf.dispose();
-  }
-});
-
-// Only mock for unit tests when no credentials
-if (skipIntegration) {
-  vi.mock('@cloudflare/sandbox', () => ({
-    getSandbox: vi.fn(() => ({
-      setEnvVars: vi.fn().mockResolvedValue(undefined),
-      ping: vi.fn().mockResolvedValue(undefined),
-      killAllProcesses: vi.fn().mockResolvedValue(undefined),
-      runCode: vi.fn().mockImplementation(async (code: string) => {
-        if (code.includes('print(')) {
-          const match = code.match(/print\(['"](.+?)['"]\)/);
-          const output = match ? match[1] : 'Mock Python output';
-          return { results: [{ text: output + '\n' }] };
-        }
-        return { results: [{ text: 'Mock execution result\n' }] };
-      }),
-      exec: vi.fn().mockImplementation(async (command: string) => {
-        if (command.includes('echo')) {
-          const match = command.match(/echo ["'](.+?)["']/);
-          const output = match ? match[1] : 'Mock echo output';
-          return { stdout: output + '\n', stderr: '', exitCode: 0 };
-        }
-        if (command.includes('ls -la')) {
-          return {
-            stdout: 'drwxr-xr-x  2 user user 4096 Jan 1 12:00 .\n-rw-r--r--  1 user user  100 Jan 1 12:00 test.txt\n',
-            stderr: '',
-            exitCode: 0
-          };
-        }
-        return { stdout: 'Mock command output\n', stderr: '', exitCode: 0 };
-      }),
-      readFile: vi.fn().mockResolvedValue({ content: 'Mock file content' }),
-      writeFile: vi.fn().mockResolvedValue(undefined),
-      mkdir: vi.fn().mockResolvedValue(undefined),
-      exposePort: vi.fn().mockResolvedValue({ url: 'mock-preview.example.com' }),
-      destroy: vi.fn().mockResolvedValue(undefined)
-    }))
-  }));
-}
-
-describe('Miniflare Integration Tests', () => {
-  it('should create Miniflare instance if running integration tests', () => {
-    if (!skipIntegration) {
-      expect(mf).toBeDefined();
-      expect(mf).toBeInstanceOf(Miniflare);
-    } else {
-      expect(mf).toBeNull();
-    }
-  });
-
-  it('should interact with real Miniflare Workers runtime', async () => {
-    if (!skipIntegration && mf) {
-      // Test direct interaction with Miniflare
-      const response = await mf.dispatchFetch('http://localhost/');
-      expect(response.status).toBe(200);
-
-      const text = await response.text();
-      expect(text).toBe('Hello from Miniflare test worker!');
-    }
-  });
-
-  it('should access Durable Objects through Miniflare', async () => {
-    if (!skipIntegration && mf) {
-      // Get bindings from Miniflare
-      const env = await mf.getBindings();
-      expect((env as any).SandboxDO).toBeDefined();
-
-      // Create Durable Object ID and stub
-      const SandboxDO = (env as any).SandboxDO;
-      const id = SandboxDO.idFromName('test-sandbox');
-      const stub = SandboxDO.get(id);
-
-      // Test Durable Object interaction
-      const response = await stub.fetch('http://localhost/health');
-      const data = await response.json();
-
-      expect(data.status).toBe('ok');
-      expect(data.provider).toBe('cloudflare-miniflare');
-    }
-  });
-});
-
-// Create sandbox binding based on test mode
-const createSandboxBinding = () => {
-  if (!skipIntegration) {
-    // For integration tests, we'll need to handle async binding creation inside tests
-    return null; // Will be replaced in beforeEach
-  } else {
-    // Use mock binding for unit tests
-    return {
-      idFromName: (name: string) => ({ toString: () => `mock-id-${name}` }),
-      get: (_id: any) => ({
-        fetch: vi.fn().mockResolvedValue(new Response(JSON.stringify({
-          status: 'mock',
-          provider: 'cloudflare-mock'
-        })))
-      })
-    };
-  }
-};
-
-// For integration tests, we need to provide the binding after Miniflare is set up
-async function getIntegrationBinding() {
-  if (!skipIntegration && mf) {
-    const env = await mf.getBindings();
-    return (env as any).SandboxDO;
-  }
-  return null;
-}
-
-// Create provider with proper binding
-const defineProviderForTests = async () => {
-  let binding = createSandboxBinding();
-
-  if (!skipIntegration) {
-    // For integration tests, get the real Miniflare binding
-    binding = await getIntegrationBinding();
-  }
-
-  return cloudflare({
-    sandboxBinding: binding,
-    timeout: 300000,
-    runtime: 'python'
-  });
-};
-
-// Use a describe block to handle async provider creation
-describe('Standardized Test Suite', () => {
-  let testProvider: any;
-
-  beforeAll(async () => {
-    testProvider = await defineProviderForTests();
-  });
-
-  // Since we can't easily modify runProviderTestSuite, let's run the basic tests
-  it('should have valid provider instance for testing', async () => {
-    expect(testProvider).toBeDefined();
-    expect(testProvider.name).toBe('cloudflare');
-
-    // Only test sandbox creation in unit test mode
-    if (skipIntegration) {
-      try {
-        const result = await testProvider.sandbox.create();
-        expect(result).toBeDefined();
-        expect(result.sandboxId).toBeDefined();
-      } catch (error) {
-        // Expected in some test scenarios
-      }
-    }
+    expect(binding.newUniqueId).toHaveBeenCalledOnce();
+    expect(binding.get).toHaveBeenCalledOnce();
+    expect(sandbox.start).toHaveBeenCalledOnce();
+    expect(created.sandboxId).toBe('0'.repeat(64));
   });
 
   it('generates unique sandbox IDs under concurrency', async () => {
-    if (skipIntegration) {
-      const results = await Promise.all(Array.from({ length: 20 }, () => testProvider.sandbox.create()));
-      const sandboxIds = results.map((result: { sandboxId: string }) => result.sandboxId);
+    const { binding } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
 
-      expect(new Set(sandboxIds).size).toBe(sandboxIds.length);
-    }
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => provider.sandbox.create())
+    );
+    const sandboxIds = results.map((result) => result.sandboxId);
+
+    expect(new Set(sandboxIds).size).toBe(sandboxIds.length);
   });
 
-  it('uses the configured WarmPool binding for direct sandbox creation', async () => {
-    if (skipIntegration) {
-      vi.mocked(getSandbox).mockClear();
-      const sandboxBinding = createSandboxBinding();
-      const { binding: warmPoolBinding, pool } = createWarmPoolBinding({ physicalId: 'physicalabcde' });
-      const provider = cloudflare({
-        sandboxBinding,
-        warmPool: { binding: warmPoolBinding, target: 5, refreshInterval: 1234 },
-      });
+  it('uses an existing native Durable Object ID when provided', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
 
-      const result = await provider.sandbox.create({ sandboxId: 'logicalabcde' });
+    const created = await provider.sandbox.create({ sandboxId: SANDBOX_ID });
 
-      expect(warmPoolBinding.idFromName).toHaveBeenCalledWith('global-pool');
-      expect(pool.configure).toHaveBeenCalledWith({ warmTarget: 5, refreshInterval: 1234 });
-      expect(pool.getContainer).toHaveBeenCalledWith('logicalabcde');
-      expect(getSandbox).toHaveBeenCalledWith(sandboxBinding, 'physicalabcde', {});
-      expect(result.sandboxId).toBe('logicalabcde');
-    }
+    expect(binding.idFromString).toHaveBeenCalledWith(SANDBOX_ID);
+    expect(binding.newUniqueId).not.toHaveBeenCalled();
+    expect(sandbox.start).toHaveBeenCalledOnce();
+    expect(created.sandboxId).toBe(SANDBOX_ID);
   });
 
-  it('uses WarmPool lookup for direct getById without allocating', async () => {
-    if (skipIntegration) {
-      const { binding: warmPoolBinding, pool } = createWarmPoolBinding({ physicalId: 'physicalabcde' });
-      const provider = cloudflare({
-        sandboxBinding: createSandboxBinding(),
-        warmPool: { binding: warmPoolBinding, target: 5 },
-      });
+  it('executes commands through the direct RPC contract', async () => {
+    const { binding, sandbox } = createDirectBinding(async () =>
+      directOutput('hello\n', 'warning\n', 3)
+    );
+    const provider = cloudflare({
+      sandboxBinding: binding,
+      timeout: 45_000,
+      envVars: { PROVIDER_ENV: 'provider' },
+    });
+    const created = await provider.sandbox.create({
+      envs: { SANDBOX_ENV: 'sandbox' },
+    });
 
-      const result = await provider.sandbox.getById('logicalabcde');
+    const result = await created.runCommand('echo hello', {
+      cwd: '/tmp',
+      env: { COMMAND_ENV: 'command' },
+      timeout: 12_345,
+    });
 
-      expect(pool.lookupContainer).toHaveBeenCalledWith('logicalabcde');
-      expect(pool.getContainer).not.toHaveBeenCalled();
-      expect(result?.sandboxId).toBe('logicalabcde');
-    }
+    expect(sandbox.exec).toHaveBeenCalledWith(
+      [
+        'sh',
+        '-lc',
+        "export PROVIDER_ENV='provider'; export SANDBOX_ENV='sandbox'; export COMMAND_ENV='command'; echo hello",
+      ],
+      '/tmp',
+      12_345
+    );
+    expect(result).toMatchObject({
+      stdout: 'hello\n',
+      stderr: 'warning\n',
+      exitCode: 3,
+    });
   });
 
-  it('returns null from direct getById when WarmPool has no assignment', async () => {
-    if (skipIntegration) {
-      const { binding: warmPoolBinding } = createWarmPoolBinding({ physicalId: null });
-      const provider = cloudflare({
-        sandboxBinding: createSandboxBinding(),
-        warmPool: { binding: warmPoolBinding },
-      });
+  it('uses provider and command execution timeouts, not the create timeout', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding, timeout: 45_000 });
+    const created = await provider.sandbox.create({ timeout: 1 });
 
-      await expect(provider.sandbox.getById('logicalabcde')).resolves.toBeNull();
-    }
+    await created.runCommand('true');
+    expect(sandbox.exec).toHaveBeenLastCalledWith(
+      ['sh', '-lc', 'true'],
+      undefined,
+      45_000
+    );
+
+    const invalid = await created.runCommand('true', { timeout: 900_001 });
+    expect(invalid.exitCode).toBe(127);
+    expect(invalid.stderr).toContain('no greater than 900000');
   });
 
-  it('reports WarmPool assignments stopped when destroying direct sandboxes', async () => {
-    if (skipIntegration) {
-      const { binding: warmPoolBinding, pool } = createWarmPoolBinding({ physicalId: 'physicalabcde' });
-      const provider = cloudflare({
-        sandboxBinding: createSandboxBinding(),
-        warmPool: { binding: warmPoolBinding },
-      });
-
-      await provider.sandbox.destroy('logicalabcde');
-
-      expect(pool.lookupContainer).toHaveBeenCalledWith('logicalabcde');
-      expect(pool.reportStopped).toHaveBeenCalledWith('physicalabcde');
-    }
+  it('rejects invalid provider execution timeouts', async () => {
+    const { binding } = createDirectBinding();
+    await expect(
+      cloudflare({ sandboxBinding: binding, timeout: 0 }).sandbox.create()
+    ).rejects.toThrow('Execution timeout must be greater than 0');
   });
 
-  it('creates remote sandboxes through the bridge before the first remote operation', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse('abcde'))
-        .mockResolvedValueOnce(bridgeExecResponse([
-          { event: 'stdout', data: Buffer.from('v22.0.0\n').toString('base64') },
+  it('gets an existing sandbox without starting it', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({
+      sandboxBinding: binding,
+      envVars: { RECONNECTED: 'yes' },
+    });
+
+    const result = await provider.sandbox.getById(SANDBOX_ID);
+
+    expect(binding.idFromString).toHaveBeenCalledWith(SANDBOX_ID);
+    expect(sandbox.start).not.toHaveBeenCalled();
+    expect(sandbox.exec).toHaveBeenCalledWith(['true'], undefined, 30_000);
+    expect(result?.sandboxId).toBe(SANDBOX_ID);
+
+    await result?.runCommand('echo ready');
+    expect(sandbox.exec).toHaveBeenLastCalledWith(
+      ['sh', '-lc', "export RECONNECTED='yes'; echo ready"],
+      undefined,
+      30_000
+    );
+  });
+
+  it('returns null when a direct sandbox cannot be reached', async () => {
+    const { binding } = createDirectBinding(async () => {
+      throw new Error('container is not running');
+    });
+    const provider = cloudflare({ sandboxBinding: binding });
+
+    await expect(provider.sandbox.getById(SANDBOX_ID)).resolves.toBeNull();
+    await expect(provider.sandbox.getById('not-an-id')).resolves.toBeNull();
+  });
+
+  it('destroys a sandbox through the direct RPC contract', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
+
+    await provider.sandbox.destroy(SANDBOX_ID);
+
+    expect(binding.idFromString).toHaveBeenCalledWith(SANDBOX_ID);
+    expect(sandbox.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('propagates direct destroy failures', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    sandbox.destroy.mockRejectedValueOnce(new Error('destroy failed'));
+    const provider = cloudflare({ sandboxBinding: binding });
+
+    await expect(provider.sandbox.destroy(SANDBOX_ID)).rejects.toThrow(
+      'destroy failed'
+    );
+  });
+
+  it('implements filesystem operations through exec', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
+    const created = await provider.sandbox.create();
+
+    await expect(created.filesystem.readFile('/tmp/test.txt')).resolves.toBe(
+      'Mock file content'
+    );
+    await created.filesystem.writeFile('/tmp/test.txt', "it's safe");
+    await created.filesystem.mkdir('/tmp/test dir');
+    await created.filesystem.remove('/tmp/test.txt');
+    await expect(created.filesystem.readdir('/tmp')).resolves.toEqual([
+      {
+        name: 'test\nfile.txt',
+        type: 'file',
+        size: 4,
+        modified: new Date('2025-01-01T12:00:00.250Z'),
+      },
+      {
+        name: 'subdir',
+        type: 'directory',
+        size: 4096,
+        modified: new Date('2025-01-01T13:00:00.500Z'),
+      },
+    ]);
+
+    const commands = sandbox.exec.mock.calls.map((call) => call[0][2]);
+    expect(commands).toContain("cat -- '/tmp/test.txt'");
+    const writeCommand = commands.find((command) =>
+      command.includes('| base64 -d >>')
+    );
+    expect(writeCommand).toBeDefined();
+    const encoded = /printf %s '([^']+)'/.exec(writeCommand || '')?.[1];
+    expect(Buffer.from(encoded || '', 'base64').toString()).toBe("it's safe");
+    expect(
+      commands.some(
+        (command) =>
+          command.startsWith("cat -- '/tmp/.computesdk-") &&
+          command.includes(" > '/tmp/test.txt' && rm -f -- '/tmp/.computesdk-")
+      )
+    ).toBe(true);
+    expect(commands).toContain("mkdir -p -- '/tmp/test dir'");
+    expect(commands).toContain("rm -rf -- '/tmp/test.txt'");
+    expect(commands).toContain(
+      "find -- '/tmp' -mindepth 1 -maxdepth 1 -printf '%y\\0%s\\0%T@\\0%f\\0'"
+    );
+  });
+
+  it('writes through existing file and symlink targets instead of replacing them', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
+    const created = await provider.sandbox.create();
+
+    await created.filesystem.writeFile('/tmp/existing', 'new content');
+
+    const commands = sandbox.exec.mock.calls.map((call) => call[0][2]);
+    expect(
+      commands.some(
+        (command) =>
+          command.startsWith("cat -- '/tmp/.computesdk-") &&
+          command.includes(" > '/tmp/existing' && rm -f -- ")
+      )
+    ).toBe(true);
+    expect(commands.some((command) => command.startsWith('mv '))).toBe(false);
+  });
+
+  it('rejects a directory as a write destination and cleans up', async () => {
+    const { binding, sandbox } = createDirectBinding(async (argv) => {
+      const command = argv[2] || '';
+      return command.includes(" > '/tmp/directory'")
+        ? directOutput('', 'Is a directory', 1)
+        : directOutput();
+    });
+    const provider = cloudflare({ sandboxBinding: binding });
+    const created = await provider.sandbox.create();
+
+    await expect(
+      created.filesystem.writeFile('/tmp/directory', 'content')
+    ).rejects.toThrow('File write failed: Is a directory');
+
+    const commands = sandbox.exec.mock.calls.map((call) => call[0][2]);
+    expect(
+      commands.some((command) =>
+        command.startsWith("rm -f -- '/tmp/.computesdk-")
+      )
+    ).toBe(true);
+  });
+
+  it('prefixes relative directory paths before passing them to find', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
+    const created = await provider.sandbox.create();
+
+    await created.filesystem.readdir('-name');
+    await created.filesystem.readdir('!');
+
+    const commands = sandbox.exec.mock.calls.map((call) => call[0][2]);
+    expect(commands).toContain(
+      "find -- './-name' -mindepth 1 -maxdepth 1 -printf '%y\\0%s\\0%T@\\0%f\\0'"
+    );
+    expect(commands).toContain(
+      "find -- './!' -mindepth 1 -maxdepth 1 -printf '%y\\0%s\\0%T@\\0%f\\0'"
+    );
+  });
+
+  it('writes large content and null bytes in bounded chunks', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
+    const created = await provider.sandbox.create();
+    const content = `${'a'.repeat(150_000)}\0tail\n`;
+
+    await created.filesystem.writeFile('/tmp/large.bin', content);
+
+    const encodedChunks = sandbox.exec.mock.calls
+      .map((call) => call[0][2] as string)
+      .filter((command) => command.includes('| base64 -d >>'))
+      .map((command) => /printf %s '([^']+)'/.exec(command)?.[1] || '');
+    expect(encodedChunks.length).toBeGreaterThan(1);
+    const reconstructed = Buffer.concat(
+      encodedChunks.map((encoded) => Buffer.from(encoded, 'base64'))
+    ).toString();
+    expect(reconstructed).toBe(content);
+  });
+});
+
+describe('Cloudflare remote bridge mode', () => {
+  it('creates a sandbox before the first remote operation', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse())
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
+          {
+            event: 'stdout',
+            data: Buffer.from('v22.0.0\n').toString('base64'),
+          },
           { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
-        ]));
+        ])
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+        envVars: { TEST_ENV: 'value' },
+      });
 
-      try {
-        const remoteProvider = cloudflare({
-          sandboxUrl: 'https://example.com',
-          sandboxApiKey: 'secret',
-          envVars: { TEST_ENV: 'value' },
-        });
+      const created = await provider.sandbox.create();
+      expect(created.sandboxId).toBe(SANDBOX_ID);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://example.com/v1/sandbox'
+      );
+      expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST');
 
-        const created = await remoteProvider.sandbox.create();
-        expect(created.sandboxId).toBe('abcde');
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.com/v1/sandbox');
-        expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST');
+      const result = await created.runCommand('node -v');
+      expect(result.exitCode).toBe(0);
 
-        const result = await created.runCommand('node -v');
-        expect(result.exitCode).toBe(0);
-        expect(fetchMock).toHaveBeenCalledTimes(2);
-
-        const call = fetchMock.mock.calls[1];
-        expect(call?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/exec`);
-
-        const requestInit = call?.[1];
-        expect(typeof requestInit?.body).toBe('string');
-        if (typeof requestInit?.body !== 'string') {
-          throw new Error('Expected worker request body to be a string');
-        }
-
-        const body = JSON.parse(requestInit.body) as Record<string, unknown>;
-        expect(body.argv).toEqual(['sh', '-lc', "export TEST_ENV='value'; node -v"]);
-        expect(body.timeout_ms).toBeUndefined();
-      } finally {
-        vi.unstubAllGlobals();
-      }
+      const call = fetchMock.mock.calls[1];
+      expect(call?.[0]).toBe(
+        `https://example.com/v1/sandbox/${SANDBOX_ID}/exec`
+      );
+      const body = JSON.parse(call?.[1]?.body as string);
+      expect(body).toEqual({
+        argv: ['sh', '-lc', "export TEST_ENV='value'; node -v"],
+        timeout_ms: 30_000,
+      });
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
-  it('parses bridge exec SSE stdout, stderr, and exit events', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(bridgeExecResponse([
-          { event: 'stdout', data: Buffer.from('hello\n').toString('base64') },
-          { event: 'stderr', data: Buffer.from('warn\n').toString('base64') },
-          { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
-        ]));
+  it('rejects IDs that are not native Durable Object IDs', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse('abcde'));
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
 
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const created = await remoteProvider.sandbox.create();
-        const result = await created.runCommand('echo hello');
-
-        expect(result.stdout).toBe('hello\n');
-        expect(result.stderr).toBe('warn\n');
-        expect(result.exitCode).toBe(0);
-      } finally {
-        vi.unstubAllGlobals();
-      }
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        'missing or invalid sandbox id'
+      );
+      await expect(provider.sandbox.getById('abcde')).resolves.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
-  it('returns bridge exec non-zero exit codes', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 42 }) }]));
+  it('parses bridge exec stdout, stderr, and exit events', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse())
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
+          {
+            event: 'stdout',
+            data: Buffer.from('hello\n').toString('base64'),
+          },
+          {
+            event: 'stderr',
+            data: Buffer.from('warn\n').toString('base64'),
+          },
+          { event: 'exit', data: JSON.stringify({ exit_code: 42 }) },
+        ])
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
+      const result = await created.runCommand('echo hello');
 
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const created = await remoteProvider.sandbox.create();
-        const result = await created.runCommand('exit 42');
+      expect(result).toMatchObject({
+        stdout: 'hello\n',
+        stderr: 'warn\n',
+        exitCode: 42,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
-        expect(result.exitCode).toBe(42);
-      } finally {
-        vi.unstubAllGlobals();
-      }
+  it('rejects bridge exec responses without an exit event', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse())
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
+          {
+            event: 'stdout',
+            data: Buffer.from('partial').toString('base64'),
+          },
+        ])
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
+      const result = await created.runCommand('echo partial');
+
+      expect(result.exitCode).toBe(127);
+      expect(result.stderr).toContain('without an exit event');
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
   it('maps bridge request failures to command errors', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(new Response('boom', { status: 500 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse())
+      .mockResolvedValueOnce(new Response('boom', { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
+      const result = await created.runCommand('node -v');
 
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const created = await remoteProvider.sandbox.create();
-        const result = await created.runCommand('node -v');
-
-        expect(result.exitCode).toBe(127);
-        expect(result.stderr).toContain('boom');
-      } finally {
-        vi.unstubAllGlobals();
-      }
+      expect(result.exitCode).toBe(127);
+      expect(result.stderr).toContain('boom');
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
-  it('uses bridge file endpoints with raw bodies', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(new Response('hello', { status: 200 }))
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  it('implements filesystem operations through the exec endpoint', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse())
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
+          {
+            event: 'stdout',
+            data: Buffer.from('hello').toString('base64'),
+          },
+          { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
+        ])
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
 
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const created = await remoteProvider.sandbox.create();
-
-        await expect(created.filesystem.readFile('/workspace/tmp/a.txt')).resolves.toBe('hello');
-        await created.filesystem.writeFile('/workspace/tmp/a.txt', 'hello');
-
-        expect(fetchMock.mock.calls[1]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/tmp/a.txt`);
-        expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('GET');
-        expect(fetchMock.mock.calls[2]?.[0]).toBe(`https://example.com/v1/sandbox/${created.sandboxId}/file/workspace/tmp/a.txt`);
-        expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('PUT');
-        expect(fetchMock.mock.calls[2]?.[1]?.body).toBe('hello');
-      } finally {
-        vi.unstubAllGlobals();
-      }
-    }
-  });
-
-  it('uses a bridge-compatible cwd for filesystem shell helpers', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 0 }) }]));
-
-      vi.stubGlobal('fetch', fetchMock);
-
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const created = await remoteProvider.sandbox.create();
-        await created.filesystem.mkdir('/workspace/tmp');
-
-        const requestInit = fetchMock.mock.calls[1]?.[1];
-        expect(typeof requestInit?.body).toBe('string');
-        const body = JSON.parse(requestInit?.body as string) as Record<string, unknown>;
-        expect(body.cwd).toBe('/workspace');
-      } finally {
-        vi.unstubAllGlobals();
-      }
+      await expect(created.filesystem.readFile('/tmp/a.txt')).resolves.toBe(
+        'hello'
+      );
+      const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+      expect(body.argv).toEqual(['sh', '-lc', "cat -- '/tmp/a.txt'"]);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
   it('shell-quotes filesystem paths containing metacharacters', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse())
-        .mockResolvedValueOnce(bridgeExecResponse([{ event: 'exit', data: JSON.stringify({ exit_code: 0 }) }]));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse())
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
+          { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
+        ])
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
+      const maliciousPath = '/tmp/$(touch pwned)`whoami`\\!';
+      await created.filesystem.mkdir(maliciousPath);
 
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const created = await remoteProvider.sandbox.create();
-        const maliciousPath = '/workspace/$(touch pwned)`whoami`\\!';
-        await created.filesystem.mkdir(maliciousPath);
-
-        const requestInit = fetchMock.mock.calls[1]?.[1];
-        const body = JSON.parse(requestInit?.body as string) as { argv: string[] };
-        const command = body.argv[body.argv.length - 1];
-        // Path must be wrapped in single quotes so metacharacters are inert.
-        expect(command).toContain("mkdir -p '/workspace/$(touch pwned)`whoami`\\!'");
-        expect(command).not.toContain('"');
-      } finally {
-        vi.unstubAllGlobals();
-      }
+      const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+      expect(body.argv[2]).toContain(
+        "mkdir -p -- '/tmp/$(touch pwned)`whoami`\\!'"
+      );
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
-  it('handles bridge tunnel urls with and without protocol', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(bridgeCreateResponse('abcde'))
-        .mockResolvedValueOnce(bridgeCreateResponse('fghij'))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ url: 'https://abc.example.com' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ url: 'def.example.com' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  it('verifies a remote sandbox without allocating one', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
+          { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
+        ])
+      )
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
+          { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
+        ])
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+        envVars: { RECONNECTED: 'yes' },
+      });
 
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        const first = await remoteProvider.sandbox.create();
-        const second = await remoteProvider.sandbox.create();
+      const sandbox = await provider.sandbox.getById(SANDBOX_ID);
+      expect(sandbox?.sandboxId).toBe(SANDBOX_ID);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        `https://example.com/v1/sandbox/${SANDBOX_ID}/exec`
+      );
+      expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST');
 
-        await expect(first.getUrl({ port: 3000 })).resolves.toBe('https://abc.example.com');
-        await expect(second.getUrl({ port: 3000 })).resolves.toBe('https://def.example.com');
-      } finally {
-        vi.unstubAllGlobals();
-      }
+      await sandbox?.runCommand('echo ready');
+      const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+      expect(body.argv).toEqual([
+        'sh',
+        '-lc',
+        "export RECONNECTED='yes'; echo ready",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
-  it('does not allocate a remote sandbox when getting by id', async () => {
-    if (skipIntegration) {
-      const fetchMock = vi.fn();
+  it('returns null when a remote sandbox cannot be reached', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('container is not running', { status: 500 })
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
-      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      await expect(provider.sandbox.getById(SANDBOX_ID)).resolves.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
-      try {
-        const remoteProvider = cloudflare({ sandboxUrl: 'https://example.com', sandboxApiKey: 'secret' });
-        await expect(remoteProvider.sandbox.getById('abcde')).resolves.toMatchObject({ sandboxId: 'abcde' });
-        expect(fetchMock).not.toHaveBeenCalled();
-      } finally {
-        vi.unstubAllGlobals();
-      }
+  it('destroys remote sandboxes through the bridge', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse(OTHER_SANDBOX_ID))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
+      await created.destroy();
+
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        `https://example.com/v1/sandbox/${OTHER_SANDBOX_ID}`
+      );
+      expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('DELETE');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('propagates remote destroy failures', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(bridgeCreateResponse())
+      .mockResolvedValueOnce(new Response('unauthorized', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
+
+      await expect(created.destroy()).rejects.toThrow(
+        'Sandbox Worker request failed: 401 - unauthorized'
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports port forwarding as unsupported', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(bridgeCreateResponse());
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+      const created = await provider.sandbox.create();
+
+      await expect(created.getUrl({ port: 3000 })).rejects.toThrow(
+        'does not support port forwarding'
+      );
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });
-
-// Run the standardized test suite with mock binding for unit tests
-if (skipIntegration) {
-  runProviderTestSuite({
-    name: 'cloudflare-unit',
-    provider: cloudflare({
-      sandboxBinding: createSandboxBinding(),
-      timeout: 300000,
-      runtime: 'python'
-    }),
-    supportsFilesystem: true,  // Cloudflare supports full filesystem operations
-    timeout: 300000,           // 5 minutes for container operations
-    skipIntegration: true     // Always skip for mocked tests
-  });
-}

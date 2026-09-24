@@ -39,7 +39,7 @@ npm install @computesdk/cloudflare
 
 ## Setup
 
-To use the Cloudflare provider in remote mode, you connect to Cloudflare's official Sandbox bridge Worker. This only needs to be deployed once.
+To use the Cloudflare provider in remote mode, deploy the Cloudflare sandbox demo Worker once and connect to it over HTTP.
 
 You can print these setup instructions at any time by running:
 
@@ -49,13 +49,13 @@ npx @computesdk/cloudflare
 
 > **Note:** This command only prints instructions — it does not deploy anything and does not require Docker.
 
-### Step 1: Deploy the official bridge Worker
+### Step 1: Deploy the sandbox demo Worker
 
-Deploy Cloudflare's official Sandbox bridge Worker by following the guide at [developers.cloudflare.com/sandbox/bridge](https://developers.cloudflare.com/sandbox/bridge/).
+Follow the deployment instructions for the [sandbox demo Worker](https://github.com/cloudflare/containers-demos/tree/main/sandbox).
 
-### Step 2: Set the bridge Worker's API key secret
+### Step 2: Set the Worker's API key secret
 
-From your bridge Worker project, set the `SANDBOX_API_KEY` secret:
+From the sandbox demo Worker project, set the `SANDBOX_API_KEY` secret:
 
 ```bash
 npx wrangler secret put SANDBOX_API_KEY
@@ -63,16 +63,14 @@ npx wrangler secret put SANDBOX_API_KEY
 
 ### Step 3: Configure your app
 
-Add the bridge URL and the same API key to your `.env` file:
+Add the Worker URL and the same API key to your `.env` file:
 
 ```bash
-CLOUDFLARE_SANDBOX_URL=https://<your-bridge-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
 CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 ```
 
 These are the only env vars needed at runtime.
-
-> **Warm pool:** Warm pool support is configured on the bridge Worker. Set `WARM_POOL_TARGET` to a positive value (for example `WARM_POOL_TARGET=10`) to keep sandboxes warm.
 
 ## Usage
 
@@ -98,27 +96,20 @@ await sandbox.destroy();
 ### Run Commands
 
 ```typescript
-const result = await sandbox.runCommand('ls -la /app');
+const result = await sandbox.runCommand('ls -la /tmp');
 console.log(result.stdout);
 ```
 
 ### Filesystem
 
 ```typescript
-await sandbox.filesystem.writeFile('/app/config.json', JSON.stringify({ key: 'value' }));
-const content = await sandbox.filesystem.readFile('/app/config.json');
+await sandbox.filesystem.mkdir('/tmp/app/data');
+await sandbox.filesystem.writeFile('/tmp/app/config.json', JSON.stringify({ key: 'value' }));
+const content = await sandbox.filesystem.readFile('/tmp/app/config.json');
 
-await sandbox.filesystem.mkdir('/app/data');
-const files = await sandbox.filesystem.readdir('/app');
-const exists = await sandbox.filesystem.exists('/app/config.json');
-await sandbox.filesystem.remove('/app/temp.txt');
-```
-
-### Port Forwarding
-
-```typescript
-const url = await sandbox.getUrl({ port: 3000 });
-console.log(`Service available at: ${url}`);
+const files = await sandbox.filesystem.readdir('/tmp/app');
+const exists = await sandbox.filesystem.exists('/tmp/app/config.json');
+await sandbox.filesystem.remove('/tmp/app/temp.txt');
 ```
 
 ### Environment Variables
@@ -148,37 +139,50 @@ const sandbox = await compute.sandbox.create({
 
 ```typescript
 interface CloudflareConfig {
-  /** URL of the deployed bridge Worker (remote mode) */
+  /** URL of the deployed sandbox demo Worker (remote mode) */
   sandboxUrl?: string;
-  /** API key for authenticating with the bridge Worker */
+  /** API key for authenticating with the Worker */
   sandboxApiKey?: string;
   /** @deprecated Use sandboxApiKey instead. */
   sandboxSecret?: string;
-  /** Durable Object binding (direct mode only - see below) */
+  /** Durable Object binding to the sandbox demo Worker's Sandbox class (direct mode only) */
   sandboxBinding?: any;
-  /** Warm pool configuration (direct mode only) */
-  warmPool?: {
-    binding: any;
-    target?: number;
-    refreshInterval?: number;
-    poolName?: string;
-  };
-  /** Execution timeout in milliseconds */
+  /** Execution timeout in milliseconds (default 30,000; maximum 900,000) */
   timeout?: number;
-  /** Default runtime environment */
-  runtime?: string;
   /** Environment variables to pass to sandbox */
   envVars?: Record<string, string>;
-  /** Options forwarded to the underlying @cloudflare/sandbox SDK (direct mode) */
-  sandboxOptions?: {
-    sleepAfter?: string | number;
-    keepAlive?: boolean;
-  };
 }
+```
+
+## Direct Mode
+
+A Cloudflare Worker can call the sandbox demo Worker's Durable Object directly instead of using its HTTP API. Add a cross-script Durable Object binding to the Worker that uses ComputeSDK:
+
+```jsonc
+{
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SANDBOX",
+        "class_name": "Sandbox",
+        "script_name": "sandbox"
+      }
+    ]
+  }
+}
+```
+
+Pass the binding to the provider:
+
+```typescript
+const compute = cloudflare({
+  sandboxBinding: env.SANDBOX,
+});
 ```
 
 ## Limitations
 
 * Resource limits apply based on your Cloudflare plan
 * Some system calls may be restricted in the container environment
+* Port forwarding is not supported
 * Listing all sandboxes is not supported — use `getById` to reconnect to a specific sandbox

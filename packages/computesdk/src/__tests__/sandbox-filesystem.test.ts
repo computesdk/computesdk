@@ -124,12 +124,15 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
     config: () =>
       envConfig({
         sandboxUrl: env('CLOUDFLARE_SANDBOX_URL'),
-        sandboxSecret: env('CLOUDFLARE_SANDBOX_SECRET'),
+        sandboxApiKey:
+          env('CLOUDFLARE_SANDBOX_API_KEY') ||
+          env('CLOUDFLARE_SANDBOX_SECRET'),
       }),
     isConfigured: () =>
       Boolean(
         env('CLOUDFLARE_SANDBOX_URL') &&
-          env('CLOUDFLARE_SANDBOX_SECRET')
+          (env('CLOUDFLARE_SANDBOX_API_KEY') ||
+            env('CLOUDFLARE_SANDBOX_SECRET'))
       ),
   },
   codesandbox: {

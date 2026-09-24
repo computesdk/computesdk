@@ -9,7 +9,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "skipLibCheck": true,
-    "types": ["@cloudflare/workers-types", "@types/node"]
+    "types": ["@types/node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

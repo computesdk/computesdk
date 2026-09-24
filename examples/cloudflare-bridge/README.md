@@ -1,21 +1,21 @@
-# ComputeSDK Cloudflare Bridge Example
+# ComputeSDK Cloudflare Remote Example
 
-This example shows how to use `@computesdk/cloudflare` from a Node.js process against an official Cloudflare Sandbox bridge endpoint.
+This example shows how to use `@computesdk/cloudflare` from a Node.js process through the sandbox demo Worker's HTTP API.
 
-The bridge Worker implementation is not included in this repository. Deploy and configure the official bridge by following the Cloudflare documentation:
+Deploy and configure the sandbox demo Worker from the Cloudflare Containers demos repository:
 
-- https://developers.cloudflare.com/sandbox/bridge/
+- https://github.com/cloudflare/containers-demos/tree/main/sandbox
 
-## Configure the bridge endpoint
+## Configure the Worker endpoint
 
-Copy `.env.example` to `.env` and fill in the bridge URL and API key from your official bridge deployment:
+Copy `.env.example` to `.env` and fill in the Worker URL and API key from your deployment:
 
 ```bash
 cp examples/cloudflare-bridge/.env.example examples/cloudflare-bridge/.env
 ```
 
 ```bash
-CLOUDFLARE_SANDBOX_URL=https://cloudflare-sandbox-bridge.<your-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
 CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 ```
 
@@ -30,9 +30,11 @@ corepack pnpm --filter @computesdk/example-cloudflare-bridge start
 
 The client will:
 
-1. create a sandbox through the bridge API;
-2. execute a command through the bridge SSE exec endpoint;
-3. write/read/list files under `/workspace` through ComputeSDK filesystem helpers;
+1. create a sandbox through the Worker's HTTP API;
+2. execute a command through the Worker's SSE exec endpoint;
+3. write/read/list files under `/tmp` through ComputeSDK filesystem helpers;
 4. destroy the sandbox.
 
-For direct mode inside Cloudflare Workers with a warm pool, see `examples/cloudflare-direct`.
+The filesystem helpers execute shell commands through the Worker's exec endpoint.
+
+For direct mode inside Cloudflare Workers, see `examples/cloudflare-direct`.

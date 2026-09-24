@@ -48,8 +48,8 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
     ['VERCEL_OIDC_TOKEN'],
   ],
   cloudflare: [
+    ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_API_KEY'],
     ['CLOUDFLARE_SANDBOX_URL', 'CLOUDFLARE_SANDBOX_SECRET'],
-    ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
   ],
   'cloud-run': [[]],
   beam: [['BEAM_TOKEN', 'BEAM_WORKSPACE_ID']],
@@ -92,7 +92,7 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | reado
   },
   cloudflare: {
     sandboxUrl: 'CLOUDFLARE_SANDBOX_URL',
-    sandboxSecret: 'CLOUDFLARE_SANDBOX_SECRET',
+    sandboxApiKey: ['CLOUDFLARE_SANDBOX_API_KEY', 'CLOUDFLARE_SANDBOX_SECRET'],
   },
   'cloud-run': { sandboxUrl: 'CLOUD_RUN_SANDBOX_URL', sandboxSecret: 'CLOUD_RUN_SANDBOX_SECRET', gatewayAuthToken: 'CLOUD_RUN_AUTH_TOKEN', sandboxBinary: 'CLOUD_RUN_SANDBOX_BINARY' },
   beam: { token: 'BEAM_TOKEN', workspaceId: 'BEAM_WORKSPACE_ID' },
@@ -365,7 +365,6 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'vercel':
         return await import('@computesdk/vercel');
       case 'cloudflare':
-        // @ts-ignore - @cloudflare/sandbox types may not be available
         return await import('@computesdk/cloudflare');
       case 'cloud-run':
         return await import('@computesdk/cloud-run');
