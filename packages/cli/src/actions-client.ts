@@ -183,6 +183,41 @@ export interface CiRunInspection {
   jobs: CiJobInspection[];
 }
 
+/**
+ * `GET /api/v1/actions/runs/{runId}/summary` — a run's failure digest.
+ * Wire shape mirrors `CiRunSummary` in benchmarks-platform `lib/ci/run-summary.ts`.
+ */
+export interface CiRunSummaryJob {
+  id: string;
+  name: string;
+  conclusion: CiJobState;
+  provider: string | null;
+  region: string | null;
+}
+
+export interface CiRunSummaryFailedStep {
+  ordinal: number;
+  name: string;
+  exitCode: number | null;
+}
+
+export interface CiRunSummaryFailure extends CiRunSummaryJob {
+  failureReason: string | null;
+  failedSteps: CiRunSummaryFailedStep[];
+  excerpt: {
+    stepOrdinal: number | null;
+    text: string;
+    truncated: boolean;
+  } | null;
+}
+
+export interface CiRunSummary {
+  runId: string;
+  conclusion: CiConclusion;
+  jobs: CiRunSummaryJob[];
+  failures: CiRunSummaryFailure[];
+}
+
 export interface CiArtifactListItem {
   id: string;
   name: string;

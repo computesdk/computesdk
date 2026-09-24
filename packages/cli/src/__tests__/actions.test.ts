@@ -6,6 +6,7 @@ import {
   formatRunHistory,
   formatRunInspection,
   formatRunRow,
+  formatRunSummary,
   formatVerifyResult,
   matchJob,
   matchWorkflow,
@@ -21,6 +22,7 @@ import {
   type CiRun,
   type CiRunHistory,
   type CiRunInspection,
+  type CiRunSummary,
   type CiWorkflow,
 } from '../actions-client.js';
 
@@ -602,5 +604,62 @@ describe('resolveActionsAuth', () => {
     ]) {
       expect(resolveActionsAuth({ apiKey: 'k', baseUrl: ok }).baseUrl).toBe(ok);
     }
+  });
+});
+
+describe('formatRunSummary', () => {
+  const SUMMARY: CiRunSummary = {
+    runId: RUN.id,
+    conclusion: 'failed',
+    jobs: [
+      { id: 'job-1', name: 'build', conclusion: 'passed', provider: 'e2b', region: 'us-west-1' },
+      { id: 'job-2', name: 'test', conclusion: 'failed', provider: 'modal', region: null },
+    ],
+    failures: [
+      {
+        id: 'job-2',
+        name: 'test',
+        conclusion: 'failed',
+        provider: 'modal',
+        region: null,
+        failureReason: null,
+        failedSteps: [{ ordinal: 2, name: 'pnpm test', exitCode: 1 }],
+        excerpt: {
+          stepOrdinal: 2,
+          text: 'FAIL src/foo.test.ts\nexpected 1 got 2',
+          truncated: true,
+        },
+      },
+    ],
+  };
+
+  it('renders failed jobs with failed steps and the excerpt', () => {
+    const out = formatRunSummary(SUMMARY);
+    expect(out).toContain('test');
+    expect(out).toContain('modal');
+    expect(out).toContain('step 2  pnpm test (exit 1)');
+    expect(out).toContain('step 2 tail, truncated');
+    expect(out).toContain('expected 1 got 2');
+  });
+
+  it('says when there are no failed jobs', () => {
+    const out = formatRunSummary({ ...SUMMARY, conclusion: 'passed', failures: [] });
+    expect(out).toContain('no failed jobs');
+  });
+
+  it('labels whole-job excerpts and shows the platform failure reason', () => {
+    const out = formatRunSummary({
+      ...SUMMARY,
+      failures: [
+        {
+          ...SUMMARY.failures[0],
+          failureReason: 'refused by all providers',
+          failedSteps: [],
+          excerpt: { stepOrdinal: null, text: 'placement log line', truncated: false },
+        },
+      ],
+    });
+    expect(out).toContain('refused by all providers');
+    expect(out).toContain('job log tail');
   });
 });
