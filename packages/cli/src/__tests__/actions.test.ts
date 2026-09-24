@@ -197,7 +197,7 @@ describe('formatRunHistory', () => {
         steps: [],
       },
       {
-        job: 'build',
+        job: 'build\x1b[2J\x08uild',
         workflowJobId: 'build',
         runs: 5,
         failedRuns: 0,
@@ -269,6 +269,28 @@ describe('formatRunHistory', () => {
   it('handles an empty window', () => {
     const out = formatRunHistory({ runCount: 0, conclusions: {}, jobs: [], runs: [] });
     expect(out).toContain('last 0 runs: none');
+  });
+
+  it('neutralizes control characters in workflow-controlled names', () => {
+    const evil: CiRunHistory = {
+      runCount: 1,
+      conclusions: { failed: 1 },
+      jobs: [
+        {
+          job: 'build\x1b[2J\x08uild',
+          workflowJobId: 'build',
+          runs: 1,
+          failedRuns: 1,
+          failedBeforeSteps: 0,
+          steps: [{ step: 'run\x07evil', ordinal: 1, failedRuns: 1 }],
+        },
+      ],
+      runs: [],
+    };
+    const out = formatRunHistory(evil);
+    expect(out).not.toContain('\x1b');
+    expect(out).not.toContain('\x07');
+    expect(out).toContain('build�[2J�uild');
   });
 });
 

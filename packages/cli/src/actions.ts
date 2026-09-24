@@ -298,6 +298,13 @@ async function* followRunLogs(
   }
 }
 
+// Job and step names come from workflow files — potentially attacker-controlled
+// in a PR context — so strip control characters before writing to the terminal.
+function safeTerm(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '�');
+}
+
 export function formatRunHistory(history: CiRunHistory): string {
   const lines: string[] = [];
   const parts = (Object.entries(history.conclusions) as [string, number][])
@@ -312,9 +319,9 @@ export function formatRunHistory(history: CiRunHistory): string {
       const platform = job.failedBeforeSteps > 0 ? pc.dim(`  (${job.failedBeforeSteps} failed before steps)`) : '';
       const count = `${job.failedRuns}/${job.runs} runs failed`;
       const label = job.failedRuns > 0 ? pc.red(count) : pc.green(count);
-      lines.push(`  ${job.job}  ${label}  ${rate}%${platform}`);
+      lines.push(`  ${safeTerm(job.job)}  ${label}  ${rate}%${platform}`);
       for (const step of job.steps) {
-        lines.push(pc.dim(`    step "${step.step}" failed in ${step.failedRuns} run${step.failedRuns === 1 ? '' : 's'}`));
+        lines.push(pc.dim(`    step "${safeTerm(step.step)}" failed in ${step.failedRuns} run${step.failedRuns === 1 ? '' : 's'}`));
       }
     }
   }
@@ -326,7 +333,7 @@ export function formatRunHistory(history: CiRunHistory): string {
     lines.push(pc.bold('failed runs'));
     for (const run of failed) {
       const blame = run.failedJobs.length > 0
-        ? run.failedJobs.map((j) => (j.step === null ? j.job : `${j.job}:${j.step}`)).join(', ')
+        ? run.failedJobs.map((j) => safeTerm(j.step === null ? j.job : `${j.job}:${j.step}`)).join(', ')
         : pc.dim('(no failed job recorded)');
       lines.push(`  ${shortSha(run.headSha)}  ${pc.dim(run.startedAt)}  ${blame}`);
     }
