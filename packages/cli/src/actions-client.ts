@@ -92,6 +92,97 @@ export interface CiRun {
   logTail: string[];
 }
 
+/**
+ * One job of `GET /api/v1/actions/runs/{id}/state`: the live fields plus the
+ * context that decided how the job ran — resolved runner image, container
+ * pin, concurrency group, timeout/fetch-depth overrides.
+ */
+export interface CiJobInspection {
+  id: string;
+  name: string;
+  state: CiJobState;
+  provider: string | null;
+  region: string | null;
+  sandboxId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  placementAttempts: CiPlacementAttempt[];
+  /** Why the platform failed the job before steps ran, when it did. */
+  failureReason: string | null;
+  /** The `runs-on:` labels as declared. */
+  runsOn: string[];
+  /** The `computesdk:` placement pin the labels carried, when one did. */
+  placementHint: { provider: string; region: string | null; label: string } | null;
+  /** Labels act actually read (placement labels stripped, default substituted). */
+  resolvedRunsOn: string[] | null;
+  runsOnHasExpression: boolean;
+  /** The image the job's steps ran in: container pin, else the mapped label. */
+  runnerImage: string | null;
+  /** The literal `container:` image the job declared, if any. */
+  container: string | null;
+  timeoutMinutes: number | null;
+  /** Deepest `fetch-depth` a checkout step pinned (0 = full history). */
+  fetchDepth: number | null;
+  concurrencyGroup: string | null;
+  concurrencyCancelInProgress: boolean;
+  matrix: Record<string, string> | null;
+  steps: {
+    ordinal: number;
+    name: string;
+    state: CiJobState;
+    exitCode: number | null;
+    startedAt: string | null;
+    finishedAt: string | null;
+  }[];
+}
+
+/** A cache entry the run's window touched (saved or restored). */
+export interface CiRunCacheTouch {
+  key: string;
+  version: string;
+  scopeRef: string;
+  sizeBytes: number;
+  savedAt: string | null;
+  restoredAt: string | null;
+}
+
+/** `GET /api/v1/actions/runs/{id}/state` — a run plus its effective context. */
+export interface CiRunInspection {
+  id: string;
+  conclusion: CiConclusion;
+  runNumber: number | null;
+  ref: string;
+  headSha: string;
+  event: string;
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  supersededByRunId: string | null;
+  cancellationReason: string | null;
+  /** Why the run was refused before placement, when it was. */
+  blockedReason: string | null;
+  concurrencyGroup: string | null;
+  dispatchInputs: Record<string, string> | null;
+  providerOverride: string | null;
+  /** The commit the stored workflow definition was parsed from. */
+  workflowParsedFromSha: string | null;
+  /**
+   * True when the stored parse came from a different commit than the run's
+   * head — the definition-derived fields may then describe a newer workflow
+   * than the run used (a fork pull request always shows this by design).
+   */
+  definitionStale: boolean;
+  /** Secret *names* the jobs could reference — never values. */
+  secrets: {
+    access: 'declared' | 'all';
+    /** Whether named secrets are also exported as job env vars. */
+    env: boolean;
+    names: string[];
+  } | null;
+  caches: CiRunCacheTouch[];
+  jobs: CiJobInspection[];
+}
+
 export interface CiArtifactListItem {
   id: string;
   name: string;

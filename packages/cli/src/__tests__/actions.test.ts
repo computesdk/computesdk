@@ -4,6 +4,7 @@ import {
   formatProviderRow,
   formatRunDetail,
   formatRunHistory,
+  formatRunInspection,
   formatRunRow,
   formatVerifyResult,
   matchJob,
@@ -19,6 +20,7 @@ import {
   type CiProviderKeyResponse,
   type CiRun,
   type CiRunHistory,
+  type CiRunInspection,
   type CiWorkflow,
 } from '../actions-client.js';
 
@@ -288,6 +290,119 @@ describe('formatRunHistory', () => {
       runs: [],
     };
     const out = formatRunHistory(evil);
+    expect(out).not.toContain('\x1b');
+    expect(out).not.toContain('\x07');
+    expect(out).toContain('build�[2J�uild');
+  });
+});
+
+describe('formatRunInspection', () => {
+  const INSPECTION: CiRunInspection = {
+    id: '8f1c6a3e-0b7d-4f2a-9c8e-1d2b3c4d5e6f',
+    conclusion: 'failed',
+    runNumber: 42,
+    ref: 'refs/heads/main',
+    headSha: 'abcdef1234567890',
+    event: 'push',
+    queuedAt: '2026-09-21T12:00:00.000Z',
+    startedAt: '2026-09-21T12:00:05.000Z',
+    finishedAt: '2026-09-21T12:02:00.000Z',
+    supersededByRunId: null,
+    cancellationReason: null,
+    blockedReason: null,
+    concurrencyGroup: 'ci-main',
+    dispatchInputs: null,
+    providerOverride: null,
+    workflowParsedFromSha: 'abcdef1234567890',
+    definitionStale: false,
+    secrets: { access: 'declared', env: true, names: ['NPM_TOKEN', 'DEPLOY_KEY'] },
+    caches: [
+      {
+        key: 'node-modules-linux',
+        version: 'abc123',
+        scopeRef: 'refs/heads/main',
+        sizeBytes: 4096,
+        savedAt: null,
+        restoredAt: '2026-09-21T12:00:10.000Z',
+      },
+      {
+        key: 'build-output',
+        version: 'abc123',
+        scopeRef: 'refs/heads/main',
+        sizeBytes: 1024,
+        savedAt: '2026-09-21T12:01:50.000Z',
+        restoredAt: null,
+      },
+    ],
+    jobs: [
+      {
+        id: 'job-1',
+        name: 'build',
+        state: 'failed',
+        provider: 'vercel',
+        region: 'iad1',
+        sandboxId: 'sb-1',
+        startedAt: '2026-09-21T12:00:05.000Z',
+        finishedAt: '2026-09-21T12:01:00.000Z',
+        placementAttempts: [
+          { provider: 'namespace', region: null, error: 'key not configured' },
+        ],
+        failureReason: 'No runner image matches the `runs-on` labels for build',
+        runsOn: ['computesdk:vercel', 'self-hosted'],
+        placementHint: { provider: 'vercel', region: null, label: 'computesdk:vercel' },
+        resolvedRunsOn: ['ubuntu-latest'],
+        runsOnHasExpression: false,
+        runnerImage: 'catthehacker/ubuntu:act-latest',
+        container: null,
+        timeoutMinutes: 15,
+        fetchDepth: 0,
+        concurrencyGroup: 'build-main',
+        concurrencyCancelInProgress: true,
+        matrix: { node: '20' },
+        steps: [],
+      },
+    ],
+  };
+
+  it('shows the run context: secrets, caches, concurrency, inputs', () => {
+    const out = formatRunInspection(INSPECTION);
+    expect(out).toContain('concurrency: ci-main');
+    expect(out).toContain('secrets (declared, exported to env): NPM_TOKEN, DEPLOY_KEY');
+    expect(out).toContain('node-modules-linux');
+    expect(out).toContain('restored');
+    expect(out).toContain('build-output');
+    expect(out).toContain('saved');
+    expect(out).not.toContain('supersecret');
+  });
+
+  it('shows per-job resolution: runs-on rewrite, image, pin, overrides', () => {
+    const out = formatRunInspection(INSPECTION);
+    expect(out).toContain('runs-on: computesdk:vercel, self-hosted → ubuntu-latest');
+    expect(out).toContain('image: catthehacker/ubuntu:act-latest');
+    expect(out).toContain('pinned: computesdk:vercel');
+    expect(out).toContain('concurrency: build-main (cancel-in-progress)');
+    expect(out).toContain('timeout 15m');
+    expect(out).toContain('fetch-depth 0');
+    expect(out).toContain('matrix: node=20');
+    expect(out).toContain('placement failed on namespace: key not configured');
+    expect(out).toContain('failed: No runner image matches');
+  });
+
+  it('warns when the stored definition is not from this head', () => {
+    const out = formatRunInspection({ ...INSPECTION, workflowParsedFromSha: 'fffff1234567890', definitionStale: true });
+    expect(out).toContain('definition: stored parse is from fffff123');
+    expect(formatRunInspection(INSPECTION)).not.toContain('definition:');
+  });
+
+  it('neutralizes control characters in workflow-controlled strings', () => {
+    const evil: CiRunInspection = {
+      ...INSPECTION,
+      concurrencyGroup: 'ci\x1b[2J-main',
+      secrets: { access: 'declared', env: false, names: ['TOK\x07EN'] },
+      caches: [{ ...INSPECTION.caches[0], key: 'node\x1b[K-modules' }],
+      jobs: [{ ...INSPECTION.jobs[0], name: 'build\x1b[2J\x08uild' }],
+    };
+    const out = formatRunInspection(evil);
     expect(out).not.toContain('\x1b');
     expect(out).not.toContain('\x07');
     expect(out).toContain('build�[2J�uild');
