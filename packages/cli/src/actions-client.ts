@@ -158,6 +158,44 @@ export interface CiProviderKeyResponse {
   verified?: boolean;
 }
 
+/** One failed job inside a run-history entry — step is the first failed step. */
+export interface CiRunJobFailure {
+  job: string;
+  workflowJobId: string | null;
+  step: string | null;
+  stepOrdinal: number | null;
+}
+
+export interface CiRunHistoryEntry {
+  id: string;
+  ref: string;
+  headSha: string;
+  runNumber: number | null;
+  conclusion: CiConclusion;
+  startedAt: string;
+  failedJobs: CiRunJobFailure[];
+}
+
+export interface CiJobHistory {
+  job: string;
+  /** The workflow job key, when recorded; disambiguates same-named jobs. */
+  workflowJobId: string | null;
+  /** Runs in the window that contained this job. */
+  runs: number;
+  failedRuns: number;
+  /** Runs where the job failed with no step blamed (platform failures). */
+  failedBeforeSteps: number;
+  steps: { step: string; ordinal: number; failedRuns: number }[];
+}
+
+/** `GET /api/v1/actions/history` — the window plus the rollup over it. */
+export interface CiRunHistory {
+  runCount: number;
+  conclusions: Partial<Record<CiConclusion, number>>;
+  jobs: CiJobHistory[];
+  runs: CiRunHistoryEntry[];
+}
+
 export interface ActionsOrg {
   organizationId: string;
   name: string;

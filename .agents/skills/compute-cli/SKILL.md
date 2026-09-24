@@ -28,6 +28,7 @@ npm i -g @computesdk/cli                # or install once
 ```
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...]
 compute actions runs <repo> [--status ...] [--branch ...]
+compute actions history <repo> --workflow <path|name> [--branch ...] [--job] [--limit n]
 compute actions run <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
 compute actions cancel|rerun <run-id>

@@ -30,6 +30,7 @@ import {
   type CiProviderKeyResponse,
   type CiProvidersResponse,
   type CiRun,
+  type CiRunHistory,
   type CiWorkflow,
 } from './actions-client.js';
 
@@ -297,6 +298,49 @@ async function* followRunLogs(
   }
 }
 
+// Job and step names come from workflow files — potentially attacker-controlled
+// in a PR context — so strip control characters before writing to the terminal.
+function safeTerm(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '�');
+}
+
+export function formatRunHistory(history: CiRunHistory): string {
+  const lines: string[] = [];
+  const parts = (Object.entries(history.conclusions) as [string, number][])
+    .map(([c, n]) => `${n} ${c}`)
+    .join(', ');
+  lines.push(`last ${history.runCount} runs: ${parts || 'none'}`);
+  if (history.jobs.length > 0) {
+    lines.push('');
+    lines.push(pc.bold('jobs'));
+    for (const job of history.jobs) {
+      const rate = job.runs > 0 ? Math.round((job.failedRuns / job.runs) * 100) : 0;
+      const platform = job.failedBeforeSteps > 0 ? pc.dim(`  (${job.failedBeforeSteps} failed before steps)`) : '';
+      const count = `${job.failedRuns}/${job.runs} runs failed`;
+      const label = job.failedRuns > 0 ? pc.red(count) : pc.green(count);
+      lines.push(`  ${safeTerm(job.job)}  ${label}  ${rate}%${platform}`);
+      for (const step of job.steps) {
+        lines.push(pc.dim(`    step "${safeTerm(step.step)}" failed in ${step.failedRuns} run${step.failedRuns === 1 ? '' : 's'}`));
+      }
+    }
+  }
+  const failed = history.runs.filter(
+    (r) => r.conclusion === 'failed' || r.failedJobs.length > 0,
+  );
+  if (failed.length > 0) {
+    lines.push('');
+    lines.push(pc.bold('failed runs'));
+    for (const run of failed) {
+      const blame = run.failedJobs.length > 0
+        ? run.failedJobs.map((j) => safeTerm(j.step === null ? j.job : `${j.job}:${j.step}`)).join(', ')
+        : pc.dim('(no failed job recorded)');
+      lines.push(`  ${shortSha(run.headSha)}  ${pc.dim(run.startedAt)}  ${blame}`);
+    }
+  }
+  return lines.join('\n');
+}
+
 export function formatProviderRow(p: CiProviderInfo): string {
   const icon = p.usable ? pc.green('●') : pc.gray('○');
   const name = p.usable ? pc.white(p.provider) : pc.gray(p.provider);
@@ -405,6 +449,37 @@ export function registerActionsCommands(program: Command): void {
         }
         for (const run of rs) console.log(formatRunRow(run));
       });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    actions
+      .command('history')
+      .description('Recent run history for a workflow — per-job/step failure rates (is this failure flaky?)')
+      .argument('<repo>', 'repository in owner/repo format')
+      .requiredOption('--workflow <path|name>', 'workflow path or name')
+      .option('--branch <branch...>', 'narrow the window to branches/refs')
+      .option('--job <job>', 'narrow the rollup to one job name or workflow job id')
+      .option('--limit <n>', 'runs in the window (default 10, max 50)'),
+  ).action(async (repo: string, opts: CommonOpts & { workflow: string; branch?: string[]; job?: string; limit?: string }) => {
+    try {
+      const c = client(opts);
+      const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
+        '/api/v1/actions/workflows',
+        { repo },
+      );
+      const workflow = matchWorkflow(workflows, opts.workflow) ?? workflows.find((w) => w.path === opts.workflow);
+      const workflowPath = workflow?.path ?? opts.workflow;
+      const history = await c.get<CiRunHistory>('/api/v1/actions/history', {
+        repo,
+        workflow: workflowPath,
+        branch: opts.branch,
+        job: opts.job,
+        limit: opts.limit,
+      });
+      output(opts, history, (h) => console.log(formatRunHistory(h)));
     } catch (e) {
       fail(e);
     }
