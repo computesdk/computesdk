@@ -7,7 +7,8 @@ function sanitizePathPart(name: string): string {
 
 /**
  * `compute actions` — drive the benchmarks-platform Actions API end-to-end:
- * dispatch workflows, watch runs, stream logs, manage artifacts.
+ * dispatch workflows, watch runs, inspect run context, stream logs,
+ * manage artifacts.
  *
  * Auth: COMPUTE_API_KEY (or --api-key); --base-url overrides the
  * https://platform.computesdk.com default. Every subcommand takes --json for
@@ -31,6 +32,7 @@ import {
   type CiProvidersResponse,
   type CiRun,
   type CiRunHistory,
+  type CiRunInspection,
   type CiWorkflow,
 } from './actions-client.js';
 
@@ -167,6 +169,77 @@ export function formatRunDetail(run: CiRun, runUrl?: string): string {
       for (const step of job.steps) {
         const exit = step.exitCode === null ? '' : ` (exit ${step.exitCode})`;
         lines.push(pc.dim(`    ${step.name}  ${step.state}${exit}  ${formatDuration(step.durationMs)}`));
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+/** `compute actions inspect` — the run plus everything that shaped it. */
+export function formatRunInspection(run: CiRunInspection): string {
+  const lines: string[] = [];
+  lines.push(`${pc.bold('run')}  ${conclusionLabel(run.conclusion)}${run.runNumber === null ? '' : `  #${run.runNumber}`}`);
+  lines.push(pc.dim(run.id));
+  lines.push(`${run.ref}  ${shortSha(run.headSha)}  ${run.event}`);
+  lines.push(`queued: ${run.queuedAt}  started: ${run.startedAt}  finished: ${run.finishedAt}`);
+  if (run.cancellationReason) lines.push(`cancelled: ${run.cancellationReason}`);
+  if (run.supersededByRunId) lines.push(`superseded by: ${run.supersededByRunId}`);
+  if (run.blockedReason) lines.push(pc.red(`blocked: ${run.blockedReason}`));
+  if (run.concurrencyGroup) lines.push(`concurrency: ${run.concurrencyGroup}`);
+  if (run.providerOverride) lines.push(`dispatched to: ${run.providerOverride}`);
+  if (run.dispatchInputs && Object.keys(run.dispatchInputs).length > 0) {
+    lines.push(`inputs: ${Object.entries(run.dispatchInputs).map(([k, v]) => `${k}=${v}`).join('  ')}`);
+  }
+  if (run.secrets) {
+    const names = run.secrets.names.length > 0 ? run.secrets.names.join(', ') : 'none';
+    lines.push(`secrets (${run.secrets.access}${run.secrets.env ? ', exported to env' : ''}): ${names}`);
+  }
+  if (run.caches.length > 0) {
+    lines.push('');
+    lines.push(pc.bold('caches'));
+    for (const cache of run.caches) {
+      const action = [cache.restoredAt ? 'restored' : null, cache.savedAt ? 'saved' : null]
+        .filter(Boolean)
+        .join('+');
+      lines.push(`  ${cache.key}  ${pc.dim(`${action}  ${cache.scopeRef}  ${cache.sizeBytes}B`)}`);
+    }
+  }
+  if (run.jobs.length > 0) {
+    lines.push('');
+    lines.push(pc.bold('jobs'));
+    for (const job of run.jobs) {
+      const placement = job.provider
+        ? `${job.provider}${job.region ? `:${job.region}` : ''}`
+        : '-';
+      lines.push(`  ${job.name}  ${conclusionLabel(job.state)}  ${placement}`);
+      lines.push(pc.dim(`    ${job.id}`));
+      if (job.runsOn.length > 0 || job.resolvedRunsOn !== null) {
+        const resolved =
+          job.resolvedRunsOn !== null && job.resolvedRunsOn.join(',') !== job.runsOn.join(',')
+            ? ` → ${job.resolvedRunsOn.join(', ')}`
+            : '';
+        lines.push(`    runs-on: ${job.runsOn.join(', ') || '(none)'}${resolved}`);
+      }
+      if (job.runsOnHasExpression) lines.push(pc.dim('    runs-on resolves at runtime (expression)'));
+      if (job.container) lines.push(`    container: ${job.container}`);
+      if (job.runnerImage) lines.push(`    image: ${job.runnerImage}`);
+      if (job.placementHint) {
+        lines.push(`    pinned: ${job.placementHint.label}`);
+      }
+      if (job.concurrencyGroup) {
+        lines.push(`    concurrency: ${job.concurrencyGroup}${job.concurrencyCancelInProgress ? ' (cancel-in-progress)' : ''}`);
+      }
+      const overrides = [
+        job.timeoutMinutes !== null ? `timeout ${job.timeoutMinutes}m` : null,
+        job.fetchDepth !== null ? `fetch-depth ${job.fetchDepth}` : null,
+      ].filter(Boolean);
+      if (overrides.length > 0) lines.push(`    ${overrides.join('  ')}`);
+      if (job.matrix) {
+        lines.push(`    matrix: ${Object.entries(job.matrix).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+      }
+      if (job.failureReason) lines.push(pc.red(`    failed: ${job.failureReason}`));
+      for (const attempt of job.placementAttempts) {
+        lines.push(pc.dim(`    placement failed on ${attempt.provider}${attempt.region ? `:${attempt.region}` : ''}: ${attempt.error}`));
       }
     }
   }
@@ -497,6 +570,23 @@ export function registerActionsCommands(program: Command): void {
       const org = await c.org();
       const url = `${c.baseUrl}/${org.slug}/actions/runs/${run.id}`;
       output(opts, { ...run, url }, (r) => console.log(formatRunDetail(r, r.url)));
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    actions
+      .command('inspect')
+      .description('Inspect a run: resolved runner image, caches, secret names, concurrency, placement context')
+      .argument('<run-id>', 'run ID'),
+  ).action(async (runId: string, opts: CommonOpts) => {
+    try {
+      const c = client(opts);
+      const inspection = await c.get<CiRunInspection>(
+        `/api/v1/actions/runs/${runId}/state`,
+      );
+      output(opts, inspection, (r) => console.log(formatRunInspection(r)));
     } catch (e) {
       fail(e);
     }
