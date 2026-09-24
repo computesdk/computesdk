@@ -94,13 +94,20 @@ async function listRunJobs(c: ActionsClient, runId: string): Promise<CiJob[]> {
   }));
 }
 
-/** The run's failure digest; null on deployments without the summary route. */
+/** The run's failure digest; null when the summary cannot be fetched. */
 async function fetchRunSummary(c: ActionsClient, runId: string): Promise<CiRunSummary | null> {
   try {
     return await c.get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
   } catch (e) {
-    if (e instanceof ActionsApiError && e.status === 404) return null;
-    throw e;
+    // The digest rides along with `actions run`; a deployment without the
+    // route or a summary error must not hide the run detail itself. The
+    // `summary` command fetches directly so its own errors still surface.
+    if (!(e instanceof ActionsApiError && e.status === 404)) {
+      console.error(
+        pc.dim(`summary unavailable: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    }
+    return null;
   }
 }
 
