@@ -187,6 +187,10 @@ export function formatRunInspection(run: CiRunInspection): string {
   if (run.blockedReason) lines.push(pc.red(`blocked: ${run.blockedReason}`));
   if (run.concurrencyGroup) lines.push(`concurrency: ${run.concurrencyGroup}`);
   if (run.providerOverride) lines.push(`dispatched to: ${run.providerOverride}`);
+  if (run.definitionStale) {
+    const parsed = run.workflowParsedFromSha ? shortSha(run.workflowParsedFromSha) : 'unknown';
+    lines.push(pc.yellow(`definition: stored parse is from ${parsed}, not this head — context may be newer than the run`));
+  }
   if (run.dispatchInputs && Object.keys(run.dispatchInputs).length > 0) {
     lines.push(`inputs: ${Object.entries(run.dispatchInputs).map(([k, v]) => `${k}=${v}`).join('  ')}`);
   }

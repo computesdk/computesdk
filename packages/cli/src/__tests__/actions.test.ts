@@ -313,6 +313,8 @@ describe('formatRunInspection', () => {
     concurrencyGroup: 'ci-main',
     dispatchInputs: null,
     providerOverride: null,
+    workflowParsedFromSha: 'abcdef1234567890',
+    definitionStale: false,
     secrets: { access: 'declared', env: true, names: ['NPM_TOKEN', 'DEPLOY_KEY'] },
     caches: [
       {
@@ -384,6 +386,12 @@ describe('formatRunInspection', () => {
     expect(out).toContain('matrix: node=20');
     expect(out).toContain('placement failed on namespace: key not configured');
     expect(out).toContain('failed: No runner image matches');
+  });
+
+  it('warns when the stored definition is not from this head', () => {
+    const out = formatRunInspection({ ...INSPECTION, workflowParsedFromSha: 'fffff1234567890', definitionStale: true });
+    expect(out).toContain('definition: stored parse is from fffff123');
+    expect(formatRunInspection(INSPECTION)).not.toContain('definition:');
   });
 });
 

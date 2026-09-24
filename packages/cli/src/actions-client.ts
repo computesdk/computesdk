@@ -164,6 +164,14 @@ export interface CiRunInspection {
   concurrencyGroup: string | null;
   dispatchInputs: Record<string, string> | null;
   providerOverride: string | null;
+  /** The commit the stored workflow definition was parsed from. */
+  workflowParsedFromSha: string | null;
+  /**
+   * True when the stored parse came from a different commit than the run's
+   * head — the definition-derived fields may then describe a newer workflow
+   * than the run used (a fork pull request always shows this by design).
+   */
+  definitionStale: boolean;
   /** Secret *names* the jobs could reference — never values. */
   secrets: {
     access: 'declared' | 'all';
