@@ -69,6 +69,20 @@ describe('daemonSeedScriptCommand', () => {
     expect(command.startsWith('sh -c ')).toBe(true)
     expect(command).toContain('exec "$__daemond_node" -e "$0" "$1"')
   })
+
+  it('emits a quote-free command line with argvEncoding base64', () => {
+    const command = daemonSeedScriptCommand({ ssePort: 38989 }, { command: 'echo', args: ['it\'s "quoted"'] }, { argvEncoding: 'base64' })
+    // Every word is a fixed token or base64: nothing for an exec layer that
+    // re-splits or collapses quotes to get wrong.
+    expect(command).toMatch(/^printf %s [A-Za-z0-9+/=]+ \| base64 -d \| sh -s [A-Za-z0-9+/=]+ [A-Za-z0-9+/=]+$/)
+    const words = command.split(' ')
+    const [prelude, script, payload] = [words[2], words[9], words[10]]
+    const decodedPrelude = Buffer.from(prelude, 'base64').toString('utf8')
+    expect(decodedPrelude).toContain('command -v node')
+    expect(decodedPrelude).toContain('exec "$__daemond_node" -e "$(printf %s "$1" | base64 -d)" "b64:$2"')
+    expect(Buffer.from(script, 'base64').toString('utf8')).toContain('const CONFIG=')
+    expect(JSON.parse(Buffer.from(payload, 'base64').toString('utf8'))).toEqual({ command: 'echo', args: ['it\'s "quoted"'] })
+  })
 })
 
 describe('parseSeedInvocationOutput', () => {
@@ -113,6 +127,32 @@ describe('seed launcher end-to-end', () => {
     expect(invocation.command.stdout).toBe('hello-from-seed\n')
     expect(invocation.command.exitCode).toBe(0)
     if (invocation.daemon.pid) daemonPids.push(invocation.daemon.pid)
+  }, 30_000)
+
+  it('delivers POSIX-exact argv through the base64 encoding and honest status for detached jobs', async () => {
+    const ssePort = 38100 + ((process.pid + 7) % 500)
+    const config = { name: `vitest-b64-${process.pid}`, ssePort }
+    const run = async (payload: Parameters<typeof daemonSeedScriptCommand>[1]) => {
+      const result = await runSeedCommand(daemonSeedScriptCommand(config, payload, { argvEncoding: 'base64' }), { ...process.env })
+      expect(result.status).toBe(0)
+      const invocation = parseSeedInvocationOutput(result.stdout)
+      if (invocation.daemon.pid) daemonPids.push(invocation.daemon.pid)
+      return invocation.command
+    }
+
+    const argv = await run({ command: 'printf', args: ['%s|', 'a b', '"c"', '$HOME', "it's"] })
+    expect(argv.stdout).toBe('a b|"c"|$HOME|it\'s|')
+    expect(argv.exitCode).toBe(0)
+
+    const started = await run({ command: 'sh', args: ['-c', 'sleep 0.3; echo done; exit 7'], detach: true })
+    expect(started.status).toBe('running')
+    expect(started.exitCode).toBeNull()
+    expect(typeof started.jobId).toBe('string')
+
+    const waited = await run({ wait: started.jobId! })
+    expect(waited.status).toBe('exited')
+    expect(waited.exitCode).toBe(7)
+    expect(waited.stdout).toBe('done\n')
   }, 30_000)
 })
 

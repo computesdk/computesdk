@@ -33,9 +33,10 @@ import { daemonSeedScript, daemonSeedScriptCommand } from "daemond";
   - `socket` defaults to `/tmp/.computesdk/seed-sockets/<hash>.sock`
   - `ssePort` defaults to `38989`
   - `sseStrictPort` defaults to `false`; when `true`, daemon fails instead of falling back if the SSE port is busy
-- `daemonSeedScriptCommand(config, payload)`
+- `daemonSeedScriptCommand(config, payload, options?)`
   - builds a shell-safe `node -e ...` command string
-  - `payload` can be a plain command string (for example `"pwd"`) or a JSON command object
+  - `payload` can be a plain command string (for example `"pwd"`), a JSON command object, or a job control object (`{ wait }`, `{ status }`, `{ kill }`)
+  - `options.argvEncoding: "base64"` emits a command line made only of fixed tokens and base64 words (`printf %s <b64> | base64 -d | sh -s <b64> <b64>`). Use it for exec layers that re-split or collapse quotes; the default `"quoted"` mode is a single `sh -c '...'`
 - `parseSeedInvocationOutput(stdout)`
   - parses seed launcher stdout into the typed invocation result
   - reads the last non-empty stdout line as JSON
@@ -58,6 +59,18 @@ const cmd = daemonSeedScriptCommand(
   { command: "node", args: ["-v"] },
 );
 // pass `cmd` directly to sandbox.runCommand(cmd)
+
+// Detached jobs: `exec` returns as soon as the process starts, so the
+// sandbox's exec slot is free while the job runs. Wait for it later.
+const started = parseSeedInvocationOutput(
+  await run(daemonSeedScriptCommand(cfg, { command: "sh", args: ["-c", "make test"], detach: true })),
+);
+// started.command => { status: "running", exitCode: null, jobId: "...", pid: 123 }
+const done = parseSeedInvocationOutput(
+  await run(daemonSeedScriptCommand(cfg, { wait: started.command.jobId!, timeoutMs: 60_000 })),
+);
+// done.command => { status: "exited", exitCode: 2, signal: null, stdout, stderr, combined }
+// If `timeoutMs` elapses first, the result is a `running` snapshot with the output so far.
 
 const rawStdout = '{"token":"...","requestId":"...","daemon":{"reused":true,"pid":1234,"sseUrl":"..."},"command":{"exitCode":0,"stdout":"v22.0.0\\n","stderr":"","combined":"v22.0.0\\n"}}\n';
 const parsed = parseSeedInvocationOutput(rawStdout);
@@ -91,9 +104,14 @@ The daemon speaks newline-delimited JSON over its Unix socket.
 Supported message types:
 
 - `health` (optional `token`; validated when provided)
-- `exec` (requires `token`)
+- `exec` (requires `token`; `detach: true` returns `{ status: "running", exitCode: null, jobId }` once the process has started)
+- `wait` (requires `token`; `{ wait: jobId, timeoutMs? }` blocks until the job exits or the timeout elapses)
+- `status` (requires `token`; `{ status: jobId }` returns the current snapshot without blocking)
+- `kill` (requires `token`; `{ kill: jobId, signal? }` signals the job's whole process group)
 - `subscribe` / `unsubscribe` (requires `token`)
 - `stop` (requires `token`)
+
+Command results carry `status: "running" | "exited"`. `exitCode` is `null` while running and when the process was terminated by a signal (see `signal`); it is never invented. Finished jobs are retained for 10 minutes so late `wait`/`status` calls still resolve; unknown job ids are an error.
 
 SSE stream endpoint:
 
