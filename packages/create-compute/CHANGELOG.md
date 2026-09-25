@@ -1,5 +1,11 @@
 # create-compute
 
+## 0.2.19
+
+### Patch Changes
+
+- computesdk@4.1.8
+
 ## 0.2.18
 
 ### Patch Changes

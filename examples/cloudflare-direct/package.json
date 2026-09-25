@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/example-cloudflare-direct",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "description": "ComputeSDK Cloudflare direct mode Worker example",
   "scripts": {

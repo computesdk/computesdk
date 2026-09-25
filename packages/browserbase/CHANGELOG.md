@@ -1,5 +1,12 @@
 # @computesdk/browserbase
 
+## 0.3.15
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
 ## 0.3.14
 
 ### Patch Changes

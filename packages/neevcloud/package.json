@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/neevcloud",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "NeevCloud provider for ComputeSDK - secure cloud sandboxes with command execution, filesystem access, and preview URLs",
   "author": "NeevCloud",
   "license": "MIT",

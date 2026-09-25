@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/brezel",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Brezel provider for ComputeSDK — self-hosted Firecracker sandboxes for autonomous agents",
   "author": "InferCrane <support@infercrane.com>",
   "license": "MIT",

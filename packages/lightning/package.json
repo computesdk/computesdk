@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/lightning",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Lightning AI provider for ComputeSDK - cloud sandboxes for code execution, command running, and filesystem access",
   "author": "ComputeSDK",
   "license": "MIT",

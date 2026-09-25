@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/tilion",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Tilion browser provider for ComputeSDK - cloud browser sessions powered by Tilion (beta)",
   "license": "MIT",
   "type": "module",
