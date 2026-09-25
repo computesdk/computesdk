@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { SandboxInstance } from '@blaxel/core';
-import { blaxel } from '../index';
+import { daemonSeedScriptCommand } from 'daemond';
+import type { SeedInvocationResult } from 'daemond';
+import { blaxel, BlaxelExecError } from '../index';
+import type { BlaxelCommandResult } from '../index';
 
 vi.mock('@blaxel/core', () => ({
 	initialize: vi.fn(),
@@ -43,12 +46,16 @@ function makeSandbox(
 	} as unknown as SandboxInstance;
 }
 
-async function runEcho(sandbox: SandboxInstance) {
+async function getSandbox(sandbox: SandboxInstance, exec: 'native' | 'daemon' = 'native') {
 	const { SandboxInstance: MockedInstance } = await import('@blaxel/core');
 	vi.mocked(MockedInstance.get).mockResolvedValue(sandbox);
-	const sbx = await blaxel({}).sandbox.getById('test-sandbox');
+	const sbx = await blaxel({ exec }).sandbox.getById('test-sandbox');
 	expect(sbx).not.toBeNull();
-	return sbx!.runCommand('echo hello');
+	return sbx!;
+}
+
+async function runEcho(sandbox: SandboxInstance): Promise<BlaxelCommandResult> {
+	return (await getSandbox(sandbox)).runCommand('echo hello') as Promise<BlaxelCommandResult>;
 }
 
 describe('blaxel runCommand output capture', () => {
@@ -141,7 +148,7 @@ describe('blaxel runCommand output capture', () => {
 		expect(result.stderr).toBe('boom');
 	});
 
-	it('returns nonzero exit code when the API reports status failed', async () => {
+	it('throws BlaxelExecError instead of inventing an exit code when status is failed with exit code 0', async () => {
 		const sandbox = makeSandbox(async () => ({
 			status: 'failed',
 			exitCode: 0,
@@ -149,9 +156,33 @@ describe('blaxel runCommand output capture', () => {
 			stderr: 'boom',
 		}));
 
+		const error = await runEcho(sandbox).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(BlaxelExecError);
+		const execError = error as BlaxelExecError;
+		expect(execError.status).toBe('failed');
+		expect(execError.exitCode).toBe(0);
+		expect(execError.stderr).toBe('boom');
+		expect(execError.message).toContain('one exec at a time');
+	});
+
+	it('throws BlaxelExecError when the exec channel is severed (terminated, no exit code)', async () => {
+		const sandbox = makeSandbox(async () => ({ status: 'terminated', pid: 'p1' }));
+
+		const error = await runEcho(sandbox).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(BlaxelExecError);
+		expect((error as BlaxelExecError).status).toBe('terminated');
+		expect((error as BlaxelExecError).exitCode).toBeNull();
+	});
+
+	it('reports status alongside a completed exit code', async () => {
+		const sandbox = makeSandbox(async () => ({ status: 'completed', exitCode: 0, pid: 'p1', stdout: 'ok' }));
+
 		const result = await runEcho(sandbox);
 
-		expect(result.exitCode).not.toBe(0);
+		expect(result.status).toBe('completed');
+		expect(result.exitCode).toBe(0);
 	});
 
 	it('waits for a still-running process and recovers output from the finished process', async () => {
@@ -268,5 +299,153 @@ describe('blaxel runCommand output capture', () => {
 
 		expect(result.exitCode).toBe(3);
 		expect(result.stderr).toBe('bad');
+		expect(result.status).toBe('failed');
+	});
+});
+
+function seedOutput(command: Partial<SeedInvocationResult['command']>): string {
+	const invocation: SeedInvocationResult = {
+		token: 't',
+		requestId: 'r',
+		daemon: { reused: true, pid: 1, sseUrl: 'http://127.0.0.1:38989/events?token=t' },
+		command: { exitCode: 0, signal: null, stdout: '', stderr: '', combined: '', ...command },
+	};
+	return `${JSON.stringify(invocation)}\n`;
+}
+
+function decodeLauncherPayload(launcher: string): Record<string, unknown> {
+	const words = launcher.split(' ');
+	return JSON.parse(Buffer.from(words[words.length - 1], 'base64').toString('utf8'));
+}
+
+describe('blaxel runCommand via daemond (default exec mode)', () => {
+	it('delivers the command as a base64 launcher and returns the real exit code', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			const payload = decodeLauncherPayload(opts.command);
+			expect(payload).toMatchObject({ command: 'sh', args: ['-c', 'echo "a  b" $X'], cwd: '/tmp', env: { X: '1' }, detach: false });
+			return { status: 'completed', exitCode: 0, pid: 'p1', stdout: seedOutput({ exitCode: 5, stdout: 'out\n', stderr: 'err' }) };
+		});
+		const sandbox = makeSandbox(exec);
+
+		const result = await (await getSandbox(sandbox, 'daemon')).runCommand('echo "a  b" $X', { cwd: '/tmp', env: { X: '1' } });
+
+		expect(exec).toHaveBeenCalledTimes(1);
+		const launcher = exec.mock.calls[0][0].command;
+		expect(launcher).toBe(daemonSeedScriptCommand({ ssePort: 38989 }, decodeLauncherPayload(launcher) as { command: string }, { argvEncoding: 'base64' }));
+		expect(launcher).toMatch(/^printf %s [A-Za-z0-9+/=]+ \| base64 -d \| sh -s [A-Za-z0-9+/=]+ [A-Za-z0-9+/=]+$/);
+		expect(result).toMatchObject({ exitCode: 5, stdout: 'out\n', stderr: 'err', status: 'completed', signal: null });
+	});
+
+	it('runs background commands as detached daemon jobs and reports status running', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			expect(decodeLauncherPayload(opts.command)).toMatchObject({ detach: true });
+			return { status: 'completed', exitCode: 0, pid: 'p1', stdout: seedOutput({ status: 'running', exitCode: null, jobId: 'job-1', pid: 42 }) };
+		});
+
+		const result = await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('sleep 60', { background: true });
+
+		expect(result).toMatchObject({ status: 'running', exitCode: 0, jobId: 'job-1' });
+	});
+
+	it('maps a signal-terminated job to 128+signo with status killed', async () => {
+		const exec = vi.fn(async () => ({
+			status: 'completed', exitCode: 0, pid: 'p1',
+			stdout: seedOutput({ status: 'exited', exitCode: null, signal: 'SIGKILL' }),
+		}));
+
+		const result = await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true');
+
+		expect(result).toMatchObject({ status: 'killed', exitCode: 137, signal: 'SIGKILL' });
+	});
+
+	it('falls back to native exec for the sandbox when the launcher cannot bootstrap', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			if (opts.command.startsWith('printf %s ')) {
+				return { status: 'failed', exitCode: 127, pid: 'p1', stderr: 'daemon bootstrap failed: no node' };
+			}
+			return { status: 'completed', exitCode: 0, pid: 'p2', stdout: 'native\n' };
+		});
+		const sbx = await getSandbox(makeSandbox(exec), 'daemon');
+
+		const first = await sbx.runCommand('echo native');
+		const second = await sbx.runCommand('echo native');
+
+		expect(first).toMatchObject({ stdout: 'native\n', exitCode: 0, status: 'completed' });
+		expect(second.stdout).toBe('native\n');
+		// launcher, native, native: the downgrade sticks for this sandbox
+		expect(exec.mock.calls.map((c) => c[0].command.startsWith('printf %s '))).toEqual([true, false, false]);
+	});
+
+	it('does not downgrade to native on a transient launcher failure (non-127)', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			if (opts.command.startsWith('printf %s ')) {
+				return { status: 'failed', exitCode: 1, pid: 'p1', stderr: 'daemon: connect ECONNREFUSED' };
+			}
+			return { status: 'completed', exitCode: 0, pid: 'p2', stdout: 'native\n' };
+		});
+		const sbx = await getSandbox(makeSandbox(exec), 'daemon');
+
+		const error = await sbx.runCommand('echo x').catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(BlaxelExecError);
+		expect((error as BlaxelExecError).stderr).toContain('ECONNREFUSED');
+
+		await sbx.runCommand('echo x').catch(() => undefined);
+		expect(exec.mock.calls.map((c) => c[0].command.startsWith('printf %s '))).toEqual([true, true]);
+	});
+
+	it('applies the 5-minute default deadline to the daemon payload when no timeout is given', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			expect(decodeLauncherPayload(opts.command)).toMatchObject({ timeoutMs: 5 * 60 * 1000 });
+			return { status: 'completed', exitCode: 0, pid: 'p1', stdout: seedOutput({}) };
+		});
+
+		await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true');
+		expect(exec).toHaveBeenCalledTimes(1);
+	});
+
+	it('gives background jobs no default deadline', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			const payload = decodeLauncherPayload(opts.command);
+			expect(payload).toMatchObject({ detach: true });
+			expect(payload).not.toHaveProperty('timeoutMs');
+			return {
+				status: 'completed', exitCode: 0, pid: 'p1',
+				stdout: seedOutput({ status: 'running', exitCode: null, jobId: 'job-1' }),
+			};
+		});
+
+		await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('sleep 1d', { background: true });
+		expect(exec).toHaveBeenCalledTimes(1);
+	});
+
+	it('maps every Linux signal, including SIGUSR1, to 128+signo', async () => {
+		const exec = vi.fn(async () => ({
+			status: 'completed', exitCode: 0, pid: 'p1',
+			stdout: seedOutput({ status: 'exited', exitCode: null, signal: 'SIGUSR1' }),
+		}));
+
+		const result = await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true');
+		expect(result).toMatchObject({ status: 'killed', exitCode: 138, signal: 'SIGUSR1' });
+	});
+
+	it('throws instead of guessing an exit code for an unknown signal name', async () => {
+		const exec = vi.fn(async () => ({
+			status: 'completed', exitCode: 0, pid: 'p1',
+			stdout: seedOutput({ status: 'exited', exitCode: null, signal: 'SIGWHATEVER', stdout: 'partial' }),
+		}));
+
+		const error = await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true').catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(BlaxelExecError);
+		expect((error as BlaxelExecError).exitCode).toBeNull();
+		expect((error as BlaxelExecError).stdout).toBe('partial');
+	});
+
+	it('surfaces a busy exec slot as BlaxelExecError even in daemon mode', async () => {
+		const exec = vi.fn(async () => ({ status: 'failed', exitCode: 0, pid: 'p1' }));
+
+		const error = await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true').catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(BlaxelExecError);
+		expect(exec).toHaveBeenCalledTimes(1);
 	});
 });
