@@ -1,8 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { SeedCommandInput, SeedInvocationResult, SeedScriptConfig } from "./types.js";
+import type { SeedCommandOptions, SeedInput, SeedInvocationResult, SeedScriptConfig } from "./types.js";
 
-const SCRIPT_VERSION = "1";
+// Bump whenever the launcher<->daemon wire protocol changes. The launcher
+// compares it against the running daemon's health `version` and replaces a
+// daemon (same socket, same SSE port) that doesn't speak its protocol.
+const SCRIPT_VERSION = "2";
 
 function loadSeedLauncherRuntimeSource(): string {
   const runtimePath = path.join(__dirname, "runtime", "seed-launcher.js");
@@ -16,7 +19,12 @@ function createLauncherScript(config: {
   sseStrictPort: boolean;
 }): string {
   const daemonSourceBase64 = Buffer.from(loadSeedLauncherRuntimeSource(), "utf8").toString("base64");
-  const serialized = JSON.stringify(config);
+  // The script travels through shells and exec layers of unknown encoding
+  // discipline; keeping it pure ASCII means base64 of it round-trips anywhere.
+  const serialized = JSON.stringify(config).replace(
+    /[\u007f-\uffff]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 
   return [
     "const fs=require('node:fs')",
@@ -41,9 +49,11 @@ function createLauncherScript(config: {
     "function writeState(value){mkdirp(path.dirname(stateFile));fs.writeFileSync(stateFile,JSON.stringify(value,null,2)+'\\n','utf8')}",
     "function request(message,timeoutMs=5000){return new Promise((resolve,reject)=>{const conn=net.createConnection(socketPath);let buf='';const timer=setTimeout(()=>{try{conn.destroy()}catch{}reject(new Error('seed launcher timeout'))},timeoutMs);conn.once('error',(err)=>{clearTimeout(timer);reject(err)});conn.on('data',(chunk)=>{buf+=String(chunk);let idx=-1;while((idx=buf.indexOf('\\n'))!==-1){const line=buf.slice(0,idx);buf=buf.slice(idx+1);if(!line.trim())continue;let msg;try{msg=JSON.parse(line)}catch{continue}if(msg.replyTo===message.id||msg.type==='error'){clearTimeout(timer);conn.end();resolve(msg);return}}});conn.once('connect',()=>{try{conn.write(JSON.stringify(message)+'\\n')}catch(err){clearTimeout(timer);reject(err)}})})}",
     "async function waitForHealthy(token,timeoutMs,errorContext){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){try{const health=await request({id:'health-'+Date.now(),type:'health',token},1000);if(health&&health.type==='health'&&health.payload&&health.payload.state==='running')return health.payload}catch{}await sleep(100)}throw new Error('seed launcher could not reach daemon health'+(errorContext?' ('+errorContext+')':''))}",
-    "function parseInput(argv){if(argv.length===0)throw new Error('seed launcher requires a command or JSON payload');if(argv.length===1){const raw=argv[0];try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&typeof parsed.command==='string')return parsed}catch{}return {command:raw,args:[]}}return {command:argv[0],args:argv.slice(1)}}",
-    "async function ensureDaemon(){mkdirp(path.dirname(socketPath));mkdirp(baseDir);fs.writeFileSync(daemonFile,DAEMON_SOURCE,'utf8');const state=readState();const token=state&&typeof state.token==='string'&&state.token?state.token:randomToken();let reused=false;let health=null;try{health=await waitForHealthy(token,500);reused=true}catch{}if(!health){const encoded=Buffer.from(JSON.stringify({version:VERSION,name:CONFIG.name,token,socket:socketPath,stateFile,sseHost:'127.0.0.1',ssePort:Number.isFinite(CONFIG.ssePort)?Number(CONFIG.ssePort):38989,sseStrictPort:CONFIG.sseStrictPort===true}),'utf8').toString('base64');const child=spawn(process.execPath,[daemonFile,encoded],{detached:true,stdio:'ignore',env:process.env});child.unref();health=await waitForHealthy(token,8000,'ssePort='+String(CONFIG.ssePort)+', sseStrictPort='+(CONFIG.sseStrictPort===true?'true':'false'));writeState({version:VERSION,name:CONFIG.name,pid:child.pid||null,token,socket:socketPath,ssePort:health.sseUrl?Number(new URL(health.sseUrl).port):null,startedAt:Date.now()});}return {token,reused,health}}",
-    "async function main(){const input=parseInput(process.argv.slice(1));const ensure=await ensureDaemon();const requestId=(input.requestId&&String(input.requestId))||('req-'+Date.now()+'-'+Math.random().toString(16).slice(2));const execResponse=await request({id:requestId,type:'exec',token:ensure.token,payload:{command:input.command,args:Array.isArray(input.args)?input.args:[],cwd:typeof input.cwd==='string'?input.cwd:undefined,env:input.env&&typeof input.env==='object'?input.env:undefined,shell:input.shell===true,timeoutMs:Number.isFinite(input.timeoutMs)?Number(input.timeoutMs):undefined}},Math.max(1000,Number(input.timeoutMs)||60000)+2000);if(execResponse.type==='error'){throw new Error(String(execResponse.payload&&execResponse.payload.message||'seed launcher request failed'))}const result={token:ensure.token,requestId,daemon:{reused:ensure.reused,pid:ensure.health&&Number.isFinite(Number(ensure.health.pid))?Number(ensure.health.pid):null,sseUrl:ensure.health&&typeof ensure.health.sseUrl==='string'?ensure.health.sseUrl:''},command:execResponse.payload};process.stdout.write(JSON.stringify(result)+'\\n')}",
+    "function parseInput(argv){if(argv.length===0)throw new Error('seed launcher requires a command or JSON payload');if(argv.length===1){let raw=argv[0];if(raw.startsWith('b64:'))raw=Buffer.from(raw.slice(4),'base64').toString('utf8');try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(typeof parsed.command==='string'||typeof parsed.wait==='string'||typeof parsed.status==='string'||typeof parsed.kill==='string'))return parsed}catch{}return {command:raw,args:[]}}return {command:argv[0],args:argv.slice(1)}}",
+    "function buildRequest(input,token,requestId){if(typeof input.wait==='string'){const t=Number.isFinite(input.timeoutMs)?Number(input.timeoutMs):undefined;return {message:{id:requestId,type:'wait',token,payload:{jobId:input.wait,timeoutMs:t}},timeoutMs:(t===undefined?7*24*3600*1000:Math.max(1000,t))+2000}}if(typeof input.status==='string')return {message:{id:requestId,type:'status',token,payload:{jobId:input.status}},timeoutMs:5000};if(typeof input.kill==='string')return {message:{id:requestId,type:'kill',token,payload:{jobId:input.kill,signal:typeof input.signal==='string'?input.signal:undefined}},timeoutMs:5000};const detach=input.detach===true;const t=Number.isFinite(input.timeoutMs)?Number(input.timeoutMs):undefined;return {message:{id:requestId,type:'exec',token,payload:{command:input.command,args:Array.isArray(input.args)?input.args:[],cwd:typeof input.cwd==='string'?input.cwd:undefined,env:input.env&&typeof input.env==='object'?input.env:undefined,shell:input.shell===true,timeoutMs:t,detach}},timeoutMs:detach?10000:Math.max(1000,t||60000)+2000}}",
+    "async function replaceDaemon(token,state,health){try{await request({id:'stop-'+Date.now(),type:'stop',token},2000)}catch{}const pid=(health&&Number.isFinite(health.pid)&&health.pid)||(state&&Number.isFinite(state.pid)&&state.pid)||null;const deadline=Date.now()+5000;while(Date.now()<deadline){let alive=false;try{await request({id:'health-'+Date.now(),type:'health',token},500);alive=true}catch{}if(!alive){try{fs.unlinkSync(socketPath)}catch{}return}if(pid){try{process.kill(pid,Date.now()>deadline-2000?'SIGKILL':'SIGTERM')}catch{}}await sleep(100)}throw new Error('seed launcher could not replace daemon speaking protocol '+String(health&&health.version)+' with '+VERSION)}",
+    "async function ensureDaemon(){mkdirp(path.dirname(socketPath));mkdirp(baseDir);fs.writeFileSync(daemonFile,DAEMON_SOURCE,'utf8');const state=readState();const token=state&&typeof state.token==='string'&&state.token?state.token:randomToken();let reused=false;let health=null;try{health=await waitForHealthy(token,500);reused=true}catch{}if(health&&health.version!==VERSION){await replaceDaemon(token,state,health);health=null;reused=false}if(!health){const encoded=Buffer.from(JSON.stringify({version:VERSION,name:CONFIG.name,token,socket:socketPath,stateFile,sseHost:'127.0.0.1',ssePort:Number.isFinite(CONFIG.ssePort)?Number(CONFIG.ssePort):38989,sseStrictPort:CONFIG.sseStrictPort===true}),'utf8').toString('base64');const child=spawn(process.execPath,[daemonFile,encoded],{detached:true,stdio:'ignore',env:process.env});child.unref();health=await waitForHealthy(token,8000,'ssePort='+String(CONFIG.ssePort)+', sseStrictPort='+(CONFIG.sseStrictPort===true?'true':'false'));writeState({version:VERSION,name:CONFIG.name,pid:child.pid||null,token,socket:socketPath,ssePort:health.sseUrl?Number(new URL(health.sseUrl).port):null,startedAt:Date.now()});}return {token,reused,health}}",
+    "async function main(){const input=parseInput(process.argv.slice(1));const ensure=await ensureDaemon();const requestId=(input.requestId&&String(input.requestId))||('req-'+Date.now()+'-'+Math.random().toString(16).slice(2));const req=buildRequest(input,ensure.token,requestId);const execResponse=await request(req.message,req.timeoutMs);if(execResponse.type==='error'){throw new Error(String(execResponse.payload&&execResponse.payload.message||'seed launcher request failed'))}const result={token:ensure.token,requestId,daemon:{reused:ensure.reused,pid:ensure.health&&Number.isFinite(Number(ensure.health.pid))?Number(ensure.health.pid):null,sseUrl:ensure.health&&typeof ensure.health.sseUrl==='string'?ensure.health.sseUrl:''},command:execResponse.payload};process.stdout.write(JSON.stringify(result)+'\\n')}",
     "main().catch((err)=>{process.stderr.write(String(err&&err.stack?err.stack:err)+'\\n');process.exit(1)})",
   ].join(";");
 }
@@ -169,7 +179,7 @@ const NODE_SHA256_FN = [
  * DAEMOND_NODE_SKIP_SHA256=1 disables digest verification (tests, or mirrors
  * serving repackaged archives).
  */
-function nodeBootstrapPrelude(): string {
+function nodeBootstrapPrelude(exec: string): string {
   const v = BOOTSTRAP_NODE_VERSION;
   return [
     ...NODE_FETCH_FN,
@@ -250,22 +260,40 @@ function nodeBootstrapPrelude(): string {
     "fi",
     // $0 is the launcher script, $1 the payload — both arrive as arguments to
     // the outer `sh -c` so the program itself stays safely quoted.
-    'exec "$__daemond_node" -e "$0" "$1"',
+    exec,
   ].join("\n");
+}
+
+const QUOTED_EXEC = 'exec "$__daemond_node" -e "$0" "$1"';
+// Under `sh -s` the words after the options are $1 and $2 (not $0); both are
+// base64 here, the payload decoded launcher-side so `b64:` marks it as such.
+const BASE64_EXEC = 'exec "$__daemond_node" -e "$(printf %s "$1" | base64 -d)" "b64:$2"';
+
+function base64(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64");
 }
 
 export function daemonSeedScriptCommand(
   config: SeedScriptConfig | undefined,
-  payload: string | SeedCommandInput,
+  payload: string | SeedInput,
+  options?: SeedCommandOptions,
 ): string {
   const script = daemonSeedScript(config);
   const payloadArg = typeof payload === "string" ? payload : JSON.stringify(payload);
+
+  if (options?.argvEncoding === "base64") {
+    // No quotes anywhere on the line: every word is base64 or a fixed token.
+    // An exec layer that re-splits or collapses quoting (Blaxel's does) still
+    // delivers the program, script and payload byte-for-byte.
+    return `printf %s ${base64(nodeBootstrapPrelude(BASE64_EXEC))} | base64 -d | sh -s ${base64(script)} ${base64(payloadArg)}`;
+  }
+
   // Wrapped as `sh -c '<program>' '<script>' '<payload>'`: a single command
   // invocation, so providers that prepend `VAR=value` env assignments or a
   // `cd <dir> &&` prefix to the command (archil, namespace) apply them to a
   // real command rather than producing a syntax error on the function
   // definition the prelude opens with.
-  return `sh -c ${shellQuote(nodeBootstrapPrelude())} ${shellQuote(script)} ${shellQuote(payloadArg)}`;
+  return `sh -c ${shellQuote(nodeBootstrapPrelude(QUOTED_EXEC))} ${shellQuote(script)} ${shellQuote(payloadArg)}`;
 }
 
 function outputTail(raw: string): string {
