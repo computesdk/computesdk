@@ -6,7 +6,7 @@
  * and port exposure capabilities.
  */
 
-import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
+import beamClient, { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
@@ -25,11 +25,38 @@ export interface BeamConfig {
   timeout?: number;
 }
 
+interface BeamOptsSnapshot {
+  token: string;
+  workspaceId: string;
+  gatewayUrl: string;
+  timeout: number;
+}
+
+let configuredOpts: BeamOptsSnapshot | null = null;
+
 function configureBeamOpts(config: BeamConfig): void {
-  beamOpts.token = config.token || (typeof process !== 'undefined' && process.env?.BEAM_TOKEN) || '';
-  beamOpts.workspaceId = config.workspaceId || (typeof process !== 'undefined' && process.env?.BEAM_WORKSPACE_ID) || '';
-  if (config.gatewayUrl) beamOpts.gatewayUrl = config.gatewayUrl;
-  if (config.timeout) (beamOpts as any).timeout = config.timeout;
+  const next: BeamOptsSnapshot = {
+    token: config.token || (typeof process !== 'undefined' && process.env?.BEAM_TOKEN) || '',
+    workspaceId: config.workspaceId || (typeof process !== 'undefined' && process.env?.BEAM_WORKSPACE_ID) || '',
+    gatewayUrl: config.gatewayUrl || beamOpts.gatewayUrl,
+    timeout: config.timeout || beamOpts.timeout,
+  };
+  beamOpts.token = next.token;
+  beamOpts.workspaceId = next.workspaceId;
+  beamOpts.gatewayUrl = next.gatewayUrl;
+  beamOpts.timeout = next.timeout;
+
+  // The singleton BeamClient caches its axios instance — Authorization header
+  // baked from beamOpts on first request — so a different credential has to
+  // drop that client or every later call keeps the previous token.
+  if (configuredOpts === null ||
+    next.token !== configuredOpts.token ||
+    next.workspaceId !== configuredOpts.workspaceId ||
+    next.gatewayUrl !== configuredOpts.gatewayUrl ||
+    next.timeout !== configuredOpts.timeout) {
+    (beamClient as unknown as { _client?: unknown })._client = undefined;
+    configuredOpts = next;
+  }
 }
 
 function shellEscape(arg: string): string {
