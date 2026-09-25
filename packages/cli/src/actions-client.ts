@@ -328,6 +328,53 @@ export interface ActionsOrg {
   slug: string;
 }
 
+/**
+ * One row of `GET /api/v1/actions/repos`: a repo the org can run CI on,
+ * GitHub-App-granted or a generic git remote.
+ */
+export interface CiRepo {
+  repoId: string;
+  fullName: string;
+  defaultBranch: string;
+  enabled: boolean;
+  private: boolean;
+  forkPullRequests: boolean;
+  /** `github_app` for App-granted repos; `none`/`token`/`basic`/`ssh` for remotes. */
+  authType: string;
+  cloneUrl: string | null;
+  githubInstallationId: number | null;
+  workflowPaths: string[];
+  disabledWorkflowCount: number;
+  lastPolledAt: string | null;
+  lastPollError: string | null;
+}
+
+export interface CiReposResponse {
+  repos: CiRepo[];
+}
+
+/** What an enable/remote-connect discovered before answering. */
+export interface CiRepoDiscovery {
+  workflowsFound: boolean;
+  seeded: boolean;
+  error: string | null;
+}
+
+export interface CiRepoConnectResponse {
+  repoId: string | null;
+  fullName: string;
+  defaultBranch: string;
+  authType: string;
+  discovery: CiRepoDiscovery;
+}
+
+export interface CiRepoPatchResponse {
+  fullName: string;
+  enabled?: boolean;
+  forkPullRequests?: boolean;
+  discovery: CiRepoDiscovery | null;
+}
+
 export class ActionsApiError extends Error {
   constructor(
     public status: number,
@@ -379,6 +426,15 @@ export class ActionsClient {
   async put<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
     const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
       method: 'PUT',
+      headers: { ...this.headers(), 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return this.parse<T>(res);
+  }
+
+  async patch<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
+    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
+      method: 'PATCH',
       headers: { ...this.headers(), 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
