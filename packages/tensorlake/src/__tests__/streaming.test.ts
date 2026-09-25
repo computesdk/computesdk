@@ -116,6 +116,36 @@ describe('streamTensorlakeCommand', () => {
     expect(result.exitCode).toBe(3);
   });
 
+  it('skips the line-less terminal event a follow stream ends with', async () => {
+    const out: string[] = [];
+    const err: string[] = [];
+    // What the SDK actually delivers at follow end: a sentinel event whose
+    // `line` is absent despite the type promising a string.
+    const terminal = { line: undefined } as unknown as { line: string };
+    const fake = fakeSandbox({
+      followStdout: async function* () {
+        yield { line: 'tick 1' };
+        yield terminal;
+      },
+      followStderr: async function* () {
+        yield { line: 'warn' };
+        yield terminal;
+      },
+    });
+
+    const running = streamTensorlakeCommand(fake.sandbox, 'echo', {
+      onStdout: (text) => out.push(text),
+      onStderr: (text) => err.push(text),
+    });
+    fake.exit(0);
+
+    const result = await running;
+    expect(out).toEqual(['tick 1\n']);
+    expect(err).toEqual(['warn\n']);
+    expect(result.stdout).not.toContain('undefined');
+    expect(result.stderr).not.toContain('undefined');
+  });
+
   it('passes the working directory and environment to the process', async () => {
     const fake = fakeSandbox();
     const running = streamTensorlakeCommand(fake.sandbox, 'pwd', {

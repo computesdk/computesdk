@@ -62,12 +62,19 @@ async function* lines(
   events: AsyncIterable<{ line: string }>,
 ): AsyncIterable<string> {
   for await (const event of events) {
+    // The follow stream closes with a terminal event that carries no line —
+    // the SDK's type says `line: string`, but the runtime event is a sentinel.
+    // Interpolating it unconditionally would append a literal "undefined"
+    // line to every streamed command's output.
+    if (typeof event.line !== "string") continue;
     yield `${event.line}\n`;
   }
 }
 
-const joinLines = (buffered: string[]): string =>
-  buffered.length === 0 ? "" : `${buffered.join("\n")}\n`;
+const joinLines = (buffered: string[]): string => {
+  const present = buffered.filter((line) => typeof line === "string");
+  return present.length === 0 ? "" : `${present.join("\n")}\n`;
+};
 
 /**
  * Runs `command` under `sh -c`, streaming its output through the callbacks, and
