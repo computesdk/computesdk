@@ -914,12 +914,14 @@ export function registerActionsCommands(program: Command): void {
     repos
       .command('enable')
       .description('Enable a repo the org can already see (granted by a GitHub App install, or a connected remote)')
-      .argument('<repo>', 'repository in owner/repo format'),
-  ).action(async (repo: string, opts: CommonOpts) => {
+      .argument('<repo>', 'repository in owner/repo format')
+      .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
+  ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
     try {
       const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
         fullName: repo,
         enabled: true,
+        ...(opts.repoId !== undefined && { repoId: opts.repoId }),
       });
       output(opts, result, (r) => {
         console.log(`enabled  ${pc.cyan(safeTerm(r.fullName))}`);
@@ -934,12 +936,14 @@ export function registerActionsCommands(program: Command): void {
     repos
       .command('disable')
       .description('Disable a repo — it stays connected but no runs are scheduled')
-      .argument('<repo>', 'repository in owner/repo format'),
-  ).action(async (repo: string, opts: CommonOpts) => {
+      .argument('<repo>', 'repository in owner/repo format')
+      .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
+  ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
     try {
       const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
         fullName: repo,
         enabled: false,
+        ...(opts.repoId !== undefined && { repoId: opts.repoId }),
       });
       output(opts, result, (r) => console.log(`disabled  ${pc.cyan(safeTerm(r.fullName))}`));
     } catch (e) {
