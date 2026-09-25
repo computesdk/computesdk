@@ -57,6 +57,14 @@
   * [Upstash](providers/upstash.md)
   * [Vercel](providers/vercel.md)
 
+## Platform
+
+* [Overview](platform/README.md)
+* [CLI reference](platform/cli.md)
+* [Actions](platform/actions.md)
+* [Benchmarks](platform/benchmarks.md)
+* [API reference](platform/api-reference.md)
+
 ## Reference
 
 * [Sandbox (interface)](reference/Sandbox.md)
