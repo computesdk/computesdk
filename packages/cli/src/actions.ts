@@ -495,14 +495,14 @@ function formatRepoRow(r: CiRepo): string {
     r.workflowPaths.length > 0
       ? `${r.workflowPaths.length} workflow${r.workflowPaths.length === 1 ? '' : 's'}`
       : 'no workflows yet';
-  const error = r.lastPollError ? pc.red(`  poll error: ${r.lastPollError}`) : '';
-  return `${head}  ${r.fullName}  ${pc.dim(`${via} · ${r.defaultBranch} · ${workflows}`)}${error}`;
+  const error = r.lastPollError ? pc.red(`  poll error: ${safeTerm(r.lastPollError)}`) : '';
+  return `${head}  ${safeTerm(r.fullName)}  ${pc.dim(`${safeTerm(via)} · ${safeTerm(r.defaultBranch)} · ${workflows}`)}${error}`;
 }
 
 /** Print what an enable/connect discovered — one dim line, nothing on a clean run. */
 function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: string | null }): void {
   if (d.error) {
-    console.log(pc.yellow(`discovery: ${d.error} (the poll cron retries)`));
+    console.log(pc.yellow(`discovery: ${safeTerm(d.error)} (the poll cron retries)`));
     return;
   }
   console.log(pc.dim(`discovery: ${d.workflowsFound ? 'workflows found' : 'no workflows yet'}${d.seeded ? ', cursors seeded' : ''}`));
@@ -902,7 +902,7 @@ export function registerActionsCommands(program: Command): void {
         ...(opts.branch !== undefined && { defaultBranch: opts.branch }),
       });
       output(opts, result, (r) => {
-        console.log(`connected  ${pc.cyan(r.fullName)}  ${pc.dim(`(${r.authType}, ${r.defaultBranch})`)}`);
+        console.log(`connected  ${pc.cyan(safeTerm(r.fullName))}  ${pc.dim(`(${safeTerm(r.authType)}, ${safeTerm(r.defaultBranch)})`)}`);
         printDiscovery(r.discovery);
       });
     } catch (e) {
@@ -922,7 +922,7 @@ export function registerActionsCommands(program: Command): void {
         enabled: true,
       });
       output(opts, result, (r) => {
-        console.log(`enabled  ${pc.cyan(r.fullName)}`);
+        console.log(`enabled  ${pc.cyan(safeTerm(r.fullName))}`);
         if (r.discovery) printDiscovery(r.discovery);
       });
     } catch (e) {
@@ -941,7 +941,7 @@ export function registerActionsCommands(program: Command): void {
         fullName: repo,
         enabled: false,
       });
-      output(opts, result, (r) => console.log(`disabled  ${pc.cyan(r.fullName)}`));
+      output(opts, result, (r) => console.log(`disabled  ${pc.cyan(safeTerm(r.fullName))}`));
     } catch (e) {
       fail(e);
     }
