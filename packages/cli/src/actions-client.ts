@@ -4,7 +4,6 @@
  * keep them in sync by hand; the API is the contract.
  */
 
-import { loadStoredCredentials } from './auth.js';
 
 export const DEFAULT_BASE_URL = 'https://platform.computesdk.com';
 
@@ -636,33 +635,28 @@ export function encodeWatchCursor(
   return `${id}:${jobId}:${stepPart}:${offset}`;
 }
 
+/** The subset of `@benchsdk/cli`'s `resolveAuth` result Actions needs. */
+export type StoredPlatformAuth = { apiKey?: string; token?: string };
+export type StoredPlatformAuthResolver = (opts: { baseUrl: string }) => Promise<StoredPlatformAuth>;
+
+const NO_CREDENTIALS_HINT =
+  'Set COMPUTE_API_KEY, pass --api-key, or run `compute bench auth login`.';
+
 /**
  * Precedence: `--api-key` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
- * (legacy) > `~/.computesdk/credentials.json` (written by `compute login`).
- * Never starts the browser login flow — Actions commands are noninteractive.
+ * (legacy) > platform OAuth credentials stored by `compute bench auth login`
+ * (`~/.benchsdk/credentials.json`, via `@benchsdk/cli`'s `resolveAuth`, which
+ * refreshes an expired access token but never opens a browser). The gateway
+ * key written by `compute login` is a different credential and is not used.
  */
-export function resolveActionsAuth(
+export async function resolveActionsAuth(
   opts: {
     apiKey?: string;
     baseUrl?: string;
     allowUntrustedHost?: boolean;
   },
-  loadStored: () => string | null = loadStoredCredentials,
-): ActionsAuth {
-  // `||` not `??`: empty-string env vars (common in CI matrices) should fall
-  // through to the next source, not count as configured.
-  const apiKey =
-    opts.apiKey ||
-    process.env.COMPUTE_API_KEY ||
-    process.env.BENCHMARKS_PLATFORM_API_KEY || // legacy name
-    loadStored() ||
-    undefined;
-  if (!apiKey) {
-    throw new ActionsCliError(
-      'no_credentials',
-      'No API key. Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.',
-    );
-  }
+  resolveStored: StoredPlatformAuthResolver = resolveStoredPlatformAuth,
+): Promise<ActionsAuth> {
   const baseUrl = (
     opts.baseUrl ||
     process.env.COMPUTE_PLATFORM_URL ||
@@ -689,7 +683,38 @@ export function resolveActionsAuth(
         'Use an https:// base URL; http:// is only allowed for localhost/loopback.',
     );
   }
+
+  // `||` not `??`: empty-string env vars (common in CI matrices) should fall
+  // through to the next source, not count as configured.
+  let apiKey =
+    opts.apiKey ||
+    process.env.COMPUTE_API_KEY ||
+    process.env.BENCHMARKS_PLATFORM_API_KEY || // legacy name
+    undefined;
+  if (!apiKey) {
+    let stored: StoredPlatformAuth;
+    try {
+      stored = await resolveStored({ baseUrl });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      // `@benchsdk/cli`'s "nothing stored" message names `bench` commands and
+      // env vars that only apply to that CLI; keep ours for that case and
+      // surface the reason only for expired/failed-refresh sessions.
+      const detail = reason.startsWith('No credentials found') ? 'No API key.' : reason;
+      throw new ActionsCliError('no_credentials', `${detail} ${NO_CREDENTIALS_HINT}`);
+    }
+    apiKey = stored.apiKey || stored.token || undefined;
+  }
+  if (!apiKey) {
+    throw new ActionsCliError('no_credentials', `No API key. ${NO_CREDENTIALS_HINT}`);
+  }
   return { apiKey, baseUrl };
+}
+
+async function resolveStoredPlatformAuth(opts: { baseUrl: string }): Promise<StoredPlatformAuth> {
+  const { resolveAuth } = await import('@benchsdk/cli');
+  const auth = await resolveAuth({ baseUrl: opts.baseUrl });
+  return { apiKey: auth.apiKey, token: auth.token };
 }
 
 function isLoopbackHost(host: string): boolean {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   dispatchBody,
   formatDuration,
@@ -667,7 +667,7 @@ describe('toErrorEnvelope', () => {
 });
 
 describe('resolveActionsAuth', () => {
-  const noStored = () => null;
+  const noStored = async () => ({});
   const ENV = ['COMPUTE_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_API_KEY', 'BENCHMARKS_PLATFORM_URL'];
   const saved: Record<string, string | undefined> = {};
   beforeEach(() => {
@@ -683,94 +683,137 @@ describe('resolveActionsAuth', () => {
     }
   });
 
-  it('prefers the flag over the env var', () => {
+  const key = async (
+    opts: Parameters<typeof resolveActionsAuth>[0],
+    stored: Parameters<typeof resolveActionsAuth>[1] = noStored,
+  ) => (await resolveActionsAuth(opts, stored)).apiKey;
+
+  const failCode = async (
+    opts: Parameters<typeof resolveActionsAuth>[0],
+    stored: Parameters<typeof resolveActionsAuth>[1] = noStored,
+  ) => {
+    try {
+      await resolveActionsAuth(opts, stored);
+    } catch (e) {
+      return e as ActionsCliError;
+    }
+    throw new Error('expected resolveActionsAuth to throw');
+  };
+
+  it('prefers the flag over the env var', async () => {
     process.env.COMPUTE_API_KEY = 'env-key';
-    expect(resolveActionsAuth({ apiKey: 'flag-key' }, noStored).apiKey).toBe('flag-key');
-    expect(resolveActionsAuth({}, noStored).apiKey).toBe('env-key');
+    expect(await key({ apiKey: 'flag-key' })).toBe('flag-key');
+    expect(await key({})).toBe('env-key');
   });
 
-  it('falls back to stored login credentials after every env var', () => {
-    const stored = () => 'stored-key';
-    expect(resolveActionsAuth({}, stored).apiKey).toBe('stored-key');
+  it('falls back to stored platform credentials after every env var', async () => {
+    const stored = vi.fn(async () => ({ apiKey: 'stored-key' }));
+    expect(await key({}, stored)).toBe('stored-key');
+    expect(stored).toHaveBeenCalledWith({ baseUrl: 'https://platform.computesdk.com' });
     process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
-    expect(resolveActionsAuth({}, stored).apiKey).toBe('legacy-key');
+    expect(await key({}, stored)).toBe('legacy-key');
     process.env.COMPUTE_API_KEY = 'env-key';
-    expect(resolveActionsAuth({}, stored).apiKey).toBe('env-key');
-    expect(resolveActionsAuth({ apiKey: 'flag-key' }, stored).apiKey).toBe('flag-key');
+    expect(await key({}, stored)).toBe('env-key');
+    expect(await key({ apiKey: 'flag-key' }, stored)).toBe('flag-key');
+    // Only consulted when nothing higher in the chain was set.
+    expect(stored).toHaveBeenCalledTimes(1);
   });
 
-  it('accepts the legacy BENCHMARKS_PLATFORM_* env vars as fallback', () => {
+  it('uses a stored OAuth access token when no API key is stored', async () => {
+    const stored = async () => ({ token: 'oauth-access-token' });
+    expect(await key({}, stored)).toBe('oauth-access-token');
+    // A stored API key wins over a stored token, matching @benchsdk/cli.
+    expect(await key({}, async () => ({ apiKey: 'stored-key', token: 't' }))).toBe('stored-key');
+  });
+
+  it('passes the resolved base URL to the stored resolver so refresh hits the same host', async () => {
+    const stored = vi.fn(async () => ({ token: 't' }));
+    await resolveActionsAuth({ baseUrl: 'http://localhost:3000/' }, stored);
+    expect(stored).toHaveBeenCalledWith({ baseUrl: 'http://localhost:3000' });
+  });
+
+  it('maps a stored-credential failure (missing, expired, refresh failed) to no_credentials', async () => {
+    const expired = async () => {
+      throw new Error('Your session has expired.');
+    };
+    const err = await failCode({}, expired);
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect(err.code).toBe('no_credentials');
+    expect(err.message).toContain('Your session has expired.');
+    expect(err.message).toContain('compute bench auth login');
+    expect(err.message).not.toContain('compute login');
+
+    const nothingStored = async () => {
+      throw new Error('No credentials found. Set BENCHMARKS_PLATFORM_API_KEY ... run `bench auth login`.');
+    };
+    const none = await failCode({}, nothingStored);
+    expect(none.code).toBe('no_credentials');
+    expect(none.message).toBe('No API key. Set COMPUTE_API_KEY, pass --api-key, or run `compute bench auth login`.');
+  });
+
+  it('accepts the legacy BENCHMARKS_PLATFORM_* env vars as fallback', async () => {
     process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
     process.env.BENCHMARKS_PLATFORM_URL = 'https://staging.computesdk.com';
-    const auth = resolveActionsAuth({});
+    const auth = await resolveActionsAuth({});
     expect(auth.apiKey).toBe('legacy-key');
     expect(auth.baseUrl).toBe('https://staging.computesdk.com');
-    delete process.env.BENCHMARKS_PLATFORM_API_KEY;
-    delete process.env.BENCHMARKS_PLATFORM_URL;
   });
 
-  it('empty new env vars fall through to the legacy aliases', () => {
+  it('empty new env vars fall through to the legacy aliases', async () => {
     process.env.COMPUTE_API_KEY = '';
     process.env.COMPUTE_PLATFORM_URL = '';
     process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
     process.env.BENCHMARKS_PLATFORM_URL = 'https://staging.computesdk.com';
-    const auth = resolveActionsAuth({});
+    const auth = await resolveActionsAuth({});
     expect(auth.apiKey).toBe('legacy-key');
     expect(auth.baseUrl).toBe('https://staging.computesdk.com');
-    delete process.env.COMPUTE_API_KEY;
-    delete process.env.COMPUTE_PLATFORM_URL;
-    delete process.env.BENCHMARKS_PLATFORM_API_KEY;
-    delete process.env.BENCHMARKS_PLATFORM_URL;
   });
 
-  it('strips a trailing slash from base-url', () => {
+  it('strips a trailing slash from base-url', async () => {
     expect(
-      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://localhost:3000/' }).baseUrl,
+      (await resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://localhost:3000/' })).baseUrl,
     ).toBe('http://localhost:3000');
   });
 
-  it('throws a coded error without a key', () => {
-    let err: unknown;
-    try {
-      resolveActionsAuth({}, noStored);
-    } catch (e) {
-      err = e;
-    }
+  it('throws a coded error without a key', async () => {
+    const err = await failCode({});
     expect(err).toBeInstanceOf(ActionsCliError);
-    expect((err as ActionsCliError).code).toBe('no_credentials');
-    expect((err as Error).message).toContain('compute login');
+    expect(err.code).toBe('no_credentials');
+    expect(err.message).toContain('compute bench auth login');
   });
 
-  it('requires https for any non-loopback host, trusted or not', () => {
+  it('requires https for any non-loopback host, trusted or not', async () => {
     for (const insecure of [
       'http://platform.computesdk.com',
       'http://staging.computesdk.com',
       'http://computesdk.com',
     ]) {
-      expect(() => resolveActionsAuth({ apiKey: 'k', baseUrl: insecure })).toThrow('plaintext HTTP');
+      await expect(resolveActionsAuth({ apiKey: 'k', baseUrl: insecure })).rejects.toThrow('plaintext HTTP');
     }
-    let err: unknown;
-    try {
-      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://platform.computesdk.com' });
-    } catch (e) {
-      err = e;
-    }
-    expect((err as ActionsCliError).code).toBe('insecure_transport');
+    expect((await failCode({ apiKey: 'k', baseUrl: 'http://platform.computesdk.com' })).code).toBe('insecure_transport');
     // --allow-untrusted-host is about the host, not the transport.
-    expect(() =>
+    await expect(
       resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://evil.example.com', allowUntrustedHost: true }),
-    ).toThrow('plaintext HTTP');
-    expect(() =>
+    ).rejects.toThrow('plaintext HTTP');
+    await expect(
       resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://evil.example.com' }),
-    ).toThrow('--allow-untrusted-host');
+    ).rejects.toThrow('--allow-untrusted-host');
   });
 
-  it('refuses to send the key to untrusted hosts', () => {
-    expect(() =>
+  it('validates the base URL before touching stored credentials', async () => {
+    const stored = vi.fn(async () => ({ apiKey: 'stored-key' }));
+    await expect(
+      resolveActionsAuth({ baseUrl: 'http://evil.example.com' }, stored),
+    ).rejects.toThrow('--allow-untrusted-host');
+    expect(stored).not.toHaveBeenCalled();
+  });
+
+  it('refuses to send the key to untrusted hosts', async () => {
+    await expect(
       resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com' }),
-    ).toThrow('--allow-untrusted-host');
+    ).rejects.toThrow('--allow-untrusted-host');
     expect(
-      resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com', allowUntrustedHost: true })
+      (await resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com', allowUntrustedHost: true }))
         .baseUrl,
     ).toBe('https://evil.example.com');
     for (const ok of [
@@ -780,7 +823,7 @@ describe('resolveActionsAuth', () => {
       'http://127.0.0.1:8787',
       'http://[::1]:3000',
     ]) {
-      expect(resolveActionsAuth({ apiKey: 'k', baseUrl: ok }).baseUrl).toBe(ok);
+      expect((await resolveActionsAuth({ apiKey: 'k', baseUrl: ok })).baseUrl).toBe(ok);
     }
   });
 });

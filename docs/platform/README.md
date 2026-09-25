@@ -47,7 +47,7 @@ The key implies the organization — no org id is needed on normal calls. `BENCH
 
 ### CLI browser auth
 
-The `compute` CLI can also authenticate interactively — `compute bench auth` (and other commands that need auth) run a browser flow against `console.computesdk.com` and store the resulting key in `~/.computesdk/credentials.json`. An env var key always wins over stored credentials.
+The `compute` CLI can also authenticate interactively — `compute bench auth login` runs the platform's OAuth flow and stores the resulting tokens in `~/.benchsdk/credentials.json`, which `compute bench` and `compute actions` then use (refreshing expired access tokens automatically). An env var key always wins over stored credentials. Note that `compute login` authenticates against `console.computesdk.com` and stores a *gateway* key (`COMPUTESDK_API_KEY`) for `compute run`; it is not a platform credential.
 
 ## Products and entitlements
 

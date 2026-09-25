@@ -62,8 +62,8 @@ interface CommonOpts extends JsonOpts {
   allowUntrustedHost?: boolean;
 }
 
-function client(opts: CommonOpts): ActionsClient {
-  return new ActionsClient(resolveActionsAuth(opts));
+async function client(opts: CommonOpts): Promise<ActionsClient> {
+  return new ActionsClient(await resolveActionsAuth(opts));
 }
 
 /** Print `data` as JSON when --json was passed; otherwise call `render`. */
@@ -600,7 +600,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)'),
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
         '/api/v1/actions/workflows',
         { repo },
@@ -639,7 +639,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--branch <branch...>', 'filter by branch/ref'),
   ).action(async (repo: string, opts: CommonOpts & { status?: string[]; branch?: string[] }) => {
     try {
-      const { runs } = await client(opts).get<{ runs: CiRun[] }>(
+      const { runs } = await (await client(opts)).get<{ runs: CiRun[] }>(
         '/api/v1/actions/runs',
         { repo, status: opts.status, branch: opts.branch },
       );
@@ -666,7 +666,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--limit <n>', 'runs in the window (default 10, max 50)'),
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; branch?: string[]; job?: string; limit?: string }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
         '/api/v1/actions/workflows',
         { repo },
@@ -693,7 +693,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const run = await c.get<CiRun>(`/api/v1/actions/runs/${runId}`);
       const org = await c.org();
       const url = `${c.baseUrl}/${org.slug}/actions/runs/${run.id}`;
@@ -719,7 +719,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const summary = await client(opts).get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
+      const summary = await (await client(opts)).get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
       output(opts, summary, (s) => console.log(formatRunSummary(s)));
     } catch (e) {
       fail(e, opts);
@@ -733,7 +733,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const inspection = await c.get<CiRunInspection>(
         `/api/v1/actions/runs/${runId}/state`,
       );
@@ -753,7 +753,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--follow', 'stream logs while the run is live'),
   ).action(async (runId: string, opts: CommonOpts & { job?: string; step?: string; follow?: boolean }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       let jobs = await listRunJobs(c, runId);
       if (opts.job) {
         const job = matchJob(jobs, opts.job);
@@ -816,7 +816,7 @@ export function registerActionsCommands(program: Command): void {
     .description('List the org\'s registered compute providers (regions, act/usable status)');
   common(providers).action(async (opts: CommonOpts) => {
     try {
-      const data = await client(opts).get<CiProvidersResponse>('/api/v1/actions/providers');
+      const data = await (await client(opts)).get<CiProvidersResponse>('/api/v1/actions/providers');
       output(opts, data, (d) => {
         for (const p of d.providers) console.log(formatProviderRow(p));
       });
@@ -835,7 +835,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--verify', 'run the placement probe after saving'),
   ).action(async (provider: string, opts: CommonOpts & { key?: string; field?: string[]; verify?: boolean }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       let body: Record<string, unknown>;
       if (opts.field !== undefined) {
         if (opts.key !== undefined) throw new Error('Pass either --key or --field, not both.');
@@ -871,7 +871,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {
-      const result = await client(opts).post<CiProviderKeyResponse>(
+      const result = await (await client(opts)).post<CiProviderKeyResponse>(
         `/api/v1/actions/providers/${provider}/verify`,
       );
       output(opts, result, (r) => console.log(formatVerifyResult(r)));
@@ -888,7 +888,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {
-      const result = await client(opts).del<{ provider: string; deleted: boolean }>(
+      const result = await (await client(opts)).del<{ provider: string; deleted: boolean }>(
         `/api/v1/actions/providers/${provider}/key`,
       );
       output(opts, result, (r) => {
@@ -904,7 +904,7 @@ export function registerActionsCommands(program: Command): void {
     .description('List the org\'s connected repositories');
   common(repos).action(async (opts: CommonOpts) => {
     try {
-      const data = await client(opts).get<CiReposResponse>('/api/v1/actions/repos');
+      const data = await (await client(opts)).get<CiReposResponse>('/api/v1/actions/repos');
       output(opts, data, (d) => {
         for (const r of d.repos) console.log(formatRepoRow(r));
       });
@@ -949,7 +949,7 @@ export function registerActionsCommands(program: Command): void {
       if (opts.knownHostsFile !== undefined && opts.sshKeyFile === undefined) {
         throw new Error('--known-hosts-file requires --ssh-key-file.');
       }
-      const result = await client(opts).post<CiRepoConnectResponse>('/api/v1/actions/repos', {
+      const result = await (await client(opts)).post<CiRepoConnectResponse>('/api/v1/actions/repos', {
         cloneUrl,
         ...body,
         ...(opts.name !== undefined && { name: opts.name }),
@@ -972,7 +972,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
   ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
     try {
-      const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
+      const result = await (await client(opts)).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
         fullName: repo,
         enabled: true,
         ...(opts.repoId !== undefined && { repoId: opts.repoId }),
@@ -994,7 +994,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
   ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
     try {
-      const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
+      const result = await (await client(opts)).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
         fullName: repo,
         enabled: false,
         ...(opts.repoId !== undefined && { repoId: opts.repoId }),
@@ -1012,7 +1012,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const result = await client(opts).post<{ cancelled: boolean }>(
+      const result = await (await client(opts)).post<{ cancelled: boolean }>(
         `/api/v1/actions/runs/${runId}/cancel`,
       );
       output(opts, result, (r) => {
@@ -1030,7 +1030,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const result = await c.post<{ runId: string; created: boolean }>(
         `/api/v1/actions/runs/${runId}/rerun`,
       );
@@ -1054,7 +1054,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--out <dir>', 'download artifacts into this directory instead of listing'),
   ).action(async (runId: string, opts: CommonOpts & { job?: string; out?: string }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       let jobs = await listRunJobs(c, runId);
       if (opts.job) {
         const job = matchJob(jobs, opts.job);

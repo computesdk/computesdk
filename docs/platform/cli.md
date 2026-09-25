@@ -24,7 +24,7 @@ The binary is `compute`. Pass `--json` on almost any platform command for machin
 
 ## Authentication
 
-Auth resolves in this order: `--api-key` flag → `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored credentials (`~/.computesdk/credentials.json`, written by `compute login`). Actions commands never start the browser login themselves; with no key anywhere they fail with `no_credentials`.
+Auth resolves in this order: `--api-key` flag → `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored platform OAuth credentials (`~/.benchsdk/credentials.json`, written by `compute bench auth login`; an expired access token is refreshed silently). Actions commands never start the browser login themselves; with no key anywhere they fail with `no_credentials`. The gateway key stored by `compute login` (`~/.computesdk/credentials.json`) is a different credential and is not used for the platform API.
 
 The bearer key is only sent to `computesdk.com` and loopback hosts unless you pass `--allow-untrusted-host`, and only over HTTPS — plain `http://` is accepted for `localhost`/`127.0.0.1`/`::1` only. `--allow-untrusted-host` does not relax the HTTPS requirement.
 

@@ -236,7 +236,7 @@ describe('resolveApiKey', () => {
   });
 });
 
-describe('resolveActionsAuth stored credentials', () => {
+describe('resolveActionsAuth ignores gateway login credentials', () => {
   const ACTIONS_ENV = ['COMPUTE_API_KEY', 'BENCHMARKS_PLATFORM_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_URL'];
   const saved: Record<string, string | undefined> = {};
 
@@ -254,28 +254,19 @@ describe('resolveActionsAuth stored credentials', () => {
     }
   });
 
-  it('uses the key written by the browser login flow', () => {
+  it('does not use the gateway key written by `compute login` and never starts a login', async () => {
+    // The gateway key is not a platform credential; only the platform resolver is consulted.
     storeCredentials('computesdk_live_stored');
-    expect(resolveActionsAuth({}).apiKey).toBe('computesdk_live_stored');
-  });
-
-  it('flag and env win over the stored key', () => {
-    storeCredentials('computesdk_live_stored');
-    process.env.COMPUTE_API_KEY = 'env-key';
-    expect(resolveActionsAuth({}).apiKey).toBe('env-key');
-    expect(resolveActionsAuth({ apiKey: 'flag-key' }).apiKey).toBe('flag-key');
-  });
-
-  it('fails synchronously with no_credentials instead of starting a login', () => {
-    // Synchronous throw proves no browser/server flow was awaited.
+    const noPlatformCreds = async () => ({});
     let err: unknown;
     try {
-      resolveActionsAuth({});
+      await resolveActionsAuth({}, noPlatformCreds);
     } catch (e) {
       err = e;
     }
     expect(err).toBeInstanceOf(ActionsCliError);
     expect((err as ActionsCliError).code).toBe('no_credentials');
-    expect(fs.existsSync(CREDENTIALS_FILE)).toBe(false);
+    expect((err as Error).message).toContain('compute bench auth login');
+    expect(loadStoredCredentials()).toBe('computesdk_live_stored');
   });
 });
