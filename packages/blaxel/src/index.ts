@@ -613,6 +613,7 @@ const TERMINAL_PROCESS_STATUSES = new Set(['completed', 'failed', 'stopped', 'ki
 
 /** How long to poll for a still-running process when no command timeout is set. */
 const DEFAULT_PROCESS_WAIT_MS = 5 * 60 * 1000;
+const LAUNCHER_TIMEOUT_GRACE_MS = 10_000;
 
 /** Grace period for the live log stream to deliver its final bytes after the process goes terminal. */
 const STREAM_DRAIN_MS = 2000;
@@ -782,8 +783,12 @@ function normalizeProcessStatus(status: string | undefined): BlaxelProcessStatus
 	}
 }
 
+// Linux signal numbers (the sandbox is Linux; Node reports signals by name).
 const SIGNAL_NUMBERS: Record<string, number> = {
-	SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGABRT: 6, SIGKILL: 9, SIGSEGV: 11, SIGPIPE: 13, SIGALRM: 14, SIGTERM: 15,
+	SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGILL: 4, SIGTRAP: 5, SIGABRT: 6, SIGIOT: 6, SIGBUS: 7, SIGFPE: 8,
+	SIGKILL: 9, SIGUSR1: 10, SIGSEGV: 11, SIGUSR2: 12, SIGPIPE: 13, SIGALRM: 14, SIGTERM: 15, SIGSTKFLT: 16,
+	SIGCHLD: 17, SIGCONT: 18, SIGSTOP: 19, SIGTSTP: 20, SIGTTIN: 21, SIGTTOU: 22, SIGURG: 23, SIGXCPU: 24,
+	SIGXFSZ: 25, SIGVTALRM: 26, SIGPROF: 27, SIGWINCH: 28, SIGIO: 29, SIGPOLL: 29, SIGPWR: 30, SIGSYS: 31,
 };
 
 function createRequestId(): string {
@@ -809,7 +814,7 @@ async function runViaDaemon(
 		args: ['-c', command],
 		cwd: options?.cwd,
 		env: options?.env,
-		timeoutMs: options?.timeout,
+		timeoutMs: options?.timeout ?? DEFAULT_PROCESS_WAIT_MS,
 		detach: options?.background === true,
 		requestId: createRequestId(),
 	};
@@ -817,13 +822,28 @@ async function runViaDaemon(
 
 	// The launcher's own exit status is only meaningful for the bootstrap; the
 	// command's outcome is in the JSON it prints.
-	const native = await executeWithStreaming(sandbox, launcher, options?.timeout);
+	// Give the launcher a little longer than the command so daemond's own
+	// timeout result (real exit code / signal) wins over a native wait timeout.
+	const native = await executeWithStreaming(
+		sandbox,
+		launcher,
+		(options?.timeout ?? DEFAULT_PROCESS_WAIT_MS) + LAUNCHER_TIMEOUT_GRACE_MS
+	);
 
 	let invocation: SeedInvocationResult;
 	try {
 		invocation = parseSeedInvocationOutput(native.stdout);
-	} catch {
-		return null;
+	} catch (parseError) {
+		// The launcher exits 127 only when the sandbox has no JS runtime and the
+		// bootstrap download failed: a property of the image, so fall back to
+		// native for good. Anything else is a transient daemon failure and must
+		// not silently route later commands through Blaxel's quote-mangling exec.
+		if (native.exitCode === 127) return null;
+		throw new BlaxelExecError(
+			`Blaxel daemon launcher produced no result (exit ${native.exitCode}, status '${native.status}'): ` +
+				(parseError instanceof Error ? parseError.message : String(parseError)),
+			{ status: native.status, exitCode: native.exitCode, pid: native.pid, stdout: native.stdout, stderr: native.stderr }
+		);
 	}
 
 	const cmd = invocation.command;
@@ -839,7 +859,15 @@ async function runViaDaemon(
 	}
 
 	const signal = cmd.signal ?? null;
-	const exitCode = cmd.exitCode ?? (signal ? 128 + (SIGNAL_NUMBERS[signal] ?? 0) : 1);
+	if (cmd.exitCode === null && signal && SIGNAL_NUMBERS[signal] === undefined) {
+		throw new BlaxelExecError(`Blaxel daemon job was terminated by unknown signal '${signal}'`, {
+			status: 'killed',
+			exitCode: null,
+			stdout: cmd.stdout,
+			stderr: cmd.stderr,
+		});
+	}
+	const exitCode = cmd.exitCode ?? (signal ? 128 + SIGNAL_NUMBERS[signal] : 1);
 	return {
 		stdout: cmd.stdout,
 		stderr: cmd.stderr,

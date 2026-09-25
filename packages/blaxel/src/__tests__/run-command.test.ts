@@ -376,6 +376,55 @@ describe('blaxel runCommand via daemond (default exec mode)', () => {
 		expect(exec.mock.calls.map((c) => c[0].command.startsWith('printf %s '))).toEqual([true, false, false]);
 	});
 
+	it('does not downgrade to native on a transient launcher failure (non-127)', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			if (opts.command.startsWith('printf %s ')) {
+				return { status: 'failed', exitCode: 1, pid: 'p1', stderr: 'daemon: connect ECONNREFUSED' };
+			}
+			return { status: 'completed', exitCode: 0, pid: 'p2', stdout: 'native\n' };
+		});
+		const sbx = await getSandbox(makeSandbox(exec), 'daemon');
+
+		const error = await sbx.runCommand('echo x').catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(BlaxelExecError);
+		expect((error as BlaxelExecError).stderr).toContain('ECONNREFUSED');
+
+		await sbx.runCommand('echo x').catch(() => undefined);
+		expect(exec.mock.calls.map((c) => c[0].command.startsWith('printf %s '))).toEqual([true, true]);
+	});
+
+	it('applies the 5-minute default deadline to the daemon payload when no timeout is given', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			expect(decodeLauncherPayload(opts.command)).toMatchObject({ timeoutMs: 5 * 60 * 1000 });
+			return { status: 'completed', exitCode: 0, pid: 'p1', stdout: seedOutput({}) };
+		});
+
+		await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true');
+		expect(exec).toHaveBeenCalledTimes(1);
+	});
+
+	it('maps every Linux signal, including SIGUSR1, to 128+signo', async () => {
+		const exec = vi.fn(async () => ({
+			status: 'completed', exitCode: 0, pid: 'p1',
+			stdout: seedOutput({ status: 'exited', exitCode: null, signal: 'SIGUSR1' }),
+		}));
+
+		const result = await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true');
+		expect(result).toMatchObject({ status: 'killed', exitCode: 138, signal: 'SIGUSR1' });
+	});
+
+	it('throws instead of guessing an exit code for an unknown signal name', async () => {
+		const exec = vi.fn(async () => ({
+			status: 'completed', exitCode: 0, pid: 'p1',
+			stdout: seedOutput({ status: 'exited', exitCode: null, signal: 'SIGWHATEVER', stdout: 'partial' }),
+		}));
+
+		const error = await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('true').catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(BlaxelExecError);
+		expect((error as BlaxelExecError).exitCode).toBeNull();
+		expect((error as BlaxelExecError).stdout).toBe('partial');
+	});
+
 	it('surfaces a busy exec slot as BlaxelExecError even in daemon mode', async () => {
 		const exec = vi.fn(async () => ({ status: 'failed', exitCode: 0, pid: 'p1' }));
 
