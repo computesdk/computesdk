@@ -35,6 +35,7 @@ import {
   runBrowserAuthFlow,
   resolveApiKey,
 } from '../auth.js';
+import { ActionsCliError, resolveActionsAuth } from '../actions-client.js';
 
 const CREDENTIALS_DIR = path.join(TEST_HOME, '.computesdk');
 const CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, 'credentials.json');
@@ -232,5 +233,49 @@ describe('resolveApiKey', () => {
     process.env.COMPUTESDK_API_KEY = 'computesdk_live_from_env';
     const key = await resolveApiKey();
     expect(key).toBe('computesdk_live_from_env');
+  });
+});
+
+describe('resolveActionsAuth stored credentials', () => {
+  const ACTIONS_ENV = ['COMPUTE_API_KEY', 'BENCHMARKS_PLATFORM_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_URL'];
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const k of ACTIONS_ENV) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+
+  afterEach(() => {
+    for (const k of ACTIONS_ENV) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('uses the key written by the browser login flow', () => {
+    storeCredentials('computesdk_live_stored');
+    expect(resolveActionsAuth({}).apiKey).toBe('computesdk_live_stored');
+  });
+
+  it('flag and env win over the stored key', () => {
+    storeCredentials('computesdk_live_stored');
+    process.env.COMPUTE_API_KEY = 'env-key';
+    expect(resolveActionsAuth({}).apiKey).toBe('env-key');
+    expect(resolveActionsAuth({ apiKey: 'flag-key' }).apiKey).toBe('flag-key');
+  });
+
+  it('fails synchronously with no_credentials instead of starting a login', () => {
+    // Synchronous throw proves no browser/server flow was awaited.
+    let err: unknown;
+    try {
+      resolveActionsAuth({});
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect((err as ActionsCliError).code).toBe('no_credentials');
+    expect(fs.existsSync(CREDENTIALS_FILE)).toBe(false);
   });
 });

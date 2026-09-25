@@ -26,7 +26,7 @@ npm i -g @computesdk/cli                # or install once
 ## Actions API quick reference
 
 ```
-compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...]
+compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...] [--manual]
 compute actions runs <repo> [--status ...] [--branch ...]
 compute actions history <repo> --workflow <path|name> [--branch ...] [--job] [--limit n]
 compute actions run <run-id>

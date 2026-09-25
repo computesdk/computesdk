@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
+  dispatchBody,
   formatDuration,
   formatProviderRow,
   formatRunDetail,
@@ -13,10 +14,14 @@ import {
   parseInputs,
 } from '../actions.js';
 import {
+  ActionsApiError,
   ActionsClient,
+  ActionsCliError,
   encodeWatchCursor,
+  isSecureActionsTransport,
   readSseEvents,
   resolveActionsAuth,
+  toErrorEnvelope,
   type CiProviderInfo,
   type CiProviderKeyResponse,
   type CiRun,
@@ -43,6 +48,16 @@ const WORKFLOWS: CiWorkflow[] = [
     name: 'Nightly Bench',
     path: '.github/workflows/nightly.yml',
     dispatchable: true,
+    refs: ['refs/heads/main'],
+    inputs: [],
+    schedules: [],
+  },
+  {
+    id: 'w-3',
+    repoFullName: 'acme/widgets',
+    name: 'On Push Only',
+    path: '.github/workflows/push.yml',
+    dispatchable: false,
     refs: ['refs/heads/main'],
     inputs: [],
     schedules: [],
@@ -542,12 +557,112 @@ describe('ActionsClient', () => {
   });
 });
 
+describe('dispatchBody', () => {
+  const ci = WORKFLOWS[0];
+  const pushOnly = WORKFLOWS[2];
+
+  it('builds a workflow_dispatch body without a manual field', () => {
+    expect(dispatchBody(ci, { inputs: ['suite=dax'], provider: 'vercel', providerRegion: 'sfo1' })).toEqual({
+      workflowId: 'w-1',
+      ref: 'refs/heads/main',
+      inputs: { suite: 'dax' },
+      provider: 'vercel',
+      providerRegion: 'sfo1',
+    });
+  });
+
+  it('refuses a non-dispatchable workflow unless --manual is passed', () => {
+    expect(() => dispatchBody(pushOnly, {})).toThrow('--manual');
+    expect(dispatchBody(pushOnly, { manual: true })).toEqual({
+      workflowId: 'w-3',
+      ref: 'refs/heads/main',
+      inputs: {},
+      manual: true,
+    });
+  });
+
+  it('sends manual: true for a dispatchable workflow too, and refuses inputs with it', () => {
+    expect(dispatchBody(ci, { manual: true, ref: 'refs/heads/dev' })).toMatchObject({ manual: true, ref: 'refs/heads/dev' });
+    expect(() => dispatchBody(ci, { manual: true, inputs: ['a=b'] })).toThrow('no --inputs');
+  });
+
+  it('validates ref and provider-region', () => {
+    expect(() => dispatchBody({ ...ci, refs: [] }, {})).toThrow('--ref');
+    expect(() => dispatchBody(ci, { providerRegion: 'sfo1' })).toThrow('--provider-region requires --provider');
+  });
+});
+
+describe('toErrorEnvelope', () => {
+  it('maps API errors to code/httpStatus/retryable and carries details', () => {
+    expect(toErrorEnvelope(new ActionsApiError(403, 'Owner or admin access required'))).toEqual({
+      ok: false,
+      error: { code: 'forbidden', message: 'Owner or admin access required', httpStatus: 403, retryable: false },
+    });
+    expect(toErrorEnvelope(new ActionsApiError(400, 'bad', { error: 'bad', details: { field: 'ref' } })).error).toMatchObject({
+      code: 'bad_request',
+      details: { field: 'ref' },
+    });
+    expect(toErrorEnvelope(new ActionsApiError(404, 'x')).error.code).toBe('not_found');
+    expect(toErrorEnvelope(new ActionsApiError(409, 'x')).error.code).toBe('conflict');
+    expect(toErrorEnvelope(new ActionsApiError(401, 'x')).error.code).toBe('unauthenticated');
+    expect(toErrorEnvelope(new ActionsApiError(429, 'x')).error).toMatchObject({ code: 'rate_limited', retryable: true });
+    expect(toErrorEnvelope(new ActionsApiError(503, 'x')).error).toMatchObject({ code: 'server_error', retryable: true });
+    expect(toErrorEnvelope(new ActionsApiError(500, 'x')).error).toMatchObject({ code: 'server_error', retryable: false });
+  });
+
+  it('carries CLI error codes and has no httpStatus', () => {
+    const env = toErrorEnvelope(new ActionsCliError('no_credentials', 'No API key.'));
+    expect(env).toEqual({ ok: false, error: { code: 'no_credentials', message: 'No API key.', retryable: false } });
+    expect(toErrorEnvelope(new ActionsCliError('invalid_argument', 'x')).error.code).toBe('invalid_argument');
+  });
+
+  it('marks fetch failures as retryable network errors', () => {
+    const err = new TypeError('fetch failed');
+    (err as { cause?: unknown }).cause = new Error('ECONNREFUSED');
+    expect(toErrorEnvelope(err).error).toEqual({
+      code: 'network',
+      message: 'fetch failed: ECONNREFUSED',
+      retryable: true,
+    });
+  });
+
+  it('falls back to unknown for anything else', () => {
+    expect(toErrorEnvelope(new Error('boom')).error).toEqual({ code: 'unknown', message: 'boom', retryable: false });
+    expect(toErrorEnvelope('str').error.message).toBe('str');
+  });
+});
+
 describe('resolveActionsAuth', () => {
+  const noStored = () => null;
+  const ENV = ['COMPUTE_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_API_KEY', 'BENCHMARKS_PLATFORM_URL'];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of ENV) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of ENV) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
   it('prefers the flag over the env var', () => {
     process.env.COMPUTE_API_KEY = 'env-key';
-    expect(resolveActionsAuth({ apiKey: 'flag-key' }).apiKey).toBe('flag-key');
-    expect(resolveActionsAuth({}).apiKey).toBe('env-key');
-    delete process.env.COMPUTE_API_KEY;
+    expect(resolveActionsAuth({ apiKey: 'flag-key' }, noStored).apiKey).toBe('flag-key');
+    expect(resolveActionsAuth({}, noStored).apiKey).toBe('env-key');
+  });
+
+  it('falls back to stored login credentials after every env var', () => {
+    const stored = () => 'stored-key';
+    expect(resolveActionsAuth({}, stored).apiKey).toBe('stored-key');
+    process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
+    expect(resolveActionsAuth({}, stored).apiKey).toBe('legacy-key');
+    process.env.COMPUTE_API_KEY = 'env-key';
+    expect(resolveActionsAuth({}, stored).apiKey).toBe('env-key');
+    expect(resolveActionsAuth({ apiKey: 'flag-key' }, stored).apiKey).toBe('flag-key');
   });
 
   it('accepts the legacy BENCHMARKS_PLATFORM_* env vars as fallback', () => {
@@ -580,12 +695,40 @@ describe('resolveActionsAuth', () => {
     ).toBe('http://localhost:3000');
   });
 
-  it('throws without a key', () => {
-    delete process.env.COMPUTE_API_KEY;
-    delete process.env.COMPUTE_PLATFORM_URL;
-    delete process.env.BENCHMARKS_PLATFORM_API_KEY;
-    delete process.env.BENCHMARKS_PLATFORM_URL;
-    expect(() => resolveActionsAuth({})).toThrow('COMPUTE_API_KEY');
+  it('throws a coded error without a key', () => {
+    let err: unknown;
+    try {
+      resolveActionsAuth({}, noStored);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect((err as ActionsCliError).code).toBe('no_credentials');
+    expect((err as Error).message).toContain('compute login');
+  });
+
+  it('requires https for any non-loopback host, trusted or not', () => {
+    for (const insecure of [
+      'http://platform.computesdk.com',
+      'http://staging.computesdk.com',
+      'http://computesdk.com',
+    ]) {
+      expect(() => resolveActionsAuth({ apiKey: 'k', baseUrl: insecure })).toThrow('plaintext HTTP');
+    }
+    let err: unknown;
+    try {
+      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://platform.computesdk.com' });
+    } catch (e) {
+      err = e;
+    }
+    expect((err as ActionsCliError).code).toBe('insecure_transport');
+    // --allow-untrusted-host is about the host, not the transport.
+    expect(() =>
+      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://evil.example.com', allowUntrustedHost: true }),
+    ).toThrow('plaintext HTTP');
+    expect(() =>
+      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://evil.example.com' }),
+    ).toThrow('--allow-untrusted-host');
   });
 
   it('refuses to send the key to untrusted hosts', () => {
@@ -601,9 +744,24 @@ describe('resolveActionsAuth', () => {
       'https://staging.computesdk.com',
       'http://localhost:3000',
       'http://127.0.0.1:8787',
+      'http://[::1]:3000',
     ]) {
       expect(resolveActionsAuth({ apiKey: 'k', baseUrl: ok }).baseUrl).toBe(ok);
     }
+  });
+});
+
+describe('isSecureActionsTransport', () => {
+  it('accepts https anywhere and http only on loopback', () => {
+    expect(isSecureActionsTransport('https://platform.computesdk.com')).toBe(true);
+    expect(isSecureActionsTransport('https://evil.example.com')).toBe(true);
+    expect(isSecureActionsTransport('http://localhost:3000')).toBe(true);
+    expect(isSecureActionsTransport('http://127.0.0.1')).toBe(true);
+    expect(isSecureActionsTransport('http://[::1]')).toBe(true);
+    expect(isSecureActionsTransport('http://platform.computesdk.com')).toBe(false);
+    expect(isSecureActionsTransport('http://10.0.0.5:3000')).toBe(false);
+    expect(isSecureActionsTransport('ftp://localhost')).toBe(false);
+    expect(isSecureActionsTransport('not a url')).toBe(false);
   });
 });
 

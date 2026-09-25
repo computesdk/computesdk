@@ -4,6 +4,8 @@
  * keep them in sync by hand; the API is the contract.
  */
 
+import { loadStoredCredentials } from './auth.js';
+
 export const DEFAULT_BASE_URL = 'https://platform.computesdk.com';
 
 export interface ActionsAuth {
@@ -386,6 +388,103 @@ export class ActionsApiError extends Error {
   }
 }
 
+/** Stable machine-readable codes for errors raised by the CLI itself. */
+export type ActionsCliErrorCode =
+  | 'no_credentials'
+  | 'untrusted_host'
+  | 'insecure_transport'
+  | 'invalid_argument'
+  | 'not_found';
+
+/** An error the CLI raised before or instead of an API call. */
+export class ActionsCliError extends Error {
+  constructor(
+    public code: ActionsCliErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ActionsCliError';
+  }
+}
+
+/** The `--json` error envelope; `code` is stable, `message` is for humans. */
+export interface ActionsErrorEnvelope {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    /** Present when the platform answered; absent for local/transport failures. */
+    httpStatus?: number;
+    retryable: boolean;
+    /** The platform's `details` object, when its error response carried one. */
+    details?: Record<string, unknown>;
+  };
+}
+
+function codeForStatus(status: number): string {
+  switch (status) {
+    case 400: return 'bad_request';
+    case 401: return 'unauthenticated';
+    case 403: return 'forbidden';
+    case 404: return 'not_found';
+    case 409: return 'conflict';
+    case 413: return 'payload_too_large';
+    case 429: return 'rate_limited';
+    default: return status >= 500 ? 'server_error' : 'http_error';
+  }
+}
+
+function errorDetails(body: unknown): Record<string, unknown> | undefined {
+  if (body && typeof body === 'object' && 'details' in body) {
+    const details = (body as { details: unknown }).details;
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+      return details as Record<string, unknown>;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Classify any error thrown by an Actions command. API errors carry the HTTP
+ * status; CLI errors carry their own code; a fetch rejection (DNS, refused
+ * connection, TLS) is `network`; anything else is `unknown`.
+ */
+export function toErrorEnvelope(error: unknown): ActionsErrorEnvelope {
+  if (error instanceof ActionsApiError) {
+    const details = errorDetails(error.body);
+    return {
+      ok: false,
+      error: {
+        code: codeForStatus(error.status),
+        message: error.message,
+        httpStatus: error.status,
+        retryable: error.status === 429 || error.status === 502 || error.status === 503 || error.status === 504,
+        ...(details !== undefined && { details }),
+      },
+    };
+  }
+  if (error instanceof ActionsCliError) {
+    return { ok: false, error: { code: error.code, message: error.message, retryable: false } };
+  }
+  // undici/Node fetch rejects with a TypeError whose cause is the socket error.
+  if (error instanceof TypeError && /fetch failed/i.test(error.message)) {
+    const cause = (error as { cause?: unknown }).cause;
+    const detail = cause instanceof Error ? `: ${cause.message}` : '';
+    return {
+      ok: false,
+      error: { code: 'network', message: `${error.message}${detail}`, retryable: true },
+    };
+  }
+  return {
+    ok: false,
+    error: {
+      code: 'unknown',
+      message: error instanceof Error ? error.message : String(error),
+      retryable: false,
+    },
+  };
+}
+
 export class ActionsClient {
   private orgPromise: Promise<ActionsOrg> | null = null;
 
@@ -537,20 +636,31 @@ export function encodeWatchCursor(
   return `${id}:${jobId}:${stepPart}:${offset}`;
 }
 
-export function resolveActionsAuth(opts: {
-  apiKey?: string;
-  baseUrl?: string;
-  allowUntrustedHost?: boolean;
-}): ActionsAuth {
+/**
+ * Precedence: `--api-key` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
+ * (legacy) > `~/.computesdk/credentials.json` (written by `compute login`).
+ * Never starts the browser login flow — Actions commands are noninteractive.
+ */
+export function resolveActionsAuth(
+  opts: {
+    apiKey?: string;
+    baseUrl?: string;
+    allowUntrustedHost?: boolean;
+  },
+  loadStored: () => string | null = loadStoredCredentials,
+): ActionsAuth {
   // `||` not `??`: empty-string env vars (common in CI matrices) should fall
   // through to the next source, not count as configured.
   const apiKey =
     opts.apiKey ||
     process.env.COMPUTE_API_KEY ||
-    process.env.BENCHMARKS_PLATFORM_API_KEY; // legacy name
+    process.env.BENCHMARKS_PLATFORM_API_KEY || // legacy name
+    loadStored() ||
+    undefined;
   if (!apiKey) {
-    throw new Error(
-      'No API key. Set COMPUTE_API_KEY or pass --api-key.',
+    throw new ActionsCliError(
+      'no_credentials',
+      'No API key. Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.',
     );
   }
   const baseUrl = (
@@ -564,12 +674,38 @@ export function resolveActionsAuth(opts: {
   // --base-url would exfiltrate it. Only trusted hosts are allowed silently;
   // anything else must be opted into with --allow-untrusted-host.
   if (!opts.allowUntrustedHost && !isTrustedActionsHost(baseUrl)) {
-    throw new Error(
+    throw new ActionsCliError(
+      'untrusted_host',
       `Refusing to send the API key to ${baseUrl} — it is not a computesdk.com or localhost host. ` +
         'If this is a self-hosted/dev deployment you trust, pass --allow-untrusted-host.',
     );
   }
+  // Host trust and transport security are separate: --allow-untrusted-host
+  // says who may receive the key, never that it may travel in plaintext.
+  if (!isSecureActionsTransport(baseUrl)) {
+    throw new ActionsCliError(
+      'insecure_transport',
+      `Refusing to send the API key over plaintext HTTP to ${baseUrl}. ` +
+        'Use an https:// base URL; http:// is only allowed for localhost/loopback.',
+    );
+  }
   return { apiKey, baseUrl };
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+}
+
+/** https://, or http:// to a loopback host only. */
+export function isSecureActionsTransport(baseUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'https:') return true;
+  return url.protocol === 'http:' && isLoopbackHost(url.hostname);
 }
 
 /** computesdk.com (and subdomains) or localhost — safe to receive the API key. */
@@ -580,11 +716,5 @@ export function isTrustedActionsHost(baseUrl: string): boolean {
   } catch {
     return false;
   }
-  return (
-    host === 'computesdk.com' ||
-    host.endsWith('.computesdk.com') ||
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host === '::1'
-  );
+  return host === 'computesdk.com' || host.endsWith('.computesdk.com') || isLoopbackHost(host);
 }

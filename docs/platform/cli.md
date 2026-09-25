@@ -14,11 +14,19 @@ pnpm dlx @computesdk/cli <cmd>   # zero-install, always latest
 npm i -g @computesdk/cli         # or install once
 ```
 
-The binary is `compute`. Pass `--json` on almost any platform command for machine-readable output.
+The binary is `compute`. Pass `--json` on almost any platform command for machine-readable output. With `--json`, failures are written to stderr as a single JSON envelope and the process exits 1:
+
+```json
+{ "ok": false, "error": { "code": "forbidden", "message": "Owner or admin access required", "httpStatus": 403, "retryable": false } }
+```
+
+`code` is one of `bad_request`, `unauthenticated`, `forbidden`, `not_found`, `conflict`, `payload_too_large`, `rate_limited`, `server_error`, `http_error` (API responses — `httpStatus` is set), or `no_credentials`, `untrusted_host`, `insecure_transport`, `invalid_argument`, `network`, `unknown` (local — no `httpStatus`). `retryable` is `true` for 429/502/503/504 and network failures. `details` is present only when the API returned a `details` object.
 
 ## Authentication
 
-Auth resolves in this order: `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored credentials (`~/.computesdk/credentials.json`, written by the browser login flow). The bearer key is only sent to `computesdk.com` and `localhost` unless you pass `--allow-untrusted-host`.
+Auth resolves in this order: `--api-key` flag → `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored credentials (`~/.computesdk/credentials.json`, written by `compute login`). Actions commands never start the browser login themselves; with no key anywhere they fail with `no_credentials`.
+
+The bearer key is only sent to `computesdk.com` and loopback hosts unless you pass `--allow-untrusted-host`, and only over HTTPS — plain `http://` is accepted for `localhost`/`127.0.0.1`/`::1` only. `--allow-untrusted-host` does not relax the HTTPS requirement.
 
 ```bash
 export COMPUTE_API_KEY="csdk_..."
@@ -44,6 +52,7 @@ compute actions providers remove <provider>
 
 # Dispatch and follow runs
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...]
+compute actions dispatch <repo> --workflow <path|name> --manual   # no workflow_dispatch needed; no inputs
 compute actions runs <repo> [--status ...] [--branch ...]
 compute actions history <repo> --workflow <path|name> [--branch] [--job] [--limit n]
 compute actions run <run-id>                   # jobs, provider:region placement

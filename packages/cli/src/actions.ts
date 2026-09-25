@@ -10,9 +10,10 @@ function sanitizePathPart(name: string): string {
  * dispatch workflows, watch runs, inspect run context, stream logs,
  * manage artifacts.
  *
- * Auth: COMPUTE_API_KEY (or --api-key); --base-url overrides the
- * https://platform.computesdk.com default. Every subcommand takes --json for
- * machine-readable output.
+ * Auth: --api-key, else COMPUTE_API_KEY, else the credentials `compute login`
+ * stored; --base-url overrides the https://platform.computesdk.com default.
+ * Every subcommand takes --json for machine-readable output — on success the
+ * data, on failure the `{ ok: false, error: {...} }` envelope on stderr.
  */
 
 import { Command } from 'commander';
@@ -21,9 +22,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
+  ActionsCliError,
   ActionsClient,
   encodeWatchCursor,
   resolveActionsAuth,
+  toErrorEnvelope,
   type CiArtifactListItem,
   type CiJob,
   type CiLogSlice,
@@ -115,11 +118,18 @@ async function fetchRunSummary(c: ActionsClient, runId: string): Promise<CiRunSu
   }
 }
 
-function fail(error: unknown): never {
-  if (error instanceof ActionsApiError) {
+/**
+ * Report an error and exit 1. With --json the stderr line is the stable
+ * envelope from `toErrorEnvelope` (stdout stays empty, so a consumer can parse
+ * either stream without guessing); otherwise a one-line human message.
+ */
+function fail(error: unknown, opts: JsonOpts = {}): never {
+  if (opts.json) {
+    process.stderr.write(JSON.stringify(toErrorEnvelope(error)) + '\n');
+  } else if (error instanceof ActionsApiError) {
     console.error(pc.red(`Error (${error.status}): ${error.message}`));
   } else {
-    console.error(pc.red(`Error: ${(error as Error).message}`));
+    console.error(pc.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
   }
   process.exit(1);
 }
@@ -308,7 +318,7 @@ export function parseInputs(pairs: string[] | undefined): Record<string, string>
   for (const pair of pairs ?? []) {
     const eq = pair.indexOf('=');
     if (eq === -1) {
-      throw new Error(`Invalid --inputs entry "${pair}". Expected key=value.`);
+      throw new ActionsCliError('invalid_argument', `Invalid --inputs entry "${pair}". Expected key=value.`);
     }
     inputs[pair.slice(0, eq)] = pair.slice(eq + 1);
   }
@@ -378,7 +388,7 @@ export function parseStep(step: string | undefined): number | 'runner' | null {
   if (step === 'runner') return 'runner';
   const n = Number(step);
   if (!Number.isInteger(n) || n < 0) {
-    throw new Error(`Invalid --step "${step}". Expected a step ordinal or "runner".`);
+    throw new ActionsCliError('invalid_argument', `Invalid --step "${step}". Expected a step ordinal or "runner".`);
   }
   return n;
 }
@@ -510,6 +520,42 @@ function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: st
 
 // ─── Commands ───────────────────────────────────────────────────────────────
 
+/**
+ * The `POST /api/v1/actions/dispatch` body for `dispatch`. Without --manual a
+ * workflow must declare `workflow_dispatch`; with it, the platform runs the
+ * workflow regardless and accepts no inputs, so any given here are refused
+ * rather than silently dropped.
+ */
+export function dispatchBody(
+  workflow: CiWorkflow,
+  opts: { ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string },
+): Record<string, unknown> {
+  if (!workflow.dispatchable && !opts.manual) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Workflow "${workflow.path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
+    );
+  }
+  if (opts.manual && opts.inputs !== undefined && opts.inputs.length > 0) {
+    throw new ActionsCliError('invalid_argument', '--manual runs take no --inputs.');
+  }
+  const ref = opts.ref ?? workflow.refs[0];
+  if (!ref) throw new ActionsCliError('invalid_argument', 'No --ref given and the workflow has no watched refs.');
+  if (opts.providerRegion !== undefined && opts.provider === undefined) {
+    throw new ActionsCliError('invalid_argument', '--provider-region requires --provider.');
+  }
+  return {
+    workflowId: workflow.id,
+    ref,
+    inputs: parseInputs(opts.inputs),
+    ...(opts.manual && { manual: true }),
+    ...(opts.provider !== undefined && {
+      provider: opts.provider,
+      ...(opts.providerRegion !== undefined && { providerRegion: opts.providerRegion }),
+    }),
+  };
+}
+
 export function registerActionsCommands(program: Command): void {
   const actions = program
     .command('actions')
@@ -526,14 +572,15 @@ export function registerActionsCommands(program: Command): void {
   common(
     actions
       .command('dispatch')
-      .description('Dispatch a workflow_dispatch run')
+      .description('Dispatch a workflow_dispatch run (or any workflow with --manual)')
       .argument('<repo>', 'repository in owner/repo format')
       .requiredOption('--workflow <path|name>', 'workflow path or name')
       .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref)')
-      .option('--inputs <pairs...>', 'workflow inputs as key=value')
+      .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch workflows only)')
+      .option('--manual', 'run a workflow that does not declare workflow_dispatch; takes no --inputs')
       .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
       .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)'),
-  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; provider?: string; providerRegion?: string }) => {
+  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string }) => {
     try {
       const c = client(opts);
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
@@ -543,26 +590,15 @@ export function registerActionsCommands(program: Command): void {
       const workflow = matchWorkflow(workflows, opts.workflow);
       if (!workflow) {
         const choices = workflows.map((w) => `${w.path} (${w.name})`).join(', ') || 'none';
-        throw new Error(
-          `No dispatchable workflow "${opts.workflow}" in ${repo}. Available: ${choices}`,
+        throw new ActionsCliError(
+          'not_found',
+          `No workflow "${opts.workflow}" in ${repo}. Available: ${choices}`,
         );
       }
-      const ref = opts.ref ?? workflow.refs[0];
-      if (!ref) throw new Error('No --ref given and the workflow has no watched refs.');
-      if (opts.providerRegion !== undefined && opts.provider === undefined) {
-        throw new Error('--provider-region requires --provider.');
-      }
+      const body = dispatchBody(workflow, opts);
       const result = await c.post<{ runId: string; created: boolean; headSha: string }>(
         '/api/v1/actions/dispatch',
-        {
-          workflowId: workflow.id,
-          ref,
-          inputs: parseInputs(opts.inputs),
-          ...(opts.provider !== undefined && {
-            provider: opts.provider,
-            ...(opts.providerRegion !== undefined && { providerRegion: opts.providerRegion }),
-          }),
-        },
+        body,
       );
       const org = await c.org();
       const url = `${c.baseUrl}/${org.slug}/actions/runs/${result.runId}`;
@@ -572,7 +608,7 @@ export function registerActionsCommands(program: Command): void {
         console.log(`url: ${r.url}`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -597,7 +633,7 @@ export function registerActionsCommands(program: Command): void {
         for (const run of rs) console.log(formatRunRow(run));
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -628,7 +664,7 @@ export function registerActionsCommands(program: Command): void {
       });
       output(opts, history, (h) => console.log(formatRunHistory(h)));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -654,7 +690,7 @@ export function registerActionsCommands(program: Command): void {
         }
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -668,7 +704,7 @@ export function registerActionsCommands(program: Command): void {
       const summary = await client(opts).get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
       output(opts, summary, (s) => console.log(formatRunSummary(s)));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -685,7 +721,7 @@ export function registerActionsCommands(program: Command): void {
       );
       output(opts, inspection, (r) => console.log(formatRunInspection(r)));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -753,7 +789,7 @@ export function registerActionsCommands(program: Command): void {
         }
       }
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -767,7 +803,7 @@ export function registerActionsCommands(program: Command): void {
         for (const p of d.providers) console.log(formatProviderRow(p));
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -806,7 +842,7 @@ export function registerActionsCommands(program: Command): void {
       });
       if (verification?.verified === false) process.exitCode = 1;
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -823,7 +859,7 @@ export function registerActionsCommands(program: Command): void {
       output(opts, result, (r) => console.log(formatVerifyResult(r)));
       if (result.verified === false) process.exitCode = 1;
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -841,7 +877,7 @@ export function registerActionsCommands(program: Command): void {
         console.log(r.deleted ? `deleted  ${r.provider}` : `no key stored for ${r.provider}`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -855,7 +891,7 @@ export function registerActionsCommands(program: Command): void {
         for (const r of d.repos) console.log(formatRepoRow(r));
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -906,7 +942,7 @@ export function registerActionsCommands(program: Command): void {
         printDiscovery(r.discovery);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -928,7 +964,7 @@ export function registerActionsCommands(program: Command): void {
         if (r.discovery) printDiscovery(r.discovery);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -947,7 +983,7 @@ export function registerActionsCommands(program: Command): void {
       });
       output(opts, result, (r) => console.log(`disabled  ${pc.cyan(safeTerm(r.fullName))}`));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -965,7 +1001,7 @@ export function registerActionsCommands(program: Command): void {
         console.log(r.cancelled ? `Cancelled ${runId}` : `Run ${runId} was already finished`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -987,7 +1023,7 @@ export function registerActionsCommands(program: Command): void {
         console.log(`url: ${r.url}`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -1052,7 +1088,7 @@ export function registerActionsCommands(program: Command): void {
         if (!any) console.log('No artifacts.');
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 }
