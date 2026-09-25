@@ -1,5 +1,12 @@
 # @computesdk/hyperbrowser
 
+## 0.2.12
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
 ## 0.2.11
 
 ### Patch Changes

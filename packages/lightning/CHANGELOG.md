@@ -1,5 +1,12 @@
 # @computesdk/lightning
 
+## 1.0.7
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
 ## 1.0.6
 
 ### Patch Changes

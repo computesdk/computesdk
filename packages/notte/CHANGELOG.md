@@ -1,5 +1,12 @@
 # @computesdk/notte
 
+## 0.3.11
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
 ## 0.3.10
 
 ### Patch Changes

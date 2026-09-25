@@ -1,5 +1,12 @@
 # @computesdk/novita
 
+## 0.0.3
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
 ## 0.0.2
 
 ### Patch Changes

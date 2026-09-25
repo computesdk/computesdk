@@ -1,5 +1,13 @@
 # @computesdk/provider
 
+## 2.1.9
+
+### Patch Changes
+
+- Updated dependencies [1157237]
+  - daemond@0.1.6
+  - computesdk@4.1.8
+
 ## 2.1.8
 
 ### Patch Changes

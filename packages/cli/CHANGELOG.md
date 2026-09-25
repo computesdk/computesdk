@@ -1,5 +1,29 @@
 # @computesdk/cli
 
+## 1.0.11
+
+### Patch Changes
+
+- c77a730: feat(cli): `compute actions inspect <run-id>` — run introspection
+
+  Reads `GET /api/v1/actions/runs/{runId}/state` and prints the context that
+  decided how the run behaved: each job's declared vs resolved `runs-on`
+  labels and the runner image actually used, `container:` pins, cache keys
+  saved/restored in the run window, the names (never values) of secrets
+  bound, concurrency groups, timeout/fetch-depth overrides, and placement
+  attempts with the winning provider:region. `--json` prints the raw
+  inspection document.
+
+- d52afb5: feat(cli): `compute actions summary` + inline failure digest in `compute actions run`
+
+  Reads `GET /api/v1/actions/runs/{runId}/summary` and prints each failed job
+  with its failed steps and a bounded, secret-redacted tail of the failing
+  output — so debugging a red run does not mean paging the full log. `compute
+actions run <id>` prints the same digest inline for failed runs when the
+  deployment serves the summary route; `--json` carries it as `summary`.
+
+  - computesdk@4.1.8
+
 ## 1.0.10
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @computesdk/modal
 
+## 1.9.12
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
 ## 1.9.11
 
 ### Patch Changes

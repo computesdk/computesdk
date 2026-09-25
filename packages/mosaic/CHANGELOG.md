@@ -1,5 +1,12 @@
 # @computesdk/mosaic
 
+## 0.1.8
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
 ## 0.1.7
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/buddy",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Buddy provider for ComputeSDK - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots",
   "author": "Lucas Czulak",
   "license": "MIT",

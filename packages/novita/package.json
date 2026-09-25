@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/novita",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Novita Sandbox provider for ComputeSDK - cloud sandboxes with native streaming, filesystem access, and snapshots",
   "license": "MIT",
   "main": "./dist/index.js",
