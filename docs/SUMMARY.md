@@ -43,6 +43,7 @@
   * [Northflank](providers/northflank.md)
   * [Novita](providers/novita.md)
   * [OpenComputer](providers/opencomputer.md)
+  * [Prime Intellect](providers/prime.md)
   * [Quilt](providers/quilt.md)
   * [Railway](providers/railway.md)
   * [Run Cloud](providers/run-cloud.md)
