@@ -39,14 +39,13 @@ async function waitForSocketRemoved(socketPath, timeoutMs, message) {
   throw new Error(message);
 }
 
-// Mirrors the launcher's socket derivation, including the protocol version.
 const SCRIPT_VERSION = "2";
 
 function defaultSocketPath(name, cwd) {
   const workspaceHash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
   const daemonHash = crypto
     .createHash("sha256")
-    .update(`${name}:${workspaceHash}:v${SCRIPT_VERSION}`)
+    .update(`${name}:${workspaceHash}`)
     .digest("hex")
     .slice(0, 16);
   return path.join(os.tmpdir(), ".computesdk", "seed-sockets", `${daemonHash}.sock`);
@@ -385,6 +384,36 @@ test("seed launcher uses configured SSE port", async () => {
     assert.equal(actualPort, targetPort);
   } finally {
     await stopDaemon(name, launched.token);
+  }
+});
+
+test("seed launcher replaces a daemon speaking an older protocol on the same socket and port", async () => {
+  const reserved = await reserveTcpPort();
+  const targetPort = reserved.port;
+  await new Promise((resolve, reject) => {
+    reserved.server.close((err) => (err ? reject(err) : resolve()));
+  });
+
+  const name = `seed-script-upgrade-${process.pid}`;
+  const script = daemonSeedScript({ name, ssePort: targetPort, sseStrictPort: true });
+  // Simulate the previous release: same socket, same strict port, older protocol.
+  const oldScript = script.replace(`const VERSION='${SCRIPT_VERSION}'`, "const VERSION='0'");
+  assert.notEqual(oldScript, script);
+
+  const old = await runSeedLauncher(oldScript, ["pwd"]);
+  try {
+    assert.equal(old.daemon.reused, false);
+    const upgraded = await runSeedLauncher(script, ["pwd"]);
+    assert.equal(upgraded.daemon.reused, false);
+    assert.notEqual(upgraded.daemon.pid, old.daemon.pid);
+    assert.equal(Number(new URL(upgraded.daemon.sseUrl).port), targetPort);
+    assert.equal(upgraded.token, old.token);
+
+    const again = await runSeedLauncher(script, ["pwd"]);
+    assert.equal(again.daemon.reused, true);
+    assert.equal(again.daemon.pid, upgraded.daemon.pid);
+  } finally {
+    await stopDaemon(name, old.token);
   }
 });
 
