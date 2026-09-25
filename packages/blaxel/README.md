@@ -59,10 +59,55 @@ interface BlaxelConfig {
   memory?: number;
   /** Default ports for sandbox (default: [3000]) */
   ports?: number[];
+  /** Volumes attached to every sandbox created by this provider */
+  volumes?: BlaxelVolume[];
+  /** How runCommand delivers commands: 'daemon' (default) or 'native' */
+  exec?: 'daemon' | 'native';
 }
 ```
 
-> 💡 **Note:** For persistent storage across sandbox sessions, see [Mounting & using sandbox volumes](https://docs.blaxel.ai/Sandboxes/Volumes)
+### Volumes
+
+The sandbox rootfs is small (about 1GB). Attach volumes on the provider or per `create()` call; per-call volumes are appended to the provider defaults. Blaxel requires `region` when volumes are attached.
+
+```typescript
+const compute = blaxel({ region: 'us-pdx-1' });
+
+const sandbox = await compute.sandbox.create({
+  volumes: [
+    // Disk-backed scratch space that lives and dies with the sandbox
+    { type: 'ephemeral', name: 'docker', mountPath: '/var/lib/docker', sizeMb: 4096 },
+    // An existing volume resource in the same workspace/region
+    { type: 'persistent', name: 'model-cache', mountPath: '/models', readOnly: true },
+  ],
+});
+```
+
+`BlaxelVolume` mirrors `VolumeAttachment` from `@blaxel/core`; `sizeMb` is required for ephemeral volumes and ignored for persistent ones. See [Mounting & using sandbox volumes](https://docs.blaxel.ai/Sandboxes/Volumes).
+
+### Command delivery (`exec` mode)
+
+Blaxel's exec API has three behaviours worth knowing about:
+
+1. **Quoting is not preserved.** The command string is re-split by the exec layer: an expanded shell variable can arrive as a single argv word and double-quoted arguments can be collapsed.
+2. **One process at a time.** While a process is running, further execs are refused with status `failed` (and exit code 0), and a running process can itself report `failed` while still producing output.
+3. **The exec channel is coupled to the managed `dockerd`.** Killing or restarting Blaxel's own dockerd inside the sandbox severs the exec channel: the process goes `terminated` with exit code 127 and no output. Run your own Docker daemon against a separate data root (e.g. an ephemeral volume at `/var/lib/docker`) rather than replacing the managed one.
+
+The default `exec: 'daemon'` mode works around 1 and 2. `runCommand` hands the command to [daemond](../daemond) inside the sandbox through a launcher made only of base64 words, and daemond spawns `sh -c <command>` with exact argv, so quoting reaches your command intact. daemond also reports the process's real exit code and signal. `background: true` starts a detached daemond job and returns `{ status: 'running', exitCode: 0, jobId }` immediately, freeing the sandbox's single exec slot. Set `exec: 'native'` to pass command strings verbatim to `sandbox.process.exec`; the provider also downgrades a sandbox to native automatically if daemond cannot be bootstrapped there (no JS runtime and no way to download one).
+
+The result of `runCommand` is a `BlaxelCommandResult`: a standard `CommandResult` plus `status` (`completed | running | failed | stopped | killed | terminated`), `signal`, and `jobId`. The exit code is never invented: when Blaxel reports a non-`completed` status with no non-zero exit code (a refused exec, a severed channel), `runCommand` throws `BlaxelExecError` carrying `status`, `exitCode: number | null`, `pid`, and any captured output, instead of returning a fabricated exit code.
+
+```typescript
+import { BlaxelExecError } from '@computesdk/blaxel';
+
+try {
+  await sandbox.runCommand('make test');
+} catch (error) {
+  if (error instanceof BlaxelExecError && error.status === 'failed') {
+    // another process is still running in the sandbox
+  }
+}
+```
 
 ### Default Images
 

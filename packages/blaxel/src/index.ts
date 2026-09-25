@@ -6,8 +6,44 @@
 
 import { SandboxInstance, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { daemonSeedScriptCommand, parseSeedInvocationOutput } from 'daemond';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { SeedCommandInput, SeedInvocationResult } from 'daemond';
+
+/**
+ * A volume attached to a sandbox at creation time.
+ *
+ * Mirrors `VolumeAttachment` from `@blaxel/core`. The sandbox rootfs is small
+ * (~1GB); attach an ephemeral volume for anything disk-hungry, e.g.
+ * `{ type: 'ephemeral', name: 'docker', mountPath: '/var/lib/docker', sizeMb: 4096 }`.
+ * Blaxel requires `region` to be set when volumes are attached.
+ */
+export interface BlaxelVolume {
+	/** `persistent` attaches an existing volume resource; `ephemeral` creates disk-backed scratch space that lives with the sandbox. Defaults to `persistent`. */
+	type?: 'ephemeral' | 'persistent';
+	/** Persistent: name of the volume resource in the same workspace/region. Ephemeral: an identifier for the volume. */
+	name: string;
+	/** Absolute path inside the sandbox. */
+	mountPath: string;
+	readOnly?: boolean;
+	/** Capacity in MB. Required for ephemeral volumes, ignored for persistent ones. */
+	sizeMb?: number;
+}
+
+/**
+ * How `runCommand` delivers commands to the sandbox.
+ *
+ * - `daemon` (default): the command is handed to daemond inside the sandbox
+ *   through a base64-encoded launcher and spawned as `sh -c <command>` with
+ *   exact argv. This sidesteps Blaxel's exec layer re-splitting/collapsing
+ *   quotes, yields the process's real exit code, and lets `background: true`
+ *   run as a detached daemon job so the sandbox's single exec slot is freed.
+ *   Falls back to `native` for the sandbox if daemond cannot be bootstrapped
+ *   (no JS runtime and no way to download one).
+ * - `native`: the command string is passed verbatim to `sandbox.process.exec`.
+ */
+export type BlaxelExecMode = 'daemon' | 'native';
 
 /**
  * Blaxel-specific configuration options
@@ -25,6 +61,74 @@ export interface BlaxelConfig {
 	memory?: number | 4096;
 	/** Default ports for sandbox */
 	ports?: number[] | [3000];
+	/** Default volumes attached to every sandbox created by this provider. */
+	volumes?: BlaxelVolume[];
+	/** Command delivery mode for `runCommand`. Defaults to `daemon`. */
+	exec?: BlaxelExecMode;
+}
+
+/**
+ * `sandbox.create()` options understood by the Blaxel provider.
+ */
+export interface BlaxelCreateOptions extends CreateSandboxOptions {
+	/** Volumes to attach to this sandbox; appended to `BlaxelConfig.volumes`. */
+	volumes?: BlaxelVolume[];
+}
+
+/**
+ * Status of the sandbox process that ran a command, as reported by Blaxel
+ * (native mode) or by daemond (daemon mode).
+ *
+ * `running` is only returned for `background: true` in daemon mode. Native
+ * mode never returns a non-terminal status: it throws {@link BlaxelExecError}
+ * instead of guessing an exit code.
+ */
+export type BlaxelProcessStatus = 'completed' | 'running' | 'failed' | 'stopped' | 'killed' | 'terminated';
+
+/**
+ * `runCommand` result with the process status alongside the exit code.
+ */
+export interface BlaxelCommandResult extends CommandResult {
+	status: BlaxelProcessStatus;
+	/** Signal that terminated the process, when daemond reports one (exit code is then `128 + signo`). */
+	signal?: string | null;
+	/** daemond job id for `background: true` commands in daemon mode. */
+	jobId?: string;
+}
+
+/**
+ * Thrown by `runCommand` when Blaxel reports a process status from which no
+ * trustworthy exit code can be derived — most commonly `failed` with exit code
+ * 0, which is what the exec API returns when another process is already
+ * running in the sandbox (Blaxel allows one exec at a time).
+ */
+export class BlaxelExecError extends Error {
+	readonly status: string;
+	readonly exitCode: number | null;
+	readonly pid?: string;
+	readonly stdout: string;
+	readonly stderr: string;
+
+	constructor(message: string, info: { status: string; exitCode: number | null; pid?: string; stdout: string; stderr: string }) {
+		super(message);
+		this.name = 'BlaxelExecError';
+		this.status = info.status;
+		this.exitCode = info.exitCode;
+		this.pid = info.pid;
+		this.stdout = info.stdout;
+		this.stderr = info.stderr;
+	}
+}
+
+/** Same daemon as the provider framework's streaming path, so both share one process. */
+const DAEMON_SSE_PORT = 38989;
+
+/** Exec mode per sandbox instance; downgraded to `native` when daemond can't be bootstrapped. */
+const execModes = new WeakMap<SandboxInstance, BlaxelExecMode>();
+
+function registerSandbox(config: BlaxelConfig, sandbox: SandboxInstance): SandboxInstance {
+	execModes.set(sandbox, config.exec ?? 'daemon');
+	return sandbox;
 }
 
 /**
@@ -35,7 +139,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	methods: {
 		sandbox: {
 			// Collection operations (map to compute.sandbox.*)
-			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
+			create: async (config: BlaxelConfig, options?: BlaxelCreateOptions) => {
 				// Destructure known ComputeSDK fields, collect the rest for passthrough
 				const {
 					timeout: optTimeout,
@@ -47,8 +151,10 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					sandboxId: optSandboxId,
 					namespace: _namespace,
 					directory: _directory,
+					volumes: optVolumes,
 					...providerOptions
 				} = options || {};
+				const volumes = [...(config.volumes ?? []), ...(optVolumes ?? [])];
 
 				const optRuntime = (options as any)?.runtime as string | undefined;
 
@@ -98,12 +204,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						ttl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
+						...(volumes.length > 0 && { volumes }),
 						...providerOptions, // Spread provider-specific options
 					});
 				}
 
 				return {
-					sandbox,
+					sandbox: registerSandbox(config, sandbox),
 					sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
 				};
 			} catch (error) {
@@ -144,7 +251,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					}
 
 					return {
-						sandbox,
+						sandbox: registerSandbox(config, sandbox),
 						sandboxId,
 					};
 				} catch (error) {
@@ -157,7 +264,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				initializeBlaxel(config);
 				const sandboxList = await listAllSandboxes();
 				return sandboxList.map(sandbox => ({
-					sandbox,
+					sandbox: registerSandbox(config, sandbox),
 					sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
 				}));
 			},
@@ -172,10 +279,16 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			},
 
 			// Instance operations (map to individual Sandbox methods)
-		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<BlaxelCommandResult> => {
 			const startTime = Date.now();
 
 			try {
+				if ((execModes.get(sandbox) ?? 'daemon') === 'daemon') {
+					const viaDaemon = await runViaDaemon(sandbox, command, options, startTime);
+					if (viaDaemon) return viaDaemon;
+					execModes.set(sandbox, 'native');
+				}
+
 				// Build command with options
 				let fullCommand = command;
 				
@@ -197,19 +310,22 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 				}
 
-				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand, options?.timeout);
+				const { stdout, stderr, exitCode, status } = await executeWithStreaming(sandbox, fullCommand, options?.timeout);
 
 				return {
 					stdout,
 					stderr,
 					exitCode,
+					status,
 					durationMs: Date.now() - startTime
 				};
 			} catch (error) {
+				if (error instanceof BlaxelExecError) throw error;
 				return {
 					stdout: '',
 					stderr: error instanceof Error ? error.message : String(error),
 					exitCode: 127,
+					status: 'failed',
 					durationMs: Date.now() - startTime
 				};
 			}
@@ -493,7 +609,7 @@ function convertSandboxStatus(status: string | undefined): 'running' | 'stopped'
 }
 
 /** Process statuses from which no more output will arrive. */
-const TERMINAL_PROCESS_STATUSES = new Set(['completed', 'failed', 'stopped', 'killed']);
+const TERMINAL_PROCESS_STATUSES = new Set(['completed', 'failed', 'stopped', 'killed', 'terminated']);
 
 /** How long to poll for a still-running process when no command timeout is set. */
 const DEFAULT_PROCESS_WAIT_MS = 5 * 60 * 1000;
@@ -508,7 +624,7 @@ async function executeWithStreaming(
 	sandbox: SandboxInstance,
 	command: string,
 	timeoutMs?: number
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+): Promise<{ stdout: string; stderr: string; exitCode: number; status: BlaxelProcessStatus; pid?: string }> {
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
 	// streamLogs emits whole protocol lines with their delimiters stripped,
@@ -630,12 +746,108 @@ async function executeWithStreaming(
 		stdout = result.logs;
 	}
 
-	let exitCode = result.exitCode ?? 0;
-	if (result.status === 'failed' && exitCode === 0) {
-		exitCode = 1;
+	const status = normalizeProcessStatus(result.status);
+	const exitCode = result.exitCode ?? (status === 'completed' ? 0 : null);
+
+	// A non-`completed` status without a non-zero exit code is not a process
+	// outcome: Blaxel reports `failed`/0 when it refuses an exec because another
+	// process is running, and `terminated`/`stopped` when the sandbox side went
+	// away. Substituting a code would hide all of those.
+	if (status === 'completed' && exitCode !== null) {
+		return { stdout, stderr, exitCode, status, pid: result.pid };
+	}
+	if (exitCode !== null && exitCode !== 0) {
+		return { stdout, stderr, exitCode, status, pid: result.pid };
+	}
+	throw new BlaxelExecError(
+		`Blaxel exec ended with status '${status}' and no exit code` +
+		(status === 'failed' ? ' (another process may be running: the sandbox allows one exec at a time)' : ''),
+		{ status, exitCode, pid: result.pid, stdout, stderr }
+	);
+}
+
+function normalizeProcessStatus(status: string | undefined): BlaxelProcessStatus {
+	switch (status) {
+		case 'completed':
+		case 'running':
+		case 'failed':
+		case 'stopped':
+		case 'killed':
+		case 'terminated':
+			return status;
+		case undefined:
+			return 'completed';
+		default:
+			return 'failed';
+	}
+}
+
+const SIGNAL_NUMBERS: Record<string, number> = {
+	SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGABRT: 6, SIGKILL: 9, SIGSEGV: 11, SIGPIPE: 13, SIGALRM: 14, SIGTERM: 15,
+};
+
+function createRequestId(): string {
+	if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+		return crypto.randomUUID();
+	}
+	return `req_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+/**
+ * Runs `command` through daemond inside the sandbox. Returns `null` when the
+ * launcher itself could not run (no JS runtime and bootstrap failed), in which
+ * case the caller should fall back to native exec for this sandbox.
+ */
+async function runViaDaemon(
+	sandbox: SandboxInstance,
+	command: string,
+	options: RunCommandOptions | undefined,
+	startTime: number
+): Promise<BlaxelCommandResult | null> {
+	const payload: SeedCommandInput = {
+		command: 'sh',
+		args: ['-c', command],
+		cwd: options?.cwd,
+		env: options?.env,
+		timeoutMs: options?.timeout,
+		detach: options?.background === true,
+		requestId: createRequestId(),
+	};
+	const launcher = daemonSeedScriptCommand({ ssePort: DAEMON_SSE_PORT }, payload, { argvEncoding: 'base64' });
+
+	// The launcher's own exit status is only meaningful for the bootstrap; the
+	// command's outcome is in the JSON it prints.
+	const native = await executeWithStreaming(sandbox, launcher, options?.timeout);
+
+	let invocation: SeedInvocationResult;
+	try {
+		invocation = parseSeedInvocationOutput(native.stdout);
+	} catch {
+		return null;
 	}
 
-	return { stdout, stderr, exitCode };
+	const cmd = invocation.command;
+	if (cmd.status === 'running') {
+		return {
+			stdout: cmd.stdout,
+			stderr: cmd.stderr,
+			exitCode: 0,
+			status: 'running',
+			jobId: cmd.jobId,
+			durationMs: Date.now() - startTime,
+		};
+	}
+
+	const signal = cmd.signal ?? null;
+	const exitCode = cmd.exitCode ?? (signal ? 128 + (SIGNAL_NUMBERS[signal] ?? 0) : 1);
+	return {
+		stdout: cmd.stdout,
+		stderr: cmd.stderr,
+		exitCode,
+		status: signal ? 'killed' : 'completed',
+		signal,
+		durationMs: Date.now() - startTime,
+	};
 }
 
 // Export the Blaxel SandboxInstance type for explicit typing

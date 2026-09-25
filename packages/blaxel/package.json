@@ -30,6 +30,7 @@
   "dependencies": {
     "@blaxel/core": "^0.3.21",
     "@computesdk/provider": "workspace:*",
+    "daemond": "workspace:*",
     "computesdk": "workspace:*"
   },
   "keywords": [
