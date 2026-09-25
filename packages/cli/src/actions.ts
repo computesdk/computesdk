@@ -17,7 +17,7 @@ function sanitizePathPart(name: string): string {
 
 import { Command } from 'commander';
 import pc from 'picocolors';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
@@ -30,6 +30,10 @@ import {
   type CiProviderInfo,
   type CiProviderKeyResponse,
   type CiProvidersResponse,
+  type CiRepo,
+  type CiRepoConnectResponse,
+  type CiRepoPatchResponse,
+  type CiReposResponse,
   type CiRun,
   type CiRunHistory,
   type CiRunInspection,
@@ -484,6 +488,26 @@ export function formatVerifyResult(r: CiProviderKeyResponse): string {
   return `${head}  ${r.key.provider}${act}${detail}`;
 }
 
+function formatRepoRow(r: CiRepo): string {
+  const head = r.enabled ? pc.green('enabled') : pc.dim('disabled');
+  const via = r.authType === 'github_app' ? 'github-app' : r.authType;
+  const workflows =
+    r.workflowPaths.length > 0
+      ? `${r.workflowPaths.length} workflow${r.workflowPaths.length === 1 ? '' : 's'}`
+      : 'no workflows yet';
+  const error = r.lastPollError ? pc.red(`  poll error: ${safeTerm(r.lastPollError)}`) : '';
+  return `${head}  ${safeTerm(r.fullName)}  ${pc.dim(`${safeTerm(via)} · ${safeTerm(r.defaultBranch)} · ${workflows}`)}${error}`;
+}
+
+/** Print what an enable/connect discovered — one dim line, nothing on a clean run. */
+function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: string | null }): void {
+  if (d.error) {
+    console.log(pc.yellow(`discovery: ${safeTerm(d.error)} (the poll cron retries)`));
+    return;
+  }
+  console.log(pc.dim(`discovery: ${d.workflowsFound ? 'workflows found' : 'no workflows yet'}${d.seeded ? ', cursors seeded' : ''}`));
+}
+
 // ─── Commands ───────────────────────────────────────────────────────────────
 
 export function registerActionsCommands(program: Command): void {
@@ -816,6 +840,112 @@ export function registerActionsCommands(program: Command): void {
       output(opts, result, (r) => {
         console.log(r.deleted ? `deleted  ${r.provider}` : `no key stored for ${r.provider}`);
       });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  const repos = actions
+    .command('repos')
+    .description('List the org\'s connected repositories');
+  common(repos).action(async (opts: CommonOpts) => {
+    try {
+      const data = await client(opts).get<CiReposResponse>('/api/v1/actions/repos');
+      output(opts, data, (d) => {
+        for (const r of d.repos) console.log(formatRepoRow(r));
+      });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    repos
+      .command('connect')
+      .description('Connect a git remote (validated by a real ls-remote; lands enabled)')
+      .argument('<cloneUrl>', 'http(s) or ssh git remote URL')
+      .option('--name <owner/repo>', 'repo name override (default: derived from cloneUrl)')
+      .option('--branch <branch>', 'default branch (default: main, else the remote\'s first)')
+      .option('--token <token>', 'credential for private http(s) remotes')
+      .option('--username <user>', 'username — with --token, makes auth "basic" instead of "token"')
+      .option('--ssh-key-file <path>', 'OpenSSH/PEM private key file for ssh remotes')
+      .option('--known-hosts-file <path>', 'known_hosts pin for ssh remotes'),
+  ).action(async (cloneUrl: string, opts: CommonOpts & { name?: string; branch?: string; token?: string; username?: string; sshKeyFile?: string; knownHostsFile?: string }) => {
+    try {
+      let body: Record<string, unknown>;
+      if (opts.sshKeyFile !== undefined) {
+        if (opts.token !== undefined || opts.username !== undefined) {
+          throw new Error('Pass either --ssh-key-file or --token/--username, not both.');
+        }
+        body = {
+          authType: 'ssh',
+          credential: readFileSync(opts.sshKeyFile, 'utf8'),
+          ...(opts.knownHostsFile !== undefined && {
+            knownHosts: readFileSync(opts.knownHostsFile, 'utf8'),
+          }),
+        };
+      } else if (opts.username !== undefined) {
+        if (opts.token === undefined) throw new Error('--username requires --token.');
+        body = { authType: 'basic', username: opts.username, credential: opts.token };
+      } else if (opts.token !== undefined) {
+        body = { authType: 'token', credential: opts.token };
+      } else {
+        body = { authType: 'none' };
+      }
+      if (opts.knownHostsFile !== undefined && opts.sshKeyFile === undefined) {
+        throw new Error('--known-hosts-file requires --ssh-key-file.');
+      }
+      const result = await client(opts).post<CiRepoConnectResponse>('/api/v1/actions/repos', {
+        cloneUrl,
+        ...body,
+        ...(opts.name !== undefined && { name: opts.name }),
+        ...(opts.branch !== undefined && { defaultBranch: opts.branch }),
+      });
+      output(opts, result, (r) => {
+        console.log(`connected  ${pc.cyan(safeTerm(r.fullName))}  ${pc.dim(`(${safeTerm(r.authType)}, ${safeTerm(r.defaultBranch)})`)}`);
+        printDiscovery(r.discovery);
+      });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    repos
+      .command('enable')
+      .description('Enable a repo the org can already see (granted by a GitHub App install, or a connected remote)')
+      .argument('<repo>', 'repository in owner/repo format')
+      .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
+  ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
+    try {
+      const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
+        fullName: repo,
+        enabled: true,
+        ...(opts.repoId !== undefined && { repoId: opts.repoId }),
+      });
+      output(opts, result, (r) => {
+        console.log(`enabled  ${pc.cyan(safeTerm(r.fullName))}`);
+        if (r.discovery) printDiscovery(r.discovery);
+      });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+  common(
+    repos
+      .command('disable')
+      .description('Disable a repo — it stays connected but no runs are scheduled')
+      .argument('<repo>', 'repository in owner/repo format')
+      .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
+  ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
+    try {
+      const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
+        fullName: repo,
+        enabled: false,
+        ...(opts.repoId !== undefined && { repoId: opts.repoId }),
+      });
+      output(opts, result, (r) => console.log(`disabled  ${pc.cyan(safeTerm(r.fullName))}`));
     } catch (e) {
       fail(e);
     }
