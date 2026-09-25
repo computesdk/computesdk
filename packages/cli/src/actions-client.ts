@@ -391,6 +391,7 @@ export class ActionsApiError extends Error {
 export type ActionsCliErrorCode =
   | 'no_credentials'
   | 'untrusted_host'
+  | 'untrusted_host_stored_auth'
   | 'insecure_transport'
   | 'invalid_argument'
   | 'workflow_not_found';
@@ -692,6 +693,16 @@ export async function resolveActionsAuth(
     process.env.BENCHMARKS_PLATFORM_API_KEY || // legacy name
     undefined;
   if (!apiKey) {
+    // Stored platform OAuth is only ever resolved (and refreshed) for trusted
+    // hosts. --allow-untrusted-host opts an explicit key into a host, not the
+    // user's saved session.
+    if (!isTrustedActionsHost(baseUrl)) {
+      throw new ActionsCliError(
+        'untrusted_host_stored_auth',
+        `Refusing to use stored platform credentials with untrusted host ${baseUrl}. ` +
+          'Pass --api-key or set COMPUTE_API_KEY to use an explicit key with --allow-untrusted-host.',
+      );
+    }
     let stored: StoredPlatformAuth;
     try {
       stored = await resolveStored({ baseUrl });

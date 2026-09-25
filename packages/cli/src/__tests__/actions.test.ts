@@ -732,6 +732,38 @@ describe('resolveActionsAuth', () => {
     expect(stored).toHaveBeenCalledWith({ baseUrl: 'http://localhost:3000' });
   });
 
+  it('uses stored platform credentials for trusted hosts only', async () => {
+    const stored = vi.fn(async () => ({ token: 'oauth-access-token' }));
+    expect(await key({ baseUrl: 'https://platform.computesdk.com' }, stored)).toBe('oauth-access-token');
+    expect(await key({ baseUrl: 'https://staging.computesdk.com' }, stored)).toBe('oauth-access-token');
+    expect(stored).toHaveBeenCalledTimes(2);
+  });
+
+  it('never resolves or refreshes stored credentials for an untrusted host, even with --allow-untrusted-host', async () => {
+    const stored = vi.fn(async () => ({ token: 'oauth-access-token' }));
+    const err = await failCode({ baseUrl: 'https://evil.example.com', allowUntrustedHost: true }, stored);
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect(err.code).toBe('untrusted_host_stored_auth');
+    expect(err.message).toContain('--api-key');
+    expect(err.message).toContain('COMPUTE_API_KEY');
+    expect(stored).not.toHaveBeenCalled();
+    // Without the flag the plain untrusted_host refusal wins, still without touching stored auth.
+    expect((await failCode({ baseUrl: 'https://evil.example.com' }, stored)).code).toBe('untrusted_host');
+    expect(stored).not.toHaveBeenCalled();
+  });
+
+  it('lets --allow-untrusted-host send an explicit flag or env key over HTTPS', async () => {
+    const stored = vi.fn(async () => ({ token: 'oauth-access-token' }));
+    const untrusted = { baseUrl: 'https://evil.example.com', allowUntrustedHost: true };
+    expect(await key({ ...untrusted, apiKey: 'flag-key' }, stored)).toBe('flag-key');
+    process.env.COMPUTE_API_KEY = 'env-key';
+    expect(await key(untrusted, stored)).toBe('env-key');
+    delete process.env.COMPUTE_API_KEY;
+    process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
+    expect(await key(untrusted, stored)).toBe('legacy-key');
+    expect(stored).not.toHaveBeenCalled();
+  });
+
   it('maps a stored-credential failure (missing, expired, refresh failed) to no_credentials', async () => {
     const expired = async () => {
       throw new Error('Your session has expired.');

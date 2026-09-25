@@ -10,8 +10,11 @@ function sanitizePathPart(name: string): string {
  * dispatch workflows, watch runs, inspect run context, stream logs,
  * manage artifacts.
  *
- * Auth: --api-key, else COMPUTE_API_KEY, else the credentials `compute login`
- * stored; --base-url overrides the https://platform.computesdk.com default.
+ * Auth: --api-key, else COMPUTE_API_KEY, else the platform OAuth credentials
+ * `compute bench auth login` stored (refreshed silently, never prompts). The
+ * gateway key from `compute login` is not used. --base-url overrides the
+ * https://platform.computesdk.com default; a non-computesdk host needs
+ * --allow-untrusted-host and an explicit key — stored OAuth is never sent there.
  * Every subcommand takes --json for machine-readable output — on success the
  * data, on failure the `{ ok: false, error: {...} }` envelope on stderr.
  */
@@ -584,7 +587,7 @@ export function registerActionsCommands(program: Command): void {
     cmd
       .option('--api-key <key>', 'API key (default: $COMPUTE_API_KEY)')
       .option('--base-url <url>', 'API base URL (default: https://platform.computesdk.com)')
-      .option('--allow-untrusted-host', 'send the API key to a non-computesdk, non-localhost --base-url')
+      .option('--allow-untrusted-host', 'send an explicit --api-key/env key to a non-computesdk, non-localhost --base-url (stored login credentials are never sent)')
       .option('--json', 'print machine-readable JSON');
 
   common(
