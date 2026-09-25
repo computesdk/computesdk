@@ -319,7 +319,12 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
     return;
   }
 
-  const send = (): void => reply(conn, "exec_result", requestId, jobSnapshot(started));
+  // An attached exec's result is delivered exactly once, right here; only
+  // detached jobs need to stay addressable (wait/status/kill) after exit.
+  const send = (): void => {
+    reply(conn, "exec_result", requestId, jobSnapshot(started));
+    jobs.delete(started.id);
+  };
   if (started.status === "exited") send();
   else started.onExit.add(send);
 }
@@ -378,9 +383,10 @@ function handleKill(msg: WireMessage, conn: net.Socket): void {
     replyError(conn, requestId, `seed daemon: unknown job ${jobId}`);
     return;
   }
-  if (job.status === "running") {
-    job.kill(typeof payload.signal === "string" && payload.signal ? payload.signal : "SIGTERM");
-  }
+  // Signal the whole process group even when the leader has exited: a shell
+  // that backgrounded a child with redirected output exits first, leaving the
+  // child alive in the group.
+  job.kill(typeof payload.signal === "string" && payload.signal ? payload.signal : "SIGTERM");
   reply(conn, "exec_result", requestId, jobSnapshot(job));
 }
 
@@ -513,6 +519,7 @@ async function main(): Promise<void> {
             ts: now(),
             payload: {
               state: "running",
+              version: config.version,
               pid: process.pid,
               uptime: now() - startedAt,
               sseUrl: `http://${config.sseHost}:${String(sse.port)}/events?token=${config.token}`,

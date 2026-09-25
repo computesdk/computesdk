@@ -39,11 +39,14 @@ async function waitForSocketRemoved(socketPath, timeoutMs, message) {
   throw new Error(message);
 }
 
+// Mirrors the launcher's socket derivation, including the protocol version.
+const SCRIPT_VERSION = "2";
+
 function defaultSocketPath(name, cwd) {
   const workspaceHash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
   const daemonHash = crypto
     .createHash("sha256")
-    .update(`${name}:${workspaceHash}`)
+    .update(`${name}:${workspaceHash}:v${SCRIPT_VERSION}`)
     .digest("hex")
     .slice(0, 16);
   return path.join(os.tmpdir(), ".computesdk", "seed-sockets", `${daemonHash}.sock`);
@@ -260,6 +263,32 @@ test("seed launcher runs detached jobs concurrently and reports honest exit stat
     const encoded = Buffer.from(JSON.stringify({ command: "printf", args: ["%s|", "a b", '"c"', "$X"] })).toString("base64");
     const decoded = await runSeedLauncher(script, [`b64:${encoded}`]);
     assert.equal(decoded.command.stdout, 'a b|"c"|$X|');
+
+    // Attached execs are not retained: their result was already delivered.
+    const attached = await runSeedLauncher(script, [JSON.stringify({ command: "sh", args: ["-c", "echo done"] })]);
+    assert.equal(attached.command.stdout, "done\n");
+    assert.ok(attached.command.jobId);
+    await assert.rejects(
+      runSeedLauncher(script, [JSON.stringify({ status: attached.command.jobId })]),
+      /unknown job/,
+    );
+
+    // A background grandchild that outlives its shell is still reachable via kill.
+    const d = await runSeedLauncher(script, [
+      JSON.stringify({ command: "sh", args: ["-c", "sleep 30 >/dev/null 2>&1 & echo $!"], detach: true }),
+    ]);
+    const exited = await runSeedLauncher(script, [JSON.stringify({ wait: d.command.jobId, timeoutMs: 5000 })]);
+    assert.equal(exited.command.status, "exited");
+    const orphanPid = Number(exited.command.stdout.trim());
+    assert.ok(Number.isInteger(orphanPid) && orphanPid > 0, `unexpected stdout ${exited.command.stdout}`);
+    assert.doesNotThrow(() => process.kill(orphanPid, 0), "orphan should still be alive before kill");
+    await runSeedLauncher(script, [JSON.stringify({ kill: d.command.jobId, signal: "SIGKILL" })]);
+    const deadline = Date.now() + 3000;
+    let orphanAlive = true;
+    while (orphanAlive && Date.now() < deadline) {
+      try { process.kill(orphanPid, 0); await new Promise((r) => setTimeout(r, 100)); } catch { orphanAlive = false; }
+    }
+    assert.equal(orphanAlive, false, "kill should reach the background grandchild");
   } finally {
     await stopDaemon(name, a.token);
   }
@@ -294,6 +323,12 @@ test("seed daemon socket auth, subscribe, and stop", async () => {
     const subscribed = await messages.next(3000);
     assert.equal(subscribed.type, "subscribed");
     assert.equal(subscribed.replyTo, "sub-auth");
+
+    conn.write(`${JSON.stringify({ id: "health-1", type: "health", token })}\n`);
+    const health = await messages.next(3000);
+    assert.equal(health.type, "health");
+    assert.equal(health.payload.state, "running");
+    assert.equal(health.payload.version, SCRIPT_VERSION);
 
     conn.write(
       `${JSON.stringify({
