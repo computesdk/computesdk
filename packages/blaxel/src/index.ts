@@ -809,13 +809,16 @@ async function runViaDaemon(
 	options: RunCommandOptions | undefined,
 	startTime: number
 ): Promise<BlaxelCommandResult | null> {
+	const detach = options?.background === true;
 	const payload: SeedCommandInput = {
 		command: 'sh',
 		args: ['-c', command],
 		cwd: options?.cwd,
 		env: options?.env,
-		timeoutMs: options?.timeout ?? DEFAULT_PROCESS_WAIT_MS,
-		detach: options?.background === true,
+		// A background job runs until it exits or is killed; only attached
+		// commands get the native path's default deadline.
+		timeoutMs: options?.timeout ?? (detach ? undefined : DEFAULT_PROCESS_WAIT_MS),
+		detach,
 		requestId: createRequestId(),
 	};
 	const launcher = daemonSeedScriptCommand({ ssePort: DAEMON_SSE_PORT }, payload, { argvEncoding: 'base64' });

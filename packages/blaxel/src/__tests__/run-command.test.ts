@@ -403,6 +403,21 @@ describe('blaxel runCommand via daemond (default exec mode)', () => {
 		expect(exec).toHaveBeenCalledTimes(1);
 	});
 
+	it('gives background jobs no default deadline', async () => {
+		const exec = vi.fn(async (opts: ExecOptions) => {
+			const payload = decodeLauncherPayload(opts.command);
+			expect(payload).toMatchObject({ detach: true });
+			expect(payload).not.toHaveProperty('timeoutMs');
+			return {
+				status: 'completed', exitCode: 0, pid: 'p1',
+				stdout: seedOutput({ status: 'running', exitCode: null, jobId: 'job-1' }),
+			};
+		});
+
+		await (await getSandbox(makeSandbox(exec), 'daemon')).runCommand('sleep 1d', { background: true });
+		expect(exec).toHaveBeenCalledTimes(1);
+	});
+
 	it('maps every Linux signal, including SIGUSR1, to 128+signo', async () => {
 		const exec = vi.fn(async () => ({
 			status: 'completed', exitCode: 0, pid: 'p1',
