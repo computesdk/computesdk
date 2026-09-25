@@ -394,7 +394,7 @@ export type ActionsCliErrorCode =
   | 'untrusted_host'
   | 'insecure_transport'
   | 'invalid_argument'
-  | 'not_found';
+  | 'workflow_not_found';
 
 /** An error the CLI raised before or instead of an API call. */
 export class ActionsCliError extends Error {

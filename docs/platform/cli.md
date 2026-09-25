@@ -20,7 +20,7 @@ The binary is `compute`. Pass `--json` on almost any platform command for machin
 { "ok": false, "error": { "code": "forbidden", "message": "Owner or admin access required", "httpStatus": 403, "retryable": false } }
 ```
 
-`code` is one of `bad_request`, `unauthenticated`, `forbidden`, `not_found`, `conflict`, `payload_too_large`, `rate_limited`, `server_error`, `http_error` (API responses — `httpStatus` is set), or `no_credentials`, `untrusted_host`, `insecure_transport`, `invalid_argument`, `network`, `unknown` (local — no `httpStatus`). `retryable` is `true` for 429/502/503/504 and network failures. `details` is present only when the API returned a `details` object.
+`code` is one of `bad_request`, `unauthenticated`, `forbidden`, `not_found`, `conflict`, `payload_too_large`, `rate_limited`, `server_error`, `http_error` (API responses — `httpStatus` is set), or `no_credentials`, `untrusted_host`, `insecure_transport`, `invalid_argument`, `workflow_not_found`, `network`, `unknown` (raised locally — no `httpStatus`). `retryable` is `true` for 429/502/503/504 and network failures. `details` is present only when the API returned a `details` object.
 
 ## Authentication
 
@@ -52,7 +52,7 @@ compute actions providers remove <provider>
 
 # Dispatch and follow runs
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...]
-compute actions dispatch <repo> --workflow <path|name> --manual   # no workflow_dispatch needed; no inputs
+compute actions dispatch <repo> --workflow <path|name> --manual   # run even without workflow_dispatch (then no inputs)
 compute actions runs <repo> [--status ...] [--branch ...]
 compute actions history <repo> --workflow <path|name> [--branch] [--job] [--limit n]
 compute actions run <run-id>                   # jobs, provider:region placement

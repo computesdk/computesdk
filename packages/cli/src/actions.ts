@@ -522,9 +522,9 @@ function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: st
 
 /**
  * The `POST /api/v1/actions/dispatch` body for `dispatch`. Without --manual a
- * workflow must declare `workflow_dispatch`; with it, the platform runs the
- * workflow regardless and accepts no inputs, so any given here are refused
- * rather than silently dropped.
+ * workflow must declare `workflow_dispatch`. With it, a workflow that doesn't
+ * is run anyway; such a run has no inputs, so any given are refused rather
+ * than silently dropped. A dispatchable workflow keeps its inputs either way.
  */
 export function dispatchBody(
   workflow: CiWorkflow,
@@ -536,8 +536,11 @@ export function dispatchBody(
       `Workflow "${workflow.path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
     );
   }
-  if (opts.manual && opts.inputs !== undefined && opts.inputs.length > 0) {
-    throw new ActionsCliError('invalid_argument', '--manual runs take no --inputs.');
+  if (!workflow.dispatchable && opts.inputs !== undefined && opts.inputs.length > 0) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Workflow "${workflow.path}" has no workflow_dispatch inputs; --manual runs of it take no --inputs.`,
+    );
   }
   const ref = opts.ref ?? workflow.refs[0];
   if (!ref) throw new ActionsCliError('invalid_argument', 'No --ref given and the workflow has no watched refs.');
@@ -576,8 +579,8 @@ export function registerActionsCommands(program: Command): void {
       .argument('<repo>', 'repository in owner/repo format')
       .requiredOption('--workflow <path|name>', 'workflow path or name')
       .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref)')
-      .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch workflows only)')
-      .option('--manual', 'run a workflow that does not declare workflow_dispatch; takes no --inputs')
+      .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch inputs only)')
+      .option('--manual', 'run a workflow even if it does not declare workflow_dispatch (such runs take no --inputs)')
       .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
       .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)'),
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string }) => {
@@ -591,7 +594,7 @@ export function registerActionsCommands(program: Command): void {
       if (!workflow) {
         const choices = workflows.map((w) => `${w.path} (${w.name})`).join(', ') || 'none';
         throw new ActionsCliError(
-          'not_found',
+          'workflow_not_found',
           `No workflow "${opts.workflow}" in ${repo}. Available: ${choices}`,
         );
       }

@@ -26,7 +26,7 @@ compute actions logs <run-id> --follow
 compute actions run <run-id>
 ```
 
-`--workflow` matches the workflow's file path, display name, or id. Workflows without `workflow_dispatch` are refused unless you pass `--manual`, which runs the workflow anyway and takes no `--inputs`. `dispatch --provider <id>` pins placement to one provider — a refusal is recorded as the job's `failureReason`, which is itself a useful signal when evaluating providers.
+`--workflow` matches the workflow's file path, display name, or id. Workflows without `workflow_dispatch` are refused unless you pass `--manual`, which runs the workflow anyway; such a run has no inputs, so `--inputs` is rejected for it (a `workflow_dispatch` workflow keeps its inputs with or without `--manual`). `dispatch --provider <id>` pins placement to one provider — a refusal is recorded as the job's `failureReason`, which is itself a useful signal when evaluating providers.
 
 `POST /api/v1/actions/dispatch` accepts `{ workflowId, ref, inputs?, manual?, requestId?, provider?, providerRegion? }`. `manual: true` runs a workflow that doesn't declare `workflow_dispatch` (no inputs). `requestId` dedupes dispatch and rerun.
 

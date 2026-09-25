@@ -581,9 +581,18 @@ describe('dispatchBody', () => {
     });
   });
 
-  it('sends manual: true for a dispatchable workflow too, and refuses inputs with it', () => {
-    expect(dispatchBody(ci, { manual: true, ref: 'refs/heads/dev' })).toMatchObject({ manual: true, ref: 'refs/heads/dev' });
-    expect(() => dispatchBody(ci, { manual: true, inputs: ['a=b'] })).toThrow('no --inputs');
+  it('keeps inputs for a dispatchable workflow even with --manual', () => {
+    expect(dispatchBody(ci, { manual: true, ref: 'refs/heads/dev', inputs: ['a=b'] })).toEqual({
+      workflowId: 'w-1',
+      ref: 'refs/heads/dev',
+      inputs: { a: 'b' },
+      manual: true,
+    });
+  });
+
+  it('refuses inputs only for a non-dispatchable workflow forced with --manual', () => {
+    expect(() => dispatchBody(pushOnly, { manual: true, inputs: ['a=b'] })).toThrow('take no --inputs');
+    expect(dispatchBody(pushOnly, { manual: true, inputs: [] })).toMatchObject({ manual: true, inputs: {} });
   });
 
   it('validates ref and provider-region', () => {
@@ -614,6 +623,11 @@ describe('toErrorEnvelope', () => {
     const env = toErrorEnvelope(new ActionsCliError('no_credentials', 'No API key.'));
     expect(env).toEqual({ ok: false, error: { code: 'no_credentials', message: 'No API key.', retryable: false } });
     expect(toErrorEnvelope(new ActionsCliError('invalid_argument', 'x')).error.code).toBe('invalid_argument');
+    expect(toErrorEnvelope(new ActionsCliError('workflow_not_found', 'x')).error).toEqual({
+      code: 'workflow_not_found',
+      message: 'x',
+      retryable: false,
+    });
   });
 
   it('marks fetch failures as retryable network errors', () => {
