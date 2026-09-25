@@ -134,6 +134,20 @@ function fail(error: unknown, opts: JsonOpts = {}): never {
   process.exit(1);
 }
 
+/**
+ * Commander's own usage errors (unknown option, missing required option or
+ * argument) are raised before any action runs, so `fail` never sees them.
+ * Route them through the same envelope when --json is among the raw args.
+ */
+export function usageErrorOutput(str: string, write: (str: string) => void, argv: string[] = process.argv): void {
+  if (argv.includes('--json')) {
+    const message = str.replace(/^error:\s*/i, '').trim();
+    write(JSON.stringify(toErrorEnvelope(new ActionsCliError('invalid_argument', message))) + '\n');
+  } else {
+    write(str);
+  }
+}
+
 // ─── Formatting (pure, exported for tests) ──────────────────────────────────
 
 export function formatDuration(ms: number | null | undefined): string {
@@ -563,7 +577,8 @@ export function registerActionsCommands(program: Command): void {
   const actions = program
     .command('actions')
     .alias('ci')
-    .description('Drive the benchmarks-platform Actions API');
+    .description('Drive the benchmarks-platform Actions API')
+    .configureOutput({ outputError: usageErrorOutput });
 
   const common = (cmd: Command) =>
     cmd

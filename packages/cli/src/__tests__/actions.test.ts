@@ -12,6 +12,7 @@ import {
   matchJob,
   matchWorkflow,
   parseInputs,
+  usageErrorOutput,
 } from '../actions.js';
 import {
   ActionsApiError,
@@ -598,6 +599,25 @@ describe('dispatchBody', () => {
   it('validates ref and provider-region', () => {
     expect(() => dispatchBody({ ...ci, refs: [] }, {})).toThrow('--ref');
     expect(() => dispatchBody(ci, { providerRegion: 'sfo1' })).toThrow('--provider-region requires --provider');
+  });
+});
+
+describe('usageErrorOutput', () => {
+  it('wraps commander usage errors in the envelope when --json is present', () => {
+    const out: string[] = [];
+    usageErrorOutput("error: required option '--workflow <path|name>' not specified\n", (s) => out.push(s), [
+      'node', 'compute', 'actions', 'dispatch', 'a/b', '--json',
+    ]);
+    expect(JSON.parse(out[0])).toEqual({
+      ok: false,
+      error: { code: 'invalid_argument', message: "required option '--workflow <path|name>' not specified", retryable: false },
+    });
+  });
+
+  it('passes commander output through unchanged without --json', () => {
+    const out: string[] = [];
+    usageErrorOutput('error: unknown option \'--bogus\'\n', (s) => out.push(s), ['node', 'compute', 'actions', 'runs']);
+    expect(out).toEqual(['error: unknown option \'--bogus\'\n']);
   });
 });
 
