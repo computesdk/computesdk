@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 32.0.2
+
+### Patch Changes
+
+- Updated dependencies [286f055]
+  - @computesdk/vercel@1.7.39
+
 ## 32.0.1
 
 ### Patch Changes
