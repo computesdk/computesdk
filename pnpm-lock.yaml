@@ -553,6 +553,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@benchsdk/cli':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@benchsdk/runner':
         specifier: ^0.3.0
         version: 0.3.0

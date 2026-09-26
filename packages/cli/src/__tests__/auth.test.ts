@@ -35,6 +35,7 @@ import {
   runBrowserAuthFlow,
   resolveApiKey,
 } from '../auth.js';
+import { ActionsCliError, resolveActionsAuth } from '../actions-client.js';
 
 const CREDENTIALS_DIR = path.join(TEST_HOME, '.computesdk');
 const CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, 'credentials.json');
@@ -232,5 +233,40 @@ describe('resolveApiKey', () => {
     process.env.COMPUTESDK_API_KEY = 'computesdk_live_from_env';
     const key = await resolveApiKey();
     expect(key).toBe('computesdk_live_from_env');
+  });
+});
+
+describe('resolveActionsAuth ignores gateway login credentials', () => {
+  const ACTIONS_ENV = ['COMPUTE_API_KEY', 'BENCHMARKS_PLATFORM_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_URL'];
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const k of ACTIONS_ENV) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+
+  afterEach(() => {
+    for (const k of ACTIONS_ENV) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('does not use the gateway key written by `compute login` and never starts a login', async () => {
+    // The gateway key is not a platform credential; only the platform resolver is consulted.
+    storeCredentials('computesdk_live_stored');
+    const noPlatformCreds = async () => ({});
+    let err: unknown;
+    try {
+      await resolveActionsAuth({}, noPlatformCreds);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect((err as ActionsCliError).code).toBe('no_credentials');
+    expect((err as Error).message).toContain('compute bench auth login');
+    expect(loadStoredCredentials()).toBe('computesdk_live_stored');
   });
 });
