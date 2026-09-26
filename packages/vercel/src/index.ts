@@ -89,6 +89,10 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           const optSource = (options as any)?.source;
 
           const params: any = { timeout, ...providerOptions };
+          // Vercel sandboxes are persistent by default, which auto-snapshots the
+          // filesystem on every stop() and accrues Snapshot Storage. ComputeSDK
+          // sandboxes default to non-persistent unless the caller opts in.
+          params.persistent = providerOptions.persistent ?? false;
           const optDaemonSsePort = (options as any)?.daemonSsePort as number | false | undefined;
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) params.ports = ports;

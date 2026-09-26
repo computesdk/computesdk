@@ -167,6 +167,14 @@ await compute.sandbox.destroy('sandbox-id');
 // Each sandbox is ephemeral and single-use
 ```
 
+### Persistence
+
+Sandboxes are created with `persistent: false` by default — a persistent sandbox auto-snapshots its filesystem on every `stop()`, which accrues Vercel Snapshot Storage charges. To opt in to persistence (required if you plan to resume or snapshot the sandbox later), pass it at create time:
+
+```typescript
+const sandbox = await compute.sandbox.create({ persistent: true });
+```
+
 ## Error Handling
 
 ```typescript
