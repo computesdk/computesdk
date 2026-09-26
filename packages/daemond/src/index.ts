@@ -9,4 +9,11 @@ export type {
   SeedDaemonInfo,
   SeedHealthPayload,
   SeedEventFilter,
+  SeedTunnelConnectInput,
+  SeedTunnelStatusInput,
+  SeedTunnelDisconnectInput,
+  SeedTunnelPayload,
+  SeedTunnelInput,
+  SeedTunnelState,
+  SeedTunnelStatus,
 } from "./types.js";

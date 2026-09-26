@@ -390,6 +390,396 @@ function handleKill(msg: WireMessage, conn: net.Socket): void {
   reply(conn, "exec_result", requestId, jobSnapshot(job));
 }
 
+// ---- tunnel client ----
+// Dial-out multiplexed tunnel to the control plane (RFC:
+// docs/rfcs/0001-daemond-dial-out-tunnel.md). A single WebSocket carries JSON
+// text control frames (open/opened/close/error/ping/pong/auth) and binary data
+// frames (uint32be stream id + payload). The daemon keeps zero dependencies,
+// so this uses the global WebSocket shipped since Node 22 — typed minimally
+// here because the runtime tsconfig's lib predates it.
+
+interface TunnelSocketEvent {
+  data?: unknown;
+  code?: number;
+  reason?: string;
+  message?: string;
+}
+
+interface TunnelSocket {
+  readyState: number;
+  bufferedAmount: number;
+  binaryType: string;
+  send(data: string | Uint8Array): void;
+  close(code?: number, reason?: string): void;
+  addEventListener(type: string, fn: (ev: TunnelSocketEvent) => void): void;
+}
+
+const TUNNEL_MAX_FRAME_PAYLOAD = 64 * 1024;
+const TUNNEL_BACKPRESSURE_LIMIT = 1024 * 1024;
+const TUNNEL_BACKOFF_MIN_MS = 500;
+const TUNNEL_BACKOFF_MAX_MS = 10_000;
+const TUNNEL_MAX_STREAMS = 256;
+const TUNNEL_WS_OPEN = 1;
+
+interface TunnelStatus {
+  state: "connecting" | "connected" | "disconnected";
+  url: string | null;
+  connectedAt: number | null;
+  reconnects: number;
+  streamsOpen: number;
+  lastError: string | null;
+}
+
+const tunnelStatus: TunnelStatus = {
+  state: "disconnected",
+  url: null,
+  connectedAt: null,
+  reconnects: 0,
+  streamsOpen: 0,
+  lastError: null,
+};
+
+let tunnelWs: TunnelSocket | null = null;
+let tunnelToken: string | null = null;
+let tunnelAllowPort: (port: number) => boolean = () => true;
+let tunnelClosed = true; // user intent: while true, close events never trigger a reconnect
+let tunnelBackoffMs = TUNNEL_BACKOFF_MIN_MS;
+let tunnelReconnectTimer: NodeJS.Timeout | null = null;
+const tunnelStreams = new Map<number, net.Socket>();
+const tunnelStateWaiters = new Set<() => void>();
+
+function tunnelNotify(): void {
+  for (const waiter of [...tunnelStateWaiters]) waiter();
+}
+
+function tunnelSnapshot(): Record<string, unknown> {
+  return { ...tunnelStatus };
+}
+
+function tunnelIsLoopbackHost(host: string): boolean {
+  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+}
+
+function parseTunnelAllowPorts(input: unknown): ((port: number) => boolean) | string {
+  if (input === undefined) return (port) => port >= 1 && port <= 65535;
+  if (!Array.isArray(input)) return "allowPorts must be an array of ports or \"a-b\" ranges";
+  const rules: Array<(port: number) => boolean> = [];
+  for (const entry of input) {
+    if (typeof entry === "number" && Number.isInteger(entry)) {
+      const p = entry;
+      rules.push((port) => port === p);
+      continue;
+    }
+    if (typeof entry === "string" && /^\d+-\d+$/.test(entry)) {
+      const [lo, hi] = entry.split("-").map(Number);
+      rules.push((port) => port >= lo && port <= hi);
+      continue;
+    }
+    return `allowPorts: invalid entry ${JSON.stringify(entry)}`;
+  }
+  return (port) => rules.some((rule) => rule(port));
+}
+
+function tunnelSendFrame(ws: TunnelSocket, id: number, payload: Buffer): void {
+  for (let off = 0; off < payload.length; off += TUNNEL_MAX_FRAME_PAYLOAD) {
+    const frame = Buffer.allocUnsafe(4 + Math.min(TUNNEL_MAX_FRAME_PAYLOAD, payload.length - off));
+    frame.writeUInt32BE(id >>> 0, 0);
+    payload.copy(frame, 4, off, off + TUNNEL_MAX_FRAME_PAYLOAD);
+    ws.send(frame);
+  }
+}
+
+function tunnelSendControl(ws: TunnelSocket, obj: Record<string, unknown>): void {
+  if (ws.readyState === TUNNEL_WS_OPEN) ws.send(JSON.stringify(obj));
+}
+
+function tunnelSendError(ws: TunnelSocket, id: number, code: string, message: string): void {
+  tunnelSendControl(ws, { t: "error", id, code, message });
+}
+
+function tunnelOpenStream(ws: TunnelSocket, id: number, port: number, host: string): void {
+  if (tunnelStreams.size >= TUNNEL_MAX_STREAMS) {
+    tunnelSendError(ws, id, "TOO_MANY_STREAMS", `max ${String(TUNNEL_MAX_STREAMS)} streams`);
+    return;
+  }
+  if (!tunnelIsLoopbackHost(host)) {
+    tunnelSendError(ws, id, "HOST_NOT_ALLOWED", `not allowed: ${host}:${String(port)}`);
+    return;
+  }
+  if (!tunnelAllowPort(port)) {
+    tunnelSendError(ws, id, "PORT_NOT_ALLOWED", `not allowed: ${host}:${String(port)}`);
+    return;
+  }
+  const sock = net.connect(port, host);
+  tunnelStreams.set(id, sock);
+  tunnelStatus.streamsOpen = tunnelStreams.size;
+  sock.on("connect", () => {
+    tunnelSendControl(ws, { t: "opened", id });
+  });
+  sock.on("data", (chunk: Buffer) => {
+    if (ws.readyState !== TUNNEL_WS_OPEN) return;
+    tunnelSendFrame(ws, id, chunk);
+    if (ws.bufferedAmount > TUNNEL_BACKPRESSURE_LIMIT && !sock.destroyed) {
+      sock.pause();
+      const poll = setInterval(() => {
+        if (ws.bufferedAmount <= TUNNEL_BACKPRESSURE_LIMIT / 2 || ws.readyState !== TUNNEL_WS_OPEN) {
+          clearInterval(poll);
+          if (!sock.destroyed) sock.resume();
+        }
+      }, 20);
+      poll.unref();
+    }
+  });
+  sock.on("end", () => {
+    tunnelSendControl(ws, { t: "close", id });
+  });
+  sock.on("error", (err: NodeJS.ErrnoException) => {
+    tunnelSendError(ws, id, err.code || "ECONNREFUSED", err.message);
+    tunnelStreams.delete(id);
+    tunnelStatus.streamsOpen = tunnelStreams.size;
+  });
+  sock.on("close", () => {
+    tunnelStreams.delete(id);
+    tunnelStatus.streamsOpen = tunnelStreams.size;
+  });
+}
+
+function tunnelHandleFrame(ws: TunnelSocket, data: unknown, isBinary: boolean): void {
+  if (isBinary) {
+    const buf = Buffer.isBuffer(data)
+      ? data
+      : Buffer.from(data as ArrayBuffer);
+    if (buf.length < 4) return;
+    const id = buf.readUInt32BE(0);
+    const sock = tunnelStreams.get(id);
+    if (sock && !sock.destroyed) sock.write(buf.subarray(4));
+    return;
+  }
+  let msg: { t?: string; id?: number; port?: number; host?: string; ts?: number };
+  try {
+    msg = JSON.parse(typeof data === "string" ? data : Buffer.from(data as ArrayBuffer).toString());
+  } catch {
+    return;
+  }
+  switch (msg.t) {
+    case "open":
+      if (typeof msg.id === "number" && typeof msg.port === "number") {
+        tunnelOpenStream(ws, msg.id, msg.port, typeof msg.host === "string" ? msg.host : "127.0.0.1");
+      }
+      break;
+    case "close": {
+      const sock = typeof msg.id === "number" ? tunnelStreams.get(msg.id) : undefined;
+      if (sock) sock.end();
+      break;
+    }
+    case "ping":
+      tunnelSendControl(ws, { t: "pong", ts: msg.ts });
+      break;
+  }
+}
+
+function tunnelConnect(): void {
+  if (tunnelClosed || !tunnelStatus.url) return;
+  const WS = (globalThis as { WebSocket?: new (url: string) => TunnelSocket }).WebSocket;
+  if (!WS) {
+    tunnelStatus.state = "disconnected";
+    tunnelStatus.lastError = "tunnel requires Node >= 22";
+    tunnelNotify();
+    return;
+  }
+  let wsUrl: string;
+  try {
+    const u = new URL(tunnelStatus.url);
+    if (tunnelToken) u.searchParams.set("token", tunnelToken);
+    wsUrl = u.toString();
+  } catch {
+    tunnelStatus.state = "disconnected";
+    tunnelStatus.lastError = `invalid tunnel url: ${tunnelStatus.url}`;
+    tunnelNotify();
+    return;
+  }
+  tunnelStatus.state = "connecting";
+  tunnelNotify();
+
+  const ws = new WS(wsUrl);
+  tunnelWs = ws;
+  ws.binaryType = "arraybuffer";
+
+  ws.addEventListener("open", () => {
+    if (tunnelToken) ws.send(JSON.stringify({ t: "auth", token: tunnelToken }));
+    tunnelBackoffMs = TUNNEL_BACKOFF_MIN_MS;
+    tunnelStatus.state = "connected";
+    tunnelStatus.connectedAt = now();
+    tunnelStatus.lastError = null;
+    publish({ channel: "daemon", type: "tunnel.connected", url: tunnelStatus.url, ts: now() });
+    tunnelNotify();
+  });
+
+  ws.addEventListener("message", (ev) => {
+    tunnelHandleFrame(ws, ev.data, typeof ev.data !== "string");
+  });
+
+  ws.addEventListener("close", (ev) => {
+    if (tunnelWs === ws) tunnelWs = null;
+    for (const sock of tunnelStreams.values()) sock.destroy();
+    tunnelStreams.clear();
+    tunnelStatus.streamsOpen = 0;
+    if (tunnelStatus.state !== "disconnected") {
+      tunnelStatus.state = "disconnected";
+      tunnelStatus.connectedAt = null;
+    }
+    const code = typeof ev.code === "number" ? ev.code : 1006;
+    const reason = typeof ev.reason === "string" ? ev.reason : "";
+    if (code === 4401) tunnelStatus.lastError = "unauthorized";
+    const willRetry = !tunnelClosed && code !== 4401 && tunnelStatus.lastError !== "tunnel requires Node >= 22";
+    publish({
+      channel: "daemon",
+      type: "tunnel.disconnected",
+      url: tunnelStatus.url,
+      code,
+      reason,
+      willRetry,
+      ts: now(),
+    });
+    if (willRetry) {
+      tunnelStatus.reconnects++;
+      const jitter = tunnelBackoffMs * 0.25 * (Math.random() * 2 - 1);
+      const delay = Math.min(tunnelBackoffMs + jitter, TUNNEL_BACKOFF_MAX_MS);
+      tunnelBackoffMs = Math.min(tunnelBackoffMs * 2, TUNNEL_BACKOFF_MAX_MS);
+      tunnelReconnectTimer = setTimeout(() => {
+        tunnelReconnectTimer = null;
+        tunnelConnect();
+      }, delay);
+      tunnelReconnectTimer.unref();
+    }
+    tunnelNotify();
+  });
+
+  ws.addEventListener("error", (ev) => {
+    // 'close' follows; reconnect is handled there. Preserve the dial failure
+    // reason so `status` reports something better than lastError: null.
+    if (typeof ev.message === "string" && ev.message.length > 0) {
+      tunnelStatus.lastError = ev.message;
+    }
+  });
+}
+
+function tunnelStart(url: string, token: string, allowPort: (port: number) => boolean): void {
+  const sameTarget =
+    tunnelStatus.url === url &&
+    tunnelToken === token &&
+    !tunnelClosed &&
+    tunnelStatus.state !== "disconnected";
+  if (sameTarget) return; // same URL + same token: no-op; a new token replaces the tunnel
+  tunnelTeardown();
+  tunnelClosed = false;
+  tunnelToken = token;
+  tunnelAllowPort = allowPort;
+  tunnelStatus.url = url;
+  tunnelStatus.connectedAt = null;
+  tunnelStatus.lastError = null;
+  tunnelBackoffMs = TUNNEL_BACKOFF_MIN_MS;
+  tunnelConnect();
+}
+
+function tunnelDisconnect(): void {
+  tunnelTeardown();
+  tunnelStatus.state = "disconnected";
+  tunnelStatus.connectedAt = null;
+  tunnelNotify();
+}
+
+function tunnelTeardown(): void {
+  tunnelClosed = true;
+  if (tunnelReconnectTimer) {
+    clearTimeout(tunnelReconnectTimer);
+    tunnelReconnectTimer = null;
+  }
+  for (const sock of tunnelStreams.values()) sock.destroy();
+  tunnelStreams.clear();
+  tunnelStatus.streamsOpen = 0;
+  const ws = tunnelWs;
+  tunnelWs = null;
+  if (ws && (ws.readyState === TUNNEL_WS_OPEN || ws.readyState === 0 /* CONNECTING */)) {
+    try {
+      ws.close(1000);
+    } catch {}
+  }
+}
+
+function handleTunnel(msg: WireMessage, conn: net.Socket): void {
+  const requestId = msg.id || makeId();
+  const payload = msg.payload ?? {};
+
+  if (payload.status === true) {
+    reply(conn, "tunnel_result", requestId, tunnelSnapshot());
+    return;
+  }
+
+  if (payload.disconnect === true) {
+    tunnelDisconnect();
+    reply(conn, "tunnel_result", requestId, tunnelSnapshot());
+    return;
+  }
+
+  if ("connect" in payload) {
+    const connectUrl = payload.connect;
+    const token = payload.tunnelToken;
+    if (typeof connectUrl !== "string" || !connectUrl) {
+      replyError(conn, requestId, "seed daemon: tunnel connect requires a url string");
+      return;
+    }
+    if (typeof token !== "string" || !token) {
+      replyError(conn, requestId, "seed daemon: tunnel connect requires a tunnelToken string");
+      return;
+    }
+    const allowPort = parseTunnelAllowPorts(payload.allowPorts);
+    if (typeof allowPort === "string") {
+      replyError(conn, requestId, `seed daemon: ${allowPort}`);
+      return;
+    }
+    const timeoutMs = Number.isFinite(payload.timeoutMs)
+      ? Math.max(1, Number(payload.timeoutMs))
+      : 10_000;
+
+    tunnelStart(connectUrl, token, allowPort);
+
+    const send = (): void => {
+      reply(conn, "tunnel_result", requestId, tunnelSnapshot());
+    };
+    if (tunnelStatus.state === "connected") {
+      send();
+      return;
+    }
+    const timer = setTimeout(() => {
+      tunnelStateWaiters.delete(onChange);
+      send();
+    }, timeoutMs);
+    const onChange = (): void => {
+      // Reply as soon as connected, or once the attempt has terminally failed
+      // (unauthorized / unsupported runtime / invalid url — no retry pending).
+      const terminal =
+        tunnelStatus.state === "connected" ||
+        (tunnelStatus.state === "disconnected" && tunnelClosed) ||
+        tunnelStatus.lastError === "unauthorized" ||
+        tunnelStatus.lastError === "tunnel requires Node >= 22" ||
+        (tunnelStatus.lastError ?? "").startsWith("invalid tunnel url");
+      if (!terminal) return;
+      clearTimeout(timer);
+      tunnelStateWaiters.delete(onChange);
+      send();
+    };
+    tunnelStateWaiters.add(onChange);
+    conn.once("close", () => {
+      clearTimeout(timer);
+      tunnelStateWaiters.delete(onChange);
+    });
+    return;
+  }
+
+  replyError(conn, requestId, "seed daemon: tunnel message requires connect, status or disconnect");
+}
+
 function createSseServer(): Promise<{ server: http.Server; port: number }> {
   const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url ?? "/", `http://${config.sseHost}`);
@@ -585,6 +975,11 @@ async function main(): Promise<void> {
           continue;
         }
 
+        if (msg.type === "tunnel") {
+          handleTunnel({ ...msg, id }, conn);
+          continue;
+        }
+
         if (msg.type === "stop") {
           writeLine(conn, {
             id: makeId(),
@@ -594,6 +989,7 @@ async function main(): Promise<void> {
             payload: { ok: true },
           });
           setTimeout(() => {
+            tunnelTeardown();
             try {
               server.close();
               sse.server.close();
@@ -618,6 +1014,7 @@ async function main(): Promise<void> {
   server.listen(config.socket);
 
   process.on("SIGTERM", () => {
+    tunnelTeardown();
     try {
       server.close();
       sse.server.close();
