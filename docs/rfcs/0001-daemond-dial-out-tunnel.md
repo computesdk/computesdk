@@ -274,6 +274,44 @@ it, `connectTunnel` for control-plane access everywhere. A convenience
 `compute.sandbox.create({ tunnel: { url, token } })` option can connect at
 creation time in a later PR.
 
+### Self-hosting
+
+There is no separate service to deploy. The tunnel endpoint is a WebSocket
+route inside the control-plane application that already creates sandboxes:
+
+```ts
+import { createTunnelServer } from "@computesdk/tunnel";
+
+// 1. attach to the HTTP server you already run, behind your existing LB/TLS
+const tunnel = createTunnelServer({
+  server: httpServer,
+  path: "/tunnel",
+  authenticate: (token) => db.sandboxIdForTunnelToken(token), // you mint + verify
+});
+
+// 2. per sandbox: mint a token, tell daemond where to dial
+const sandbox = await compute.sandbox.create();
+const token = randomToken();
+await db.saveTunnelToken(sandbox.sandboxId, token);
+await sandbox.connectTunnel({ url: "wss://cp.example.com/tunnel", token });
+
+// 3. use it
+const conn = await tunnel.waitFor(sandbox.sandboxId);
+await conn.fetch("http://localhost:8787/health");
+```
+
+Requirements: a hostname the sandbox can reach (public, or routable from the
+provider's network), outbound internet from the sandbox, and Node ≥ 22 in the
+sandbox (already required by daemond). State is one `token → sandboxId`
+mapping. Multi-instance control planes route by `sandboxId` (sticky endpoint
+or a thin router in front; see Failure modes).
+
+The cost of self-hosting is that a machine without ingress — a laptop behind
+NAT, a CI runner — cannot receive the dial-back. This is why the tunnel is
+opt-in rather than implicit, why a dev-tunnel workflow (`cloudflared`,
+`ngrok`, …) should be documented, and why a ComputeSDK-hosted endpoint
+(below) is the natural default for users who do not want to expose anything.
+
 ## Interaction with existing streaming (follow-up, not in this RFC's PRs 1–2)
 
 Once a tunnel is connected, `factory.ts` no longer needs a routable port for
@@ -395,6 +433,25 @@ client → background `node` HTTP server + tunnel client → `waitFor` →
 `fetch`) and prints the local listener port for whoever can supply
 `TUNNEL_PUBLIC_URL`; running it on a host with ingress and a provider key is
 the first task of PR 1.
+
+## Future directions (not in this RFC's PRs)
+
+The dial-out link is the primitive; this RFC only uses it for control-plane
+→ sandbox access. The same link and frames support:
+
+1. **Public HTTP ingress (replaces the need for `getUrl`)**. A reverse proxy in
+   front of the tunnel server maps `https://<port>-<sandboxId>.<host>` to
+   `conn.fetch`/`conn.open` (including WebSocket upgrades). With it, a
+   browser-openable URL exists on every provider and provider-native `getUrl`
+   becomes an optimisation rather than a requirement. Roughly **small** once
+   PR 2 exists: an `http-proxy`-style handler plus wildcard TLS.
+2. **Hosted endpoint**. ComputeSDK runs the same `@computesdk/tunnel` server
+   at e.g. `tunnel.computesdk.com`, mints tokens at sandbox create, and the
+   SDK relays `conn.fetch` through the API. Self-hosting stays possible;
+   users without ingress get the feature without exposing anything.
+3. **Egress through the control plane**. Sandbox-initiated `open` frames (even
+   stream IDs are reserved for this) let daemond route outbound traffic via
+   the control plane for allowlisting and observability.
 
 ## Open questions
 
