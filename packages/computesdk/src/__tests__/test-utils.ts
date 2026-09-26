@@ -26,6 +26,7 @@ interface ProviderSandbox {
   getInstance(): unknown
   runCode(code: string): Promise<CodeResult>
   runCommand(command: string, args?: string[]): Promise<CommandResult>
+  startProcess(command: string, options?: any): Promise<any>
   getInfo(): Promise<SandboxInfo>
   getUrl(options: { port: number; protocol?: string }): Promise<string>
   getProvider(): Provider
@@ -68,6 +69,10 @@ export class MockSandbox implements ProviderSandbox {
       exitCode: 0,
       durationMs: 50,
     }
+  }
+
+  async startProcess(_command: string, _options?: any): Promise<any> {
+    throw new Error('daemond: not supported by mock')
   }
 
   async getInfo(): Promise<SandboxInfo> {

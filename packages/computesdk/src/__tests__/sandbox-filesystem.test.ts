@@ -643,6 +643,9 @@ function createInMemoryFilesystemProvider(): DirectProvider {
             exitCode: 0,
             durationMs: 0,
           }),
+          startProcess: async (): Promise<never> => {
+            throw new Error('daemond: not supported by mock');
+          },
           getInfo: async (): Promise<SandboxInfo> => ({
             id: sandboxId,
             provider: 'in-memory-filesystem',

@@ -39,7 +39,7 @@ async function waitForSocketRemoved(socketPath, timeoutMs, message) {
   throw new Error(message);
 }
 
-const SCRIPT_VERSION = "2";
+const SCRIPT_VERSION = "3";
 
 function defaultSocketPath(name, cwd) {
   const workspaceHash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
@@ -364,6 +364,215 @@ test("seed daemon socket auth, subscribe, and stop", async () => {
   }
 
   await waitForSocketRemoved(socketPath, 5000, "seed daemon did not stop");
+});
+
+test("seed daemon supports stdin writes to detached jobs", async () => {
+  const name = `seed-script-stdin-${process.pid}`;
+  const script = daemonSeedScript({ name });
+
+  const started = await runSeedLauncher(script, [
+    JSON.stringify({ command: "cat", detach: true, stdin: true }),
+  ]);
+  try {
+    assert.equal(started.command.status, "running");
+    const jobId = started.command.jobId;
+    assert.equal(typeof jobId, "string");
+
+    const w1 = await runSeedLauncher(script, [JSON.stringify({ stdin: jobId, data: "hello\n" })]);
+    assert.equal(w1.command.status, "running");
+
+    await runSeedLauncher(script, [
+      JSON.stringify({ stdin: jobId, data: Buffer.from("world\n").toString("base64"), encoding: "base64" }),
+    ]);
+
+    await runSeedLauncher(script, [JSON.stringify({ closeStdin: jobId })]);
+    const waited = await runSeedLauncher(script, [JSON.stringify({ wait: jobId, timeoutMs: 5000 })]);
+    assert.equal(waited.command.status, "exited");
+    assert.equal(waited.command.exitCode, 0);
+    assert.equal(waited.command.stdout, "hello\nworld\n");
+    assert.equal(waited.command.truncated, false);
+  } finally {
+    await stopDaemon(name, started.token);
+  }
+});
+
+test("seed daemon rejects invalid stdin requests", async () => {
+  const name = `seed-script-stdin-errors-${process.pid}`;
+  const script = daemonSeedScript({ name });
+
+  // stdin requires detach
+  await assert.rejects(
+    runSeedLauncher(script, [JSON.stringify({ command: "cat", stdin: true })]),
+    /stdin requires detach/,
+  );
+
+  const noStdin = await runSeedLauncher(script, [
+    JSON.stringify({ command: "sh", args: ["-c", "sleep 30"], detach: true }),
+  ]);
+  try {
+    await assert.rejects(
+      runSeedLauncher(script, [JSON.stringify({ stdin: noStdin.command.jobId, data: "x" })]),
+      /not started with stdin/,
+    );
+
+    await assert.rejects(
+      runSeedLauncher(script, [JSON.stringify({ stdin: "no-such-job", data: "x" })]),
+      /unknown job/,
+    );
+
+    const cat = await runSeedLauncher(script, [
+      JSON.stringify({ command: "cat", detach: true, stdin: true }),
+    ]);
+    await runSeedLauncher(script, [JSON.stringify({ closeStdin: cat.command.jobId })]);
+    const exited = await runSeedLauncher(script, [
+      JSON.stringify({ wait: cat.command.jobId, timeoutMs: 5000 }),
+    ]);
+    assert.equal(exited.command.status, "exited");
+    await assert.rejects(
+      runSeedLauncher(script, [JSON.stringify({ stdin: cat.command.jobId, data: "x" })]),
+      /has exited/,
+    );
+  } finally {
+    await runSeedLauncher(script, [JSON.stringify({ kill: noStdin.command.jobId, signal: "SIGKILL" })]).catch(() => {});
+    await stopDaemon(name, noStdin.token);
+  }
+});
+
+test("seed daemon rejects stdin writes after closeStdin and stays healthy", async () => {
+  const name = `seed-script-stdin-closed-${process.pid}`;
+  const script = daemonSeedScript({ name });
+
+  const cat = await runSeedLauncher(script, [
+    JSON.stringify({ command: "sh", args: ["-c", "sleep 30"], detach: true, stdin: true }),
+  ]);
+  try {
+    await runSeedLauncher(script, [JSON.stringify({ closeStdin: cat.command.jobId })]);
+
+    // A write racing/after the close is rejected rather than writing after end.
+    await assert.rejects(
+      runSeedLauncher(script, [JSON.stringify({ stdin: cat.command.jobId, data: "x" })]),
+      /stdin of job .* is closed/,
+    );
+
+    // Closing twice is a no-op success, and the daemon still answers health.
+    await runSeedLauncher(script, [JSON.stringify({ closeStdin: cat.command.jobId })]);
+    const socketPath = defaultSocketPath(name, process.cwd());
+    const conn = await connectSocket(socketPath, 3000);
+    try {
+      const messages = readMessages(conn);
+      conn.write(`${JSON.stringify({ id: "health-1", type: "health", token: cat.token })}\n`);
+      const health = await messages.next(3000);
+      assert.equal(health.type, "health");
+      assert.equal(health.payload.state, "running");
+    } finally {
+      if (!conn.destroyed) conn.destroy();
+    }
+  } finally {
+    await runSeedLauncher(script, [JSON.stringify({ kill: cat.command.jobId, signal: "SIGKILL" })]).catch(() => {});
+    await stopDaemon(name, cat.token);
+  }
+});
+
+test("seed daemon bounds detached job output buffers", async () => {
+  const name = `seed-script-truncate-${process.pid}`;
+  const script = daemonSeedScript({ name, maxJobOutputBytes: 1024 });
+
+  const started = await runSeedLauncher(script, [
+    JSON.stringify({
+      command: "sh",
+      args: ["-c", "i=0; while [ $i -lt 200 ]; do echo 0123456789abcdef0123456789abcdef; i=$((i+1)); done"],
+      detach: true,
+    }),
+  ]);
+  try {
+    const waited = await runSeedLauncher(script, [
+      JSON.stringify({ wait: started.command.jobId, timeoutMs: 10000 }),
+    ]);
+    assert.equal(waited.command.status, "exited");
+    assert.equal(waited.command.truncated, true);
+    assert.ok(Buffer.byteLength(waited.command.stdout) <= 1024);
+    assert.ok(waited.command.stdout.endsWith("0123456789abcdef0123456789abcdef\n"));
+
+    // An attached exec through the same daemon stays unbounded (no truncation flag effect).
+    const attached = await runSeedLauncher(script, [
+      JSON.stringify({
+        command: "sh",
+        args: ["-c", "i=0; while [ $i -lt 200 ]; do echo 0123456789abcdef0123456789abcdef; i=$((i+1)); done"],
+      }),
+    ]);
+    assert.ok(Buffer.byteLength(attached.command.stdout) > 1024);
+  } finally {
+    await stopDaemon(name, started.token);
+  }
+});
+
+test("seed daemon publishes jobId on command.started and command.stdin.closed on close", async () => {
+  const name = `seed-script-events-${process.pid}`;
+  const script = daemonSeedScript({ name });
+  const launched = await runSeedLauncher(script, ["pwd"]);
+  const socketPath = defaultSocketPath(name, process.cwd());
+
+  let conn = null;
+  try {
+    conn = await connectSocket(socketPath, 3000);
+    const messages = readMessages(conn);
+    // Events are published independently of request replies, so collect them
+    // with a separate listener — readMessages would consume them off the same
+    // socket while awaiting replies.
+    const events = [];
+    conn.on("data", (data) => {
+      for (const line of data.toString("utf8").split("\n")) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          if (msg.type === "event") events.push(msg.payload);
+        } catch {}
+      }
+    });
+    const waitForEvent = async (predicate, timeoutMs = 5000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const found = events.find(predicate);
+        if (found) return found;
+        await sleep(20);
+      }
+      throw new Error("Timed out waiting for event");
+    };
+
+    conn.write(
+      `${JSON.stringify({ id: "sub-1", type: "subscribe", token: launched.token, payload: { channel: "daemon" } })}\n`,
+    );
+    const subscribed = await messages.next(3000);
+    assert.equal(subscribed.type, "subscribed");
+
+    conn.write(
+      `${JSON.stringify({ id: "exec-stdin", type: "exec", token: launched.token, payload: { command: "cat", detach: true, stdin: true } })}\n`,
+    );
+    const execResult = await messages.nextMatching(
+      (msg) => msg.type === "exec_result" && msg.replyTo === "exec-stdin",
+      5000,
+    );
+    const jobId = execResult.payload.jobId;
+    assert.equal(typeof jobId, "string");
+
+    const started = await waitForEvent(
+      (e) => e.type === "command.started" && e.requestId === "exec-stdin",
+    );
+    assert.equal(started.jobId, jobId);
+
+    conn.write(
+      `${JSON.stringify({ id: "close-1", type: "closeStdin", token: launched.token, payload: { jobId } })}\n`,
+    );
+    await messages.nextMatching((msg) => msg.type === "exec_result" && msg.replyTo === "close-1", 5000);
+
+    const closed = await waitForEvent(
+      (e) => e.type === "command.stdin.closed" && e.jobId === jobId,
+    );
+    assert.equal(closed.channel, "daemon");
+  } finally {
+    if (conn && !conn.destroyed) conn.destroy();
+    await stopDaemon(name, launched.token);
+  }
 });
 
 test("seed launcher uses configured SSE port", async () => {
