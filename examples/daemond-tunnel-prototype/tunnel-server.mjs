@@ -222,14 +222,15 @@ class TunnelConnection extends EventEmitter {
   }
 }
 
-export function createTunnelServer({ port, server, authenticate }) {
+export function createTunnelServer({ port, host = '127.0.0.1', server, authenticate }) {
   const connections = new Map(); // sandboxId -> TunnelConnection
   const waiters = new Set();     // { sandboxId, resolve, timer }
   let httpServer = null;
 
+  const wssOpts = { noServer: true, maxPayload: MAX_FRAME_PAYLOAD + 4 };
   const wss = server
-    ? new WebSocketServer({ noServer: true })
-    : (httpServer = http.createServer(), new WebSocketServer({ noServer: true }));
+    ? new WebSocketServer(wssOpts)
+    : (httpServer = http.createServer(), new WebSocketServer(wssOpts));
   const target = server || httpServer;
 
   target.on('upgrade', (req, socket, head) => {
@@ -308,7 +309,7 @@ export function createTunnelServer({ port, server, authenticate }) {
   });
 
   const ready = httpServer
-    ? new Promise((resolve) => httpServer.listen(port ?? 0, '127.0.0.1', resolve))
+    ? new Promise((resolve) => httpServer.listen(port ?? 0, host, resolve))
     : Promise.resolve();
 
   return {

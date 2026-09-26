@@ -166,10 +166,12 @@ async function sandboxDemo() {
   const { compute } = await import('computesdk');
   const TOKEN = crypto.randomBytes(16).toString('hex');
   const server = createTunnelServer({
-    port: 0,
+    host: '0.0.0.0',
+    port: Number(process.env.TUNNEL_LOCAL_PORT) || 0,
     authenticate: (t) => (t === TOKEN ? 'sandbox-remote' : null),
   });
   await server.ready;
+  console.log(`tunnel server listening on 0.0.0.0:${server.port} — map this port to TUNNEL_PUBLIC_URL`);
 
   const sandbox = await compute.sandbox.create();
   console.log(`sandbox created: ${sandbox.sandboxId}`);

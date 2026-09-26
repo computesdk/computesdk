@@ -126,15 +126,6 @@ importers:
         specifier: ^4.135.0
         version: 4.136.1(@types/node@20.19.5)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  examples/daemond-tunnel-prototype:
-    dependencies:
-      computesdk:
-        specifier: workspace:*
-        version: link:../../packages/computesdk
-      ws:
-        specifier: ^8.18.3
-        version: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-
   packages/agentcore:
     dependencies:
       '@aws-sdk/client-bedrock-agentcore':
@@ -293,7 +284,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.57)(@computesdk/modal@1.9.12)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.55)(@computesdk/modal@1.9.9)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -3190,17 +3181,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.37':
-    resolution: {integrity: sha512-wfgbaAWEtaYtfoOitX72SmAsfIjg1bC6U87nfcjAigEbEVvBX1bw7FRgJEPdBqv/NphXJdqXi9x2AiOijZ7LQw==}
+  '@computesdk/daytona@1.7.35':
+    resolution: {integrity: sha512-Zynnr6sji1H7/gqa9cy7Ldt/NDFnPpRKneSGZ+ZX1UiiZc3lTSnAuI73VQ5mClAt9mpU7R2vU+vY+Jf/ydOObA==}
 
-  '@computesdk/e2b@1.7.57':
-    resolution: {integrity: sha512-kytzoJ+m9RVk1q4jx6s8qF0TEk2wJpjP0BhjxvSn2FtOjuhwxrImUyJxC/fRDtgJcm0DXNNg7dMCVZQ+mIsaUg==}
+  '@computesdk/e2b@1.7.55':
+    resolution: {integrity: sha512-qP1RSX5pIONEWlmf0gEktxSnpYO+tUi93HJv2O1dX0QUlk2/3YD2ZsrVt0bcImKhyi6SOU3PXNA+gX/yRgnitw==}
 
-  '@computesdk/modal@1.9.12':
-    resolution: {integrity: sha512-sWXKFcgCOMXU/iMdCTkNN3okOIQ4hECF7smI0CORlEoFl5ldgQB7DXRnQRPTOTJ7mKacLs05D5TBrlDWPb0vSQ==}
+  '@computesdk/modal@1.9.9':
+    resolution: {integrity: sha512-nEbIwhUQpWSE76AGG7ccwVRPfY5iXdqPVXR9HGXfnmeSyZpL5IIzztUaNew3TE+CX5TjtcaF/IWMZCoD5AaVCQ==}
 
-  '@computesdk/provider@2.1.9':
-    resolution: {integrity: sha512-Gw2V+LuxwUWwXGibcL7aG7ao1zv/xW88Ggt22Afna+62Br0yQmhDgpNQ+ans2UihcIBBAQjfgwMiE29pGNCB5Q==}
+  '@computesdk/provider@2.1.7':
+    resolution: {integrity: sha512-sTEXZS8dMCibH29UuyCQ/mZftxAjL4HRApTlCzsei36suLjDX6OIFRSokR6/u3HZnT0x7TwmgC+eo8gV8oltmg==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -6028,8 +6019,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.8:
-    resolution: {integrity: sha512-UhEPuh9EMsVuOFPKHrAllyACGm8UYKGsUklH8uFJ24mdLUT11PkU4NTCFmG0V1O8Oyhi8d2riaUoavTnGa8PSA==}
+  computesdk@4.1.6:
+    resolution: {integrity: sha512-yNlM5nrFOH6XBqoXcCAXjs1JYSYyeCGL38pY7zXNK/OLDgRX6u+aJlqSQdDfMJvzhPNV9GJmPkEwgJ0SOxJVNQ==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -6119,8 +6110,8 @@ packages:
     resolution: {integrity: sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg==}
     engines: {node: '>=18'}
 
-  daemond@0.1.6:
-    resolution: {integrity: sha512-vpYT4ToRHKRSIYmKG/ovUMNF6+7e1s3m/4eJ10AxmegIW7t0XcxSVzp3pYbz+X4rFeykyy02N7kFa6sHh1YZsA==}
+  daemond@0.1.4:
+    resolution: {integrity: sha512-xiLScBiwYGGPmxfcAb24aH+FkmR/ZSd+PxOvigGpKda6OsDjE2Gj6/4oAX2N3hMWoL4atti1hYyF9dLV3FFM0A==}
     engines: {node: '>=18.0.0'}
     os: [linux, darwin]
 
@@ -9055,6 +9046,30 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  ws@8.18.3:
+    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  ws@8.20.1:
+    resolution: {integrity: sha512-It4dO0K5v//JtTXuPkfEOaI3uUN87iYPnqo/ZzqCoG3g8uhA66QUMs/SrM0YK7/NAu+r4LMh/9dq2A7k+rHs+w==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   ws@8.21.0:
     resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
     engines: {node: '>=10.0.0'}
@@ -9199,15 +9214,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.57)(@computesdk/modal@1.9.12)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.55)(@computesdk/modal@1.9.9)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@computesdk/e2b': 1.7.57
-      '@computesdk/modal': 1.9.12
+      '@computesdk/daytona': 1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@computesdk/e2b': 1.7.55
+      '@computesdk/modal': 1.9.9
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10181,11 +10196,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@computesdk/daytona@1.7.35(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
-      '@computesdk/provider': 2.1.9
+      '@computesdk/provider': 2.1.7
       '@daytonaio/sdk': 0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      computesdk: 4.1.8
+      computesdk: 4.1.6
     transitivePeerDependencies:
       - aws-crt
       - debug
@@ -10193,25 +10208,25 @@ snapshots:
       - ws
     optional: true
 
-  '@computesdk/e2b@1.7.57':
+  '@computesdk/e2b@1.7.55':
     dependencies:
-      '@computesdk/provider': 2.1.9
-      computesdk: 4.1.8
+      '@computesdk/provider': 2.1.7
+      computesdk: 4.1.6
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.12':
+  '@computesdk/modal@1.9.9':
     dependencies:
-      '@computesdk/provider': 2.1.9
-      computesdk: 4.1.8
+      '@computesdk/provider': 2.1.7
+      computesdk: 4.1.6
       modal: 0.7.6
     optional: true
 
-  '@computesdk/provider@2.1.9':
+  '@computesdk/provider@2.1.7':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.8
-      daemond: 0.1.6
+      computesdk: 4.1.6
+      daemond: 0.1.4
     optional: true
 
   '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
@@ -10739,7 +10754,7 @@ snapshots:
       form-data: 4.0.4
       glob: 10.4.5
       tar: 7.5.9
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -10761,7 +10776,7 @@ snapshots:
     dependencies:
       form-data: 4.0.5
       node-fetch: 2.7.0
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       zod: 4.4.3
       zod-to-json-schema: 3.25.1(zod@4.4.3)
     transitivePeerDependencies:
@@ -10965,7 +10980,7 @@ snapshots:
       '@types/stream-buffers': 3.0.8
       form-data: 4.0.5
       hpagent: 1.2.0
-      isomorphic-ws: 5.0.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      isomorphic-ws: 5.0.0(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       js-yaml: 4.1.0
       jsonpath-plus: 10.4.0
       node-fetch: 2.7.0
@@ -10974,7 +10989,7 @@ snapshots:
       socks-proxy-agent: 8.0.5
       stream-buffers: 3.0.3
       tar-fs: 3.1.2
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -11070,7 +11085,7 @@ snapshots:
       tar: 7.5.16
       utf-8-validate: 6.0.6
       whatwg-url: 14.2.0
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - encoding
 
@@ -12769,7 +12784,7 @@ snapshots:
   anchorbrowser@0.16.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       playwright: 1.60.0
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -13323,10 +13338,10 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.8:
+  computesdk@4.1.6:
     dependencies:
       '@computesdk/cmd': 0.4.1
-      daemond: 0.1.6
+      daemond: 0.1.4
     optional: true
 
   concat-map@0.0.1: {}
@@ -13430,7 +13445,7 @@ snapshots:
       rrweb-cssom: 0.8.0
     optional: true
 
-  daemond@0.1.6:
+  daemond@0.1.4:
     optional: true
 
   data-urls@5.0.0:
@@ -14557,6 +14572,10 @@ snapshots:
 
   isomorphic-timers-promises@1.0.1: {}
 
+  isomorphic-ws@5.0.0(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
+    dependencies:
+      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+
   isomorphic-ws@5.0.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
     dependencies:
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
@@ -15102,7 +15121,7 @@ snapshots:
 
   notte-sdk@0.0.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       zod: 4.4.3
     transitivePeerDependencies:
       - bufferutil
@@ -15816,7 +15835,7 @@ snapshots:
   sandbox0@0.9.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       shlex: 3.0.0
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -16278,7 +16297,7 @@ snapshots:
   tensorlake@0.5.33(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       undici: 8.3.0
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -16904,6 +16923,16 @@ snapshots:
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
+
+  ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+    optionalDependencies:
+      bufferutil: 4.1.0
+      utf-8-validate: 6.0.6
+
+  ws@8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+    optionalDependencies:
+      bufferutil: 4.1.0
+      utf-8-validate: 6.0.6
 
   ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     optionalDependencies:
