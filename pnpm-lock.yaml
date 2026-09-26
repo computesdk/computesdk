@@ -894,6 +894,9 @@ importers:
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
+      ws:
+        specifier: ^8.18.3
+        version: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   packages/daytona:
     dependencies:

@@ -124,6 +124,43 @@ Emitted events include:
 - `command.stderr`
 - `command.exit`
 
+## Tunnel
+
+The daemon can maintain a dial-out tunnel to a control plane: a single
+WebSocket multiplexing bidirectional byte streams into the sandbox, so the
+control plane reaches in-sandbox services without inbound connectivity. The
+wire protocol is defined in `docs/rfcs/0001-daemond-dial-out-tunnel.md`.
+
+Send `type: "tunnel"` over the daemon socket (requires `token`) with one of:
+
+- `{ connect: "<ws(s)://host/tunnel>", tunnelToken: "<t>", allowPorts?: [8787, "9000-9100"], timeoutMs?: 10000 }` — start the tunnel (a different URL replaces the existing one; same URL is a no-op). The daemon sends the token as `?token=` and as a first `{"t":"auth","token"}` frame; the server accepts either. `allowPorts` restricts which in-sandbox ports the control plane may open (default: any port); connect targets are always limited to loopback hosts (`127.0.0.1`, `localhost`, `::1`).
+- `{ status: true }` — return the current status without changing anything.
+- `{ disconnect: true }` — close the socket (code 1000), close all streams, and suppress reconnects.
+
+All three reply `tunnel_result` with the status object; `connect` replies as
+soon as the tunnel is `connected` or `timeoutMs` elapses:
+
+```json
+{ "state": "connecting|connected|disconnected", "url": "ws://…", "connectedAt": 1730000000000,
+  "reconnects": 0, "streamsOpen": 0, "lastError": null }
+```
+
+The tunnel token never appears in status, events, or logs. On link loss the
+daemon reconnects forever with exponential backoff (500 ms doubling to 10 s,
+±25 % jitter); a close code of `4401` (unauthorized) or an explicit
+`disconnect`/`stop` ends retries. Link loss publishes
+`tunnel.disconnected { url, code, reason, willRetry }` and each successful
+connect publishes `tunnel.connected { url }` on the `daemon` channel (socket
+`subscribe` and SSE). There are no per-stream events.
+
+Requires Node ≥ 22 inside the sandbox (the client uses the global `WebSocket`
+— zero dependencies); on older runtimes `connect` fails with
+`lastError: "tunnel requires Node >= 22"`.
+
+Launcher-side, a payload of `{ tunnel: { … } }` drives the same protocol, and
+the invocation result carries the status under `tunnel` (with a placeholder
+empty `command`).
+
 ## Development
 
 ```bash
