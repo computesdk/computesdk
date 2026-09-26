@@ -39,7 +39,7 @@ type FakeState = {
   waitReturnsRunning?: boolean
   failBootstrap?: boolean
   failRequests?: Record<string, { exitCode: number; stderr: string }>
-  getUrl?: ReturnType<typeof vi.fn>
+  getUrl?: (sandbox: unknown, options: { port: number; protocol?: string }) => Promise<string>
 }
 
 function makeMethods(state: FakeState) {
@@ -142,7 +142,7 @@ function makeMethods(state: FakeState) {
       createdAt: new Date(),
       timeout: 300000,
     } as SandboxInfo),
-    getUrl: state.getUrl ?? vi.fn().mockRejectedValue(new Error('port not exposed')),
+    getUrl: state.getUrl ?? (async () => { throw new Error('port not exposed') }),
   }
 }
 
@@ -214,7 +214,7 @@ describe('startProcess', () => {
   })
 
   it('falls back to polling, delivers stdout diffs sequentially, and fires onExit once', async () => {
-    const state = {
+    const state: FakeState = {
       job: freshJob(),
       stdinWrites: [] as string[],
       // Slow statuses + a fast poll interval would overlap under setInterval;
