@@ -91,6 +91,9 @@ export interface SeedCommandResult {
   pid?: number | null;
   /** True when a detached job's buffered output exceeded the cap and was tailed. */
   truncated?: boolean;
+  /** Total bytes ever appended to each stream (before truncation), for offset-based consumers. */
+  stdoutBytes?: number;
+  stderrBytes?: number;
 }
 
 export interface SeedCommandOptions {

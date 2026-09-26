@@ -27,6 +27,8 @@ type JobState = {
   status: 'running' | 'exited'
   exitCode: number | null
   signal: string | null
+  stdoutBytes?: number
+  stderrBytes?: number
 }
 
 type FakeState = {
@@ -37,6 +39,10 @@ type FakeState = {
   statusInFlight?: number
   maxStatusInFlight?: number
   waitReturnsRunning?: boolean
+  /** Queue of statuses returned by successive `wait` requests. */
+  waitQueue?: JobState['status'][]
+  /** Snapshot fields merged into the final `wait` result. */
+  waitResult?: Partial<JobState>
   failBootstrap?: boolean
   failRequests?: Record<string, { exitCode: number; stderr: string }>
   getUrl?: (sandbox: unknown, options: { port: number; protocol?: string }) => Promise<string>
@@ -89,6 +95,8 @@ function makeMethods(state: FakeState) {
         stderr: state.job.stderr,
         combined: state.job.stdout + state.job.stderr,
         truncated: false,
+        stdoutBytes: state.job.stdoutBytes ?? Buffer.byteLength(state.job.stdout),
+        stderrBytes: state.job.stderrBytes ?? Buffer.byteLength(state.job.stderr),
       })
 
       if (typeof payload.stdin === 'string') {
@@ -115,8 +123,16 @@ function makeMethods(state: FakeState) {
         }
       }
       if (typeof payload.wait === 'string') {
-        if (state.waitReturnsRunning) return respond(jobSnapshot())
-        return respond({ ...jobSnapshot(), status: 'exited', exitCode: 0 })
+        const queued = state.waitQueue?.shift()
+        if (queued === 'running' || (queued === undefined && state.waitReturnsRunning)) {
+          return respond(jobSnapshot())
+        }
+        // A real exit snapshot already contains everything the job produced —
+        // drain pending status updates before answering.
+        while (state.statusSnapshots?.length) {
+          Object.assign(state.job, state.statusSnapshots.shift())
+        }
+        return respond({ ...jobSnapshot(), ...state.waitResult, status: 'exited', exitCode: 0 })
       }
       if (typeof payload.kill === 'string') {
         state.job.signal = String(payload.signal ?? 'SIGTERM')
@@ -347,6 +363,83 @@ describe('startProcess', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('still emits when consecutive buffers are identical at the cap', async () => {
+    // The daemon reports cumulative byte totals, so an identical-looking
+    // buffer still yields the new tail.
+    const buf = 'x'.repeat(1024)
+    const state: FakeState = {
+      job: freshJob(),
+      stdinWrites: [] as string[],
+      statusSnapshots: [
+        { stdout: buf, stdoutBytes: 1024 },
+        { stdout: buf, stdoutBytes: 2048 },
+        { stdout: buf, stdoutBytes: 3072, status: 'exited' as const, exitCode: 0 },
+      ],
+    }
+    const { provider } = makeSandbox(state)
+    const sandbox = await provider.sandbox.create()
+
+    const chunks: string[] = []
+    const onExit = vi.fn()
+    await sandbox.startProcess('spam', {
+      onStdout: (c) => chunks.push(c),
+      onExit,
+      pollIntervalMs: 5,
+    })
+    await new Promise((r) => setTimeout(r, 150))
+
+    expect(chunks).toEqual([buf, buf, buf])
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-issues the daemon wait in chunks until the process exits', async () => {
+    const state: FakeState = {
+      job: freshJob(),
+      stdinWrites: [] as string[],
+      waitQueue: ['running', 'running', 'exited'],
+    }
+    const { methods, provider } = makeSandbox(state)
+    const sandbox = await provider.sandbox.create()
+
+    const proc = await sandbox.startProcess('sleep 60')
+    const result = await proc.wait()
+
+    const waitCalls = methods.runCommand.mock.calls.filter(([, cmd]) => {
+      try {
+        return typeof JSON.parse(cmd as string).wait === 'string'
+      } catch {
+        return false
+      }
+    })
+    expect(waitCalls).toHaveLength(3)
+    expect(result.exitCode).toBe(0)
+  })
+
+  it('flushes buffered output before resolving wait', async () => {
+    // Slow statuses mean the poller hasn't delivered output when wait lands;
+    // wait must emit the full final stdout before firing onExit.
+    const state: FakeState = {
+      job: freshJob(),
+      stdinWrites: [] as string[],
+      statusDelayMs: 200,
+      statusSnapshots: [{ stdout: '' }],
+      waitResult: { stdout: 'final\noutput\n', stdoutBytes: 13 },
+    }
+    const { provider } = makeSandbox(state)
+    const sandbox = await provider.sandbox.create()
+
+    const order: string[] = []
+    const proc = await sandbox.startProcess('slow', {
+      onStdout: (c) => order.push(`out:${c}`),
+      onExit: () => order.push('exit'),
+      pollIntervalMs: 5,
+    })
+    await proc.wait()
+    await new Promise((r) => setTimeout(r, 300))
+
+    expect(order).toEqual(['out:final\noutput\n', 'exit'])
   })
 
   it('rejects wait when the timeout elapses before exit', async () => {

@@ -115,7 +115,7 @@ Supported message types:
 - `subscribe` / `unsubscribe` (requires `token`)
 - `stop` (requires `token`)
 
-Command results carry `status: "running" | "exited"` and `truncated` (true when a detached job's buffered output exceeded `maxJobOutputBytes` and was tailed). `exitCode` is `null` while running and when the process was terminated by a signal (see `signal`); it is never invented. Finished jobs are retained for 10 minutes so late `wait`/`status` calls still resolve; unknown job ids are an error.
+Command results carry `status: "running" | "exited"` and `truncated` (true when a detached job's buffered output exceeded `maxJobOutputBytes` and was tailed). `stdoutBytes`/`stderrBytes` are monotonically increasing totals of all bytes ever appended to each stream (before truncation), so consumers can diff snapshots by offset rather than by comparing buffer contents. `exitCode` is `null` while running and when the process was terminated by a signal (see `signal`); it is never invented. Finished jobs are retained for 10 minutes so late `wait`/`status` calls still resolve; unknown job ids are an error.
 
 SSE stream endpoint:
 

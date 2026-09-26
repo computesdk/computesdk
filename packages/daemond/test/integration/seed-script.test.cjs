@@ -438,6 +438,41 @@ test("seed daemon rejects invalid stdin requests", async () => {
   }
 });
 
+test("seed daemon rejects stdin writes after closeStdin and stays healthy", async () => {
+  const name = `seed-script-stdin-closed-${process.pid}`;
+  const script = daemonSeedScript({ name });
+
+  const cat = await runSeedLauncher(script, [
+    JSON.stringify({ command: "sh", args: ["-c", "sleep 30"], detach: true, stdin: true }),
+  ]);
+  try {
+    await runSeedLauncher(script, [JSON.stringify({ closeStdin: cat.command.jobId })]);
+
+    // A write racing/after the close is rejected rather than writing after end.
+    await assert.rejects(
+      runSeedLauncher(script, [JSON.stringify({ stdin: cat.command.jobId, data: "x" })]),
+      /stdin of job .* is closed/,
+    );
+
+    // Closing twice is a no-op success, and the daemon still answers health.
+    await runSeedLauncher(script, [JSON.stringify({ closeStdin: cat.command.jobId })]);
+    const socketPath = defaultSocketPath(name, process.cwd());
+    const conn = await connectSocket(socketPath, 3000);
+    try {
+      const messages = readMessages(conn);
+      conn.write(`${JSON.stringify({ id: "health-1", type: "health", token: cat.token })}\n`);
+      const health = await messages.next(3000);
+      assert.equal(health.type, "health");
+      assert.equal(health.payload.state, "running");
+    } finally {
+      if (!conn.destroyed) conn.destroy();
+    }
+  } finally {
+    await runSeedLauncher(script, [JSON.stringify({ kill: cat.command.jobId, signal: "SIGKILL" })]).catch(() => {});
+    await stopDaemon(name, cat.token);
+  }
+});
+
 test("seed daemon bounds detached job output buffers", async () => {
   const name = `seed-script-truncate-${process.pid}`;
   const script = daemonSeedScript({ name, maxJobOutputBytes: 1024 });

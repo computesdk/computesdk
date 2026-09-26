@@ -30,6 +30,7 @@ import {
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
   type SeedCommandInput,
+  type SeedCommandResult,
   type SeedInput,
   type SeedInvocationResult,
 } from 'daemond';
@@ -40,6 +41,13 @@ type DaemonStreamState = {
 };
 
 const DEFAULT_DAEMON_SSE_PORT = 38989;
+
+/**
+ * Each daemon `wait` request blocks at most this long, so a long-running
+ * process never has to outlive a provider's own command timeout — the wait
+ * loop simply re-issues the request.
+ */
+const DAEMON_WAIT_CHUNK_MS = 30_000;
 
 function createDaemonRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -102,33 +110,24 @@ function emitMissingOutput(
 }
 
 /**
- * Emits the incremental diff between a previously seen buffer and the newest
- * snapshot. Normally the snapshot only grows, so the diff is a suffix — but a
- * truncated buffer drops the head, in which case we emit the new buffer minus
- * the longest overlap still shared with what was already delivered.
+ * Emits the incremental output between two status snapshots using the
+ * daemon's byte counters: `totalBytes` is the number of bytes ever appended
+ * to the stream (before truncation), so the undelivered tail is the last
+ * `totalBytes - seen.bytes` bytes of the current buffer — correct even when
+ * the buffer was truncated or is identical to the previous snapshot.
  */
 function emitProcessDiff(
-  seen: { value: string },
-  next: string,
+  seen: { bytes: number },
+  buffer: string,
+  totalBytes: number | undefined,
   emit?: (chunk: string) => void
 ): void {
-  const previous = seen.value;
-  seen.value = next;
-  if (!emit || !next) return;
-  if (next.startsWith(previous)) {
-    const diff = next.slice(previous.length);
-    if (diff) emit(diff);
-    return;
-  }
-  const maxOverlap = Math.min(previous.length, next.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap--) {
-    if (previous.endsWith(next.slice(0, overlap))) {
-      const diff = next.slice(overlap);
-      if (diff) emit(diff);
-      return;
-    }
-  }
-  emit(next);
+  if (totalBytes === undefined) return;
+  const newBytes = totalBytes - seen.bytes;
+  seen.bytes = totalBytes;
+  if (newBytes <= 0 || !emit) return;
+  const buf = Buffer.from(buffer, 'utf8');
+  emit(buf.subarray(Math.max(0, buf.length - newBytes)).toString('utf8'));
 }
 
 function parseSseDataLines(raw: string): string[] {
@@ -695,18 +694,19 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       truncated: snapshot.truncated,
     });
 
-    const getStatus = async (): Promise<ProcessStatus> => {
+    const getRawStatus = async (): Promise<typeof invocation.command> => {
       const { invocation: statusInvocation } = await this.daemonJobRequest(
         { status: jobId },
         'process status',
         { cwd: options.cwd, env: options.env }
       );
-      return toStatus(statusInvocation.command);
+      return statusInvocation.command;
     };
 
-    if (options.onStdout || options.onStderr || options.onExit) {
-      this.watchProcessOutput(jobId, options, getStatus, fireExit);
-    }
+    const watcher =
+      options.onStdout || options.onStderr || options.onExit
+        ? this.watchProcessOutput(jobId, options, getRawStatus, fireExit)
+        : undefined;
 
     const self = this;
     return {
@@ -727,30 +727,44 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           { cwd: options.cwd, env: options.env }
         );
       },
-      status: getStatus,
+      status: async (): Promise<ProcessStatus> => toStatus(await getRawStatus()),
       async wait(waitOptions?: { timeout?: number }): Promise<CommandResult & { signal: string | null }> {
         const startedAt = Date.now();
-        const { invocation: waitInvocation } = await self.daemonJobRequest(
-          { wait: jobId, timeoutMs: waitOptions?.timeout },
-          'process wait',
-          {
-            cwd: options.cwd,
-            env: options.env,
-            timeout: waitOptions?.timeout ? waitOptions.timeout + 5000 : undefined,
+        const deadline =
+          waitOptions?.timeout !== undefined ? startedAt + waitOptions.timeout : undefined;
+        // Chunk the daemon wait so a long-running process never outlives a
+        // provider's own command timeout — each request blocks at most
+        // DAEMON_WAIT_CHUNK_MS and the loop re-issues it.
+        while (true) {
+          const remaining = deadline !== undefined ? deadline - Date.now() : DAEMON_WAIT_CHUNK_MS;
+          if (remaining <= 0) {
+            throw new Error(`daemond: process ${jobId} did not exit within ${waitOptions?.timeout}ms`);
           }
-        );
-        const snapshot = waitInvocation.command;
-        if (snapshot.status === 'running') {
-          throw new Error(`daemond: process ${jobId} did not exit within ${waitOptions?.timeout}ms`);
+          const chunk = Math.min(remaining, DAEMON_WAIT_CHUNK_MS);
+          const { invocation: waitInvocation } = await self.daemonJobRequest(
+            { wait: jobId, timeoutMs: chunk },
+            'process wait',
+            {
+              cwd: options.cwd,
+              env: options.env,
+              timeout: chunk + 5000,
+            }
+          );
+          const snapshot = waitInvocation.command;
+          if (snapshot.status === 'running') {
+            continue;
+          }
+          // Flush any output the watcher hasn't delivered yet, then exit.
+          watcher?.finish(snapshot);
+          fireExit(snapshot.exitCode ?? null, snapshot.signal ?? null);
+          return {
+            stdout: snapshot.stdout ?? '',
+            stderr: snapshot.stderr ?? '',
+            exitCode: snapshot.exitCode ?? -1,
+            durationMs: Date.now() - startedAt,
+            signal: snapshot.signal ?? null,
+          };
         }
-        fireExit(snapshot.exitCode ?? null, snapshot.signal ?? null);
-        return {
-          stdout: snapshot.stdout ?? '',
-          stderr: snapshot.stderr ?? '',
-          exitCode: snapshot.exitCode ?? -1,
-          durationMs: Date.now() - startedAt,
-          signal: snapshot.signal ?? null,
-        };
       },
       async kill(signal: string = 'SIGTERM'): Promise<void> {
         await self.daemonJobRequest(
@@ -771,11 +785,11 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   private watchProcessOutput(
     jobId: string,
     options: StartProcessOptions,
-    getStatus: () => Promise<ProcessStatus>,
+    getStatus: () => Promise<SeedCommandResult>,
     fireExit: (exitCode: number | null, signal: string | null) => void
-  ): void {
-    const seenStdout = { value: '' };
-    const seenStderr = { value: '' };
+  ): { finish: (snapshot: SeedCommandResult) => void } {
+    const seenStdout = { bytes: 0 };
+    const seenStderr = { bytes: 0 };
     let stopped = false;
     let inFlight = false;
     let dirty = false;
@@ -795,13 +809,16 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       inFlight = true;
       try {
         const status = await getStatus();
+        // A finish() may have landed while this refresh was in flight — its
+        // snapshot is authoritative and already flushed, so emit nothing.
+        if (stopped) return;
         failures = 0;
-        emitProcessDiff(seenStdout, status.stdout, options.onStdout);
-        emitProcessDiff(seenStderr, status.stderr, options.onStderr);
+        emitProcessDiff(seenStdout, status.stdout ?? '', status.stdoutBytes, options.onStdout);
+        emitProcessDiff(seenStderr, status.stderr ?? '', status.stderrBytes, options.onStderr);
         if (status.status === 'exited') {
           stopped = true;
           streamController.abort();
-          fireExit(status.exitCode, status.signal);
+          fireExit(status.exitCode ?? null, status.signal ?? null);
         }
       } catch {
         // The daemon (or the job) may be gone; give up after a few misses.
@@ -838,10 +855,23 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       })();
     };
 
+    /**
+     * Delivers whatever the watcher hasn't emitted yet from the final
+     * (exited) snapshot, then stops the watcher — call before `fireExit`
+     * so callbacks see all output before `onExit`.
+     */
+    const finish = (snapshot: SeedCommandResult): void => {
+      if (stopped) return;
+      stopped = true;
+      streamController.abort();
+      emitProcessDiff(seenStdout, snapshot.stdout ?? '', snapshot.stdoutBytes, options.onStdout);
+      emitProcessDiff(seenStderr, snapshot.stderr ?? '', snapshot.stderrBytes, options.onStderr);
+    };
+
     const state = this.daemonStreamState;
     if (!state?.rawSseUrl) {
       startPolling();
-      return;
+      return { finish };
     }
 
     // SSE is best-effort: any failure (or a connect that hangs — an unroutable
@@ -891,6 +921,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         if (!stopped) startPolling();
       }
     );
+
+    return { finish };
   }
 
   async getInfo(): Promise<SandboxInfo> {

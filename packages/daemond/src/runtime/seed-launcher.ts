@@ -146,6 +146,9 @@ interface Job {
   stdinOpen: boolean;
   bounded: boolean;
   truncated: boolean;
+  /** Total bytes ever appended to each stream, before truncation. */
+  stdoutBytes: number;
+  stderrBytes: number;
   kill(signal: string): void;
   onExit: Set<() => void>;
 }
@@ -163,6 +166,8 @@ function jobSnapshot(job: Job): Record<string, unknown> {
     stderr: job.stderr,
     combined: job.combined,
     truncated: job.truncated,
+    stdoutBytes: job.stdoutBytes,
+    stderrBytes: job.stderrBytes,
   };
 }
 
@@ -175,6 +180,9 @@ function replyError(conn: net.Socket, replyTo: string, message: string): void {
 }
 
 function appendOutput(job: Job, field: "stdout" | "stderr" | "combined", text: string): void {
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (field === "stdout") job.stdoutBytes += bytes;
+  else if (field === "stderr") job.stderrBytes += bytes;
   let next = job[field] + text;
   // Detached jobs buffer output for later status/wait reads, so the buffers
   // are bounded — keep the tail once a stream outgrows the cap. Attached
@@ -247,6 +255,8 @@ function startJob(msg: WireMessage): Job | string {
     stdinOpen: useStdin,
     bounded: detach,
     truncated: false,
+    stdoutBytes: 0,
+    stderrBytes: 0,
     kill(signal: string) {
       try {
         if (child.pid) process.kill(-child.pid, signal as NodeJS.Signals);
@@ -277,6 +287,11 @@ function startJob(msg: WireMessage): Job | string {
     };
     job.stdin.once("close", onStdinClosed);
     job.stdin.once("finish", onStdinClosed);
+    // A stream error (EPIPE, write-after-end) must never surface as an
+    // unhandled 'error' event and take the daemon down.
+    job.stdin.on("error", () => {
+      job.stdinOpen = false;
+    });
   }
 
   let finished = false;
@@ -483,6 +498,9 @@ function handleCloseStdin(msg: WireMessage, conn: net.Socket): void {
   if (!resolved) return;
   const { job, requestId } = resolved;
   if (job.stdinOpen && job.stdin) {
+    // Mark closed synchronously so a stdin write racing this request is
+    // rejected instead of writing after end.
+    job.stdinOpen = false;
     job.stdin.end();
   }
   reply(conn, "exec_result", requestId, jobSnapshot(job));
