@@ -1,0 +1,13 @@
+{
+  "name": "@computesdk/example-daemond-tunnel-prototype",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "demo": "node demo.mjs"
+  },
+  "dependencies": {
+    "computesdk": "workspace:*",
+    "ws": "^8.18.3"
+  }
+}
