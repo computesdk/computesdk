@@ -217,8 +217,10 @@ const result = await proc.wait();      // { exitCode: -1, signal: 'SIGTERM', ...
 - Runs via the in-sandbox daemon: the sandbox needs `node`, or a Linux/glibc
   image the daemon can bootstrap one into; otherwise `startProcess` throws a
   `daemond:`-prefixed error.
-- Output callbacks are delivered over SSE when the daemon's port is routable
-  from the caller, otherwise by polling `status()` every `pollIntervalMs`.
+- Output callbacks are driven from the daemon's buffered `status` snapshot —
+  SSE (when the daemon's port is routable from the caller) only lowers latency,
+  otherwise the snapshot is polled every `pollIntervalMs`. Chunk boundaries
+  therefore follow the snapshot, not the process's own writes.
 - Each buffered output stream is capped at 4 MiB; when exceeded the tail is
   kept and snapshots report `truncated: true`.
 - Exited processes stay retrievable (`status`/`wait`) for 10 minutes.

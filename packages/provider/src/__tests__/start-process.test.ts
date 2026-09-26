@@ -29,14 +29,20 @@ type JobState = {
   signal: string | null
 }
 
-function makeMethods(state: {
+type FakeState = {
   job: JobState
   stdinWrites: string[]
-  statusSnapshots?: JobState[]
+  statusSnapshots?: Partial<JobState>[]
+  statusDelayMs?: number
+  statusInFlight?: number
+  maxStatusInFlight?: number
   waitReturnsRunning?: boolean
   failBootstrap?: boolean
   failRequests?: Record<string, { exitCode: number; stderr: string }>
-}) {
+  getUrl?: ReturnType<typeof vi.fn>
+}
+
+function makeMethods(state: FakeState) {
   return {
     create: vi.fn().mockResolvedValue({
       sandbox: { id: 'test-proc', status: 'running' },
@@ -95,9 +101,18 @@ function makeMethods(state: {
         return respond(jobSnapshot())
       }
       if (typeof payload.status === 'string') {
-        const next = state.statusSnapshots?.shift()
-        if (next) Object.assign(state.job, next)
-        return respond(jobSnapshot())
+        state.statusInFlight = (state.statusInFlight ?? 0) + 1
+        state.maxStatusInFlight = Math.max(state.maxStatusInFlight ?? 0, state.statusInFlight)
+        try {
+          if (state.statusDelayMs) {
+            await new Promise((r) => setTimeout(r, state.statusDelayMs))
+          }
+          const next = state.statusSnapshots?.shift()
+          if (next) Object.assign(state.job, next)
+          return respond(jobSnapshot())
+        } finally {
+          state.statusInFlight!--
+        }
       }
       if (typeof payload.wait === 'string') {
         if (state.waitReturnsRunning) return respond(jobSnapshot())
@@ -127,11 +142,11 @@ function makeMethods(state: {
       createdAt: new Date(),
       timeout: 300000,
     } as SandboxInfo),
-    getUrl: vi.fn().mockRejectedValue(new Error('port not exposed')),
+    getUrl: state.getUrl ?? vi.fn().mockRejectedValue(new Error('port not exposed')),
   }
 }
 
-function makeSandbox(state: Parameters<typeof makeMethods>[0]) {
+function makeSandbox(state: FakeState) {
   const methods = makeMethods(state)
   daemonSeedScriptCommand.mockImplementation((_config: unknown, payload: unknown) =>
     typeof payload === 'string' ? payload : JSON.stringify(payload)
@@ -198,15 +213,18 @@ describe('startProcess', () => {
     )
   })
 
-  it('falls back to polling, delivers stdout diffs, and fires onExit once', async () => {
+  it('falls back to polling, delivers stdout diffs sequentially, and fires onExit once', async () => {
     const state = {
       job: freshJob(),
       stdinWrites: [] as string[],
+      // Slow statuses + a fast poll interval would overlap under setInterval;
+      // the sequential loop must never run two status requests at once.
+      statusDelayMs: 30,
       statusSnapshots: [
         { stdout: 'a\n' },
         { stdout: 'a\nb\n' },
         { stdout: 'a\nb\n', status: 'exited' as const, exitCode: 0 },
-      ] as JobState[],
+      ] as Partial<JobState>[],
     }
     const { provider } = makeSandbox(state)
     const sandbox = await provider.sandbox.create()
@@ -221,12 +239,114 @@ describe('startProcess', () => {
 
     const result = await proc.wait()
     // Let the polling loop observe the exited snapshot.
-    await new Promise((r) => setTimeout(r, 60))
+    await new Promise((r) => setTimeout(r, 150))
 
     expect(chunks.join('')).toBe('a\nb\n')
     expect(onExit).toHaveBeenCalledTimes(1)
     expect(onExit).toHaveBeenCalledWith({ exitCode: 0, signal: null })
     expect(result.exitCode).toBe(0)
+    expect(state.maxStatusInFlight ?? 0).toBeLessThanOrEqual(1)
+  })
+
+  it('drives callbacks from status snapshots when SSE opens', async () => {
+    const state = {
+      job: freshJob(),
+      stdinWrites: [] as string[],
+      statusSnapshots: [
+        { stdout: 'a\n' },
+        { stdout: 'a\nb\n' },
+        { stdout: 'a\nb\n', status: 'exited' as const, exitCode: 0 },
+      ] as Partial<JobState>[],
+      getUrl: vi.fn().mockResolvedValue('https://derived.mock.dev'),
+    }
+    const { provider } = makeSandbox(state)
+    const sandbox = await provider.sandbox.create()
+
+    let streamController!: ReadableStreamDefaultController<Uint8Array>
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      start: (c) => {
+        streamController = c
+      },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, body }) as unknown as Response)
+    )
+
+    const chunks: string[] = []
+    const onExit = vi.fn()
+    await sandbox.startProcess('yes', {
+      onStdout: (c) => chunks.push(c),
+      onExit,
+      pollIntervalMs: 5,
+    })
+
+    // Let the stream open (fires the initial flush refresh).
+    await new Promise((r) => setTimeout(r, 30))
+    streamController.enqueue(
+      encoder.encode('data: {"type":"command.stdout","jobId":"job-1","chunk":"junk"}\n\n')
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    streamController.enqueue(
+      encoder.encode('data: {"type":"command.exit","jobId":"job-1","exitCode":0,"signal":null}\n\n')
+    )
+    await new Promise((r) => setTimeout(r, 100))
+    streamController.close()
+
+    // Chunks come from status snapshots, not the SSE chunk payload.
+    expect(chunks).toEqual(['a\n', 'b\n'])
+    expect(onExit).toHaveBeenCalledTimes(1)
+    expect(onExit).toHaveBeenCalledWith({ exitCode: 0, signal: null })
+  })
+
+  it('starts polling when the SSE stream never opens', async () => {
+    vi.useFakeTimers()
+    try {
+      const state = {
+        job: freshJob(),
+        stdinWrites: [] as string[],
+        statusSnapshots: [{ stdout: 'a\n', status: 'exited' as const, exitCode: 0 }] as Partial<JobState>[],
+        getUrl: vi.fn().mockResolvedValue('https://derived.mock.dev'),
+      }
+      const { methods, provider } = makeSandbox(state)
+      const sandbox = await provider.sandbox.create()
+
+      // fetch never resolves on its own — the open timer must cut over to
+      // polling. It honors the AbortSignal like a real fetch.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_url: unknown, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+            })
+        )
+      )
+
+      const chunks: string[] = []
+      const onExit = vi.fn()
+      await sandbox.startProcess('yes', {
+        onStdout: (c) => chunks.push(c),
+        onExit,
+        pollIntervalMs: 5,
+      })
+
+      await vi.advanceTimersByTimeAsync(5100)
+
+      const statusCalls = methods.runCommand.mock.calls.filter(([, cmd]) => {
+        try {
+          return typeof JSON.parse(cmd as string).status === 'string'
+        } catch {
+          return false
+        }
+      })
+      expect(statusCalls.length).toBeGreaterThan(0)
+      expect(chunks.join('')).toBe('a\n')
+      expect(onExit).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects wait when the timeout elapses before exit', async () => {

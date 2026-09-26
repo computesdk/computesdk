@@ -195,6 +195,10 @@ async function streamDaemonEvents(
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
     onExit?: (exitCode: number | null, signal: string | null) => void;
+    /** Called once the stream is open and verified (2xx with a body). */
+    onOpen?: () => void;
+    /** Called for every event matching the filter, before type handling. */
+    onEvent?: (event: ReturnType<typeof normalizeDaemonStreamEvent>) => void;
     markStdout: (chunk?: string) => void;
     markStderr: (chunk?: string) => void;
   },
@@ -204,6 +208,7 @@ async function streamDaemonEvents(
   if (!response.ok || !response.body) {
     throw new Error(`Failed to open daemon event stream: ${response.status}`);
   }
+  callbacks.onOpen?.();
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -233,6 +238,7 @@ async function streamDaemonEvents(
         if (filter.jobId && event.jobId !== filter.jobId) {
           continue;
         }
+        callbacks.onEvent?.(event);
         if (event.type === 'command.exit') {
           callbacks.onExit?.(event.exitCode ?? null, event.signal ?? null);
           return;
@@ -757,9 +763,10 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   }
 
   /**
-   * Delivers a started process's output to its callbacks: SSE from the daemon
-   * when the port is routable, otherwise a status-polling diff loop. Fires
-   * `onExit` exactly once via the shared `fireExit`.
+   * Delivers a started process's output to its callbacks. The daemon's
+   * buffered `status` snapshot is the single source of truth — the SSE stream,
+   * when the port is routable, only wakes the shared refresh. Fires `onExit`
+   * exactly once via the shared `fireExit`.
    */
   private watchProcessOutput(
     jobId: string,
@@ -767,55 +774,123 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     getStatus: () => Promise<ProcessStatus>,
     fireExit: (exitCode: number | null, signal: string | null) => void
   ): void {
+    const seenStdout = { value: '' };
+    const seenStderr = { value: '' };
+    let stopped = false;
+    let inFlight = false;
+    let dirty = false;
+    let polling = false;
+    let failures = 0;
     const streamController = new AbortController();
 
-    const startPolling = (): void => {
-      const seenStdout = { value: '' };
-      const seenStderr = { value: '' };
-      let failures = 0;
-      const interval = setInterval(async () => {
-        let status: ProcessStatus;
-        try {
-          status = await getStatus();
-          failures = 0;
-        } catch {
-          // The daemon (or the job) may be gone; give up after a few misses.
-          failures += 1;
-          if (failures >= 3) clearInterval(interval);
-          return;
-        }
+    // Exactly one status request at a time: a refresh triggered while one is
+    // still running (provider runCommand can take seconds) just marks dirty
+    // and re-runs after it finishes, so diffs are never emitted out of order.
+    const refresh = async (): Promise<void> => {
+      if (stopped) return;
+      if (inFlight) {
+        dirty = true;
+        return;
+      }
+      inFlight = true;
+      try {
+        const status = await getStatus();
+        failures = 0;
         emitProcessDiff(seenStdout, status.stdout, options.onStdout);
         emitProcessDiff(seenStderr, status.stderr, options.onStderr);
         if (status.status === 'exited') {
-          clearInterval(interval);
+          stopped = true;
+          streamController.abort();
           fireExit(status.exitCode, status.signal);
         }
-      }, options.pollIntervalMs ?? 500);
-      (interval as unknown as { unref?: () => void }).unref?.();
+      } catch {
+        // The daemon (or the job) may be gone; give up after a few misses.
+        failures += 1;
+        if (failures >= 3) {
+          stopped = true;
+          streamController.abort();
+        }
+      } finally {
+        inFlight = false;
+        if (dirty) {
+          dirty = false;
+          void refresh();
+        }
+      }
+    };
+
+    const sleep = (ms: number): Promise<void> =>
+      new Promise((resolve) => {
+        const timer = setTimeout(resolve, ms);
+        (timer as unknown as { unref?: () => void }).unref?.();
+      });
+
+    // Sequential poll loop — never two status calls in flight.
+    const startPolling = (): void => {
+      if (polling || stopped) return;
+      polling = true;
+      const interval = options.pollIntervalMs ?? 500;
+      void (async () => {
+        while (!stopped) {
+          await refresh();
+          if (!stopped) await sleep(interval);
+        }
+      })();
     };
 
     const state = this.daemonStreamState;
-    const streamPromise = state?.rawSseUrl
-      ? this.resolveDaemonSseUrl(state.rawSseUrl, state.token).then((sseUrl) =>
-          streamDaemonEvents(
-            sseUrl,
-            { jobId },
-            {
-              onStdout: options.onStdout,
-              onStderr: options.onStderr,
-              onExit: (exitCode, signal) => {
-                fireExit(exitCode, signal);
-                streamController.abort();
-              },
-              markStdout: () => {},
-              markStderr: () => {},
-            },
-            streamController.signal
-          )
-        )
-      : Promise.reject(new Error('daemon stream unavailable'));
+    if (!state?.rawSseUrl) {
+      startPolling();
+      return;
+    }
 
-    streamPromise.then(() => undefined, () => startPolling());
+    // SSE is best-effort: any failure (or a connect that hangs — an unroutable
+    // port can hang instead of failing) falls back to polling. Once polling
+    // starts, SSE events never trigger refreshes again.
+    let opened = false;
+    const openTimer = setTimeout(() => {
+      if (!opened) streamController.abort();
+    }, 5000);
+    (openTimer as unknown as { unref?: () => void }).unref?.();
+
+    const streamPromise = this.resolveDaemonSseUrl(state.rawSseUrl, state.token).then((sseUrl) =>
+      streamDaemonEvents(
+        sseUrl,
+        { jobId },
+        {
+          onOpen: () => {
+            opened = true;
+            // Flush whatever the job printed before the stream connected.
+            void refresh();
+          },
+          onEvent: (event) => {
+            if (polling) return;
+            if (
+              event.type === 'command.stdout' ||
+              event.type === 'command.stderr' ||
+              event.type === 'command.exit'
+            ) {
+              void refresh();
+            }
+          },
+          markStdout: () => {},
+          markStderr: () => {},
+        },
+        streamController.signal
+      )
+    );
+
+    streamPromise.then(
+      () => {
+        clearTimeout(openTimer);
+        // The stream ended or errored while the job may still run — poll.
+        if (!stopped) startPolling();
+      },
+      () => {
+        clearTimeout(openTimer);
+        if (!stopped) startPolling();
+      }
+    );
   }
 
   async getInfo(): Promise<SandboxInfo> {
