@@ -624,6 +624,14 @@ test("tunnel connect: launcher reports connected, control plane sees token auth 
     const ev = await waitForEvent(sub.events, "tunnel.connected", 3000);
     assert.equal(ev.url, cp.url);
     assert.ok(!JSON.stringify(ev).includes(tunnelToken));
+
+    // Same URL + same token is a strict no-op: no replacement, no new attempt.
+    const again = await runSeedLauncher(script, [
+      JSON.stringify({ tunnel: { connect: cp.url, tunnelToken, timeoutMs: 8000 } }),
+    ]);
+    assert.equal(again.tunnel.state, "connected");
+    assert.equal(again.tunnel.connectedAt, result.tunnel.connectedAt);
+    assert.equal(again.tunnel.reconnects, result.tunnel.reconnects);
     sub.conn.destroy();
   } finally {
     sub.conn.destroy();
@@ -758,6 +766,25 @@ test("tunnel reconnects after link loss and reports reconnects", async () => {
     if (sub) sub.conn.destroy();
     await stopDaemon(name, result.token);
     await closeServer(cp);
+  }
+});
+
+test("tunnel connect to an unreachable control plane reports a lastError", async () => {
+  const name = `seed-tunnel-dialfail-${process.pid}`;
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: "ws://127.0.0.1:1/tunnel", tunnelToken: "tt", timeoutMs: 1500 } }),
+  ]);
+  try {
+    assert.ok(["connecting", "disconnected"].includes(result.tunnel.state));
+    assert.equal(typeof result.tunnel.lastError, "string");
+    assert.ok(result.tunnel.lastError.length > 0);
+
+    const status = await runSeedLauncher(script, [JSON.stringify({ tunnel: { disconnect: true } })]);
+    assert.equal(status.tunnel.state, "disconnected");
+  } finally {
+    await stopDaemon(name, result.token);
   }
 });
 

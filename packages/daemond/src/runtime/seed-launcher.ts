@@ -655,15 +655,22 @@ function tunnelConnect(): void {
     tunnelNotify();
   });
 
-  ws.addEventListener("error", () => {
-    // 'close' follows; reconnect is handled there.
+  ws.addEventListener("error", (ev) => {
+    // 'close' follows; reconnect is handled there. Preserve the dial failure
+    // reason so `status` reports something better than lastError: null.
+    if (typeof ev.message === "string" && ev.message.length > 0) {
+      tunnelStatus.lastError = ev.message;
+    }
   });
 }
 
 function tunnelStart(url: string, token: string, allowPort: (port: number) => boolean): void {
   const sameTarget =
-    tunnelStatus.url === url && !tunnelClosed && tunnelStatus.state !== "disconnected";
-  if (sameTarget) return; // same URL already connecting/connected: no-op
+    tunnelStatus.url === url &&
+    tunnelToken === token &&
+    !tunnelClosed &&
+    tunnelStatus.state !== "disconnected";
+  if (sameTarget) return; // same URL + same token: no-op; a new token replaces the tunnel
   tunnelTeardown();
   tunnelClosed = false;
   tunnelToken = token;
