@@ -115,7 +115,7 @@ function getClient(config: RuntimeConfig): Promise<Runtime> {
 interface SandboxState {
   /** Environment variables given at create, applied to every command. */
   env: Record<string, string>
-  /** The timeout given at create, in milliseconds. */
+  /** The lease set at create, in milliseconds. */
   timeoutMs?: number
   config: RuntimeConfig
 }
@@ -279,7 +279,8 @@ export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, Runt
         )
         track(sandbox, config, {
           env,
-          ...(options?.timeout === undefined ? {} : { timeoutMs: options.timeout }),
+          // The lease Runtime was given: whole seconds, rounded up.
+          ...(body.timeoutSeconds === undefined ? {} : { timeoutMs: body.timeoutSeconds * 1000 }),
         })
         return { sandbox, sandboxId: sandbox.id }
       },
@@ -436,8 +437,13 @@ export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, Runt
           ...(options?.sandboxId ? { sandboxId: options.sandboxId } : {}),
           ...(options?.limit ? { limit: Math.min(options.limit, 100) } : {}),
         })
-        const snapshots = await page.toArray(options?.limit ?? 10_000)
-        return snapshots.map(toSnapshot)
+        // With no limit, every snapshot: the pages are read to the end.
+        const snapshots = []
+        for await (const snapshot of page) {
+          snapshots.push(toSnapshot(snapshot))
+          if (options?.limit && snapshots.length >= options.limit) break
+        }
+        return snapshots
       },
 
       delete: async (config: RuntimeConfig, snapshotId: string) => {

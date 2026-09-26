@@ -23,6 +23,7 @@ const h = vi.hoisted(() => {
     execResult: undefined as ExecResult | undefined,
     pages: [] as string[][],
     snapshotDeleteMissing: false,
+    extraSnapshots: 0,
   }
 
   const record = (method: string, ...args: unknown[]) => state.calls.push({ method, args })
@@ -177,19 +178,20 @@ const h = vi.hoisted(() => {
     snapshots = {
       list: vi.fn(async (filter: Record<string, unknown>) => {
         record('snapshots.list', filter)
+        const snapshot = (id: string) => ({
+          id,
+          name: id.slice(5),
+          state: 'ready',
+          sourceSandboxId: 'sbx_1',
+          createdAt: '2026-09-25T02:00:00.000Z',
+          readyAt: '2026-09-25T02:00:05.000Z',
+          expiresAt: '2026-10-02T02:00:00.000Z',
+        })
         return {
-          toArray: async (limit: number) =>
-            [
-              {
-                id: 'snap_a',
-                name: 'a',
-                state: 'ready',
-                sourceSandboxId: 'sbx_1',
-                createdAt: '2026-09-25T02:00:00.000Z',
-                readyAt: '2026-09-25T02:00:05.000Z',
-                expiresAt: '2026-10-02T02:00:00.000Z',
-              },
-            ].slice(0, limit),
+          async *[Symbol.asyncIterator]() {
+            yield snapshot('snap_a')
+            for (let n = 0; n < state.extraSnapshots; n++) yield snapshot(`snap_${n}`)
+          },
         }
       }),
       delete: vi.fn(async (id: string) => {
@@ -223,6 +225,7 @@ beforeEach(() => {
   h.state.execResult = undefined
   h.state.pages = []
   h.state.snapshotDeleteMissing = false
+  h.state.extraSnapshots = 0
 })
 
 describe('create', () => {
@@ -433,6 +436,13 @@ describe('lifecycle', () => {
     expect((await sandbox.getInfo()).status).toBe('running')
   })
 
+  it('reports the lease Runtime was given, rounded up to whole seconds', async () => {
+    const sandbox = await provider().sandbox.create({ timeout: 1_500 })
+    const [body] = calls('sandboxes.create')[0].args as [{ timeoutSeconds?: number }]
+    expect(body.timeoutSeconds).toBe(2)
+    expect((await sandbox.getInfo()).timeout).toBe(2_000)
+  })
+
   it('falls back to the sandbox lease for getInfo timeout', async () => {
     const sandbox = await provider().sandbox.getById('sbx_live')
     expect((await sandbox!.getInfo()).timeout).toBe(1_800_000)
@@ -529,6 +539,13 @@ describe('snapshots', () => {
     const snapshots = await provider().snapshot!.list({ sandboxId: 'sbx_1', limit: 5 })
     expect(calls('snapshots.list')[0].args).toEqual([{ sandboxId: 'sbx_1', limit: 5 }])
     expect(snapshots.map((snapshot) => snapshot.id)).toEqual(['snap_a'])
+  })
+
+  it('lists every snapshot when no limit is given, past 10,000', async () => {
+    h.state.extraSnapshots = 10_000
+    const snapshots = await provider().snapshot!.list()
+    expect(snapshots).toHaveLength(10_001)
+    expect(calls('snapshots.list')[0].args).toEqual([{}])
   })
 
   it('treats deleting a missing snapshot as done', async () => {
