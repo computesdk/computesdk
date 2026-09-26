@@ -28,11 +28,13 @@ npm install daemond
 import { daemonSeedScript, daemonSeedScriptCommand } from "daemond";
 ```
 
-- `daemonSeedScript({ name?, socket?, ssePort?, sseStrictPort? })`
+- `daemonSeedScript({ name?, socket?, ssePort?, sseStrictPort?, maxJobOutputBytes?, jobRetentionMs? })`
   - `name` defaults to `daemond-seed`
   - `socket` defaults to `/tmp/.computesdk/seed-sockets/<hash>.sock`
   - `ssePort` defaults to `38989`
   - `sseStrictPort` defaults to `false`; when `true`, daemon fails instead of falling back if the SSE port is busy
+  - `maxJobOutputBytes` bounds each buffered output stream (`stdout`, `stderr`, `combined`) of **detached** jobs; defaults to 4 MiB. Overflow keeps the tail and sets `truncated: true` on the job snapshot. Attached execs stay unbounded.
+  - `jobRetentionMs` controls how long an exited detached job stays retrievable via `wait`/`status`; defaults to 10 minutes
 - `daemonSeedScriptCommand(config, payload, options?)`
   - builds a shell-safe `node -e ...` command string
   - `payload` can be a plain command string (for example `"pwd"`), a JSON command object, or a job control object (`{ wait }`, `{ status }`, `{ kill }`)
@@ -104,24 +106,27 @@ The daemon speaks newline-delimited JSON over its Unix socket.
 Supported message types:
 
 - `health` (optional `token`; validated when provided)
-- `exec` (requires `token`; `detach: true` returns `{ status: "running", exitCode: null, jobId }` once the process has started)
+- `exec` (requires `token`; `detach: true` returns `{ status: "running", exitCode: null, jobId }` once the process has started). Add `stdin: true` (requires `detach: true`) to open a writable stdin pipe on the job.
 - `wait` (requires `token`; `{ wait: jobId, timeoutMs? }` blocks until the job exits or the timeout elapses)
 - `status` (requires `token`; `{ status: jobId }` returns the current snapshot without blocking)
 - `kill` (requires `token`; `{ kill: jobId, signal? }` signals the job's whole process group)
+- `stdin` (requires `token`; `{ jobId, data, encoding?: "utf8"|"base64" }` writes to a job's stdin pipe; replies after the write is flushed. Errors: unknown job, job exited, job not started with `stdin`, or stdin already closed)
+- `closeStdin` (requires `token`; `{ jobId }` ends the job's stdin pipe; closing twice is a no-op success)
 - `subscribe` / `unsubscribe` (requires `token`)
 - `stop` (requires `token`)
 
-Command results carry `status: "running" | "exited"`. `exitCode` is `null` while running and when the process was terminated by a signal (see `signal`); it is never invented. Finished jobs are retained for 10 minutes so late `wait`/`status` calls still resolve; unknown job ids are an error.
+Command results carry `status: "running" | "exited"` and `truncated` (true when a detached job's buffered output exceeded `maxJobOutputBytes` and was tailed). `exitCode` is `null` while running and when the process was terminated by a signal (see `signal`); it is never invented. Finished jobs are retained for 10 minutes so late `wait`/`status` calls still resolve; unknown job ids are an error.
 
 SSE stream endpoint:
 
 - `GET /events?token=<token>`
 
-Emitted events include:
+Emitted events include (all `command.*` events carry `jobId`):
 
 - `command.started`
 - `command.stdout`
 - `command.stderr`
+- `command.stdin.closed` (emitted once when a job's stdin pipe closes)
 - `command.exit`
 
 ## Development

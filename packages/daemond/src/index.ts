@@ -4,6 +4,9 @@ export { parseSeedInvocationOutput } from "./seed-script.js";
 export type {
   SeedScriptConfig,
   SeedCommandInput,
+  SeedStdinInput,
+  SeedCloseStdinInput,
+  SeedInput,
   SeedCommandResult,
   SeedInvocationResult,
   SeedDaemonInfo,

@@ -34,6 +34,12 @@ export interface ProviderTestConfig {
    * opt-in per provider rather than assumed.
    */
   supportsStreaming?: boolean;
+  /**
+   * Whether to exercise `startProcess` (interactive stdin jobs via the
+   * in-sandbox daemon). Like streaming it runs through daemond, so it needs a
+   * sandbox where the daemon can boot — opt-in per provider.
+   */
+  supportsProcesses?: boolean;
 }
 
 /**
@@ -51,6 +57,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
     supportsGetUrl = true,
     filesystemBasePath = '/tmp',
     supportsStreaming = false,
+    supportsProcesses = false,
   } = config;
 
   return () => {
@@ -276,6 +283,36 @@ export function defineProviderTests(config: ProviderTestConfig) {
       });
     }
 
+    if (supportsProcesses && !skipIntegration) {
+      describe('Interactive Processes', () => {
+        it('should write to a process stdin and collect echoed output', async () => {
+          const chunks: string[] = [];
+          const proc = await sandbox.startProcess('cat', {
+            stdin: true,
+            onStdout: (c) => chunks.push(c),
+          });
+
+          await proc.write('hello\n');
+          await proc.write('world\n');
+          await proc.closeStdin();
+
+          const result = await proc.wait({ timeout: 30000 });
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toBe('hello\nworld\n');
+          expect(chunks.join('')).toBe(result.stdout);
+        }, timeout);
+
+        it('should kill a running process and report its signal', async () => {
+          const proc = await sandbox.startProcess('sleep 60');
+          await proc.kill();
+          const result = await proc.wait({ timeout: 15000 });
+
+          expect(result.exitCode).not.toBe(0);
+          expect(result.signal).toBeTruthy();
+        }, timeout);
+      });
+    }
+
     describe('Shell Command Argument Quoting', () => {
       it('should properly quote arguments with spaces', async () => {
         const result = await sandbox.runCommand('sh -c \'echo "hello world"\'');
@@ -368,6 +405,10 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
         return { stdout: 'test content\n', stderr: '', exitCode: 0, durationMs: 20 };
       }
       return { stdout: `Mock command output: ${command}`, stderr: '', exitCode: 0, durationMs: 50 };
+    },
+
+    startProcess: async (): Promise<never> => {
+      throw new Error('daemond: not supported by mock');
     },
 
     getInfo: async (): Promise<SandboxInfo> => ({

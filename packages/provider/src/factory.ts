@@ -22,11 +22,15 @@ import type {
   ListSnapshotsOptions,
   CreateTemplateOptions,
   ListTemplatesOptions,
+  StartProcessOptions,
+  ProcessStatus,
+  ProcessHandle,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
   type SeedCommandInput,
+  type SeedInput,
   type SeedInvocationResult,
 } from 'daemond';
 
@@ -97,6 +101,36 @@ function emitMissingOutput(
   }
 }
 
+/**
+ * Emits the incremental diff between a previously seen buffer and the newest
+ * snapshot. Normally the snapshot only grows, so the diff is a suffix — but a
+ * truncated buffer drops the head, in which case we emit the new buffer minus
+ * the longest overlap still shared with what was already delivered.
+ */
+function emitProcessDiff(
+  seen: { value: string },
+  next: string,
+  emit?: (chunk: string) => void
+): void {
+  const previous = seen.value;
+  seen.value = next;
+  if (!emit || !next) return;
+  if (next.startsWith(previous)) {
+    const diff = next.slice(previous.length);
+    if (diff) emit(diff);
+    return;
+  }
+  const maxOverlap = Math.min(previous.length, next.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    if (previous.endsWith(next.slice(0, overlap))) {
+      const diff = next.slice(overlap);
+      if (diff) emit(diff);
+      return;
+    }
+  }
+  emit(next);
+}
+
 function parseSseDataLines(raw: string): string[] {
   const chunks = raw.split(/\n\n+/);
   const out: string[] = [];
@@ -120,7 +154,25 @@ function pickString(source: Record<string, unknown> | undefined, keys: string[])
   return undefined;
 }
 
-function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestId?: string; stdout?: string; stderr?: string } {
+function pickNullableNumber(source: Record<string, unknown> | undefined, keys: string[]): number | null | undefined {
+  if (!source) return undefined;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'number') return value;
+    if (value === null) return null;
+  }
+  return undefined;
+}
+
+function normalizeDaemonStreamEvent(payload: unknown): {
+  type?: string;
+  requestId?: string;
+  jobId?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  signal?: string | null;
+} {
   if (!payload || typeof payload !== 'object') return {};
   const record = payload as Record<string, unknown>;
   const data = (record.data && typeof record.data === 'object')
@@ -128,15 +180,24 @@ function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestI
     : undefined;
   const type = pickString(record, ['type', 'event']);
   const requestId = pickString(record, ['requestId']) ?? pickString(data, ['requestId']);
+  const jobId = pickString(record, ['jobId']) ?? pickString(data, ['jobId']);
   const stdout = pickString(record, ['stdout', 'output', 'chunk']) ?? pickString(data, ['stdout', 'output', 'chunk']);
   const stderr = pickString(record, ['stderr']) ?? pickString(data, ['stderr']);
-  return { type, requestId, stdout, stderr };
+  const exitCode = pickNullableNumber(record, ['exitCode']) ?? pickNullableNumber(data, ['exitCode']);
+  const signal = pickString(record, ['signal']) ?? pickString(data, ['signal']);
+  return { type, requestId, jobId, stdout, stderr, exitCode, signal };
 }
 
 async function streamDaemonEvents(
   sseUrl: string,
-  requestIdFilter: { current?: string },
-  callbacks: { onStdout?: (data: string) => void; onStderr?: (data: string) => void; markStdout: (chunk?: string) => void; markStderr: (chunk?: string) => void },
+  filter: { requestId?: { current?: string }; jobId?: string },
+  callbacks: {
+    onStdout?: (data: string) => void;
+    onStderr?: (data: string) => void;
+    onExit?: (exitCode: number | null, signal: string | null) => void;
+    markStdout: (chunk?: string) => void;
+    markStderr: (chunk?: string) => void;
+  },
   signal: AbortSignal
 ): Promise<void> {
   const response = await fetch(sseUrl, { signal });
@@ -166,8 +227,15 @@ async function streamDaemonEvents(
           continue;
         }
         const event = normalizeDaemonStreamEvent(parsed);
-        if (requestIdFilter.current && event.requestId !== requestIdFilter.current) {
+        if (filter.requestId?.current && event.requestId !== filter.requestId.current) {
           continue;
+        }
+        if (filter.jobId && event.jobId !== filter.jobId) {
+          continue;
+        }
+        if (event.type === 'command.exit') {
+          callbacks.onExit?.(event.exitCode ?? null, event.signal ?? null);
+          return;
         }
         if ((event.type === 'command.stdout' || !event.type) && event.stdout && callbacks.onStdout) {
           callbacks.markStdout(event.stdout);
@@ -423,26 +491,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       delete forwardedOptions.onStdout;
       delete forwardedOptions.onStderr;
 
-      if (!this.daemonStreamState) {
-        const bootstrapPayload: SeedCommandInput = {
-          command: 'sh',
-          args: ['-lc', 'true'],
-          cwd: options.cwd,
-          env: options.env,
-          timeoutMs: options.timeout,
-          requestId: createDaemonRequestId(),
-        };
-        const bootstrapCommand = daemonSeedScriptCommand(
-          { ssePort: DEFAULT_DAEMON_SSE_PORT },
-          bootstrapPayload
-        );
-        const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
-        const bootstrapInvocation = parseDaemonSeedResult(bootstrapResult, 'daemon bootstrap');
-        this.daemonStreamState = {
-          token: bootstrapInvocation.token,
-          rawSseUrl: bootstrapInvocation.daemon.sseUrl,
-        };
-      }
+      await this.ensureDaemon(options, forwardedOptions);
 
       const daemonPayload: SeedCommandInput = {
         command: 'sh',
@@ -481,7 +530,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         )
           .then((sseUrl) => streamDaemonEvents(
             sseUrl,
-            requestIdFilter,
+            { requestId: requestIdFilter },
             {
               onStdout: options.onStdout,
               onStderr: options.onStderr,
@@ -528,6 +577,245 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     // Pass command and options directly to provider - no preprocessing
     // Provider is responsible for handling cwd, env, background, etc.
     return await this.methods.runCommand(this.sandbox, command, options);
+  }
+
+  /**
+   * Boots (or reuses) the in-sandbox daemon so daemon jobs can be addressed.
+   * `options` carries the caller's cwd/env/timeout for the bootstrap probe;
+   * `forwardedOptions` is passed to the provider's own runCommand.
+   */
+  private async ensureDaemon(
+    options: { cwd?: string; env?: Record<string, string>; timeout?: number },
+    forwardedOptions: RunCommandOptions
+  ): Promise<DaemonStreamState> {
+    if (!this.daemonStreamState) {
+      const bootstrapPayload: SeedCommandInput = {
+        command: 'sh',
+        args: ['-lc', 'true'],
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeout,
+        requestId: createDaemonRequestId(),
+      };
+      const bootstrapCommand = daemonSeedScriptCommand(
+        { ssePort: DEFAULT_DAEMON_SSE_PORT },
+        bootstrapPayload
+      );
+      const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
+      const bootstrapInvocation = parseDaemonSeedResult(bootstrapResult, 'daemon bootstrap');
+      this.daemonStreamState = {
+        token: bootstrapInvocation.token,
+        rawSseUrl: bootstrapInvocation.daemon.sseUrl,
+      };
+    }
+    return this.daemonStreamState;
+  }
+
+  /**
+   * Runs a single daemon job-control request (exec/stdin/closeStdin/status/
+   * wait/kill) through the provider's runCommand and parses the result.
+   */
+  private async daemonJobRequest(
+    payload: SeedInput,
+    phase: string,
+    opts?: {
+      argvEncoding?: 'quoted' | 'base64';
+      timeout?: number;
+      cwd?: string;
+      env?: Record<string, string>;
+    }
+  ): Promise<{ invocation: SeedInvocationResult; result: CommandResult }> {
+    const command = daemonSeedScriptCommand(
+      { ssePort: DEFAULT_DAEMON_SSE_PORT },
+      payload,
+      opts?.argvEncoding ? { argvEncoding: opts.argvEncoding } : undefined
+    );
+    const runOptions: RunCommandOptions = {};
+    if (opts?.cwd) runOptions.cwd = opts.cwd;
+    if (opts?.env) runOptions.env = opts.env;
+    if (opts?.timeout) runOptions.timeout = opts.timeout;
+    const result = await this.methods.runCommand(this.sandbox, command, runOptions);
+    const invocation = parseDaemonSeedResult(result, phase);
+    this.daemonStreamState = {
+      token: invocation.token,
+      rawSseUrl: invocation.daemon.sseUrl,
+    };
+    return { invocation, result };
+  }
+
+  async startProcess(
+    command: string,
+    options: StartProcessOptions = {}
+  ): Promise<ProcessHandle> {
+    const forwardedOptions: RunCommandOptions = {};
+    if (options.cwd) forwardedOptions.cwd = options.cwd;
+    if (options.env) forwardedOptions.env = options.env;
+
+    await this.ensureDaemon(options, forwardedOptions);
+
+    const { invocation } = await this.daemonJobRequest(
+      {
+        command: 'sh',
+        args: ['-lc', command],
+        cwd: options.cwd,
+        env: options.env,
+        detach: true,
+        stdin: options.stdin === true,
+        requestId: createDaemonRequestId(),
+      } satisfies SeedCommandInput,
+      'daemon start',
+      { cwd: options.cwd, env: options.env }
+    );
+
+    const jobId = invocation.command.jobId;
+    if (!jobId) {
+      throw new Error('daemond: process did not start');
+    }
+    const pid = invocation.command.pid ?? null;
+
+    let exitFired = false;
+    const fireExit = (exitCode: number | null, signal: string | null): void => {
+      if (exitFired) return;
+      exitFired = true;
+      options.onExit?.({ exitCode, signal });
+    };
+
+    const toStatus = (snapshot: typeof invocation.command): ProcessStatus => ({
+      status: snapshot.status === 'exited' ? 'exited' : 'running',
+      exitCode: snapshot.exitCode ?? null,
+      signal: snapshot.signal ?? null,
+      stdout: snapshot.stdout ?? '',
+      stderr: snapshot.stderr ?? '',
+      truncated: snapshot.truncated,
+    });
+
+    const getStatus = async (): Promise<ProcessStatus> => {
+      const { invocation: statusInvocation } = await this.daemonJobRequest(
+        { status: jobId },
+        'process status',
+        { cwd: options.cwd, env: options.env }
+      );
+      return toStatus(statusInvocation.command);
+    };
+
+    if (options.onStdout || options.onStderr || options.onExit) {
+      this.watchProcessOutput(jobId, options, getStatus, fireExit);
+    }
+
+    const self = this;
+    return {
+      pid,
+      jobId,
+      async write(data: string | Uint8Array): Promise<void> {
+        const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
+        await self.daemonJobRequest(
+          { stdin: jobId, data: bytes.toString('base64'), encoding: 'base64' },
+          'stdin write',
+          { argvEncoding: 'base64', cwd: options.cwd, env: options.env }
+        );
+      },
+      async closeStdin(): Promise<void> {
+        await self.daemonJobRequest(
+          { closeStdin: jobId },
+          'stdin close',
+          { cwd: options.cwd, env: options.env }
+        );
+      },
+      status: getStatus,
+      async wait(waitOptions?: { timeout?: number }): Promise<CommandResult & { signal: string | null }> {
+        const startedAt = Date.now();
+        const { invocation: waitInvocation } = await self.daemonJobRequest(
+          { wait: jobId, timeoutMs: waitOptions?.timeout },
+          'process wait',
+          {
+            cwd: options.cwd,
+            env: options.env,
+            timeout: waitOptions?.timeout ? waitOptions.timeout + 5000 : undefined,
+          }
+        );
+        const snapshot = waitInvocation.command;
+        if (snapshot.status === 'running') {
+          throw new Error(`daemond: process ${jobId} did not exit within ${waitOptions?.timeout}ms`);
+        }
+        fireExit(snapshot.exitCode ?? null, snapshot.signal ?? null);
+        return {
+          stdout: snapshot.stdout ?? '',
+          stderr: snapshot.stderr ?? '',
+          exitCode: snapshot.exitCode ?? -1,
+          durationMs: Date.now() - startedAt,
+          signal: snapshot.signal ?? null,
+        };
+      },
+      async kill(signal: string = 'SIGTERM'): Promise<void> {
+        await self.daemonJobRequest(
+          { kill: jobId, signal },
+          'process kill',
+          { cwd: options.cwd, env: options.env }
+        );
+      },
+    };
+  }
+
+  /**
+   * Delivers a started process's output to its callbacks: SSE from the daemon
+   * when the port is routable, otherwise a status-polling diff loop. Fires
+   * `onExit` exactly once via the shared `fireExit`.
+   */
+  private watchProcessOutput(
+    jobId: string,
+    options: StartProcessOptions,
+    getStatus: () => Promise<ProcessStatus>,
+    fireExit: (exitCode: number | null, signal: string | null) => void
+  ): void {
+    const streamController = new AbortController();
+
+    const startPolling = (): void => {
+      const seenStdout = { value: '' };
+      const seenStderr = { value: '' };
+      let failures = 0;
+      const interval = setInterval(async () => {
+        let status: ProcessStatus;
+        try {
+          status = await getStatus();
+          failures = 0;
+        } catch {
+          // The daemon (or the job) may be gone; give up after a few misses.
+          failures += 1;
+          if (failures >= 3) clearInterval(interval);
+          return;
+        }
+        emitProcessDiff(seenStdout, status.stdout, options.onStdout);
+        emitProcessDiff(seenStderr, status.stderr, options.onStderr);
+        if (status.status === 'exited') {
+          clearInterval(interval);
+          fireExit(status.exitCode, status.signal);
+        }
+      }, options.pollIntervalMs ?? 500);
+      (interval as unknown as { unref?: () => void }).unref?.();
+    };
+
+    const state = this.daemonStreamState;
+    const streamPromise = state?.rawSseUrl
+      ? this.resolveDaemonSseUrl(state.rawSseUrl, state.token).then((sseUrl) =>
+          streamDaemonEvents(
+            sseUrl,
+            { jobId },
+            {
+              onStdout: options.onStdout,
+              onStderr: options.onStderr,
+              onExit: (exitCode, signal) => {
+                fireExit(exitCode, signal);
+                streamController.abort();
+              },
+              markStdout: () => {},
+              markStderr: () => {},
+            },
+            streamController.signal
+          )
+        )
+      : Promise.reject(new Error('daemon stream unavailable'));
+
+    streamPromise.then(() => undefined, () => startPolling());
   }
 
   async getInfo(): Promise<SandboxInfo> {
