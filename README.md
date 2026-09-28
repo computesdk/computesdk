@@ -102,6 +102,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
 | **Run Cloud** | `RUN_CLOUD_API_KEY` | Fast Firecracker microVM sandboxes with snapshots |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
+| **Runtime** | `RUNTIME_API_KEY` | Firecracker microVM sandboxes with streaming, previews and snapshots |
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
@@ -316,6 +317,7 @@ npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/novita           # Novita Sandbox provider
 npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provider
 npm install @computesdk/runloop          # Runloop provider
+npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
@@ -359,6 +361,7 @@ See individual provider READMEs for details:
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/run-cloud](./packages/run-cloud)** - Fast Firecracker microVM sandboxes with filesystem and snapshot support
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
+- **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
 - **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
