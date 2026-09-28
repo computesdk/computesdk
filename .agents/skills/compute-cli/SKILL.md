@@ -56,7 +56,7 @@ compute actions dispatch computesdk/ci-test --workflow Smoke --ref main \
 ```
 
 - `--allow-untrusted-host` is required — the bearer key is only sent to computesdk.com/localhost otherwise. It only covers an explicit `--api-key`/`COMPUTE_API_KEY`; stored `bench auth login` credentials are refused for untrusted hosts (`untrusted_host_stored_auth`).
-- The preview shares the production control-plane DB: runs appear in the prod runs table, provider creds and secrets resolve identically, and jobs land on real provider sandboxes.
+- The preview has its own Neon branch DB, copied from production when the preview is built: runs dispatched at a preview don't show up in prod (`actions run <id>` returns 404 there), and vault writes made through a preview (`actions vault set --base-url <preview>`) never reach production. Provider creds still resolve and jobs still land on real provider sandboxes.
 - `--provider <id>` on dispatch pins placement; a refusal is itself a useful signal (the job's `failureReason` says why).
 - Per-job logs: `GET /api/v1/actions/jobs/<jobId>/logs` (`compute actions logs` also works); job ids come from `compute actions run <run-id> --json`.
 - Wait for the Vercel check on the PR to be green before dispatching — dispatching during a build can hit the previous deployment.
