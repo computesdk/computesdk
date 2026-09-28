@@ -45,6 +45,26 @@ Logs are **byte-addressed**. Poll `GET /api/v1/actions/jobs/{jobId}/logs?offset=
 
 Cancel and rerun: `compute actions cancel|rerun <run-id>`, or `POST .../runs/{runId}/cancel|rerun`.
 
+## Secrets
+
+Jobs get organization secrets (Settings → Actions) narrowly, not broadly:
+
+* The platform scans each workflow for `secrets.NAME` / `secrets['NAME']` references — in `${{ … }}` expressions and bare `if:` conditions — and passes exactly those names into the job's secrets context. Every other organization secret is withheld. The job log lists which secrets it received and how many were withheld.
+* A declared name the organization never configured resolves to an empty string (GitHub parity), so `if: secrets.NAME != ''` feature-detection works; each unconfigured name is noted once in the job log.
+* `${{ secrets.GITHUB_TOKEN }}` resolves to an installation token scoped to the repo, carrying what the job's `permissions:` block asked for. Fork pull requests receive no secrets and no token.
+* Every log line the job emits — including the executor's own — passes through a mask covering all configured secret values, so a printed secret lands in the stored log as `***`.
+* A secret whose stored ciphertext can't be opened fails the job **before** placement with an actionable reason, rather than silently substituting an empty value.
+
+When a workflow reaches the secrets context in a way the scan can't resolve to names — `fromJson(secrets)`, dynamic indexing, a composite action's inputs — declare the access with a comment directive anywhere in the workflow file:
+
+```yaml
+# computesdk:secrets=DEPLOY_TOKEN,NPM_TOKEN   # add names to the declared set
+# computesdk:secrets=all                    # give the job every organization secret
+# computesdk:secrets-env=declared           # also export declared secrets as env vars
+```
+
+An expression that reads `secrets` without a literal name (e.g. `secrets[matrix.key]`) is classified `all` automatically — the platform widens rather than hand the job an empty value it can't explain. `# computesdk:secrets=…` is for the cases the file itself doesn't reveal, like secrets consumed inside a composite action. `# computesdk:secrets-env=declared` is for workflows that read `$NAME` directly instead of `${{ secrets.NAME }}`; it exports only configured, declared names and never expands to all secrets.
+
 ## GitHub compatibility
 
 Runs GitHub-correctly today:
@@ -55,7 +75,7 @@ Runs GitHub-correctly today:
 * `concurrency` including `cancel-in-progress`, job/step `timeout-minutes`
 * `workflow_dispatch` inputs, third-party `uses:` actions, check-run reporting, cancel/rerun
 * `container:` pins — act pulls and runs the image through a reachable Docker daemon on every supported provider; a provider with no daemon refuses the job with a recorded reason
-* missing org secrets resolve to an empty string (matching GitHub), so `if: secrets.NAME != ''` feature-detection works; each unconfigured name is noted once in the job log
+* `secrets.*` expressions resolve against the job's declared secret scope; missing org secrets resolve to an empty string (see [Secrets](#secrets))
 * `actions/checkout` `fetch-depth` (other checkout inputs are not yet threaded)
 
 Refused before placement, by design: `services:`, reusable-workflow calls (`jobs.<id>.uses`), `environment:`, non-literal `container:`.
