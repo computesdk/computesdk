@@ -1,5 +1,12 @@
 # @computesdk/tensorlake
 
+## 0.1.16
+
+### Patch Changes
+
+- 620c463: Skip the line-less terminal event Tensorlake's follow streams emit at end-of-stream; interpolating it unconditionally appended a literal `undefined` line to every streamed command's stdout and stderr. Buffered output (`getStdout`/`getStderr`) is filtered the same way.
+- 182c992: Update the `tensorlake` SDK from 0.5.33 to 0.5.135.
+
 ## 0.1.15
 
 ### Patch Changes

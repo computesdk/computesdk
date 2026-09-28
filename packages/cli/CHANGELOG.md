@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 1.0.12
+
+### Patch Changes
+
+- 1718c06: Harden `compute actions`: structured JSON error envelope under `--json`, stored `compute bench auth login` platform credentials as an auth fallback (flag > env > stored), HTTPS required for non-loopback base URLs, and an explicit `--manual` dispatch option.
+
 ## 1.0.11
 
 ### Patch Changes
