@@ -32,7 +32,7 @@ All Actions routes require the `actions` product entitlement (`403` otherwise). 
 | GET | `/actions/providers` | Registered providers — regions, act/usable status |
 | PUT/DELETE | `/actions/providers/{provider}/key` | Save / remove the org's provider credential |
 | POST | `/actions/providers/{provider}/verify` | Probe the stored key with a real sandbox |
-| GET | `/actions/workflows?repo=` | Dispatchable workflows on enabled repos |
+| GET | `/actions/workflows?repo=` | Workflows on enabled repos (`dispatchable: false` ones run via `manual: true`) |
 | POST | `/actions/dispatch` | `{ workflowId, ref, inputs?, manual?, requestId?, provider?, providerRegion? }` → `{ runId, created, headSha }` |
 | GET | `/actions/history?repo=&workflow=` | Recent-run window + per-job/step failure rollups |
 | GET | `/actions/run-days?timeZone=&repo=&branch=` | Days with runs |

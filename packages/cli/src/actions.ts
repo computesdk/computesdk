@@ -10,9 +10,13 @@ function sanitizePathPart(name: string): string {
  * dispatch workflows, watch runs, inspect run context, stream logs,
  * manage artifacts.
  *
- * Auth: COMPUTE_API_KEY (or --api-key); --base-url overrides the
- * https://platform.computesdk.com default. Every subcommand takes --json for
- * machine-readable output.
+ * Auth: --api-key, else COMPUTE_API_KEY, else the platform OAuth credentials
+ * `compute bench auth login` stored (refreshed silently, never prompts). The
+ * gateway key from `compute login` is not used. --base-url overrides the
+ * https://platform.computesdk.com default; a non-computesdk host needs
+ * --allow-untrusted-host and an explicit key — stored OAuth is never sent there.
+ * Every subcommand takes --json for machine-readable output — on success the
+ * data, on failure the `{ ok: false, error: {...} }` envelope on stderr.
  */
 
 import { Command } from 'commander';
@@ -21,9 +25,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
+  ActionsCliError,
   ActionsClient,
   encodeWatchCursor,
   resolveActionsAuth,
+  toErrorEnvelope,
   type CiArtifactListItem,
   type CiJob,
   type CiLogSlice,
@@ -59,8 +65,8 @@ interface CommonOpts extends JsonOpts {
   allowUntrustedHost?: boolean;
 }
 
-function client(opts: CommonOpts): ActionsClient {
-  return new ActionsClient(resolveActionsAuth(opts));
+async function client(opts: CommonOpts): Promise<ActionsClient> {
+  return new ActionsClient(await resolveActionsAuth(opts));
 }
 
 /** Print `data` as JSON when --json was passed; otherwise call `render`. */
@@ -115,13 +121,34 @@ async function fetchRunSummary(c: ActionsClient, runId: string): Promise<CiRunSu
   }
 }
 
-function fail(error: unknown): never {
-  if (error instanceof ActionsApiError) {
+/**
+ * Report an error and exit 1. With --json the stderr line is the stable
+ * envelope from `toErrorEnvelope` (stdout stays empty, so a consumer can parse
+ * either stream without guessing); otherwise a one-line human message.
+ */
+function fail(error: unknown, opts: JsonOpts = {}): never {
+  if (opts.json) {
+    process.stderr.write(JSON.stringify(toErrorEnvelope(error)) + '\n');
+  } else if (error instanceof ActionsApiError) {
     console.error(pc.red(`Error (${error.status}): ${error.message}`));
   } else {
-    console.error(pc.red(`Error: ${(error as Error).message}`));
+    console.error(pc.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
   }
   process.exit(1);
+}
+
+/**
+ * Commander's own usage errors (unknown option, missing required option or
+ * argument) are raised before any action runs, so `fail` never sees them.
+ * Route them through the same envelope when --json is among the raw args.
+ */
+export function usageErrorOutput(str: string, write: (str: string) => void, argv: string[] = process.argv): void {
+  if (argv.includes('--json')) {
+    const message = str.replace(/^error:\s*/i, '').trim();
+    write(JSON.stringify(toErrorEnvelope(new ActionsCliError('invalid_argument', message))) + '\n');
+  } else {
+    write(str);
+  }
 }
 
 // ─── Formatting (pure, exported for tests) ──────────────────────────────────
@@ -308,7 +335,7 @@ export function parseInputs(pairs: string[] | undefined): Record<string, string>
   for (const pair of pairs ?? []) {
     const eq = pair.indexOf('=');
     if (eq === -1) {
-      throw new Error(`Invalid --inputs entry "${pair}". Expected key=value.`);
+      throw new ActionsCliError('invalid_argument', `Invalid --inputs entry "${pair}". Expected key=value.`);
     }
     inputs[pair.slice(0, eq)] = pair.slice(eq + 1);
   }
@@ -378,7 +405,7 @@ export function parseStep(step: string | undefined): number | 'runner' | null {
   if (step === 'runner') return 'runner';
   const n = Number(step);
   if (!Number.isInteger(n) || n < 0) {
-    throw new Error(`Invalid --step "${step}". Expected a step ordinal or "runner".`);
+    throw new ActionsCliError('invalid_argument', `Invalid --step "${step}". Expected a step ordinal or "runner".`);
   }
   return n;
 }
@@ -510,32 +537,73 @@ function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: st
 
 // ─── Commands ───────────────────────────────────────────────────────────────
 
+/**
+ * The `POST /api/v1/actions/dispatch` body for `dispatch`. Without --manual a
+ * workflow must declare `workflow_dispatch`. With it, a workflow that doesn't
+ * is run anyway; such a run has no inputs, so any given are refused rather
+ * than silently dropped. A dispatchable workflow keeps its inputs either way.
+ */
+export function dispatchBody(
+  workflow: CiWorkflow,
+  opts: { ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string },
+): Record<string, unknown> {
+  if (!workflow.dispatchable && !opts.manual) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Workflow "${workflow.path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
+    );
+  }
+  if (!workflow.dispatchable && opts.inputs !== undefined && opts.inputs.length > 0) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Workflow "${workflow.path}" has no workflow_dispatch inputs; --manual runs of it take no --inputs.`,
+    );
+  }
+  const ref = opts.ref ?? workflow.refs[0];
+  if (!ref) throw new ActionsCliError('invalid_argument', 'No --ref given and the workflow has no watched refs.');
+  if (opts.providerRegion !== undefined && opts.provider === undefined) {
+    throw new ActionsCliError('invalid_argument', '--provider-region requires --provider.');
+  }
+  return {
+    workflowId: workflow.id,
+    ref,
+    inputs: parseInputs(opts.inputs),
+    ...(opts.manual && { manual: true }),
+    ...(opts.provider !== undefined && {
+      provider: opts.provider,
+      ...(opts.providerRegion !== undefined && { providerRegion: opts.providerRegion }),
+    }),
+  };
+}
+
 export function registerActionsCommands(program: Command): void {
   const actions = program
     .command('actions')
     .alias('ci')
-    .description('Drive the benchmarks-platform Actions API');
+    .description('Drive the benchmarks-platform Actions API')
+    .configureOutput({ outputError: usageErrorOutput });
 
   const common = (cmd: Command) =>
     cmd
       .option('--api-key <key>', 'API key (default: $COMPUTE_API_KEY)')
       .option('--base-url <url>', 'API base URL (default: https://platform.computesdk.com)')
-      .option('--allow-untrusted-host', 'send the API key to a non-computesdk, non-localhost --base-url')
+      .option('--allow-untrusted-host', 'send an explicit --api-key/env key to a non-computesdk, non-localhost --base-url (stored login credentials are never sent)')
       .option('--json', 'print machine-readable JSON');
 
   common(
     actions
       .command('dispatch')
-      .description('Dispatch a workflow_dispatch run')
+      .description('Dispatch a workflow_dispatch run (or any workflow with --manual)')
       .argument('<repo>', 'repository in owner/repo format')
       .requiredOption('--workflow <path|name>', 'workflow path or name')
       .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref)')
-      .option('--inputs <pairs...>', 'workflow inputs as key=value')
+      .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch inputs only)')
+      .option('--manual', 'run a workflow even if it does not declare workflow_dispatch (such runs take no --inputs)')
       .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
       .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)'),
-  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; provider?: string; providerRegion?: string }) => {
+  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
         '/api/v1/actions/workflows',
         { repo },
@@ -543,26 +611,15 @@ export function registerActionsCommands(program: Command): void {
       const workflow = matchWorkflow(workflows, opts.workflow);
       if (!workflow) {
         const choices = workflows.map((w) => `${w.path} (${w.name})`).join(', ') || 'none';
-        throw new Error(
-          `No dispatchable workflow "${opts.workflow}" in ${repo}. Available: ${choices}`,
+        throw new ActionsCliError(
+          'workflow_not_found',
+          `No workflow "${opts.workflow}" in ${repo}. Available: ${choices}`,
         );
       }
-      const ref = opts.ref ?? workflow.refs[0];
-      if (!ref) throw new Error('No --ref given and the workflow has no watched refs.');
-      if (opts.providerRegion !== undefined && opts.provider === undefined) {
-        throw new Error('--provider-region requires --provider.');
-      }
+      const body = dispatchBody(workflow, opts);
       const result = await c.post<{ runId: string; created: boolean; headSha: string }>(
         '/api/v1/actions/dispatch',
-        {
-          workflowId: workflow.id,
-          ref,
-          inputs: parseInputs(opts.inputs),
-          ...(opts.provider !== undefined && {
-            provider: opts.provider,
-            ...(opts.providerRegion !== undefined && { providerRegion: opts.providerRegion }),
-          }),
-        },
+        body,
       );
       const org = await c.org();
       const url = `${c.baseUrl}/${org.slug}/actions/runs/${result.runId}`;
@@ -572,7 +629,7 @@ export function registerActionsCommands(program: Command): void {
         console.log(`url: ${r.url}`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -585,7 +642,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--branch <branch...>', 'filter by branch/ref'),
   ).action(async (repo: string, opts: CommonOpts & { status?: string[]; branch?: string[] }) => {
     try {
-      const { runs } = await client(opts).get<{ runs: CiRun[] }>(
+      const { runs } = await (await client(opts)).get<{ runs: CiRun[] }>(
         '/api/v1/actions/runs',
         { repo, status: opts.status, branch: opts.branch },
       );
@@ -597,7 +654,7 @@ export function registerActionsCommands(program: Command): void {
         for (const run of rs) console.log(formatRunRow(run));
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -612,7 +669,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--limit <n>', 'runs in the window (default 10, max 50)'),
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; branch?: string[]; job?: string; limit?: string }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
         '/api/v1/actions/workflows',
         { repo },
@@ -628,7 +685,7 @@ export function registerActionsCommands(program: Command): void {
       });
       output(opts, history, (h) => console.log(formatRunHistory(h)));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -639,7 +696,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const run = await c.get<CiRun>(`/api/v1/actions/runs/${runId}`);
       const org = await c.org();
       const url = `${c.baseUrl}/${org.slug}/actions/runs/${run.id}`;
@@ -654,7 +711,7 @@ export function registerActionsCommands(program: Command): void {
         }
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -665,10 +722,10 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const summary = await client(opts).get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
+      const summary = await (await client(opts)).get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
       output(opts, summary, (s) => console.log(formatRunSummary(s)));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -679,13 +736,13 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const inspection = await c.get<CiRunInspection>(
         `/api/v1/actions/runs/${runId}/state`,
       );
       output(opts, inspection, (r) => console.log(formatRunInspection(r)));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -699,7 +756,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--follow', 'stream logs while the run is live'),
   ).action(async (runId: string, opts: CommonOpts & { job?: string; step?: string; follow?: boolean }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       let jobs = await listRunJobs(c, runId);
       if (opts.job) {
         const job = matchJob(jobs, opts.job);
@@ -753,7 +810,7 @@ export function registerActionsCommands(program: Command): void {
         }
       }
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -762,12 +819,12 @@ export function registerActionsCommands(program: Command): void {
     .description('List the org\'s registered compute providers (regions, act/usable status)');
   common(providers).action(async (opts: CommonOpts) => {
     try {
-      const data = await client(opts).get<CiProvidersResponse>('/api/v1/actions/providers');
+      const data = await (await client(opts)).get<CiProvidersResponse>('/api/v1/actions/providers');
       output(opts, data, (d) => {
         for (const p of d.providers) console.log(formatProviderRow(p));
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -781,7 +838,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--verify', 'run the placement probe after saving'),
   ).action(async (provider: string, opts: CommonOpts & { key?: string; field?: string[]; verify?: boolean }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       let body: Record<string, unknown>;
       if (opts.field !== undefined) {
         if (opts.key !== undefined) throw new Error('Pass either --key or --field, not both.');
@@ -806,7 +863,7 @@ export function registerActionsCommands(program: Command): void {
       });
       if (verification?.verified === false) process.exitCode = 1;
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -817,13 +874,13 @@ export function registerActionsCommands(program: Command): void {
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {
-      const result = await client(opts).post<CiProviderKeyResponse>(
+      const result = await (await client(opts)).post<CiProviderKeyResponse>(
         `/api/v1/actions/providers/${provider}/verify`,
       );
       output(opts, result, (r) => console.log(formatVerifyResult(r)));
       if (result.verified === false) process.exitCode = 1;
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -834,14 +891,14 @@ export function registerActionsCommands(program: Command): void {
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {
-      const result = await client(opts).del<{ provider: string; deleted: boolean }>(
+      const result = await (await client(opts)).del<{ provider: string; deleted: boolean }>(
         `/api/v1/actions/providers/${provider}/key`,
       );
       output(opts, result, (r) => {
         console.log(r.deleted ? `deleted  ${r.provider}` : `no key stored for ${r.provider}`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -850,12 +907,12 @@ export function registerActionsCommands(program: Command): void {
     .description('List the org\'s connected repositories');
   common(repos).action(async (opts: CommonOpts) => {
     try {
-      const data = await client(opts).get<CiReposResponse>('/api/v1/actions/repos');
+      const data = await (await client(opts)).get<CiReposResponse>('/api/v1/actions/repos');
       output(opts, data, (d) => {
         for (const r of d.repos) console.log(formatRepoRow(r));
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -895,7 +952,7 @@ export function registerActionsCommands(program: Command): void {
       if (opts.knownHostsFile !== undefined && opts.sshKeyFile === undefined) {
         throw new Error('--known-hosts-file requires --ssh-key-file.');
       }
-      const result = await client(opts).post<CiRepoConnectResponse>('/api/v1/actions/repos', {
+      const result = await (await client(opts)).post<CiRepoConnectResponse>('/api/v1/actions/repos', {
         cloneUrl,
         ...body,
         ...(opts.name !== undefined && { name: opts.name }),
@@ -906,7 +963,7 @@ export function registerActionsCommands(program: Command): void {
         printDiscovery(r.discovery);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -918,7 +975,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
   ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
     try {
-      const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
+      const result = await (await client(opts)).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
         fullName: repo,
         enabled: true,
         ...(opts.repoId !== undefined && { repoId: opts.repoId }),
@@ -928,7 +985,7 @@ export function registerActionsCommands(program: Command): void {
         if (r.discovery) printDiscovery(r.discovery);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -940,14 +997,14 @@ export function registerActionsCommands(program: Command): void {
       .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
   ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
     try {
-      const result = await client(opts).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
+      const result = await (await client(opts)).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
         fullName: repo,
         enabled: false,
         ...(opts.repoId !== undefined && { repoId: opts.repoId }),
       });
       output(opts, result, (r) => console.log(`disabled  ${pc.cyan(safeTerm(r.fullName))}`));
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -958,14 +1015,14 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const result = await client(opts).post<{ cancelled: boolean }>(
+      const result = await (await client(opts)).post<{ cancelled: boolean }>(
         `/api/v1/actions/runs/${runId}/cancel`,
       );
       output(opts, result, (r) => {
         console.log(r.cancelled ? `Cancelled ${runId}` : `Run ${runId} was already finished`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -976,7 +1033,7 @@ export function registerActionsCommands(program: Command): void {
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       const result = await c.post<{ runId: string; created: boolean }>(
         `/api/v1/actions/runs/${runId}/rerun`,
       );
@@ -987,7 +1044,7 @@ export function registerActionsCommands(program: Command): void {
         console.log(`url: ${r.url}`);
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 
@@ -1000,7 +1057,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--out <dir>', 'download artifacts into this directory instead of listing'),
   ).action(async (runId: string, opts: CommonOpts & { job?: string; out?: string }) => {
     try {
-      const c = client(opts);
+      const c = await client(opts);
       let jobs = await listRunJobs(c, runId);
       if (opts.job) {
         const job = matchJob(jobs, opts.job);
@@ -1052,7 +1109,7 @@ export function registerActionsCommands(program: Command): void {
         if (!any) console.log('No artifacts.');
       });
     } catch (e) {
-      fail(e);
+      fail(e, opts);
     }
   });
 }

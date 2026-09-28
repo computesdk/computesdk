@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  dispatchBody,
   formatDuration,
   formatProviderRow,
   formatRunDetail,
@@ -11,12 +12,17 @@ import {
   matchJob,
   matchWorkflow,
   parseInputs,
+  usageErrorOutput,
 } from '../actions.js';
 import {
+  ActionsApiError,
   ActionsClient,
+  ActionsCliError,
   encodeWatchCursor,
+  isSecureActionsTransport,
   readSseEvents,
   resolveActionsAuth,
+  toErrorEnvelope,
   type CiProviderInfo,
   type CiProviderKeyResponse,
   type CiRun,
@@ -43,6 +49,16 @@ const WORKFLOWS: CiWorkflow[] = [
     name: 'Nightly Bench',
     path: '.github/workflows/nightly.yml',
     dispatchable: true,
+    refs: ['refs/heads/main'],
+    inputs: [],
+    schedules: [],
+  },
+  {
+    id: 'w-3',
+    repoFullName: 'acme/widgets',
+    name: 'On Push Only',
+    path: '.github/workflows/push.yml',
+    dispatchable: false,
     refs: ['refs/heads/main'],
     inputs: [],
     schedules: [],
@@ -542,58 +558,294 @@ describe('ActionsClient', () => {
   });
 });
 
-describe('resolveActionsAuth', () => {
-  it('prefers the flag over the env var', () => {
-    process.env.COMPUTE_API_KEY = 'env-key';
-    expect(resolveActionsAuth({ apiKey: 'flag-key' }).apiKey).toBe('flag-key');
-    expect(resolveActionsAuth({}).apiKey).toBe('env-key');
-    delete process.env.COMPUTE_API_KEY;
+describe('dispatchBody', () => {
+  const ci = WORKFLOWS[0];
+  const pushOnly = WORKFLOWS[2];
+
+  it('builds a workflow_dispatch body without a manual field', () => {
+    expect(dispatchBody(ci, { inputs: ['suite=dax'], provider: 'vercel', providerRegion: 'sfo1' })).toEqual({
+      workflowId: 'w-1',
+      ref: 'refs/heads/main',
+      inputs: { suite: 'dax' },
+      provider: 'vercel',
+      providerRegion: 'sfo1',
+    });
   });
 
-  it('accepts the legacy BENCHMARKS_PLATFORM_* env vars as fallback', () => {
+  it('refuses a non-dispatchable workflow unless --manual is passed', () => {
+    expect(() => dispatchBody(pushOnly, {})).toThrow('--manual');
+    expect(dispatchBody(pushOnly, { manual: true })).toEqual({
+      workflowId: 'w-3',
+      ref: 'refs/heads/main',
+      inputs: {},
+      manual: true,
+    });
+  });
+
+  it('keeps inputs for a dispatchable workflow even with --manual', () => {
+    expect(dispatchBody(ci, { manual: true, ref: 'refs/heads/dev', inputs: ['a=b'] })).toEqual({
+      workflowId: 'w-1',
+      ref: 'refs/heads/dev',
+      inputs: { a: 'b' },
+      manual: true,
+    });
+  });
+
+  it('refuses inputs only for a non-dispatchable workflow forced with --manual', () => {
+    expect(() => dispatchBody(pushOnly, { manual: true, inputs: ['a=b'] })).toThrow('take no --inputs');
+    expect(dispatchBody(pushOnly, { manual: true, inputs: [] })).toMatchObject({ manual: true, inputs: {} });
+  });
+
+  it('validates ref and provider-region', () => {
+    expect(() => dispatchBody({ ...ci, refs: [] }, {})).toThrow('--ref');
+    expect(() => dispatchBody(ci, { providerRegion: 'sfo1' })).toThrow('--provider-region requires --provider');
+  });
+});
+
+describe('usageErrorOutput', () => {
+  it('wraps commander usage errors in the envelope when --json is present', () => {
+    const out: string[] = [];
+    usageErrorOutput("error: required option '--workflow <path|name>' not specified\n", (s) => out.push(s), [
+      'node', 'compute', 'actions', 'dispatch', 'a/b', '--json',
+    ]);
+    expect(JSON.parse(out[0])).toEqual({
+      ok: false,
+      error: { code: 'invalid_argument', message: "required option '--workflow <path|name>' not specified", retryable: false },
+    });
+  });
+
+  it('passes commander output through unchanged without --json', () => {
+    const out: string[] = [];
+    usageErrorOutput('error: unknown option \'--bogus\'\n', (s) => out.push(s), ['node', 'compute', 'actions', 'runs']);
+    expect(out).toEqual(['error: unknown option \'--bogus\'\n']);
+  });
+});
+
+describe('toErrorEnvelope', () => {
+  it('maps API errors to code/httpStatus/retryable and carries details', () => {
+    expect(toErrorEnvelope(new ActionsApiError(403, 'Owner or admin access required'))).toEqual({
+      ok: false,
+      error: { code: 'forbidden', message: 'Owner or admin access required', httpStatus: 403, retryable: false },
+    });
+    expect(toErrorEnvelope(new ActionsApiError(400, 'bad', { error: 'bad', details: { field: 'ref' } })).error).toMatchObject({
+      code: 'bad_request',
+      details: { field: 'ref' },
+    });
+    expect(toErrorEnvelope(new ActionsApiError(404, 'x')).error.code).toBe('not_found');
+    expect(toErrorEnvelope(new ActionsApiError(409, 'x')).error.code).toBe('conflict');
+    expect(toErrorEnvelope(new ActionsApiError(401, 'x')).error.code).toBe('unauthenticated');
+    expect(toErrorEnvelope(new ActionsApiError(429, 'x')).error).toMatchObject({ code: 'rate_limited', retryable: true });
+    expect(toErrorEnvelope(new ActionsApiError(503, 'x')).error).toMatchObject({ code: 'server_error', retryable: true });
+    expect(toErrorEnvelope(new ActionsApiError(500, 'x')).error).toMatchObject({ code: 'server_error', retryable: false });
+  });
+
+  it('carries CLI error codes and has no httpStatus', () => {
+    const env = toErrorEnvelope(new ActionsCliError('no_credentials', 'No API key.'));
+    expect(env).toEqual({ ok: false, error: { code: 'no_credentials', message: 'No API key.', retryable: false } });
+    expect(toErrorEnvelope(new ActionsCliError('invalid_argument', 'x')).error.code).toBe('invalid_argument');
+    expect(toErrorEnvelope(new ActionsCliError('workflow_not_found', 'x')).error).toEqual({
+      code: 'workflow_not_found',
+      message: 'x',
+      retryable: false,
+    });
+  });
+
+  it('marks fetch failures as retryable network errors', () => {
+    const err = new TypeError('fetch failed');
+    (err as { cause?: unknown }).cause = new Error('ECONNREFUSED');
+    expect(toErrorEnvelope(err).error).toEqual({
+      code: 'network',
+      message: 'fetch failed: ECONNREFUSED',
+      retryable: true,
+    });
+  });
+
+  it('falls back to unknown for anything else', () => {
+    expect(toErrorEnvelope(new Error('boom')).error).toEqual({ code: 'unknown', message: 'boom', retryable: false });
+    expect(toErrorEnvelope('str').error.message).toBe('str');
+  });
+});
+
+describe('resolveActionsAuth', () => {
+  const noStored = async () => ({});
+  const ENV = ['COMPUTE_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_API_KEY', 'BENCHMARKS_PLATFORM_URL'];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of ENV) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of ENV) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  const key = async (
+    opts: Parameters<typeof resolveActionsAuth>[0],
+    stored: Parameters<typeof resolveActionsAuth>[1] = noStored,
+  ) => (await resolveActionsAuth(opts, stored)).apiKey;
+
+  const failCode = async (
+    opts: Parameters<typeof resolveActionsAuth>[0],
+    stored: Parameters<typeof resolveActionsAuth>[1] = noStored,
+  ) => {
+    try {
+      await resolveActionsAuth(opts, stored);
+    } catch (e) {
+      return e as ActionsCliError;
+    }
+    throw new Error('expected resolveActionsAuth to throw');
+  };
+
+  it('prefers the flag over the env var', async () => {
+    process.env.COMPUTE_API_KEY = 'env-key';
+    expect(await key({ apiKey: 'flag-key' })).toBe('flag-key');
+    expect(await key({})).toBe('env-key');
+  });
+
+  it('falls back to stored platform credentials after every env var', async () => {
+    const stored = vi.fn(async () => ({ apiKey: 'stored-key' }));
+    expect(await key({}, stored)).toBe('stored-key');
+    expect(stored).toHaveBeenCalledWith({ baseUrl: 'https://platform.computesdk.com' });
+    process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
+    expect(await key({}, stored)).toBe('legacy-key');
+    process.env.COMPUTE_API_KEY = 'env-key';
+    expect(await key({}, stored)).toBe('env-key');
+    expect(await key({ apiKey: 'flag-key' }, stored)).toBe('flag-key');
+    // Only consulted when nothing higher in the chain was set.
+    expect(stored).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a stored OAuth access token when no API key is stored', async () => {
+    const stored = async () => ({ token: 'oauth-access-token' });
+    expect(await key({}, stored)).toBe('oauth-access-token');
+    // A stored API key wins over a stored token, matching @benchsdk/cli.
+    expect(await key({}, async () => ({ apiKey: 'stored-key', token: 't' }))).toBe('stored-key');
+  });
+
+  it('passes the resolved base URL to the stored resolver so refresh hits the same host', async () => {
+    const stored = vi.fn(async () => ({ token: 't' }));
+    await resolveActionsAuth({ baseUrl: 'http://localhost:3000/' }, stored);
+    expect(stored).toHaveBeenCalledWith({ baseUrl: 'http://localhost:3000' });
+  });
+
+  it('uses stored platform credentials for trusted hosts only', async () => {
+    const stored = vi.fn(async () => ({ token: 'oauth-access-token' }));
+    expect(await key({ baseUrl: 'https://platform.computesdk.com' }, stored)).toBe('oauth-access-token');
+    expect(await key({ baseUrl: 'https://staging.computesdk.com' }, stored)).toBe('oauth-access-token');
+    expect(stored).toHaveBeenCalledTimes(2);
+  });
+
+  it('never resolves or refreshes stored credentials for an untrusted host, even with --allow-untrusted-host', async () => {
+    const stored = vi.fn(async () => ({ token: 'oauth-access-token' }));
+    const err = await failCode({ baseUrl: 'https://evil.example.com', allowUntrustedHost: true }, stored);
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect(err.code).toBe('untrusted_host_stored_auth');
+    expect(err.message).toContain('--api-key');
+    expect(err.message).toContain('COMPUTE_API_KEY');
+    expect(stored).not.toHaveBeenCalled();
+    // Without the flag the plain untrusted_host refusal wins, still without touching stored auth.
+    expect((await failCode({ baseUrl: 'https://evil.example.com' }, stored)).code).toBe('untrusted_host');
+    expect(stored).not.toHaveBeenCalled();
+  });
+
+  it('lets --allow-untrusted-host send an explicit flag or env key over HTTPS', async () => {
+    const stored = vi.fn(async () => ({ token: 'oauth-access-token' }));
+    const untrusted = { baseUrl: 'https://evil.example.com', allowUntrustedHost: true };
+    expect(await key({ ...untrusted, apiKey: 'flag-key' }, stored)).toBe('flag-key');
+    process.env.COMPUTE_API_KEY = 'env-key';
+    expect(await key(untrusted, stored)).toBe('env-key');
+    delete process.env.COMPUTE_API_KEY;
+    process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
+    expect(await key(untrusted, stored)).toBe('legacy-key');
+    expect(stored).not.toHaveBeenCalled();
+  });
+
+  it('maps a stored-credential failure (missing, expired, refresh failed) to no_credentials', async () => {
+    const expired = async () => {
+      throw new Error('Your session has expired.');
+    };
+    const err = await failCode({}, expired);
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect(err.code).toBe('no_credentials');
+    expect(err.message).toContain('Your session has expired.');
+    expect(err.message).toContain('compute bench auth login');
+    expect(err.message).not.toContain('compute login');
+
+    const nothingStored = async () => {
+      throw new Error('No credentials found. Set BENCHMARKS_PLATFORM_API_KEY ... run `bench auth login`.');
+    };
+    const none = await failCode({}, nothingStored);
+    expect(none.code).toBe('no_credentials');
+    expect(none.message).toBe('No API key. Set COMPUTE_API_KEY, pass --api-key, or run `compute bench auth login`.');
+  });
+
+  it('accepts the legacy BENCHMARKS_PLATFORM_* env vars as fallback', async () => {
     process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
     process.env.BENCHMARKS_PLATFORM_URL = 'https://staging.computesdk.com';
-    const auth = resolveActionsAuth({});
+    const auth = await resolveActionsAuth({});
     expect(auth.apiKey).toBe('legacy-key');
     expect(auth.baseUrl).toBe('https://staging.computesdk.com');
-    delete process.env.BENCHMARKS_PLATFORM_API_KEY;
-    delete process.env.BENCHMARKS_PLATFORM_URL;
   });
 
-  it('empty new env vars fall through to the legacy aliases', () => {
+  it('empty new env vars fall through to the legacy aliases', async () => {
     process.env.COMPUTE_API_KEY = '';
     process.env.COMPUTE_PLATFORM_URL = '';
     process.env.BENCHMARKS_PLATFORM_API_KEY = 'legacy-key';
     process.env.BENCHMARKS_PLATFORM_URL = 'https://staging.computesdk.com';
-    const auth = resolveActionsAuth({});
+    const auth = await resolveActionsAuth({});
     expect(auth.apiKey).toBe('legacy-key');
     expect(auth.baseUrl).toBe('https://staging.computesdk.com');
-    delete process.env.COMPUTE_API_KEY;
-    delete process.env.COMPUTE_PLATFORM_URL;
-    delete process.env.BENCHMARKS_PLATFORM_API_KEY;
-    delete process.env.BENCHMARKS_PLATFORM_URL;
   });
 
-  it('strips a trailing slash from base-url', () => {
+  it('strips a trailing slash from base-url', async () => {
     expect(
-      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://localhost:3000/' }).baseUrl,
+      (await resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://localhost:3000/' })).baseUrl,
     ).toBe('http://localhost:3000');
   });
 
-  it('throws without a key', () => {
-    delete process.env.COMPUTE_API_KEY;
-    delete process.env.COMPUTE_PLATFORM_URL;
-    delete process.env.BENCHMARKS_PLATFORM_API_KEY;
-    delete process.env.BENCHMARKS_PLATFORM_URL;
-    expect(() => resolveActionsAuth({})).toThrow('COMPUTE_API_KEY');
+  it('throws a coded error without a key', async () => {
+    const err = await failCode({});
+    expect(err).toBeInstanceOf(ActionsCliError);
+    expect(err.code).toBe('no_credentials');
+    expect(err.message).toContain('compute bench auth login');
   });
 
-  it('refuses to send the key to untrusted hosts', () => {
-    expect(() =>
+  it('requires https for any non-loopback host, trusted or not', async () => {
+    for (const insecure of [
+      'http://platform.computesdk.com',
+      'http://staging.computesdk.com',
+      'http://computesdk.com',
+    ]) {
+      await expect(resolveActionsAuth({ apiKey: 'k', baseUrl: insecure })).rejects.toThrow('plaintext HTTP');
+    }
+    expect((await failCode({ apiKey: 'k', baseUrl: 'http://platform.computesdk.com' })).code).toBe('insecure_transport');
+    // --allow-untrusted-host is about the host, not the transport.
+    await expect(
+      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://evil.example.com', allowUntrustedHost: true }),
+    ).rejects.toThrow('plaintext HTTP');
+    await expect(
+      resolveActionsAuth({ apiKey: 'k', baseUrl: 'http://evil.example.com' }),
+    ).rejects.toThrow('--allow-untrusted-host');
+  });
+
+  it('validates the base URL before touching stored credentials', async () => {
+    const stored = vi.fn(async () => ({ apiKey: 'stored-key' }));
+    await expect(
+      resolveActionsAuth({ baseUrl: 'http://evil.example.com' }, stored),
+    ).rejects.toThrow('--allow-untrusted-host');
+    expect(stored).not.toHaveBeenCalled();
+  });
+
+  it('refuses to send the key to untrusted hosts', async () => {
+    await expect(
       resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com' }),
-    ).toThrow('--allow-untrusted-host');
+    ).rejects.toThrow('--allow-untrusted-host');
     expect(
-      resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com', allowUntrustedHost: true })
+      (await resolveActionsAuth({ apiKey: 'k', baseUrl: 'https://evil.example.com', allowUntrustedHost: true }))
         .baseUrl,
     ).toBe('https://evil.example.com');
     for (const ok of [
@@ -601,9 +853,24 @@ describe('resolveActionsAuth', () => {
       'https://staging.computesdk.com',
       'http://localhost:3000',
       'http://127.0.0.1:8787',
+      'http://[::1]:3000',
     ]) {
-      expect(resolveActionsAuth({ apiKey: 'k', baseUrl: ok }).baseUrl).toBe(ok);
+      expect((await resolveActionsAuth({ apiKey: 'k', baseUrl: ok })).baseUrl).toBe(ok);
     }
+  });
+});
+
+describe('isSecureActionsTransport', () => {
+  it('accepts https anywhere and http only on loopback', () => {
+    expect(isSecureActionsTransport('https://platform.computesdk.com')).toBe(true);
+    expect(isSecureActionsTransport('https://evil.example.com')).toBe(true);
+    expect(isSecureActionsTransport('http://localhost:3000')).toBe(true);
+    expect(isSecureActionsTransport('http://127.0.0.1')).toBe(true);
+    expect(isSecureActionsTransport('http://[::1]')).toBe(true);
+    expect(isSecureActionsTransport('http://platform.computesdk.com')).toBe(false);
+    expect(isSecureActionsTransport('http://10.0.0.5:3000')).toBe(false);
+    expect(isSecureActionsTransport('ftp://localhost')).toBe(false);
+    expect(isSecureActionsTransport('not a url')).toBe(false);
   });
 });
 
