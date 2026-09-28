@@ -28,8 +28,10 @@ import {
   ActionsCliError,
   ActionsClient,
   encodeWatchCursor,
+  isTrustedActionsHost,
   resolveActionsAuth,
   toErrorEnvelope,
+  type ActionsAuth,
   type CiArtifactListItem,
   type CiJob,
   type CiLogSlice,
@@ -73,6 +75,25 @@ interface CommonOpts extends JsonOpts {
 
 async function client(opts: CommonOpts): Promise<ActionsClient> {
   return new ActionsClient(await resolveActionsAuth(opts));
+}
+
+/**
+ * `vault set` and `vault get` carry a value, not just the key, so they only
+ * ever talk to a trusted host: --allow-untrusted-host does not extend to them.
+ */
+export function assertVaultValueHost(auth: ActionsAuth): void {
+  if (!isTrustedActionsHost(auth.baseUrl)) {
+    throw new ActionsCliError(
+      'untrusted_host',
+      `Refusing to send or read vault values at ${auth.baseUrl} — only computesdk.com and localhost hosts are allowed, even with --allow-untrusted-host.`,
+    );
+  }
+}
+
+async function vaultValueClient(opts: CommonOpts): Promise<ActionsClient> {
+  const auth = await resolveActionsAuth(opts);
+  assertVaultValueHost(auth);
+  return new ActionsClient(auth);
 }
 
 /** Print `data` as JSON when --json was passed; otherwise call `render`. */
@@ -1110,7 +1131,7 @@ export function registerActionsCommands(program: Command): void {
       const value = readFileSync(opts.fromFile ?? 0, 'utf8');
       const kind = parseVaultKind(opts.kind);
       const body = vaultSetBody(name, value, { ...opts, kind });
-      const result = await (await client(opts)).put<CiVaultSaveResponse>(
+      const result = await (await vaultValueClient(opts)).put<CiVaultSaveResponse>(
         vaultPath('/api/v1/vault', { repo: opts.repo }),
         body,
       );
@@ -1134,7 +1155,7 @@ export function registerActionsCommands(program: Command): void {
   ).action(async (name: string, opts: VaultOpts) => {
     try {
       const kind = parseVaultKind(opts.kind);
-      const result = await (await client(opts)).post<CiVaultRevealResponse>(
+      const result = await (await vaultValueClient(opts)).post<CiVaultRevealResponse>(
         vaultPath('/api/v1/vault/reveal', { repo: opts.repo }),
         { name, kind },
       );

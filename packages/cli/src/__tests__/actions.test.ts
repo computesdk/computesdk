@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  assertVaultValueHost,
   dispatchBody,
   formatDuration,
   formatProviderRow,
@@ -962,6 +963,14 @@ describe('vault helpers', () => {
       revealable: true,
       labels: ['ci'],
     });
+  });
+
+  it('keeps vault values off untrusted hosts even when the key is allowed there', () => {
+    expect(() =>
+      assertVaultValueHost({ apiKey: 'k', baseUrl: 'https://benchmarks-platform-git-x-computesdk.vercel.app' }),
+    ).toThrow(ActionsCliError);
+    expect(() => assertVaultValueHost({ apiKey: 'k', baseUrl: 'https://platform.computesdk.com' })).not.toThrow();
+    expect(() => assertVaultValueHost({ apiKey: 'k', baseUrl: 'http://localhost:3000' })).not.toThrow();
   });
 
   it('refuses an empty value and --revealable on a variable', () => {
