@@ -18,7 +18,7 @@ npm i -g @computesdk/cli                # or install once
 ## Command groups
 
 - `compute run <image> --provider <p>` / `compute providers` — ComputeSDK gateway sandbox runs. Auth: `COMPUTESDK_API_KEY` (Devin org secret, provisioned). Providers take their own creds (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`).
-- `compute actions <sub>` — benchmarks-platform Actions API (dispatch/runs/run/logs/cancel/rerun/artifacts). See the actions section below.
+- `compute actions <sub>` — benchmarks-platform Actions API (dispatch/runs/run/logs/cancel/rerun/artifacts/vault). See the actions section below.
 - `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
 
 `--json` machine-readable output is available throughout the actions/bench surface.
@@ -34,11 +34,13 @@ compute actions inspect <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
 compute actions cancel|rerun <run-id>
 compute actions artifacts <run-id> [--job] [--out <dir>]
+compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|variable]
 ```
 
 - Auth envs (Devin org secrets already exist): `COMPUTE_API_KEY` (primary) with `BENCHMARKS_PLATFORM_API_KEY` as legacy fallback — both work; `COMPUTE_PLATFORM_URL`/`BENCHMARKS_PLATFORM_URL` or `--base-url` for the endpoint (default `https://platform.computesdk.com`).
 - Bearer key only sent to computesdk.com/localhost unless `--allow-untrusted-host`, and only over HTTPS (plain http only for loopback). With no key, Actions falls back to stored platform OAuth from `compute bench auth login` (`~/.benchsdk`), not the gateway `compute login` key — and only for computesdk.com/localhost hosts.
 - `--workflow` matches full path, display name, or workflow id — NOT basename.
+- `vault set NAME` reads the value from stdin (`printf %s "$V" |`, not `echo`) or `--from-file`, never argv; `--revealable` (secrets, fixed at creation) allows `vault get`. Needs an owner/admin key; API is `/api/v1/vault` in benchmarks-platform.
 - `logs --follow` uses resumable byte-offset cursors; reconnects resume from `nextOffset`.
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
 - Run dashboard URLs: `{base}/{orgSlug}/actions/runs/{runId}`.
