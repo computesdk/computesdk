@@ -28,8 +28,10 @@ import {
   ActionsCliError,
   ActionsClient,
   encodeWatchCursor,
+  isTrustedActionsHost,
   resolveActionsAuth,
   toErrorEnvelope,
+  type ActionsAuth,
   type CiArtifactListItem,
   type CiJob,
   type CiLogSlice,
@@ -44,6 +46,12 @@ import {
   type CiRunHistory,
   type CiRunInspection,
   type CiRunSummary,
+  type CiVaultDeleteResponse,
+  type CiVaultItem,
+  type CiVaultKind,
+  type CiVaultListResponse,
+  type CiVaultRevealResponse,
+  type CiVaultSaveResponse,
   type CiWorkflow,
 } from './actions-client.js';
 
@@ -67,6 +75,25 @@ interface CommonOpts extends JsonOpts {
 
 async function client(opts: CommonOpts): Promise<ActionsClient> {
   return new ActionsClient(await resolveActionsAuth(opts));
+}
+
+/**
+ * `vault set` and `vault get` carry a value, not just the key, so they only
+ * ever talk to a trusted host: --allow-untrusted-host does not extend to them.
+ */
+export function assertVaultValueHost(auth: ActionsAuth): void {
+  if (!isTrustedActionsHost(auth.baseUrl)) {
+    throw new ActionsCliError(
+      'untrusted_host',
+      `Refusing to send or read vault values at ${auth.baseUrl} — only computesdk.com and localhost hosts are allowed, even with --allow-untrusted-host.`,
+    );
+  }
+}
+
+async function vaultValueClient(opts: CommonOpts): Promise<ActionsClient> {
+  const auth = await resolveActionsAuth(opts);
+  assertVaultValueHost(auth);
+  return new ActionsClient(auth);
 }
 
 /** Print `data` as JSON when --json was passed; otherwise call `render`. */
@@ -576,6 +603,59 @@ export function dispatchBody(
   };
 }
 
+/** `--kind` for the vault commands: `secret` unless told otherwise. */
+export function parseVaultKind(kind: string | undefined): CiVaultKind {
+  if (kind === undefined || kind === 'secret' || kind === 'variable') return kind ?? 'secret';
+  throw new ActionsCliError('invalid_argument', `--kind must be secret or variable, got "${kind}".`);
+}
+
+/** A vault route path with its scope in the query string. */
+export function vaultPath(
+  path: string,
+  params: { repo?: string; kind?: CiVaultKind; name?: string },
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) search.set(key, value);
+  }
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+/**
+ * The `PUT /api/v1/vault` body for `vault set`. The value is sent exactly as
+ * read — never trimmed — because whitespace can be part of a key.
+ */
+export function vaultSetBody(
+  name: string,
+  value: string,
+  opts: { kind: CiVaultKind; revealable?: boolean; description?: string; labels?: string[] },
+): Record<string, unknown> {
+  if (value === '') throw new ActionsCliError('invalid_argument', 'The value is empty.');
+  if (opts.revealable && opts.kind === 'variable') {
+    throw new ActionsCliError('invalid_argument', '--revealable applies to secrets; variables are always readable.');
+  }
+  return {
+    name,
+    kind: opts.kind,
+    value,
+    ...(opts.revealable && { revealable: true }),
+    ...(opts.description !== undefined && { description: opts.description }),
+    ...(opts.labels !== undefined && opts.labels.length > 0 && { labels: opts.labels }),
+  };
+}
+
+export function formatVaultRow(item: CiVaultItem): string {
+  const flags = [
+    item.kind,
+    ...(item.revealable && item.kind === 'secret' ? ['revealable'] : []),
+    `v${item.version}`,
+    ...(item.source === 'organization' ? ['inherited'] : []),
+    ...(item.overridesOrganization ? ['overrides org'] : []),
+  ];
+  return `${pc.cyan(safeTerm(item.name))}  ${pc.dim(flags.join(', '))}  ${pc.dim(`updated ${safeTerm(item.updatedAt)}`)}`;
+}
+
 export function registerActionsCommands(program: Command): void {
   const actions = program
     .command('actions')
@@ -1003,6 +1083,98 @@ export function registerActionsCommands(program: Command): void {
         ...(opts.repoId !== undefined && { repoId: opts.repoId }),
       });
       output(opts, result, (r) => console.log(`disabled  ${pc.cyan(safeTerm(r.fullName))}`));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  const vault = actions
+    .command('vault')
+    .description('The org vault: secrets and variables (owner/admin key)');
+  const vaultScope = (cmd: Command) =>
+    common(cmd)
+      .option('--repo <owner/repo>', 'scope to a repo\'s own items instead of the org\'s')
+      .option('--kind <kind>', 'secret or variable', 'secret');
+  type VaultOpts = CommonOpts & { repo?: string; kind?: string };
+
+  vaultScope(
+    vault.command('ls').description('List names and metadata (never values)'),
+  ).action(async (opts: VaultOpts) => {
+    try {
+      const path = vaultPath('/api/v1/vault', { repo: opts.repo, kind: parseVaultKind(opts.kind) });
+      const data = await (await client(opts)).get<CiVaultListResponse>(path);
+      output(opts, data, (d) => {
+        for (const item of d.items) console.log(formatVaultRow(item));
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  vaultScope(
+    vault
+      .command('set')
+      .description('Store a value, read from stdin (or --from-file) and sent exactly as read')
+      .argument('<name>', 'item name, e.g. NPM_TOKEN')
+      .option('--from-file <path>', 'read the value from a file instead of stdin')
+      .option('--revealable', 'let the value be read back with `vault get` (secrets; fixed at creation)')
+      .option('--description <text>', 'what the item is for')
+      .option('--labels <labels...>', 'labels (fixed at creation)'),
+  ).action(async (name: string, opts: VaultOpts & { fromFile?: string; revealable?: boolean; description?: string; labels?: string[] }) => {
+    try {
+      if (opts.fromFile === undefined && process.stdin.isTTY) {
+        throw new ActionsCliError(
+          'invalid_argument',
+          'Pipe the value on stdin (e.g. printf %s "$VALUE" | compute actions vault set NAME) or pass --from-file.',
+        );
+      }
+      const value = readFileSync(opts.fromFile ?? 0, 'utf8');
+      const kind = parseVaultKind(opts.kind);
+      const body = vaultSetBody(name, value, { ...opts, kind });
+      const result = await (await vaultValueClient(opts)).put<CiVaultSaveResponse>(
+        vaultPath('/api/v1/vault', { repo: opts.repo }),
+        body,
+      );
+      output(opts, result, (r) => {
+        const where = opts.repo ? safeTerm(opts.repo) : 'org';
+        console.log(`saved  ${pc.cyan(safeTerm(r.item.name))}  ${pc.dim(`(${r.item.kind}, v${r.item.version}, ${where})`)}`);
+        if (/\r?\n$/.test(value)) {
+          console.error(pc.yellow('note: the stored value ends with a newline; use printf %s rather than echo to avoid one.'));
+        }
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  vaultScope(
+    vault
+      .command('get')
+      .description('Print a value: any variable, or a secret created --revealable')
+      .argument('<name>', 'item name'),
+  ).action(async (name: string, opts: VaultOpts) => {
+    try {
+      const kind = parseVaultKind(opts.kind);
+      const result = await (await vaultValueClient(opts)).post<CiVaultRevealResponse>(
+        vaultPath('/api/v1/vault/reveal', { repo: opts.repo }),
+        { name, kind },
+      );
+      output(opts, result, (r) => process.stdout.write(r.value));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  vaultScope(
+    vault
+      .command('rm')
+      .description('Delete an item (with --repo, only the repo\'s override)')
+      .argument('<name>', 'item name'),
+  ).action(async (name: string, opts: VaultOpts) => {
+    try {
+      const path = vaultPath('/api/v1/vault', { repo: opts.repo, kind: parseVaultKind(opts.kind), name });
+      const result = await (await client(opts)).del<CiVaultDeleteResponse>(path);
+      output(opts, result, (r) => console.log(`deleted  ${pc.cyan(safeTerm(r.name))}  ${pc.dim(`(${r.kind})`)}`));
     } catch (e) {
       fail(e, opts);
     }

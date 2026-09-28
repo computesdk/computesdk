@@ -376,6 +376,43 @@ export interface CiRepoPatchResponse {
   discovery: CiRepoDiscovery | null;
 }
 
+export type CiVaultKind = 'secret' | 'variable';
+
+/** One row of `GET /api/v1/vault` — metadata only; values never list. */
+export interface CiVaultItem {
+  name: string;
+  kind: CiVaultKind;
+  description: string | null;
+  revealable: boolean;
+  labels: string[];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  /** Present when listing or writing with `?repo=`. */
+  source?: 'organization' | 'repository';
+  overridesOrganization?: boolean;
+}
+
+export interface CiVaultListResponse {
+  items: CiVaultItem[];
+}
+
+export interface CiVaultSaveResponse {
+  item: CiVaultItem;
+}
+
+export interface CiVaultRevealResponse {
+  name: string;
+  kind: CiVaultKind;
+  value: string;
+}
+
+export interface CiVaultDeleteResponse {
+  name: string;
+  kind: CiVaultKind;
+  deleted: true;
+}
+
 export class ActionsApiError extends Error {
   constructor(
     public status: number,

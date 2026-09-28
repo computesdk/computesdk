@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  assertVaultValueHost,
   dispatchBody,
   formatDuration,
   formatProviderRow,
@@ -8,11 +9,15 @@ import {
   formatRunInspection,
   formatRunRow,
   formatRunSummary,
+  formatVaultRow,
   formatVerifyResult,
   matchJob,
   matchWorkflow,
   parseInputs,
+  parseVaultKind,
   usageErrorOutput,
+  vaultPath,
+  vaultSetBody,
 } from '../actions.js';
 import {
   ActionsApiError,
@@ -928,5 +933,66 @@ describe('formatRunSummary', () => {
     });
     expect(out).toContain('refused by all providers');
     expect(out).toContain('job log tail');
+  });
+});
+
+describe('vault helpers', () => {
+  it('defaults the kind to secret and refuses anything else', () => {
+    expect(parseVaultKind(undefined)).toBe('secret');
+    expect(parseVaultKind('variable')).toBe('variable');
+    expect(() => parseVaultKind('secrets')).toThrow(ActionsCliError);
+  });
+
+  it('puts the scope in the query string, skipping what is unset', () => {
+    expect(vaultPath('/api/v1/vault', {})).toBe('/api/v1/vault');
+    expect(vaultPath('/api/v1/vault', { repo: 'acme/app', kind: 'secret', name: 'NPM_TOKEN' })).toBe(
+      '/api/v1/vault?repo=acme%2Fapp&kind=secret&name=NPM_TOKEN',
+    );
+  });
+
+  it('sends the value exactly as read, never trimmed', () => {
+    expect(vaultSetBody('PEM', ' key\n', { kind: 'secret' })).toEqual({
+      name: 'PEM',
+      kind: 'secret',
+      value: ' key\n',
+    });
+    expect(vaultSetBody('T', 'v', { kind: 'secret', revealable: true, labels: ['ci'] })).toEqual({
+      name: 'T',
+      kind: 'secret',
+      value: 'v',
+      revealable: true,
+      labels: ['ci'],
+    });
+  });
+
+  it('keeps vault values off untrusted hosts even when the key is allowed there', () => {
+    expect(() =>
+      assertVaultValueHost({ apiKey: 'k', baseUrl: 'https://benchmarks-platform-git-x-computesdk.vercel.app' }),
+    ).toThrow(ActionsCliError);
+    expect(() => assertVaultValueHost({ apiKey: 'k', baseUrl: 'https://platform.computesdk.com' })).not.toThrow();
+    expect(() => assertVaultValueHost({ apiKey: 'k', baseUrl: 'http://localhost:3000' })).not.toThrow();
+  });
+
+  it('refuses an empty value and --revealable on a variable', () => {
+    expect(() => vaultSetBody('T', '', { kind: 'secret' })).toThrow(ActionsCliError);
+    expect(() => vaultSetBody('T', 'v', { kind: 'variable', revealable: true })).toThrow(ActionsCliError);
+  });
+
+  it('shows where a repo-scoped row comes from', () => {
+    const row = formatVaultRow({
+      name: 'NPM_TOKEN',
+      kind: 'secret',
+      description: null,
+      revealable: true,
+      labels: [],
+      version: 2,
+      createdAt: '2026-03-03T00:00:00.000Z',
+      updatedAt: '2026-03-04T00:00:00.000Z',
+      source: 'organization',
+    });
+    expect(row).toContain('NPM_TOKEN');
+    expect(row).toContain('revealable');
+    expect(row).toContain('v2');
+    expect(row).toContain('inherited');
   });
 });

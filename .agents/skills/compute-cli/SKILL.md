@@ -18,7 +18,7 @@ npm i -g @computesdk/cli                # or install once
 ## Command groups
 
 - `compute run <image> --provider <p>` / `compute providers` — ComputeSDK gateway sandbox runs. Auth: `COMPUTESDK_API_KEY` (Devin org secret, provisioned). Providers take their own creds (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`).
-- `compute actions <sub>` — benchmarks-platform Actions API (dispatch/runs/run/logs/cancel/rerun/artifacts). See the actions section below.
+- `compute actions <sub>` — benchmarks-platform Actions API (dispatch/runs/run/logs/cancel/rerun/artifacts/vault). See the actions section below.
 - `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
 
 `--json` machine-readable output is available throughout the actions/bench surface.
@@ -34,11 +34,13 @@ compute actions inspect <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
 compute actions cancel|rerun <run-id>
 compute actions artifacts <run-id> [--job] [--out <dir>]
+compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|variable]
 ```
 
 - Auth envs (Devin org secrets already exist): `COMPUTE_API_KEY` (primary) with `BENCHMARKS_PLATFORM_API_KEY` as legacy fallback — both work; `COMPUTE_PLATFORM_URL`/`BENCHMARKS_PLATFORM_URL` or `--base-url` for the endpoint (default `https://platform.computesdk.com`).
 - Bearer key only sent to computesdk.com/localhost unless `--allow-untrusted-host`, and only over HTTPS (plain http only for loopback). With no key, Actions falls back to stored platform OAuth from `compute bench auth login` (`~/.benchsdk`), not the gateway `compute login` key — and only for computesdk.com/localhost hosts.
 - `--workflow` matches full path, display name, or workflow id — NOT basename.
+- `vault set NAME` reads the value from stdin (`printf %s "$V" |`, not `echo`) or `--from-file`, never argv; `--revealable` (secrets, fixed at creation) allows `vault get`. Needs an owner/admin key; API is `/api/v1/vault` in benchmarks-platform.
 - `logs --follow` uses resumable byte-offset cursors; reconnects resume from `nextOffset`.
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
 - Run dashboard URLs: `{base}/{orgSlug}/actions/runs/{runId}`.
@@ -54,7 +56,7 @@ compute actions dispatch computesdk/ci-test --workflow Smoke --ref main \
 ```
 
 - `--allow-untrusted-host` is required — the bearer key is only sent to computesdk.com/localhost otherwise. It only covers an explicit `--api-key`/`COMPUTE_API_KEY`; stored `bench auth login` credentials are refused for untrusted hosts (`untrusted_host_stored_auth`).
-- The preview shares the production control-plane DB: runs appear in the prod runs table, provider creds and secrets resolve identically, and jobs land on real provider sandboxes.
+- The preview has its own Neon branch DB, copied from production when the preview is built: runs dispatched at a preview don't show up in prod (`actions run <id>` returns 404 there). `actions vault set`/`get` refuse non-computesdk.com hosts even with `--allow-untrusted-host`, because a PR author controls the preview's code and could capture the value; test vault changes against localhost instead. Provider creds still resolve and jobs still land on real provider sandboxes.
 - `--provider <id>` on dispatch pins placement; a refusal is itself a useful signal (the job's `failureReason` says why).
 - Per-job logs: `GET /api/v1/actions/jobs/<jobId>/logs` (`compute actions logs` also works); job ids come from `compute actions run <run-id> --json`.
 - Wait for the Vercel check on the PR to be green before dispatching — dispatching during a build can hit the previous deployment.
