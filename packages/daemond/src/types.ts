@@ -42,7 +42,56 @@ export interface SeedKillInput {
   requestId?: string;
 }
 
-export type SeedInput = SeedCommandInput | SeedWaitInput | SeedStatusInput | SeedKillInput;
+/**
+ * Start (or replace) the daemon's dial-out tunnel. `connect` is the control
+ * plane WebSocket URL; `tunnelToken` authenticates the daemon to it.
+ * `allowPorts` entries are port numbers or `"a-b"` ranges the tunnel may dial
+ * inside the sandbox (default: any port, loopback hosts only).
+ */
+export interface SeedTunnelConnectInput {
+  connect: string;
+  tunnelToken: string;
+  allowPorts?: Array<number | string>;
+  timeoutMs?: number;
+}
+
+/** Snapshot the tunnel's current state without changing it. */
+export interface SeedTunnelStatusInput {
+  status: true;
+}
+
+/** Stop the tunnel and suppress reconnects. */
+export interface SeedTunnelDisconnectInput {
+  disconnect: true;
+}
+
+export type SeedTunnelPayload =
+  | SeedTunnelConnectInput
+  | SeedTunnelStatusInput
+  | SeedTunnelDisconnectInput;
+
+export interface SeedTunnelInput {
+  tunnel: SeedTunnelPayload;
+  requestId?: string;
+}
+
+export type SeedInput =
+  | SeedCommandInput
+  | SeedWaitInput
+  | SeedStatusInput
+  | SeedKillInput
+  | SeedTunnelInput;
+
+export type SeedTunnelState = "connecting" | "connected" | "disconnected";
+
+export interface SeedTunnelStatus {
+  state: SeedTunnelState;
+  url: string | null;
+  connectedAt: number | null;
+  reconnects: number;
+  streamsOpen: number;
+  lastError: string | null;
+}
 
 export type SeedJobStatus = "running" | "exited";
 
@@ -85,6 +134,8 @@ export interface SeedInvocationResult {
   requestId: string;
   daemon: SeedDaemonInfo;
   command: SeedCommandResult;
+  /** Present for tunnel invocations: the tunnel status snapshot. */
+  tunnel?: SeedTunnelStatus;
 }
 
 export interface SeedHealthPayload {

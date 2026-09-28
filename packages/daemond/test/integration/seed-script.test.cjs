@@ -8,6 +8,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const { daemonSeedScript } = require("../../dist/index.js");
+const { WebSocketServer } = require("ws");
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,7 +40,7 @@ async function waitForSocketRemoved(socketPath, timeoutMs, message) {
   throw new Error(message);
 }
 
-const SCRIPT_VERSION = "2";
+const SCRIPT_VERSION = "3";
 
 function defaultSocketPath(name, cwd) {
   const workspaceHash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
@@ -457,5 +458,382 @@ test("seed launcher fails when strict SSE port is busy", async () => {
         else resolve();
       });
     });
+  }
+});
+
+// ---- tunnel client tests ----
+
+function startTunnelControlPlane() {
+  const wss = new WebSocketServer({ host: "127.0.0.1", port: 0, path: "/tunnel" });
+  const conns = [];
+  wss.on("connection", (ws, req) => {
+    const entry = {
+      ws,
+      url: req.url,
+      frames: [],
+      cursor: 0,
+      closeCode: null,
+      waiters: [],
+    };
+    ws.binaryType = "nodebuffer";
+    ws.on("message", (data, isBinary) => {
+      const frame = { data, isBinary };
+      entry.frames.push(frame);
+      for (const w of entry.waiters.splice(0)) w(frame);
+    });
+    ws.on("close", (code) => {
+      entry.closeCode = code;
+    });
+    conns.push(entry);
+    for (const w of entry.newConnWaiters?.splice(0) ?? []) w(entry);
+  });
+  const state = {
+    wss,
+    conns,
+    newConnWaiters: [],
+  };
+  wss.on("connection", () => {
+    for (const w of state.newConnWaiters.splice(0)) w(conns[conns.length - 1]);
+  });
+  return new Promise((resolve) => {
+    wss.on("listening", () => {
+      state.url = `ws://127.0.0.1:${wss.address().port}/tunnel`;
+      resolve(state);
+    });
+  });
+}
+
+function waitForTunnelConn(server, index, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  return (async () => {
+    while (Date.now() < deadline) {
+      if (server.conns[index]) return server.conns[index];
+      await sleep(25);
+    }
+    throw new Error(`no tunnel connection #${index}`);
+  })();
+}
+
+function nextFrame(connEntry, predicate, timeoutMs = 5000) {
+  // Consume-style scan: frames before the match are dropped so callers can
+  // poll a stream of frames without re-reading the same one.
+  for (let i = connEntry.cursor; i < connEntry.frames.length; i++) {
+    connEntry.cursor = i + 1;
+    if (predicate(connEntry.frames[i])) return Promise.resolve(connEntry.frames[i]);
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timed out waiting for tunnel frame")), timeoutMs);
+    const waiter = (frame) => {
+      if (predicate(frame)) {
+        clearTimeout(timer);
+        resolve(frame);
+      } else {
+        connEntry.waiters.push(waiter);
+      }
+    };
+    connEntry.waiters.push(waiter);
+  });
+}
+
+function encodeTunnelData(id, buf) {
+  const out = Buffer.alloc(4 + buf.length);
+  out.writeUInt32BE(id >>> 0, 0);
+  buf.copy(out, 4);
+  return out;
+}
+
+function startTunnelApp() {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("ok");
+  });
+  return new Promise((resolve) =>
+    server.listen(0, "127.0.0.1", () => resolve({ server, port: server.address().port })),
+  );
+}
+
+async function subscribeDaemonEvents(socketPath, token) {
+  const conn = await connectSocket(socketPath, 3000);
+  conn.write(`${JSON.stringify({ id: "sub-tunnel", type: "subscribe", token, payload: { channel: "daemon" } })}\n`);
+  const events = [];
+  let buf = "";
+  conn.on("data", (data) => {
+    buf += data.toString("utf8");
+    let idx = -1;
+    while ((idx = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, idx);
+      buf = buf.slice(idx + 1);
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.type === "event") events.push(msg.payload);
+      } catch {}
+    }
+  });
+  await sleep(150); // let the subscribe land
+  return { conn, events };
+}
+
+async function waitForEvent(events, type, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ev = events.find((e) => e && e.type === type);
+    if (ev) return ev;
+    await sleep(50);
+  }
+  throw new Error(`no ${type} event within ${timeoutMs}ms`);
+}
+
+function closeServer(server) {
+  return new Promise((resolve) => {
+    for (const c of server.conns ?? []) c.ws.terminate();
+    if (server.wss) server.wss.close(() => resolve());
+    else server.close(() => resolve());
+  });
+}
+
+test("tunnel connect: launcher reports connected, control plane sees token auth and tunnel.connected event", async () => {
+  const name = `seed-tunnel-connect-${process.pid}`;
+  const cp = await startTunnelControlPlane();
+  const script = daemonSeedScript({ name });
+  const tunnelToken = "tt-secret-token";
+
+  // Boot the daemon with a trivial exec so we can subscribe for events before
+  // the tunnel connects (the connected event fires only once).
+  const boot = await runSeedLauncher(script, ["pwd"]);
+  const sub = await subscribeDaemonEvents(defaultSocketPath(name, process.cwd()), boot.token);
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: cp.url, tunnelToken, timeoutMs: 8000 } }),
+  ]);
+  try {
+    assert.equal(result.tunnel.state, "connected");
+    assert.equal(result.tunnel.url, cp.url);
+    assert.equal(typeof result.tunnel.connectedAt, "number");
+    assert.equal(result.command.exitCode, 0);
+    assert.equal(result.command.stdout, "");
+
+    const conn = await waitForTunnelConn(cp, 0);
+    const url = new URL(conn.url, "http://x");
+    assert.equal(url.searchParams.get("token"), tunnelToken);
+    const auth = await nextFrame(conn, (f) => !f.isBinary && JSON.parse(f.data.toString()).t === "auth");
+    assert.equal(JSON.parse(auth.data.toString()).token, tunnelToken);
+    // The tunnel token must not leak into status or events.
+    assert.ok(!JSON.stringify(result.tunnel).includes(tunnelToken));
+
+    const ev = await waitForEvent(sub.events, "tunnel.connected", 3000);
+    assert.equal(ev.url, cp.url);
+    assert.ok(!JSON.stringify(ev).includes(tunnelToken));
+
+    // Same URL + same token is a strict no-op: no replacement, no new attempt.
+    const again = await runSeedLauncher(script, [
+      JSON.stringify({ tunnel: { connect: cp.url, tunnelToken, timeoutMs: 8000 } }),
+    ]);
+    assert.equal(again.tunnel.state, "connected");
+    assert.equal(again.tunnel.connectedAt, result.tunnel.connectedAt);
+    assert.equal(again.tunnel.reconnects, result.tunnel.reconnects);
+    sub.conn.destroy();
+  } finally {
+    sub.conn.destroy();
+    await stopDaemon(name, result.token);
+    await closeServer(cp);
+  }
+});
+
+test("tunnel carries a stream: open -> opened -> HTTP request/response over data frames -> close", async () => {
+  const name = `seed-tunnel-stream-${process.pid}`;
+  const cp = await startTunnelControlPlane();
+  const app = await startTunnelApp();
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: cp.url, tunnelToken: "tt", timeoutMs: 8000 } }),
+  ]);
+  try {
+    assert.equal(result.tunnel.state, "connected");
+    const conn = await waitForTunnelConn(cp, 0);
+
+    conn.ws.send(JSON.stringify({ t: "open", id: 1, port: app.port, host: "127.0.0.1" }));
+    await nextFrame(conn, (f) => !f.isBinary && JSON.parse(f.data.toString()).t === "opened");
+
+    conn.ws.send(encodeTunnelData(1, Buffer.from("GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")));
+
+    const chunks = [];
+    const deadline = Date.now() + 5000;
+    let closed = false;
+    while (Date.now() < deadline && !closed) {
+      const f = await nextFrame(conn, (fr) => fr.isBinary || JSON.parse(fr.data.toString()).t === "close", 5000);
+      if (f.isBinary) {
+        const id = f.data.readUInt32BE(0);
+        if (id === 1) chunks.push(f.data.subarray(4));
+      } else {
+        const msg = JSON.parse(f.data.toString());
+        if (msg.t === "close" && msg.id === 1) closed = true;
+      }
+    }
+    const body = Buffer.concat(chunks).toString();
+    assert.match(body, /HTTP\/1\.1 200/);
+    assert.match(body, /ok/);
+    assert.equal(closed, true, "daemon should send close{id:1} after the app socket ends");
+  } finally {
+    await stopDaemon(name, result.token);
+    await closeServer(cp);
+    await new Promise((r) => app.server.close(r));
+  }
+});
+
+test("tunnel surfaces ECONNREFUSED for a closed port", async () => {
+  const name = `seed-tunnel-refused-${process.pid}`;
+  const cp = await startTunnelControlPlane();
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: cp.url, tunnelToken: "tt", timeoutMs: 8000 } }),
+  ]);
+  try {
+    const conn = await waitForTunnelConn(cp, 0);
+    conn.ws.send(JSON.stringify({ t: "open", id: 3, port: 9, host: "127.0.0.1" }));
+    const frame = await nextFrame(
+      conn,
+      (f) => !f.isBinary && JSON.parse(f.data.toString()).t === "error",
+    );
+    const err = JSON.parse(frame.data.toString());
+    assert.equal(err.id, 3);
+    assert.equal(err.code, "ECONNREFUSED");
+  } finally {
+    await stopDaemon(name, result.token);
+    await closeServer(cp);
+  }
+});
+
+test("tunnel enforces allowPorts and loopback-only hosts", async () => {
+  const name = `seed-tunnel-allow-${process.pid}`;
+  const cp = await startTunnelControlPlane();
+  const app = await startTunnelApp();
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: cp.url, tunnelToken: "tt", allowPorts: [app.port], timeoutMs: 8000 } }),
+  ]);
+  try {
+    const conn = await waitForTunnelConn(cp, 0);
+    conn.ws.send(JSON.stringify({ t: "open", id: 5, port: app.port + 1, host: "127.0.0.1" }));
+    let frame = await nextFrame(conn, (f) => !f.isBinary && JSON.parse(f.data.toString()).t === "error");
+    let err = JSON.parse(frame.data.toString());
+    assert.equal(err.id, 5);
+    assert.equal(err.code, "PORT_NOT_ALLOWED");
+
+    conn.ws.send(JSON.stringify({ t: "open", id: 7, port: app.port, host: "10.0.0.1" }));
+    frame = await nextFrame(
+      conn,
+      (f) => !f.isBinary && JSON.parse(f.data.toString()).t === "error" && JSON.parse(f.data.toString()).id === 7,
+    );
+    err = JSON.parse(frame.data.toString());
+    assert.equal(err.code, "HOST_NOT_ALLOWED");
+  } finally {
+    await stopDaemon(name, result.token);
+    await closeServer(cp);
+    await new Promise((r) => app.server.close(r));
+  }
+});
+
+test("tunnel reconnects after link loss and reports reconnects", async () => {
+  const name = `seed-tunnel-reconnect-${process.pid}`;
+  const cp = await startTunnelControlPlane();
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: cp.url, tunnelToken: "tt", timeoutMs: 8000 } }),
+  ]);
+  const socketPath = defaultSocketPath(name, process.cwd());
+  let sub;
+  try {
+    const conn = await waitForTunnelConn(cp, 0);
+    sub = await subscribeDaemonEvents(socketPath, result.token);
+
+    conn.ws.terminate();
+    const reconnected = await waitForTunnelConn(cp, 1, 4000);
+    assert.ok(reconnected, "daemon should reconnect within 4s");
+
+    const status = await runSeedLauncher(script, [JSON.stringify({ tunnel: { status: true } })]);
+    assert.equal(status.tunnel.state, "connected");
+    assert.ok(status.tunnel.reconnects >= 1, `expected reconnects >= 1, got ${status.tunnel.reconnects}`);
+
+    const disc = await waitForEvent(sub.events, "tunnel.disconnected", 2000);
+    assert.equal(disc.willRetry, true);
+    await waitForEvent(sub.events, "tunnel.connected", 2000);
+  } finally {
+    if (sub) sub.conn.destroy();
+    await stopDaemon(name, result.token);
+    await closeServer(cp);
+  }
+});
+
+test("tunnel connect to an unreachable control plane reports a lastError", async () => {
+  const name = `seed-tunnel-dialfail-${process.pid}`;
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: "ws://127.0.0.1:1/tunnel", tunnelToken: "tt", timeoutMs: 1500 } }),
+  ]);
+  try {
+    assert.ok(["connecting", "disconnected"].includes(result.tunnel.state));
+    assert.equal(typeof result.tunnel.lastError, "string");
+    assert.ok(result.tunnel.lastError.length > 0);
+
+    const status = await runSeedLauncher(script, [JSON.stringify({ tunnel: { disconnect: true } })]);
+    assert.equal(status.tunnel.state, "disconnected");
+  } finally {
+    await stopDaemon(name, result.token);
+  }
+});
+
+test("tunnel does not retry after a 4401 close", async () => {
+  const name = `seed-tunnel-unauth-${process.pid}`;
+  const cp = await startTunnelControlPlane();
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: cp.url, tunnelToken: "tt", timeoutMs: 8000 } }),
+  ]);
+  try {
+    const conn = await waitForTunnelConn(cp, 0);
+    conn.ws.close(4401, "unauthorized");
+
+    const status = await runSeedLauncher(script, [JSON.stringify({ tunnel: { status: true } })]);
+    assert.equal(status.tunnel.state, "disconnected");
+    assert.equal(status.tunnel.lastError, "unauthorized");
+
+    await sleep(2000);
+    assert.equal(cp.conns.length, 1, "no reconnect should be attempted after 4401");
+  } finally {
+    await stopDaemon(name, result.token);
+    await closeServer(cp);
+  }
+});
+
+test("tunnel disconnect closes the socket with 1000 and suppresses reconnect", async () => {
+  const name = `seed-tunnel-disconnect-${process.pid}`;
+  const cp = await startTunnelControlPlane();
+  const script = daemonSeedScript({ name });
+
+  const result = await runSeedLauncher(script, [
+    JSON.stringify({ tunnel: { connect: cp.url, tunnelToken: "tt", timeoutMs: 8000 } }),
+  ]);
+  try {
+    const conn = await waitForTunnelConn(cp, 0);
+
+    const status = await runSeedLauncher(script, [JSON.stringify({ tunnel: { disconnect: true } })]);
+    assert.equal(status.tunnel.state, "disconnected");
+
+    const deadline = Date.now() + 3000;
+    while (conn.closeCode === null && Date.now() < deadline) await sleep(50);
+    assert.equal(conn.closeCode, 1000);
+
+    await sleep(1500);
+    assert.equal(cp.conns.length, 1, "no reconnect after disconnect");
+  } finally {
+    await stopDaemon(name, result.token);
+    await closeServer(cp);
   }
 });
