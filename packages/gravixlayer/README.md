@@ -8,7 +8,7 @@ and snapshots.
 npm install @computesdk/gravixlayer
 ```
 
-Requires Node.js 18 or later.
+Requires Node.js 20 or later.
 
 ```ts
 import { gravixlayer } from '@computesdk/gravixlayer'
@@ -44,7 +44,9 @@ Get an API key at <https://gravixlayer.ai>. The TypeScript SDK is
 `create` takes `templateId` (an existing template), or `snapshotId`, plus
 `envs`, `timeout`, `metadata`, `cloud`, and `region`. Omitting `templateId`
 boots `base-small`. Omitting `cloud` and `region` uses `aws` and `us-east-1`.
-Sizing comes from the template. `sandbox.getInstance()` returns the GravixLayer
+Sizing comes from the template. `image` is not accepted: build a template from
+an image with `template.create({ name, fromImage })`, then pass its name as
+`templateId`. `sandbox.getInstance()` returns the GravixLayer
 `Runtime` handle for filesystem, services, and other SDK APIs.
 
 Snapshots require a `name` on `snapshot.create`. Template builds need

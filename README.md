@@ -307,7 +307,7 @@ npm install @computesdk/declaw           # Declaw provider
 npm install @computesdk/e2b              # E2B provider
 npm install @computesdk/freestyle        # Freestyle provider
 npm install @computesdk/givemeanode      # givemeanode provider
-npm install @computesdk/gravixlayer    # GravixLayer provider
+npm install @computesdk/gravixlayer      # GravixLayer provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/lightning        # Lightning AI provider

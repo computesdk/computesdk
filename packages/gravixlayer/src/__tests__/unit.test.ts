@@ -7,6 +7,13 @@ const h = vi.hoisted(() => {
 
   type Call = { method: string; args: unknown[] }
 
+  /** Runtime IDs are UUIDs; getById answers anything else without a request. */
+  const ids = {
+    live: '3f2c8a1e-5b7d-4e9f-8a6c-1d2e3f4a5b6c',
+    gone: '7a1b2c3d-4e5f-4a6b-9c8d-0e1f2a3b4c5d',
+    broken: 'c0ffee00-1234-4abc-8def-567890abcdef',
+  }
+
   const state = {
     calls: [] as Call[],
     clientOptions: [] as Array<Record<string, unknown>>,
@@ -197,7 +204,7 @@ const h = vi.hoisted(() => {
         if (state.missing.has(id) || state.getMissingAfterList.has(id)) {
           throw new NotFoundError('No such runtime.')
         }
-        if (id === 'rt_broken') {
+        if (id === ids.broken) {
           throw Object.assign(new Error('Service unavailable.'), { status: 503 })
         }
         return makeSandbox(id)
@@ -266,7 +273,7 @@ const h = vi.hoisted(() => {
     }
   }
 
-  return { NotFoundError, GravixLayer, TemplateBuilder: MockBuilder, state }
+  return { NotFoundError, GravixLayer, TemplateBuilder: MockBuilder, state, ids }
 })
 
 vi.mock('gravixlayer', async (importOriginal) => {
@@ -459,9 +466,19 @@ describe('create', () => {
     })
   })
 
-  it('uses image when templateId is absent', async () => {
-    await provider().sandbox.create({ image: 'node-22' })
-    expect(calls('runtime.create')[0].args[0]).toMatchObject({ template: 'node-22' })
+  it('rejects image, because runtimes start from a template', async () => {
+    await expect(provider().sandbox.create({ image: 'node:22' })).rejects.toThrow(
+      /not an image.*templateId.*fromImage/,
+    )
+    await expect(
+      provider().sandbox.create({ templateId: 'base-small', image: 'node:22' }),
+    ).rejects.toThrow(/not an image/)
+    expect(calls('runtime.create')).toHaveLength(0)
+  })
+
+  it('treats a blank image as unset', async () => {
+    await provider().sandbox.create({ templateId: 'base-small', image: '  ' })
+    expect(calls('runtime.create')[0].args[0]).toMatchObject({ template: 'base-small' })
   })
 })
 
@@ -529,25 +546,55 @@ describe('runCommand', () => {
 })
 
 describe('lifecycle', () => {
-  it('returns null for 404 and terminated statuses, and rethrows other failures', async () => {
-    h.state.missing.add('rt_gone')
-    h.state.statuses.set('rt_terminated', 'terminated')
-    h.state.statuses.set('rt_stopped', 'stopped')
+  it('returns null for 404 and rethrows other failures', async () => {
+    h.state.missing.add(h.ids.gone)
     const compute = provider()
 
-    await expect(compute.sandbox.getById('rt_gone')).resolves.toBeNull()
-    await expect(compute.sandbox.getById('rt_terminated')).resolves.toBeNull()
-    await expect(compute.sandbox.getById('rt_stopped')).resolves.toBeNull()
-    await expect(compute.sandbox.getById('rt_broken')).rejects.toThrow(/Service unavailable/)
-    expect((await compute.sandbox.getById('rt_live'))?.sandboxId).toBe('rt_live')
+    await expect(compute.sandbox.getById(h.ids.gone)).resolves.toBeNull()
+    await expect(compute.sandbox.getById(h.ids.broken)).rejects.toThrow(/Service unavailable/)
+    expect((await compute.sandbox.getById(h.ids.live))?.sandboxId).toBe(h.ids.live)
+  })
+
+  it.each(['stopped', 'failed', 'terminated', 'timed_out'])(
+    'returns null for a %s runtime',
+    async (status) => {
+      h.state.statuses.set(h.ids.live, status)
+      await expect(provider().sandbox.getById(h.ids.live)).resolves.toBeNull()
+    },
+  )
+
+  it.each(['creating', 'running', 'paused', 'stopping'])(
+    'returns a handle for a %s runtime',
+    async (status) => {
+      h.state.statuses.set(h.ids.live, status)
+      expect((await provider().sandbox.getById(h.ids.live))?.sandboxId).toBe(h.ids.live)
+    },
+  )
+
+  it('returns null for an id that cannot name a runtime, without a request', async () => {
+    const compute = provider()
+    for (const id of ['', 'rt_live', 'not-a-uuid', `${h.ids.live}0`, ` ${h.ids.live}`]) {
+      await expect(compute.sandbox.getById(id)).resolves.toBeNull()
+    }
+    expect(calls('runtime.get')).toHaveLength(0)
+
+    const upper = h.ids.live.toUpperCase()
+    expect((await compute.sandbox.getById(upper))?.sandboxId).toBe(upper)
+    expect(calls('runtime.get')).toHaveLength(1)
+  })
+
+  it('reports a missing API key before judging the id', async () => {
+    await expect(gravixlayer({}).sandbox.getById('not-a-uuid')).rejects.toThrow(
+      /GRAVIXLAYER_API_KEY/,
+    )
   })
 
   it('destroys via kill and treats 404 as success', async () => {
-    h.state.missing.add('rt_gone')
+    h.state.missing.add(h.ids.gone)
     const compute = provider()
-    await expect(compute.sandbox.destroy('rt_gone')).resolves.toBeUndefined()
-    await compute.sandbox.destroy('rt_live')
-    expect(calls('runtime.kill').map((call) => call.args[0])).toEqual(['rt_gone', 'rt_live'])
+    await expect(compute.sandbox.destroy(h.ids.gone)).resolves.toBeUndefined()
+    await compute.sandbox.destroy(h.ids.live)
+    expect(calls('runtime.kill').map((call) => call.args[0])).toEqual([h.ids.gone, h.ids.live])
   })
 
   it('lists every runtime across pages without a follow-up get', async () => {
@@ -586,9 +633,8 @@ describe('lifecycle', () => {
     expect(listed.map((entry) => entry.sandboxId)).toEqual(['rt_ok'])
   })
 
-  it('maps getInfo status, provider, and remembered timeout', async () => {
+  it('maps getInfo provider, metadata, and remembered timeout', async () => {
     const sandbox = await provider().sandbox.create({ timeout: 60_000 })
-    h.state.statuses.set('rt_new', 'paused')
     const info = await sandbox.getInfo()
 
     expect(info).toMatchObject({
@@ -599,16 +645,28 @@ describe('lifecycle', () => {
       metadata: { team: 'agents' },
     })
     expect(info.createdAt.toISOString()).toBe('2026-09-25T00:00:00.000Z')
+  })
 
-    h.state.statuses.set('rt_new', 'failed')
-    expect((await sandbox.getInfo()).status).toBe('error')
-
-    h.state.statuses.set('rt_new', 'terminated')
-    expect((await sandbox.getInfo()).status).toBe('stopped')
+  it.each([
+    ['creating', 'running'],
+    ['running', 'running'],
+    ['paused', 'stopped'],
+    ['stopping', 'stopped'],
+    ['stopped', 'stopped'],
+    ['terminated', 'stopped'],
+    ['timed_out', 'stopped'],
+    ['failed', 'error'],
+    ['', 'stopped'],
+    ['resuming', 'stopped'],
+    ['constructor', 'stopped'],
+  ])('reports runtime status %j as %s', async (status, expected) => {
+    const sandbox = await provider().sandbox.create()
+    h.state.statuses.set('rt_new', status)
+    expect((await sandbox.getInfo()).status).toBe(expected)
   })
 
   it('derives timeout from startedAt and timeoutAt when create timeout was not set', async () => {
-    const sandbox = await provider().sandbox.getById('rt_live')
+    const sandbox = await provider().sandbox.getById(h.ids.live)
     expect((await sandbox!.getInfo()).timeout).toBe(1_800_000)
   })
 })

@@ -68,7 +68,9 @@ await sandbox.destroy()
 ```
 
 `templateId` selects an existing template. To start from a snapshot, pass
-`snapshotId` instead (not both). Create a snapshot with
+`snapshotId` instead (not both). `image` is not accepted; build a template from
+an image with `template.create({ name, fromImage })` and pass its name as
+`templateId`. Create a snapshot with
 `compute.snapshot.create(sandboxId, { name: 'my-snapshot' })` — a name is
 required. Building a new template needs `fromImage` or `dockerfile` on
 `template.create`; pick an existing template with `templateId` on sandbox create.

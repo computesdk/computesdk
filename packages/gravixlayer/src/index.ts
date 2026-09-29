@@ -91,17 +91,27 @@ export function clearGravixLayerClients(): void {
 
 const createTimeoutMs = new WeakMap<object, number>()
 
-const TERMINAL_STATUSES = new Set(['stopped', 'terminated', 'killed', 'destroyed'])
-
-const RUNNING_STATUSES = new Set([
-  'running',
-  'creating',
-  'starting',
-  'pending',
-  'provisioning',
-  'booting',
-  'paused',
+/**
+ * ComputeSDK status for every runtime status the API reports. Only a running
+ * runtime accepts commands, so a paused or stopping one reports `stopped`.
+ * A `Map`, so no status string can resolve to an `Object.prototype` member.
+ */
+const SANDBOX_STATUS: ReadonlyMap<string, SandboxInfo['status']> = new Map([
+  ['creating', 'running'],
+  ['running', 'running'],
+  ['paused', 'stopped'],
+  ['stopping', 'stopped'],
+  ['stopped', 'stopped'],
+  ['terminated', 'stopped'],
+  ['timed_out', 'stopped'],
+  ['failed', 'error'],
 ])
+
+/** Statuses the API no longer counts as live. `getById` reports these as gone. */
+const ENDED_STATUSES: ReadonlySet<string> = new Set(['stopped', 'failed', 'terminated', 'timed_out'])
+
+/** Runtime IDs are UUIDs. A string of any other shape cannot name a runtime. */
+const RUNTIME_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function isNotFound(error: unknown): boolean {
   return (
@@ -227,11 +237,9 @@ const CREATE_HTTP_TIMEOUT_MS = 180_000
 /** In-flight or completed publish, so concurrent getUrl calls share one request. */
 const publishedUrls = new WeakMap<Runtime, Map<number, Promise<string>>>()
 
-function mapStatus(status: string | undefined): SandboxInfo['status'] {
-  const normalized = typeof status === 'string' ? status.toLowerCase() : ''
-  if (RUNNING_STATUSES.has(normalized)) return 'running'
-  if (normalized === 'error' || normalized === 'failed') return 'error'
-  return 'stopped'
+/** A status this version does not know is reported as stopped, never as running. */
+function mapStatus(status: string): SandboxInfo['status'] {
+  return SANDBOX_STATUS.get(status) ?? 'stopped'
 }
 
 function parseCreatedAt(startedAt: string | undefined): Date {
@@ -344,7 +352,12 @@ const createGravixLayerProvider = defineProvider<
   methods: {
     sandbox: {
       create: async (config: GravixLayerConfig, options: CreateSandboxOptions = {}) => {
-        const template = nonempty(options.templateId ?? options.image)
+        if (nonempty(options.image)) {
+          throw new Error(
+            'GravixLayer runtimes start from a template, not an image. Pass `templateId`, or build a template from the image with `template.create({ name, fromImage })`.',
+          )
+        }
+        const template = nonempty(options.templateId)
         if (template && options.snapshotId) {
           throw new Error('A runtime starts from a template or a snapshot, not both')
         }
@@ -395,10 +408,10 @@ const createGravixLayerProvider = defineProvider<
 
       getById: async (config: GravixLayerConfig, sandboxId: string) => {
         const client = getClient(config)
+        if (!RUNTIME_ID.test(sandboxId)) return null
         try {
           const sandbox = await client.runtime.get(sandboxId)
-          const status = typeof sandbox.status === 'string' ? sandbox.status.toLowerCase() : ''
-          if (TERMINAL_STATUSES.has(status)) return null
+          if (ENDED_STATUSES.has(sandbox.status)) return null
           return { sandbox, sandboxId: sandbox.runtimeId }
         } catch (error) {
           if (isNotFound(error)) return null
