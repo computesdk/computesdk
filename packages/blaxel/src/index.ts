@@ -82,7 +82,14 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				let sandbox: SandboxInstance;
 
 				if (optSandboxId) {
-					// Resume an existing live sandbox
+					// Resume an existing live sandbox. Refuse an abort signal here:
+					// the sandbox manager destroys a resolved sandbox after an abort,
+					// which would delete a sandbox this call did not create.
+					if (options?.signal) {
+						throw new Error(
+							'create({ sandboxId }) attaches to an existing sandbox and cannot be combined with an abort signal'
+						);
+					}
 					sandbox = await SandboxInstance.get(optSandboxId);
 					if (!sandbox) {
 						throw new Error(`Sandbox ${optSandboxId} not found`);
@@ -406,7 +413,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				if (options?.sandboxId) {
 					const sandbox = await SandboxInstance.get(options.sandboxId);
 					const snapshots = await sandbox.snapshots.list();
-					return snapshots.map(toSnapshotInfo);
+					const infos = snapshots.map(toSnapshotInfo);
+					return options.limit ? infos.slice(0, options.limit) : infos;
 				}
 
 				// Workspace-wide listing; the page is an auto-paging iterable.

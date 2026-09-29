@@ -731,11 +731,50 @@ describe('archil snapshots and forks', () => {
     ).toBe(true);
   });
 
-  it('rejects snapshotId in exec mode since disks cannot be forked', async () => {
+  it('forks a VM when snapshotId is passed under the default exec config', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url.includes('/fork')) {
+        return json(sandboxWire('running', 'sbx_fork'));
+      }
+      return json(sandboxWire());
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ snapshotId: 'sbx_123' });
+
+    expect(sandbox.sandboxId).toBe('sbx_fork');
+    const calls = fetchMock.mock.calls as any[][];
+    expect(
+      calls.some(
+        ([url, init]) =>
+          String(url).includes('/api/sandboxes/sbx_123/fork') &&
+          (init as RequestInit)?.method === 'POST',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects ephemeral: true combined with snapshotId', async () => {
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     await expect(
-      provider.sandbox.create({ snapshotId: 'sbx_123' }),
-    ).rejects.toThrow(/does not support snapshotId/i);
+      provider.sandbox.create({ snapshotId: 'sbx_123', ephemeral: true }),
+    ).rejects.toThrow(/cannot combine ephemeral/i);
+  });
+
+  it('rejects attaching to an existing sandbox with an abort signal', async () => {
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await expect(
+      provider.sandbox.create({
+        sandboxId: 'sbx_123',
+        signal: AbortSignal.timeout(1000),
+      }),
+    ).rejects.toThrow(/cannot be combined with an abort signal/i);
   });
 
   it('creates a snapshot by forking the source sandbox', async () => {
@@ -799,6 +838,34 @@ describe('archil snapshots and forks', () => {
           (init as RequestInit)?.method === 'DELETE',
       ),
     ).toBe(true);
+  });
+
+  it('ignores a 404 when deleting an unknown snapshot', async () => {
+    const fetchMock = vi.fn(async () => new Response('not found', { status: 404 }));
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await expect(provider.snapshot!.delete('sbx_gone')).resolves.toBeUndefined();
+  });
+
+  it('propagates real deletion failures instead of reporting success', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response('boom', { status: 500 });
+      return json(sandboxWire('running', 'sbx_snap'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await expect(provider.snapshot!.delete('sbx_snap')).rejects.toThrow();
   });
 });
 
