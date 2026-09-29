@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 32.0.3
+
+### Patch Changes
+
+- Updated dependencies [ca3e772]
+  - @computesdk/modal@1.9.13
+
 ## 32.0.2
 
 ### Patch Changes

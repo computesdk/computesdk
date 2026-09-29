@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.107
+
+### Patch Changes
+
+- Updated dependencies [ca3e772]
+  - @computesdk/modal@1.9.13
+
 ## 0.4.106
 
 ### Patch Changes
