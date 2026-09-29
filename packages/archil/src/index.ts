@@ -170,7 +170,9 @@ function createClient(config: ArchilConfig, resolved: ResolvedConfig): ArchilCli
 }
 
 function resolveCreateDiskId(options?: ArchilCreateOptions): string {
-  const diskId = options?.diskId;
+  // `sandboxId` is accepted as an alias: exec-mode sandboxes are addressed by
+  // their disk id.
+  const diskId = options?.diskId ?? options?.sandboxId;
 
   if (!diskId) {
     throw new Error(
@@ -181,6 +183,15 @@ function resolveCreateDiskId(options?: ArchilCreateOptions): string {
   }
 
   return diskId;
+}
+
+async function forkSandboxVm(
+  client: ArchilClient,
+  sourceId: string,
+  name?: string,
+): Promise<ArchilVm> {
+  const source = await client.sandboxes.get(sourceId);
+  return source.fork({ name });
 }
 
 function shellEscape(value: string): string {
@@ -387,9 +398,20 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             : resolved.execution;
 
         if (execution === 'persistent') {
-          const vm = await client.sandboxes.create(toSandboxRequest(options), {
-            wait: true,
-          });
+          // snapshotId forks a new sandbox from that snapshot's state —
+          // Archil models snapshots as isolated writable branches of a
+          // source sandbox. sandboxId attaches to a live sandbox instead.
+          let vm: ArchilVm;
+          if (options?.snapshotId) {
+            vm = await forkSandboxVm(client, options.snapshotId, options?.name);
+          } else if (options?.sandboxId) {
+            vm = await client.sandboxes.get(options.sandboxId);
+            await ensureVmRunning(vm);
+          } else {
+            vm = await client.sandboxes.create(toSandboxRequest(options), {
+              wait: true,
+            });
+          }
           sandboxModes.set(vm.id, 'persistent');
           return {
             sandbox: {
@@ -401,6 +423,13 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             },
             sandboxId: vm.id,
           };
+        }
+
+        if (options?.snapshotId) {
+          throw new Error(
+            'Archil exec mode does not support snapshotId — disks cannot be forked. ' +
+              'Use execution: "persistent" to fork sandboxes, or diskId to attach an existing disk.',
+          );
         }
 
         const diskId = resolveCreateDiskId(options);
@@ -829,6 +858,52 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       },
 
       getInstance: (sandbox: ArchilSandbox): ArchilSandbox => sandbox,
+    },
+
+    // Archil has no separate snapshot resource: a "snapshot" is a sandbox
+    // fork (an isolated writable branch of the source sandbox's state), so
+    // snapshot ids are ordinary sandbox ids that create() forks again.
+    snapshot: {
+      create: async (
+        config: ArchilConfig,
+        sandboxId: string,
+        options?: { name?: string },
+      ) => {
+        const resolved = resolveConfig(config);
+        const client = createClient(config, resolved);
+        try {
+          const fork = await forkSandboxVm(client, sandboxId, options?.name);
+          return {
+            id: fork.id,
+            provider: 'archil',
+            createdAt: fork.createdAt ?? new Date(),
+            metadata: { name: fork.name },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create Archil snapshot: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      },
+
+      list: async (_config: ArchilConfig) => {
+        throw new Error(
+          'Archil provider does not support listing snapshots.',
+        );
+      },
+
+      delete: async (config: ArchilConfig, snapshotId: string) => {
+        const resolved = resolveConfig(config);
+        const client = createClient(config, resolved);
+        try {
+          const vm = await client.sandboxes.get(snapshotId);
+          await vm.delete();
+        } catch {
+          // Ignore if not found
+        }
+      },
     },
   },
 });

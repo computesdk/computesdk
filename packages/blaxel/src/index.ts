@@ -4,7 +4,9 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { SandboxInstance, initialize } from '@blaxel/core';
+import { randomUUID } from 'node:crypto';
+
+import { SandboxInstance, Snapshot, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
@@ -40,7 +42,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				const {
 					timeout: optTimeout,
 					envs,
-					name: _name,
+					name,
 					metadata,
 					templateId: _templateId,
 					snapshotId,
@@ -79,14 +81,25 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 				let sandbox: SandboxInstance;
 
-				// Check if we should resume an existing sandbox or create new
-				const existingId = optSandboxId || snapshotId;
-				
-				if (existingId) {
-					// Resume existing sandbox or snapshot
-					sandbox = await SandboxInstance.get(existingId);
+				if (optSandboxId) {
+					// Resume an existing live sandbox
+					sandbox = await SandboxInstance.get(optSandboxId);
 					if (!sandbox) {
-						throw new Error(`Sandbox ${existingId} not found`);
+						throw new Error(`Sandbox ${optSandboxId} not found`);
+					}
+				} else if (snapshotId) {
+					// Fork a new sandbox from a workspace snapshot. The fork is
+					// created even when the snapshot's source sandbox is gone.
+					const snapshot = await Snapshot.get(snapshotId);
+					const forkName = name || `sandbox-${randomUUID().slice(0, 8)}`;
+					const forkResult = await snapshot.fork(forkName, {
+						targetType: 'sandbox',
+						envs: Object.entries(envs || {}).map(([envName, value]) => ({ name: envName, value: value as string })),
+					});
+					const createdName = forkResult.name || forkName;
+					sandbox = await SandboxInstance.get(createdName);
+					if (!sandbox) {
+						throw new Error(`Sandbox ${forkName} not found after forking snapshot ${snapshotId}`);
 					}
 				} else {
 					// Create new Blaxel sandbox
@@ -370,25 +383,16 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		},
 
 		snapshot: {
-			create: async (config: BlaxelConfig, sandboxId: string, options?: { name?: string }) => {
+			create: async (config: BlaxelConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
 				try {
 					initializeBlaxel(config);
-					
-					const sandbox = await SandboxInstance.get(sandboxId);
-					
-					if (!sandbox) {
-						throw new Error(`Sandbox ${sandboxId} not found`);
-					}
 
-					return {
-						id: sandboxId,
-						provider: 'blaxel',
-						createdAt: new Date(),
-						metadata: {
-							name: options?.name,
-							image: sandbox.spec?.runtime?.image
-						}
-					};
+					const snapshot = await Snapshot.create({
+						...(options?.name && { name: options.name }),
+						source: { name: sandboxId },
+					});
+
+					return toSnapshotInfo(snapshot);
 				} catch (error) {
 					throw new Error(
 						`Failed to create Blaxel snapshot: ${error instanceof Error ? error.message : String(error)}`
@@ -396,24 +400,30 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}
 			},
 
-			list: async (config: BlaxelConfig) => {
+			list: async (config: BlaxelConfig, options?: ListSnapshotsOptions) => {
 				initializeBlaxel(config);
-				const sandboxList = await listAllSandboxes();
-				return sandboxList.map(sandbox => ({
-					id: sandbox.metadata?.name || 'blaxel-unknown',
-					provider: 'blaxel',
-					createdAt: sandbox.metadata?.createdAt ? new Date(sandbox.metadata.createdAt) : new Date(),
-					metadata: {
-						image: sandbox.spec?.runtime?.image,
-						status: sandbox.status
-					}
-				}));
+
+				if (options?.sandboxId) {
+					const sandbox = await SandboxInstance.get(options.sandboxId);
+					const snapshots = await sandbox.snapshots.list();
+					return snapshots.map(toSnapshotInfo);
+				}
+
+				// Workspace-wide listing; the page is an auto-paging iterable.
+				const snapshots: Snapshot[] = [];
+				for await (const snapshot of await Snapshot.list(
+					options?.limit ? { limit: Math.min(options.limit, 200) } : undefined
+				)) {
+					snapshots.push(snapshot);
+					if (options?.limit && snapshots.length >= options.limit) break;
+				}
+				return snapshots.map(toSnapshotInfo);
 			},
 
 			delete: async (config: BlaxelConfig, snapshotId: string) => {
 				try {
 					initializeBlaxel(config);
-					await SandboxInstance.delete(snapshotId);
+					await Snapshot.delete(snapshotId);
 				} catch (error) {
 					// Ignore if not found
 				}
@@ -442,6 +452,23 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		}
 	}
 });
+
+/**
+ * Map a Blaxel workspace snapshot to the provider-agnostic snapshot shape.
+ */
+function toSnapshotInfo(snapshot: Snapshot) {
+	return {
+		id: snapshot.id,
+		provider: 'blaxel',
+		createdAt: snapshot.createdAt ? new Date(snapshot.createdAt) : new Date(),
+		metadata: {
+			name: snapshot.name,
+			status: snapshot.status,
+			sourceSandbox: snapshot.source?.name,
+			sourceDeleted: snapshot.source?.deleted,
+		}
+	};
+}
 
 /**
  * Collect all sandboxes across pages — since @blaxel/core 0.3.x, list()

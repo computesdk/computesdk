@@ -652,6 +652,156 @@ describe('archil persistent mode', () => {
   });
 });
 
+describe('archil snapshots and forks', () => {
+  function json(data: unknown, status = 200): Response {
+    return new Response(JSON.stringify({ success: true, data }), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  function sandboxWire(status = 'running', id = 'sbx_123') {
+    return {
+      sandbox_id: id,
+      name: 'test-sandbox',
+      status,
+      vcpu_count: 2,
+      mem_size_mib: 2048,
+      base_image: 'ubuntu:26.04',
+      max_ttl_seconds: 3600,
+      max_concurrent_execs: 8,
+      created_at: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
+    };
+  }
+
+  it('forks a new sandbox when snapshotId is passed', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url.includes('/fork')) {
+        return json(sandboxWire('running', 'sbx_fork'));
+      }
+      return json(sandboxWire());
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const sandbox = await provider.sandbox.create({
+      snapshotId: 'sbx_123',
+      name: 'ci-fork',
+    });
+
+    expect(sandbox.sandboxId).toBe('sbx_fork');
+    const calls = fetchMock.mock.calls as any[][];
+    const forkCall = calls.find(
+      ([url, init]) =>
+        String(url).includes('/api/sandboxes/sbx_123/fork') &&
+        (init as RequestInit)?.method === 'POST',
+    );
+    expect(forkCall).toBeDefined();
+    expect(String(forkCall![0])).toContain('wait=true');
+    expect(
+      JSON.parse(String((forkCall![1] as RequestInit).body)),
+    ).toMatchObject({ name: 'ci-fork' });
+  });
+
+  it('attaches to a live sandbox when sandboxId is passed', async () => {
+    const fetchMock = vi.fn(async () => json(sandboxWire()));
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const sandbox = await provider.sandbox.create({ sandboxId: 'sbx_123' });
+
+    expect(sandbox.sandboxId).toBe('sbx_123');
+    const calls = fetchMock.mock.calls as any[][];
+    expect(
+      calls.every(([_url, init]) => ((init as RequestInit)?.method ?? 'GET') === 'GET'),
+    ).toBe(true);
+    expect(
+      calls.some(([url]) => String(url).includes('/api/sandboxes/sbx_123')),
+    ).toBe(true);
+  });
+
+  it('rejects snapshotId in exec mode since disks cannot be forked', async () => {
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    await expect(
+      provider.sandbox.create({ snapshotId: 'sbx_123' }),
+    ).rejects.toThrow(/does not support snapshotId/i);
+  });
+
+  it('creates a snapshot by forking the source sandbox', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url.includes('/fork')) {
+        return json(sandboxWire('running', 'sbx_snap'));
+      }
+      return json(sandboxWire());
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const snapshot = await provider.snapshot!.create('sbx_123', {
+      name: 'golden',
+    });
+
+    expect(snapshot).toMatchObject({ id: 'sbx_snap', provider: 'archil' });
+    const calls = fetchMock.mock.calls as any[][];
+    expect(
+      calls.some(
+        ([url, init]) =>
+          String(url).includes('/api/sandboxes/sbx_123/fork') &&
+          (init as RequestInit)?.method === 'POST',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not support listing snapshots', async () => {
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    await expect(provider.snapshot!.list()).rejects.toThrow(
+      /does not support listing snapshots/i,
+    );
+  });
+
+  it('deletes a snapshot by deleting its backing sandbox', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      return json(sandboxWire('running', 'sbx_snap'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await provider.snapshot!.delete('sbx_snap');
+
+    const calls = fetchMock.mock.calls as any[][];
+    expect(
+      calls.some(
+        ([url, init]) =>
+          String(url).includes('/api/sandboxes/sbx_snap') &&
+          (init as RequestInit)?.method === 'DELETE',
+      ),
+    ).toBe(true);
+  });
+});
+
 runProviderTestSuite({
   name: 'archil',
   provider: (() => {
