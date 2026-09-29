@@ -1,7 +1,7 @@
 ---
 description: >-
   The ComputeSDK Platform REST API surface — every /api/v1 endpoint for
-  Actions, benchmarks, organizations, sandboxes, and the org feed.
+  Actions, the vault, benchmarks, organizations, sandboxes, and the org feed.
 ---
 
 # API reference
@@ -49,6 +49,17 @@ All Actions routes require the `actions` product entitlement (`403` otherwise). 
 | GET | `/actions/jobs/{jobId}/logs/download` | Whole log as `text/plain` |
 | GET | `/actions/jobs/{jobId}/artifacts` | Job's artifacts |
 | GET | `/actions/jobs/{jobId}/artifacts/{artifactId}` | Redirect to signed download URL (`410` when expired) |
+
+## Vault (secrets and variables)
+
+Owner/admin keys only. Not gated on the Actions entitlement. `repo=<owner>/<name>` scopes to a repo's overrides; `kind` is `secret` (default) or `variable`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/vault?repo=&kind=` | List items — names and metadata, never values (with `repo`, includes inherited org items) |
+| PUT | `/vault?repo=` | `{ name, kind?, value, description?, revealable?, labels?, expectedVersion? }` — value stored exactly as sent; `revealable`/`labels` fixed at creation |
+| DELETE | `/vault?repo=&kind=&name=` | Delete an item |
+| POST | `/vault/reveal?repo=` | `{ name, kind? }` → `{ name, kind, value }` — variables and revealable secrets only (`403` otherwise, `404` when absent) |
 
 ## Benchmarks
 
