@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const { createSandbox } = vi.hoisted(() => ({ createSandbox: vi.fn() }));
+
 const files = new Map<string, string>();
 const dirs = new Set<string>();
 let openCalls = 0;
@@ -65,8 +67,7 @@ vi.mock('modal', () => ({
     apps = { fromName: async () => ({}) };
     images = { fromRegistry: () => ({ build: async () => ({}) }) };
     sandboxes = {
-      create: async () => new FakeSandbox(),
-      experimentalCreate: async () => new FakeSandbox(),
+      create: createSandbox.mockImplementation(async () => new FakeSandbox()),
       fromId: async () => new FakeSandbox(),
     };
   },
@@ -76,11 +77,44 @@ vi.mock('modal', () => ({
 import { modal } from '../index';
 import { SandboxFilesystemNotFoundError as FakeNotFoundError } from 'modal';
 
+describe('modal sandbox creation', () => {
+  beforeEach(() => { createSandbox.mockClear(); });
+
+  it('creates sandboxes through the standard SDK API without experimental options', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    const sandbox = await provider.sandbox.create();
+
+    expect(sandbox.sandboxId).toBe('sb-test');
+    expect(createSandbox).toHaveBeenCalledTimes(1);
+    expect(createSandbox).toHaveBeenCalledWith({}, {}, { encryptedPorts: [38989] });
+  });
+
+  it('passes GPU and sandbox options to the SDK so it can select the backend', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's', timeout: 300000 });
+    await provider.sandbox.create({
+      gpu: 'T4',
+      name: 'gpu-sandbox',
+      envs: { TEST: 'value' },
+      ports: [8080],
+      timeout: 600000,
+    });
+
+    expect(createSandbox).toHaveBeenCalledTimes(1);
+    expect(createSandbox).toHaveBeenCalledWith({}, {}, {
+      gpu: 'T4',
+      encryptedPorts: [8080, 38989],
+      timeoutMs: 600000,
+      env: { TEST: 'value' },
+      name: 'gpu-sandbox',
+    });
+  });
+});
+
 describe('modal filesystem read/write', () => {
   beforeEach(() => { files.clear(); dirs.clear(); openCalls = 0; pwdFails = false; execCalls.length = 0; fsCalls.length = 0; });
 
   it('uses Sandbox.filesystem (V1 and V2 compatible) instead of the deprecated Sandbox.open', async () => {
-    const provider = modal({ tokenId: 't', tokenSecret: 's', scalableSandboxes: true });
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
     const sandbox = await provider.sandbox.create();
 
     const content = '  x'.repeat(50_000) + '\n';
@@ -93,7 +127,7 @@ describe('modal filesystem read/write', () => {
   });
 
   it('routes mkdir/readdir/exists/remove through Sandbox.filesystem', async () => {
-    const provider = modal({ tokenId: 't', tokenSecret: 's', scalableSandboxes: true });
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
     const sandbox = await provider.sandbox.create();
 
     await sandbox.filesystem.mkdir('/tmp/bench/fs-1');

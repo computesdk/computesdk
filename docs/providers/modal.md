@@ -83,9 +83,8 @@ interface ModalConfig {
   daemonSsePort?: number | false;
   /** Modal app name (default: 'computesdk-modal') */
   appName?: string;
-  /** Use Modal's experimental scalable sandboxes API */
-  scalableSandboxes?: boolean;
 }
 ```
+
 
 Ports are exposed with unencrypted tunnels by default for maximum compatibility.
