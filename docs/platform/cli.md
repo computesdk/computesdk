@@ -2,7 +2,7 @@
 description: >-
   Install and use the `compute` CLI (@computesdk/cli) to drive the ComputeSDK
   Platform — Actions dispatch, run logs, artifacts, provider credentials,
-  connected repos, and the bench toolchain — plus one-off sandbox runs.
+  secrets and variables, connected repos, and the bench toolchain — plus one-off sandbox runs.
 ---
 
 # CLI reference
@@ -50,6 +50,12 @@ compute actions providers configure <provider> # save the org's credential
 compute actions providers verify <provider>    # probe it with a real sandbox
 compute actions providers remove <provider>
 
+# Secrets and variables (owner/admin key required)
+compute actions vault ls [--repo <owner>/<repo>] [--kind secret|variable]
+compute actions vault set <name> [--repo] [--kind] [--revealable] [--description] [--labels a,b] [--from-file <path>]
+compute actions vault get <name> [--repo] [--kind]
+compute actions vault rm <name> [--repo] [--kind]
+
 # Dispatch and follow runs
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...]
 compute actions dispatch <repo> --workflow <path|name> --manual   # run even without workflow_dispatch (then no inputs)
@@ -69,6 +75,9 @@ Notes:
 * `--workflow` matches the full file path, the display name, or the workflow id — not the basename.
 * `logs --follow` is resumable: it tracks byte offsets, so a reconnect picks up where it left off.
 * `history` is how you tell a new failure from a flaky one — it reports per-job and per-step failure rates over a window of recent runs.
+* `vault set` reads the value from stdin (or `--from-file`) and stores it exactly as read — no trimming, so `printf '%s' "$VALUE" | compute actions vault set NAME` avoids a trailing newline. Values are never accepted as arguments.
+* `vault ls` prints names and metadata, never values. `vault get` prints a variable, or a secret created with `--revealable`; any other secret is `forbidden` — replace it instead of reading it. `--revealable` and `--labels` are fixed when the item is created.
+* `vault set` and `vault get` only talk to `computesdk.com` and loopback hosts, even with `--allow-untrusted-host`.
 * Run dashboard URLs look like `https://platform.computesdk.com/<org>/actions/runs/<runId>`.
 
 ## `compute bench` — the benchmarks toolchain

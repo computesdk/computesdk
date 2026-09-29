@@ -16,7 +16,23 @@ Jobs execute under [`act`](https://github.com/nektos/act) inside a ComputeSDK sa
 1. **Entitlement** — Actions requires the Actions product subscription (Settings → Billing). Unentitled orgs get `403` from every `/api/v1/actions/*` route.
 2. **Connect a repo** — either install the platform's GitHub App (grants repo access + push/PR triggers), or connect a generic git remote by clone URL from **Actions → Repos** or `compute actions repos connect <clone-url>` (`token`, `basic`, `ssh`, and unauthenticated remotes are supported). A connect validates the remote with a real `ls-remote`, then lands enabled.
 3. **Register a provider credential** — under **Settings → Providers**, or `compute actions providers configure <provider>`. `verify` probes the stored key by placing a real sandbox; `providers` lists regions and whether each provider is act-usable.
-4. **Workflows** — repos run ordinary workflow YAML (`.github/workflows/`). Workflows become dispatchable once the repo is enabled and the workflow declares `workflow_dispatch`.
+4. **Secrets and variables** — optional; see [Secrets and variables](#secrets-and-variables).
+5. **Workflows** — repos run ordinary workflow YAML (`.github/workflows/`). Workflows become dispatchable once the repo is enabled and the workflow declares `workflow_dispatch`.
+
+## Secrets and variables
+
+The org vault holds two kinds of item, set under **Settings → Vault** (org-wide), a repo's **Vault** page (repo overrides), or `compute actions vault`:
+
+* **Secrets** reach workflows as `${{ secrets.NAME }}` and are masked in logs. They are write-only unless created revealable (`--revealable`), which lets owners/admins read them back with `vault get`.
+* **Variables** reach workflows as `${{ vars.NAME }}`. They are configuration, not credentials: always readable and not masked.
+
+A repo-level item overrides the org item with the same name. A job only receives the secrets its workflow names (plus `GITHUB_TOKEN`); a workflow that reads secrets dynamically must name them or opt in with `# computesdk:secrets=all`. `compute actions inspect <run-id>` lists the secret names a job was given.
+
+```bash
+printf '%s' "$NPM_TOKEN" | compute actions vault set NPM_TOKEN
+printf '%s' staging | compute actions vault set DEPLOY_ENV --kind variable --repo myorg/myrepo
+compute actions vault ls --repo myorg/myrepo    # includes inherited org items
+```
 
 ## Dispatch and follow a run
 
