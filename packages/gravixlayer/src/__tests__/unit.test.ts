@@ -665,6 +665,12 @@ describe('lifecycle', () => {
     expect((await sandbox.getInfo()).status).toBe(expected)
   })
 
+  it('reports the lease it applied for a subsecond timeout', async () => {
+    const sandbox = await provider().sandbox.create({ timeout: 90_500 })
+    expect(calls('runtime.create')[0].args[0]).toMatchObject({ timeoutSeconds: 91 })
+    expect((await sandbox.getInfo()).timeout).toBe(91_000)
+  })
+
   it('derives timeout from startedAt and timeoutAt when create timeout was not set', async () => {
     const sandbox = await provider().sandbox.getById(h.ids.live)
     expect((await sandbox!.getInfo()).timeout).toBe(1_800_000)

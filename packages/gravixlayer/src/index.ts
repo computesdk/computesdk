@@ -402,7 +402,11 @@ const createGravixLayerProvider = defineProvider<
         }
 
         const sandbox = await client.runtime.create(body)
-        rememberTimeout(sandbox, options.timeout)
+        // Report the lease the runtime actually got: seconds, rounded up.
+        rememberTimeout(
+          sandbox,
+          body.timeoutSeconds === undefined ? undefined : body.timeoutSeconds * 1000,
+        )
         return { sandbox, sandboxId: sandbox.runtimeId }
       },
 
