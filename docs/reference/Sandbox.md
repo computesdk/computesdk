@@ -158,6 +158,78 @@ await sandbox.runCommand('python train.py', {
 
 ---
 
+## `startProcess(command, options?)`
+
+Start an interactive long-running process via the in-sandbox daemon. Unlike
+`runCommand`, this returns immediately with a handle while the process keeps
+running — the handle lets you write to its stdin, poll its status, and wait for
+or kill it.
+
+**Parameters:**
+- `command` (string): Shell command to run (executed as `sh -lc <command>`)
+- `options` (StartProcessOptions, optional):
+  - `cwd` (string): Working directory
+  - `env` (Record<string, string>): Environment variables
+  - `stdin` (boolean): Open a writable stdin pipe (default `false`)
+  - `onStdout` / `onStderr` ((chunk: string) => void): Streamed output callbacks
+  - `onExit` ((result: { exitCode: number | null; signal: string | null }) => void): Fires once when the process exits
+  - `pollIntervalMs` (number): Interval for the status-polling fallback used when the daemon's SSE port is not reachable (default 500)
+
+**Returns:** `Promise<ProcessHandle>`
+
+```ts
+interface ProcessHandle {
+  readonly pid: number | null;
+  readonly jobId: string;
+  /** Write to stdin. Rejects if not started with `stdin: true` or exited. */
+  write(data: string | Uint8Array): Promise<void>;
+  closeStdin(): Promise<void>;
+  /** Current snapshot (status, exitCode, signal, buffered stdout/stderr). */
+  status(): Promise<ProcessStatus>;
+  /** Resolve when the process exits; rejects if `timeout` elapses first. */
+  wait(options?: { timeout?: number }): Promise<CommandResult & { signal: string | null }>;
+  kill(signal?: string): Promise<void>;
+}
+
+interface ProcessStatus {
+  status: 'running' | 'exited';
+  exitCode: number | null;
+  signal: string | null;
+  stdout: string;
+  stderr: string;
+  truncated?: boolean;
+}
+```
+
+```ts
+const proc = await sandbox.startProcess(
+  `node -e 'process.stdin.on("data", d => process.stdout.write("echo:" + d))'`,
+  { stdin: true, onStdout: (chunk) => process.stdout.write(chunk) }
+);
+await proc.write('hello\n');           // prints "echo:hello"
+const snapshot = await proc.status();  // { status: 'running', stdout: 'echo:hello\n', ... }
+await proc.kill();
+const result = await proc.wait();      // { exitCode: -1, signal: 'SIGTERM', ... }
+```
+
+**Behavior:**
+
+- Runs via the in-sandbox daemon: the sandbox needs `node`, or a Linux/glibc
+  image the daemon can bootstrap one into; otherwise `startProcess` throws a
+  `daemond:`-prefixed error.
+- Output callbacks are driven from the daemon's buffered `status` snapshot —
+  SSE (when the daemon's port is routable from the caller) only lowers latency,
+  otherwise the snapshot is polled every `pollIntervalMs`. Chunk boundaries
+  therefore follow the snapshot, not the process's own writes.
+- Each buffered output stream is capped at 4 MiB; when exceeded the tail is
+  kept and snapshots report `truncated: true`.
+- Exited processes stay retrievable (`status`/`wait`) for 10 minutes.
+
+<br/>
+<br/>
+
+---
+
 ## `getInfo()`
 
 Get information about the sandbox including status, provider, and metadata.

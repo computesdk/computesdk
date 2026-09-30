@@ -3,6 +3,10 @@ export interface SeedScriptConfig {
   socket?: string;
   ssePort?: number;
   sseStrictPort?: boolean;
+  /** Per-stream buffered-output cap for detached jobs (default 4 MiB). */
+  maxJobOutputBytes?: number;
+  /** How long an exited detached job stays retrievable (default 10 minutes). */
+  jobRetentionMs?: number;
 }
 
 export interface SeedCommandInput {
@@ -20,6 +24,11 @@ export interface SeedCommandInput {
    * `timeoutMs` is set.
    */
   detach?: boolean;
+  /**
+   * Open a writable stdin pipe on the child. Requires `detach: true` — the
+   * job then accepts `stdin`/`closeStdin` messages addressed by `jobId`.
+   */
+  stdin?: boolean;
 }
 
 /** Block until a detached job exits (or `timeoutMs` elapses) and return its result. */
@@ -42,7 +51,27 @@ export interface SeedKillInput {
   requestId?: string;
 }
 
-export type SeedInput = SeedCommandInput | SeedWaitInput | SeedStatusInput | SeedKillInput;
+/** Write data to the stdin pipe of a detached job started with `stdin: true`. */
+export interface SeedStdinInput {
+  stdin: string;
+  data: string;
+  encoding?: "utf8" | "base64";
+  requestId?: string;
+}
+
+/** Close the stdin pipe of a detached job (closing twice is a no-op). */
+export interface SeedCloseStdinInput {
+  closeStdin: string;
+  requestId?: string;
+}
+
+export type SeedInput =
+  | SeedCommandInput
+  | SeedWaitInput
+  | SeedStatusInput
+  | SeedKillInput
+  | SeedStdinInput
+  | SeedCloseStdinInput;
 
 export type SeedJobStatus = "running" | "exited";
 
@@ -60,6 +89,11 @@ export interface SeedCommandResult {
   status?: SeedJobStatus;
   jobId?: string;
   pid?: number | null;
+  /** True when a detached job's buffered output exceeded the cap and was tailed. */
+  truncated?: boolean;
+  /** Total bytes ever appended to each stream (before truncation), for offset-based consumers. */
+  stdoutBytes?: number;
+  stderrBytes?: number;
 }
 
 export interface SeedCommandOptions {

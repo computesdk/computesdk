@@ -22,11 +22,16 @@ import type {
   ListSnapshotsOptions,
   CreateTemplateOptions,
   ListTemplatesOptions,
+  StartProcessOptions,
+  ProcessStatus,
+  ProcessHandle,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
   type SeedCommandInput,
+  type SeedCommandResult,
+  type SeedInput,
   type SeedInvocationResult,
 } from 'daemond';
 
@@ -36,6 +41,13 @@ type DaemonStreamState = {
 };
 
 const DEFAULT_DAEMON_SSE_PORT = 38989;
+
+/**
+ * Each daemon `wait` request blocks at most this long, so a long-running
+ * process never has to outlive a provider's own command timeout — the wait
+ * loop simply re-issues the request.
+ */
+const DAEMON_WAIT_CHUNK_MS = 30_000;
 
 function createDaemonRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -97,6 +109,27 @@ function emitMissingOutput(
   }
 }
 
+/**
+ * Emits the incremental output between two status snapshots using the
+ * daemon's byte counters: `totalBytes` is the number of bytes ever appended
+ * to the stream (before truncation), so the undelivered tail is the last
+ * `totalBytes - seen.bytes` bytes of the current buffer — correct even when
+ * the buffer was truncated or is identical to the previous snapshot.
+ */
+function emitProcessDiff(
+  seen: { bytes: number },
+  buffer: string,
+  totalBytes: number | undefined,
+  emit?: (chunk: string) => void
+): void {
+  if (totalBytes === undefined) return;
+  const newBytes = totalBytes - seen.bytes;
+  seen.bytes = totalBytes;
+  if (newBytes <= 0 || !emit) return;
+  const buf = Buffer.from(buffer, 'utf8');
+  emit(buf.subarray(Math.max(0, buf.length - newBytes)).toString('utf8'));
+}
+
 function parseSseDataLines(raw: string): string[] {
   const chunks = raw.split(/\n\n+/);
   const out: string[] = [];
@@ -120,7 +153,25 @@ function pickString(source: Record<string, unknown> | undefined, keys: string[])
   return undefined;
 }
 
-function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestId?: string; stdout?: string; stderr?: string } {
+function pickNullableNumber(source: Record<string, unknown> | undefined, keys: string[]): number | null | undefined {
+  if (!source) return undefined;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'number') return value;
+    if (value === null) return null;
+  }
+  return undefined;
+}
+
+function normalizeDaemonStreamEvent(payload: unknown): {
+  type?: string;
+  requestId?: string;
+  jobId?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  signal?: string | null;
+} {
   if (!payload || typeof payload !== 'object') return {};
   const record = payload as Record<string, unknown>;
   const data = (record.data && typeof record.data === 'object')
@@ -128,21 +179,35 @@ function normalizeDaemonStreamEvent(payload: unknown): { type?: string; requestI
     : undefined;
   const type = pickString(record, ['type', 'event']);
   const requestId = pickString(record, ['requestId']) ?? pickString(data, ['requestId']);
+  const jobId = pickString(record, ['jobId']) ?? pickString(data, ['jobId']);
   const stdout = pickString(record, ['stdout', 'output', 'chunk']) ?? pickString(data, ['stdout', 'output', 'chunk']);
   const stderr = pickString(record, ['stderr']) ?? pickString(data, ['stderr']);
-  return { type, requestId, stdout, stderr };
+  const exitCode = pickNullableNumber(record, ['exitCode']) ?? pickNullableNumber(data, ['exitCode']);
+  const signal = pickString(record, ['signal']) ?? pickString(data, ['signal']);
+  return { type, requestId, jobId, stdout, stderr, exitCode, signal };
 }
 
 async function streamDaemonEvents(
   sseUrl: string,
-  requestIdFilter: { current?: string },
-  callbacks: { onStdout?: (data: string) => void; onStderr?: (data: string) => void; markStdout: (chunk?: string) => void; markStderr: (chunk?: string) => void },
+  filter: { requestId?: { current?: string }; jobId?: string },
+  callbacks: {
+    onStdout?: (data: string) => void;
+    onStderr?: (data: string) => void;
+    onExit?: (exitCode: number | null, signal: string | null) => void;
+    /** Called once the stream is open and verified (2xx with a body). */
+    onOpen?: () => void;
+    /** Called for every event matching the filter, before type handling. */
+    onEvent?: (event: ReturnType<typeof normalizeDaemonStreamEvent>) => void;
+    markStdout: (chunk?: string) => void;
+    markStderr: (chunk?: string) => void;
+  },
   signal: AbortSignal
 ): Promise<void> {
   const response = await fetch(sseUrl, { signal });
   if (!response.ok || !response.body) {
     throw new Error(`Failed to open daemon event stream: ${response.status}`);
   }
+  callbacks.onOpen?.();
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -166,8 +231,16 @@ async function streamDaemonEvents(
           continue;
         }
         const event = normalizeDaemonStreamEvent(parsed);
-        if (requestIdFilter.current && event.requestId !== requestIdFilter.current) {
+        if (filter.requestId?.current && event.requestId !== filter.requestId.current) {
           continue;
+        }
+        if (filter.jobId && event.jobId !== filter.jobId) {
+          continue;
+        }
+        callbacks.onEvent?.(event);
+        if (event.type === 'command.exit') {
+          callbacks.onExit?.(event.exitCode ?? null, event.signal ?? null);
+          return;
         }
         if ((event.type === 'command.stdout' || !event.type) && event.stdout && callbacks.onStdout) {
           callbacks.markStdout(event.stdout);
@@ -423,26 +496,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       delete forwardedOptions.onStdout;
       delete forwardedOptions.onStderr;
 
-      if (!this.daemonStreamState) {
-        const bootstrapPayload: SeedCommandInput = {
-          command: 'sh',
-          args: ['-lc', 'true'],
-          cwd: options.cwd,
-          env: options.env,
-          timeoutMs: options.timeout,
-          requestId: createDaemonRequestId(),
-        };
-        const bootstrapCommand = daemonSeedScriptCommand(
-          { ssePort: DEFAULT_DAEMON_SSE_PORT },
-          bootstrapPayload
-        );
-        const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
-        const bootstrapInvocation = parseDaemonSeedResult(bootstrapResult, 'daemon bootstrap');
-        this.daemonStreamState = {
-          token: bootstrapInvocation.token,
-          rawSseUrl: bootstrapInvocation.daemon.sseUrl,
-        };
-      }
+      await this.ensureDaemon(options, forwardedOptions);
 
       const daemonPayload: SeedCommandInput = {
         command: 'sh',
@@ -481,7 +535,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         )
           .then((sseUrl) => streamDaemonEvents(
             sseUrl,
-            requestIdFilter,
+            { requestId: requestIdFilter },
             {
               onStdout: options.onStdout,
               onStderr: options.onStderr,
@@ -528,6 +582,347 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     // Pass command and options directly to provider - no preprocessing
     // Provider is responsible for handling cwd, env, background, etc.
     return await this.methods.runCommand(this.sandbox, command, options);
+  }
+
+  /**
+   * Boots (or reuses) the in-sandbox daemon so daemon jobs can be addressed.
+   * `options` carries the caller's cwd/env/timeout for the bootstrap probe;
+   * `forwardedOptions` is passed to the provider's own runCommand.
+   */
+  private async ensureDaemon(
+    options: { cwd?: string; env?: Record<string, string>; timeout?: number },
+    forwardedOptions: RunCommandOptions
+  ): Promise<DaemonStreamState> {
+    if (!this.daemonStreamState) {
+      const bootstrapPayload: SeedCommandInput = {
+        command: 'sh',
+        args: ['-lc', 'true'],
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeout,
+        requestId: createDaemonRequestId(),
+      };
+      const bootstrapCommand = daemonSeedScriptCommand(
+        { ssePort: DEFAULT_DAEMON_SSE_PORT },
+        bootstrapPayload
+      );
+      const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
+      const bootstrapInvocation = parseDaemonSeedResult(bootstrapResult, 'daemon bootstrap');
+      this.daemonStreamState = {
+        token: bootstrapInvocation.token,
+        rawSseUrl: bootstrapInvocation.daemon.sseUrl,
+      };
+    }
+    return this.daemonStreamState;
+  }
+
+  /**
+   * Runs a single daemon job-control request (exec/stdin/closeStdin/status/
+   * wait/kill) through the provider's runCommand and parses the result.
+   */
+  private async daemonJobRequest(
+    payload: SeedInput,
+    phase: string,
+    opts?: {
+      argvEncoding?: 'quoted' | 'base64';
+      timeout?: number;
+      cwd?: string;
+      env?: Record<string, string>;
+    }
+  ): Promise<{ invocation: SeedInvocationResult; result: CommandResult }> {
+    const command = daemonSeedScriptCommand(
+      { ssePort: DEFAULT_DAEMON_SSE_PORT },
+      payload,
+      opts?.argvEncoding ? { argvEncoding: opts.argvEncoding } : undefined
+    );
+    const runOptions: RunCommandOptions = {};
+    if (opts?.cwd) runOptions.cwd = opts.cwd;
+    if (opts?.env) runOptions.env = opts.env;
+    if (opts?.timeout) runOptions.timeout = opts.timeout;
+    const result = await this.methods.runCommand(this.sandbox, command, runOptions);
+    const invocation = parseDaemonSeedResult(result, phase);
+    this.daemonStreamState = {
+      token: invocation.token,
+      rawSseUrl: invocation.daemon.sseUrl,
+    };
+    return { invocation, result };
+  }
+
+  async startProcess(
+    command: string,
+    options: StartProcessOptions = {}
+  ): Promise<ProcessHandle> {
+    const forwardedOptions: RunCommandOptions = {};
+    if (options.cwd) forwardedOptions.cwd = options.cwd;
+    if (options.env) forwardedOptions.env = options.env;
+
+    await this.ensureDaemon(options, forwardedOptions);
+
+    const { invocation } = await this.daemonJobRequest(
+      {
+        command: 'sh',
+        args: ['-lc', command],
+        cwd: options.cwd,
+        env: options.env,
+        detach: true,
+        stdin: options.stdin === true,
+        requestId: createDaemonRequestId(),
+      } satisfies SeedCommandInput,
+      'daemon start',
+      { cwd: options.cwd, env: options.env }
+    );
+
+    const jobId = invocation.command.jobId;
+    if (!jobId) {
+      throw new Error('daemond: process did not start');
+    }
+    const pid = invocation.command.pid ?? null;
+
+    let exitFired = false;
+    const fireExit = (exitCode: number | null, signal: string | null): void => {
+      if (exitFired) return;
+      exitFired = true;
+      options.onExit?.({ exitCode, signal });
+    };
+
+    const toStatus = (snapshot: typeof invocation.command): ProcessStatus => ({
+      status: snapshot.status === 'exited' ? 'exited' : 'running',
+      exitCode: snapshot.exitCode ?? null,
+      signal: snapshot.signal ?? null,
+      stdout: snapshot.stdout ?? '',
+      stderr: snapshot.stderr ?? '',
+      truncated: snapshot.truncated,
+    });
+
+    const getRawStatus = async (): Promise<typeof invocation.command> => {
+      const { invocation: statusInvocation } = await this.daemonJobRequest(
+        { status: jobId },
+        'process status',
+        { cwd: options.cwd, env: options.env }
+      );
+      return statusInvocation.command;
+    };
+
+    const watcher =
+      options.onStdout || options.onStderr || options.onExit
+        ? this.watchProcessOutput(jobId, options, getRawStatus, fireExit)
+        : undefined;
+
+    const self = this;
+    return {
+      pid,
+      jobId,
+      async write(data: string | Uint8Array): Promise<void> {
+        const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
+        await self.daemonJobRequest(
+          { stdin: jobId, data: bytes.toString('base64'), encoding: 'base64' },
+          'stdin write',
+          { argvEncoding: 'base64', cwd: options.cwd, env: options.env }
+        );
+      },
+      async closeStdin(): Promise<void> {
+        await self.daemonJobRequest(
+          { closeStdin: jobId },
+          'stdin close',
+          { cwd: options.cwd, env: options.env }
+        );
+      },
+      status: async (): Promise<ProcessStatus> => toStatus(await getRawStatus()),
+      async wait(waitOptions?: { timeout?: number }): Promise<CommandResult & { signal: string | null }> {
+        const startedAt = Date.now();
+        const deadline =
+          waitOptions?.timeout !== undefined ? startedAt + waitOptions.timeout : undefined;
+        // Chunk the daemon wait so a long-running process never outlives a
+        // provider's own command timeout — each request blocks at most
+        // DAEMON_WAIT_CHUNK_MS and the loop re-issues it.
+        while (true) {
+          const remaining = deadline !== undefined ? deadline - Date.now() : DAEMON_WAIT_CHUNK_MS;
+          if (remaining <= 0) {
+            throw new Error(`daemond: process ${jobId} did not exit within ${waitOptions?.timeout}ms`);
+          }
+          const chunk = Math.min(remaining, DAEMON_WAIT_CHUNK_MS);
+          const { invocation: waitInvocation } = await self.daemonJobRequest(
+            { wait: jobId, timeoutMs: chunk },
+            'process wait',
+            {
+              cwd: options.cwd,
+              env: options.env,
+              timeout: chunk + 5000,
+            }
+          );
+          const snapshot = waitInvocation.command;
+          if (snapshot.status === 'running') {
+            continue;
+          }
+          // Flush any output the watcher hasn't delivered yet, then exit.
+          watcher?.finish(snapshot);
+          fireExit(snapshot.exitCode ?? null, snapshot.signal ?? null);
+          return {
+            stdout: snapshot.stdout ?? '',
+            stderr: snapshot.stderr ?? '',
+            exitCode: snapshot.exitCode ?? -1,
+            durationMs: Date.now() - startedAt,
+            signal: snapshot.signal ?? null,
+          };
+        }
+      },
+      async kill(signal: string = 'SIGTERM'): Promise<void> {
+        await self.daemonJobRequest(
+          { kill: jobId, signal },
+          'process kill',
+          { cwd: options.cwd, env: options.env }
+        );
+      },
+    };
+  }
+
+  /**
+   * Delivers a started process's output to its callbacks. The daemon's
+   * buffered `status` snapshot is the single source of truth — the SSE stream,
+   * when the port is routable, only wakes the shared refresh. Fires `onExit`
+   * exactly once via the shared `fireExit`.
+   */
+  private watchProcessOutput(
+    jobId: string,
+    options: StartProcessOptions,
+    getStatus: () => Promise<SeedCommandResult>,
+    fireExit: (exitCode: number | null, signal: string | null) => void
+  ): { finish: (snapshot: SeedCommandResult) => void } {
+    const seenStdout = { bytes: 0 };
+    const seenStderr = { bytes: 0 };
+    let stopped = false;
+    let inFlight = false;
+    let dirty = false;
+    let polling = false;
+    let failures = 0;
+    const streamController = new AbortController();
+
+    // Exactly one status request at a time: a refresh triggered while one is
+    // still running (provider runCommand can take seconds) just marks dirty
+    // and re-runs after it finishes, so diffs are never emitted out of order.
+    const refresh = async (): Promise<void> => {
+      if (stopped) return;
+      if (inFlight) {
+        dirty = true;
+        return;
+      }
+      inFlight = true;
+      try {
+        const status = await getStatus();
+        // A finish() may have landed while this refresh was in flight — its
+        // snapshot is authoritative and already flushed, so emit nothing.
+        if (stopped) return;
+        failures = 0;
+        emitProcessDiff(seenStdout, status.stdout ?? '', status.stdoutBytes, options.onStdout);
+        emitProcessDiff(seenStderr, status.stderr ?? '', status.stderrBytes, options.onStderr);
+        if (status.status === 'exited') {
+          stopped = true;
+          streamController.abort();
+          fireExit(status.exitCode ?? null, status.signal ?? null);
+        }
+      } catch {
+        // The daemon (or the job) may be gone; give up after a few misses.
+        failures += 1;
+        if (failures >= 3) {
+          stopped = true;
+          streamController.abort();
+        }
+      } finally {
+        inFlight = false;
+        if (dirty) {
+          dirty = false;
+          void refresh();
+        }
+      }
+    };
+
+    const sleep = (ms: number): Promise<void> =>
+      new Promise((resolve) => {
+        const timer = setTimeout(resolve, ms);
+        (timer as unknown as { unref?: () => void }).unref?.();
+      });
+
+    // Sequential poll loop — never two status calls in flight.
+    const startPolling = (): void => {
+      if (polling || stopped) return;
+      polling = true;
+      const interval = options.pollIntervalMs ?? 500;
+      void (async () => {
+        while (!stopped) {
+          await refresh();
+          if (!stopped) await sleep(interval);
+        }
+      })();
+    };
+
+    /**
+     * Delivers whatever the watcher hasn't emitted yet from the final
+     * (exited) snapshot, then stops the watcher — call before `fireExit`
+     * so callbacks see all output before `onExit`.
+     */
+    const finish = (snapshot: SeedCommandResult): void => {
+      if (stopped) return;
+      stopped = true;
+      streamController.abort();
+      emitProcessDiff(seenStdout, snapshot.stdout ?? '', snapshot.stdoutBytes, options.onStdout);
+      emitProcessDiff(seenStderr, snapshot.stderr ?? '', snapshot.stderrBytes, options.onStderr);
+    };
+
+    const state = this.daemonStreamState;
+    if (!state?.rawSseUrl) {
+      startPolling();
+      return { finish };
+    }
+
+    // SSE is best-effort: any failure (or a connect that hangs — an unroutable
+    // port can hang instead of failing) falls back to polling. Once polling
+    // starts, SSE events never trigger refreshes again.
+    let opened = false;
+    const openTimer = setTimeout(() => {
+      if (!opened) streamController.abort();
+    }, 5000);
+    (openTimer as unknown as { unref?: () => void }).unref?.();
+
+    const streamPromise = this.resolveDaemonSseUrl(state.rawSseUrl, state.token).then((sseUrl) =>
+      streamDaemonEvents(
+        sseUrl,
+        { jobId },
+        {
+          onOpen: () => {
+            opened = true;
+            // Flush whatever the job printed before the stream connected.
+            void refresh();
+          },
+          onEvent: (event) => {
+            if (polling) return;
+            if (
+              event.type === 'command.stdout' ||
+              event.type === 'command.stderr' ||
+              event.type === 'command.exit'
+            ) {
+              void refresh();
+            }
+          },
+          markStdout: () => {},
+          markStderr: () => {},
+        },
+        streamController.signal
+      )
+    );
+
+    streamPromise.then(
+      () => {
+        clearTimeout(openTimer);
+        // The stream ended or errored while the job may still run — poll.
+        if (!stopped) startPolling();
+      },
+      () => {
+        clearTimeout(openTimer);
+        if (!stopped) startPolling();
+      }
+    );
+
+    return { finish };
   }
 
   async getInfo(): Promise<SandboxInfo> {
