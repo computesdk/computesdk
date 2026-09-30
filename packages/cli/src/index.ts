@@ -25,6 +25,7 @@ import { dirname, join } from 'path';
 import { compute, type SandboxInterface } from 'computesdk';
 import { getProviderStatus } from './providers.js';
 import { registerActionsCommands } from './actions.js';
+import { registerMarketCommands } from './market.js';
 import { startREPL } from './repl.js';
 import { clearStoredCredentials } from './auth.js';
 import { ensureAuth, resolveProvider, configureCompute } from './setup.js';
@@ -797,6 +798,12 @@ program
 // ─── actions ─────────────────────────────────────────────────────────────────
 
 registerActionsCommands(program);
+
+// ─── market ──────────────────────────────────────────────────────────────────
+// `compute market` is the sell side of the compute market — same platform
+// API and auth as `compute actions`, for orgs flagged `market_provider`.
+
+registerMarketCommands(program);
 
 // ─── bench ───────────────────────────────────────────────────────────────────
 // `compute bench` is the benchmarks-platform CLI (@benchsdk/runner's `bench`
