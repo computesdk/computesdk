@@ -1,5 +1,13 @@
 # @computesdk/workbench
 
+## 32.0.4
+
+### Patch Changes
+
+- Updated dependencies [ecde591]
+  - @computesdk/blaxel@1.6.26
+  - @computesdk/namespace@1.6.22
+
 ## 32.0.3
 
 ### Patch Changes
