@@ -628,7 +628,7 @@ export function maxPriceFields(
   }
   if (maxBid === undefined) return undefined;
   const usd = Number(maxBid);
-  if (!Number.isFinite(usd) || usd <= 0) {
+  if (!/^\d+(\.\d+)?([eE][+-]?\d+)?$/.test(maxBid) || !Number.isFinite(usd) || usd <= 0) {
     throw new ActionsCliError('invalid_argument', `Invalid --max-bid "${maxBid}". Expected a positive dollar amount (e.g. 0.12).`);
   }
   const per = maxBidPer ?? 'second';

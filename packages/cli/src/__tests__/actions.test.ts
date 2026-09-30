@@ -632,7 +632,7 @@ describe('dispatchBody', () => {
   });
 
   it('rejects a non-positive or non-numeric --max-bid', () => {
-    for (const bad of ['0', '-1', 'abc', 'Infinity']) {
+    for (const bad of ['0', '-1', 'abc', 'Infinity', '0x10', '0b1']) {
       expect(() => dispatchBody(ci, { maxBid: bad })).toThrow('--max-bid');
     }
   });
