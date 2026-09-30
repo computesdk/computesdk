@@ -89,6 +89,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Declaw** | `DECLAW_API_KEY` | Isolated cloud sandboxes |
 | **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
 | **Freestyle** | `FREESTYLE_API_KEY` | Full Linux VMs for long-running agent tasks, with snapshots and persistence |
+| **GravixLayer** | `GRAVIXLAYER_API_KEY` | Cloud runtimes with filesystem, port publishing, and snapshots |
 | **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
 | **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
 | **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
@@ -306,6 +307,7 @@ npm install @computesdk/declaw           # Declaw provider
 npm install @computesdk/e2b              # E2B provider
 npm install @computesdk/freestyle        # Freestyle provider
 npm install @computesdk/givemeanode      # givemeanode provider
+npm install @computesdk/gravixlayer      # GravixLayer provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/lightning        # Lightning AI provider
