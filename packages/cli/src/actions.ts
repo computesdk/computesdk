@@ -79,22 +79,32 @@ export async function client(opts: CommonOpts): Promise<ActionsClient> {
 }
 
 /**
- * `vault set` and `vault get` carry a value, not just the key, so they only
- * ever talk to a trusted host: --allow-untrusted-host does not extend to them.
+ * Commands that send or read a local secret value (vault set/get, market
+ * credential connect) only ever talk to a trusted host: --allow-untrusted-host
+ * opts an explicit API key into a host, not the secrets themselves.
  */
-export function assertVaultValueHost(auth: ActionsAuth): void {
+export function assertSecretValueHost(auth: ActionsAuth, what: string): void {
   if (!isTrustedActionsHost(auth.baseUrl)) {
     throw new ActionsCliError(
       'untrusted_host',
-      `Refusing to send or read vault values at ${auth.baseUrl} — only computesdk.com and localhost hosts are allowed, even with --allow-untrusted-host.`,
+      `Refusing to send or read ${what} at ${auth.baseUrl} — only computesdk.com and localhost hosts are allowed, even with --allow-untrusted-host.`,
     );
   }
 }
 
-async function vaultValueClient(opts: CommonOpts): Promise<ActionsClient> {
+export function assertVaultValueHost(auth: ActionsAuth): void {
+  assertSecretValueHost(auth, 'vault values');
+}
+
+/** A client for commands carrying a local secret value — trusted hosts only. */
+export async function secretValueClient(opts: CommonOpts, what: string): Promise<ActionsClient> {
   const auth = await resolveActionsAuth(opts);
-  assertVaultValueHost(auth);
+  assertSecretValueHost(auth, what);
   return new ActionsClient(auth);
+}
+
+async function vaultValueClient(opts: CommonOpts): Promise<ActionsClient> {
+  return secretValueClient(opts, 'vault values');
 }
 
 /** Print `data` as JSON when --json was passed; otherwise call `render`. */
