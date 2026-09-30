@@ -65,15 +65,16 @@ interface CiLiveStateJob {
   placementAttempts: CiJob['placementAttempts'];
 }
 
-type JsonOpts = { json?: boolean };
+export type JsonOpts = { json?: boolean };
 
-interface CommonOpts extends JsonOpts {
+export interface CommonOpts extends JsonOpts {
   apiKey?: string;
   baseUrl?: string;
   allowUntrustedHost?: boolean;
 }
 
-async function client(opts: CommonOpts): Promise<ActionsClient> {
+/** The platform API client behind both `compute actions` and `compute market`. */
+export async function client(opts: CommonOpts): Promise<ActionsClient> {
   return new ActionsClient(await resolveActionsAuth(opts));
 }
 
@@ -97,7 +98,7 @@ async function vaultValueClient(opts: CommonOpts): Promise<ActionsClient> {
 }
 
 /** Print `data` as JSON when --json was passed; otherwise call `render`. */
-function output<T>(opts: JsonOpts, data: T, render: (data: T) => void): void {
+export function output<T>(opts: JsonOpts, data: T, render: (data: T) => void): void {
   if (opts.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
   } else {
@@ -153,7 +154,7 @@ async function fetchRunSummary(c: ActionsClient, runId: string): Promise<CiRunSu
  * envelope from `toErrorEnvelope` (stdout stays empty, so a consumer can parse
  * either stream without guessing); otherwise a one-line human message.
  */
-function fail(error: unknown, opts: JsonOpts = {}): never {
+export function fail(error: unknown, opts: JsonOpts = {}): never {
   if (opts.json) {
     process.stderr.write(JSON.stringify(toErrorEnvelope(error)) + '\n');
   } else if (error instanceof ActionsApiError) {
@@ -481,7 +482,7 @@ async function* followRunLogs(
 
 // Job and step names come from workflow files — potentially attacker-controlled
 // in a PR context — so strip control characters before writing to the terminal.
-function safeTerm(s: string): string {
+export function safeTerm(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '�');
 }
