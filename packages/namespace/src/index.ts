@@ -6,8 +6,9 @@
  */
 
 import * as fs from 'fs/promises';
+import { randomUUID } from 'node:crypto';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -21,6 +22,8 @@ export interface NamespaceSandbox {
   createdAt: Date;
   /** Instance lifecycle state from InstanceMetadata.status, lowercased (e.g. 'running', 'destroying'). */
   status?: string;
+  /** Mountpoint of the persistent volume seeded from a snapshot, when created via snapshotId. */
+  snapshotVolumeMountPoint?: string;
 }
 
 /**
@@ -91,6 +94,18 @@ const API_ENDPOINTS = {
 const COMMAND_SERVICE = {
   RUN_COMMAND_SYNC: '/namespace.cloud.compute.v1beta.CommandService/RunCommandSync',
 };
+
+const STORAGE_SERVICE = {
+  LIST_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumes',
+  LIST_PERSISTENT_VOLUME_SNAPSHOTS: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumeSnapshots',
+  DESTROY_PERSISTENT_VOLUME_SNAPSHOT: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumeSnapshot',
+};
+
+/**
+ * Mountpoint for the persistent volume attached when `create({ snapshotId })`
+ * restores a sandbox — this is where the snapshotted filesystem state lands.
+ */
+const SNAPSHOT_VOLUME_MOUNTPOINT = '/computesdk-data';
 
 /**
  * Load bearer token from a JSON token file (e.g. from `nsc login`)
@@ -179,6 +194,17 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               machine_arch: config.machineArch || 'amd64',
               os: config.os || 'linux'
             },
+            // snapshotId restores filesystem state by seeding a new
+            // persistent volume from the given snapshot — Namespace's
+            // fork model is volume-backed rather than whole-instance.
+            ...(options?.snapshotId && {
+              volumes: [{
+                mount_point: SNAPSHOT_VOLUME_MOUNTPOINT,
+                tag: `computesdk-${randomUUID().slice(0, 8)}`,
+                persistency_kind: 'PERSISTENT',
+                from_snapshot_id: options.snapshotId,
+              }],
+            }),
             containers: [{
               name: containerName,
               ...(image === undefined
@@ -220,6 +246,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             token,
             targetContainerName: containerName,
             createdAt: new Date(),
+            ...(options?.snapshotId && { snapshotVolumeMountPoint: SNAPSHOT_VOLUME_MOUNTPOINT }),
           };
 
           return { sandbox, sandboxId: instanceId };
@@ -424,6 +451,9 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           metadata: {
             name: sandbox.name,
             commandServiceEndpoint: sandbox.commandServiceEndpoint,
+            ...(sandbox.snapshotVolumeMountPoint && {
+              snapshotVolumeMountPoint: sandbox.snapshotVolumeMountPoint,
+            }),
           }
         };
       },
@@ -433,6 +463,84 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       getInstance: (sandbox: NamespaceSandbox): NamespaceSandbox => sandbox,
-    }
+    },
+
+    // Namespace snapshots are volume-backed: persistent volumes are
+    // snapshotted automatically on instance shutdown, and a new volume can be
+    // seeded from a snapshot via VolumeRequest.from_snapshot_id.
+    snapshot: {
+      create: async () => {
+        throw new Error(
+          'Namespace cannot create snapshots on demand — persistent-volume snapshots are captured automatically when an instance with a PERSISTENT volume shuts down. Create a sandbox with a persistent volume (snapshotId path) and list snapshots after it stops.'
+        );
+      },
+
+      list: async (config: NamespaceConfig, options?: ListSnapshotsOptions) => {
+        const { token } = await getAndValidateCredentials(config);
+
+        try {
+          // Instance -> volume mapping is not exposed, so snapshots are
+          // collected across all persistent volumes in the workspace.
+          interface WireVolume { id: string; tag?: string; site?: string }
+          const volumes: WireVolume[] = [];
+          let cursor: string | undefined;
+          do {
+            const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+              method: 'POST',
+              body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
+            });
+            volumes.push(...(response.volumes || []));
+            cursor = response.pagination_cursor || undefined;
+          } while (cursor);
+
+          const snapshots = [];
+          for (const volume of volumes) {
+            const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS, {
+              method: 'POST',
+              body: JSON.stringify({ id: volume.id })
+            });
+            for (const snap of response.snapshots || []) {
+              // attached_instance_id links a snapshot back to the instance
+              // whose volume produced it.
+              if (options?.sandboxId && snap.attached_instance_id !== options.sandboxId) continue;
+              snapshots.push({
+                id: snap.id,
+                provider: 'namespace',
+                createdAt: snap.created_at ? new Date(snap.created_at) : new Date(0),
+                metadata: {
+                  volumeId: volume.id,
+                  ...(volume.tag && { volumeTag: volume.tag }),
+                  ...(volume.site && { site: volume.site }),
+                  ...(snap.attached_instance_id && { sourceInstance: snap.attached_instance_id }),
+                  ...(snap.abandoned_at && { abandoned: 'true' }),
+                },
+              });
+            }
+          }
+
+          snapshots.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          return options?.limit ? snapshots.slice(0, options.limit) : snapshots;
+        } catch (error) {
+          throw new Error(
+            `Failed to list Namespace snapshots: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+
+      delete: async (config: NamespaceConfig, snapshotId: string) => {
+        const { token } = await getAndValidateCredentials(config);
+
+        try {
+          await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUME_SNAPSHOT, {
+            method: 'POST',
+            body: JSON.stringify({ id: snapshotId })
+          });
+        } catch (error) {
+          throw new Error(
+            `Failed to delete Namespace snapshot: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+    },
   }
 });

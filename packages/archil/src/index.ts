@@ -15,7 +15,7 @@
  */
 
 import { defineProvider } from '@computesdk/provider';
-import { Archil as ArchilClient } from 'disk';
+import { Archil as ArchilClient, ArchilError } from 'disk';
 import type {
   CreateSandboxRequest as ArchilSandboxRequest,
   Sandbox as ArchilVm,
@@ -170,7 +170,9 @@ function createClient(config: ArchilConfig, resolved: ResolvedConfig): ArchilCli
 }
 
 function resolveCreateDiskId(options?: ArchilCreateOptions): string {
-  const diskId = options?.diskId;
+  // `sandboxId` is accepted as an alias: exec-mode sandboxes are addressed by
+  // their disk id.
+  const diskId = options?.diskId ?? options?.sandboxId;
 
   if (!diskId) {
     throw new Error(
@@ -181,6 +183,15 @@ function resolveCreateDiskId(options?: ArchilCreateOptions): string {
   }
 
   return diskId;
+}
+
+async function forkSandboxVm(
+  client: ArchilClient,
+  sourceId: string,
+  name?: string,
+): Promise<ArchilVm> {
+  const source = await client.sandboxes.get(sourceId);
+  return source.fork({ name });
 }
 
 function shellEscape(value: string): string {
@@ -386,10 +397,36 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
               : 'persistent'
             : resolved.execution;
 
-        if (execution === 'persistent') {
-          const vm = await client.sandboxes.create(toSandboxRequest(options), {
-            wait: true,
-          });
+        if (options?.snapshotId && options?.ephemeral === true) {
+          throw new Error(
+            'Archil cannot combine ephemeral: true with snapshotId — snapshots fork persistent VMs. Drop ephemeral or set it to false.',
+          );
+        }
+
+        // snapshotId forks a new VM from that snapshot's state — Archil
+        // models snapshots as isolated writable branches of a source
+        // sandbox — so it always takes the VM path regardless of the
+        // configured execution mode.
+        if (execution === 'persistent' || options?.snapshotId) {
+          let vm: ArchilVm;
+          if (options?.snapshotId) {
+            vm = await forkSandboxVm(client, options.snapshotId, options?.name);
+          } else if (options?.sandboxId) {
+            // Attach to a live sandbox. Refuse an abort signal here: the
+            // sandbox manager destroys a resolved sandbox after an abort,
+            // which would delete a sandbox this call did not create.
+            if (options?.signal) {
+              throw new Error(
+                'create({ sandboxId }) attaches to an existing sandbox and cannot be combined with an abort signal',
+              );
+            }
+            vm = await client.sandboxes.get(options.sandboxId);
+            await ensureVmRunning(vm);
+          } else {
+            vm = await client.sandboxes.create(toSandboxRequest(options), {
+              wait: true,
+            });
+          }
           sandboxModes.set(vm.id, 'persistent');
           return {
             sandbox: {
@@ -829,6 +866,54 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       },
 
       getInstance: (sandbox: ArchilSandbox): ArchilSandbox => sandbox,
+    },
+
+    // Archil has no separate snapshot resource: a "snapshot" is a sandbox
+    // fork (an isolated writable branch of the source sandbox's state), so
+    // snapshot ids are ordinary sandbox ids that create() forks again.
+    snapshot: {
+      create: async (
+        config: ArchilConfig,
+        sandboxId: string,
+        options?: { name?: string },
+      ) => {
+        const resolved = resolveConfig(config);
+        const client = createClient(config, resolved);
+        try {
+          const fork = await forkSandboxVm(client, sandboxId, options?.name);
+          return {
+            id: fork.id,
+            provider: 'archil',
+            createdAt: fork.createdAt ?? new Date(),
+            metadata: { name: fork.name },
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to create Archil snapshot: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      },
+
+      list: async (_config: ArchilConfig) => {
+        throw new Error(
+          'Archil provider does not support listing snapshots.',
+        );
+      },
+
+      delete: async (config: ArchilConfig, snapshotId: string) => {
+        const resolved = resolveConfig(config);
+        const client = createClient(config, resolved);
+        let vm: ArchilVm;
+        try {
+          vm = await client.sandboxes.get(snapshotId);
+        } catch (error) {
+          if (error instanceof ArchilError && error.status === 404) return;
+          throw error;
+        }
+        await vm.delete();
+      },
     },
   },
 });
