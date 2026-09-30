@@ -631,7 +631,7 @@ export function maxPriceFields(
   if (!Number.isFinite(usd) || usd <= 0) {
     throw new ActionsCliError('invalid_argument', `Invalid --max-bid "${maxBid}". Expected a positive dollar amount (e.g. 0.12).`);
   }
-  const per = maxBidPer ?? 'hour';
+  const per = maxBidPer ?? 'second';
   if (per !== 'second' && per !== 'minute' && per !== 'hour') {
     throw new ActionsCliError('invalid_argument', `--max-bid-per must be second, minute, or hour, got "${maxBidPer}".`);
   }
@@ -717,7 +717,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
       .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)')
       .option('--max-bid <usd>', 'max price per vCPU for a market fill (e.g. 0.12); unfilled jobs fall through to the next provider')
-      .option('--max-bid-per <unit>', 'time unit --max-bid is priced in: second, minute, or hour (default: hour)'),
+      .option('--max-bid-per <unit>', 'time unit --max-bid is priced in: second, minute, or hour (default: second)'),
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string; maxBid?: string; maxBidPer?: string }) => {
     try {
       const c = await client(opts);

@@ -606,24 +606,24 @@ describe('dispatchBody', () => {
     expect(() => dispatchBody(ci, { providerRegion: 'sfo1' })).toThrow('--provider-region requires --provider');
   });
 
-  it('sets a price ceiling from --max-bid, priced per hour by default', () => {
-    expect(dispatchBody(ci, { maxBid: '0.12' })).toEqual({
+  it('sets a price ceiling from --max-bid, priced per second by default', () => {
+    expect(dispatchBody(ci, { maxBid: '0.0000333' })).toEqual({
       workflowId: 'w-1',
       ref: 'refs/heads/main',
       inputs: {},
-      maxPriceUsd: 0.12,
-      maxPricePer: 'hour',
-    });
-  });
-
-  it('honours --max-bid-per for per-second and per-minute ceilings', () => {
-    expect(dispatchBody(ci, { maxBid: '0.0000333', maxBidPer: 'second' })).toMatchObject({
       maxPriceUsd: 0.0000333,
       maxPricePer: 'second',
     });
+  });
+
+  it('honours --max-bid-per for per-minute and per-hour ceilings', () => {
     expect(dispatchBody(ci, { maxBid: '0.5', maxBidPer: 'minute' })).toMatchObject({
       maxPriceUsd: 0.5,
       maxPricePer: 'minute',
+    });
+    expect(dispatchBody(ci, { maxBid: '0.12', maxBidPer: 'hour' })).toMatchObject({
+      maxPriceUsd: 0.12,
+      maxPricePer: 'hour',
     });
   });
 
