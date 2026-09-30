@@ -5,7 +5,7 @@ import type { SeedCommandOptions, SeedInput, SeedInvocationResult, SeedScriptCon
 // Bump whenever the launcher<->daemon wire protocol changes. The launcher
 // compares it against the running daemon's health `version` and replaces a
 // daemon (same socket, same SSE port) that doesn't speak its protocol.
-const SCRIPT_VERSION = "3";
+const SCRIPT_VERSION = "4";
 
 function loadSeedLauncherRuntimeSource(): string {
   const runtimePath = path.join(__dirname, "runtime", "seed-launcher.js");

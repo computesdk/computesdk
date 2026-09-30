@@ -39,7 +39,7 @@ async function waitForSocketRemoved(socketPath, timeoutMs, message) {
   throw new Error(message);
 }
 
-const SCRIPT_VERSION = "3";
+const SCRIPT_VERSION = "4";
 
 function defaultSocketPath(name, cwd) {
   const workspaceHash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
