@@ -560,7 +560,13 @@ export function registerMarketCommands(program: Command): void {
         listingPatchBody(listingId, { price: opts.price, per: opts.per }),
       );
       output(opts, result, (r) => {
-        console.log(`repriced  ${pc.cyan(r.ask.id)}  ${formatRate(r.ask.usd, r.ask.per)}`);
+        // A committed-window (rollover) listing keeps its rate in usd/per
+        // until the window renews; the new rate sits in pendingUsd/pendingPer.
+        const rate =
+          r.ask.pendingUsd !== null && r.ask.pendingPer !== null
+            ? `${formatRate(r.ask.pendingUsd, r.ask.pendingPer)} ${pc.dim('(applies next window)')}`
+            : formatRate(r.ask.usd, r.ask.per);
+        console.log(`repriced  ${pc.cyan(r.ask.id)}  ${rate}`);
       });
     } catch (e) {
       fail(e, opts);
