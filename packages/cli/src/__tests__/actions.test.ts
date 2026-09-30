@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  assertSecretValueHost,
   assertVaultValueHost,
   dispatchBody,
   formatDuration,
@@ -15,6 +16,7 @@ import {
   matchWorkflow,
   parseInputs,
   parseVaultKind,
+  secretValueClient,
   usageErrorOutput,
   vaultPath,
   vaultSetBody,
@@ -1008,6 +1010,20 @@ describe('vault helpers', () => {
     ).toThrow(ActionsCliError);
     expect(() => assertVaultValueHost({ apiKey: 'k', baseUrl: 'https://platform.computesdk.com' })).not.toThrow();
     expect(() => assertVaultValueHost({ apiKey: 'k', baseUrl: 'http://localhost:3000' })).not.toThrow();
+  });
+
+  it('keeps credential values off untrusted hosts even when the key is allowed there', async () => {
+    const untrusted = {
+      apiKey: 'k',
+      baseUrl: 'https://evil.example.com',
+      allowUntrustedHost: true,
+    };
+    await expect(secretValueClient(untrusted, 'credential values')).rejects.toThrow(
+      'Refusing to send or read credential values',
+    );
+    expect(() =>
+      assertSecretValueHost({ apiKey: 'k', baseUrl: 'https://platform.computesdk.com' }, 'credential values'),
+    ).not.toThrow();
   });
 
   it('refuses an empty value and --revealable on a variable', () => {

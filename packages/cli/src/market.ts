@@ -19,6 +19,7 @@ import {
   output,
   parseInputs,
   safeTerm,
+  secretValueClient,
   usageErrorOutput,
   type CommonOpts,
 } from './actions.js';
@@ -689,7 +690,7 @@ export function registerMarketCommands(program: Command): void {
       .option('--field <pairs...>', 'credential fields as name=value (prefer env vars for secrets)'),
   ).action(async (opts: CommonOpts & { field?: string[] }) => {
     try {
-      const c = await client(opts);
+      const c = await secretValueClient(opts, 'credential values');
       const { provider } = await c.get<{ provider: MarketProvider }>(
         '/api/v1/market/provider',
       );
