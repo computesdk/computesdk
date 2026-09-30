@@ -605,6 +605,43 @@ describe('dispatchBody', () => {
     expect(() => dispatchBody({ ...ci, refs: [] }, {})).toThrow('--ref');
     expect(() => dispatchBody(ci, { providerRegion: 'sfo1' })).toThrow('--provider-region requires --provider');
   });
+
+  it('sets a price ceiling from --max-bid, priced per hour by default', () => {
+    expect(dispatchBody(ci, { maxBid: '0.12' })).toEqual({
+      workflowId: 'w-1',
+      ref: 'refs/heads/main',
+      inputs: {},
+      maxPriceUsd: 0.12,
+      maxPricePer: 'hour',
+    });
+  });
+
+  it('honours --max-bid-per for per-second and per-minute ceilings', () => {
+    expect(dispatchBody(ci, { maxBid: '0.0000333', maxBidPer: 'second' })).toMatchObject({
+      maxPriceUsd: 0.0000333,
+      maxPricePer: 'second',
+    });
+    expect(dispatchBody(ci, { maxBid: '0.5', maxBidPer: 'minute' })).toMatchObject({
+      maxPriceUsd: 0.5,
+      maxPricePer: 'minute',
+    });
+  });
+
+  it('requires --max-bid for --max-bid-per', () => {
+    expect(() => dispatchBody(ci, { maxBidPer: 'second' })).toThrow('--max-bid-per requires --max-bid');
+  });
+
+  it('rejects a non-positive or non-numeric --max-bid', () => {
+    for (const bad of ['0', '-1', 'abc', 'Infinity']) {
+      expect(() => dispatchBody(ci, { maxBid: bad })).toThrow('--max-bid');
+    }
+  });
+
+  it('rejects an unknown --max-bid-per unit', () => {
+    expect(() => dispatchBody(ci, { maxBid: '0.12', maxBidPer: 'day' })).toThrow(
+      '--max-bid-per must be second, minute, or hour',
+    );
+  });
 });
 
 describe('usageErrorOutput', () => {

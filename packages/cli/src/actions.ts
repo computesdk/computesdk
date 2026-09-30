@@ -572,7 +572,15 @@ function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: st
  */
 export function dispatchBody(
   workflow: CiWorkflow,
-  opts: { ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string },
+  opts: {
+    ref?: string;
+    inputs?: string[];
+    manual?: boolean;
+    provider?: string;
+    providerRegion?: string;
+    maxBid?: string;
+    maxBidPer?: string;
+  },
 ): Record<string, unknown> {
   if (!workflow.dispatchable && !opts.manual) {
     throw new ActionsCliError(
@@ -591,6 +599,7 @@ export function dispatchBody(
   if (opts.providerRegion !== undefined && opts.provider === undefined) {
     throw new ActionsCliError('invalid_argument', '--provider-region requires --provider.');
   }
+  const maxPrice = maxPriceFields(opts.maxBid, opts.maxBidPer);
   return {
     workflowId: workflow.id,
     ref,
@@ -600,7 +609,33 @@ export function dispatchBody(
       provider: opts.provider,
       ...(opts.providerRegion !== undefined && { providerRegion: opts.providerRegion }),
     }),
+    ...(maxPrice !== undefined && maxPrice),
   };
+}
+
+/**
+ * `--max-bid`/`--max-bid-per` → the dispatch body's market price ceiling
+ * fields. Undefined when no ceiling is set; the ceiling only applies to a
+ * market fill — jobs that can't be filled at the price fall through to the
+ * next provider-order entry.
+ */
+export function maxPriceFields(
+  maxBid: string | undefined,
+  maxBidPer: string | undefined,
+): { maxPriceUsd: number; maxPricePer: 'second' | 'minute' | 'hour' } | undefined {
+  if (maxBidPer !== undefined && maxBid === undefined) {
+    throw new ActionsCliError('invalid_argument', '--max-bid-per requires --max-bid.');
+  }
+  if (maxBid === undefined) return undefined;
+  const usd = Number(maxBid);
+  if (!Number.isFinite(usd) || usd <= 0) {
+    throw new ActionsCliError('invalid_argument', `Invalid --max-bid "${maxBid}". Expected a positive dollar amount (e.g. 0.12).`);
+  }
+  const per = maxBidPer ?? 'hour';
+  if (per !== 'second' && per !== 'minute' && per !== 'hour') {
+    throw new ActionsCliError('invalid_argument', `--max-bid-per must be second, minute, or hour, got "${maxBidPer}".`);
+  }
+  return { maxPriceUsd: usd, maxPricePer: per };
 }
 
 /** `--kind` for the vault commands: `secret` unless told otherwise. */
@@ -680,8 +715,10 @@ export function registerActionsCommands(program: Command): void {
       .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch inputs only)')
       .option('--manual', 'run a workflow even if it does not declare workflow_dispatch (such runs take no --inputs)')
       .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
-      .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)'),
-  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string }) => {
+      .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)')
+      .option('--max-bid <usd>', 'max price per vCPU for a market fill (e.g. 0.12); unfilled jobs fall through to the next provider')
+      .option('--max-bid-per <unit>', 'time unit --max-bid is priced in: second, minute, or hour (default: hour)'),
+  ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string; maxBid?: string; maxBidPer?: string }) => {
     try {
       const c = await client(opts);
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
