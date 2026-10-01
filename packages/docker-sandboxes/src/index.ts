@@ -41,7 +41,8 @@ function clientFor(config: DockerSandboxesConfig): Sandboxes {
   let client = clients.get(key);
   if (!client) {
     const auth = pat({ username, personalAccessToken });
-    client = new Sandboxes({ auth });
+    // Create also returns the first command's exec credential, saving a request.
+    client = new Sandboxes({ auth, prefetchExecCredential: true });
     clients.set(key, client);
     // Start the token exchange now, so the first create doesn't wait for it.
     auth.getAccessToken().catch(() => {});
