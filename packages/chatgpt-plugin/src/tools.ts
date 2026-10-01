@@ -13,9 +13,14 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { Provider, ProviderSandbox } from '@computesdk/provider';
 import { CredentialVault } from './vault.js';
 import { PROVIDERS, getProvider } from './providers.js';
+import { PANEL_HTML, PANEL_MIME, PANEL_URI } from './panel.js';
+
+const PANEL_META = { 'openai/outputTemplate': PANEL_URI };
 
 interface RequestContext {
   userId: string;
+  /** The caller's bearer token — the ComputeSDK API key in first-party mode. */
+  token: string;
   vault: CredentialVault;
 }
 
@@ -36,6 +41,7 @@ function requireProvider(name: string) {
 
 function buildProvider(ctx: RequestContext, name: string): Provider {
   const spec = requireProvider(name);
+  if (spec.firstParty) return spec.create({}, ctx.token);
   const credentials = ctx.vault.getCredentials(ctx.userId, name);
   if (!credentials) {
     throw new Error(
@@ -44,7 +50,7 @@ function buildProvider(ctx: RequestContext, name: string): Provider {
         'Call set_provider_credentials first.'
     );
   }
-  return spec.create(credentials);
+  return spec.create(credentials, ctx.token);
 }
 
 async function resolveSandbox(
@@ -69,7 +75,23 @@ const providerName = z
   .string()
   .describe(`Sandbox provider name. One of: ${PROVIDERS.map((p) => p.name).join(', ')}`);
 
+// Sandbox-operation tools default to first-party computesdk; BYOK providers
+// are used only when explicitly named.
+const sandboxProvider = providerName
+  .optional()
+  .default('computesdk')
+  .describe(
+    `Sandbox provider. Defaults to "computesdk" (first-party ComputeSDK gateway, no setup needed). Other providers require set_provider_credentials first.`,
+  );
+
 export function registerTools(server: McpServer, ctx: RequestContext): void {
+  server.registerResource(
+    'sandboxes-panel',
+    PANEL_URI,
+    { mimeType: PANEL_MIME, description: 'ComputeSDK sandboxes panel' },
+    async () => ({ contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: PANEL_HTML }] })
+  );
+
   server.registerTool(
     'list_providers',
     {
@@ -83,15 +105,17 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         providers: PROVIDERS.map((p) => ({
           name: p.name,
           description: p.description,
+          firstParty: Boolean(p.firstParty),
           credentialFields: p.credentialFields,
-          configured: ctx.vault.hasCredentials(ctx.userId, p.name),
+          configured: p.firstParty ? true : ctx.vault.hasCredentials(ctx.userId, p.name),
         })),
       },
       content: [
         {
           type: 'text',
           text: PROVIDERS.map(
-            (p) => `${p.name}: ${ctx.vault.hasCredentials(ctx.userId, p.name) ? 'configured' : 'no credentials'}`
+            (p) =>
+              `${p.name}: ${p.firstParty ? 'first-party (ready)' : ctx.vault.hasCredentials(ctx.userId, p.name) ? 'configured' : 'no credentials'}`
           ).join('\n'),
         },
       ],
@@ -158,7 +182,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'Create sandbox',
       description: 'Create a new sandbox on a provider the user has configured credentials for.',
       inputSchema: {
-        provider: providerName,
+        provider: sandboxProvider,
         timeout: z.number().int().optional().describe('Sandbox lifetime in milliseconds'),
         templateId: z.string().optional().describe('Provider template/image ID to boot from'),
         envs: z.record(z.string(), z.string()).optional().describe('Environment variables to set inside the sandbox'),
@@ -168,6 +192,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         provider: z.string(),
       },
       annotations: { openWorldHint: true },
+      _meta: PANEL_META,
     },
     async ({ provider: name, timeout, templateId, envs }: {
       provider: string;
@@ -191,8 +216,9 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
     {
       title: 'List sandboxes',
       description: 'List active sandboxes on a provider.',
-      inputSchema: { provider: providerName },
+      inputSchema: { provider: sandboxProvider },
       annotations: { readOnlyHint: true },
+      _meta: PANEL_META,
     },
     async ({ provider: name }) => {
       const provider = buildProvider(ctx, name);
@@ -219,7 +245,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'Run command in sandbox',
       description: 'Execute a shell command inside a sandbox and return stdout, stderr, and exit code.',
       inputSchema: {
-        provider: providerName,
+        provider: sandboxProvider,
         sandbox_id: z.string(),
         command: z.string().describe('Shell command to execute'),
         timeout: z.number().int().optional().describe('Command timeout in milliseconds'),
@@ -257,7 +283,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'Read file from sandbox',
       description: 'Read a text file from a sandbox filesystem.',
       inputSchema: {
-        provider: providerName,
+        provider: sandboxProvider,
         sandbox_id: z.string(),
         path: z.string(),
       },
@@ -279,7 +305,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'Write file to sandbox',
       description: 'Write a text file to a sandbox filesystem.',
       inputSchema: {
-        provider: providerName,
+        provider: sandboxProvider,
         sandbox_id: z.string(),
         path: z.string(),
         content: z.string(),
@@ -302,7 +328,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'Get sandbox URL',
       description: 'Get the public URL for a port exposed by a sandbox.',
       inputSchema: {
-        provider: providerName,
+        provider: sandboxProvider,
         sandbox_id: z.string(),
         port: z.number().int().min(1).max(65535),
         protocol: z.string().optional(),
@@ -330,7 +356,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'Destroy sandbox',
       description: 'Destroy a sandbox and release its resources.',
       inputSchema: {
-        provider: providerName,
+        provider: sandboxProvider,
         sandbox_id: z.string(),
       },
       annotations: { destructiveHint: true },

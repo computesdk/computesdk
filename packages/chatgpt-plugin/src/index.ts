@@ -54,7 +54,7 @@ const server = http.createServer(async (req, res) => {
         'if none are, ask the user which provider they want and collect its credentials via set_provider_credentials.',
     }
   );
-  registerTools(mcpServer, { userId: CredentialVault.userIdForToken(token), vault });
+  registerTools(mcpServer, { userId: CredentialVault.userIdForToken(token), token, vault });
 
   // Stateless: a fresh server+transport per request — no session resumability.
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

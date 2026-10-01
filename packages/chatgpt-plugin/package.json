@@ -38,6 +38,7 @@
     "@computesdk/provider": "workspace:*",
     "@computesdk/vercel": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.24.0",
+    "computesdk": "workspace:*",
     "zod": "^4.4.3"
   },
   "keywords": [

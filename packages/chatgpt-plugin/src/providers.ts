@@ -1,9 +1,10 @@
 /**
  * Provider registry for the plugin.
  *
- * Each entry maps a provider name to the credential fields the user must
- * supply (BYOK) and a factory that builds a computesdk Provider from them.
- * Add a new supported provider by appending one entry.
+ * `computesdk` is the first-party entry: it authenticates with the caller's
+ * own bearer token (their ComputeSDK gateway key), so it needs no credential
+ * fields and is always "configured". BYOK providers take credentials stored
+ * per-user in the vault.
  */
 
 import type { Provider } from '@computesdk/provider';
@@ -11,6 +12,7 @@ import { e2b } from '@computesdk/e2b';
 import { modal } from '@computesdk/modal';
 import { vercel } from '@computesdk/vercel';
 import { daytona } from '@computesdk/daytona';
+import { computesdkGateway } from './gateway.js';
 
 export interface CredentialField {
   key: string;
@@ -22,11 +24,24 @@ export interface CredentialField {
 export interface ProviderSpec {
   name: string;
   description: string;
+  /**
+   * First-party providers authenticate with the user's bearer token and are
+   * always usable; BYOK providers require set_provider_credentials first.
+   */
+  firstParty?: boolean;
   credentialFields: CredentialField[];
-  create: (credentials: Record<string, string>) => Provider;
+  create: (credentials: Record<string, string>, userToken: string) => Provider;
 }
 
 export const PROVIDERS: ProviderSpec[] = [
+  {
+    name: 'computesdk',
+    description:
+      'ComputeSDK — hosted sandboxes on your ComputeSDK account. First-party; no provider keys needed.',
+    firstParty: true,
+    credentialFields: [],
+    create: (_c, userToken) => computesdkGateway({ apiKey: userToken }),
+  },
   {
     name: 'e2b',
     description: 'E2B — full Linux microVM sandboxes with filesystem access.',
