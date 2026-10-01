@@ -38,8 +38,10 @@ function configureBeamOpts(config: BeamConfig): void {
   const next: BeamOptsSnapshot = {
     token: config.token || (typeof process !== 'undefined' && process.env?.BEAM_TOKEN) || '',
     workspaceId: config.workspaceId || (typeof process !== 'undefined' && process.env?.BEAM_WORKSPACE_ID) || '',
-    gatewayUrl: config.gatewayUrl || beamOpts.gatewayUrl,
-    timeout: config.timeout || beamOpts.timeout,
+    // beamOpts.gatewayUrl/timeout are not the fallbacks: an earlier
+    // configuration's custom values must not carry into the next one.
+    gatewayUrl: config.gatewayUrl || 'https://app.beam.cloud',
+    timeout: config.timeout || 30000,
   };
   beamOpts.token = next.token;
   beamOpts.workspaceId = next.workspaceId;
@@ -189,7 +191,9 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (timeout) sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
 
           if (runtime === 'node' && !sandboxConfig.image) {
-            sandboxConfig.image = Image.fromRegistry('node:24-slim');
+            // Full image, not -slim: sandboxes are expected to run tooling
+            // like git that the slim variant strips.
+            sandboxConfig.image = Image.fromRegistry('node:24');
           }
 
           if (envs) {
