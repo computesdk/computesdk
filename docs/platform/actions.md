@@ -13,11 +13,30 @@ Jobs execute under [`act`](https://github.com/nektos/act) inside a ComputeSDK sa
 
 ## Setup
 
-1. **Entitlement** — Actions requires the Actions product subscription (Settings → Billing). Unentitled orgs get `403` from every `/api/v1/actions/*` route.
+1. **Access** — Actions is available to every organization; no subscription or entitlement is required.
 2. **Connect a repo** — either install the platform's GitHub App (grants repo access + push/PR triggers), or connect a generic git remote by clone URL from **Actions → Repos** or `compute actions repos connect <clone-url>` (`token`, `basic`, `ssh`, and unauthenticated remotes are supported). A connect validates the remote with a real `ls-remote`, then lands enabled.
-3. **Register a provider credential** — under **Settings → Providers**, or `compute actions providers configure <provider>`. `verify` probes the stored key by placing a real sandbox; `providers` lists regions and whether each provider is act-usable.
+3. **Register a provider credential** — under **Settings → Providers**, or `compute actions providers configure <provider> --key <key>`. See [Providers and eligibility](#providers-and-eligibility).
 4. **Secrets and variables** — optional; see [Secrets and variables](#secrets-and-variables).
 5. **Workflows** — repos run ordinary workflow YAML (`.github/workflows/`). Workflows become dispatchable once the repo is enabled and the workflow declares `workflow_dispatch`.
+
+## Providers and eligibility
+
+Provider credentials are bring-your-own: the org stores each provider's key once (encrypted, never readable again), and jobs place on whichever providers the org's **Actions provider order** names — `provider` or `provider:region` entries, walked in order, editable under **Settings → Providers**. Every refusal along the walk is recorded on the job's `placementAttempts`, so a bad key or unsupported region shows up as an explicit reason rather than a silently skipped provider.
+
+```bash
+compute actions providers                                 # providers, regions, act-usable status
+compute actions providers configure tensorlake --key <key> --verify
+compute actions providers configure blaxel --field apiKey=<k> --field workspace=<w>
+compute actions providers verify tensorlake               # re-run the placement probe
+compute actions providers remove tensorlake               # refused while live boxes need it
+```
+
+A stored key makes a provider **placeable**. Actions adds its own eligibility on top:
+
+* **Act-proven** — jobs run under `act`, which needs a real Docker daemon inside the sandbox. Providers with a built-in dockerd path (Vercel, Tensorlake, Blaxel) qualify out of the box; for any other provider, `configure --verify` / `providers verify` proves it by placing a real sandbox and running the same dockerd + act bring-up the job would — a pass marks the org's key act-capable. An unproven provider is *refused* with a recorded reason, not silently skipped.
+* **Reconnect-capable for long jobs** — a job whose `timeout-minutes` exceeds one executor invocation can only land on a provider whose sandboxes can be reattached after the invocation ends; shorter jobs don't care.
+
+`dispatch --provider <id>` pins a run to one provider regardless of the stored order (see [Dispatch](#dispatch-and-follow-a-run)).
 
 ## Secrets and variables
 
