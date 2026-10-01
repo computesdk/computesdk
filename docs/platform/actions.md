@@ -13,7 +13,7 @@ Jobs execute under [`act`](https://github.com/nektos/act) inside a ComputeSDK sa
 
 ## Setup
 
-1. **Access** — Actions is available to every organization; no subscription or entitlement is required. The free plan includes 5 Actions runs per UTC day; a paid Actions entitlement (Settings → Billing) removes the daily cap.
+1. **Access** — Actions is available to every organization; no subscription or entitlement is required.
 2. **Connect a repo** — either install the platform's GitHub App (grants repo access + push/PR triggers), or connect a generic git remote by clone URL from **Actions → Repos** or `compute actions repos connect <clone-url>` (`token`, `basic`, `ssh`, and unauthenticated remotes are supported). A connect validates the remote with a real `ls-remote`, then lands enabled.
 3. **Register a provider credential** — under **Settings → Providers**, or `compute actions providers configure <provider> --key <key>`. See [Providers and eligibility](#providers-and-eligibility).
 4. **Secrets and variables** — optional; see [Secrets and variables](#secrets-and-variables).

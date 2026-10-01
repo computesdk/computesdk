@@ -54,8 +54,7 @@ The `compute` CLI can also authenticate interactively — `compute bench auth lo
 Platform features are gated by per-org **product entitlements**:
 
 * Benchmark categories (compute, storage, browser, AI gateway) unlock benchmark runs in that category
-* **Actions** is free for every org — connected repos, dispatch, and the `/api/v1/actions/*` API work out of the box, capped at 5 runs per UTC day. A paid Actions subscription removes the cap.
-* **Sandboxes** requires the org's `sandboxes` feature flag.
+* **Actions** is free for every org — connected repos, dispatch, and the `/api/v1/actions/*` API work out of the box.
 
 Billing is managed under **Settings → Billing** (`/<org-slug>/settings/billing`). Unentitled API calls return `403`.
 
