@@ -40,10 +40,19 @@ function clientFor(config: DockerSandboxesConfig): Sandboxes {
   const key = `${username}\0${personalAccessToken}`;
   let client = clients.get(key);
   if (!client) {
-    client = new Sandboxes({ auth: pat({ username, personalAccessToken }) });
+    const auth = pat({ username, personalAccessToken });
+    client = new Sandboxes({ auth });
     clients.set(key, client);
+    // Start the token exchange now, so the first create doesn't wait for it.
+    auth.getAccessToken().catch(() => {});
   }
   return client;
+}
+
+// Sign in at import when credentials come from the environment, so the exchange
+// is done before the first create.
+if (env('DOCKER_SANDBOXES_USERNAME') && env('DOCKER_SANDBOXES_TOKEN')) {
+  clientFor({});
 }
 
 const isNotFound = (error: unknown) => error instanceof RequestError && error.httpStatus === 404;
