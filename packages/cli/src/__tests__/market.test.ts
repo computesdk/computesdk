@@ -8,12 +8,14 @@ import {
   formatListingStatus,
   formatProviderStatus,
   formatRate,
+  formatReplacedFill,
   formatSettlementRow,
   formatUsd,
   listingPatchBody,
   parseCapacity,
   parseExpiresIn,
   parseRate,
+  replaceTarget,
   sellBody,
   type MarketAsk,
   type MarketCredentialField,
@@ -364,6 +366,7 @@ describe('formatBook', () => {
         region: 'us-east-1',
         usd: 0.1,
         per: 'second',
+        status: 'live' as const,
         createdAt: '2026-09-29T12:30:00.000Z',
       },
     ],
@@ -385,6 +388,58 @@ describe('formatBook', () => {
     expect(out).toContain('no listings are live');
     expect(out).toContain('no open offers');
     expect(out).toContain('nothing has sold yet');
+  });
+
+  it('marks a replaced sale', () => {
+    const out = formatBook({
+      ...BOOK,
+      fills: [{ ...BOOK.fills[0], status: 'replaced' as const }],
+    });
+    expect(out).toContain('replaced');
+  });
+});
+
+describe('replaceTarget', () => {
+  it('evicts a whole listing by default', () => {
+    expect(replaceTarget('a-1', undefined)).toEqual({
+      path: '/api/v1/market/listings/a-1/replace',
+      scope: 'listing',
+    });
+  });
+
+  it('targets one sale with --fill', () => {
+    expect(replaceTarget('a-1', 'f-1')).toEqual({
+      path: '/api/v1/market/fills/f-1/replace',
+      scope: 'fill',
+    });
+  });
+
+  it('requires a target', () => {
+    expect(() => replaceTarget(undefined, undefined)).toThrow('Nothing to replace');
+  });
+});
+
+describe('formatReplacedFill', () => {
+  it('shows the seconds-lived settle and a re-placed job', () => {
+    const out = formatReplacedFill({
+      fillId: 'f-1',
+      askId: 'a-1',
+      settledMicroUsd: 300,
+      jobRequeued: true,
+    });
+    expect(out).toContain('f-1');
+    expect(out).toContain('$0.0003');
+    expect(out).toContain('re-places');
+  });
+
+  it('omits the job note for a router sale', () => {
+    const out = formatReplacedFill({
+      fillId: 'f-2',
+      askId: 'a-1',
+      settledMicroUsd: 0,
+      jobRequeued: false,
+    });
+    expect(out).not.toContain('re-places');
   });
 });
 

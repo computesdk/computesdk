@@ -115,9 +115,31 @@ export interface MarketOrderBook {
     region: string | null;
     usd: number;
     per: MarketRatePer;
+    /** 'replaced' = the seller took the capacity back mid-sale. */
+    status: 'live' | 'closed' | 'replaced';
     createdAt: string;
   }[];
   prices: { askId: string; usd: number; per: MarketRatePer; changedAt: string }[];
+}
+
+/** One evicted sale — POST /api/v1/market/fills/:id/replace and each entry of the listing replace. */
+export interface MarketReplacedFill {
+  fillId: string;
+  askId: string;
+  /** Charged to the buyer — the seconds the fill actually lived. */
+  settledMicroUsd: number;
+  /** An Actions job on the evicted capacity re-places on the buyer's next provider. */
+  jobRequeued: boolean;
+}
+
+export type MarketReplaceFillOutcome =
+  | { ok: true; fill: MarketReplacedFill }
+  | { ok: false; status: number; error: string };
+
+/** POST /api/v1/market/listings/:id/replace — paused listing + per-fill outcomes. */
+export interface MarketListingReplaceResult {
+  listing: MarketAsk;
+  fills: MarketReplaceFillOutcome[];
 }
 
 /** `describeSettlement` — one row of GET /api/v1/market/settlements. */
@@ -442,11 +464,52 @@ export function formatBook(book: MarketOrderBook): string {
   lines.push(pc.bold('recent sales'));
   if (book.fills.length === 0) lines.push(pc.dim('  nothing has sold yet'));
   for (const fill of book.fills) {
+    const statusNote =
+      fill.status === 'replaced'
+        ? pc.yellow('  replaced')
+        : fill.status === 'closed'
+          ? pc.gray('  closed')
+          : '';
     lines.push(
-      `  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}`,
+      `  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}${statusNote}`,
     );
   }
   return lines.join('\n');
+}
+
+/** `replaced  f-1  settled $0.0003` (+ a note when an Actions job re-places). */
+export function formatReplacedFill(fill: MarketReplacedFill): string {
+  const settled = formatUsd(fill.settledMicroUsd / 1e6);
+  const job = fill.jobRequeued
+    ? pc.dim(" — job re-places on the buyer's next provider")
+    : '';
+  return `replaced  ${pc.cyan(fill.fillId)}  settled ${settled}${job}`;
+}
+
+/**
+ * `compute market replace` resolves to exactly one endpoint: `--fill` evicts
+ * one sale, a listing ID pauses the listing and evicts every sale on it.
+ */
+export function replaceTarget(
+  listingId: string | undefined,
+  fillId: string | undefined,
+): { path: string; scope: 'listing' | 'fill' } {
+  if (fillId !== undefined) {
+    return {
+      path: `/api/v1/market/fills/${encodeURIComponent(fillId)}/replace`,
+      scope: 'fill',
+    };
+  }
+  if (listingId === undefined) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      'Nothing to replace — pass a listing ID or --fill <fill-id>.',
+    );
+  }
+  return {
+    path: `/api/v1/market/listings/${encodeURIComponent(listingId)}/replace`,
+    scope: 'listing',
+  };
 }
 
 export function formatSettlementRow(s: MarketSettlement): string {
@@ -623,6 +686,47 @@ export function registerMarketCommands(program: Command): void {
       fail(e, opts);
     }
   });
+
+  common(
+    market
+      .command('replace')
+      .description(
+        'Take capacity back: evict a sale, or pause a listing and evict every sale on it.\n' +
+          "An evicted Actions job restarts on the buyer's next provider; the buyer pays\n" +
+          'only for the seconds the sale actually ran.',
+      )
+      .argument('[listing-id]', 'listing to pause and evict every sale on')
+      .option('--fill <fill-id>', 'evict one sale without touching the listing'),
+  ).action(
+    async (
+      listingId: string | undefined,
+      opts: CommonOpts & { fill?: string },
+    ) => {
+      try {
+        const target = replaceTarget(listingId, opts.fill);
+        const c = await client(opts);
+        if (target.scope === 'fill') {
+          const result = await c.post<{ fill: MarketReplacedFill }>(target.path, {});
+          output(opts, result, (r) => console.log(formatReplacedFill(r.fill)));
+        } else {
+          const result = await c.post<MarketListingReplaceResult>(target.path, {});
+          output(opts, result, (r) => {
+            console.log(`paused  ${pc.cyan(r.listing.id)}`);
+            if (r.fills.length === 0) {
+              console.log(pc.dim('  no live sales to evict'));
+              return;
+            }
+            for (const f of r.fills) {
+              if (f.ok) console.log(formatReplacedFill(f.fill));
+              else console.log(pc.red(`  could not evict a sale — ${f.error}`));
+            }
+          });
+        }
+      } catch (e) {
+        fail(e, opts);
+      }
+    },
+  );
 
   common(
     market
