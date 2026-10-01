@@ -390,12 +390,13 @@ describe('formatBook', () => {
     expect(out).toContain('nothing has sold yet');
   });
 
-  it('marks a replaced sale', () => {
+  it('marks a replaced sale and shows the sale id for --fill', () => {
     const out = formatBook({
       ...BOOK,
       fills: [{ ...BOOK.fills[0], status: 'replaced' as const }],
     });
     expect(out).toContain('replaced');
+    expect(out).toContain('f-1');
   });
 });
 

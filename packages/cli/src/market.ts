@@ -471,7 +471,7 @@ export function formatBook(book: MarketOrderBook): string {
           ? pc.gray('  closed')
           : '';
     lines.push(
-      `  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}${statusNote}`,
+      `  ${pc.dim(fill.id)}  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}${statusNote}`,
     );
   }
   return lines.join('\n');
@@ -721,6 +721,8 @@ export function registerMarketCommands(program: Command): void {
               else console.log(pc.red(`  could not evict a sale — ${f.error}`));
             }
           });
+          // A partial eviction is not success: some sales are still running.
+          if (result.fills.some((f) => !f.ok)) process.exitCode = 1;
         }
       } catch (e) {
         fail(e, opts);
