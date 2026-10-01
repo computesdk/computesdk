@@ -69,7 +69,9 @@ export const dockerSandboxes = defineProvider<Sandbox, DockerSandboxesConfig>({
             ...(options?.name ? { displayName: options.name } : {}),
             lifecycle: { timeoutMs: options?.timeout ?? config.timeout ?? 300000 },
           });
-          const sandbox = await accepted.waitUntilRunning();
+          // waitUntilRunning() always reads once; skip it when create already returned running.
+          // Same check as the SDK's own withSandbox(), valid because we pass no idempotencyKey.
+          const sandbox = accepted.status === 'running' && accepted.uid ? accepted : await accepted.waitUntilRunning();
           return { sandbox, sandboxId: sandbox.name };
         } catch (error) {
           // A RequestError's message is only its code; the server's explanation is in raw.message.

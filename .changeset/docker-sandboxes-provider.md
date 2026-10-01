@@ -1,5 +1,5 @@
 ---
-"@computesdk/docker-sandboxes": minor
+"@computesdk/docker-sandboxes": patch
 ---
 
-New provider: Docker Sandboxes, through the official `@docker/sandboxes` SDK.
+Add Docker Sandboxes provider

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/docker-sandboxes",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Docker Sandboxes provider for ComputeSDK - cloud microVM sandboxes from Docker",
   "author": "Docker",
   "license": "MIT",
