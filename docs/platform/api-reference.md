@@ -23,7 +23,7 @@ Base URL: `https://platform.computesdk.com/api/v1`. Authenticate every request w
 
 ## Actions (CI)
 
-All Actions routes require the `actions` product entitlement (`403` otherwise). See [Actions](actions.md) for semantics.
+Actions is available to every organization — no product entitlement required. The free plan allows 5 runs per UTC day; a paid `actions` entitlement removes the cap. See [Actions](actions.md) for semantics.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ All Actions routes require the `actions` product entitlement (`403` otherwise). 
 
 ## Vault (secrets and variables)
 
-Owner/admin keys only. Not gated on the Actions entitlement. `repo=<owner>/<name>` scopes to a repo's overrides; `kind` is `secret` (default) or `variable`.
+Owner/admin keys only. Requires compute access (Actions, or the `sandboxes` flag). `repo=<owner>/<name>` scopes to a repo's overrides; `kind` is `secret` (default) or `variable`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -86,6 +86,8 @@ Org keys see their own benchmarks plus subscribed (entitled) ones — never othe
 | GET/POST | `.../runs/{runId}/workers/{workerId}` · `/events` · `/heartbeat` · `/complete` · `/fail` · `/release` · `/artifacts` | Worker lifecycle — for benchmark executors |
 
 ## Sandboxes
+
+Mutations require the org's `sandboxes` feature flag; reads and destroy stay open so a disabled flag never strands a running box. Body on POST: `{ label?, providerOrder?: ["provider[:region]", ...], timeoutMs?, secrets?: [vault names] }` — omitting `providerOrder` falls back to the org's stored Sandboxes order, then the Actions order, then the deployment default. Commands return a `stdout`/`stderr` event stream closed by `exit`, or send `Accept: application/json` for a buffered `{ commandId, exitCode, stdout, stderr, durationMs }`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
