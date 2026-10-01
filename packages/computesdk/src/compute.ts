@@ -221,6 +221,22 @@ class ComputeManager {
     for (const [index, provider] of candidates.entries()) {
       try {
         const sandbox = await provider.sandbox.create(providerOptions);
+        if (
+          providerOptions?.egress &&
+          typeof providerOptions.egress === 'object' &&
+          !Array.isArray(providerOptions.egress) &&
+          !sandbox.egress
+        ) {
+          // The provider accepted the option but did not honor it — destroy
+          // the sandbox rather than hand back one without egress routing.
+          const orphanId = getSandboxId(sandbox);
+          if (orphanId) {
+            provider.sandbox.destroy(orphanId).catch(() => {});
+          }
+          throw new Error(
+            `egress: provider "${getProviderLabel(provider, index)}" does not support the "egress" option`
+          );
+        }
         this.registerSandboxProvider(sandbox, provider);
         return sandbox;
       } catch (error) {

@@ -118,6 +118,12 @@ export interface GivemeanodeCreateTemplateOptions {
   expiresAfter?: string
 }
 
+/** The shared `egress` option is now a union (router options | legacy forms);
+ *  givemeanode only honors its own 'open' | 'none' strings. */
+function asGmnEgress(value: unknown): 'open' | 'none' | undefined {
+  return value === 'open' || value === 'none' ? value : undefined
+}
+
 type ConfigWithClient = GivemeanodeConfig & { __client?: GmnClient }
 
 function getClient(config: ConfigWithClient): GmnClient {
@@ -145,7 +151,7 @@ const provider = defineProvider<
           getClient(config),
           config.ramGib,
           config.egress,
-          options,
+          options && { ...options, egress: asGmnEgress(options.egress) },
           config.execRetries,
         )
         return { sandbox, sandboxId: sandbox.id }

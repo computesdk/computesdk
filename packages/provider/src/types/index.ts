@@ -18,6 +18,8 @@ export type {
   SandboxFileSystem,
   CreateSandboxOptions,
   SandboxResourceOptions,
+  SandboxEgressOptions,
+  SandboxEgressInfo,
   RunloopLaunchParameters,
   VercelSandboxResources,
 } from 'computesdk';

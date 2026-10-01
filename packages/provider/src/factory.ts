@@ -25,6 +25,7 @@ import type {
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
+  SandboxEgressInfo,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
@@ -34,6 +35,7 @@ import {
   type SeedInput,
   type SeedInvocationResult,
 } from 'daemond';
+import { setupSandboxEgress } from './egress.js';
 
 type DaemonStreamState = {
   token: string;
@@ -411,6 +413,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
+  /** Set at create when `CreateSandboxOptions.egress` was passed. */
+  egress?: SandboxEgressInfo;
   private daemonStreamState?: DaemonStreamState;
   constructor(
     private sandbox: TSandbox,
@@ -998,7 +1002,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       throw makeAbortError();
     }
 
-    return new GeneratedSandbox<TSandbox>(
+    const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -1007,6 +1011,12 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods.destroy,
       this.providerInstance
     );
+
+    if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
+      sandbox.egress = await setupSandboxEgress(sandbox, options.egress, this.providerName);
+    }
+
+    return sandbox;
   }
 
   async getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null> {
