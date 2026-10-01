@@ -16,7 +16,7 @@ export interface DockerSandboxesConfig {
   username?: string;
   /** Docker personal or organization access token - falls back to DOCKER_SANDBOXES_TOKEN */
   token?: string;
-  /** Image used when create() is given no templateId or snapshotId - falls back to DOCKER_SANDBOXES_IMAGE */
+  /** Snapshot template (`images/...`) used when create() is given no templateId or snapshotId - falls back to DOCKER_SANDBOXES_IMAGE */
   image?: string;
   /** Sandbox lifetime in milliseconds */
   timeout?: number;
@@ -54,12 +54,17 @@ export const dockerSandboxes = defineProvider<Sandbox, DockerSandboxesConfig>({
     sandbox: {
       create: async (config: DockerSandboxesConfig, options?: CreateSandboxOptions) => {
         const client = clientFor(config);
-        const image = options?.templateId || options?.snapshotId || config.image || env('DOCKER_SANDBOXES_IMAGE') || undefined;
+        const image = options?.templateId || options?.snapshotId || config.image || env('DOCKER_SANDBOXES_IMAGE');
+        // Snapshot templates only: a registry image would be pulled cold on every create.
+        if (!image?.startsWith('images/')) {
+          throw new Error(
+            `Docker Sandboxes needs a snapshot template ('images/...') as templateId, snapshotId, ` +
+              `'image' in config, or DOCKER_SANDBOXES_IMAGE.`,
+          );
+        }
         try {
           const accepted = await client.create({
-            // `images/...` names a saved image or snapshot; anything else is a registry reference,
-            // which the API only accepts with an explicit size.
-            ...(image ? (image.startsWith('images/') ? { image } : { imageRef: image, resources: 'small' as const }) : {}),
+            image,
             ...(options?.envs ? { environment: options.envs } : {}),
             ...(options?.name ? { displayName: options.name } : {}),
             lifecycle: { timeoutMs: options?.timeout ?? config.timeout ?? 300000 },

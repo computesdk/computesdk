@@ -23,7 +23,7 @@ export DOCKER_SANDBOXES_TOKEN=your_access_token
 import { dockerSandboxes } from '@computesdk/docker-sandboxes';
 
 const compute = dockerSandboxes({});
-const sandbox = await compute.sandbox.create({ templateId: 'node:22' });
+const sandbox = await compute.sandbox.create({ templateId: 'images/tmpl_...' });
 
 const result = await sandbox.runCommand('node -v');
 console.log(result.stdout);
@@ -37,10 +37,10 @@ await sandbox.destroy();
 |---|---|---|
 | `username` | `DOCKER_SANDBOXES_USERNAME` | Docker username or organization |
 | `token` | `DOCKER_SANDBOXES_TOKEN` | Docker personal or organization access token |
-| `image` | `DOCKER_SANDBOXES_IMAGE` | Image used when `create()` gets no `templateId` or `snapshotId` |
+| `image` | `DOCKER_SANDBOXES_IMAGE` | Snapshot template used when `create()` gets no `templateId` or `snapshotId` |
 | `timeout` | | Sandbox lifetime in milliseconds (default 300000) |
 
-`templateId` and `snapshotId` both select the sandbox image: an `images/...` name for a saved image or snapshot, or a registry reference such as `node:22`. Providers built with the same credentials share one SDK client, so the token exchange happens once per process.
+`templateId` and `snapshotId` both take a snapshot template name (`images/...`). Registry images are not accepted: they would be pulled on every create. Providers built with the same credentials share one SDK client, so the token exchange happens once per process.
 
 ## Supported
 
