@@ -3,6 +3,103 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { closeMiosaConnections, miosa, DEFAULT_BASE_URL } from "../index";
 import type { MiosaSandboxRecord } from "../index";
 
+// In-memory stand-in for node:http2. Each fake session records the streams
+// opened on it and only answers them once the test marks it connected, which
+// mirrors how http2 queues requests on a session that is still connecting.
+const fakeHttp2 = vi.hoisted(() => {
+  type Listener = (...args: unknown[]) => void;
+
+  // Just the listener surface the transport uses on sessions and streams.
+  class Emitter {
+    private listeners = new Map<string, Listener[]>();
+    on(event: string, listener: Listener): this {
+      this.listeners.set(event, [
+        ...(this.listeners.get(event) ?? []),
+        listener,
+      ]);
+      return this;
+    }
+    once(event: string, listener: Listener): this {
+      const wrapped: Listener = (...args) => {
+        this.listeners.set(
+          event,
+          (this.listeners.get(event) ?? []).filter((l) => l !== wrapped),
+        );
+        listener(...args);
+      };
+      return this.on(event, wrapped);
+    }
+    emit(event: string, ...args: unknown[]): void {
+      for (const listener of this.listeners.get(event) ?? []) listener(...args);
+    }
+  }
+
+  class FakeStream extends Emitter {
+    constructor(readonly session: FakeSession) {
+      super();
+    }
+    end(): void {
+      this.session.pending.push(this);
+      if (this.session.connected) this.session.flush();
+    }
+  }
+
+  class FakeSession extends Emitter {
+    connected = false;
+    closed = false;
+    destroyed = false;
+    pending: FakeStream[] = [];
+    streams: FakeStream[] = [];
+    request(): FakeStream {
+      const stream = new FakeStream(this);
+      this.streams.push(stream);
+      return stream;
+    }
+    connect(): void {
+      this.connected = true;
+      this.emit("connect");
+      this.flush();
+    }
+    flush(): void {
+      for (const stream of this.pending.splice(0)) {
+        setImmediate(() => {
+          stream.emit("response", { ":status": 200 });
+          stream.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({ data: { id: "sbx-1", state: "running" } }),
+            ),
+          );
+          stream.emit("end");
+        });
+      }
+    }
+    referenced = true;
+    ref(): void {
+      this.referenced = true;
+    }
+    unref(): void {
+      this.referenced = false;
+    }
+    close(): void {
+      this.closed = true;
+    }
+  }
+
+  const sessions: FakeSession[] = [];
+  const connect = () => {
+    const session = new FakeSession();
+    sessions.push(session);
+    return session;
+  };
+  return { sessions, connect };
+});
+
+vi.mock("node:http2", () => ({
+  connect: fakeHttp2.connect,
+  default: { connect: fakeHttp2.connect },
+}));
+
 const API_KEY = "msk_test_0123456789abcdef";
 
 function sandboxRecord(
@@ -328,6 +425,116 @@ describe("miosa provider", () => {
   describe("connection pooling", () => {
     it("should expose a disposal hook that is safe to call with no pool", () => {
       expect(() => closeMiosaConnections()).not.toThrow();
+    });
+
+    describe("over HTTP/2", () => {
+      const savedNodeEnv = process.env.NODE_ENV;
+      const baseUrl = "https://pool.example.test/api/v1";
+      // Yields to the event loop until the condition holds. Bounded to a few
+      // milliseconds, far below any timer-based wait in the transport.
+      const settle = async (condition: () => boolean = () => true) => {
+        for (let turn = 0; turn < 50 && !condition(); turn += 1) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        await new Promise((resolve) => setImmediate(resolve));
+      };
+      const streamsOpened = () =>
+        fakeHttp2.sessions.reduce(
+          (count, session) => count + session.streams.length,
+          0,
+        );
+
+      beforeEach(() => {
+        // The pooled transport is skipped under NODE_ENV=test.
+        process.env.NODE_ENV = "production";
+        fakeHttp2.sessions.length = 0;
+      });
+
+      afterEach(() => {
+        closeMiosaConnections();
+        process.env.NODE_ENV = savedNodeEnv;
+      });
+
+      it("should dispatch as soon as the first session connects", async () => {
+        // Freeze timers so only the connect event can release the request.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const provider = miosa({ apiKey: API_KEY, baseUrl });
+          const pending = provider.sandbox.getById("sbx-1");
+          // The request is parked once its bounded first-ready timer exists.
+          await settle(() => vi.getTimerCount() > 0);
+          expect(vi.getTimerCount()).toBeGreaterThan(0);
+          expect(streamsOpened()).toBe(0);
+
+          const first = fakeHttp2.sessions[0]!;
+          first.connect();
+          await settle(() => streamsOpened() > 0);
+
+          expect(first.streams).toHaveLength(1);
+          expect(
+            fakeHttp2.sessions.slice(1).every((session) => !session.connected),
+          ).toBe(true);
+          await expect(pending).resolves.toMatchObject({ sandboxId: "sbx-1" });
+          expect(fetchMock).not.toHaveBeenCalled();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("should leave idle pooled sessions unreferenced", async () => {
+        const provider = miosa({ apiKey: API_KEY, baseUrl });
+        await settle(() => fakeHttp2.sessions.length > 0);
+        expect(fakeHttp2.sessions.every((session) => !session.referenced)).toBe(
+          true,
+        );
+
+        fakeHttp2.sessions[0]!.connect();
+        await provider.sandbox.getById("sbx-1");
+
+        expect(fakeHttp2.sessions.every((session) => !session.referenced)).toBe(
+          true,
+        );
+      });
+
+      it("should prefer a connected session over sessions still connecting", async () => {
+        const provider = miosa({ apiKey: API_KEY, baseUrl });
+        await settle(() => fakeHttp2.sessions.length > 0);
+        const first = fakeHttp2.sessions[0]!;
+        first.connect();
+
+        const pending = Promise.all([
+          provider.sandbox.getById("sbx-1"),
+          provider.sandbox.getById("sbx-1"),
+          provider.sandbox.getById("sbx-1"),
+        ]);
+        await settle(() => streamsOpened() === 3);
+        expect(streamsOpened()).toBe(3);
+        const results = await pending;
+
+        expect(results.every((result) => result?.sandboxId === "sbx-1")).toBe(
+          true,
+        );
+        expect(first.streams).toHaveLength(3);
+        expect(
+          fakeHttp2.sessions.slice(1).every((session) => !session.connected),
+        ).toBe(true);
+      });
+
+      it("should round-robin across connected sessions", async () => {
+        const provider = miosa({ apiKey: API_KEY, baseUrl });
+        await settle(() => fakeHttp2.sessions.length > 0);
+        const connected = fakeHttp2.sessions.slice(0, 3);
+        for (const session of connected) session.connect();
+
+        await Promise.all(
+          Array.from({ length: 6 }, () => provider.sandbox.getById("sbx-1")),
+        );
+
+        expect(connected.map((session) => session.streams.length)).toEqual([
+          2, 2, 2,
+        ]);
+        expect(streamsOpened()).toBe(6);
+      });
     });
   });
 

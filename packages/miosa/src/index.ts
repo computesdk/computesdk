@@ -295,14 +295,13 @@ async function nodeHttp2Request(
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
 
-  // Cold start: wait for the first connected session, then give the rest of
-  // the pool a short window (250ms cap) to reach a quorum so a concurrent
-  // burst spreads over warm connections instead of serializing behind
-  // handshakes. Steady state pays nothing: ready.size > 0 skips all of this.
-  // The first wait is BOUNDED (1s): if no session ever connects (unreachable
-  // or misconfigured endpoint), dispatch falls through to the legacy
+  // Cold start: wait for the first connected session, then dispatch. Sessions
+  // that connect later join `ready` and the round-robin below, so nothing
+  // waits on the rest of the pool. Steady state pays nothing: ready.size > 0
+  // skips this. The wait is BOUNDED (1s): if no session ever connects
+  // (unreachable or misconfigured endpoint), dispatch falls through to the
   // any-session path below and the request itself surfaces the connection
-  // error promptly, exactly as before this optimization - never a hang.
+  // error promptly - never a hang.
   if (pool.ready.size === 0) {
     let firstReadyTimer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
@@ -312,13 +311,6 @@ async function nodeHttp2Request(
       }),
     ]);
     if (firstReadyTimer !== undefined) clearTimeout(firstReadyTimer);
-    if (pool.ready.size > 0) {
-      const quorum = Math.min(8, pool.sessions.length);
-      const deadline = Date.now() + 250;
-      while (pool.ready.size < quorum && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-    }
   }
 
   const candidates =
