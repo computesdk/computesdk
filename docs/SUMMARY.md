@@ -18,6 +18,7 @@
   * [Buddy](providers/buddy.md)
   * [Cloud Run](providers/cloud-run.md)
   * [Cloudflare](providers/cloudflare.md)
+  * [Cocoon Stack](providers/cocoonstack.md)
   * [CodeSandbox](providers/codesandbox.md)
   * [Collimate](providers/collimate.md)
   * [CreateOS](providers/createos-sandbox.md)
