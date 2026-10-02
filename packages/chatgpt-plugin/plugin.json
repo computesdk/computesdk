@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "computesdk-sandboxes",
+  "version": "0.1.0",
+  "description": "Run real code in ComputeSDK cloud sandboxes — create environments, execute commands, manage files and long-running processes, preview ports.",
+  "extensions": {
+    "com.openai": {
+      "displayName": "ComputeSDK Sandboxes"
+    }
+  }
+}

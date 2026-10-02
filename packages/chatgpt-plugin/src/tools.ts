@@ -20,7 +20,8 @@ import { PROVIDERS, getProvider } from './providers.js';
 import { gatewayClient, GatewayApiError } from './gateway.js';
 import { PANEL_HTML, PANEL_MIME, PANEL_URI } from './panel.js';
 
-const PANEL_META = { 'openai/outputTemplate': PANEL_URI };
+// MCP Apps standard field + the OpenAI compatibility alias.
+const PANEL_META = { 'ui/resourceUri': PANEL_URI, 'openai/outputTemplate': PANEL_URI };
 
 // Labels the plugin stamps on gateway sandboxes; the panel and list filter
 // scope to them so org pool boxes (`sb-pool-*`) and Actions sandboxes
@@ -242,7 +243,6 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         provider: z.string(),
       },
       annotations: { openWorldHint: true },
-      _meta: PANEL_META,
     },
     async ({ provider: name, label, timeout, templateId, image, snapshotId, provider_order, resources, secrets, envs }: {
       provider: string;
@@ -294,7 +294,6 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         label_prefix: z.string().optional().describe('Only return first-party sandboxes whose label starts with this (e.g. "chatgpt-plugin")'),
       },
       annotations: { readOnlyHint: true },
-      _meta: PANEL_META,
     },
     async ({ provider: name, label_prefix }) => {
       const provider = buildProvider(ctx, name);
@@ -578,6 +577,41 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         }
         throw e;
       }
+    }
+  );
+
+  server.registerTool(
+    'show_sandboxes',
+    {
+      title: 'Show sandboxes panel',
+      description:
+        'Render the ComputeSDK sandboxes panel (live list, status, cost, destroy). Render-only tool — call list_sandboxes first for data; the panel refreshes itself on tool-result notifications.',
+      inputSchema: {
+        label_prefix: z.string().optional().default(PLUGIN_LABEL_PREFIX).describe('Label scope for the panel list'),
+      },
+      annotations: { readOnlyHint: true },
+      _meta: PANEL_META,
+    },
+    async ({ label_prefix }) => {
+      const provider = buildProvider(ctx, 'computesdk');
+      const sandboxes = await provider.sandbox.list();
+      const infos = await Promise.all(
+        sandboxes.map(async (s) => {
+          try {
+            return await s.getInfo();
+          } catch {
+            return { id: s.sandboxId };
+          }
+        })
+      );
+      const filtered = infos.filter((i) => {
+        const label = (i as { metadata?: { label?: unknown } }).metadata?.label;
+        return typeof label === 'string' && label.startsWith(label_prefix);
+      });
+      return textResult(
+        { sandboxes: filtered },
+        `${filtered.length} plugin sandbox(es).`
+      );
     }
   );
 

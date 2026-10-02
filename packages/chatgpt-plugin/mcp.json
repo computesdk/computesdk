@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "computesdk-sandboxes": {
+      "type": "streamable-http",
+      "url": "https://mcp.computesdk.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${COMPUTESDK_API_KEY}"
+      }
+    }
+  }
+}
