@@ -1,5 +1,13 @@
 # computesdk
 
+## 4.1.9
+
+### Patch Changes
+
+- f1a8578: Add `sandbox.startProcess()` for interactive long-running processes: daemond gains stdin-capable detached jobs (`stdin`/`closeStdin` messages, bounded output buffers, `command.stdin.closed` events), and the provider factory implements `startProcess` once for all providers.
+- Updated dependencies [f1a8578]
+  - daemond@0.1.7
+
 ## 4.1.8
 
 ### Patch Changes
