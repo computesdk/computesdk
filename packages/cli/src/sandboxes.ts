@@ -411,13 +411,14 @@ export function registerSandboxesCommands(program: Command): void {
             : await readFile(opts.file, 'utf8');
         }
         if (data === undefined && !process.stdin.isTTY) {
-          const piped = await new Promise<string>((resolve) => {
-            let buf = '';
-            process.stdin.setEncoding('utf8');
-            process.stdin.on('data', (chunk) => (buf += chunk));
-            process.stdin.on('end', () => resolve(buf));
+          // Buffer raw bytes — decoding as utf8 first would corrupt binary
+          // input before --base64 could encode it.
+          const piped = await new Promise<Buffer>((resolve) => {
+            const chunks: Buffer[] = [];
+            process.stdin.on('data', (chunk) => chunks.push(chunk));
+            process.stdin.on('end', () => resolve(Buffer.concat(chunks)));
           });
-          data = opts.base64 ? Buffer.from(piped).toString('base64') : piped;
+          data = opts.base64 ? piped.toString('base64') : piped.toString('utf8');
         }
         if (data === undefined || data === '') {
           console.error(pc.red('Pass --data, --file, or pipe stdin'));
