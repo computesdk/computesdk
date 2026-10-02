@@ -42,6 +42,9 @@ export interface SandboxSummary {
   placementAttempts: unknown[];
   commandCount: number;
   secrets: string[];
+  /** The `boot.image` asked for, and what the provider actually booted. */
+  requestedImage: string | null;
+  image: string | null;
   createdAt: string;
   lastCommandAt: string | null;
   destroyedAt: string | null;
@@ -52,7 +55,7 @@ export interface SandboxSummary {
 /** `toDetail` — POST /sandboxes and GET /sandboxes/{id}. */
 export interface SandboxDetail extends SandboxSummary {
   /** BYOK direct-attach descriptor — null on market fills and ambient providers. */
-  attach: { provider: string; providerSandboxId: string } | null;
+  attach: { provider: string; providerSandboxId: string; region: string | null } | null;
 }
 
 export interface SandboxProcess {
@@ -62,6 +65,8 @@ export interface SandboxProcess {
   command: string;
   cwd: string | null;
   envNames: string[];
+  /** Whether the job's stdin pipe is open (spawn `--stdin`). */
+  stdin: boolean;
   status: string;
   exitCode: number | null;
   signal: string | null;
@@ -93,6 +98,19 @@ export type PathView =
   | { path: string; type: 'file'; content: string }
   | { path: string; type: 'directory'; entries: FileEntry[] };
 
+/** `snapshotView` — one row of GET /sandboxes/{id}/snapshots. */
+export interface SandboxSnapshot {
+  id: string;
+  sandboxId: string;
+  provider: string;
+  region: string | null;
+  providerSnapshotId: string;
+  label: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+}
+
 /** POSIX single-quote: argv survives intact through the remote `sh -lc`. */
 function shellQuote(arg: string): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`;
@@ -104,19 +122,31 @@ function printSandbox(s: SandboxSummary): void {
   const attach = 'attach' in s ? (s as SandboxDetail).attach : undefined;
   console.log(`${pc.cyan(s.id)}  ${s.status}  ${s.provider ?? '—'}  ${s.providerSandboxId ?? '—'}`);
   console.log(`  label: ${s.label ?? '—'}   commands: ${s.commandCount}   created: ${s.createdAt}`);
+  if (s.image !== undefined) {
+    console.log(`  image: ${s.image ?? '—'}${s.requestedImage !== null && s.requestedImage !== s.image ? `  ${pc.dim(`(requested: ${s.requestedImage})`)}` : ''}`);
+  }
   if (s.destroyError) console.log(`  destroyError: ${pc.red(s.destroyError)}`);
   if (attach !== undefined) {
     console.log(
       attach === null
         ? '  attach: none (market fill or ambient provider — platform drive only)'
-        : `  attach: ${attach.provider} / ${attach.providerSandboxId}`,
+        : `  attach: ${attach.provider} / ${attach.providerSandboxId}${attach.region ? ` (${attach.region})` : ''}`,
     );
   }
 }
 
 function printProcess(p: SandboxProcess | SandboxProcessStatus): void {
   const exit = p.status === 'exited' ? `exit=${p.exitCode ?? '?'}${p.signal ? ` (${p.signal})` : ''}` : '';
-  console.log(`${pc.cyan(p.jobId)}  ${p.status}${exit ? '  ' + exit : ''}  ${p.command}`);
+  const stdin = p.stdin && p.status === 'running' ? '  [stdin open]' : '';
+  console.log(`${pc.cyan(p.jobId)}  ${p.status}${exit ? '  ' + exit : ''}${stdin}  ${p.command}`);
+}
+
+function printSnapshot(s: SandboxSnapshot): void {
+  const state = s.deletedAt !== null ? `  ${pc.dim(`(deleted ${s.deletedAt})`)}` : '';
+  console.log(`${pc.cyan(s.id)}  ${s.providerSnapshotId}${state}`);
+  console.log(
+    `  provider: ${s.provider}${s.region ? ` (${s.region})` : ''}   label: ${s.label ?? '—'}   created: ${s.createdAt}${s.expiresAt ? `   expires: ${s.expiresAt}` : ''}`,
+  );
 }
 
 // ─── Commands ────────────────────────────────────────────────────────────────
@@ -257,9 +287,10 @@ export function registerSandboxesCommands(program: Command): void {
     .description('Start a detached process that outlives this request')
     .option('--cwd <dir>', 'working directory')
     .option('-e, --env <key=value>', 'environment variable (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
+    .option('--stdin', 'keep the process\'s stdin pipe open for `stdin`/`close-stdin`')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
-    .action(async (sandboxId: string, command: string[], opts: CommonOpts & { cwd?: string; env?: string[] }) => {
+    .action(async (sandboxId: string, command: string[], opts: CommonOpts & { cwd?: string; env?: string[]; stdin?: boolean }) => {
       try {
         const c = await client(opts);
         const res = await c.post<{ process: SandboxProcess }>(
@@ -268,6 +299,7 @@ export function registerSandboxesCommands(program: Command): void {
             command: command.map(shellQuote).join(' '),
             ...(opts.cwd ? { cwd: opts.cwd } : {}),
             ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
+            ...(opts.stdin ? { stdin: true } : {}),
           },
         );
         output(opts, res.process, printProcess);
@@ -356,6 +388,68 @@ export function registerSandboxesCommands(program: Command): void {
           opts.signal ? { signal: opts.signal } : {},
         );
         output(opts, res.process, printProcess);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('stdin <sandboxId> <jobId>')
+    .description('Write to a process\'s stdin pipe (spawn with --stdin; --data, --file, or piped)')
+    .option('--data <text>', 'data to write')
+    .option('--file <local>', 'read data from a local file')
+    .option('--base64', 'base64-encode the input before sending (binary-safe)')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .action(async (sandboxId: string, jobId: string, opts: CommonOpts & { data?: string; file?: string; base64?: boolean }) => {
+      try {
+        let data = opts.data;
+        if (data === undefined && opts.file) {
+          const { readFile } = await import('node:fs/promises');
+          data = opts.base64
+            ? (await readFile(opts.file)).toString('base64')
+            : await readFile(opts.file, 'utf8');
+        }
+        if (data === undefined && !process.stdin.isTTY) {
+          const piped = await new Promise<string>((resolve) => {
+            let buf = '';
+            process.stdin.setEncoding('utf8');
+            process.stdin.on('data', (chunk) => (buf += chunk));
+            process.stdin.on('end', () => resolve(buf));
+          });
+          data = opts.base64 ? Buffer.from(piped).toString('base64') : piped;
+        }
+        if (data === undefined || data === '') {
+          console.error(pc.red('Pass --data, --file, or pipe stdin'));
+          process.exit(1);
+        }
+        if (opts.base64 && opts.data !== undefined) {
+          data = Buffer.from(data).toString('base64');
+        }
+        const c = await client(opts);
+        const res = await c.post<{ ok: boolean }>(
+          `/api/v1/sandboxes/${sandboxId}/processes/${jobId}/stdin`,
+          { data, ...(opts.base64 ? { encoding: 'base64' } : {}) },
+        );
+        output(opts, res, () => console.log(`wrote ${data.length} chars to ${jobId}`));
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('close-stdin <sandboxId> <jobId>')
+    .description('Close a process\'s stdin pipe')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .action(async (sandboxId: string, jobId: string, opts: CommonOpts) => {
+      try {
+        const c = await client(opts);
+        const res = await c.post<{ ok: boolean }>(
+          `/api/v1/sandboxes/${sandboxId}/processes/${jobId}/close-stdin`,
+          {},
+        );
+        output(opts, res, () => console.log(`closed stdin on ${jobId}`));
       } catch (e) {
         fail(e, opts);
       }
@@ -495,6 +589,59 @@ export function registerSandboxesCommands(program: Command): void {
           protocol: opts.protocol,
         });
         output(opts, res, (r) => console.log(safeTerm(r.url)));
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('snapshots <sandboxId>')
+    .description('List the sandbox\'s snapshots')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .action(async (sandboxId: string, opts: CommonOpts) => {
+      try {
+        const c = await client(opts);
+        const res = await c.get<{ snapshots: SandboxSnapshot[] }>(
+          `/api/v1/sandboxes/${sandboxId}/snapshots`,
+        );
+        output(opts, res.snapshots, (list) => list.forEach(printSnapshot));
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('snapshot <sandboxId>')
+    .description('Snapshot a running sandbox through its provider')
+    .option('--label <label>', 'label for the snapshot')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .action(async (sandboxId: string, opts: CommonOpts & { label?: string }) => {
+      try {
+        const c = await client(opts);
+        const res = await c.post<{ snapshot: SandboxSnapshot }>(
+          `/api/v1/sandboxes/${sandboxId}/snapshots`,
+          opts.label ? { label: opts.label } : {},
+        );
+        output(opts, res.snapshot, printSnapshot);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('snapshot-delete <sandboxId> <snapshotId>')
+    .description('Delete a snapshot\'s provider artifact')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .action(async (sandboxId: string, snapshotId: string, opts: CommonOpts) => {
+      try {
+        const c = await client(opts);
+        const res = await c.del<{ ok: boolean }>(
+          `/api/v1/sandboxes/${sandboxId}/snapshots/${snapshotId}`,
+        );
+        output(opts, res, () => console.log(`deleted snapshot ${snapshotId}`));
       } catch (e) {
         fail(e, opts);
       }
