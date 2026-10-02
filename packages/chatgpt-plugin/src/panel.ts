@@ -78,7 +78,13 @@ window.addEventListener("message", (event) => {
     msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result);
     return;
   }
-  if (msg.method === "ui/notifications/tool-result") refresh();
+  if (msg.method === "ui/notifications/tool-result") {
+    // If the notification carries the render tool's sandbox list, paint it
+    // directly instead of issuing a redundant list_sandboxes call.
+    const sbs = msg.params?.structuredContent?.sandboxes ?? msg.params?.result?.structuredContent?.sandboxes;
+    if (Array.isArray(sbs)) render(sbs);
+    else refresh();
+  }
 });
 
 const callTool = (name, args) => rpcRequest("tools/call", { name, arguments: args });
@@ -88,22 +94,21 @@ function render(sandboxes) {
   emptyEl.hidden = sandboxes.length > 0;
   for (const sb of sandboxes) {
     const li = document.createElement("li");
-    const meta = sb.metadata || {};
     const id = document.createElement("span");
     id.className = "id";
-    const label = meta.label || sb.id || sb.sandbox_id || "?";
+    const label = sb.label || sb.id || "?";
     id.textContent = label;
-    id.title = (sb.id || sb.sandbox_id) + " · " + (meta.gatewayProvider || "unplaced") + (meta.costUsd != null ? " · $" + Number(meta.costUsd).toFixed(4) : "");
+    id.title = (sb.id || "?") + " · " + (sb.provider || "unplaced") + (sb.costUsd != null ? " · $" + Number(sb.costUsd).toFixed(4) : "");
     const state = document.createElement("span");
     state.className = "state";
-    state.textContent = meta.gatewayStatus || sb.status || sb.state || "running";
+    state.textContent = sb.status || "running";
     const kill = document.createElement("button");
     kill.className = "destroy";
     kill.textContent = "Destroy";
     kill.onclick = async () => {
       kill.disabled = true;
       try {
-        await callTool("destroy_sandbox", { provider: "computesdk", sandbox_id: sb.id || sb.sandbox_id });
+        await callTool("destroy_sandbox", { provider: "computesdk", sandbox_id: sb.id });
         refresh();
       } catch (e) { errEl.textContent = String(e.message || e); }
     };
@@ -115,7 +120,7 @@ function render(sandboxes) {
 async function refresh() {
   errEl.textContent = "";
   try {
-    const res = await callTool("list_sandboxes", { provider: "computesdk", label_prefix: "chatgpt-plugin" });
+    const res = await callTool("list_sandboxes", { provider: "computesdk" });
     render(res?.structuredContent?.sandboxes || []);
   } catch (e) {
     errEl.textContent = String(e.message || e);

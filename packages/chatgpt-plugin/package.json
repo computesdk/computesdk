@@ -2,7 +2,7 @@
   "name": "@computesdk/chatgpt-plugin",
   "version": "0.1.0",
   "description": "ComputeSDK — developer tool for running code in any sandbox provider, with live market bidding for the best price. ChatGPT plugin (MCP server).",
-  "author": "Garrison",
+  "author": "ComputeSDK",
   "license": "MIT",
   "private": true,
   "type": "module",

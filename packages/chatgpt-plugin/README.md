@@ -30,20 +30,23 @@ namespace) are still available via `set_provider_credentials`.
   (`ui/initialize`, `tools/call`, `ui/notifications/tool-result`).
 - `src/tools.ts` — MCP tools: `list_providers`,
   `set_provider_credentials`, `remove_provider_credentials`,
-  `create_sandbox` (label, image, snapshotId, provider_order, resources,
-  secrets passthroughs), `list_sandboxes` (`label_prefix` filter),
-  `run_command`, `start_process` / `list_processes` / `process_status` /
-  `wait_process` / `kill_process` / `write_stdin` / `close_stdin`
-  (first-party only), `read_file`, `write_file`, `list_files`,
-  `delete_path`, `get_sandbox_url`, `destroy_sandbox`. All sandbox tools
-  default `provider` to `computesdk`; `create_sandbox`/`list_sandboxes`
-  carry `openai/outputTemplate` pointing at the panel.
+  `create_sandbox` (label, image, snapshotId, provider_order, resources
+  passthroughs), `list_sandboxes` (scoped to `chatgpt-plugin-*` labels on
+  first-party), `run_command`, `start_process` / `list_processes` /
+  `process_status` / `wait_process` / `kill_process` / `write_stdin` /
+  `close_stdin` (first-party only), `read_file`, `write_file`,
+  `list_files`, `delete_path`, `get_sandbox_url`, `get_routing_settings`,
+  `destroy_sandbox`, `show_sandboxes`. All sandbox tools default
+  `provider` to `computesdk`. First-party scope is enforced server-side:
+  commands, file ops, and destroys on non-plugin sandboxes are refused.
+  `show_sandboxes` is the render tool — `_meta.ui.resourceUri` (+ the
+  `openai/outputTemplate` alias) points at the panel.
 
 ### Gateway API surface used
 
 | Op | Endpoint |
 |---|---|
-| create | `POST /api/v1/sandboxes` `{label?, timeoutMs?, providerOrder?, image?, snapshotId?, resources?, secrets?}` |
+| create | `POST /api/v1/sandboxes` `{label?, timeoutMs?, providerOrder?, image?, snapshotId?, resources?}` |
 | get | `GET /api/v1/sandboxes/:id` (includes `attach` descriptor — BYOK connect() offramp) |
 | list | `GET /api/v1/sandboxes?status&limit&cursor` |
 | destroy | `DELETE /api/v1/sandboxes/:id` |
@@ -51,7 +54,7 @@ namespace) are still available via `set_provider_credentials`.
 | files | `GET/POST/DELETE /api/v1/sandboxes/:id/files?path=` (absolute paths, ≤32MB content) |
 | urls | `GET /api/v1/sandboxes/:id/urls?port&protocol` → `{url}` (501 when the provider has no ingress) |
 | processes | `POST/GET /api/v1/sandboxes/:id/processes`, `GET /processes/:jobId`, `.../wait`, `.../kill`, `.../stdin`, `.../close-stdin` |
-| settings | `GET /api/v1/sandboxes/settings` (routing order, market cap, sizes, warm pool) |
+| settings | `GET /api/v1/sandboxes/settings` (routing order, market cap) |
 
 Client-side clamps mirror the platform: 6h sandbox timeout, 64KB/~290s
 commands, 32MB file content. `sb-pool`-prefixed labels are reserved by the

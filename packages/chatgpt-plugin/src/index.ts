@@ -32,7 +32,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname !== '/mcp' || req.method !== 'POST') {
+  if (url.pathname === '/mcp' && req.method !== 'POST') {
+    res.writeHead(405, { 'content-type': 'application/json', allow: 'POST' });
+    res.end(JSON.stringify({ error: 'method_not_allowed' }));
+    return;
+  }
+
+  if (url.pathname !== '/mcp') {
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: 'not_found' }));
     return;

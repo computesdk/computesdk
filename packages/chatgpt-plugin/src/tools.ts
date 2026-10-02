@@ -20,8 +20,13 @@ import { PROVIDERS, getProvider } from './providers.js';
 import { gatewayClient, GatewayApiError } from './gateway.js';
 import { PANEL_HTML, PANEL_MIME, PANEL_URI } from './panel.js';
 
-// MCP Apps standard field + the OpenAI compatibility alias.
-const PANEL_META = { 'ui/resourceUri': PANEL_URI, 'openai/outputTemplate': PANEL_URI };
+// MCP Apps nested meta + the OpenAI compatibility alias.
+const PANEL_META = { ui: { resourceUri: PANEL_URI }, 'openai/outputTemplate': PANEL_URI };
+
+// Annotation presets — every tool declares all three hints explicitly.
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: true };
+const WRITE = { readOnlyHint: false, destructiveHint: true, openWorldHint: true };
+const MUTATE = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
 
 // Labels the plugin stamps on gateway sandboxes; the panel and list filter
 // scope to them so org pool boxes (`sb-pool-*`) and Actions sandboxes
@@ -29,6 +34,7 @@ const PANEL_META = { 'ui/resourceUri': PANEL_URI, 'openai/outputTemplate': PANEL
 const PLUGIN_LABEL_PREFIX = 'chatgpt-plugin';
 const MAX_SANDBOX_TIMEOUT_MS = 6 * 60 * 60 * 1000;
 const MAX_COMMAND_TIMEOUT_MS = 290_000;
+const MAX_WAIT_MS = 300_000;
 const MAX_COMMAND_BYTES = 64 * 1024;
 const MAX_FILE_CONTENT_BYTES = 32 * 1024 * 1024;
 
@@ -75,6 +81,34 @@ function buildProvider(ctx: RequestContext, name: string): Provider {
   return spec.create(credentials, ctx.token);
 }
 
+/**
+ * First-party scope enforcement: the plugin only operates on sandboxes it
+ * created (`${PLUGIN_LABEL_PREFIX}-*` labels). Without this, tools could
+ * read, run commands in, or destroy the org's warm-pool and CI sandboxes.
+ * BYOK providers are already scoped by the user's own credentials.
+ */
+async function requirePluginOwned(
+  provider: Provider,
+  name: string,
+  sandboxId: string,
+  sandbox?: ProviderSandbox
+): Promise<void> {
+  if (name !== 'computesdk') return;
+  const sb = sandbox ?? (await provider.sandbox.getById(sandboxId));
+  if (!sb) throw new Error(`Sandbox "${sandboxId}" not found.`);
+  let label: unknown;
+  try {
+    label = ((await sb.getInfo()) as { metadata?: { label?: unknown } }).metadata?.label;
+  } catch {
+    label = undefined;
+  }
+  if (typeof label !== 'string' || !label.startsWith(PLUGIN_LABEL_PREFIX)) {
+    throw new Error(
+      `Sandbox "${sandboxId}" is not managed by this plugin — it only operates on ${PLUGIN_LABEL_PREFIX}-* sandboxes it created.`
+    );
+  }
+}
+
 async function resolveSandbox(
   ctx: RequestContext,
   providerName: string,
@@ -83,15 +117,40 @@ async function resolveSandbox(
   const key = cacheKey(ctx.userId, providerName, sandboxId);
   const cached = sandboxCache.get(key);
   const provider = buildProvider(ctx, providerName);
-  if (cached) return { provider, sandbox: cached };
+  if (cached) {
+    await requirePluginOwned(provider, providerName, sandboxId, cached);
+    return { provider, sandbox: cached };
+  }
 
   const found = await provider.sandbox.getById(sandboxId);
   if (!found) {
     throw new Error(`Sandbox "${sandboxId}" not found on provider "${providerName}".`);
   }
+  await requirePluginOwned(provider, providerName, sandboxId, found);
   sandboxCache.set(key, found);
   return { provider, sandbox: found };
 }
+
+/** Process tools bypass resolveSandbox — same ownership check via gateway. */
+async function scopedGateway(ctx: RequestContext, name: string, sandboxId: string) {
+  gatewayOnly(name);
+  const provider = buildProvider(ctx, name);
+  await requirePluginOwned(provider, name, sandboxId);
+  return gatewayClient({ apiKey: ctx.token });
+}
+
+/** Slim sandbox projection for tool output — no raw gateway internals. */
+const slimSandbox = (info: unknown) => {
+  const i = info as Record<string, unknown>;
+  const meta = (i.metadata ?? {}) as Record<string, unknown>;
+  return {
+    id: i.id ?? i.sandbox_id,
+    label: meta.label,
+    status: meta.gatewayStatus ?? i.status ?? i.state,
+    provider: meta.gatewayProvider,
+    costUsd: meta.costUsd,
+  };
+};
 
 const providerName = z
   .string()
@@ -120,7 +179,11 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
   server.registerResource(
     'sandboxes-panel',
     PANEL_URI,
-    { mimeType: PANEL_MIME, description: 'ComputeSDK sandboxes panel' },
+    {
+      mimeType: PANEL_MIME,
+      description: 'ComputeSDK Router sandboxes panel',
+      _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] } } },
+    },
     async () => ({ contents: [{ uri: PANEL_URI, mimeType: PANEL_MIME, text: PANEL_HTML }] })
   );
 
@@ -130,7 +193,20 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'List sandbox providers',
       description:
         'List the sandbox providers available through this plugin, the credential fields each requires, and whether the current user has configured credentials.',
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: {
+        providers: z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            firstParty: z.boolean(),
+            configured: z.boolean(),
+            credentialFields: z.array(
+              z.object({ key: z.string(), label: z.string(), secret: z.boolean(), required: z.boolean() })
+            ),
+          })
+        ),
+      },
     },
     async () => ({
       structuredContent: {
@@ -164,9 +240,10 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         provider: providerName,
         credentials: z
           .record(z.string(), z.string())
-          .describe('Map of credential field name to value, e.g. { "apiKey": "e2b_..." }'),
+          .describe('Map of credential field name to value, e.g. { "apiKey": "tk_..." }'),
       },
-      annotations: { destructiveHint: false },
+      annotations: MUTATE,
+      outputSchema: { provider: z.string(), stored: z.array(z.string()) },
     },
     async ({ provider, credentials }: { provider: string; credentials: Record<string, string> }) => {
       const spec = requireProvider(provider);
@@ -194,7 +271,8 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'Remove provider credentials',
       description: 'Delete stored BYOK credentials for a provider.',
       inputSchema: { provider: providerName },
-      annotations: { destructiveHint: true },
+      annotations: WRITE,
+      outputSchema: { provider: z.string(), removed: z.boolean() },
     },
     async ({ provider }) => {
       const removed = ctx.vault.removeCredentials(ctx.userId, provider);
@@ -231,20 +309,15 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
           })
           .optional()
           .describe('Requested sizing (first-party only)'),
-        secrets: z
-          .array(z.string().regex(/^[A-Za-z0-9_]+$/))
-          .max(100)
-          .optional()
-          .describe('Names of org vault secrets to inject as env vars into commands (first-party only)'),
         envs: z.record(z.string(), z.string()).optional().describe('Environment variables to set inside the sandbox (BYOK providers only)'),
       },
       outputSchema: {
         sandbox_id: z.string(),
         provider: z.string(),
       },
-      annotations: { openWorldHint: true },
+      annotations: MUTATE,
     },
-    async ({ provider: name, label, timeout, templateId, image, snapshotId, provider_order, resources, secrets, envs }: {
+    async ({ provider: name, label, timeout, templateId, image, snapshotId, provider_order, resources, envs }: {
       provider: string;
       label?: string;
       timeout?: number;
@@ -253,14 +326,13 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       snapshotId?: string;
       provider_order?: string[];
       resources?: { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number };
-      secrets?: string[];
       envs?: Record<string, string>;
     }) => {
       const provider = buildProvider(ctx, name);
       const firstParty = Boolean(requireProvider(name).firstParty);
-      if (!firstParty && (provider_order || image || resources || secrets || label)) {
+      if (!firstParty && (provider_order || image || resources || label)) {
         throw new Error(
-          'label/image/resources/secrets/provider_order are first-party computesdk options — BYOK providers accept timeout/templateId/envs only.'
+          'label/image/resources/provider_order are first-party computesdk options — BYOK providers accept timeout/templateId/envs only.'
         );
       }
       const sandbox = await provider.sandbox.create({
@@ -273,7 +345,6 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         metadata: {
           ...(provider_order ? { providerOrder: provider_order } : {}),
           ...(resources ? { resources } : {}),
-          ...(secrets ? { secrets } : {}),
         },
       });
       sandboxCache.set(cacheKey(ctx.userId, name, sandbox.sandboxId), sandbox);
@@ -288,14 +359,25 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
     'list_sandboxes',
     {
       title: 'List sandboxes',
-      description: 'List active sandboxes on a provider. First-party results can be scoped to sandboxes this plugin created via label_prefix.',
+      description: 'List active sandboxes on a provider. First-party results are scoped to sandboxes this plugin created; BYOK providers list their own account.',
       inputSchema: {
         provider: sandboxProvider,
-        label_prefix: z.string().optional().describe('Only return first-party sandboxes whose label starts with this (e.g. "chatgpt-plugin")'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: {
+        provider: z.string(),
+        sandboxes: z.array(
+          z.object({
+            id: z.unknown().optional(),
+            label: z.unknown().optional(),
+            status: z.unknown().optional(),
+            provider: z.unknown().optional(),
+            costUsd: z.unknown().optional(),
+          })
+        ),
+      },
     },
-    async ({ provider: name, label_prefix }) => {
+    async ({ provider: name }) => {
       const provider = buildProvider(ctx, name);
       const sandboxes = await provider.sandbox.list();
       const infos = await Promise.all(
@@ -307,14 +389,14 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
           }
         })
       );
-      const filtered = label_prefix
+      const filtered = name === 'computesdk'
         ? infos.filter((i) => {
             const label = (i as { metadata?: { label?: unknown } }).metadata?.label;
-            return typeof label === 'string' && label.startsWith(label_prefix);
+            return typeof label === 'string' && label.startsWith(PLUGIN_LABEL_PREFIX);
           })
         : infos;
       return textResult(
-        { provider: name, sandboxes: filtered },
+        { provider: name, sandboxes: filtered.map(slimSandbox) },
         `${filtered.length} sandbox(es) on ${name}.`
       );
     }
@@ -336,7 +418,7 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         stderr: z.string().optional(),
         exit_code: z.number().optional(),
       },
-      annotations: { openWorldHint: true, destructiveHint: true },
+      annotations: WRITE,
     },
     async ({ provider: name, sandbox_id, command, timeout }) => {
       const { sandbox } = await resolveSandbox(ctx, name, sandbox_id);
@@ -364,11 +446,10 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         stdin: z.boolean().optional().describe('Keep a writable stdin pipe for write_stdin/close_stdin'),
       },
       outputSchema: { job_id: z.string(), status: z.string().optional() },
-      annotations: { openWorldHint: true, destructiveHint: true },
+      annotations: WRITE,
     },
     async ({ provider: name, sandbox_id, command, cwd, env, stdin }) => {
-      gatewayOnly(name);
-      const client = gatewayClient({ apiKey: ctx.token });
+      const client = await scopedGateway(ctx, name, sandbox_id);
       const p = await client.startProcess(sandbox_id, { command, cwd, env, stdin });
       return textResult(
         { job_id: p.jobId, status: p.status, pid: p.pid },
@@ -383,11 +464,11 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       title: 'List sandbox processes',
       description: 'List detached processes started in a first-party computesdk sandbox.',
       inputSchema: { provider: sandboxProvider, sandbox_id: z.string() },
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: { processes: z.array(z.record(z.string(), z.unknown())) },
     },
     async ({ provider: name, sandbox_id }) => {
-      gatewayOnly(name);
-      const client = gatewayClient({ apiKey: ctx.token });
+      const client = await scopedGateway(ctx, name, sandbox_id);
       const processes = await client.listProcesses(sandbox_id);
       return textResult(
         { processes },
@@ -406,11 +487,11 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         sandbox_id: z.string(),
         job_id: z.string(),
       },
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: { process: z.record(z.string(), z.unknown()) },
     },
     async ({ provider: name, sandbox_id, job_id }) => {
-      gatewayOnly(name);
-      const client = gatewayClient({ apiKey: ctx.token });
+      const client = await scopedGateway(ctx, name, sandbox_id);
       const p = await client.getProcess(sandbox_id, job_id);
       return textResult(
         { process: p },
@@ -423,18 +504,18 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
     'wait_process',
     {
       title: 'Wait for process exit',
-      description: 'Block until a detached process exits (bounded by timeout; the job keeps running on timeout). First-party computesdk only.',
+      description: `Block until a detached process exits (bounded by timeout, max ${MAX_WAIT_MS / 1000}s; the job keeps running on timeout). First-party computesdk only.`,
       inputSchema: {
         provider: sandboxProvider,
         sandbox_id: z.string(),
         job_id: z.string(),
-        timeout: z.number().int().optional().describe('Wait bound in milliseconds'),
+        timeout: z.number().int().max(MAX_WAIT_MS).optional().describe('Wait bound in milliseconds (max 300s)'),
       },
-      annotations: { openWorldHint: true },
+      annotations: READ_ONLY,
+      outputSchema: { process: z.record(z.string(), z.unknown()) },
     },
     async ({ provider: name, sandbox_id, job_id, timeout }) => {
-      gatewayOnly(name);
-      const client = gatewayClient({ apiKey: ctx.token });
+      const client = await scopedGateway(ctx, name, sandbox_id);
       const p = await client.waitProcess(sandbox_id, job_id, timeout);
       return textResult(
         { process: p },
@@ -454,11 +535,11 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         job_id: z.string(),
         signal: z.string().optional().describe('Signal name or number, e.g. SIGKILL or 9'),
       },
-      annotations: { destructiveHint: true },
+      annotations: WRITE,
+      outputSchema: { process: z.record(z.string(), z.unknown()) },
     },
     async ({ provider: name, sandbox_id, job_id, signal }) => {
-      gatewayOnly(name);
-      const client = gatewayClient({ apiKey: ctx.token });
+      const client = await scopedGateway(ctx, name, sandbox_id);
       const p = await client.killProcess(sandbox_id, job_id, signal);
       return textResult(
         { process: p },
@@ -479,11 +560,11 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         data: z.string(),
         encoding: z.enum(['utf8', 'base64']).optional().describe('Input encoding; use base64 for binary data'),
       },
-      annotations: { destructiveHint: true },
+      annotations: WRITE,
+      outputSchema: { job_id: z.string(), written: z.number() },
     },
     async ({ provider: name, sandbox_id, job_id, data, encoding }) => {
-      gatewayOnly(name);
-      const client = gatewayClient({ apiKey: ctx.token });
+      const client = await scopedGateway(ctx, name, sandbox_id);
       await client.writeStdin(sandbox_id, job_id, data, encoding);
       return textResult({ job_id, written: data.length }, `Wrote ${data.length} chars to ${job_id}.`);
     }
@@ -499,11 +580,11 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         sandbox_id: z.string(),
         job_id: z.string(),
       },
-      annotations: { destructiveHint: true },
+      annotations: WRITE,
+      outputSchema: { job_id: z.string(), closed: z.boolean() },
     },
     async ({ provider: name, sandbox_id, job_id }) => {
-      gatewayOnly(name);
-      const client = gatewayClient({ apiKey: ctx.token });
+      const client = await scopedGateway(ctx, name, sandbox_id);
       await client.closeStdin(sandbox_id, job_id);
       return textResult({ job_id, closed: true }, `Closed stdin on ${job_id}.`);
     }
@@ -519,7 +600,8 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         sandbox_id: z.string(),
         path: z.string(),
       },
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: { path: z.string(), content: z.string() },
     },
     async ({ provider: name, sandbox_id, path }) => {
       const { sandbox } = await resolveSandbox(ctx, name, sandbox_id);
@@ -539,7 +621,8 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         path: z.string(),
         content: z.string().max(MAX_FILE_CONTENT_BYTES),
       },
-      annotations: { destructiveHint: true },
+      annotations: WRITE,
+      outputSchema: { path: z.string(), written: z.boolean() },
     },
     async ({ provider: name, sandbox_id, path, content }) => {
       const { sandbox } = await resolveSandbox(ctx, name, sandbox_id);
@@ -558,7 +641,8 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         sandbox_id: z.string(),
         path: z.string(),
       },
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: { path: z.string(), entries: z.array(z.record(z.string(), z.unknown())) },
     },
     async ({ provider: name, sandbox_id, path }) => {
       const { sandbox } = await resolveSandbox(ctx, name, sandbox_id);
@@ -580,7 +664,8 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         sandbox_id: z.string(),
         path: z.string(),
       },
-      annotations: { destructiveHint: true },
+      annotations: WRITE,
+      outputSchema: { path: z.string(), removed: z.boolean() },
     },
     async ({ provider: name, sandbox_id, path }) => {
       const { sandbox } = await resolveSandbox(ctx, name, sandbox_id);
@@ -600,7 +685,8 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         port: z.number().int().min(1).max(65535),
         protocol: z.string().optional(),
       },
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: { url: z.string() },
     },
     async ({ provider: name, sandbox_id, port, protocol }: {
       provider: string;
@@ -628,14 +714,22 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
     {
       title: 'Show sandboxes panel',
       description:
-        'Render the ComputeSDK sandboxes panel (live list, status, cost, destroy). Render-only tool — call list_sandboxes first for data; the panel refreshes itself on tool-result notifications.',
-      inputSchema: {
-        label_prefix: z.string().optional().default(PLUGIN_LABEL_PREFIX).describe('Label scope for the panel list'),
+        'Render the ComputeSDK Router sandboxes panel (live list, status, cost, destroy). Self-contained render tool — returns the plugin-scoped sandbox list for the panel to display.',
+      annotations: READ_ONLY,
+      outputSchema: {
+        sandboxes: z.array(
+          z.object({
+            id: z.unknown().optional(),
+            label: z.unknown().optional(),
+            status: z.unknown().optional(),
+            provider: z.unknown().optional(),
+            costUsd: z.unknown().optional(),
+          })
+        ),
       },
-      annotations: { readOnlyHint: true },
       _meta: PANEL_META,
     },
-    async ({ label_prefix }) => {
+    async () => {
       const provider = buildProvider(ctx, 'computesdk');
       const sandboxes = await provider.sandbox.list();
       const infos = await Promise.all(
@@ -649,10 +743,10 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
       );
       const filtered = infos.filter((i) => {
         const label = (i as { metadata?: { label?: unknown } }).metadata?.label;
-        return typeof label === 'string' && label.startsWith(label_prefix);
+        return typeof label === 'string' && label.startsWith(PLUGIN_LABEL_PREFIX);
       });
       return textResult(
-        { sandboxes: filtered },
+        { sandboxes: filtered.map(slimSandbox) },
         `${filtered.length} plugin sandbox(es).`
       );
     }
@@ -663,15 +757,19 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
     {
       title: 'Get routing settings',
       description:
-        'Show the caller\'s sandbox routing config on the ComputeSDK gateway: provider order, market spend cap, resource sizes, and warm-pool floors. First-party only.',
+        'Show the caller\'s sandbox routing config on the ComputeSDK gateway: provider order and market spend cap. First-party only.',
       inputSchema: { provider: sandboxProvider },
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY,
+      outputSchema: { settings: z.record(z.string(), z.unknown()) },
     },
     async ({ provider: name }) => {
       gatewayOnly(name);
       const client = gatewayClient({ apiKey: ctx.token });
-      const settings = await client.getSettings();
-      return textResult({ settings }, JSON.stringify(settings, null, 2));
+      const settings = (await client.getSettings()) as Record<string, unknown>;
+      // Project to user-facing routing fields — omit internal sizes/floors.
+      const { providerOrder, market, marketCapUsd } = settings as Record<string, unknown>;
+      const slim = { providerOrder, market, marketCapUsd };
+      return textResult({ settings: slim }, JSON.stringify(slim, null, 2));
     }
   );
 
@@ -684,7 +782,8 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         provider: sandboxProvider,
         sandbox_id: z.string(),
       },
-      annotations: { destructiveHint: true },
+      annotations: WRITE,
+      outputSchema: { sandbox_id: z.string(), destroyed: z.boolean() },
     },
     async ({ provider: name, sandbox_id }) => {
       const { sandbox } = await resolveSandbox(ctx, name, sandbox_id);
