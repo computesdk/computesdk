@@ -134,15 +134,47 @@ const HTTP2_SESSION_COUNT = (() => {
 
 interface Http2SessionPool {
   sessions: import("node:http2").ClientHttp2Session[];
-  // Sessions whose TLS + HTTP/2 handshake has completed. Dispatching onto a
-  // session that has not connected yet makes the request pay that session's
-  // full handshake as first-byte latency - at burst start that is every
-  // request in the burst, serialized behind 16 cold connects.
+  // Sessions whose TLS + HTTP/2 handshake has completed and whose peer
+  // SETTINGS have arrived. Dispatching onto a session that has not connected
+  // yet makes the request pay that session's full handshake as first-byte
+  // latency, and until the peer's SETTINGS arrive the client does not know its
+  // concurrent-stream limit, so streams opened above it are refused.
   ready: Set<import("node:http2").ClientHttp2Session>;
   firstReady: Promise<void>;
   resolveFirstReady: () => void;
+  // Streams open (or reserved) on each session, so dispatch can honor the
+  // peer's SETTINGS_MAX_CONCURRENT_STREAMS.
+  openStreams: Map<import("node:http2").ClientHttp2Session, number>;
+  // Requests waiting for stream capacity. Woken whenever a session becomes
+  // ready, a stream closes, or a session leaves the pool.
+  capacityWaiters: Set<() => void>;
   next: number;
   inFlight: number;
+}
+
+function wakeCapacityWaiters(pool: Http2SessionPool): void {
+  const waiters = Array.from(pool.capacityWaiters);
+  pool.capacityWaiters.clear();
+  for (const wake of waiters) wake();
+}
+
+function spareStreams(
+  pool: Http2SessionPool,
+  session: import("node:http2").ClientHttp2Session,
+): number {
+  const limit =
+    session.remoteSettings?.maxConcurrentStreams ?? Number.POSITIVE_INFINITY;
+  return limit - (pool.openStreams.get(session) ?? 0);
+}
+
+function releaseStream(
+  pool: Http2SessionPool,
+  session: import("node:http2").ClientHttp2Session,
+): void {
+  const open = (pool.openStreams.get(session) ?? 1) - 1;
+  if (open > 0) pool.openStreams.set(session, open);
+  else pool.openStreams.delete(session);
+  wakeCapacityWaiters(pool);
 }
 
 // A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
@@ -193,6 +225,8 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     ready: new Set<import("node:http2").ClientHttp2Session>(),
     firstReady,
     resolveFirstReady,
+    openStreams: new Map<import("node:http2").ClientHttp2Session, number>(),
+    capacityWaiters: new Set<() => void>(),
     next: 0,
     inFlight: 0,
   };
@@ -220,16 +254,22 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     }
     pool.sessions.push(session);
 
-    session.once("connect", () => {
+    // Ready once the peer's first SETTINGS frame arrives (it follows the
+    // handshake), so its concurrent-stream limit is known before dispatch.
+    session.once("remoteSettings", () => {
+      if (session.closed || session.destroyed) return;
       pool.ready.add(session);
       pool.resolveFirstReady();
+      wakeCapacityWaiters(pool);
     });
 
     const discard = () => {
       pool.ready.delete(session);
+      pool.openStreams.delete(session);
       pool.sessions = pool.sessions.filter(
         (candidate) => candidate !== session,
       );
+      wakeCapacityWaiters(pool);
     };
     session.once("close", discard);
     session.once("error", discard);
@@ -283,6 +323,40 @@ export function closeMiosaConnections(): void {
   http2SessionPools.clear();
 }
 
+// Picks a session for one request and reserves a stream slot on it. Ready
+// sessions with spare capacity are used round-robin. When every ready session
+// is at its peer's concurrent-stream limit, the request waits until a stream
+// closes or another session becomes ready. With no ready session at all (the
+// bounded first-ready wait expired), any pooled session is used.
+async function reserveHttp2Stream(
+  pool: Http2SessionPool,
+  origin: string,
+): Promise<{
+  pool: Http2SessionPool;
+  session: import("node:http2").ClientHttp2Session;
+}> {
+  for (;;) {
+    let candidates: import("node:http2").ClientHttp2Session[];
+    if (pool.ready.size > 0) {
+      candidates = Array.from(pool.ready).filter(
+        (candidate) => spareStreams(pool, candidate) > 0,
+      );
+      if (candidates.length === 0) {
+        await new Promise<void>((resolve) => pool.capacityWaiters.add(resolve));
+        continue;
+      }
+    } else {
+      if (pool.sessions.length === 0) pool = await ensureHttp2Sessions(origin);
+      candidates = pool.sessions;
+    }
+
+    const session = candidates[pool.next % candidates.length]!;
+    pool.next = (pool.next + 1) % candidates.length;
+    pool.openStreams.set(session, (pool.openStreams.get(session) ?? 0) + 1);
+    return { pool, session };
+  }
+}
+
 async function nodeHttp2Request(
   url: URL,
   method: "GET" | "POST" | "PATCH" | "DELETE",
@@ -295,8 +369,8 @@ async function nodeHttp2Request(
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
 
-  // Cold start: wait for the first connected session, then dispatch. Sessions
-  // that connect later join `ready` and the round-robin below, so nothing
+  // Cold start: wait for the first ready session, then dispatch. Sessions
+  // that become ready later join `ready` and the selection below, so nothing
   // waits on the rest of the pool. Steady state pays nothing: ready.size > 0
   // skips this. The wait is BOUNDED (1s): if no session ever connects
   // (unreachable or misconfigured endpoint), dispatch falls through to the
@@ -313,23 +387,39 @@ async function nodeHttp2Request(
     if (firstReadyTimer !== undefined) clearTimeout(firstReadyTimer);
   }
 
-  const candidates =
-    pool.ready.size > 0 ? Array.from(pool.ready) : pool.sessions;
-  const session = candidates[pool.next % candidates.length]!;
-  pool.next = (pool.next + 1) % candidates.length;
+  let session: import("node:http2").ClientHttp2Session;
+  let streamPool: Http2SessionPool;
+  try {
+    ({ pool: streamPool, session } = await reserveHttp2Stream(pool, origin));
+  } catch (error) {
+    pool.inFlight -= 1;
+    if (pool.inFlight <= 0) {
+      pool.inFlight = 0;
+      setPoolRef(pool, false);
+    }
+    throw error;
+  }
 
   try {
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
       let status = 0;
       const chunks: Buffer[] = [];
-      const request = session.request({
-        ":method": method,
-        ":path": `${url.pathname}${url.search}`,
-        ...headers,
-        ...(body === undefined
-          ? {}
-          : { "content-length": Buffer.byteLength(body).toString() }),
-      });
+      let request: import("node:http2").ClientHttp2Stream;
+      try {
+        request = session.request({
+          ":method": method,
+          ":path": `${url.pathname}${url.search}`,
+          ...headers,
+          ...(body === undefined
+            ? {}
+            : { "content-length": Buffer.byteLength(body).toString() }),
+        });
+      } catch (error) {
+        releaseStream(streamPool, session);
+        reject(error);
+        return;
+      }
+      request.once("close", () => releaseStream(streamPool, session));
 
       request.on("response", (responseHeaders) => {
         status = Number(responseHeaders[":status"] ?? 0);

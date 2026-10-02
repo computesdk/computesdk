@@ -6,6 +6,8 @@ import type { MiosaSandboxRecord } from "../index";
 // In-memory stand-in for node:http2. Each fake session records the streams
 // opened on it and only answers them once the test marks it connected, which
 // mirrors how http2 queues requests on a session that is still connecting.
+// Like a real server, a session refuses streams above its advertised
+// concurrent-stream limit (fakeHttp2.limit).
 const fakeHttp2 = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void;
 
@@ -35,6 +37,7 @@ const fakeHttp2 = vi.hoisted(() => {
   }
 
   class FakeStream extends Emitter {
+    refused = false;
     constructor(readonly session: FakeSession) {
       super();
     }
@@ -50,6 +53,9 @@ const fakeHttp2 = vi.hoisted(() => {
     destroyed = false;
     pending: FakeStream[] = [];
     streams: FakeStream[] = [];
+    open = 0;
+    peakOpen = 0;
+    remoteSettings: { maxConcurrentStreams?: number } = {};
     request(): FakeStream {
       const stream = new FakeStream(this);
       this.streams.push(stream);
@@ -58,11 +64,28 @@ const fakeHttp2 = vi.hoisted(() => {
     connect(): void {
       this.connected = true;
       this.emit("connect");
+      this.remoteSettings = { maxConcurrentStreams: state.limit };
+      this.emit("remoteSettings", this.remoteSettings);
       this.flush();
     }
     flush(): void {
       for (const stream of this.pending.splice(0)) {
+        if (this.open >= state.limit) {
+          stream.refused = true;
+          setImmediate(() => {
+            const error = Object.assign(
+              new Error("Stream closed with error code NGHTTP2_REFUSED_STREAM"),
+              { code: "ERR_HTTP2_STREAM_ERROR" },
+            );
+            stream.emit("error", error);
+            stream.emit("close");
+          });
+          continue;
+        }
+        this.open += 1;
+        this.peakOpen = Math.max(this.peakOpen, this.open);
         setImmediate(() => {
+          this.open -= 1;
           stream.emit("response", { ":status": 200 });
           stream.emit(
             "data",
@@ -71,6 +94,7 @@ const fakeHttp2 = vi.hoisted(() => {
             ),
           );
           stream.emit("end");
+          stream.emit("close");
         });
       }
     }
@@ -87,12 +111,16 @@ const fakeHttp2 = vi.hoisted(() => {
   }
 
   const sessions: FakeSession[] = [];
-  const connect = () => {
-    const session = new FakeSession();
-    sessions.push(session);
-    return session;
+  const state = {
+    sessions,
+    limit: 100,
+    connect: (): FakeSession => {
+      const session = new FakeSession();
+      sessions.push(session);
+      return session;
+    },
   };
-  return { sessions, connect };
+  return state;
 });
 
 vi.mock("node:http2", () => ({
@@ -448,6 +476,7 @@ describe("miosa provider", () => {
         // The pooled transport is skipped under NODE_ENV=test.
         process.env.NODE_ENV = "production";
         fakeHttp2.sessions.length = 0;
+        fakeHttp2.limit = 100;
       });
 
       afterEach(() => {
@@ -518,6 +547,35 @@ describe("miosa provider", () => {
         expect(
           fakeHttp2.sessions.slice(1).every((session) => !session.connected),
         ).toBe(true);
+      });
+
+      it("should keep a cold burst within each session's concurrent-stream limit", async () => {
+        fakeHttp2.limit = 2;
+        const provider = miosa({ apiKey: API_KEY, baseUrl });
+        const pending = Promise.allSettled(
+          Array.from({ length: 10 }, () => provider.sandbox.getById("sbx-1")),
+        );
+        await settle(() => fakeHttp2.sessions.length > 0);
+        const connected = fakeHttp2.sessions.slice(0, 3);
+        for (const session of connected) session.connect();
+
+        const results = await pending;
+
+        expect(
+          results.filter((result) => result.status === "rejected"),
+        ).toEqual([]);
+        expect(
+          fakeHttp2.sessions.flatMap((session) => session.streams),
+        ).toHaveLength(10);
+        expect(
+          fakeHttp2.sessions.some((session) =>
+            session.streams.some((stream) => stream.refused),
+          ),
+        ).toBe(false);
+        expect(connected.every((session) => session.peakOpen <= 2)).toBe(true);
+        expect(
+          connected.filter((session) => session.streams.length > 0).length,
+        ).toBeGreaterThan(1);
       });
 
       it("should round-robin across connected sessions", async () => {
