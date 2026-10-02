@@ -595,12 +595,38 @@ export class ActionsClient {
       if (value === undefined) continue;
       for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
     }
-    const res = await this.fetchImpl(url, { headers: this.headers() });
+    const res = await this.fetchImpl(url, {
+      headers: { ...this.headers(), accept: 'text/event-stream' },
+    });
     if (!res.ok) {
       await this.parse(res); // throws
     }
     if (!res.body) throw new Error('SSE response has no body');
     yield* readSseEvents(res.body);
+  }
+
+  /**
+   * `sse()` with the frame's `event:` name preserved — for streams whose
+   * events are distinguished by name rather than payload shape (process
+   * follow: stdout/stderr share a `{chunk}` payload).
+   */
+  async *sseNamed(
+    path: string,
+    params?: Record<string, string | string[] | undefined>,
+  ): AsyncGenerator<{ event: string; data: unknown }> {
+    const url = new URL(`${this.auth.baseUrl}${path}`);
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value === undefined) continue;
+      for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
+    }
+    const res = await this.fetchImpl(url, {
+      headers: { ...this.headers(), accept: 'text/event-stream' },
+    });
+    if (!res.ok) {
+      await this.parse(res); // throws
+    }
+    if (!res.body) throw new Error('SSE response has no body');
+    yield* readSseNamedEvents(res.body);
   }
 
   /** Download bytes following redirects (artifact URLs 302 to storage). */
@@ -617,7 +643,7 @@ export class ActionsClient {
   }
 
   private headers(): Record<string, string> {
-    return { authorization: `Bearer ${this.auth.apiKey}` };
+    return { authorization: `Bearer ${this.auth.apiKey}`, accept: 'application/json' };
   }
 
   private async parse<T>(res: Response): Promise<T> {
@@ -654,6 +680,38 @@ export async function* readSseEvents(
           if (line.startsWith('data: ')) {
             yield JSON.parse(line.slice(6));
           }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/** `readSseEvents` with the `event:` name preserved alongside the JSON payload. */
+export async function* readSseNamedEvents(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<{ event: string; data: unknown }> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        let event = 'message';
+        const dataLines: string[] = [];
+        for (const line of frame.split('\n')) {
+          if (line.startsWith('event: ')) event = line.slice(7);
+          else if (line.startsWith('data: ')) dataLines.push(line.slice(6));
+        }
+        if (dataLines.length > 0) {
+          yield { event, data: JSON.parse(dataLines.join('\n')) };
         }
       }
     }
