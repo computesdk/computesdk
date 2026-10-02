@@ -6,7 +6,7 @@
  * and port exposure capabilities.
  */
 
-import { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
+import beamClient, { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
@@ -25,11 +25,40 @@ export interface BeamConfig {
   timeout?: number;
 }
 
+interface BeamOptsSnapshot {
+  token: string;
+  workspaceId: string;
+  gatewayUrl: string;
+  timeout: number;
+}
+
+let configuredOpts: BeamOptsSnapshot | null = null;
+
 function configureBeamOpts(config: BeamConfig): void {
-  beamOpts.token = config.token || (typeof process !== 'undefined' && process.env?.BEAM_TOKEN) || '';
-  beamOpts.workspaceId = config.workspaceId || (typeof process !== 'undefined' && process.env?.BEAM_WORKSPACE_ID) || '';
-  if (config.gatewayUrl) beamOpts.gatewayUrl = config.gatewayUrl;
-  if (config.timeout) (beamOpts as any).timeout = config.timeout;
+  const next: BeamOptsSnapshot = {
+    token: config.token || (typeof process !== 'undefined' && process.env?.BEAM_TOKEN) || '',
+    workspaceId: config.workspaceId || (typeof process !== 'undefined' && process.env?.BEAM_WORKSPACE_ID) || '',
+    // beamOpts.gatewayUrl/timeout are not the fallbacks: an earlier
+    // configuration's custom values must not carry into the next one.
+    gatewayUrl: config.gatewayUrl || 'https://app.beam.cloud',
+    timeout: config.timeout || 30000,
+  };
+  beamOpts.token = next.token;
+  beamOpts.workspaceId = next.workspaceId;
+  beamOpts.gatewayUrl = next.gatewayUrl;
+  beamOpts.timeout = next.timeout;
+
+  // The singleton BeamClient caches its axios instance — Authorization header
+  // baked from beamOpts on first request — so a different credential has to
+  // drop that client or every later call keeps the previous token.
+  if (configuredOpts === null ||
+    next.token !== configuredOpts.token ||
+    next.workspaceId !== configuredOpts.workspaceId ||
+    next.gatewayUrl !== configuredOpts.gatewayUrl ||
+    next.timeout !== configuredOpts.timeout) {
+    (beamClient as unknown as { _client?: unknown })._client = undefined;
+    configuredOpts = next;
+  }
 }
 
 function shellEscape(arg: string): string {
@@ -162,7 +191,9 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (timeout) sandboxConfig.keepWarmSeconds = Math.ceil(timeout / 1000);
 
           if (runtime === 'node' && !sandboxConfig.image) {
-            sandboxConfig.image = Image.fromRegistry('node:24-slim');
+            // Full image, not -slim: sandboxes are expected to run tooling
+            // like git that the slim variant strips.
+            sandboxConfig.image = Image.fromRegistry('node:24');
           }
 
           if (envs) {
