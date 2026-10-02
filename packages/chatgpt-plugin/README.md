@@ -31,7 +31,7 @@ daytona) are still available via `set_provider_credentials`.
   `create_sandbox` (label, image, snapshotId, provider_order, resources,
   secrets passthroughs), `list_sandboxes` (`label_prefix` filter),
   `run_command`, `start_process` / `list_processes` / `process_status` /
-  `wait_process` / `kill_process` / `write_stdin` / `close_stdin`
+  `wait_process` / `kill_process`
   (first-party only), `read_file`, `write_file`, `list_files`,
   `delete_path`, `get_sandbox_url`, `destroy_sandbox`. All sandbox tools
   default `provider` to `computesdk`; `create_sandbox`/`list_sandboxes`
@@ -48,7 +48,7 @@ daytona) are still available via `set_provider_credentials`.
 | exec | `POST /api/v1/sandboxes/:id/commands` `{command, timeoutMs?}` (buffered; ≤64KB, ~290s) |
 | files | `GET/POST/DELETE /api/v1/sandboxes/:id/files?path=` (absolute paths, ≤32MB content) |
 | urls | `GET /api/v1/sandboxes/:id/urls?port&protocol` → `{url}` (501 when the provider has no ingress) |
-| processes | `POST/GET /api/v1/sandboxes/:id/processes`, `GET /processes/:jobId`, `.../wait`, `.../kill`, `.../stdin`, `.../close-stdin` |
+| processes | `POST/GET /api/v1/sandboxes/:id/processes`, `GET /processes/:jobId`, `.../wait`, `.../kill` (no stdin endpoints — not deployed on the gateway) |
 | settings | `GET /api/v1/sandboxes/settings` (routing order, market cap, sizes, warm pool) |
 
 Client-side clamps mirror the platform: 6h sandbox timeout, 64KB/~290s
