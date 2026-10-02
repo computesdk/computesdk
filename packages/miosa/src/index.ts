@@ -29,6 +29,17 @@ export interface MiosaConfig {
   baseUrl?: string;
   /** Default sandbox lifetime in milliseconds (maps to MIOSA timeout_sec). */
   timeout?: number;
+  /**
+   * Opts create/exec/destroy into the SOMA one-hop runner transport
+   * (RUNNER-CONTRACTS-2026-10-02.md C5/C6) instead of the control plane.
+   * A key carrying a region segment (`msk_<region>_...`) is eligible
+   * automatically; set this to force it on for a region-less key, or to
+   * `false` to pin a region-tagged key back to the control plane. Falls
+   * back to the MIOSA_RUNNER_MODE environment variable ("1"/"true").
+   */
+  runnerMode?: boolean;
+  /** Overrides `miosa.ai` for the runner transport - self-hosted / test deployments only. */
+  runnerBaseDomain?: string;
 }
 
 // ── MIOSA API response shapes (subset the adapter consumes) ────────────────
@@ -101,6 +112,15 @@ export interface MiosaSandbox {
   record: MiosaSandboxRecord;
   apiKey: string;
   baseUrl: string;
+  /**
+   * Set when this handle routes create/exec/destroy through the runner
+   * transport (see "SOMA one-hop runner transport" below). Carried on the
+   * handle, not re-derived per call, because runCommand/filesystem/getInfo
+   * only ever receive the handle - never the original MiosaConfig - so the
+   * routing decision made at create()/getById()/list() time has to travel
+   * with it.
+   */
+  runner?: RunnerRouting;
 }
 
 // ── HTTP client ─────────────────────────────────────────────────────────────
@@ -384,6 +404,18 @@ function preconnectMiosa(config: MiosaConfig): void {
   // never use. resolveAuth still raises the descriptive error on first call.
   if (!hasUsableCredentials(config)) return;
 
+  // list/getById/getUrl/filesystem/snapshots stay on the control-plane pool
+  // even for a runner-eligible key (runner-sdk.d.ts), so both warm here when
+  // eligible - this is additive, never a replacement for the block below.
+  const apiKey =
+    config.apiKey ??
+    (typeof process !== "undefined" ? process.env?.MIOSA_API_KEY : undefined) ??
+    "";
+  const runner = resolveRunnerRouting(config, apiKey);
+  if (runner) {
+    void getRunnerClient(apiKey, runner).catch(() => undefined);
+  }
+
   const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const url = new URL(baseUrl);
 
@@ -531,7 +563,135 @@ async function sendMiosaRequest(
   return fetch(url, { method, headers, body });
 }
 
-function resolveAuth(config: MiosaConfig): { apiKey: string; baseUrl: string } {
+// ── SOMA one-hop runner transport (opt-in) ─────────────────────────────────
+//
+// RUNNER-CONTRACTS-2026-10-02.md (C5/C6) and ONE-HOP-RUNNER-DESIGN-2026-10-02.md
+// (section 6), both in the miosa repo's tasks/soma-speed/, describe the
+// contract this implements. When eligible, create/exec/destroy go straight
+// to run-<region>.miosa.ai via @miosa/sdk's RunnerClient instead of
+// api.miosa.ai: the control-plane fast lane, HostMode fence and Finch pool
+// never see the request. Every other operation (list, getById, getInfo,
+// getUrl/expose, filesystem, snapshots) keeps using the control-plane
+// transport above - RunnerClient does not expose those routes yet, and
+// expose/snapshots stay on the control plane regardless (design doc 5.5).
+//
+// A key is eligible when it carries a region segment (`msk_<region>_...`,
+// C5) or the caller opts in explicitly via `runnerMode` / MIOSA_RUNNER_MODE.
+// An explicit `runnerMode: false` always wins, so a region-tagged key can
+// still be pinned to the control plane (e.g. while debugging).
+
+/**
+ * Regions with a live or planned runner fleet. MUST stay identical to
+ * @miosa/sdk's own `KNOWN_RUNNER_REGIONS` (src/runner/region.ts, C1/C5):
+ * this only decides provider-level routing eligibility before a
+ * RunnerClient - which owns resolving the actual target region - is ever
+ * constructed. A looser check (e.g. "any `msk_<word>_...`") would wrongly
+ * treat fixture keys like `msk_test_...` as region-tagged.
+ */
+const RUNNER_REGIONS = new Set(["us", "eu"]);
+
+function hasRunnerRegionSegment(apiKey: string): boolean {
+  const parts = apiKey.split("_");
+  return parts.length >= 3 && RUNNER_REGIONS.has(parts[1] ?? "");
+}
+
+function readBooleanEnv(name: string): boolean | undefined {
+  const raw = typeof process !== "undefined" ? process.env?.[name] : undefined;
+  if (raw === undefined) return undefined;
+  return raw === "1" || raw.toLowerCase() === "true";
+}
+
+export interface RunnerRouting {
+  /** Overrides `miosa.ai` - for self-hosted / test deployments (RunnerClientOptions.baseDomain). */
+  readonly baseDomain?: string;
+}
+
+function resolveRunnerRouting(
+  config: MiosaConfig,
+  apiKey: string,
+): RunnerRouting | undefined {
+  const explicitOptIn = config.runnerMode ?? readBooleanEnv("MIOSA_RUNNER_MODE");
+  if (explicitOptIn === false) return undefined;
+  if (explicitOptIn !== true && !hasRunnerRegionSegment(apiKey)) return undefined;
+  return config.runnerBaseDomain ? { baseDomain: config.runnerBaseDomain } : {};
+}
+
+/** `InstanceType<RunnerClient>` without a static import - see runner-sdk.d.ts. */
+type MiosaRunnerClient = InstanceType<
+  (typeof import("@miosa/sdk"))["RunnerClient"]
+>;
+
+const runnerClients = new Map<string, Promise<MiosaRunnerClient>>();
+
+function runnerClientCacheKey(apiKey: string, routing: RunnerRouting): string {
+  return `${apiKey}:${routing.baseDomain ?? ""}`;
+}
+
+async function getRunnerClient(
+  apiKey: string,
+  routing: RunnerRouting,
+): Promise<MiosaRunnerClient> {
+  const cacheKey = runnerClientCacheKey(apiKey, routing);
+  let pending = runnerClients.get(cacheKey);
+  if (!pending) {
+    pending = import("@miosa/sdk").then(
+      ({ RunnerClient }) =>
+        new RunnerClient({
+          apiKey,
+          ...(routing.baseDomain ? { baseDomain: routing.baseDomain } : {}),
+        }),
+    );
+    runnerClients.set(cacheKey, pending);
+    // A failed import (package not installed/published yet) must not poison
+    // the cache for a later retry.
+    pending.catch(() => runnerClients.delete(cacheKey));
+  }
+  return pending;
+}
+
+/**
+ * Closes every cached RunnerClient and forgets it. Mirrors
+ * closeMiosaConnections() for the control-plane pool; mainly for tests and
+ * long-lived hosts that want deterministic socket teardown.
+ */
+export async function closeMiosaRunnerConnections(): Promise<void> {
+  const pending = [...runnerClients.values()];
+  runnerClients.clear();
+  await Promise.all(
+    pending.map(async (clientPromise) => {
+      try {
+        const client = await clientPromise;
+        await client.close();
+      } catch {
+        // Construction itself failed - nothing to close.
+      }
+    }),
+  );
+}
+
+/** The runner's exec response body is the same shape as the control
+ * plane's (C2): either `{ data: {...} }` or a flat result. */
+function unwrapExecResult(raw: Record<string, unknown>): MiosaExecResult {
+  const data = raw["data"];
+  return data && typeof data === "object"
+    ? (data as MiosaExecResult)
+    : (raw as MiosaExecResult);
+}
+
+/** True for both MiosaApiError (control plane) and the runner's own error
+ * class - both carry a numeric `.status`, so this needs no instanceof
+ * against a class loaded via dynamic import. */
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { status?: unknown }).status === 404
+  );
+}
+
+function resolveAuth(
+  config: MiosaConfig,
+): { apiKey: string; baseUrl: string; runner?: RunnerRouting } {
   const apiKey =
     config.apiKey ??
     (typeof process !== "undefined" ? process.env?.MIOSA_API_KEY : undefined) ??
@@ -548,9 +708,12 @@ function resolveAuth(config: MiosaConfig): { apiKey: string; baseUrl: string } {
     );
   }
 
+  const runner = resolveRunnerRouting(config, apiKey);
+
   return {
     apiKey,
     baseUrl: (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, ""),
+    ...(runner ? { runner } : {}),
   };
 }
 
@@ -676,13 +839,33 @@ async function execInSandbox(
     body.timeout = Math.ceil(options.timeout / 1000);
 
   try {
-    const response = await miosaRequest<{ data: MiosaExecResult }>(
-      sandbox,
-      "POST",
-      `/sandboxes/${sandbox.record.id}/exec`,
-      body,
-    );
-    const result = response.data ?? {};
+    let result: MiosaExecResult;
+    if (sandbox.runner) {
+      // KNOWN GAP: RunnerClient.exec's typed options (runner-sdk.d.ts) only
+      // carry cwd/env/timeout - there is no wait/wait_timeout_ms knob yet,
+      // so the readiness wait above is not honored on this path pending
+      // either that type growing or soma-api's runner /exec defaulting to
+      // a synchronous wait on its own. Everything else about the request
+      // (path, auth, response body) is the same contract as the control
+      // plane (C2).
+      const client = await getRunnerClient(sandbox.apiKey, sandbox.runner);
+      const raw = await client.exec(sandbox.record.id, fullCommand, {
+        ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options?.env !== undefined ? { env: options.env } : {}),
+        ...(options?.timeout !== undefined
+          ? { timeout: Math.ceil(options.timeout / 1000) }
+          : {}),
+      });
+      result = unwrapExecResult(raw);
+    } else {
+      const response = await miosaRequest<{ data: MiosaExecResult }>(
+        sandbox,
+        "POST",
+        `/sandboxes/${sandbox.record.id}/exec`,
+        body,
+      );
+      result = response.data ?? {};
+    }
     return {
       stdout: result.stdout ?? "",
       stderr: result.stderr ?? "",
@@ -759,13 +942,14 @@ const createMiosaProvider = defineProvider<
         if (options?.envs !== undefined) body.env = options.envs;
         if (options?.metadata !== undefined) body.metadata = options.metadata;
 
-        const payload = await miosaRequest<unknown>(
-          auth,
-          "POST",
-          "/sandboxes",
-          body,
-        );
-        const record = unwrapSandbox(payload);
+        const record = auth.runner
+          ? unwrapSandbox(
+              (await (await getRunnerClient(auth.apiKey, auth.runner)).createSandbox(body))
+                .data,
+            )
+          : unwrapSandbox(
+              await miosaRequest<unknown>(auth, "POST", "/sandboxes", body),
+            );
         if (!record.id) {
           throw new Error(
             "MIOSA create sandbox returned a record without an id",
@@ -808,14 +992,20 @@ const createMiosaProvider = defineProvider<
       destroy: async (config: MiosaConfig, sandboxId: string) => {
         const auth = resolveAuth(config);
         try {
-          await miosaRequest<unknown>(
-            auth,
-            "DELETE",
-            `/sandboxes/${sandboxId}`,
-          );
+          if (auth.runner) {
+            await (await getRunnerClient(auth.apiKey, auth.runner)).destroySandbox(
+              sandboxId,
+            );
+          } else {
+            await miosaRequest<unknown>(
+              auth,
+              "DELETE",
+              `/sandboxes/${sandboxId}`,
+            );
+          }
         } catch (error) {
           // Destroying an already-destroyed sandbox is a no-op.
-          if (error instanceof MiosaApiError && error.status === 404) return;
+          if (isNotFoundError(error)) return;
           throw error;
         }
       },
