@@ -1,5 +1,13 @@
 # @computesdk/opencomputer
 
+## 1.0.9
+
+### Patch Changes
+
+- Updated dependencies [f1a8578]
+  - @computesdk/provider@2.1.10
+  - computesdk@4.1.9
+
 ## 1.0.8
 
 ### Patch Changes

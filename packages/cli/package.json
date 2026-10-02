@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cli",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "ComputeSDK CLI - Cloud-native workspace management",
   "author": "ComputeSDK",
   "license": "MIT",
