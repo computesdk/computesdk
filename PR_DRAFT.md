@@ -26,11 +26,13 @@ What changes:
   string` (self-hosted/test override for `miosa.ai`). Both optional and
   additive; the public surface is otherwise unchanged.
 
-Known gap: `RunnerClient.exec`'s options (`cwd`/`env`/`timeout`) have no
-`wait`/`wait_timeout_ms` knob yet, so the synchronous-readiness-wait
-semantics `runCommand` relies on today are not preserved on the runner path
-until that type grows or soma-api's runner `/exec` defaults to a
-synchronous wait on its own. Flagged in a code comment at the call site.
+On `wait`/`wait_timeout_ms`: `runCommand` builds those into the
+control-plane request body to cap a synchronous readiness wait, but never
+forwards them to `RunnerClient.exec` (whose options are `cwd`/`env`/
+`timeout` only - no wait knob). This is intentional, not a gap: on the
+runner, `create` only answers once the launch has completed (state
+"running", C2), so by the time `exec` runs there is nothing left to wait
+for. No `@miosa/sdk` type change needed.
 
 Blocked on: `@miosa/sdk` has not published a version containing
 `RunnerClient` (npm tops out at 3.2.5; the runner module is still on
@@ -38,6 +40,13 @@ feat/sdk-soma-runner, PR #213, unreleased). This package's
 `dependencies."@miosa/sdk"` is pinned to `^3.3.0` in anticipation, so
 `pnpm install` cannot resolve it yet - that is why this PR stays unopened
 until the SDK publishes.
+
+The `msk_<region>_...` key format is also still under review upstream (it
+has to coexist with the existing single-letter purpose codes - `msk_u_`/
+`msk_a_`/`msk_p_` - in that same segment). This provider's eligibility
+check matches `@miosa/sdk`'s `KNOWN_RUNNER_REGIONS` allowlist rather than
+guessing at the key's shape, so it follows whatever format lands there
+without needing a second change here.
 
 Testing: new `src/__tests__/runner-transport.test.ts` mocks `@miosa/sdk`
 via `vi.mock` (the module need not exist on disk for this) and covers

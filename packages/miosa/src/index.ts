@@ -587,6 +587,11 @@ async function sendMiosaRequest(
  * RunnerClient - which owns resolving the actual target region - is ever
  * constructed. A looser check (e.g. "any `msk_<word>_...`") would wrongly
  * treat fixture keys like `msk_test_...` as region-tagged.
+ *
+ * The key format itself is still under review upstream (it has to coexist
+ * with the existing single-letter purpose codes - `msk_u_`/`msk_a_`/
+ * `msk_p_` - in this same segment), so this allowlist, not a shape guess,
+ * is the part of this check expected to need updating as that lands.
  */
 const RUNNER_REGIONS = new Set(["us", "eu"]);
 
@@ -841,13 +846,15 @@ async function execInSandbox(
   try {
     let result: MiosaExecResult;
     if (sandbox.runner) {
-      // KNOWN GAP: RunnerClient.exec's typed options (runner-sdk.d.ts) only
-      // carry cwd/env/timeout - there is no wait/wait_timeout_ms knob yet,
-      // so the readiness wait above is not honored on this path pending
-      // either that type growing or soma-api's runner /exec defaulting to
-      // a synchronous wait on its own. Everything else about the request
-      // (path, auth, response body) is the same contract as the control
-      // plane (C2).
+      // wait/wait_timeout_ms (body, above) are accepted from the caller but
+      // intentionally dropped here, not forwarded: on the runner, create
+      // only answers once the launch has completed (state "running", C2),
+      // so by the time exec runs there is nothing left to wait for - unlike
+      // the control plane, where create/exec can return before the VM has
+      // finished booting. RunnerClient.exec's typed options (runner-sdk.d.ts)
+      // reflect that - they carry cwd/env/timeout only, no wait knob.
+      // Everything else about the request (path, auth, response body) is
+      // the same contract as the control plane (C2).
       const client = await getRunnerClient(sandbox.apiKey, sandbox.runner);
       const raw = await client.exec(sandbox.record.id, fullCommand, {
         ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}),
