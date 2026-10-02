@@ -354,21 +354,22 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
     {
       title: 'Start detached process in sandbox',
       description:
-        'Start a detached, long-running process in a first-party computesdk sandbox. Returns a job_id for process_status / wait_process / kill_process. Use for servers, watchers, builds — anything that outlives the ~290s run_command cap.',
+        'Start a detached, long-running process in a first-party computesdk sandbox. Returns a job_id for process_status / wait_process / kill_process / write_stdin. Use for servers, watchers, builds — anything that outlives the ~290s run_command cap.',
       inputSchema: {
         provider: sandboxProvider,
         sandbox_id: z.string(),
         command: z.string().max(MAX_COMMAND_BYTES),
         cwd: z.string().optional(),
         env: z.record(z.string(), z.string()).optional(),
+        stdin: z.boolean().optional().describe('Keep a writable stdin pipe for write_stdin/close_stdin'),
       },
       outputSchema: { job_id: z.string(), status: z.string().optional() },
       annotations: { openWorldHint: true, destructiveHint: true },
     },
-    async ({ provider: name, sandbox_id, command, cwd, env }) => {
+    async ({ provider: name, sandbox_id, command, cwd, env, stdin }) => {
       gatewayOnly(name);
       const client = gatewayClient({ apiKey: ctx.token });
-      const p = await client.startProcess(sandbox_id, { command, cwd, env });
+      const p = await client.startProcess(sandbox_id, { command, cwd, env, stdin });
       return textResult(
         { job_id: p.jobId, status: p.status, pid: p.pid },
         `Started process ${p.jobId} (${p.status}).`
@@ -463,6 +464,48 @@ export function registerTools(server: McpServer, ctx: RequestContext): void {
         { process: p },
         `${p.jobId} ${p.status}${p.exitCode !== null ? ` exit=${p.exitCode}` : ''}`
       );
+    }
+  );
+
+  server.registerTool(
+    'write_stdin',
+    {
+      title: 'Write to process stdin',
+      description: 'Write data to a detached process\'s stdin pipe (started with stdin=true). First-party computesdk only.',
+      inputSchema: {
+        provider: sandboxProvider,
+        sandbox_id: z.string(),
+        job_id: z.string(),
+        data: z.string(),
+        encoding: z.enum(['utf8', 'base64']).optional().describe('Input encoding; use base64 for binary data'),
+      },
+      annotations: { destructiveHint: true },
+    },
+    async ({ provider: name, sandbox_id, job_id, data, encoding }) => {
+      gatewayOnly(name);
+      const client = gatewayClient({ apiKey: ctx.token });
+      await client.writeStdin(sandbox_id, job_id, data, encoding);
+      return textResult({ job_id, written: data.length }, `Wrote ${data.length} chars to ${job_id}.`);
+    }
+  );
+
+  server.registerTool(
+    'close_stdin',
+    {
+      title: 'Close process stdin',
+      description: 'Close a detached process\'s stdin pipe. First-party computesdk only.',
+      inputSchema: {
+        provider: sandboxProvider,
+        sandbox_id: z.string(),
+        job_id: z.string(),
+      },
+      annotations: { destructiveHint: true },
+    },
+    async ({ provider: name, sandbox_id, job_id }) => {
+      gatewayOnly(name);
+      const client = gatewayClient({ apiKey: ctx.token });
+      await client.closeStdin(sandbox_id, job_id);
+      return textResult({ job_id, closed: true }, `Closed stdin on ${job_id}.`);
     }
   );
 

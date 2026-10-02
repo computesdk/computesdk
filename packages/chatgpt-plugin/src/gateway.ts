@@ -219,6 +219,7 @@ export function gatewayClient(config: GatewayConfig) {
         command: string;
         cwd?: string;
         env?: Record<string, string>;
+        stdin?: boolean;
       },
     ) =>
       api<{ process: GatewayProcess }>(gw, 'POST', base(sandboxId), input).then(
@@ -249,6 +250,23 @@ export function gatewayClient(config: GatewayConfig) {
         `${base(sandboxId)}/${jobId}/kill`,
         signal === undefined ? {} : { signal },
       ).then((r) => r.process),
+    writeStdin: (
+      sandboxId: string,
+      jobId: string,
+      data: string,
+      encoding?: 'utf8' | 'base64',
+    ) =>
+      api<{ ok: boolean }>(gw, 'POST', `${base(sandboxId)}/${jobId}/stdin`, {
+        data,
+        ...(encoding === undefined ? {} : { encoding }),
+      }),
+    closeStdin: (sandboxId: string, jobId: string) =>
+      api<{ ok: boolean }>(
+        gw,
+        'POST',
+        `${base(sandboxId)}/${jobId}/close-stdin`,
+        {},
+      ),
     /** Sandbox-lane routing settings (provider order, market cap, sizes). */
     getSettings: () =>
       api<Record<string, unknown>>(gw, 'GET', '/sandboxes/settings'),

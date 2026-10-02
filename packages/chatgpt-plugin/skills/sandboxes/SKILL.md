@@ -18,8 +18,7 @@ The user's bearer token is their ComputeSDK API key — sandboxes run first-part
 ## Choosing the execution tool
 
 - `run_command` — one-shot commands under ~290s and 64KB. Returns buffered stdout/stderr/exit_code.
-- `start_process` — anything that outlives the cap: servers, watchers, builds, training. Returns `job_id`; follow up with `wait_process`, `process_status` (buffered output), `kill_process`. `list_processes` shows all jobs on a sandbox.
-- No stdin/streaming process control exists — design around `start_process` + `wait_process` + `process_status` polling.
+- `start_process` — anything that outlives the cap: servers, watchers, builds, training. Returns `job_id`; follow up with `wait_process`, `process_status` (buffered output), `kill_process`. `list_processes` shows all jobs on a sandbox. Spawn with `stdin: true` to keep a writable stdin pipe for `write_stdin`/`close_stdin` (interactive REPLs, CLIs; a 502 there means the box's daemon predates the stdin ops).
 
 ## Workflow details
 
