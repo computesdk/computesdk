@@ -42,4 +42,15 @@ describe('namespace create deadline', () => {
     await provider.sandbox.create({} as any);
     expect(calls[0].body.deadline).toBe('2026-10-02T16:30:00.000Z');
   });
+
+  it('ignores nonpositive timeouts and uses the one-hour default', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-02T15:30:00Z'));
+    const calls = mockFetch();
+    const provider = namespace({ token: 'ns_test' });
+    await provider.sandbox.create({ timeout: 0 } as any);
+    await provider.sandbox.create({ timeout: -5000 } as any);
+    expect(calls[0].body.deadline).toBe('2026-10-02T16:30:00.000Z');
+    expect(calls[1].body.deadline).toBe('2026-10-02T16:30:00.000Z');
+  });
 });
