@@ -1,11 +1,11 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "computesdk-sandboxes",
+  "name": "computesdk-router",
   "version": "0.1.0",
-  "description": "Run real code in ComputeSDK cloud sandboxes — create environments, execute commands, manage files and long-running processes, preview ports.",
+  "description": "A developer tool for running code in any sandbox provider, with a live bidding option for the best price.",
   "extensions": {
     "com.openai": {
-      "displayName": "ComputeSDK Sandboxes"
+      "displayName": "ComputeSDK Router"
     }
   }
 }

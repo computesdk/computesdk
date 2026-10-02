@@ -46,7 +46,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   const mcpServer = new McpServer(
-    { name: 'computesdk-sandbox', version: '0.1.0' },
+    { name: 'computesdk-router', version: '0.1.0' },
     {
       instructions:
         'This plugin places compute sandboxes on ComputeSDK\'s hosted gateway: ' +

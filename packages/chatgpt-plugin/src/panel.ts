@@ -15,7 +15,7 @@ export const PANEL_HTML = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
-<title>ComputeSDK Sandboxes</title>
+<title>ComputeSDK Router</title>
 <style>
 :root { color-scheme: light dark; }
 body {
@@ -46,7 +46,7 @@ button.refresh { background: #111bf5; color: #fff; margin-top: 12px; }
 <body>
 <main>
   <h2>Sandboxes</h2>
-  <div class="sub">ComputeSDK &mdash; running and recent environments</div>
+  <div class="sub">ComputeSDK Router &mdash; running and recent environments</div>
   <ul id="list"></ul>
   <div id="empty" class="empty" hidden>No sandboxes yet &mdash; ask ChatGPT to run something.</div>
   <div id="err" class="error"></div>

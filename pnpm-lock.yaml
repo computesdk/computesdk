@@ -553,21 +553,21 @@ importers:
 
   packages/chatgpt-plugin:
     dependencies:
-      '@computesdk/daytona':
+      '@computesdk/archil':
         specifier: workspace:*
-        version: link:../daytona
-      '@computesdk/e2b':
+        version: link:../archil
+      '@computesdk/blaxel':
         specifier: workspace:*
-        version: link:../e2b
-      '@computesdk/modal':
+        version: link:../blaxel
+      '@computesdk/namespace':
         specifier: workspace:*
-        version: link:../modal
+        version: link:../namespace
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
-      '@computesdk/vercel':
+      '@computesdk/tensorlake':
         specifier: workspace:*
-        version: link:../vercel
+        version: link:../tensorlake
       '@modelcontextprotocol/sdk':
         specifier: ^1.24.0
         version: 1.26.0(zod@4.4.3)
@@ -1909,7 +1909,7 @@ importers:
         version: link:../provider
       '@opencomputer/sdk':
         specifier: latest
-        version: 2.1.2
+        version: 2.3.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4413,8 +4413,8 @@ packages:
   '@onkernel/sdk@0.49.0':
     resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
-  '@opencomputer/sdk@2.1.2':
-    resolution: {integrity: sha512-Yd4R/OPFu0VnaB0ZXBN3gzB53g4Gg2pvF2gUG8y8H2D57bCn+KkwaQij3ZO72JSlhNR3z0rnp5FaEFALvNUlRg==}
+  '@opencomputer/sdk@2.3.0':
+    resolution: {integrity: sha512-fhDk/8vSC7ja991PYr7vs02W73UYq2eeh6EsNV4Bcm44HRO4sbPvIgbXO5pURYAWBUIavuLnaqrbYyw4719IVA==}
     engines: {node: '>=18'}
 
   '@opentelemetry/api-logs@0.214.0':
@@ -11314,7 +11314,7 @@ snapshots:
 
   '@onkernel/sdk@0.49.0': {}
 
-  '@opencomputer/sdk@2.1.2':
+  '@opencomputer/sdk@2.3.0':
     dependencies:
       undici: 7.28.0
 

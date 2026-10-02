@@ -1,13 +1,15 @@
-# @computesdk/chatgpt-plugin
+# ComputeSDK Router — ChatGPT plugin
 
-ComputeSDK ChatGPT plugin: a remote MCP server that lets ChatGPT users run
-real code in cloud sandboxes — create, exec, file I/O, list, destroy.
+A developer tool for running code in any sandbox provider, with a live
+bidding option for the best price. A remote MCP server that lets ChatGPT
+users run real code in cloud sandboxes — create, exec, file I/O, long-running
+processes, preview URLs, list, destroy.
 
 **First-party first**: the user's ChatGPT connector bearer token is their
 ComputeSDK API key. `create_sandbox` routes through the hosted gateway at
 `platform.computesdk.com` (`/api/v1/sandboxes`) — no provider setup, usage
-billed to their ComputeSDK account. BYOK providers (e2b, modal, vercel,
-daytona) are still available via `set_provider_credentials`.
+billed to their ComputeSDK account. BYOK providers (tensorlake, blaxel, archil,
+namespace) are still available via `set_provider_credentials`.
 
 ## Architecture
 

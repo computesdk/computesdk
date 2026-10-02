@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "computesdk-sandboxes": {
+    "computesdk": {
       "type": "streamable-http",
       "url": "https://mcp.computesdk.com/mcp",
       "headers": {

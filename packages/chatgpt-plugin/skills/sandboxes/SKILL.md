@@ -31,7 +31,7 @@ The user's bearer token is their ComputeSDK API key — sandboxes run first-part
 
 ## BYOK path (technical users)
 
-Only when the user wants their own provider account: `set_provider_credentials` for e2b, modal, vercel, or daytona (see `list_providers` for required fields), then pass `provider: "<name>"` to sandbox tools. Process tools and gateway-only create args are first-party-only and will reject BYOK providers.
+Only when the user wants their own provider account: `set_provider_credentials` for tensorlake, blaxel, archil, or namespace (see `list_providers` for required fields), then pass `provider: "<name>"` to sandbox tools. Process tools and gateway-only create args are first-party-only and will reject BYOK providers.
 
 ## Panel
 
