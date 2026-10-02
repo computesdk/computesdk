@@ -40,7 +40,7 @@ await sandbox.destroy();
 | `image` | `DOCKER_SANDBOXES_IMAGE` | Snapshot template used when `create()` gets no `templateId` or `snapshotId` |
 | `timeout` | | Sandbox lifetime in milliseconds (default 300000) |
 
-`templateId` and `snapshotId` both take a snapshot template name (`images/...`). Registry images are not accepted: they would be pulled on every create. Providers built with the same credentials share one SDK client, so the token exchange happens once per process. When both environment variables are set, the provider starts that exchange as soon as it is imported, so the first `create()` doesn't wait for it.
+`templateId` and `snapshotId` both take a snapshot template name (`images/...`). Registry images are not accepted: they would be pulled on every create. Providers built with the same credentials share one SDK client, so the token exchange happens once per process. When both environment variables are set, the provider starts that exchange as soon as it is imported, so the first `create()` doesn't wait for it. It also makes one request to the API host's `/healthz` at import, so later connections resume that TLS session instead of each doing a full handshake.
 
 ## Supported
 
