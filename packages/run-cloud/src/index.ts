@@ -11,6 +11,8 @@ import type {
   SandboxTunnel as NativeTunnel,
   Snapshot as NativeSnapshot,
 } from '@run-cloud/sdk';
+import crypto from 'node:crypto';
+import path from 'node:path';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
@@ -75,6 +77,36 @@ export interface RunCloudSnapshot {
   provider: 'run-cloud';
   createdAt: Date;
   metadata: Record<string, unknown>;
+}
+
+// Serialize writeFile calls targeting the same path on the same sandbox.
+// This keeps chunk assembly and finalization from interleaving across
+// concurrent calls while still allowing writes to different paths to run
+// in parallel.
+const writeFileLocks = new WeakMap<RunCloudSandbox, Map<string, Promise<void>>>();
+
+function queueWrite(
+  handle: RunCloudSandbox,
+  targetPath: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  let locks = writeFileLocks.get(handle);
+  if (!locks) {
+    locks = new Map();
+    writeFileLocks.set(handle, locks);
+  }
+
+  const previous = locks.get(targetPath) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => write())
+    .finally(() => {
+      if (locks!.get(targetPath) === next) {
+        locks!.delete(targetPath);
+      }
+    });
+  locks.set(targetPath, next);
+  return next;
 }
 
 function env(name: string): string | undefined {
@@ -358,6 +390,30 @@ function singleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+// Chunk base64-encoded file writes so each runCommand stays under typical
+// shell argument / command-length limits. Must be a multiple of 4 to keep
+// base64 padding aligned across chunks.
+const FILESYSTEM_BASE64_CHUNK_SIZE = 48_000;
+
+function normalizeShellPath(input: string): string {
+  if (
+    input === '' ||
+    input.startsWith('/') ||
+    input.startsWith('./') ||
+    input.startsWith('../')
+  ) {
+    return input;
+  }
+  if (input.startsWith('-')) {
+    return `./${input}`;
+  }
+  return input;
+}
+
+function shellQuotePath(input: string): string {
+  return `"${escapeShellArg(normalizeShellPath(input))}"`;
+}
+
 function snapshotDate(snapshot: NativeSnapshot): Date {
   const record = snapshot as Record<string, unknown>;
   const value = record.createdAt ?? record.created_at;
@@ -519,52 +575,112 @@ const _provider = defineProvider<
       getInstance: (handle): RunCloudSandbox => handle,
 
       filesystem: {
-        readFile: async (handle, path): Promise<string> => {
+        readFile: async (handle, filePath): Promise<string> => {
           const bytes = await handle.client.sandboxes.readFile(
             handle.sandbox.id,
-            path,
+            filePath,
           );
           return new TextDecoder().decode(bytes);
         },
 
-        writeFile: async (handle, path, content, runCommand): Promise<void> => {
-          const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const quotedPath = `"${escapeShellArg(path)}"`;
+        writeFile: async (handle, filePath, content, runCommand): Promise<void> => {
+          const normalizedPath = normalizeShellPath(filePath);
+
+          return queueWrite(handle, normalizedPath, async () => {
+            const escapedPath = shellQuotePath(normalizedPath);
+            const dir = path.posix.dirname(normalizedPath);
+            const escapedDir = shellQuotePath(dir);
+
+            if (content.length === 0) {
+              const result = await runCommand(
+                handle,
+                `mkdir -p ${escapedDir} && : > ${escapedPath}`,
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(
+                  `Run Cloud writeFile failed for ${filePath}: ` +
+                    (result.stderr || `exit ${result.exitCode}`),
+                );
+              }
+              return;
+            }
+
+            const encoded = Buffer.from(content, 'utf8').toString('base64');
+            const chunks: string[] = [];
+            for (let offset = 0; offset < encoded.length; offset += FILESYSTEM_BASE64_CHUNK_SIZE) {
+              chunks.push(encoded.slice(offset, offset + FILESYSTEM_BASE64_CHUNK_SIZE));
+            }
+
+            // Build a short, unique staging file in the destination directory.
+            // Keeping the staging basename independent of the destination avoids
+            // ENAMETOOLONG for valid filenames that are near the component limit.
+            const stagingBasename = `.computesdk-tmp.${crypto.randomBytes(4).toString('hex')}`;
+            const stagingPath = path.posix.join(dir, stagingBasename);
+            const escapedStagingPath = shellQuotePath(stagingPath);
+
+            try {
+              let first = true;
+              for (const chunk of chunks) {
+                const redirect = first ? '>' : '>>';
+                const result = await runCommand(
+                  handle,
+                  `mkdir -p ${escapedDir} && ` +
+                    `printf '%s' "${escapeShellArg(chunk)}" | base64 -d ${redirect} ${escapedStagingPath}`,
+                );
+                if (result.exitCode !== 0) {
+                  throw new Error(
+                    `Run Cloud writeFile failed for ${filePath}: ` +
+                      (result.stderr || `exit ${result.exitCode}`),
+                  );
+                }
+                first = false;
+              }
+
+              // Copy the completed staging content into the destination and
+              // remove the staging file. Using shell redirection preserves the
+              // destination's existing inode, permissions, and links, and
+              // fails when the destination is an existing directory.
+              const result = await runCommand(
+                handle,
+                `cat < ${escapedStagingPath} > ${escapedPath} && rm -f -- ${escapedStagingPath}`,
+              );
+              if (result.exitCode !== 0) {
+                throw new Error(
+                  `Run Cloud writeFile failed for ${filePath}: ` +
+                    (result.stderr || `exit ${result.exitCode}`),
+                );
+              }
+            } catch (error) {
+              await runCommand(handle, `rm -f -- ${escapedStagingPath}`).catch(
+                () => {},
+              );
+              throw error;
+            }
+          });
+        },
+
+        mkdir: async (handle, dirPath, runCommand): Promise<void> => {
           const result = await runCommand(
             handle,
-            `mkdir -p "$(dirname ${quotedPath})" && ` +
-              `printf '%s' "${encoded}" | base64 -d > ${quotedPath}`,
+            `mkdir -p ${shellQuotePath(dirPath)}`,
           );
           if (result.exitCode !== 0) {
             throw new Error(
-              `Run Cloud writeFile failed for ${path}: ` +
+              `Run Cloud mkdir failed for ${dirPath}: ` +
                 (result.stderr || `exit ${result.exitCode}`),
             );
           }
         },
 
-        mkdir: async (handle, path, runCommand): Promise<void> => {
+        readdir: async (handle, dirPath, runCommand): Promise<FileEntry[]> => {
           const result = await runCommand(
             handle,
-            `mkdir -p "${escapeShellArg(path)}"`,
-          );
-          if (result.exitCode !== 0) {
-            throw new Error(
-              `Run Cloud mkdir failed for ${path}: ` +
-                (result.stderr || `exit ${result.exitCode}`),
-            );
-          }
-        },
-
-        readdir: async (handle, path, runCommand): Promise<FileEntry[]> => {
-          const result = await runCommand(
-            handle,
-            `find "${escapeShellArg(path)}" -mindepth 1 -maxdepth 1 ` +
+            `find ${shellQuotePath(dirPath)} -mindepth 1 -maxdepth 1 ` +
               `-printf '%f\\t%y\\t%s\\t%T@\\n'`,
           );
           if (result.exitCode !== 0) {
             throw new Error(
-              `Run Cloud readdir failed for ${path}: ` +
+              `Run Cloud readdir failed for ${dirPath}: ` +
                 (result.stderr || `exit ${result.exitCode}`),
             );
           }
@@ -583,22 +699,22 @@ const _provider = defineProvider<
             });
         },
 
-        exists: async (handle, path, runCommand): Promise<boolean> => {
+        exists: async (handle, targetPath, runCommand): Promise<boolean> => {
           const result = await runCommand(
             handle,
-            `test -e "${escapeShellArg(path)}"`,
+            `test -e ${shellQuotePath(targetPath)}`,
           );
           return result.exitCode === 0;
         },
 
-        remove: async (handle, path, runCommand): Promise<void> => {
+        remove: async (handle, targetPath, runCommand): Promise<void> => {
           const result = await runCommand(
             handle,
-            `rm -rf "${escapeShellArg(path)}"`,
+            `rm -rf ${shellQuotePath(targetPath)}`,
           );
           if (result.exitCode !== 0) {
             throw new Error(
-              `Run Cloud remove failed for ${path}: ` +
+              `Run Cloud remove failed for ${targetPath}: ` +
                 (result.stderr || `exit ${result.exitCode}`),
             );
           }
