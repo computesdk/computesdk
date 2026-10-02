@@ -10,10 +10,11 @@ tasks/soma-speed/.
 What changes:
 - `sandbox.create`, `runCommand`, and `sandbox.destroy` route through
   `@miosa/sdk`'s `RunnerClient` (`run-<region>.miosa.ai`) instead of the
-  control plane, whenever the API key carries a region segment
-  (`msk_<region>_...`) or the caller opts in via the new `runnerMode` config
-  field (or `MIOSA_RUNNER_MODE` env var). An explicit `runnerMode: false`
-  always wins over a region-tagged key.
+  control plane, whenever the caller opts in via the new `runnerMode`
+  config field (or `MIOSA_RUNNER_MODE` env var). No API key carries a
+  region this release (C5 decision, 2026-10-02), so there is no key-based
+  eligibility - `runnerMode` is the only way in, and the region defaults
+  to `us`.
 - Every other operation - `list`, `getById`, `getInfo`, `getUrl`/expose,
   `filesystem.*`, `snapshot.*` - keeps using the control-plane transport
   unchanged: `RunnerClient` does not expose those routes yet, and
@@ -41,18 +42,11 @@ feat/sdk-soma-runner, PR #213, unreleased). This package's
 `pnpm install` cannot resolve it yet - that is why this PR stays unopened
 until the SDK publishes.
 
-The `msk_<region>_...` key format is also still under review upstream (it
-has to coexist with the existing single-letter purpose codes - `msk_u_`/
-`msk_a_`/`msk_p_` - in that same segment). This provider's eligibility
-check matches `@miosa/sdk`'s `KNOWN_RUNNER_REGIONS` allowlist rather than
-guessing at the key's shape, so it follows whatever format lands there
-without needing a second change here.
-
 Testing: new `src/__tests__/runner-transport.test.ts` mocks `@miosa/sdk`
 via `vi.mock` (the module need not exist on disk for this) and covers
-eligibility (region tag, explicit opt-in/opt-out, the `msk_test_...`
-fixture-key false-positive this would otherwise cause), create/exec/destroy
-over the mocked RunnerClient, and that list/getUrl still hit the control
-plane for a region-tagged key. All 49 package tests pass (16 new + 29
-pre-existing + 4 http2-pool), `tsc --noEmit`, `tsup` build, and `eslint`
-all pass clean.
+eligibility (default stays on the control plane, `runnerMode: true`,
+`MIOSA_RUNNER_MODE=1`, an explicit `runnerMode: false` overriding the env
+var, `runnerBaseDomain`), create/exec/destroy over the mocked RunnerClient,
+and that list/getUrl still hit the control plane even with `runnerMode:
+true`. All 48 package tests pass (15 new + 29 pre-existing + 4
+http2-pool), `tsc --noEmit`, `tsup` build, and `eslint` all pass clean.

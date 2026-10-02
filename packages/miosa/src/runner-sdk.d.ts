@@ -20,7 +20,7 @@
 declare module "@miosa/sdk" {
   export interface RunnerClientOptions {
     apiKey: string;
-    /** Overrides the region parsed from the key (C5). */
+    /** Overrides the default region (`us` - no API key carries a region this release, C5). */
     region?: string;
     /** Overrides `miosa.ai` - for self-hosted / test deployments. */
     baseDomain?: string;

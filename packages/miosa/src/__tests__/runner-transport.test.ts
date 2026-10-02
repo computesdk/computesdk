@@ -30,9 +30,10 @@ vi.mock("@miosa/sdk", () => ({
 import { closeMiosaRunnerConnections, miosa, DEFAULT_BASE_URL } from "../index";
 import type { MiosaSandboxRecord } from "../index";
 
-const LEGACY_KEY = "msk_test_0123456789abcdef";
-const US_KEY = "msk_us_0123456789abcdef";
-const EU_KEY = "msk_eu_0123456789abcdef";
+// No API key carries a region this release (C5 decision, 2026-10-02), so
+// every key in this file is an ordinary key - the only thing that ever
+// turns the runner path on is `runnerMode` / MIOSA_RUNNER_MODE.
+const API_KEY = "msk_test_0123456789abcdef";
 
 function sandboxRecord(
   overrides: Partial<MiosaSandboxRecord> = {}
@@ -73,36 +74,19 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     runnerSpies.exec.mockReset();
     runnerSpies.destroySandbox.mockReset();
     runnerSpies.constructed.length = 0;
+    delete process.env.MIOSA_RUNNER_MODE;
   });
 
   afterEach(async () => {
     vi.unstubAllGlobals();
+    delete process.env.MIOSA_RUNNER_MODE;
     await closeMiosaRunnerConnections();
   });
 
   describe("eligibility", () => {
-    it("should route a region-tagged key (msk_us_...) through the runner, not fetch", async () => {
-      runnerSpies.createSandbox.mockResolvedValueOnce({
-        id: sandboxRecord().id,
-        runnerIp: "194.180.34.15",
-        data: sandboxRecord(),
-      });
-      const provider = miosa({ apiKey: US_KEY });
-
-      await provider.sandbox.create();
-
-      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
-      expect(fetchMock).not.toHaveBeenCalled();
-      expect(runnerSpies.constructed[0]?.apiKey).toBe(US_KEY);
-    });
-
-    it("should NOT treat a region-shaped test fixture key as region-tagged", async () => {
-      // msk_test_... has the same msk_<word>_... shape as a real region key,
-      // but "test" is not in RUNNER_REGIONS - this must stay on the control
-      // plane, or every existing fixture key in this suite would silently
-      // start hitting the runner instead of the mocked fetch.
+    it("should stay on the control plane by default - no key-based routing", async () => {
       fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
-      const provider = miosa({ apiKey: LEGACY_KEY });
+      const provider = miosa({ apiKey: API_KEY });
 
       await provider.sandbox.create();
 
@@ -110,27 +94,29 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
       expect(runnerSpies.createSandbox).not.toHaveBeenCalled();
     });
 
-    it("should route a eu-tagged key through the runner too", async () => {
-      runnerSpies.createSandbox.mockResolvedValueOnce({
-        id: sandboxRecord().id,
-        runnerIp: "1.2.3.4",
-        data: sandboxRecord(),
-      });
-      const provider = miosa({ apiKey: EU_KEY });
-
-      await provider.sandbox.create();
-
-      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
-      expect(fetchMock).not.toHaveBeenCalled();
-    });
-
-    it("should opt a legacy key into the runner via runnerMode: true", async () => {
+    it("should route through the runner when runnerMode: true", async () => {
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: sandboxRecord().id,
         runnerIp: "194.180.34.15",
         data: sandboxRecord(),
       });
-      const provider = miosa({ apiKey: LEGACY_KEY, runnerMode: true });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
+
+      await provider.sandbox.create();
+
+      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(runnerSpies.constructed[0]?.apiKey).toBe(API_KEY);
+    });
+
+    it("should route through the runner when MIOSA_RUNNER_MODE=1", async () => {
+      process.env.MIOSA_RUNNER_MODE = "1";
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerIp: "194.180.34.15",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
 
       await provider.sandbox.create();
 
@@ -138,9 +124,10 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("should let an explicit runnerMode: false override a region-tagged key", async () => {
+    it("should let an explicit runnerMode: false override MIOSA_RUNNER_MODE=1", async () => {
+      process.env.MIOSA_RUNNER_MODE = "1";
       fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
-      const provider = miosa({ apiKey: US_KEY, runnerMode: false });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: false });
 
       await provider.sandbox.create();
 
@@ -155,7 +142,8 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
         data: sandboxRecord(),
       });
       const provider = miosa({
-        apiKey: US_KEY,
+        apiKey: API_KEY,
+        runnerMode: true,
         runnerBaseDomain: "run.staging.internal",
       });
 
@@ -175,7 +163,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
         runnerIp: "194.180.34.15",
         data: { data: record }, // control-plane-shaped body, per C2
       });
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       const sandbox = await provider.sandbox.create({ name: "ci-run" });
 
@@ -192,7 +180,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
         runnerIp: "194.180.34.15",
         data: { state: "running" },
       });
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await expect(provider.sandbox.create()).rejects.toThrow(/without an id/);
     });
@@ -205,7 +193,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
         runnerIp: "194.180.34.15",
         data: sandboxRecord(),
       });
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
       return provider.sandbox.create();
     }
 
@@ -257,9 +245,9 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
   });
 
   describe("destroy", () => {
-    it("should destroy through the RunnerClient for a region-tagged key", async () => {
+    it("should destroy through the RunnerClient when runnerMode: true", async () => {
       runnerSpies.destroySandbox.mockResolvedValueOnce(undefined);
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await provider.sandbox.destroy("sb-1");
 
@@ -270,12 +258,10 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     it("should treat a 404-shaped runner error as already destroyed", async () => {
       const notFound = Object.assign(
         new Error("runner request failed with 404"),
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
       runnerSpies.destroySandbox.mockRejectedValueOnce(notFound);
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await expect(provider.sandbox.destroy("gone")).resolves.toBeUndefined();
     });
@@ -283,23 +269,21 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     it("should propagate a non-404 runner error", async () => {
       const forbidden = Object.assign(
         new Error("runner request failed with 403"),
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
       runnerSpies.destroySandbox.mockRejectedValueOnce(forbidden);
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await expect(provider.sandbox.destroy("sb-1")).rejects.toThrow(/403/);
     });
   });
 
   describe("operations the runner does not cover yet", () => {
-    it("should still list sandboxes over the control plane for a region-tagged key", async () => {
+    it("should still list sandboxes over the control plane when runnerMode: true", async () => {
       fetchMock.mockResolvedValueOnce(
         jsonResponse({ data: [sandboxRecord()] })
       );
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       const sandboxes = await provider.sandbox.list();
 
@@ -308,13 +292,13 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
       expect(runnerSpies.createSandbox).not.toHaveBeenCalled();
     });
 
-    it("should still expose a port over the control plane for a region-tagged key", async () => {
+    it("should still expose a port over the control plane when runnerMode: true", async () => {
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: sandboxRecord().id,
         runnerIp: "194.180.34.15",
         data: sandboxRecord(),
       });
-      const provider = miosa({ apiKey: US_KEY });
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
       const sandbox = await provider.sandbox.create();
 
       fetchMock.mockResolvedValueOnce(

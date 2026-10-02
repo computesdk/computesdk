@@ -32,10 +32,9 @@ export interface MiosaConfig {
   /**
    * Opts create/exec/destroy into the SOMA one-hop runner transport
    * (RUNNER-CONTRACTS-2026-10-02.md C5/C6) instead of the control plane.
-   * A key carrying a region segment (`msk_<region>_...`) is eligible
-   * automatically; set this to force it on for a region-less key, or to
-   * `false` to pin a region-tagged key back to the control plane. Falls
-   * back to the MIOSA_RUNNER_MODE environment variable ("1"/"true").
+   * No API key carries a region this release (C5 decision, 2026-10-02), so
+   * this is the only way in - there is no automatic, key-based eligibility.
+   * Falls back to the MIOSA_RUNNER_MODE environment variable ("1"/"true").
    */
   runnerMode?: boolean;
   /** Overrides `miosa.ai` for the runner transport - self-hosted / test deployments only. */
@@ -405,13 +404,13 @@ function preconnectMiosa(config: MiosaConfig): void {
   if (!hasUsableCredentials(config)) return;
 
   // list/getById/getUrl/filesystem/snapshots stay on the control-plane pool
-  // even for a runner-eligible key (runner-sdk.d.ts), so both warm here when
+  // even when runnerMode is on (runner-sdk.d.ts), so both warm here when
   // eligible - this is additive, never a replacement for the block below.
   const apiKey =
     config.apiKey ??
     (typeof process !== "undefined" ? process.env?.MIOSA_API_KEY : undefined) ??
     "";
-  const runner = resolveRunnerRouting(config, apiKey);
+  const runner = resolveRunnerRouting(config);
   if (runner) {
     void getRunnerClient(apiKey, runner).catch(() => undefined);
   }
@@ -575,30 +574,11 @@ async function sendMiosaRequest(
 // transport above - RunnerClient does not expose those routes yet, and
 // expose/snapshots stay on the control plane regardless (design doc 5.5).
 //
-// A key is eligible when it carries a region segment (`msk_<region>_...`,
-// C5) or the caller opts in explicitly via `runnerMode` / MIOSA_RUNNER_MODE.
-// An explicit `runnerMode: false` always wins, so a region-tagged key can
-// still be pinned to the control plane (e.g. while debugging).
-
-/**
- * Regions with a live or planned runner fleet. MUST stay identical to
- * @miosa/sdk's own `KNOWN_RUNNER_REGIONS` (src/runner/region.ts, C1/C5):
- * this only decides provider-level routing eligibility before a
- * RunnerClient - which owns resolving the actual target region - is ever
- * constructed. A looser check (e.g. "any `msk_<word>_...`") would wrongly
- * treat fixture keys like `msk_test_...` as region-tagged.
- *
- * The key format itself is still under review upstream (it has to coexist
- * with the existing single-letter purpose codes - `msk_u_`/`msk_a_`/
- * `msk_p_` - in this same segment), so this allowlist, not a shape guess,
- * is the part of this check expected to need updating as that lands.
- */
-const RUNNER_REGIONS = new Set(["us", "eu"]);
-
-function hasRunnerRegionSegment(apiKey: string): boolean {
-  const parts = apiKey.split("_");
-  return parts.length >= 3 && RUNNER_REGIONS.has(parts[1] ?? "");
-}
+// No API key carries a region this release (C5 decision, 2026-10-02): a key
+// is eligible only when the caller opts in explicitly via `runnerMode` /
+// MIOSA_RUNNER_MODE. There is no key-shape detection - region defaults to
+// `us` (RunnerClient's own default) unless `runnerBaseDomain` overrides the
+// host entirely.
 
 function readBooleanEnv(name: string): boolean | undefined {
   const raw = typeof process !== "undefined" ? process.env?.[name] : undefined;
@@ -611,13 +591,9 @@ export interface RunnerRouting {
   readonly baseDomain?: string;
 }
 
-function resolveRunnerRouting(
-  config: MiosaConfig,
-  apiKey: string,
-): RunnerRouting | undefined {
+function resolveRunnerRouting(config: MiosaConfig): RunnerRouting | undefined {
   const explicitOptIn = config.runnerMode ?? readBooleanEnv("MIOSA_RUNNER_MODE");
-  if (explicitOptIn === false) return undefined;
-  if (explicitOptIn !== true && !hasRunnerRegionSegment(apiKey)) return undefined;
+  if (explicitOptIn !== true) return undefined;
   return config.runnerBaseDomain ? { baseDomain: config.runnerBaseDomain } : {};
 }
 
@@ -713,7 +689,7 @@ function resolveAuth(
     );
   }
 
-  const runner = resolveRunnerRouting(config, apiKey);
+  const runner = resolveRunnerRouting(config);
 
   return {
     apiKey,
