@@ -93,6 +93,11 @@ export type PathView =
   | { path: string; type: 'file'; content: string }
   | { path: string; type: 'directory'; entries: FileEntry[] };
 
+/** POSIX single-quote: argv survives intact through the remote `sh -lc`. */
+function shellQuote(arg: string): string {
+  return `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
 // ─── Rendering ───────────────────────────────────────────────────────────────
 
 function printSandbox(s: SandboxSummary): void {
@@ -231,7 +236,7 @@ export function registerSandboxesCommands(program: Command): void {
         const res = await c.post<{ commandId: string } & CommandResult>(
           `/api/v1/sandboxes/${sandboxId}/commands`,
           {
-            command: command.join(' '),
+            command: command.map(shellQuote).join(' '),
             ...(opts.timeoutMs ? { timeoutMs: Number(opts.timeoutMs) } : {}),
           },
         );
@@ -240,7 +245,8 @@ export function registerSandboxesCommands(program: Command): void {
           if (r.stderr) process.stderr.write(r.stderr);
           if (!r.stdout) console.log(`exit ${r.exitCode} (${r.durationMs}ms)`);
         });
-        if (res.exitCode !== 0) process.exit(res.exitCode);
+        // exitCode, not exit(): a piped stdout flushes before the CLI exits.
+        if (res.exitCode !== 0) process.exitCode = res.exitCode;
       } catch (e) {
         fail(e, opts);
       }
@@ -259,7 +265,7 @@ export function registerSandboxesCommands(program: Command): void {
         const res = await c.post<{ process: SandboxProcess }>(
           `/api/v1/sandboxes/${sandboxId}/processes`,
           {
-            command: command.join(' '),
+            command: command.map(shellQuote).join(' '),
             ...(opts.cwd ? { cwd: opts.cwd } : {}),
             ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
           },
@@ -327,8 +333,9 @@ export function registerSandboxesCommands(program: Command): void {
           opts.timeoutMs ? { timeoutMs: Number(opts.timeoutMs) } : {},
         );
         output(opts, res.process, printProcess);
-        if (res.process.status === 'exited' && res.process.exitCode) {
-          process.exit(res.process.exitCode);
+        if (res.process.status === 'exited') {
+          // A null exit code (signal-terminated) is still a failure, not 0.
+          process.exitCode = res.process.exitCode ?? 128;
         }
       } catch (e) {
         fail(e, opts);
@@ -508,17 +515,21 @@ async function followProcess(
     if (event === 'stdout') process.stdout.write(String(payload.chunk ?? ''));
     else if (event === 'stderr') process.stderr.write(String(payload.chunk ?? ''));
     else if (event === 'exit') {
-      exitCode = typeof payload.exitCode === 'number' ? payload.exitCode : 0;
+      // A null exit code means a signal killed the process — still a failure.
+      exitCode = typeof payload.exitCode === 'number' ? payload.exitCode : 128;
       return finish();
     } else if (event === 'error') {
       console.error(pc.red(`Error: ${String(payload.error ?? 'stream error')}`));
       return finish(1);
     }
   }
-  return finish();
+  // The stream ended without an `exit` event — the process may still be
+  // running; reporting success would be wrong either way.
+  console.error(pc.yellow('stream ended before the process exited'));
+  return finish(2);
 
   function finish(code?: number): void {
     if (code !== undefined) exitCode = code;
-    if (exitCode !== 0) process.exit(exitCode);
+    if (exitCode !== 0) process.exitCode = exitCode;
   }
 }
