@@ -54,23 +54,6 @@ function clientFor(config: DockerSandboxesConfig): Sandboxes {
 // is done before the first create.
 if (env('DOCKER_SANDBOXES_USERNAME') && env('DOCKER_SANDBOXES_TOKEN')) {
   clientFor({});
-  preconnect();
-}
-
-// One request to the API host caches a TLS session, so the next connections resume it
-// instead of each doing a full handshake: ~110 ms less per create when many start at once.
-// The URL lookup must match @docker/sandboxes, which reads the same variable and default.
-function preconnect(): void {
-  if (typeof fetch !== 'function') return;
-  let origin: string;
-  try {
-    origin = new URL(env('SANDBOXES_API_URL') || 'https://connect.docker.com/sandboxes').origin;
-  } catch {
-    return; // A bad URL fails the first create with a clearer error.
-  }
-  fetch(origin + '/healthz')
-    .then((response) => response.arrayBuffer())
-    .catch(() => {});
 }
 
 const isNotFound = (error: unknown) => error instanceof RequestError && error.httpStatus === 404;
