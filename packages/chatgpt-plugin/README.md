@@ -15,8 +15,9 @@ daytona) are still available via `set_provider_credentials`.
   `GET /healthz`). Bearer token = ComputeSDK API key for first-party ops;
   also scopes the BYOK credential vault (SHA-256 → vault key).
 - `src/gateway.ts` — first-party `computesdk` provider: REST client for the
-  hosted sandbox router (create/list/get/destroy/commands), filesystem via
-  shell ops. Verified live against `platform.computesdk.com/api/v1`.
+  hosted sandbox router (create/list/get/destroy, commands, files, urls,
+  detached processes, settings). Verified live against
+  `platform.computesdk.com/api/v1`.
 - `src/vault.ts` — per-user BYOK credential store. AES-256-GCM encrypted at
   rest; secret values never appear in tool results.
 - `src/providers.ts` — provider registry; `firstParty: true` entries skip the
@@ -27,8 +28,12 @@ daytona) are still available via `set_provider_credentials`.
   (`ui/initialize`, `tools/call`, `ui/notifications/tool-result`).
 - `src/tools.ts` — MCP tools: `list_providers`,
   `set_provider_credentials`, `remove_provider_credentials`,
-  `create_sandbox`, `list_sandboxes`, `run_command`, `read_file`,
-  `write_file`, `get_sandbox_url`, `destroy_sandbox`. All sandbox tools
+  `create_sandbox` (label, image, snapshotId, provider_order, resources,
+  secrets passthroughs), `list_sandboxes` (`label_prefix` filter),
+  `run_command`, `start_process` / `list_processes` / `process_status` /
+  `wait_process` / `kill_process` / `write_stdin` / `close_stdin`
+  (first-party only), `read_file`, `write_file`, `list_files`,
+  `delete_path`, `get_sandbox_url`, `destroy_sandbox`. All sandbox tools
   default `provider` to `computesdk`; `create_sandbox`/`list_sandboxes`
   carry `openai/outputTemplate` pointing at the panel.
 
@@ -36,15 +41,19 @@ daytona) are still available via `set_provider_credentials`.
 
 | Op | Endpoint |
 |---|---|
-| create | `POST /api/v1/sandboxes` `{label?, timeoutMs?, providerOrder?}` |
-| get | `GET /api/v1/sandboxes/:id` |
+| create | `POST /api/v1/sandboxes` `{label?, timeoutMs?, providerOrder?, image?, snapshotId?, resources?, secrets?}` |
+| get | `GET /api/v1/sandboxes/:id` (includes `attach` descriptor — BYOK connect() offramp) |
 | list | `GET /api/v1/sandboxes?status&limit&cursor` |
 | destroy | `DELETE /api/v1/sandboxes/:id` |
-| exec | `POST /api/v1/sandboxes/:id/commands` `{command, timeoutMs?}` (Accept: application/json → buffered result) |
+| exec | `POST /api/v1/sandboxes/:id/commands` `{command, timeoutMs?}` (buffered; ≤64KB, ~290s) |
+| files | `GET/POST/DELETE /api/v1/sandboxes/:id/files?path=` (absolute paths, ≤32MB content) |
+| urls | `GET /api/v1/sandboxes/:id/urls?port&protocol` → `{url}` (501 when the provider has no ingress) |
+| processes | `POST/GET /api/v1/sandboxes/:id/processes`, `GET /processes/:jobId`, `.../wait`, `.../kill`, `.../stdin`, `.../close-stdin` |
+| settings | `GET /api/v1/sandboxes/settings` (routing order, market cap, sizes, warm pool) |
 
-The gateway has no file or preview-URL endpoints — filesystem ops are
-implemented over `commands` (base64), and `get_sandbox_url` returns an error
-for `computesdk` sandboxes.
+Client-side clamps mirror the platform: 6h sandbox timeout, 64KB/~290s
+commands, 32MB file content. `sb-pool`-prefixed labels are reserved by the
+warm pool — plugin sandboxes are labelled `chatgpt-plugin-*`.
 
 ## Run
 

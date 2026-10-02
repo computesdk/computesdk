@@ -88,19 +88,22 @@ function render(sandboxes) {
   emptyEl.hidden = sandboxes.length > 0;
   for (const sb of sandboxes) {
     const li = document.createElement("li");
+    const meta = sb.metadata || {};
     const id = document.createElement("span");
     id.className = "id";
-    id.textContent = sb.id || sb.sandbox_id || "?";
+    const label = meta.label || sb.id || sb.sandbox_id || "?";
+    id.textContent = label;
+    id.title = (sb.id || sb.sandbox_id) + " · " + (meta.gatewayProvider || "unplaced") + (meta.costUsd != null ? " · $" + Number(meta.costUsd).toFixed(4) : "");
     const state = document.createElement("span");
     state.className = "state";
-    state.textContent = sb.status || sb.state || "running";
+    state.textContent = meta.gatewayStatus || sb.status || sb.state || "running";
     const kill = document.createElement("button");
     kill.className = "destroy";
     kill.textContent = "Destroy";
     kill.onclick = async () => {
       kill.disabled = true;
       try {
-        await callTool("destroy_sandbox", { provider: "computesdk", sandbox_id: id.textContent });
+        await callTool("destroy_sandbox", { provider: "computesdk", sandbox_id: sb.id || sb.sandbox_id });
         refresh();
       } catch (e) { errEl.textContent = String(e.message || e); }
     };
@@ -112,7 +115,7 @@ function render(sandboxes) {
 async function refresh() {
   errEl.textContent = "";
   try {
-    const res = await callTool("list_sandboxes", { provider: "computesdk" });
+    const res = await callTool("list_sandboxes", { provider: "computesdk", label_prefix: "chatgpt-plugin" });
     render(res?.structuredContent?.sandboxes || []);
   } catch (e) {
     errEl.textContent = String(e.message || e);

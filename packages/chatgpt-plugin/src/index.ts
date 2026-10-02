@@ -49,9 +49,11 @@ const server = http.createServer(async (req, res) => {
     { name: 'computesdk-sandbox', version: '0.1.0' },
     {
       instructions:
-        'This plugin places sandboxes on any provider the user has configured. ' +
-        'Before creating a sandbox, call list_providers to see which providers are configured; ' +
-        'if none are, ask the user which provider they want and collect its credentials via set_provider_credentials.',
+        'This plugin places compute sandboxes on ComputeSDK\'s hosted gateway: ' +
+        'by default they run first-party, billed to the caller\'s ComputeSDK account ' +
+        'balance (their bearer token is the API key) — just call create_sandbox. ' +
+        'BYOK providers are opt-in for technical users via set_provider_credentials. ' +
+        'Use run_command for short work and start_process/wait_process for long-running jobs.',
     }
   );
   registerTools(mcpServer, { userId: CredentialVault.userIdForToken(token), token, vault });
