@@ -15,12 +15,13 @@ import type {
   SandboxEgressOptions,
   SandboxFileSystem,
 } from './types/index.js';
+import { randomBytes } from 'node:crypto';
 
-/** Directory the shim works out of inside the sandbox (CA, leaf certs, config). */
+/** Root dir inside the sandbox; each router instance gets a subdirectory. */
 export const EGRESS_SHIM_DIR = '/tmp/computesdk-egress';
 
-const SHIM_PATH = `${EGRESS_SHIM_DIR}/egress-shim.js`;
-const CONFIG_PATH = `${EGRESS_SHIM_DIR}/config.json`;
+/** Points at the most recent router's info so reconnects can recover it. */
+const POINTER_PATH = `${EGRESS_SHIM_DIR}/current.json`;
 const READY_PREFIX = 'EGRESS_READY ';
 const ERROR_PREFIX = 'EGRESS_ERROR ';
 const READY_TIMEOUT_MS = 60_000;
@@ -35,6 +36,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/^[[\]]+/g, '').replace(/[\]]+$/g, '');
+  return normalized === 'localhost' || normalized === '::1' || normalized.startsWith('127.');
+}
+
 function validateEgressOptions(egress: SandboxEgressOptions): void {
   if (!egress || typeof egress !== 'object') {
     throw new Error('egress: options must be an object');
@@ -47,6 +53,12 @@ function validateEgressOptions(egress: SandboxEgressOptions): void {
   }
   if (injectorUrl.protocol !== 'https:' && injectorUrl.protocol !== 'http:') {
     throw new Error(`egress: injectorUrl must be an http(s) URL (got ${JSON.stringify(egress.injectorUrl)})`);
+  }
+  if (injectorUrl.protocol === 'http:' && !isLoopbackHost(injectorUrl.hostname)) {
+    throw new Error(
+      'egress: injectorUrl must be https — plain http is only allowed for loopback injectors ' +
+        '(the token and decrypted requests travel in cleartext)'
+    );
   }
   if (!Array.isArray(egress.credentialedHosts) || egress.credentialedHosts.length === 0) {
     throw new Error('egress: credentialedHosts must be a non-empty array of hostnames');
@@ -71,17 +83,18 @@ function validateEgressOptions(egress: SandboxEgressOptions): void {
  * `~/.computesdk/daemond`. startProcess boots the daemon first, so a binary
  * is guaranteed reachable by the time this runs.
  */
-const NODE_RESOLVER =
+const nodeResolverFor = (shimPath: string, configPath: string) =>
   'NODE_BIN="$(command -v node || command -v nodejs || true)"; ' +
   'if [ -z "$NODE_BIN" ]; then ' +
   'NODE_BIN="$(ls -d "${HOME:-/tmp}/.computesdk/daemond/node-v"*-linux-*/bin/node 2>/dev/null | head -n 1)"; ' +
   'fi; ' +
   'if [ -z "$NODE_BIN" ]; then echo "egress: no JavaScript runtime found in sandbox" >&2; exit 127; fi; ' +
-  `exec "$NODE_BIN" ${SHIM_PATH} ${CONFIG_PATH}`;
+  `exec "$NODE_BIN" ${shimPath} ${configPath}`;
 
 interface ReadyMarker {
   port: number;
   caCertPath: string;
+  caBundlePath?: string;
 }
 
 function findMarker(stdout: string, prefix: string): Record<string, unknown> | undefined {
@@ -94,6 +107,23 @@ function findMarker(stdout: string, prefix: string): Record<string, unknown> | u
     } catch {
       /* partial line — keep polling */
     }
+  }
+  return undefined;
+}
+
+/**
+ * Recovers the router info of a sandbox after a reconnect (getById/list) by
+ * reading the pointer file the most recent setup wrote. Returns undefined
+ * when the sandbox has no router or the filesystem read fails.
+ */
+export async function readSandboxEgress(sandbox: EgressHost): Promise<SandboxEgressInfo | undefined> {
+  try {
+    const parsed = JSON.parse(await sandbox.filesystem.readFile(POINTER_PATH));
+    if (parsed && typeof parsed === 'object' && typeof parsed.proxyUrl === 'string') {
+      return parsed as SandboxEgressInfo;
+    }
+  } catch {
+    /* no pointer file — the sandbox never ran a router */
   }
   return undefined;
 }
@@ -118,16 +148,24 @@ export async function setupSandboxEgress(
     port: egress.port ?? 0,
   };
 
+  // Each router gets its own workdir so two routers on one sandbox never
+  // share a CA or host rules; the shim treats the config's directory as its
+  // workdir.
+  const instanceDir = `${EGRESS_SHIM_DIR}/${randomBytes(8).toString('hex')}`;
+  const shimPath = `${instanceDir}/egress-shim.js`;
+  const configPath = `${instanceDir}/config.json`;
+
   try {
-    await sandbox.filesystem.mkdir(EGRESS_SHIM_DIR);
-    await sandbox.filesystem.writeFile(SHIM_PATH, egressShimScript());
-    await sandbox.filesystem.writeFile(CONFIG_PATH, JSON.stringify(config));
+    await sandbox.filesystem.mkdir(EGRESS_SHIM_DIR).catch(() => {});
+    await sandbox.filesystem.mkdir(instanceDir);
+    await sandbox.filesystem.writeFile(shimPath, egressShimScript());
+    await sandbox.filesystem.writeFile(configPath, JSON.stringify(config));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`egress: provider "${providerName}" cannot host the egress router — ${detail}`);
   }
 
-  const handle = await sandbox.startProcess(NODE_RESOLVER);
+  const handle = await sandbox.startProcess(nodeResolverFor(shimPath, configPath));
 
   const deadline = Date.now() + READY_TIMEOUT_MS;
   let lastStdout = '';
@@ -139,12 +177,19 @@ export async function setupSandboxEgress(
 
     const ready = findMarker(lastStdout, READY_PREFIX);
     if (ready && typeof ready.port === 'number' && typeof ready.caCertPath === 'string') {
-      return {
-        proxyUrl: `http://127.0.0.1:${ready.port}`,
-        caCertPath: ready.caCertPath,
-        port: ready.port,
+      const marker = ready as unknown as ReadyMarker;
+      const info: SandboxEgressInfo = {
+        proxyUrl: `http://127.0.0.1:${marker.port}`,
+        caCertPath: marker.caCertPath,
+        caBundlePath: marker.caBundlePath,
+        port: marker.port,
         processJobId: handle.jobId,
       };
+      // Best-effort pointer for reconnects (getById/list); not fatal.
+      await sandbox.filesystem
+        .writeFile(POINTER_PATH, JSON.stringify(info))
+        .catch(() => {});
+      return info;
     }
 
     const reported = findMarker(lastStdout, ERROR_PREFIX);

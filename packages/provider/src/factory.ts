@@ -35,7 +35,7 @@ import {
   type SeedInput,
   type SeedInvocationResult,
 } from 'daemond';
-import { setupSandboxEgress } from './egress.js';
+import { readSandboxEgress, setupSandboxEgress } from './egress.js';
 
 type DaemonStreamState = {
   token: string;
@@ -1013,7 +1013,15 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
     );
 
     if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
-      sandbox.egress = await setupSandboxEgress(sandbox, options.egress, this.providerName);
+      throwIfAborted(signal);
+      try {
+        sandbox.egress = await setupSandboxEgress(sandbox, options.egress, this.providerName);
+      } catch (error) {
+        // A failed router setup must not orphan the sandbox it was set up on.
+        await this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+        throw error;
+      }
+      throwIfAborted(signal);
     }
 
     return sandbox;
@@ -1025,7 +1033,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       return null;
     }
 
-    return new GeneratedSandbox<TSandbox>(
+    const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -1034,20 +1042,27 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods.destroy,
       this.providerInstance
     );
+    // Reattach a running router's info; nothing to read if none ever ran.
+    sandbox.egress = await readSandboxEgress(sandbox).catch(() => undefined);
+    return sandbox;
   }
 
   async list(): Promise<ProviderSandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
     
-    return results.map(result => new GeneratedSandbox<TSandbox>(
-      result.sandbox,
-      result.sandboxId,
-      this.providerName,
-      this.methods,
-      this.config,
-      this.methods.destroy,
-      this.providerInstance
-    ));
+    return await Promise.all(results.map(async result => {
+      const sandbox = new GeneratedSandbox<TSandbox>(
+        result.sandbox,
+        result.sandboxId,
+        this.providerName,
+        this.methods,
+        this.config,
+        this.methods.destroy,
+        this.providerInstance
+      );
+      sandbox.egress = await readSandboxEgress(sandbox).catch(() => undefined);
+      return sandbox;
+    }));
   }
 
   async destroy(sandboxId: string): Promise<void> {

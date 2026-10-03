@@ -23,7 +23,7 @@ export type {
 } from './infra-factory';
 
 // Export egress router setup
-export { setupSandboxEgress, EGRESS_SHIM_DIR } from './egress';
+export { setupSandboxEgress, readSandboxEgress, EGRESS_SHIM_DIR } from './egress';
 
 // Export direct mode compute API
 export { createCompute } from './compute';

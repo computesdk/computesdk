@@ -191,6 +191,20 @@ describe('egress shim', () => {
     assert.match(out, /EGRESS_ERROR.*openssl/);
   });
 
+  test('rejects a non-loopback http injectorUrl', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'egress-it-httpinj-'));
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({
+      injectorUrl: 'http://injector.example.com/api', credentialedHosts: ['x'], mode: 'passthrough', port: 0,
+    }));
+    const proc = spawn(process.execPath, [SHIM, path.join(tmp, 'config.json')]);
+    let out = '';
+    proc.stderr.on('data', (d) => { out += d; });
+    proc.stdout.on('data', (d) => { out += d; });
+    const code = await new Promise((r) => proc.on('exit', r));
+    assert.equal(code, 1);
+    assert.match(out, /EGRESS_ERROR.*must be https/);
+  });
+
   describe('router behavior', () => {
     let upstream, upstreamPort;
     let injector, injectorPort;
@@ -321,6 +335,84 @@ describe('egress shim', () => {
       assert.match(out, /HTTP\/1\.1 201/);
       assert.equal(envelopes.at(-1).body.request.url, 'http://plain.example.test/echo?q=1');
       assert.equal(envelopes.at(-1).body.token, 'tok-4');
+    });
+
+    test('passthrough: reused connection tunnels a second, non-credentialed host', async (t) => {
+      const shim = await startShim({
+        injectorUrl: `http://127.0.0.1:${injectorPort}`,
+        injectorToken: 'tok-5',
+        credentialedHosts: ['plain.example.test'],
+        mode: 'passthrough',
+        port: 0,
+      });
+      t.after(() => killShim(shim.proc));
+
+      const sock = net.connect(shim.ready.port, '127.0.0.1');
+      t.after(() => sock.destroy());
+      await new Promise((r) => sock.once('connect', r));
+      // First request on the connection is credentialed → relayed.
+      const out1 = await sendRawUntilBody(
+        sock,
+        'GET http://plain.example.test/a HTTP/1.1\r\nHost: plain.example.test\r\n\r\n',
+        'injected-response'
+      );
+      assert.match(out1, /HTTP\/1\.1 201/);
+      // Second request on the SAME connection is another host → tunneled,
+      // not 403. The response must come from the real upstream.
+      const out2 = await sendRawUntilBody(
+        sock,
+        `GET /direct HTTP/1.1\r\nHost: 127.0.0.1:${upstreamPort}\r\nConnection: close\r\n\r\n`,
+        UPSTREAM_BODY
+      );
+      assert.match(out2, /HTTP\/1\.1 200/);
+      assert.match(out2, /upstream-ok/);
+    });
+
+    test('absolute URL naming an unlisted host is not relayed', async (t) => {
+      const shim = await startShim({
+        injectorUrl: `http://127.0.0.1:${injectorPort}`,
+        injectorToken: 'tok-6',
+        credentialedHosts: ['api.example.test'],
+        mode: 'passthrough',
+        port: 0,
+      });
+      t.after(() => killShim(shim.proc));
+
+      const sock = await connectThrough(shim.ready.port, 'api.example.test:443');
+      t.after(() => sock.destroy());
+      const ca = fs.readFileSync(shim.ready.caCertPath, 'utf8');
+      const tlsSock = tls.connect({ socket: sock, servername: 'api.example.test', ca });
+      await new Promise((res, rej) => {
+        tlsSock.once('secureConnect', res);
+        tlsSock.once('error', rej);
+      });
+      // Listed Host but the absolute URL is an unlisted host → passthrough
+      // tunnels to that upstream instead of relaying it to the injector.
+      const envelopeCount = envelopes.length;
+      const out = await sendRawUntilBody(
+        tlsSock,
+        `GET https://127.0.0.1:${upstreamPort}/smuggle HTTP/1.1\r\nHost: api.example.test\r\n\r\n`,
+        'HTTP/'
+      );
+      assert.match(out, /HTTP\/1\.1 (200|502|504)/);
+      assert.equal(envelopes.length, envelopeCount, 'unlisted URL must not reach the injector');
+    });
+
+    test('ready marker reports a combined CA bundle', async (t) => {
+      const shim = await startShim({
+        injectorUrl: `http://127.0.0.1:${injectorPort}`,
+        injectorToken: 'tok-7',
+        credentialedHosts: ['x'],
+        mode: 'passthrough',
+        port: 0,
+      });
+      t.after(() => killShim(shim.proc));
+      assert.equal(typeof shim.ready.caBundlePath, 'string');
+      const bundle = fs.readFileSync(shim.ready.caBundlePath, 'utf8');
+      const ca = fs.readFileSync(shim.ready.caCertPath, 'utf8');
+      assert.ok(bundle.includes(ca.trim()), 'bundle must contain the minted CA');
+      const certs = bundle.match(/BEGIN CERTIFICATE/g) ?? [];
+      assert.ok(certs.length >= 2, 'bundle should append the system trust store');
     });
 
     test('teardown', async () => {

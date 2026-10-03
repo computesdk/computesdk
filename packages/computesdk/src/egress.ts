@@ -12,6 +12,10 @@ import type { SandboxEgressInfo } from './types/universal-sandbox';
  * that manage their own trust stores.
  */
 export function sandboxEgressEnvVars(egress: SandboxEgressInfo): Record<string, string> {
+  // CA vars that REPLACE the default trust store get the combined bundle so
+  // passthrough hosts' public certs still verify; NODE_EXTRA_CA_CERTS only
+  // appends to Node's store, so the CA alone is enough there.
+  const replaceBundle = egress.caBundlePath ?? egress.caCertPath;
   return {
     HTTPS_PROXY: egress.proxyUrl,
     https_proxy: egress.proxyUrl,
@@ -19,9 +23,9 @@ export function sandboxEgressEnvVars(egress: SandboxEgressInfo): Record<string, 
     http_proxy: egress.proxyUrl,
     ALL_PROXY: egress.proxyUrl,
     all_proxy: egress.proxyUrl,
-    GIT_SSL_CAINFO: egress.caCertPath,
+    GIT_SSL_CAINFO: replaceBundle,
     NODE_EXTRA_CA_CERTS: egress.caCertPath,
-    REQUESTS_CA_BUNDLE: egress.caCertPath,
-    SSL_CERT_FILE: egress.caCertPath,
+    REQUESTS_CA_BUNDLE: replaceBundle,
+    SSL_CERT_FILE: replaceBundle,
   };
 }

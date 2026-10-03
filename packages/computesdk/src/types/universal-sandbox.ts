@@ -277,6 +277,12 @@ export interface SandboxEgressInfo {
   proxyUrl: string;
   /** Absolute path of the shim's generated root CA certificate (PEM). */
   caCertPath: string;
+  /**
+   * Absolute path of a bundle containing the shim's CA prepended to the
+   * sandbox's public trust store — point CA env vars that REPLACE the
+   * default bundle at this so passthrough traffic still verifies.
+   */
+  caBundlePath?: string;
   /** Bound port of the shim's loopback listener. */
   port: number;
   /** Daemon job ID of the running router process (`ProcessHandle.jobId`). */

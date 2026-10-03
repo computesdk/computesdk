@@ -56,7 +56,6 @@ export interface EgressShimConfig {
   maxBodyBytes?: number;
 }
 
-const DEFAULT_DIR = "/tmp/computesdk-egress";
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
 const MAX_HEAD_BYTES = 64 * 1024;
@@ -561,6 +560,37 @@ function mintRootCa(dir: string): { caKeyPath: string; caCertPath: string } {
   return { caKeyPath, caCertPath };
 }
 
+const SYSTEM_CA_BUNDLE_CANDIDATES = [
+  "/etc/ssl/certs/ca-certificates.crt",
+  "/etc/pki/tls/certs/ca-bundle.crt",
+  "/etc/ssl/cert.pem",
+  "/usr/local/share/certs/ca-root-nss.crt",
+];
+
+/**
+ * Our CA prepended to the box's public bundle. CA env vars that REPLACE the
+ * default trust store (SSL_CERT_FILE, REQUESTS_CA_BUNDLE, GIT_SSL_CAINFO)
+ * must point at this file, or passthrough hosts' public certs stop
+ * verifying.
+ */
+function writeCaBundle(dir: string, caCertPath: string): string {
+  const parts = [fs.readFileSync(caCertPath)];
+  for (const candidate of SYSTEM_CA_BUNDLE_CANDIDATES) {
+    try {
+      parts.push(fs.readFileSync(candidate));
+      break;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  const bundlePath = path.join(dir, "ca-bundle.pem");
+  fs.writeFileSync(
+    bundlePath,
+    parts.map((p) => p.toString("utf8").trimEnd() + "\n").join("")
+  );
+  return bundlePath;
+}
+
 /** Per-host leaf mint, deduplicated so concurrent CONNECTs share one openssl run. */
 function createLeafMinter(dir: string, caKeyPath: string, caCertPath: string) {
   const pending = new Map<string, Promise<tls.SecureContext>>();
@@ -624,6 +654,73 @@ function createLeafMinter(dir: string, caKeyPath: string, caCertPath: string) {
 
 type SocketLike = net.Socket | tls.TLSSocket;
 
+/** Serializes a parsed request back to wire form, origin-form target. */
+function serializeRequest(head: HttpRequestHead, body: Buffer): Buffer {
+  let target = head.target;
+  if (/^https?:\/\//i.test(target)) {
+    try {
+      const u = new URL(target);
+      target = u.pathname + u.search || "/";
+    } catch {
+      /* leave target as-is */
+    }
+  }
+  const headText =
+    `${head.method} ${target} HTTP/1.1\r\n` +
+    head.headers.map(([k, v]) => `${k}: ${v}`).join("\r\n") +
+    "\r\n\r\n";
+  return Buffer.concat([Buffer.from(headText, "latin1"), body]);
+}
+
+/**
+ * Splices `client` onto a fresh upstream connection: writes `initial`
+ * (rewritten request head, buffered body bytes) first, then pipes both
+ * directions. When `useTls`, the upstream is TLS-wrapped (public-CA
+ * verified) for `https://` absolute-URI and mid-connection upgrades.
+ * Resolves once the splice is established or has failed; on pre-splice
+ * failure an error response is written and the client destroyed.
+ */
+function spliceToUpstream(
+  client: SocketLike,
+  host: string,
+  port: number,
+  useTls: boolean,
+  initial: Buffer[]
+): Promise<void> {
+  return new Promise((resolve) => {
+    const raw = net.connect({ host, port });
+    raw.setTimeout(CONNECT_UPSTREAM_TIMEOUT_MS);
+    let established = false;
+
+    const upstream: SocketLike = useTls
+      ? tls.connect({ socket: raw, servername: host })
+      : raw;
+    if (useTls) raw.on("error", () => { /* surfaced on the TLS socket */ });
+
+    const fail = (status: number, message: string): void => {
+      if (!established) httpErrorCode(client, status, message);
+      upstream.destroy();
+      client.destroy();
+      resolve();
+    };
+    raw.once("timeout", () => fail(504, `egress router: upstream ${host}:${port} timed out`));
+    upstream.once("error", (err) =>
+      fail(502, `egress router: upstream ${host}:${port} failed: ${err.message}`)
+    );
+
+    const begin = (): void => {
+      established = true;
+      raw.setTimeout(0);
+      for (const chunk of initial) upstream.write(chunk);
+      client.pipe(upstream);
+      upstream.pipe(client);
+      resolve();
+    };
+    if (useTls) (upstream as tls.TLSSocket).once("secureConnect", begin);
+    else raw.once("connect", begin);
+  });
+}
+
 export function buildRequestUrl(scheme: "http" | "https", hostHeader: string | undefined, defaultHost: string, target: string): string {
   if (/^https?:\/\//i.test(target)) return target;
   if (target === "*") return `${scheme}://${hostHeader || defaultHost}/`;
@@ -682,6 +779,7 @@ async function serveRelayed(
   const reader = options.reader ?? new SocketReader(socket);
   const maxBody = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   let pendingHead = options.firstHead;
+  let spliced = false;
   try {
     for (;;) {
       let head: HttpRequestHead;
@@ -702,11 +800,56 @@ async function serveRelayed(
       }
 
       const hostHeader = headerValue(head.headers, "host");
-      const hostForMatch = stripPort(hostHeader || options.defaultHost);
       const closeAfter = wantsClose(head);
+      const allowlist = (config.mode ?? "passthrough") === "allowlist";
 
-      if (!matchCredentialedHost(hostForMatch, config.credentialedHosts ?? [])) {
-        writeErrorResponse(socket, 403, `egress router: ${hostForMatch} is not a credentialed host`);
+      // An absolute-form target carries its own authority and is what would
+      // be relayed — it must pass the credentialed check too, or a listed
+      // Host header could smuggle an unlisted URL to the injector.
+      let effectiveHost: string;
+      let tunnelPort: number | null;
+      let tunnelTls: boolean;
+      if (/^https?:\/\//i.test(head.target)) {
+        let url: URL;
+        try {
+          url = new URL(head.target);
+        } catch {
+          writeErrorResponse(socket, 400, "egress router: malformed absolute URI");
+          break;
+        }
+        const authority = splitAuthority(url.host);
+        effectiveHost = authority.host;
+        tunnelPort = authority.port;
+        tunnelTls = url.protocol === "https:";
+      } else {
+        const authority = splitAuthority(hostHeader || options.defaultHost);
+        effectiveHost = authority.host;
+        tunnelPort = authority.port;
+        tunnelTls = options.scheme === "https";
+      }
+
+      if (!matchCredentialedHost(effectiveHost, config.credentialedHosts ?? [])) {
+        if (allowlist) {
+          writeErrorResponse(socket, 403, `egress router: ${effectiveHost} is not a credentialed host`);
+          break;
+        }
+        if (!effectiveHost || !validConnectHost(effectiveHost)) {
+          writeErrorResponse(socket, 400, `egress router: invalid upstream host "${effectiveHost}"`);
+          break;
+        }
+        // Passthrough: splice the rest of this connection onto the real
+        // upstream rather than refusing — clients that reuse a proxy
+        // connection across hosts still get their response.
+        const buffered = reader.takeBuffered();
+        reader.unbind();
+        spliced = true;
+        await spliceToUpstream(
+          socket,
+          effectiveHost,
+          tunnelPort ?? (tunnelTls ? 443 : 80),
+          tunnelTls,
+          [serializeRequest(head, body), ...(buffered.length ? [buffered] : [])]
+        );
         break;
       }
 
@@ -727,7 +870,7 @@ async function serveRelayed(
       /* socket already dead */
     }
   } finally {
-    socket.end();
+    if (!spliced) socket.end();
   }
 }
 
@@ -840,6 +983,7 @@ async function handlePlainHttp(
 ): Promise<void> {
   let target = head.target;
   let hostHeader = headerValue(head.headers, "host");
+  let upstreamTls = false;
 
   if (/^https?:\/\//i.test(target)) {
     let parsed: URL;
@@ -851,6 +995,7 @@ async function handlePlainHttp(
       return;
     }
     hostHeader = parsed.host;
+    upstreamTls = parsed.protocol === "https:";
     target = parsed.pathname + parsed.search || "/";
   }
 
@@ -861,10 +1006,10 @@ async function handlePlainHttp(
   }
 
   const { host, port } = splitAuthority(hostHeader);
-  const upstreamPort = port ?? 80;
+  const upstreamPort = port ?? (upstreamTls ? 443 : 80);
 
   if (matchCredentialedHost(host, config.credentialedHosts ?? [])) {
-    await serveRelayed(client, { scheme: "http", defaultHost: hostHeader, reader, firstHead: head }, config);
+    await serveRelayed(client, { scheme: upstreamTls ? "https" : "http", defaultHost: hostHeader, reader, firstHead: head }, config);
     return;
   }
 
@@ -893,28 +1038,12 @@ async function handlePlainHttp(
     ]);
   }
 
-  const upstream = net.connect({ host, port: upstreamPort });
-  let established = false;
-  upstream.setTimeout(CONNECT_UPSTREAM_TIMEOUT_MS);
-  upstream.once("timeout", () => {
-    if (!established) httpErrorCode(client, 504, `egress router: upstream ${host}:${upstreamPort} timed out`);
-    upstream.destroy();
-    client.end();
-  });
-  upstream.once("error", (err) => {
-    if (!established) httpErrorCode(client, 502, `egress router: upstream ${host}:${upstreamPort} failed: ${err.message}`);
-    client.end();
-  });
-  upstream.once("connect", () => {
-    established = true;
-    upstream.setTimeout(0);
-    upstream.write(headOut);
-    const rest = reader.takeBuffered();
-    reader.unbind();
-    if (rest.length) upstream.write(rest);
-    client.pipe(upstream);
-    upstream.pipe(client);
-  });
+  const rest = reader.takeBuffered();
+  reader.unbind();
+  await spliceToUpstream(client, host, upstreamPort, upstreamTls, [
+    headOut,
+    ...(rest.length ? [rest] : []),
+  ]);
 }
 
 async function handleConnection(
@@ -978,6 +1107,16 @@ function loadConfig(configPath: string): EgressShimConfig {
   if (typeof config.injectorUrl !== "string" || !/^https?:\/\//.test(config.injectorUrl)) {
     throw new Error("config.injectorUrl must be an http(s) URL");
   }
+  {
+    const injectorUrl = new URL(config.injectorUrl);
+    const host = injectorUrl.hostname.toLowerCase().replace(/^[\[\]]/g, "");
+    const loopback = host === "localhost" || host === "::1" || host.startsWith("127.");
+    if (injectorUrl.protocol === "http:" && !loopback) {
+      throw new Error(
+        "config.injectorUrl must be https — plain http is only allowed for loopback injectors (the token and decrypted requests travel in cleartext)"
+      );
+    }
+  }
   if (!Array.isArray(config.credentialedHosts)) {
     throw new Error("config.credentialedHosts must be an array of hostnames");
   }
@@ -1000,10 +1139,13 @@ async function main(): Promise<void> {
 
   requireOpenssl();
 
-  const workdir = config.dir ?? DEFAULT_DIR;
+  // Each router works out of the directory holding its config, so two
+  // routers on one box never share a CA or host rules.
+  const workdir = config.dir ?? path.dirname(path.resolve(configPath));
   fs.mkdirSync(workdir, { recursive: true });
   const { caKeyPath, caCertPath } = mintRootCa(workdir);
   const mintLeaf = createLeafMinter(workdir, caKeyPath, caCertPath);
+  const caBundlePath = writeCaBundle(workdir, caCertPath);
 
   const server = net.createServer((client) => {
     handleConnection(client, config, mintLeaf).catch(() => client.destroy());
@@ -1016,7 +1158,7 @@ async function main(): Promise<void> {
 
   const address = server.address();
   const boundPort = typeof address === "object" && address ? address.port : config.port;
-  process.stdout.write(`EGRESS_READY ${JSON.stringify({ port: boundPort, caCertPath })}\n`);
+  process.stdout.write(`EGRESS_READY ${JSON.stringify({ port: boundPort, caCertPath, caBundlePath })}\n`);
 
   const shutdown = (): void => {
     server.close(() => process.exit(0));

@@ -74,7 +74,11 @@ function makeMethods(state: FakeState) {
           }
         }
         return {
-          readFile: vi.fn(async () => ''),
+          readFile: vi.fn(async (_s: unknown, path: string) => {
+            const content = fsState.written.get(path)
+            if (content === undefined) throw new Error('ENOENT')
+            return content
+          }),
           writeFile: vi.fn(async (_s: unknown, path: string, content: string) => {
             maybeFail(path)
             fsState.written.set(path, content)
@@ -121,7 +125,8 @@ function freshJob(): JobState {
   return {
     jobId: 'job-egress',
     pid: 42,
-    stdout: 'EGRESS_READY {"port":43111,"caCertPath":"/tmp/computesdk-egress/ca.pem"}\n',
+    stdout:
+      'EGRESS_READY {"port":43111,"caCertPath":"/tmp/computesdk-egress/abc/ca.pem","caBundlePath":"/tmp/computesdk-egress/abc/ca-bundle.pem"}\n',
     stderr: '',
     status: 'running',
     exitCode: null,
@@ -153,14 +158,17 @@ describe('egress router setup', () => {
 
     expect(sandbox.egress).toEqual({
       proxyUrl: 'http://127.0.0.1:43111',
-      caCertPath: '/tmp/computesdk-egress/ca.pem',
+      caCertPath: '/tmp/computesdk-egress/abc/ca.pem',
+      caBundlePath: '/tmp/computesdk-egress/abc/ca-bundle.pem',
       port: 43111,
       processJobId: 'job-egress',
     })
 
     const written = state.filesystem.written
-    expect(written.get(`${EGRESS_SHIM_DIR}/egress-shim.js`)).toBe('// shim source')
-    const config = JSON.parse(written.get(`${EGRESS_SHIM_DIR}/config.json`) ?? '{}')
+    const shimPath = [...written.keys()].find((p) => p.endsWith('/egress-shim.js'))
+    expect(shimPath).toMatch(new RegExp(`^${EGRESS_SHIM_DIR}/[0-9a-f]+/egress-shim\\.js$`))
+    expect(written.get(shimPath!)).toBe('// shim source')
+    const config = JSON.parse(written.get(`${shimPath!.replace('egress-shim.js', 'config.json')}`) ?? '{}')
     expect(config).toEqual({
       injectorUrl: EGRESS.injectorUrl,
       injectorToken: EGRESS.injectorToken,
@@ -168,6 +176,8 @@ describe('egress router setup', () => {
       mode: 'passthrough',
       port: 0,
     })
+    // Pointer for reconnects lands at the shared path.
+    expect(JSON.parse(written.get(`${EGRESS_SHIM_DIR}/current.json`) ?? '{}')).toEqual(sandbox.egress)
 
     // Router started through startProcess → bootstrap + detached exec.
     const execPayloads = daemonSeedScriptCommand.mock.calls
@@ -176,6 +186,52 @@ describe('egress router setup', () => {
     expect(execPayloads).toHaveLength(1)
     expect(execPayloads[0].args?.[1]).toContain('egress-shim.js')
     expect(execPayloads[0].args?.[1]).toContain('config.json')
+  })
+
+  it('destroys the sandbox when router setup fails', async () => {
+    const state = {
+      job: { ...freshJob(), stdout: 'EGRESS_ERROR {"message":"openssl binary not found"}\n' },
+      filesystem: { written: new Map<string, string>() },
+    }
+    const { methods, provider } = makeSandbox(state)
+    await expect(provider.sandbox.create({ egress: EGRESS })).rejects.toThrow(/router failed to start/)
+    expect(methods.destroy).toHaveBeenCalledWith(expect.anything(), 'test-egress')
+  })
+
+  it('rejects a non-loopback http injectorUrl before touching the sandbox', async () => {
+    const state = { job: freshJob(), filesystem: { written: new Map<string, string>() } }
+    const { provider } = makeSandbox(state)
+    await expect(
+      provider.sandbox.create({ egress: { ...EGRESS, injectorUrl: 'http://injector.example.com/api' } })
+    ).rejects.toThrow(/injectorUrl must be https/)
+    // Loopback http stays allowed for local testing.
+    const ok = await provider.sandbox.create({ egress: { ...EGRESS, injectorUrl: 'http://127.0.0.1:9000/api' } })
+    expect(ok.egress?.port).toBe(43111)
+  })
+
+  it('reattaches router info on getById via the pointer file', async () => {
+    const state = { job: freshJob(), filesystem: { written: new Map<string, string>() } }
+    const { methods, provider } = makeSandbox(state)
+    methods.getById.mockResolvedValue({ sandbox: { id: 'test-egress' }, sandboxId: 'test-egress' })
+    state.filesystem.written.set(
+      `${EGRESS_SHIM_DIR}/current.json`,
+      JSON.stringify({
+        proxyUrl: 'http://127.0.0.1:43111',
+        caCertPath: '/tmp/computesdk-egress/abc/ca.pem',
+        port: 43111,
+        processJobId: 'job-egress',
+      })
+    )
+    const sandbox = await provider.sandbox.getById('test-egress')
+    expect(sandbox?.egress?.proxyUrl).toBe('http://127.0.0.1:43111')
+  })
+
+  it('leaves egress unset on getById when no router ran', async () => {
+    const state = { job: freshJob(), filesystem: { written: new Map<string, string>() } }
+    const { methods, provider } = makeSandbox(state)
+    methods.getById.mockResolvedValue({ sandbox: { id: 'plain' }, sandboxId: 'plain' })
+    const sandbox = await provider.sandbox.getById('plain')
+    expect(sandbox?.egress).toBeUndefined()
   })
 
   it('leaves sandbox.egress unset without the option', async () => {
