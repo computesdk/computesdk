@@ -435,11 +435,19 @@ function handleModuleInstall(msg: WireMessage, conn: net.Socket): void {
     replyError(conn, requestId, "seed daemon: module sourceB64 is required");
     return;
   }
-  fs.mkdirSync(modulesDir, { recursive: true });
   const modulePath = path.join(modulesDir, `${name}.cjs`);
   const tmpPath = `${modulePath}.tmp-${process.pid}`;
-  fs.writeFileSync(tmpPath, source);
-  fs.renameSync(tmpPath, modulePath);
+  try {
+    fs.mkdirSync(modulesDir, { recursive: true });
+    fs.writeFileSync(tmpPath, source);
+    fs.renameSync(tmpPath, modulePath);
+  } catch (err) {
+    try {
+      fs.rmSync(tmpPath, { force: true });
+    } catch {}
+    replyError(conn, requestId, `seed daemon: module install failed: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
   const sha256 = crypto.createHash("sha256").update(source).digest("hex");
   publish({ channel: "daemon", type: "module.installed", requestId, name, bytes: source.length, sha256, ts: now() });
   reply(conn, "exec_result", requestId, { name, path: modulePath, bytes: source.length, sha256 });

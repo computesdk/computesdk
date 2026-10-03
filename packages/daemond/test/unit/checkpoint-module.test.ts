@@ -13,6 +13,7 @@ import {
   isExcluded,
   readCentralDirectory,
   fetchZipEntry,
+  opRestore,
   ZipWriter,
   type CheckpointManifest,
 } from "../../src/runtime/checkpoint-module.js";
@@ -105,6 +106,15 @@ describe("buildManifest", () => {
     expect(manifest.env).toEqual({ A: "1" });
     expect(manifest.workflowHash).toBe("wh");
     expect(manifest.sourceProvider).toBe("e2b");
+  });
+
+  it("resolves relative capture paths to absolute (manifest keys are absolute)", async () => {
+    const rel = path.relative(process.cwd(), root);
+    const { manifest } = await buildManifest({ paths: [rel] });
+    expect(manifest.capture.paths.every((p) => path.isAbsolute(p))).toBe(true);
+    expect(manifest.capture.paths[0]).toBe(path.resolve(rel));
+    // manifest keys still address files under the resolved root
+    expect(manifest.files[path.join(root, "src/a.ts")]).toBeDefined();
   });
 });
 
@@ -288,5 +298,316 @@ describe("range-GET restore path", () => {
     // every fetch was ranged, none pulled the whole object
     const wholeGets = requests.filter((r) => r.method === "GET" && !r.range);
     expect(wholeGets.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: streamed zip CRC + empty entries
+// ---------------------------------------------------------------------------
+
+// Reference CRC-32 (independent of the implementation under test).
+const REF_CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function refCrc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (const b of buf) c = REF_CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+describe("zip CRC integrity", () => {
+  it("streamed addFile entries record a valid CRC-32", async () => {
+    // >64KiB forces multiple read chunks — exercises incremental CRC chaining.
+    const dir = tmpdir("ckpt-crc-");
+    const payload = crypto.randomBytes(200 * 1024);
+    const file = path.join(dir, "big.bin");
+    fs.writeFileSync(file, payload);
+    const zipPath = path.join(dir, "t.zip");
+    const writer = new ZipWriter(zipPath);
+    await writer.addFile("blobs/big", file);
+    writer.finish();
+
+    const range = async (start: number, end: number) => {
+      const fd = fs.openSync(zipPath, "r");
+      try {
+        const buf = Buffer.alloc(end - start + 1);
+        fs.readSync(fd, buf, 0, buf.length, start);
+        return buf;
+      } finally {
+        fs.closeSync(fd);
+      }
+    };
+    const cd = await readCentralDirectory(range, fs.statSync(zipPath).size);
+    const entry = cd.entries.find((e) => e.name === "blobs/big")!;
+    expect(entry.crc).toBe(refCrc32(payload));
+    const data = await fetchZipEntry(range, entry);
+    expect(data.equals(payload)).toBe(true);
+  });
+
+  it("zero-length entries return empty without a range fetch", async () => {
+    const dir = tmpdir("ckpt-empty-");
+    const zipPath = path.join(dir, "t.zip");
+    const writer = new ZipWriter(zipPath);
+    writer.addBuffer("manifest.json", Buffer.from("{}"));
+    writer.addBuffer("empty.zip", Buffer.alloc(0)); // STORE ext + 0 bytes → compressedSize 0
+    writer.finish();
+    const cd = await readCentralDirectory(
+      async (s, e) => {
+        const fd = fs.openSync(zipPath, "r");
+        try {
+          const buf = Buffer.alloc(e - s + 1);
+          fs.readSync(fd, buf, 0, buf.length, s);
+          return buf;
+        } finally {
+          fs.closeSync(fd);
+        }
+      },
+      fs.statSync(zipPath).size,
+    );
+    const entry = cd.entries.find((e) => e.name === "empty.zip")!;
+    expect(entry.compressedSize).toBe(0);
+    // The data fetch would be a reversed range (416 on real servers): throw on
+    // s > e and count any data-range request beyond the 30-byte header read.
+    let dataFetches = 0;
+    const data = await fetchZipEntry(async (s, e) => {
+      if (s > e) throw new Error("reversed range requested");
+      if (e - s + 1 !== 30) dataFetches += 1;
+      const fd = fs.openSync(zipPath, "r");
+      try {
+        const buf = Buffer.alloc(e - s + 1);
+        fs.readSync(fd, buf, 0, buf.length, s);
+        return buf;
+      } finally {
+        fs.closeSync(fd);
+      }
+    }, entry);
+    expect(data.length).toBe(0);
+    expect(dataFetches).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: restore op — confinement, failures, dir modes, resultPath
+// ---------------------------------------------------------------------------
+
+describe("opRestore hardening", () => {
+  let server: http.Server;
+  let port: number;
+  const objects = new Map<string, Buffer>();
+  const out: string[] = [];
+
+  const origWrite = process.stdout.write.bind(process.stdout);
+
+  beforeAll(async () => {
+    server = http.createServer((req, res) => {
+      const buf = objects.get(req.url ?? "");
+      if (!buf) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      if (req.method === "HEAD") {
+        res.writeHead(200, { "content-length": buf.length });
+        res.end();
+        return;
+      }
+      const m = /^bytes=(\d+)-(\d+)$/.exec((req.headers.range as string) ?? "");
+      if (m) {
+        const start = Number(m[1]);
+        const end = Math.min(Number(m[2]), buf.length - 1);
+        res.writeHead(206, { "content-length": end - start + 1 });
+        res.end(buf.subarray(start, end + 1));
+        return;
+      }
+      res.writeHead(200, { "content-length": buf.length });
+      res.end(buf);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    port = (server.address() as { port: number }).port;
+    // Keep op stdout lines inspectable and out of the test log.
+    process.stdout.write = ((chunk: unknown) => {
+      out.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+  });
+
+  afterAll(() => {
+    process.stdout.write = origWrite;
+    process.exitCode = 0;
+    server.close();
+  });
+
+  function makeManifest(files: CheckpointManifest["files"], blobsInZip: string[], capturePaths = ["/cap"]): CheckpointManifest {
+    return {
+      version: 1,
+      checkpointId: `ckpt-${objects.size}`,
+      createdAt: new Date().toISOString(),
+      arch: process.arch,
+      platform: process.platform,
+      capture: { paths: capturePaths, exclude: [] },
+      blobsInZip,
+      stats: { files: 0, dirs: 0, symlinks: 0, bytes: 0 },
+      files,
+    };
+  }
+
+  async function serveCheckpoint(manifest: CheckpointManifest, blobs: Record<string, Buffer>): Promise<string> {
+    const dir = tmpdir("ckpt-srv-");
+    const zipPath = path.join(dir, "c.zip");
+    const writer = new ZipWriter(zipPath);
+    writer.addBuffer("manifest.json", Buffer.from(JSON.stringify(manifest)));
+    for (const [sha, data] of Object.entries(blobs)) writer.addBuffer(`blobs/${sha}`, data);
+    writer.finish();
+    const url = `/checkpoints/${manifest.checkpointId}.zip`;
+    objects.set(url, fs.readFileSync(zipPath));
+    return `http://127.0.0.1:${port}${url}`;
+  }
+
+  it("refuses to write manifest paths without destDir or writeAbsolute", async () => {
+    const url = await serveCheckpoint(makeManifest({}, []), {});
+    await expect(opRestore({ checkpointUrl: url })).rejects.toThrow(/destDir is required/);
+  });
+
+  it("writes manifest paths verbatim when writeAbsolute: true", async () => {
+    const abs = path.join(tmpdir("ckpt-abs-"), "verbatim.txt");
+    const content = Buffer.from("verbatim\n");
+    const url = await serveCheckpoint(
+      makeManifest({ [abs]: { type: "file", sha: sha(content), size: content.length, mode: 0o100644, mtime: 1 } }, [sha(content)]),
+      { [sha(content)]: content },
+    );
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({ checkpointUrl: url, writeAbsolute: true });
+      expect(fs.readFileSync(abs).equals(content)).toBe(true);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("rejects manifest paths that escape destDir via ..", async () => {
+    const destDir = path.join(tmpdir("ckpt-esc-"), "dest");
+    const outside = path.join(destDir, "..", "escape.txt");
+    const content = Buffer.from("nope\n");
+    const url = await serveCheckpoint(
+      makeManifest({ "/cap/../escape.txt": { type: "file", sha: sha(content), size: content.length, mode: 0o100644, mtime: 1 } }, [sha(content)]),
+      { [sha(content)]: content },
+    );
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({ checkpointUrl: url, destDir });
+      expect(process.exitCode).toBe(1); // partial restore fails the op
+      expect(fs.existsSync(outside)).toBe(false);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("does not write through pre-existing symlinks out of destDir", async () => {
+    const outsideDir = tmpdir("ckpt-outside-");
+    const destDir = path.join(tmpdir("ckpt-sym-"), "dest");
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(destDir, "evil"));
+    const content = Buffer.from("pwn\n");
+    const url = await serveCheckpoint(
+      makeManifest({ "/cap/evil/pwn.txt": { type: "file", sha: sha(content), size: content.length, mode: 0o100644, mtime: 1 } }, [sha(content)]),
+      { [sha(content)]: content },
+    );
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({ checkpointUrl: url, destDir });
+      expect(process.exitCode).toBe(1);
+      expect(fs.existsSync(path.join(outsideDir, "pwn.txt"))).toBe(false);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("creates empty children under read-only parent dirs (modes applied last)", async () => {
+    const destDir = path.join(tmpdir("ckpt-ro-"), "dest");
+    const manifest = makeManifest(
+      {
+        "/cap/ro": { type: "dir", mode: 0o40500, mtime: 1 },
+        "/cap/ro/empty-child": { type: "dir", mode: 0o40700, mtime: 1 },
+      },
+      [],
+    );
+    const url = await serveCheckpoint(manifest, {});
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({ checkpointUrl: url, destDir });
+      const child = path.join(destDir, "ro", "empty-child");
+      expect(fs.existsSync(child)).toBe(true);
+      // restore writability for tmpdir cleanup
+      fs.chmodSync(path.join(destDir, "ro"), 0o700);
+      fs.chmodSync(child, 0o700);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("restores zero-length files and reports a clean result", async () => {
+    const destDir = path.join(tmpdir("ckpt-zero-"), "dest");
+    const emptySha = sha(Buffer.alloc(0));
+    const url = await serveCheckpoint(
+      makeManifest({ "/cap/empty.bin": { type: "file", sha: emptySha, size: 0, mode: 0o100644, mtime: 1 } }, [emptySha]),
+      { [emptySha]: Buffer.alloc(0) },
+    );
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({ checkpointUrl: url, destDir });
+      expect(fs.statSync(path.join(destDir, "empty.bin")).size).toBe(0);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("fails (exitCode 1) and records failures for unfetchable blobs", async () => {
+    const destDir = path.join(tmpdir("ckpt-miss-"), "dest");
+    const missingSha = "f".repeat(64); // not in zip, no store to fall back on
+    const url = await serveCheckpoint(
+      makeManifest({ "/cap/gone.txt": { type: "file", sha: missingSha, size: 4, mode: 0o100644, mtime: 1 } }, []),
+      {},
+    );
+    const prevExit = process.exitCode;
+    out.length = 0;
+    try {
+      await opRestore({ checkpointUrl: url, destDir });
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("writes full result JSON to resultPath and emits a slim line", async () => {
+    const dir = tmpdir("ckpt-rp-");
+    const destDir = path.join(dir, "dest");
+    const resultPath = path.join(dir, "result.json");
+    const content = Buffer.from("hi\n");
+    const url = await serveCheckpoint(
+      makeManifest({ "/cap/a.txt": { type: "file", sha: sha(content), size: content.length, mode: 0o100644, mtime: 1 } }, [sha(content)]),
+      { [sha(content)]: content },
+    );
+    const prevExit = process.exitCode;
+    out.length = 0;
+    try {
+      await opRestore({ checkpointUrl: url, destDir, resultPath });
+      const full = JSON.parse(fs.readFileSync(resultPath, "utf8")) as { op: string; files: number };
+      expect(full.op).toBe("restore");
+      expect(full.files).toBe(1);
+      const slim = out
+        .filter((l) => l.includes('"type":"result"'))
+        .map((l) => JSON.parse(l) as Record<string, unknown>)
+        .pop();
+      expect(slim?.resultPath).toBe(resultPath);
+      expect(slim?.files).toBeUndefined();
+    } finally {
+      process.exitCode = prevExit;
+    }
   });
 });

@@ -38,6 +38,14 @@ export type CheckpointOp = "scan" | "capture" | "restore" | "diff";
 /**
  * Payload that runs one checkpoint op. `args` is serialized as base64 JSON on
  * the module's argv (`b64:<...>`), matching the launcher's payload convention.
+ *
+ * Op-arg contract notes:
+ * - `restore` requires `destDir` (writes are confined under it) unless
+ *   `writeAbsolute: true` is passed to write manifest paths verbatim.
+ * - `resultPath` on any op writes the full result JSON to that file and emits
+ *   a slim `{op, resultPath}` line instead — use it for big manifests when
+ *   running detached, since job stdout is tail-bounded.
+ * - `restore` exits non-zero when any file failed (see `failures[]`).
  */
 export function checkpointOpInput(
   op: CheckpointOp,

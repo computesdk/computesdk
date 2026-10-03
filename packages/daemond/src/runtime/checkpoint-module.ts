@@ -54,6 +54,22 @@ function emitResult(value: Record<string, unknown>): void {
   process.stdout.write(`${JSON.stringify({ type: "result", ...value })}\n`);
 }
 
+/**
+ * Emit an op result. When args.resultPath is set the full result is written
+ * to that file and stdout gets a slim pointer instead — detached job output
+ * is tail-bounded (4MiB), and a big manifest/result line would be clipped
+ * mid-JSON before callers could parse it.
+ */
+function emitOpResult(args: Record<string, unknown>, result: Record<string, unknown>): void {
+  const resultPath = typeof args.resultPath === "string" && args.resultPath.length > 0 ? args.resultPath : undefined;
+  if (!resultPath) {
+    emitResult(result);
+    return;
+  }
+  fs.writeFileSync(resultPath, JSON.stringify(result));
+  emitResult({ op: result.op, resultPath });
+}
+
 function emitError(err: unknown): never {
   const message = err instanceof Error ? err.stack ?? err.message : String(err);
   process.stdout.write(`${JSON.stringify({ type: "error", message })}\n`);
@@ -313,7 +329,10 @@ export async function buildManifest(args: {
     createdAt: new Date().toISOString(),
     arch: args.meta?.arch ?? process.arch,
     platform: args.meta?.platform ?? process.platform,
-    capture: { paths: args.paths, exclude: args.exclude ?? [] },
+    // Manifest keys are absolute (walkTree resolves), so the recorded capture
+    // roots must be too — a relative root here would never prefix-match on
+    // restore's destDir remap.
+    capture: { paths: args.paths.map((p) => path.resolve(p)), exclude: args.exclude ?? [] },
     blobsInZip: [],
     stats: {
       files: tree.files.length,
@@ -374,12 +393,18 @@ const CRC32_TABLE = (() => {
   return table;
 })();
 
-function crc32(data: Buffer, seed = 0xffffffff): number {
-  let crc = seed;
+/** Raw incremental CRC32 state step — no final XOR, chainable across chunks. */
+function crc32Raw(data: Buffer, state = 0xffffffff): number {
+  let crc = state;
   for (let i = 0; i < data.length; i += 1) {
     crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
   }
-  return (crc ^ 0xffffffff) >>> 0;
+  return crc;
+}
+
+/** One-shot finalized CRC32 of a complete buffer. */
+function crc32(data: Buffer, seed = 0xffffffff): number {
+  return (crc32Raw(data, seed) ^ 0xffffffff) >>> 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -473,7 +498,7 @@ export class ZipWriter {
     stream.on("data", (chunk: string | Buffer) => {
       const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
       rawSize += buf.length;
-      crc = crc32(buf, crc);
+      crc = crc32Raw(buf, crc);
     });
     await new Promise<void>((resolve, reject) => {
       stream.on("error", reject);
@@ -730,6 +755,9 @@ export async function fetchZipEntry(
   const nameLen = head.readUInt16LE(26);
   const extraLen = head.readUInt16LE(28);
   const dataStart = entry.localOffset + 30 + nameLen + extraLen;
+  // A 0-byte entry has no data to fetch — skip the range request entirely,
+  // it would be a reversed range (416) against real HTTP servers.
+  if (entry.compressedSize === 0) return Buffer.alloc(0);
   const raw = await fetchRange(dataStart, dataStart + entry.compressedSize - 1);
   if (entry.method === 8) return zlib.inflateRawSync(raw);
   return raw;
@@ -994,9 +1022,13 @@ function s3Store(cfg: {
       }
     },
     async putFile(key, filePath) {
-      // File puts stream the body but still need the payload hash up front.
-      const data = fs.readFileSync(filePath);
-      const res = await request("PUT", key, { "content-length": String(data.length) }, data);
+      // Stream the body: hash the file once (streaming) for SigV4, then PUT
+      // the file contents without ever buffering the whole object.
+      const payloadHash = await sha256File(filePath);
+      const size = fs.statSync(filePath).size;
+      const headers = sign("PUT", key, { "content-length": String(size) }, payloadHash);
+      const { url } = buildUrl(key);
+      const res = await httpPutFile({ url, headers, filePath });
       if (res.status < 200 || res.status >= 300) {
         throw new Error(`s3: PUT ${key} failed: ${res.status} ${res.body.toString("utf8").slice(0, 200)}`);
       }
@@ -1077,6 +1109,16 @@ function presignedStore(cfg: {
       }
     },
     async putFile(key, filePath) {
+      // Stream when the platform minted an exact PUT URL for this key; the
+      // POST-policy path still buffers (multipart body is assembled whole).
+      const presigned = cfg.putUrls?.[joinKey(cfg.prefix, key)] ?? cfg.putUrls?.[key];
+      if (presigned) {
+        const res = await httpPutFile({ url: presigned, filePath });
+        if (res.status < 200 || res.status >= 300) {
+          throw new Error(`presigned PUT ${key} failed: ${res.status} ${res.body.toString("utf8").slice(0, 200)}`);
+        }
+        return;
+      }
       await this.put(key, fs.readFileSync(filePath));
     },
     urlFor: readBase?.urlFor,
@@ -1132,7 +1174,7 @@ function parsePayload(argv: string[]): { op: string; args: Record<string, unknow
   return { op, args };
 }
 
-async function opScan(args: Record<string, unknown>): Promise<void> {
+export async function opScan(args: Record<string, unknown>): Promise<void> {
   const { manifest, missing } = await buildManifest({
     checkpointId: args.checkpointId as string | undefined,
     paths: (args.paths as string[]) ?? [],
@@ -1140,10 +1182,10 @@ async function opScan(args: Record<string, unknown>): Promise<void> {
     meta: args.meta as Parameters<typeof buildManifest>[0]["meta"],
     hashConcurrency: args.concurrency as number | undefined,
   });
-  emitResult({ op: "scan", manifest, missing });
+  emitOpResult(args, { op: "scan", manifest, missing });
 }
 
-async function opCapture(args: Record<string, unknown>): Promise<void> {
+export async function opCapture(args: Record<string, unknown>): Promise<void> {
   const started = Date.now();
   const store = makeStore(args.store);
   const { manifest, missing } = await buildManifest({
@@ -1194,7 +1236,8 @@ async function opCapture(args: Record<string, unknown>): Promise<void> {
   let uploadedBytes = 0;
   await mapLimit(candidates, (args.uploadConcurrency as number | undefined) ?? 8, async (sha) => {
     const abs = blobBySha.get(sha)!;
-    await store.put(`${BLOBS_PREFIX}${sha}`, fs.readFileSync(abs));
+    // Stream file → PUT: never buffer a whole blob in memory.
+    await store.putFile(`${BLOBS_PREFIX}${sha}`, abs);
     uploaded += 1;
     uploadedBytes += manifest.files[abs]?.size ?? 0;
     uploadReporter.tick(uploaded, uploadedBytes);
@@ -1236,7 +1279,7 @@ async function opCapture(args: Record<string, unknown>): Promise<void> {
   }
   fs.rmSync(tmpZip, { force: true });
 
-  emitResult({
+  emitOpResult(args, {
     op: "capture",
     checkpointId: manifest.checkpointId,
     manifest,
@@ -1257,7 +1300,7 @@ interface RestoreSource {
   entry?: ZipCdEntry;
 }
 
-async function opRestore(args: Record<string, unknown>): Promise<void> {
+export async function opRestore(args: Record<string, unknown>): Promise<void> {
   const started = Date.now();
   const store = args.store ? makeStore(args.store) : null;
   const zipUrl = args.checkpointUrl as string | undefined;
@@ -1309,6 +1352,12 @@ async function opRestore(args: Record<string, unknown>): Promise<void> {
   const includeGlobs = compileGlobs(args.include as string[] | undefined);
   const excludeGlobs = compileGlobs(args.exclude as string[] | undefined);
   const destDir = args.destDir as string | undefined;
+  // Writing manifest paths verbatim is an explicit opt-in: a crafted manifest
+  // carries attacker-chosen absolute paths, so identity restore must be asked
+  // for — otherwise every write is confined under destDir.
+  if (!destDir && args.writeAbsolute !== true) {
+    throw new Error("restore: destDir is required, or pass writeAbsolute: true to write manifest paths verbatim");
+  }
   // destDir replaces the capture root: with one capture path it is stripped
   // outright; with several, their common directory prefix is stripped so the
   // roots' distinguishing tails survive under destDir. Absolute paths still
@@ -1328,10 +1377,37 @@ async function opRestore(args: Record<string, unknown>): Promise<void> {
             return prefix;
           })();
   const mapPath = (abs: string): string => {
-    if (!destDir) return abs;
+    if (!destDir) {
+      const norm = path.normalize(abs);
+      if (!path.isAbsolute(norm)) throw new Error(`restore: non-absolute manifest path ${abs}`);
+      return norm;
+    }
     const rel =
       abs === rootPrefix ? "" : abs.startsWith(rootPrefix + "/") ? abs.slice(rootPrefix.length + 1) : abs.replace(/^\/+/, "");
-    return rel === "" ? destDir : path.join(destDir, rel);
+    if (rel === "") return destDir;
+    const norm = path.normalize(rel);
+    if (norm === ".." || norm.startsWith(`..${path.sep}`) || path.isAbsolute(norm)) {
+      throw new Error(`restore: manifest path escapes destDir: ${abs}`);
+    }
+    return path.join(destDir, norm);
+  };
+
+  // Symlink confinement: resolve destDir once, then before every write verify
+  // the real path still lands under it — covers pre-existing symlinks in the
+  // tree and links a crafted manifest had us create earlier in this restore.
+  let resolvedRoot: string | null = null;
+  if (destDir) {
+    fs.mkdirSync(destDir, { recursive: true });
+    resolvedRoot = fs.realpathSync(destDir);
+  }
+  const assertInsideRoot = (resolved: string, what: string): void => {
+    if (resolvedRoot && resolved !== resolvedRoot && !resolved.startsWith(resolvedRoot + path.sep)) {
+      throw new Error(`restore: ${what} escapes destDir via symlink (${resolved})`);
+    }
+  };
+  const prepareParent = (dest: string): void => {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    if (resolvedRoot) assertInsideRoot(fs.realpathSync(path.dirname(dest)), dest);
   };
 
   const fileEntries = Object.entries(manifest.files).filter(([p, entry]) => {
@@ -1367,7 +1443,12 @@ async function opRestore(args: Record<string, unknown>): Promise<void> {
         throw new Error(`sha256 mismatch: expected ${sha}, got ${actual}`);
       }
       const dest = mapPath(abs);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      prepareParent(dest);
+      // Never write through an existing symlink — a prior restore or a crafted
+      // tree can leave one pointing outside destDir.
+      try {
+        if (fs.lstatSync(dest).isSymbolicLink()) fs.rmSync(dest, { force: true });
+      } catch {}
       fs.writeFileSync(dest, data);
       try {
         fs.chmodSync(dest, entry.mode & 0o7777);
@@ -1388,28 +1469,32 @@ async function opRestore(args: Record<string, unknown>): Promise<void> {
     }
   });
 
-  // Directories and symlinks land after files (parents must exist first —
-  // longest path first orders parents before children).
+  // Directories and symlinks land after files. Create every directory first
+  // and apply modes afterwards (deepest first): a read-only parent mode would
+  // otherwise block its own empty children from being created.
   const dirs = Object.entries(manifest.files)
     .filter(([, entry]) => entry.type === "dir")
     .sort((a, b) => a[0].length - b[0].length);
-  for (const [p, entry] of dirs) {
+  for (const [p] of dirs) {
     try {
       const dest = mapPath(p);
       fs.mkdirSync(dest, { recursive: true });
-      try {
-        fs.chmodSync(dest, entry.mode & 0o7777);
-      } catch {}
+      if (resolvedRoot) assertInsideRoot(fs.realpathSync(dest), dest);
     } catch (err) {
       failures.push({ path: p, error: err instanceof Error ? err.message : String(err) });
     }
   }
+  for (const [p, entry] of dirs.slice().sort((a, b) => b[0].length - a[0].length)) {
+    try {
+      fs.chmodSync(mapPath(p), entry.mode & 0o7777);
+    } catch {}
+  }
   for (const [p, entry] of Object.entries(manifest.files).filter(([, e]) => e.type === "symlink")) {
     try {
       const dest = mapPath(p);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      prepareParent(dest);
       try {
-        fs.rmSync(dest, { force: true });
+        if (fs.lstatSync(dest).isSymbolicLink()) fs.rmSync(dest, { force: true });
       } catch {}
       fs.symlinkSync(entry.link ?? "", dest);
     } catch (err) {
@@ -1417,7 +1502,7 @@ async function opRestore(args: Record<string, unknown>): Promise<void> {
     }
   }
 
-  emitResult({
+  emitOpResult(args, {
     op: "restore",
     checkpointId: manifest.checkpointId,
     files: fileEntries.length,
@@ -1430,13 +1515,16 @@ async function opRestore(args: Record<string, unknown>): Promise<void> {
     env: manifest.env,
     ms: Date.now() - started,
   });
+  // A partial restore is a failed restore — exit non-zero so job control and
+  // callers gating on exit status see it (failures[] carries the detail).
+  if (failures.length > 0) process.exitCode = 1;
 }
 
-async function opDiff(args: Record<string, unknown>): Promise<void> {
+export async function opDiff(args: Record<string, unknown>): Promise<void> {
   const a = await loadManifestRef(args.a as Parameters<typeof loadManifestRef>[0]);
   const b = await loadManifestRef(args.b as Parameters<typeof loadManifestRef>[0]);
   if (!a || !b) throw new Error("diff: each side needs manifest, manifestUrl, or manifestPath");
-  emitResult({ op: "diff", diff: diffManifests(a, b) });
+  emitOpResult(args, { op: "diff", diff: diffManifests(a, b) });
 }
 
 async function main(): Promise<void> {

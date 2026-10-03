@@ -37,14 +37,21 @@ async function connectSocket(socketPath, timeoutMs) {
   throw new Error(`Timed out connecting to socket: ${socketPath}`);
 }
 
-function defaultSocketPath(name, cwd) {
+function daemonHashFor(name, cwd) {
   const workspaceHash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
-  const daemonHash = crypto
+  return crypto
     .createHash("sha256")
     .update(`${name}:${workspaceHash}`)
     .digest("hex")
     .slice(0, 16);
-  return path.join(os.tmpdir(), ".computesdk", "seed-sockets", `${daemonHash}.sock`);
+}
+
+function defaultSocketPath(name, cwd) {
+  return path.join(os.tmpdir(), ".computesdk", "seed-sockets", `${daemonHashFor(name, cwd)}.sock`);
+}
+
+function daemonModulesDir(name, cwd) {
+  return path.join(os.tmpdir(), ".computesdk", "seed-daemon", daemonHashFor(name, cwd), "modules");
 }
 
 function parseJsonLines(raw) {
@@ -225,10 +232,43 @@ test("module.install + module.exec + module.list run checkpoint ops over the soc
     assert.equal(restore.files, 2);
     assert.equal(restore.failures.length, 0);
 
-    const restoredApp = path.join(destDir, workdir.slice(1), "proj/src/app.js");
+    // Single capture root is stripped: the tree lands directly under destDir.
+    const restoredApp = path.join(destDir, "src/app.js");
     assert.equal(fs.readFileSync(restoredApp, "utf8"), "console.log('app');\n");
-    assert.equal(fs.readFileSync(path.join(destDir, workdir.slice(1), "proj/README.md"), "utf8"), "# proj\n");
-    assert.equal(fs.readlinkSync(path.join(destDir, workdir.slice(1), "proj/link")), "src/app.js");
+    assert.equal(fs.readFileSync(path.join(destDir, "README.md"), "utf8"), "# proj\n");
+    assert.equal(fs.readlinkSync(path.join(destDir, "link")), "src/app.js");
+
+    // --- regression: restore without destDir fails the job --------------------
+    const noDest = await runSeedLauncher(script, [
+      JSON.stringify(
+        checkpointOpInput("restore", {
+          store: { kind: "http", baseUrl: `http://127.0.0.1:${storePort}` },
+          checkpointId: capture.checkpointId,
+        }),
+      ),
+    ]);
+    const noDestDone = await runSeedLauncher(script, [
+      JSON.stringify({ wait: noDest.command.jobId, timeoutMs: 30000 }),
+    ]);
+    assert.equal(noDestDone.command.exitCode, 1);
+    assert.match(noDestDone.command.stdout, /destDir is required/);
+
+    // --- regression: a failed install must not kill the daemon -----------------
+    const modsDir = daemonModulesDir(name, process.cwd());
+    fs.chmodSync(modsDir, 0o555);
+    try {
+      await assert.rejects(
+        runSeedLauncher(script, [JSON.stringify(checkpointInstallInput())]),
+        /module install failed/,
+      );
+    } finally {
+      fs.chmodSync(modsDir, 0o755);
+    }
+    const listAfter = await runSeedLauncher(script, [JSON.stringify({ moduleList: true })]);
+    assert.deepEqual(
+      listAfter.command.modules.map((m) => m.name),
+      ["checkpoint"],
+    );
 
     // --- unknown module is a clean error --------------------------------------
     await assert.rejects(
