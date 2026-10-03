@@ -25,6 +25,7 @@ import type {
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
+  SandboxEgressInfo,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
@@ -34,6 +35,7 @@ import {
   type SeedInput,
   type SeedInvocationResult,
 } from 'daemond';
+import { readSandboxEgress, setupSandboxEgress } from './egress.js';
 
 type DaemonStreamState = {
   token: string;
@@ -411,6 +413,8 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
   readonly sandboxId: string;
   readonly provider: string;
   readonly filesystem: SandboxFileSystem;
+  /** Set at create when `CreateSandboxOptions.egress` was passed. */
+  egress?: SandboxEgressInfo;
   private daemonStreamState?: DaemonStreamState;
   constructor(
     private sandbox: TSandbox,
@@ -998,7 +1002,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       throw makeAbortError();
     }
 
-    return new GeneratedSandbox<TSandbox>(
+    const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -1007,6 +1011,29 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods.destroy,
       this.providerInstance
     );
+
+    if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
+      throwIfAborted(signal);
+      // Providers like archil treat an explicit sandboxId as attach-to-existing;
+      // destroying on failure would delete a VM the caller did not create.
+      const attached = Boolean((options as { sandboxId?: unknown }).sandboxId);
+      const cleanup = async () => {
+        if (!attached) await this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+      };
+      try {
+        sandbox.egress = await setupSandboxEgress(sandbox, options.egress, this.providerName);
+      } catch (error) {
+        // A failed router setup must not orphan the sandbox it was set up on.
+        await cleanup();
+        throw error;
+      }
+      if (signal?.aborted) {
+        await cleanup();
+        throw makeAbortError();
+      }
+    }
+
+    return sandbox;
   }
 
   async getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null> {
@@ -1015,7 +1042,7 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       return null;
     }
 
-    return new GeneratedSandbox<TSandbox>(
+    const sandbox = new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,
       this.providerName,
@@ -1024,11 +1051,16 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       this.methods.destroy,
       this.providerInstance
     );
+    // Reattach a running router's info; nothing to read if none ever ran.
+    sandbox.egress = await readSandboxEgress(sandbox).catch(() => undefined);
+    return sandbox;
   }
 
   async list(): Promise<ProviderSandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
     
+    // No egress reattach here: the pointer read costs one filesystem call per
+    // sandbox, which multiplies badly on enumeration. getById reattaches.
     return results.map(result => new GeneratedSandbox<TSandbox>(
       result.sandbox,
       result.sandboxId,

@@ -53,7 +53,8 @@ describe('archil getById semantics', () => {
     const sandbox = await provider.sandbox.getById('disk_123');
 
     expect(sandbox?.sandboxId).toBe('disk_123');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Disk lookup + egress pointer probe (reattaches a running router, if any).
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     const firstUrl = String((fetchMock.mock.calls as any[][])[0][0]);
     expect(firstUrl).toContain('/api/disks/disk_123');
   });

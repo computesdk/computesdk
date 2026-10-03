@@ -36,7 +36,12 @@ export type {
   SandboxResourceOptions,
   RunloopLaunchParameters,
   VercelSandboxResources,
+  SandboxEgressOptions,
+  SandboxEgressInfo,
 } from './types/universal-sandbox';
+
+// Egress router helpers
+export { sandboxEgressEnvVars } from './egress';
 
 // Compute API
 //

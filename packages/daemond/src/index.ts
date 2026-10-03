@@ -1,4 +1,5 @@
 export { daemonSeedScript } from "./seed-script.js";
+export { egressShimScript } from "./egress-shim.js";
 export { daemonSeedScriptCommand } from "./seed-script.js";
 export { parseSeedInvocationOutput } from "./seed-script.js";
 export type {
