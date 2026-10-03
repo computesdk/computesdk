@@ -118,7 +118,14 @@ function findMarker(stdout: string, prefix: string): Record<string, unknown> | u
  */
 export async function readSandboxEgress(sandbox: EgressHost): Promise<SandboxEgressInfo | undefined> {
   try {
-    const parsed = JSON.parse(await sandbox.filesystem.readFile(POINTER_PATH));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const raw = await Promise.race([
+      sandbox.filesystem.readFile(POINTER_PATH),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('pointer read timed out')), 5_000);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && typeof parsed.proxyUrl === 'string') {
       return parsed as SandboxEgressInfo;
     }

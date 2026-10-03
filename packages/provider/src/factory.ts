@@ -1050,19 +1050,17 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
   async list(): Promise<ProviderSandbox<TSandbox>[]> {
     const results = await this.methods.list(this.config);
     
-    return await Promise.all(results.map(async result => {
-      const sandbox = new GeneratedSandbox<TSandbox>(
-        result.sandbox,
-        result.sandboxId,
-        this.providerName,
-        this.methods,
-        this.config,
-        this.methods.destroy,
-        this.providerInstance
-      );
-      sandbox.egress = await readSandboxEgress(sandbox).catch(() => undefined);
-      return sandbox;
-    }));
+    // No egress reattach here: the pointer read costs one filesystem call per
+    // sandbox, which multiplies badly on enumeration. getById reattaches.
+    return results.map(result => new GeneratedSandbox<TSandbox>(
+      result.sandbox,
+      result.sandboxId,
+      this.providerName,
+      this.methods,
+      this.config,
+      this.methods.destroy,
+      this.providerInstance
+    ));
   }
 
   async destroy(sandboxId: string): Promise<void> {
