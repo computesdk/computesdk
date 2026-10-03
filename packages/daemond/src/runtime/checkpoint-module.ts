@@ -124,6 +124,13 @@ function sha256Buffer(data: Buffer | string): string {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
+/** True when `resolved` equals `root` or sits under it (`root` itself may be "/"). */
+export function isUnderRoot(root: string, resolved: string): boolean {
+  if (resolved === root) return true;
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+  return resolved.startsWith(prefix);
+}
+
 // ---------------------------------------------------------------------------
 // Glob matcher (gitignore-lite: **, *, ?, basename matching for bare names)
 // ---------------------------------------------------------------------------
@@ -1505,7 +1512,7 @@ export async function opRestore(args: Record<string, unknown>): Promise<void> {
     resolvedRoot = fs.realpathSync(destDir);
   }
   const assertInsideRoot = (resolved: string, what: string): void => {
-    if (resolvedRoot && resolved !== resolvedRoot && !resolved.startsWith(resolvedRoot + path.sep)) {
+    if (resolvedRoot && !isUnderRoot(resolvedRoot, resolved)) {
       throw new Error(`restore: ${what} escapes destDir via symlink (${resolved})`);
     }
   };
@@ -1579,18 +1586,22 @@ export async function opRestore(args: Record<string, unknown>): Promise<void> {
   const dirs = Object.entries(manifest.files)
     .filter(([, entry]) => entry.type === "dir")
     .sort((a, b) => a[0].length - b[0].length);
-  for (const [p] of dirs) {
+  const createdDirs: Array<[string, ManifestEntry]> = [];
+  for (const [p, entry] of dirs) {
     try {
       const dest = mapPath(p);
       fs.mkdirSync(dest, { recursive: true });
       if (resolvedRoot) assertInsideRoot(fs.realpathSync(dest), dest);
+      createdDirs.push([dest, entry]);
     } catch (err) {
       failures.push({ path: p, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  for (const [p, entry] of dirs.slice().sort((a, b) => b[0].length - a[0].length)) {
+  // chmod only dirs that passed confinement — chmodSync follows symlinks, so
+  // touching a rejected dest would change perms outside destDir.
+  for (const [dest, entry] of createdDirs.sort((a, b) => b[0].length - a[0].length)) {
     try {
-      fs.chmodSync(mapPath(p), entry.mode & 0o7777);
+      fs.chmodSync(dest, entry.mode & 0o7777);
     } catch {}
   }
   for (const [p, entry] of Object.entries(manifest.files).filter(([, e]) => e.type === "symlink")) {

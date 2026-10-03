@@ -13,6 +13,7 @@ import {
   isExcluded,
   readCentralDirectory,
   fetchZipEntry,
+  isUnderRoot,
   opCapture,
   opRestore,
   ZipWriter,
@@ -753,5 +754,59 @@ describe("opRestore hardening + store drivers", () => {
       noHead.delete(zipPath);
       process.exitCode = prevExit;
     }
+  });
+
+  it("does not chmod a rejected dir symlink target outside destDir", async () => {
+    const outsideDir = tmpdir("ckpt-chmod-out-");
+    fs.chmodSync(outsideDir, 0o700);
+    const destDir = path.join(tmpdir("ckpt-chmod-"), "dest");
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(destDir, "link"));
+    const url = await serveCheckpoint(
+      makeManifest({ "/cap/link": { type: "dir", mode: 0o40400, mtime: 1 } }, []),
+      {},
+    );
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({ checkpointUrl: url, destDir });
+      // confinement recorded a failure and left the outside dir's mode alone
+      expect(process.exitCode).toBe(1);
+      expect(fs.statSync(outsideDir).mode & 0o777).toBe(0o700);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("restores into / without rejecting every child (root prefix edge)", async () => {
+    // A dir-only manifest exercises confinement on "/" itself without writing
+    // files at the real filesystem root.
+    const url = await serveCheckpoint(
+      makeManifest({ "/": { type: "dir", mode: 0o40755, mtime: 1 } }, [], ["/"]),
+      {},
+    );
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({ checkpointUrl: url, destDir: "/" });
+      // / passes confinement now — no failure, clean exit
+      expect(process.exitCode ?? 0).toBe(0);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+});
+
+describe("isUnderRoot", () => {
+  it("accepts the root itself and children, including when root is /", () => {
+    expect(isUnderRoot("/a", "/a")).toBe(true);
+    expect(isUnderRoot("/a", "/a/b")).toBe(true);
+    expect(isUnderRoot("/", "/")).toBe(true);
+    expect(isUnderRoot("/", "/anything/deep")).toBe(true);
+  });
+  it("rejects siblings and prefix lookalikes", () => {
+    expect(isUnderRoot("/a", "/ab")).toBe(false);
+    expect(isUnderRoot("/a/b", "/a")).toBe(false);
+    // lexical compare only — callers pass realpath'd paths, which never
+    // contain ".." segments
+    expect(isUnderRoot("/a", "/a/../b")).toBe(true);
   });
 });
