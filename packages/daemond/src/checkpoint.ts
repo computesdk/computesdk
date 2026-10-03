@@ -46,6 +46,10 @@ export type CheckpointOp = "scan" | "capture" | "restore" | "diff";
  *   a slim `{op, resultPath}` line instead — use it for big manifests when
  *   running detached, since job stdout is tail-bounded.
  * - `restore` exits non-zero when any file failed (see `failures[]`).
+ * - `args.store` drivers: `{kind:"fs",root}` (mounted dir), `{kind:"http",
+ *   baseUrl}`, `{kind:"s3",...}` SigV4 creds, `{kind:"presigned"}` with
+ *   `post`/`getBaseUrl`/`getUrls`/`putUrls` (platform-minted; `getUrls`
+ *   per-object GETs cover blob reads without a public base).
  */
 export function checkpointOpInput(
   op: CheckpointOp,

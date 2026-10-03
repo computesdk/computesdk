@@ -1043,26 +1043,59 @@ function s3Store(cfg: {
  *  - `getBaseUrl`: a read base (public bucket URL or CDN) for GET/HEAD.
  *  - `putUrls`: per-object presigned PUTs (e.g. the checkpoint zip — its key
  *    is known ahead of capture, so the platform can presign it exactly).
+ *  - `getUrls`: per-object presigned GETs — the read counterpart to
+ *    `putUrls`, for buckets without a public read base. SigV4 presigns are
+ *    method-bound, so `head`/`stat` probe a `bytes=0-0` GET instead of HEAD.
  */
 function presignedStore(cfg: {
   post?: { url: string; fields: Record<string, string> };
   getBaseUrl?: string;
+  getUrls?: Record<string, string>;
   putUrls?: Record<string, string>;
   prefix?: string;
 }): ObjectStore {
   const readBase = cfg.getBaseUrl ? httpStore({ baseUrl: cfg.getBaseUrl, prefix: cfg.prefix }) : null;
   const post = cfg.post;
+  const getUrl = (key: string): string | undefined =>
+    cfg.getUrls?.[joinKey(cfg.prefix, key)] ?? cfg.getUrls?.[key];
+  /** `bytes=0-0` probe: exists + total size, without needing a signed HEAD. */
+  const probe = async (key: string): Promise<{ exists: boolean; size: number }> => {
+    const res = await httpRequest({ method: "GET", url: getUrl(key)!, headers: { Range: "bytes=0-0" } });
+    if (res.status === 404) return { exists: false, size: 0 };
+    if (res.status !== 200 && res.status !== 206) {
+      throw new Error(`presigned GET ${key} failed: ${res.status} ${res.body.toString("utf8").slice(0, 200)}`);
+    }
+    const range = res.headers["content-range"];
+    const total =
+      (typeof range === "string" && range.match(/\/(\d+)\s*$/)?.[1]) ?? res.headers["content-length"];
+    const size = Number(total);
+    if (!Number.isFinite(size)) throw new Error(`presigned GET ${key} returned no object size`);
+    return { exists: true, size };
+  };
   return {
     async get(key, range) {
-      if (!readBase) throw new Error("presigned store: no getBaseUrl for reads");
+      const url = getUrl(key);
+      if (url) {
+        const headers: Record<string, string> = {};
+        if (range) headers.Range = `bytes=${range.start}-${range.end}`;
+        const res = await httpRequest({ method: "GET", url, headers });
+        if (res.status === 404) throw new Error(`store: object not found: ${key}`);
+        if (res.status !== 200 && res.status !== 206) {
+          throw new Error(`presigned GET ${key} failed: ${res.status} ${res.body.toString("utf8").slice(0, 200)}`);
+        }
+        return res.body;
+      }
+      if (!readBase) throw new Error("presigned store: no getBaseUrl or getUrls for reads");
       return readBase.get(key, range);
     },
     async head(key) {
+      if (getUrl(key)) return (await probe(key)).exists;
       if (!readBase) return false;
       return readBase.head(key);
     },
     async stat(key) {
-      if (!readBase) throw new Error("presigned store: no getBaseUrl for reads");
+      if (getUrl(key)) return (await probe(key)).size;
+      if (!readBase) throw new Error("presigned store: no getBaseUrl or getUrls for reads");
       return readBase.stat(key);
     },
     async put(key, data) {
@@ -1125,18 +1158,72 @@ function presignedStore(cfg: {
   };
 }
 
+/**
+ * A real directory as the object store: `{root}` is a mounted path (an
+ * attached volume, a shared filesystem, or local dev scratch) and keys are
+ * plain files under it. Range GETs read only the requested span.
+ */
+function fsStore(cfg: { root: string; prefix?: string }): ObjectStore {
+  const keyPath = (key: string) => path.join(cfg.root, joinKey(cfg.prefix, key));
+  return {
+    async get(key, range) {
+      const filePath = keyPath(key);
+      if (!range) {
+        try {
+          return fs.readFileSync(filePath);
+        } catch {
+          throw new Error(`store: object not found: ${key}`);
+        }
+      }
+      let fd: number;
+      try {
+        fd = fs.openSync(filePath, "r");
+      } catch {
+        throw new Error(`store: object not found: ${key}`);
+      }
+      try {
+        const buf = Buffer.alloc(range.end - range.start + 1);
+        const read = fs.readSync(fd, buf, 0, buf.length, range.start);
+        return buf.subarray(0, read);
+      } finally {
+        fs.closeSync(fd);
+      }
+    },
+    async head(key) {
+      return fs.existsSync(keyPath(key));
+    },
+    async stat(key) {
+      return fs.statSync(keyPath(key)).size;
+    },
+    async put(key, data) {
+      const filePath = keyPath(key);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, data);
+    },
+    async putFile(key, filePath) {
+      const target = keyPath(key);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(filePath, target);
+    },
+    urlFor: (key) => `file://${keyPath(key)}`,
+  };
+}
+
 function makeStore(cfg: unknown): ObjectStore {
   const store = (cfg ?? {}) as Record<string, unknown>;
+  if (store.kind === "fs" || typeof store.root === "string") {
+    return fsStore(store as { root: string; prefix?: string });
+  }
   if (store.kind === "http" || typeof store.baseUrl === "string") {
     return httpStore(store as { baseUrl: string; headers?: Record<string, string>; prefix?: string });
   }
   if (store.kind === "s3" || typeof store.accessKeyId === "string") {
     return s3Store(store as Parameters<typeof s3Store>[0]);
   }
-  if (store.kind === "presigned" || store.post || store.putUrls || store.getBaseUrl) {
+  if (store.kind === "presigned" || store.post || store.putUrls || store.getUrls || store.getBaseUrl) {
     return presignedStore(store as Parameters<typeof presignedStore>[0]);
   }
-  throw new Error("checkpoint: store config required (http baseUrl | s3 creds | presigned post/getBaseUrl)");
+  throw new Error("checkpoint: store config required (fs root | http baseUrl | s3 creds | presigned post/getBaseUrl/getUrls)");
 }
 
 // ---------------------------------------------------------------------------
@@ -1312,10 +1399,27 @@ export async function opRestore(args: Record<string, unknown>): Promise<void> {
   let totalSize: number;
   if (zipUrl) {
     const sizeRes = await httpRequest({ method: "HEAD", url: zipUrl });
-    if (sizeRes.status !== 200 || !sizeRes.headers["content-length"]) {
-      throw new Error(`restore: HEAD ${zipUrl} failed or lacks content-length (${sizeRes.status})`);
+    // HEAD first; a SigV4 presigned GET URL rejects it (signatures are
+    // method-bound), so fall back to a `bytes=0-0` range GET and read the
+    // total out of content-range (or content-length when the server
+    // ignores Range).
+    if (sizeRes.status === 200 && sizeRes.headers["content-length"]) {
+      totalSize = Number(sizeRes.headers["content-length"]);
+    } else {
+      const probeRes = await httpRequest({
+        method: "GET",
+        url: zipUrl,
+        headers: { Range: "bytes=0-0" },
+      });
+      const range = probeRes.headers["content-range"];
+      const total =
+        (probeRes.status === 206 && typeof range === "string" && range.match(/\/(\d+)\s*$/)?.[1]) ??
+        (probeRes.status === 200 ? probeRes.headers["content-length"] : undefined);
+      if (total === undefined || !Number.isFinite(Number(total))) {
+        throw new Error(`restore: could not size ${zipUrl} (HEAD ${sizeRes.status}, probe ${probeRes.status})`);
+      }
+      totalSize = Number(total);
     }
-    totalSize = Number(sizeRes.headers["content-length"]);
     fetchRange = async (start, end) => {
       const res = await httpRequest({
         method: "GET",

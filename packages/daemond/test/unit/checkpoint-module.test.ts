@@ -13,6 +13,7 @@ import {
   isExcluded,
   readCentralDirectory,
   fetchZipEntry,
+  opCapture,
   opRestore,
   ZipWriter,
   type CheckpointManifest,
@@ -396,24 +397,49 @@ describe("zip CRC integrity", () => {
 // Regression: restore op — confinement, failures, dir modes, resultPath
 // ---------------------------------------------------------------------------
 
-describe("opRestore hardening", () => {
+describe("opRestore hardening + store drivers", () => {
   let server: http.Server;
   let port: number;
   const objects = new Map<string, Buffer>();
+  const noHead = new Set<string>(); // paths where HEAD is refused (presigned-style)
+  const reqs: Array<{ method?: string; url?: string; range?: string }> = [];
   const out: string[] = [];
 
   const origWrite = process.stdout.write.bind(process.stdout);
 
   beforeAll(async () => {
     server = http.createServer((req, res) => {
-      const buf = objects.get(req.url ?? "");
-      if (!buf) {
-        res.writeHead(404);
-        res.end();
+      reqs.push({ method: req.method, url: req.url, range: req.headers.range as string | undefined });
+      const key = req.url ?? "";
+      if (req.method === "PUT") {
+        const chunks: Buffer[] = [];
+        req.on("data", (c) => chunks.push(c));
+        req.on("end", () => {
+          objects.set(key, Buffer.concat(chunks));
+          res.writeHead(200);
+          res.end();
+        });
         return;
       }
       if (req.method === "HEAD") {
+        if (noHead.has(key)) {
+          res.writeHead(405);
+          res.end();
+          return;
+        }
+        const buf = objects.get(key);
+        if (!buf) {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
         res.writeHead(200, { "content-length": buf.length });
+        res.end();
+        return;
+      }
+      const buf = objects.get(key);
+      if (!buf) {
+        res.writeHead(404);
         res.end();
         return;
       }
@@ -421,7 +447,10 @@ describe("opRestore hardening", () => {
       if (m) {
         const start = Number(m[1]);
         const end = Math.min(Number(m[2]), buf.length - 1);
-        res.writeHead(206, { "content-length": end - start + 1 });
+        res.writeHead(206, {
+          "content-length": end - start + 1,
+          "content-range": `bytes ${start}-${end}/${buf.length}`,
+        });
         res.end(buf.subarray(start, end + 1));
         return;
       }
@@ -607,6 +636,121 @@ describe("opRestore hardening", () => {
       expect(slim?.resultPath).toBe(resultPath);
       expect(slim?.files).toBeUndefined();
     } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("fs store: capture uploads blobs/zip/manifest to a root dir, restore reads them back", async () => {
+    const root = tmpdir("ckpt-fs-root-");
+    const src = path.join(tmpdir("ckpt-fs-src-"), "proj");
+    fs.mkdirSync(path.join(src, "src"), { recursive: true });
+    fs.writeFileSync(path.join(src, "src/a.js"), "const a = 1;\n");
+    fs.writeFileSync(path.join(src, "empty.txt"), "");
+    const destDir = path.join(tmpdir("ckpt-fs-dest-"), "dest");
+    const prevExit = process.exitCode;
+    try {
+      await opCapture({
+        checkpointId: "ckpt-fs",
+        paths: [src],
+        store: { kind: "fs", root },
+      });
+      // standalone manifest + delta zip + blobs under the mounted root
+      expect(fs.existsSync(path.join(root, "manifests/ckpt-fs.json"))).toBe(true);
+      expect(fs.existsSync(path.join(root, "checkpoints/ckpt-fs.zip"))).toBe(true);
+      expect(fs.readdirSync(path.join(root, "blobs")).length).toBe(2);
+
+      await opRestore({ checkpointId: "ckpt-fs", store: { kind: "fs", root }, destDir });
+      expect(fs.readFileSync(path.join(destDir, "src/a.js"), "utf8")).toBe("const a = 1;\n");
+      expect(fs.statSync(path.join(destDir, "empty.txt")).size).toBe(0);
+      expect(process.exitCode ?? 0).toBe(0);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("presigned getUrls: restore fetches blobs with no store creds or read base", async () => {
+    const destDir = path.join(tmpdir("ckpt-gu-"), "dest");
+    const content = Buffer.from("via getUrls\n");
+    const blobSha = sha(content);
+    // Blob lives only behind a per-object GET URL — no getBaseUrl.
+    objects.set(`/presigned-get/${blobSha}`, content);
+    const url = await serveCheckpoint(
+      makeManifest({ "/cap/x.txt": { type: "file", sha: blobSha, size: content.length, mode: 0o100644, mtime: 1 } }, []),
+      {},
+    );
+    const prevExit = process.exitCode;
+    try {
+      await opRestore({
+        checkpointUrl: url,
+        destDir,
+        store: {
+          kind: "presigned",
+          getUrls: { [`blobs/${blobSha}`]: `http://127.0.0.1:${port}/presigned-get/${blobSha}` },
+        },
+      });
+      expect(fs.readFileSync(path.join(destDir, "x.txt")).equals(content)).toBe(true);
+      // blob fetch went through the minted URL, not a base+key join
+      expect(reqs.some((r) => r.method === "GET" && r.url === `/presigned-get/${blobSha}`)).toBe(true);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("presigned getUrls: head/stat probe a bytes=0-0 GET (no signed HEAD)", async () => {
+    // Capture against a presigned store: dedup head()s each blob. The blob URL
+    // exists in getUrls, so head probes GET bytes=0-0 → 404 → counts as new.
+    const src = path.join(tmpdir("ckpt-pp-"), "proj");
+    fs.mkdirSync(src, { recursive: true });
+    const content = Buffer.from("probe me\n");
+    fs.writeFileSync(path.join(src, "p.txt"), content);
+    const blobSha = sha(content);
+    const getBlob = `http://127.0.0.1:${port}/pg/blobs/${blobSha}`;
+    const prevExit = process.exitCode;
+    reqs.length = 0;
+    try {
+      await opCapture({
+        checkpointId: "ckpt-pp",
+        paths: [src],
+        store: {
+          kind: "presigned",
+          getUrls: { [`blobs/${blobSha}`]: getBlob },
+          putUrls: {
+            [`blobs/${blobSha}`]: `http://127.0.0.1:${port}/pg/blobs/${blobSha}`,
+            "checkpoints/ckpt-pp.zip": `http://127.0.0.1:${port}/pg/checkpoints/ckpt-pp.zip`,
+            "manifests/ckpt-pp.json": `http://127.0.0.1:${port}/pg/manifests/ckpt-pp.json`,
+          },
+        },
+      });
+      const probes = reqs.filter((r) => r.method === "GET" && r.url === `/pg/blobs/${blobSha}` && r.range === "bytes=0-0");
+      expect(probes.length).toBeGreaterThan(0);
+      expect(reqs.filter((r) => r.method === "HEAD").length).toBe(0);
+      expect(objects.has(`/pg/blobs/${blobSha}`)).toBe(true);
+      expect(objects.get(`/pg/blobs/${blobSha}`)!.equals(content)).toBe(true);
+    } finally {
+      process.exitCode = prevExit;
+    }
+  });
+
+  it("zip sizing falls back to a bytes=0-0 probe when HEAD fails", async () => {
+    const destDir = path.join(tmpdir("ckpt-probe-"), "dest");
+    const content = Buffer.from("probe zip\n");
+    const url = await serveCheckpoint(
+      makeManifest(
+        { "/cap/z.txt": { type: "file", sha: sha(content), size: content.length, mode: 0o100644, mtime: 1 } },
+        [sha(content)],
+      ),
+      { [sha(content)]: content },
+    );
+    const zipPath = new URL(url).pathname;
+    noHead.add(zipPath); // HEAD refused — like a method-bound presigned GET
+    const prevExit = process.exitCode;
+    reqs.length = 0;
+    try {
+      await opRestore({ checkpointUrl: url, destDir });
+      expect(fs.readFileSync(path.join(destDir, "z.txt")).equals(content)).toBe(true);
+      expect(reqs.some((r) => r.method === "GET" && r.url === zipPath && r.range === "bytes=0-0")).toBe(true);
+    } finally {
+      noHead.delete(zipPath);
       process.exitCode = prevExit;
     }
   });
