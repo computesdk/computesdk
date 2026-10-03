@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as net from "node:net";
 import * as http from "node:http";
+import * as crypto from "node:crypto";
 import { spawn } from "node:child_process";
 
 interface SeedLauncherDaemonConfig {
@@ -155,6 +156,13 @@ interface Job {
 
 const jobs = new Map<string, Job>();
 
+/** Installed modules live beside state.json: `<baseDir>/modules/<name>.cjs`. */
+const modulesDir = path.join(path.dirname(config.stateFile), "modules");
+
+function moduleNameValid(name: string): boolean {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(name);
+}
+
 function jobSnapshot(job: Job): Record<string, unknown> {
   return {
     jobId: job.id,
@@ -224,6 +232,7 @@ function startJob(msg: WireMessage): Job | string {
     jobId,
     command,
     args,
+    ...(typeof payload.module === "string" ? { module: payload.module } : {}),
     ts: now(),
   });
 
@@ -378,6 +387,12 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
     return;
   }
   const started = startJob({ ...msg, id: requestId });
+
+  replyWithJob(conn, started, requestId, msg.payload?.detach === true);
+}
+
+/** Shared reply path for exec and module.exec results. */
+function replyWithJob(conn: net.Socket, started: Job | string, requestId: string, detach: boolean): void {
   if (typeof started === "string") {
     reply(conn, "exec_result", requestId, {
       exitCode: 1,
@@ -388,8 +403,7 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
     });
     return;
   }
-
-  if (msg.payload?.detach === true) {
+  if (detach) {
     reply(conn, "exec_result", requestId, jobSnapshot(started));
     return;
   }
@@ -402,6 +416,90 @@ function handleExec(msg: WireMessage, conn: net.Socket): void {
   };
   if (started.status === "exited") send();
   else started.onExit.add(send);
+}
+
+function handleModuleInstall(msg: WireMessage, conn: net.Socket): void {
+  const requestId = msg.id || makeId();
+  const payload = msg.payload ?? {};
+  const name = String(payload.name ?? "");
+  if (!moduleNameValid(name)) {
+    replyError(conn, requestId, `seed daemon: invalid module name ${JSON.stringify(name)}`);
+    return;
+  }
+  const sourceB64 = String(payload.sourceB64 ?? "");
+  let source: Buffer;
+  try {
+    source = Buffer.from(sourceB64, "base64");
+    if (source.length === 0) throw new Error("empty");
+  } catch {
+    replyError(conn, requestId, "seed daemon: module sourceB64 is required");
+    return;
+  }
+  const modulePath = path.join(modulesDir, `${name}.cjs`);
+  const tmpPath = `${modulePath}.tmp-${process.pid}`;
+  try {
+    fs.mkdirSync(modulesDir, { recursive: true });
+    fs.writeFileSync(tmpPath, source);
+    fs.renameSync(tmpPath, modulePath);
+  } catch (err) {
+    try {
+      fs.rmSync(tmpPath, { force: true });
+    } catch {}
+    replyError(conn, requestId, `seed daemon: module install failed: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  const sha256 = crypto.createHash("sha256").update(source).digest("hex");
+  publish({ channel: "daemon", type: "module.installed", requestId, name, bytes: source.length, sha256, ts: now() });
+  reply(conn, "exec_result", requestId, { name, path: modulePath, bytes: source.length, sha256 });
+}
+
+function handleModuleList(msg: WireMessage, conn: net.Socket): void {
+  const requestId = msg.id || makeId();
+  const prefix = typeof msg.payload?.prefix === "string" ? msg.payload.prefix : undefined;
+  let modules: Array<{ name: string; bytes: number }> = [];
+  try {
+    modules = fs
+      .readdirSync(modulesDir)
+      .filter((file) => file.endsWith(".cjs"))
+      .map((file) => ({ name: file.slice(0, -4), bytes: fs.statSync(path.join(modulesDir, file)).size }))
+      .filter((entry) => !prefix || entry.name.startsWith(prefix));
+  } catch {}
+  reply(conn, "exec_result", requestId, { modules });
+}
+
+function handleModuleExec(msg: WireMessage, conn: net.Socket): void {
+  const requestId = msg.id || makeId();
+  const payload = msg.payload ?? {};
+  const name = String(payload.name ?? "");
+  if (!moduleNameValid(name)) {
+    replyError(conn, requestId, `seed daemon: invalid module name ${JSON.stringify(name)}`);
+    return;
+  }
+  if (payload.stdin === true && payload.detach !== true) {
+    replyError(conn, requestId, "seed daemon: stdin requires detach: true");
+    return;
+  }
+  const modulePath = path.join(modulesDir, `${name}.cjs`);
+  if (!fs.existsSync(modulePath)) {
+    replyError(conn, requestId, `seed daemon: module ${name} is not installed`);
+    return;
+  }
+  const argv = Array.isArray(payload.argv) ? payload.argv.map((value) => String(value)) : [];
+  const started = startJob({
+    ...msg,
+    id: requestId,
+    payload: {
+      command: process.execPath,
+      args: [modulePath, ...argv],
+      cwd: payload.cwd,
+      env: payload.env,
+      timeoutMs: payload.timeoutMs,
+      detach: payload.detach === true,
+      stdin: payload.stdin === true,
+      module: name,
+    },
+  });
+  replyWithJob(conn, started, requestId, payload.detach === true);
 }
 
 function handleWait(msg: WireMessage, conn: net.Socket): void {
@@ -608,6 +706,7 @@ function createSseServer(): Promise<{ server: http.Server; port: number }> {
 async function main(): Promise<void> {
   fs.mkdirSync(path.dirname(config.socket), { recursive: true });
   fs.mkdirSync(path.dirname(config.stateFile), { recursive: true });
+  fs.mkdirSync(modulesDir, { recursive: true });
   removeSocket();
 
   const sse = await createSseServer();
@@ -724,6 +823,21 @@ async function main(): Promise<void> {
 
         if (msg.type === "closeStdin") {
           handleCloseStdin({ ...msg, id }, conn);
+          continue;
+        }
+
+        if (msg.type === "module.install") {
+          handleModuleInstall({ ...msg, id }, conn);
+          continue;
+        }
+
+        if (msg.type === "module.exec") {
+          handleModuleExec({ ...msg, id }, conn);
+          continue;
+        }
+
+        if (msg.type === "module.list") {
+          handleModuleList({ ...msg, id }, conn);
           continue;
         }
 

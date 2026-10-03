@@ -20,10 +20,11 @@
     "build": "rimraf dist dist-runtime && tsc -p tsconfig.runtime.json && tsc && cp -r dist-runtime dist/runtime",
     "dev": "tsc --watch",
     "lint": "eslint",
-    "test:integration": "pnpm run build && node --test test/integration/seed-script.test.cjs",
+    "test:integration": "pnpm run build && node --test test/integration/seed-script.test.cjs test/integration/module-ops.test.cjs",
     "test:integration:docker": "pnpm run build && node test/integration/docker-seed-script.mjs",
     "typecheck": "tsc -p tsconfig.runtime.json --noEmit && tsc --noEmit",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "test": "vitest run"
   },
   "keywords": [
     "daemon",
@@ -39,7 +40,8 @@
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
