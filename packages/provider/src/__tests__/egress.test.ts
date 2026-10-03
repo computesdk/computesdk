@@ -75,6 +75,7 @@ function makeMethods(state: FakeState) {
         }
         return {
           readFile: vi.fn(async (_s: unknown, path: string) => {
+            if (path.startsWith('/proc/')) return 'node\0'
             const content = fsState.written.get(path)
             if (content === undefined) throw new Error('ENOENT')
             return content
@@ -126,7 +127,7 @@ function freshJob(): JobState {
     jobId: 'job-egress',
     pid: 42,
     stdout:
-      'EGRESS_READY {"port":43111,"caCertPath":"/tmp/computesdk-egress/abc/ca.pem","caBundlePath":"/tmp/computesdk-egress/abc/ca-bundle.pem"}\n',
+      'EGRESS_READY {"port":43111,"caCertPath":"/tmp/computesdk-egress/abc/ca.pem","caBundlePath":"/tmp/computesdk-egress/abc/ca-bundle.pem","pid":4321}\n',
     stderr: '',
     status: 'running',
     exitCode: null,
@@ -161,6 +162,7 @@ describe('egress router setup', () => {
       caCertPath: '/tmp/computesdk-egress/abc/ca.pem',
       caBundlePath: '/tmp/computesdk-egress/abc/ca-bundle.pem',
       port: 43111,
+      pid: 4321,
       processJobId: 'job-egress',
     })
 
@@ -198,6 +200,34 @@ describe('egress router setup', () => {
     expect(methods.destroy).toHaveBeenCalledWith(expect.anything(), 'test-egress')
   })
 
+  it('destroys the sandbox when the signal aborts during router setup', async () => {
+    const controller = new AbortController()
+    const state = {
+      job: { ...freshJob(), stdout: '' },
+      filesystem: { written: new Map<string, string>() },
+    }
+    const { methods, provider } = makeSandbox(state)
+    const pending = provider.sandbox.create({ egress: EGRESS, signal: controller.signal })
+    setTimeout(() => {
+      state.job.stdout = 'EGRESS_READY {"port":43111,"caCertPath":"/tmp/c/ca.pem"}\n'
+      controller.abort()
+    }, 10)
+    await expect(pending).rejects.toThrow()
+    expect(methods.destroy).toHaveBeenCalledWith(expect.anything(), 'test-egress')
+  })
+
+  it('does not destroy an attached sandbox when router setup fails', async () => {
+    const state = {
+      job: { ...freshJob(), stdout: 'EGRESS_ERROR {"message":"boom"}\n' },
+      filesystem: { written: new Map<string, string>() },
+    }
+    const { methods, provider } = makeSandbox(state)
+    await expect(
+      provider.sandbox.create({ egress: EGRESS, sandboxId: 'existing-vm' } as never)
+    ).rejects.toThrow(/router failed to start/)
+    expect(methods.destroy).not.toHaveBeenCalled()
+  })
+
   it('rejects a non-loopback http injectorUrl before touching the sandbox', async () => {
     const state = { job: freshJob(), filesystem: { written: new Map<string, string>() } }
     const { provider } = makeSandbox(state)
@@ -219,11 +249,38 @@ describe('egress router setup', () => {
         proxyUrl: 'http://127.0.0.1:43111',
         caCertPath: '/tmp/computesdk-egress/abc/ca.pem',
         port: 43111,
+        pid: 4321,
         processJobId: 'job-egress',
       })
     )
     const sandbox = await provider.sandbox.getById('test-egress')
     expect(sandbox?.egress?.proxyUrl).toBe('http://127.0.0.1:43111')
+  })
+
+  it('drops stale pointers whose router process is gone', async () => {
+    const state = { job: freshJob(), filesystem: { written: new Map<string, string>() } }
+    const { methods, provider } = makeSandbox(state)
+    methods.getById.mockResolvedValue({ sandbox: { id: 'test-egress' }, sandboxId: 'test-egress' })
+    state.filesystem.written.set(
+      `${EGRESS_SHIM_DIR}/current.json`,
+      JSON.stringify({
+        proxyUrl: 'http://127.0.0.1:43111',
+        caCertPath: '/tmp/computesdk-egress/abc/ca.pem',
+        port: 43111,
+        pid: 99999,
+        processJobId: 'job-egress',
+      })
+    )
+    // /proc reads fail — router is dead.
+    const filesystem = methods.filesystem!
+    filesystem.readFile.mockImplementation(async (_s: unknown, path: string) => {
+      if (path.startsWith('/proc/')) throw new Error('ENOENT')
+      const content = state.filesystem.written.get(path)
+      if (content === undefined) throw new Error('ENOENT')
+      return content
+    })
+    const sandbox = await provider.sandbox.getById('test-egress')
+    expect(sandbox?.egress).toBeUndefined()
   })
 
   it('leaves egress unset on getById when no router ran', async () => {

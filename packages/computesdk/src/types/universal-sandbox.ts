@@ -285,6 +285,8 @@ export interface SandboxEgressInfo {
   caBundlePath?: string;
   /** Bound port of the shim's loopback listener. */
   port: number;
+  /** PID of the router process inside the sandbox (for liveness checks). */
+  pid?: number;
   /** Daemon job ID of the running router process (`ProcessHandle.jobId`). */
   processJobId: string;
 }

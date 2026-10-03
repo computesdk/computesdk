@@ -1014,14 +1014,23 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
 
     if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
       throwIfAborted(signal);
+      // Providers like archil treat an explicit sandboxId as attach-to-existing;
+      // destroying on failure would delete a VM the caller did not create.
+      const attached = Boolean((options as { sandboxId?: unknown }).sandboxId);
+      const cleanup = async () => {
+        if (!attached) await this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+      };
       try {
         sandbox.egress = await setupSandboxEgress(sandbox, options.egress, this.providerName);
       } catch (error) {
         // A failed router setup must not orphan the sandbox it was set up on.
-        await this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+        await cleanup();
         throw error;
       }
-      throwIfAborted(signal);
+      if (signal?.aborted) {
+        await cleanup();
+        throw makeAbortError();
+      }
     }
 
     return sandbox;

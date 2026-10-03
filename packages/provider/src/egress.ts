@@ -95,6 +95,7 @@ interface ReadyMarker {
   port: number;
   caCertPath: string;
   caBundlePath?: string;
+  pid?: number;
 }
 
 function findMarker(stdout: string, prefix: string): Record<string, unknown> | undefined {
@@ -116,21 +117,30 @@ function findMarker(stdout: string, prefix: string): Record<string, unknown> | u
  * reading the pointer file the most recent setup wrote. Returns undefined
  * when the sandbox has no router or the filesystem read fails.
  */
+async function readSandboxFile(sandbox: EgressHost, path: string, timeoutMs = 5_000): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    sandbox.filesystem.readFile(path),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('sandbox read timed out')), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 export async function readSandboxEgress(sandbox: EgressHost): Promise<SandboxEgressInfo | undefined> {
   try {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const raw = await Promise.race([
-      sandbox.filesystem.readFile(POINTER_PATH),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('pointer read timed out')), 5_000);
-      }),
-    ]).finally(() => clearTimeout(timer));
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && typeof parsed.proxyUrl === 'string') {
-      return parsed as SandboxEgressInfo;
+    const parsed = JSON.parse(await readSandboxFile(sandbox, POINTER_PATH));
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.proxyUrl !== 'string') {
+      return undefined;
     }
+    // Liveness: a dead router leaves a stale pointer, so only advertise the
+    // info while its process still exists on the box.
+    if (typeof parsed.pid === 'number') {
+      await readSandboxFile(sandbox, `/proc/${parsed.pid}/cmdline`);
+    }
+    return parsed as SandboxEgressInfo;
   } catch {
-    /* no pointer file — the sandbox never ran a router */
+    /* no pointer file, dead router, or unreadable filesystem */
   }
   return undefined;
 }
@@ -190,6 +200,7 @@ export async function setupSandboxEgress(
         caCertPath: marker.caCertPath,
         caBundlePath: marker.caBundlePath,
         port: marker.port,
+        pid: marker.pid,
         processJobId: handle.jobId,
       };
       // Best-effort pointer for reconnects (getById/list); not fatal.

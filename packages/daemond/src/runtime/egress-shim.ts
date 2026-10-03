@@ -654,7 +654,16 @@ function createLeafMinter(dir: string, caKeyPath: string, caCertPath: string) {
 
 type SocketLike = net.Socket | tls.TLSSocket;
 
-/** Serializes a parsed request back to wire form, origin-form target. */
+/**
+ * Serializes a parsed request back to wire form for a fresh upstream
+ * connection: origin-form target, hop-by-hop headers stripped, body framing
+ * recomputed (readRequestBody already removed chunk framing, so a stale
+ * `Transfer-Encoding` must not survive), and `connection: close` so the
+ * upstream response FIN propagates to the client — the next request then
+ * gets fresh host routing instead of being pinned to this upstream.
+ */
+const DROP_FORWARD_HEADERS = new Set(["connection", "transfer-encoding", "content-length", "keep-alive", "upgrade"]);
+
 function serializeRequest(head: HttpRequestHead, body: Buffer): Buffer {
   let target = head.target;
   if (/^https?:\/\//i.test(target)) {
@@ -665,11 +674,49 @@ function serializeRequest(head: HttpRequestHead, body: Buffer): Buffer {
       /* leave target as-is */
     }
   }
+  const hadFraming = head.headers.some(([k]) => {
+    const lk = k.toLowerCase();
+    return lk === "content-length" || lk === "transfer-encoding";
+  });
+  const outHeaders = sanitizeRequestHeaders(head.headers).filter(([k]) => !DROP_FORWARD_HEADERS.has(k.toLowerCase()));
+  if (hadFraming || body.length) outHeaders.push(["content-length", String(body.length)]);
+  outHeaders.push(["connection", "close"]);
   const headText =
     `${head.method} ${target} HTTP/1.1\r\n` +
-    head.headers.map(([k, v]) => `${k}: ${v}`).join("\r\n") +
+    outHeaders.map(([k, v]) => `${k}: ${v}`).join("\r\n") +
     "\r\n\r\n";
   return Buffer.concat([Buffer.from(headText, "latin1"), body]);
+}
+
+/**
+ * Serializes a request head for a RAW byte-forward: unlike serializeRequest
+ * the body is passed through untouched downstream, so `Transfer-Encoding`/
+ * `Content-Length` stay exactly as the client sent them. Still drops
+ * hop-by-hop headers and forces `connection: close` so the response FIN
+ * propagates and the next request gets fresh host routing.
+ */
+const RAW_HEAD_DROP_HEADERS = new Set([
+  "connection", "proxy-connection", "keep-alive", "upgrade",
+  "proxy-authorization", "proxy-authenticate",
+]);
+
+function serializeRawHead(head: HttpRequestHead): Buffer {
+  let target = head.target;
+  if (/^https?:\/\//i.test(target)) {
+    try {
+      const u = new URL(target);
+      target = u.pathname + u.search || "/";
+    } catch {
+      /* leave target as-is */
+    }
+  }
+  const outHeaders = head.headers.filter(([k]) => !RAW_HEAD_DROP_HEADERS.has(k.toLowerCase()));
+  outHeaders.push(["connection", "close"]);
+  const headText =
+    `${head.method} ${target} HTTP/1.1\r\n` +
+    outHeaders.map(([k, v]) => `${k}: ${v}`).join("\r\n") +
+    "\r\n\r\n";
+  return Buffer.from(headText, "latin1");
 }
 
 /**
@@ -677,8 +724,13 @@ function serializeRequest(head: HttpRequestHead, body: Buffer): Buffer {
  * (rewritten request head, buffered body bytes) first, then pipes both
  * directions. When `useTls`, the upstream is TLS-wrapped (public-CA
  * verified) for `https://` absolute-URI and mid-connection upgrades.
- * Resolves once the splice is established or has failed; on pre-splice
- * failure an error response is written and the client destroyed.
+ *
+ * Client->upstream bytes are captured by a data listener attached
+ * immediately — before the upstream exists — so bytes arriving while the
+ * connection/TLS handshake is in flight are queued in `pending`, never
+ * dropped. Resolves once the splice is established or has failed; on
+ * pre-splice failure an error response is flushed to the client before it
+ * is destroyed.
  */
 function spliceToUpstream(
   client: SocketLike,
@@ -688,19 +740,61 @@ function spliceToUpstream(
   initial: Buffer[]
 ): Promise<void> {
   return new Promise((resolve) => {
+    let established = false;
+    let upstream: SocketLike;
+    const pending: Buffer[] = [...initial];
+    let clientEnded = false;
+    const flush = (): void => {
+      if (!established) return;
+      while (pending.length) upstream.write(pending.shift()!);
+      if (clientEnded) upstream.end();
+    };
+    // Attached synchronously: anything the client sends from now on is
+    // either forwarded or queued for when the upstream comes up.
+    const onData = (chunk: Buffer): void => {
+      if (established) upstream.write(chunk);
+      else pending.push(chunk);
+    };
+    const onEnd = (): void => {
+      clientEnded = true;
+      if (established) upstream.end();
+    };
+    const onGone = (): void => {
+      upstream?.destroy();
+    };
+    client.on("data", onData);
+    client.once("end", onEnd);
+    client.once("close", onGone);
+    client.once("error", onGone);
+
     const raw = net.connect({ host, port });
     raw.setTimeout(CONNECT_UPSTREAM_TIMEOUT_MS);
-    let established = false;
 
-    const upstream: SocketLike = useTls
+    upstream = useTls
       ? tls.connect({ socket: raw, servername: host })
       : raw;
     if (useTls) raw.on("error", () => { /* surfaced on the TLS socket */ });
 
     const fail = (status: number, message: string): void => {
-      if (!established) httpErrorCode(client, status, message);
+      client.removeListener("data", onData);
+      client.removeListener("end", onEnd);
       upstream.destroy();
-      client.destroy();
+      if (established) {
+        client.destroy();
+        resolve();
+        return;
+      }
+      // Destroy only after the error response has actually flushed, or the
+      // client gets a reset instead of the status line.
+      const body = Buffer.from(message, "utf8");
+      const payload = Buffer.from(
+        `HTTP/1.1 ${status} ${http.STATUS_CODES[status] ?? "Error"}\r\n` +
+          `Content-Length: ${body.length}\r\nConnection: close\r\n\r\n`,
+        "utf8"
+      );
+      client.write(payload);
+      client.write(body, () => client.destroy());
+      client.once("error", () => client.destroy());
       resolve();
     };
     raw.once("timeout", () => fail(504, `egress router: upstream ${host}:${port} timed out`));
@@ -711,8 +805,7 @@ function spliceToUpstream(
     const begin = (): void => {
       established = true;
       raw.setTimeout(0);
-      for (const chunk of initial) upstream.write(chunk);
-      client.pipe(upstream);
+      flush();
       upstream.pipe(client);
       resolve();
     };
@@ -978,7 +1071,6 @@ async function handlePlainHttp(
   client: net.Socket,
   reader: SocketReader,
   head: HttpRequestHead,
-  rawHead: Buffer,
   config: EgressShimConfig
 ): Promise<void> {
   let target = head.target;
@@ -1025,23 +1117,13 @@ async function handlePlainHttp(
     return;
   }
 
-  // Passthrough for plain HTTP: rewrite the request line to origin-form if it
-  // arrived absolute-form, forward it, then tunnel the rest of the connection.
-  const firstSpace = rawHead.indexOf(0x20);
-  const lastSpace = rawHead.indexOf(" HTTP/", firstSpace);
-  let headOut = rawHead;
-  if (firstSpace > 0 && lastSpace > firstSpace) {
-    headOut = Buffer.concat([
-      rawHead.subarray(0, firstSpace + 1),
-      Buffer.from(target + " ", "latin1"),
-      rawHead.subarray(lastSpace + 1),
-    ]);
-  }
-
+  // Passthrough for plain HTTP: forward the request (origin-form target,
+  // framing preserved, connection: close) then tunnel the rest of the
+  // connection — body bytes and any pipelined requests stream raw.
   const rest = reader.takeBuffered();
   reader.unbind();
   await spliceToUpstream(client, host, upstreamPort, upstreamTls, [
-    headOut,
+    serializeRawHead(head),
     ...(rest.length ? [rest] : []),
   ]);
 }
@@ -1082,7 +1164,7 @@ async function handleConnection(
     await handleConnect(client, reader, head, config, mintLeaf);
     return;
   }
-  await handlePlainHttp(client, reader, head, rawHead, config);
+  await handlePlainHttp(client, reader, head, config);
 }
 
 // ---------------------------------------------------------------------------
@@ -1158,7 +1240,7 @@ async function main(): Promise<void> {
 
   const address = server.address();
   const boundPort = typeof address === "object" && address ? address.port : config.port;
-  process.stdout.write(`EGRESS_READY ${JSON.stringify({ port: boundPort, caCertPath, caBundlePath })}\n`);
+  process.stdout.write(`EGRESS_READY ${JSON.stringify({ port: boundPort, caCertPath, caBundlePath, pid: process.pid })}\n`);
 
   const shutdown = (): void => {
     server.close(() => process.exit(0));
