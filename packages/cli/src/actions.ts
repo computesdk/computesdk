@@ -65,39 +65,50 @@ interface CiLiveStateJob {
   placementAttempts: CiJob['placementAttempts'];
 }
 
-type JsonOpts = { json?: boolean };
+export type JsonOpts = { json?: boolean };
 
-interface CommonOpts extends JsonOpts {
+export interface CommonOpts extends JsonOpts {
   apiKey?: string;
   baseUrl?: string;
   allowUntrustedHost?: boolean;
 }
 
-async function client(opts: CommonOpts): Promise<ActionsClient> {
+/** The platform API client behind both `compute actions` and `compute market`. */
+export async function client(opts: CommonOpts): Promise<ActionsClient> {
   return new ActionsClient(await resolveActionsAuth(opts));
 }
 
 /**
- * `vault set` and `vault get` carry a value, not just the key, so they only
- * ever talk to a trusted host: --allow-untrusted-host does not extend to them.
+ * Commands that send or read a local secret value (vault set/get, market
+ * credential connect) only ever talk to a trusted host: --allow-untrusted-host
+ * opts an explicit API key into a host, not the secrets themselves.
  */
-export function assertVaultValueHost(auth: ActionsAuth): void {
+export function assertSecretValueHost(auth: ActionsAuth, what: string): void {
   if (!isTrustedActionsHost(auth.baseUrl)) {
     throw new ActionsCliError(
       'untrusted_host',
-      `Refusing to send or read vault values at ${auth.baseUrl} — only computesdk.com and localhost hosts are allowed, even with --allow-untrusted-host.`,
+      `Refusing to send or read ${what} at ${auth.baseUrl} — only computesdk.com and localhost hosts are allowed, even with --allow-untrusted-host.`,
     );
   }
 }
 
-async function vaultValueClient(opts: CommonOpts): Promise<ActionsClient> {
+export function assertVaultValueHost(auth: ActionsAuth): void {
+  assertSecretValueHost(auth, 'vault values');
+}
+
+/** A client for commands carrying a local secret value — trusted hosts only. */
+export async function secretValueClient(opts: CommonOpts, what: string): Promise<ActionsClient> {
   const auth = await resolveActionsAuth(opts);
-  assertVaultValueHost(auth);
+  assertSecretValueHost(auth, what);
   return new ActionsClient(auth);
 }
 
+async function vaultValueClient(opts: CommonOpts): Promise<ActionsClient> {
+  return secretValueClient(opts, 'vault values');
+}
+
 /** Print `data` as JSON when --json was passed; otherwise call `render`. */
-function output<T>(opts: JsonOpts, data: T, render: (data: T) => void): void {
+export function output<T>(opts: JsonOpts, data: T, render: (data: T) => void): void {
   if (opts.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
   } else {
@@ -153,7 +164,7 @@ async function fetchRunSummary(c: ActionsClient, runId: string): Promise<CiRunSu
  * envelope from `toErrorEnvelope` (stdout stays empty, so a consumer can parse
  * either stream without guessing); otherwise a one-line human message.
  */
-function fail(error: unknown, opts: JsonOpts = {}): never {
+export function fail(error: unknown, opts: JsonOpts = {}): never {
   if (opts.json) {
     process.stderr.write(JSON.stringify(toErrorEnvelope(error)) + '\n');
   } else if (error instanceof ActionsApiError) {
@@ -481,7 +492,7 @@ async function* followRunLogs(
 
 // Job and step names come from workflow files — potentially attacker-controlled
 // in a PR context — so strip control characters before writing to the terminal.
-function safeTerm(s: string): string {
+export function safeTerm(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '�');
 }

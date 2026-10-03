@@ -214,10 +214,12 @@ async function runShell(session: Session, command: string, options?: RunCommandO
     if (stderrTail) options?.onStderr?.(stderrTail);
   }
 
+  const timedOut = result.status === "TIMED_OUT";
+  const stderr = stderrText(result);
   return {
     stdout: stdoutText(result),
-    stderr: stderrText(result),
-    exitCode: result.exitCode,
+    stderr: timedOut ? [stderr, "Tenki command timed out."].filter(Boolean).join("\n") : stderr,
+    exitCode: timedOut ? 124 : result.exitCode,
     durationMs: result.durationMs,
   };
 }

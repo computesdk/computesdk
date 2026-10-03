@@ -224,7 +224,14 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
                 })
             }],
             documented_purpose: config.documentedPurpose || 'ComputeSDK sandbox',
-            deadline: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+            deadline: new Date(
+              Date.now() +
+                (typeof options?.timeout === 'number' &&
+                Number.isFinite(options.timeout) &&
+                options.timeout > 0
+                  ? options.timeout
+                  : 60 * 60 * 1000)
+            ).toISOString()
           };
 
           const responseData = await fetchNamespace(token, API_ENDPOINTS.CREATE_INSTANCE, {

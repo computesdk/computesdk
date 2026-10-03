@@ -157,6 +157,6 @@ describe('lazy sandbox readiness', () => {
 
     await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create(options);
 
-    expect(fromRegistry).toHaveBeenCalledWith('node:24-slim');
+    expect(fromRegistry).toHaveBeenCalledWith('node:24');
   });
 });

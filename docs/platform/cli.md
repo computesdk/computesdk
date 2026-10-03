@@ -46,7 +46,8 @@ compute actions repos disable <owner>/<repo>
 
 # Provider credentials (owner/admin key required)
 compute actions providers                      # registered providers, regions, status
-compute actions providers configure <provider> # save the org's credential
+compute actions providers configure <provider> --key <key> [--verify]  # save the org's credential
+compute actions providers configure <provider> --field name=value ...  # multi-field credentials
 compute actions providers verify <provider>    # probe it with a real sandbox
 compute actions providers remove <provider>
 

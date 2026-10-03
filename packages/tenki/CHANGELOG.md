@@ -1,5 +1,14 @@
 # @computesdk/tenki
 
+## 0.1.10
+
+### Patch Changes
+
+- 475a432: Update the Tenki sandbox SDK to 1.4 and report timed-out commands as failures while preserving their partial output.
+- Updated dependencies [f1a8578]
+  - @computesdk/provider@2.1.10
+  - computesdk@4.1.9
+
 ## 0.1.9
 
 ### Patch Changes
