@@ -18,8 +18,8 @@
         "shortDescription": "Run code in cloud sandboxes",
         "longDescription": "ComputeSDK Router gives ChatGPT a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. Sandboxes are placed across sandbox providers through the ComputeSDK gateway, with a live compute market that bids for the best price.",
         "developerName": "ComputeSDK",
-        "category": "developer-tools",
-        "capabilities": ["Read", "Write"],
+        "category": "Developer Tools",
+        "capabilities": ["Run code", "Manage files", "Manage processes"],
         "websiteURL": "https://www.computesdk.com",
         "privacyPolicyURL": "https://www.computesdk.com/privacy",
         "termsOfServiceURL": "https://www.computesdk.com/terms",
@@ -29,15 +29,11 @@
           "Analyze this CSV in a fresh sandbox: load it with pandas and summarize the columns."
         ],
         "brandColor": "#111bf5",
-        "composerIcon": "./assets/icon.svg",
-        "logo": "./assets/logo.svg",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png",
+        "logoDark": "./assets/logo-dark.png",
         "screenshots": []
       }
-    }
-  },
-  "apps": {
-    "chatgpt": {
-      "id": "plugin_asdk_app_REGISTER_AFTER_PACKAGING"
     }
   }
 }

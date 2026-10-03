@@ -11,6 +11,8 @@ OAuth discovery — nothing to configure client-side.
 
 - `plugin.json` — Agent Plugins manifest (`computesdk-router`), with the
   `com.openai.interface` block ChatGPT reads for the directory listing.
+  `@plugin-creator` adds the `com.openai.apps` mapping (`./.app.json`)
+  when you give it the registered connector ID.
 - `mcp.json` — maps the plugin to the platform MCP server
   (`streamable-http`). No `headers` — auth comes from OAuth.
 - `skills/sandboxes/` — workflow skill teaching the model the tool surface.
@@ -20,48 +22,68 @@ OAuth discovery — nothing to configure client-side.
 
 ## Local install (development)
 
-Register the plugin folder in your local marketplace file,
-`~/.agents/plugins/marketplace.json`:
+Register the plugin in your personal marketplace file,
+`~/.agents/plugins/marketplace.json` (for a repo marketplace, use
+`$REPO_ROOT/.agents/plugins/marketplace.json` and keep plugins under
+`$REPO_ROOT/plugins/`):
 
 ```json
 {
+  "name": "local-plugins",
   "plugins": [
-    { "path": "/absolute/path/to/computesdk/plugins/computesdk-router" }
+    {
+      "name": "computesdk-router",
+      "source": { "source": "local", "path": "./plugins/computesdk-router" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
   ]
 }
 ```
 
-Restart the agent/CLI and the plugin's skills become available locally.
+`source.path` is `./`-prefixed relative to the marketplace root. Then
+restart the ChatGPT desktop app, open the Plugins Directory, choose your
+marketplace, and install.
 
 ## Testing in ChatGPT developer mode
 
-1. Enable developer mode in ChatGPT → Settings → Connectors.
-2. Add a custom MCP connector pointing at
-   `https://platform.computesdk.com/mcp` and complete the OAuth sign-in
-   (pick the ComputeSDK org to bill).
-3. In a chat with the connector enabled, ask it to create a sandbox and
-   run a command — exercise create → write_file → run_command →
-   sandbox_url → destroy.
-4. Once the connector works, register it in the plugin manifest: the
-   developer-mode connector gets an id like `plugin_asdk_app…`. Put it in
-   `plugin.json` under `apps.chatgpt.id` (replacing the
-   `REGISTER_AFTER_PACKAGING` placeholder), or run the `@plugin-creator`
-   tool to wire it automatically.
+1. Enable developer mode in ChatGPT → Settings → Security and login →
+   Developer mode.
+2. Go to ChatGPT Plugins, click the plus button, and register the MCP
+   server at `https://platform.computesdk.com/mcp`. Complete the OAuth
+   sign-in (pick the ComputeSDK org to bill).
+3. Copy the connection's technical ID — `plugin_asdk_app…` — from the
+   browser URL after ChatGPT creates it.
+4. Give the ID to `@plugin-creator` (Work mode) or `$plugin-creator`
+   (Codex): it wires the registered server into this package via
+   `extensions.com.openai.apps` → `./.app.json` and can create a personal
+   marketplace entry for testing. Don't hand-edit the app mapping.
+5. In a chat with the connector enabled, exercise the flow: create →
+   write_file → run_command → sandbox_url → destroy.
 
 ## Publishing
 
 - **Workspace**: publish the plugin to your ChatGPT workspace from the
   plugin settings once the connector ID is wired in — workspace users get
   it without developer mode.
-- **Public submission**: submit through the Plugin Creator / developer
-  portal. Before submitting:
-  - Replace `assets/` with real icon, logo, and screenshots — placeholder
-    art cannot be submitted.
-  - `privacyPolicyURL` and `termsOfServiceURL` must resolve to live pages
-    (coordinate with the dotcom site; the privacy policy must cover data
-    collected, purposes, recipients, and retention).
-  - Provide the portal's required test cases (5 positive, 3 negative) —
-    the create/run/url/destroy flows above are the obvious positives.
+- **Public submission**: submit through the developer portal (Upload new
+  or existing plugin → ZIP). Required by the submission rules:
+  - Five positive test cases (scenario, user prompt, expected tools,
+    expected result) and three negative test cases (where the plugin
+    should refuse, clarify, or fall back safely) — the create/run/url/
+    destroy flows above are the obvious positives.
+  - A demo-recording URL showing the main use cases.
+  - `privacyPolicyURL`, `termsOfServiceURL`, `websiteURL`, and a support
+    URL on live pages (coordinate with the dotcom site; the privacy
+    policy must cover data collected, purposes, recipients, and
+    retention).
+  - Domain verification: a `/.well-known/openai-apps-challenge` token
+    hosted on the MCP host.
+  - Every MCP tool must set `readOnlyHint`, `openWorldHint`, and
+    `destructiveHint` with a justification each — enforced server-side
+    on the platform `/mcp`.
+  - Real icon/logo assets — placeholder art cannot be submitted.
+    Screenshots only if the plugin ships UI (not in v1).
 
 ## Follow-ups
 

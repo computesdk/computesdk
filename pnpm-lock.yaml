@@ -1863,7 +1863,7 @@ importers:
         version: link:../provider
       '@opencomputer/sdk':
         specifier: latest
-        version: 2.3.0
+        version: 2.1.2
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2411,8 +2411,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@tenkicloud/sandbox':
-        specifier: ^1.0.4
-        version: 1.0.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^1.4.0
+        version: 1.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4367,8 +4367,8 @@ packages:
   '@onkernel/sdk@0.49.0':
     resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
-  '@opencomputer/sdk@2.3.0':
-    resolution: {integrity: sha512-fhDk/8vSC7ja991PYr7vs02W73UYq2eeh6EsNV4Bcm44HRO4sbPvIgbXO5pURYAWBUIavuLnaqrbYyw4719IVA==}
+  '@opencomputer/sdk@2.1.2':
+    resolution: {integrity: sha512-Yd4R/OPFu0VnaB0ZXBN3gzB53g4Gg2pvF2gUG8y8H2D57bCn+KkwaQij3ZO72JSlhNR3z0rnp5FaEFALvNUlRg==}
     engines: {node: '>=18'}
 
   '@opentelemetry/api-logs@0.214.0':
@@ -5328,8 +5328,8 @@ packages:
   '@superserve/sdk@0.7.6':
     resolution: {integrity: sha512-ovJG1hIoOolhMeKUl/j0y8awaexvHFTjYjkk7/HnrN5olpqeHDyLQT++6SJmnL3/94XFd2g2DPvc8VWABlOBqw==}
 
-  '@tenkicloud/sandbox@1.0.4':
-    resolution: {integrity: sha512-YynN84EEPfm9YeYIX6tMJ/qI2RCp0xmg1W8WIS8VO4df69IRlBaONgVgiak0ZB77hDQhj5nYHnkeEnvWOb+QPg==}
+  '@tenkicloud/sandbox@1.4.0':
+    resolution: {integrity: sha512-1fio6b1I+5gK9uw8UkHYkcdNU0EDzswL2I1/6RRQfC5cAqmO6YjIlvnbn2Ia5APhqufHvPrHVbKZfwq0gp8tXA==}
     engines: {node: '>=18'}
 
   '@tigrisdata/storage@3.6.0':
@@ -7567,6 +7567,11 @@ packages:
     resolution: {integrity: sha512-21t+ozMQDAL/UGgQVBbZ/xXvNO10++ZPuTmKRO8k9V3AClVRht49ahtDjfY8l1q6nSHOrE5ASfthzH3ol6R/hg==}
     engines: {node: '>=20.17'}
 
+  nanoid@3.3.11:
+    resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
   nanoid@3.3.19:
     resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -9249,6 +9254,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   x256@0.0.2:
     resolution: {integrity: sha512-ZsIH+sheoF8YG9YG+QKEEIdtqpHRA9FYuD7MqhfyB1kayXU43RUNBFSxBEnF8ywSUxdg+8no4+bPr5qLbyxKgA==}
     engines: {node: '>=0.4.0'}
@@ -10067,7 +10084,7 @@ snapshots:
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
-      '@modelcontextprotocol/sdk': 1.26.0(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.4.3)
       archiver: 7.0.1
       axios: 1.18.1
       dockerfile-ast: 0.7.1
@@ -10078,7 +10095,7 @@ snapshots:
       uuid: 11.1.1
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yaml: 2.8.2
-      zod: 3.25.76
+      zod: 4.4.3
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@hey-api/openapi-ts'
@@ -11178,28 +11195,6 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/sdk@1.26.0(zod@3.25.76)':
-    dependencies:
-      '@hono/node-server': 1.19.9(hono@4.12.27)
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.2.1
-      express-rate-limit: 8.2.1(express@5.2.1)
-      hono: 4.12.27
-      jose: 6.2.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.0
-      raw-body: 3.0.1
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
-    transitivePeerDependencies:
-      - supports-color
-
   '@modelcontextprotocol/sdk@1.26.0(zod@4.4.3)':
     dependencies:
       '@hono/node-server': 1.19.9(hono@4.12.27)
@@ -11221,7 +11216,6 @@ snapshots:
       zod-to-json-schema: 3.25.1(zod@4.4.3)
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   '@mongodb-js/zstd@7.0.0':
     dependencies:
@@ -11269,7 +11263,7 @@ snapshots:
 
   '@onkernel/sdk@0.49.0': {}
 
-  '@opencomputer/sdk@2.3.0':
+  '@opencomputer/sdk@2.1.2':
     dependencies:
       undici: 7.28.0
 
@@ -12502,12 +12496,12 @@ snapshots:
 
   '@superserve/sdk@0.7.6': {}
 
-  '@tenkicloud/sandbox@1.0.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@tenkicloud/sandbox@1.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
       '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -15210,6 +15204,8 @@ snapshots:
 
   nano-spawn@1.0.2: {}
 
+  nanoid@3.3.11: {}
+
   nanoid@3.3.19: {}
 
   nanoid@5.1.9: {}
@@ -15641,7 +15637,7 @@ snapshots:
 
   postcss@8.5.6:
     dependencies:
-      nanoid: 3.3.19
+      nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -17169,6 +17165,11 @@ snapshots:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
 
+  ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+    optionalDependencies:
+      bufferutil: 4.1.0
+      utf-8-validate: 6.0.6
+
   x256@0.0.2: {}
 
   xdg-app-paths@5.1.0:
@@ -17248,10 +17249,6 @@ snapshots:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.7.0
-
-  zod-to-json-schema@3.25.1(zod@3.25.76):
-    dependencies:
-      zod: 3.25.76
 
   zod-to-json-schema@3.25.1(zod@4.4.3):
     dependencies:
