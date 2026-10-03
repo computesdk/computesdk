@@ -8,6 +8,7 @@
 import { Sandboxes, pat, RequestError } from '@docker/sandboxes';
 import type { Sandbox } from '@docker/sandboxes';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { http2Fetch, type Http2Fetch } from './http2-fetch';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 
@@ -28,6 +29,20 @@ const env = (name: string) => (typeof process !== 'undefined' && process.env?.[n
 // callers commonly build a fresh provider per sandbox, so sharing keeps sign-in out of every create.
 const clients = new Map<string, Sandboxes>();
 
+// One HTTP/2 session to the API for the whole process, shared by every client. The origin lookup
+// must match @docker/sandboxes, which reads the same variable and default; on a mismatch the
+// session simply isn't used and requests go out over the global fetch.
+let api: Http2Fetch | undefined;
+function apiTransport(): Http2Fetch | undefined {
+  if (api) return api;
+  try {
+    api = http2Fetch(new URL(env('SANDBOXES_API_URL') || 'https://connect.docker.com/sandboxes').origin);
+  } catch {
+    return undefined; // A malformed URL fails the first request with the SDK's own error.
+  }
+  return api;
+}
+
 function clientFor(config: DockerSandboxesConfig): Sandboxes {
   const username = config.username || env('DOCKER_SANDBOXES_USERNAME');
   const personalAccessToken = config.token || env('DOCKER_SANDBOXES_TOKEN');
@@ -41,9 +56,19 @@ function clientFor(config: DockerSandboxesConfig): Sandboxes {
   let client = clients.get(key);
   if (!client) {
     const auth = pat({ username, personalAccessToken });
+    const transport = apiTransport();
     // Create also returns the first command's exec credential, saving a request.
-    client = new Sandboxes({ auth, prefetchExecCredential: true });
+    // transportRetries 'none' declares that the transport makes one attempt per request, which the
+    // SDK requires of an injected fetch; the SDK still applies its own maxRetries.
+    client = new Sandboxes({
+      auth,
+      prefetchExecCredential: true,
+      ...(transport ? { fetch: transport.fetch, transportRetries: 'none' as const } : {}),
+    });
     clients.set(key, client);
+    // Open the session now, sending nothing on it, so a burst of creates multiplexes on it instead
+    // of each opening its own connection.
+    transport?.preconnect();
     // Start the token exchange now, so the first create doesn't wait for it.
     auth.getAccessToken().catch(() => {});
   }
