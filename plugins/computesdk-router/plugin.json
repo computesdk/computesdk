@@ -3,9 +3,14 @@
   "name": "computesdk-router",
   "version": "0.1.0",
   "description": "A developer tool for running code in any sandbox provider, with a live bidding option for the best price.",
-  "author": "ComputeSDK",
-  "license": "MIT",
+  "author": {
+    "name": "ComputeSDK",
+    "url": "https://www.computesdk.com"
+  },
   "homepage": "https://www.computesdk.com",
+  "repository": "https://github.com/computesdk/computesdk",
+  "license": "MIT",
+  "keywords": ["sandbox", "code-execution", "compute", "market"],
   "extensions": {
     "com.openai": {
       "interface": {
@@ -14,12 +19,18 @@
         "longDescription": "ComputeSDK Router gives ChatGPT a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. Sandboxes are placed across sandbox providers through the ComputeSDK gateway, with a live compute market that bids for the best price.",
         "developerName": "ComputeSDK",
         "category": "developer-tools",
-        "capabilities": ["mcp-server", "ui"],
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://www.computesdk.com",
         "privacyPolicyURL": "https://www.computesdk.com/privacy",
         "termsOfServiceURL": "https://www.computesdk.com/terms",
-        "defaultPrompt": "Create a sandbox and run a Python script that prints system info.",
-        "logo": "assets/logo.svg",
-        "icon": "assets/logo.svg",
+        "defaultPrompt": [
+          "Create a sandbox and run a Python script that prints system info.",
+          "Spin up a sandbox, write a small web server, and give me its preview URL.",
+          "Analyze this CSV in a fresh sandbox: load it with pandas and summarize the columns."
+        ],
+        "brandColor": "#111bf5",
+        "composerIcon": "./assets/icon.svg",
+        "logo": "./assets/logo.svg",
         "screenshots": []
       }
     }
