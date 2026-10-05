@@ -31,8 +31,20 @@ export interface CloudflareDirectExecOutput {
   exitCode: number;
 }
 
+/** Size and image of a new sandbox. The sandbox Worker uses its defaults for unset fields. */
+export interface CloudflareSandboxOptions {
+  /** vCPUs of a custom instance type. Set together with memoryMib and diskMb. */
+  vcpu?: number;
+  /** Memory of a custom instance type, in MiB. */
+  memoryMib?: number;
+  /** Disk of a custom instance type, in MB. */
+  diskMb?: number;
+  /** Name of an image declared by the sandbox Worker, for example `builder`. */
+  image?: string;
+}
+
 export interface CloudflareSandboxStub {
-  start(): Promise<void>;
+  start(options?: CloudflareSandboxOptions): Promise<void>;
   exec(
     argv: string[],
     cwd: string | undefined,
@@ -105,8 +117,21 @@ function directBinding(config: CloudflareConfig): CloudflareSandboxBinding {
   return config.sandboxBinding!;
 }
 
+function sandboxOptions(
+  options?: CreateSandboxOptions
+): CloudflareSandboxOptions | undefined {
+  const { vcpu, memoryMib, diskMb, image } = options ?? {};
+  const selected: CloudflareSandboxOptions = Object.fromEntries(
+    Object.entries({ vcpu, memoryMib, diskMb, image }).filter(
+      ([, value]) => value !== undefined
+    )
+  );
+  return Object.keys(selected).length > 0 ? selected : undefined;
+}
+
 async function createBridgeSandboxId(
-  config: CloudflareConfig
+  config: CloudflareConfig,
+  options?: CloudflareSandboxOptions
 ): Promise<string> {
   const sandboxApiKey = getSandboxApiKey(config)!;
   const data = await bridgeJSONRequest(
@@ -118,7 +143,8 @@ async function createBridgeSandboxId(
       sandboxApiKey,
     },
     'POST',
-    '/v1/sandbox'
+    '/v1/sandbox',
+    options
   );
 
   if (typeof data.id !== 'string' || !isBridgeSandboxId(data.id)) {
@@ -168,7 +194,7 @@ async function bridgeJSONRequest(
   cfSandbox: CloudflareSandbox,
   method: string,
   path: string,
-  body?: Record<string, unknown>
+  body?: object
 ): Promise<any> {
   const response = await bridgeRequest(
     cfSandbox,
@@ -378,10 +404,12 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         const timeoutMs = executionTimeout(
           config.timeout ?? DEFAULT_EXEC_TIMEOUT_MS
         );
+        const startOptions = sandboxOptions(options);
 
         if (isRemote(config)) {
           const sandboxId =
-            options?.sandboxId || (await createBridgeSandboxId(config));
+            options?.sandboxId ||
+            (await createBridgeSandboxId(config, startOptions));
           if (!isBridgeSandboxId(sandboxId)) {
             throw new Error(
               'Invalid Cloudflare sandbox ID. Expected a 64-character hexadecimal Durable Object ID.'
@@ -415,7 +443,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
             ? binding.idFromString(options.sandboxId)
             : binding.newUniqueId();
           const sandbox = binding.get(objectId);
-          await sandbox.start();
+          await sandbox.start(startOptions);
           const sandboxId = objectId.toString();
 
           return {
