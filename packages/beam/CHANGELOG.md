@@ -1,5 +1,11 @@
 # @computesdk/beam
 
+## 0.3.10
+
+### Patch Changes
+
+- e980b01: Require Beam JS 1.0.21 to reuse prepared sandbox runtimes without repeated image verification and file synchronization.
+
 ## 0.3.9
 
 ### Patch Changes
