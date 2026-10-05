@@ -326,12 +326,34 @@ export const tensorlake = defineProvider<
         const { port, protocol: optionsProtocol } = options;
         const protocol = optionsProtocol || "https";
 
+        // Tensorlake's preview proxy only forwards ports registered in the
+        // sandbox's `exposed_ports`, and serves them publicly only when
+        // unauthenticated access is allowed — enable both before returning,
+        // so the URL is usable immediately. This makes the port publicly
+        // reachable to anyone who knows the URL.
+        let exposedPorts = [port];
+        try {
+          const info = await ctx.sandbox.info();
+          exposedPorts = [...new Set([...(info.exposedPorts ?? []), port])];
+        } catch {
+          // info() is best-effort; update() below is authoritative anyway
+        }
+        await ctx.sandbox.update({
+          exposedPorts,
+          allowUnauthenticatedAccess: true,
+        });
+
+        // Preview URLs live on the sandbox proxy domain
+        // (`<port>-<sandbox-id>.sandbox.tensorlake.ai`), which is the API
+        // hostname with its `api.` prefix swapped for `sandbox.`.
         const apiUrl =
           ctx.config.apiUrl ||
           (typeof process !== "undefined" && process.env?.TENSORLAKE_API_URL) ||
           "https://api.tensorlake.ai";
-
-        const proxyDomain = new URL(apiUrl).hostname;
+        const apiHost = new URL(apiUrl).hostname;
+        const proxyDomain = apiHost.startsWith("api.")
+          ? `sandbox.${apiHost.slice(4)}`
+          : apiHost;
         const subdomain =
           port === 443 || port === 80
             ? ctx.sandbox.sandboxId
