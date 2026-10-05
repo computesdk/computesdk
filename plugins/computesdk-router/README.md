@@ -49,9 +49,9 @@ marketplace, and install.
 
 1. Enable developer mode in ChatGPT → Settings → Security and login →
    Developer mode.
-2. Go to ChatGPT Plugins, click the plus button, and register the MCP
-   server at `https://platform.computesdk.com/mcp`. Complete the OAuth
-   sign-in (pick the ComputeSDK org to bill).
+2. Go to `chatgpt.com/plugins`, click **+**, choose **Create MCP App**,
+   and register the server at `https://platform.computesdk.com/mcp`.
+   Complete the OAuth sign-in (pick the ComputeSDK org to bill).
 3. Copy the connection's technical ID — `plugin_asdk_app…` — from the
    browser URL after ChatGPT creates it.
 4. Give the ID to `@plugin-creator` (Work mode) or `$plugin-creator`
