@@ -23,6 +23,7 @@
         "websiteURL": "https://www.computesdk.com",
         "privacyPolicyURL": "https://www.computesdk.com/privacy",
         "termsOfServiceURL": "https://www.computesdk.com/terms",
+        "supportURL": "https://www.computesdk.com/support",
         "defaultPrompt": [
           "Create a sandbox and run a Python script that prints system info.",
           "Spin up a sandbox, write a small web server, and give me its preview URL.",

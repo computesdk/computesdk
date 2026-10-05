@@ -25,11 +25,12 @@ const api = (path: string, init?: RequestInit) =>
     return r.json();
   });
 
-// Create
-const { id } = await api('/sandboxes', {
+// Create — the response wraps the sandbox: { sandbox: { id, … } }
+const { sandbox } = await api('/sandboxes', {
   method: 'POST',
   body: JSON.stringify({ label: 'my-job', timeoutMs: 30 * 60 * 1000 }),
 });
+const id = sandbox.id;
 
 // Run a command (buffered; ~290s cap)
 const { stdout, stderr, exitCode } = await api(`/sandboxes/${id}/commands`, {
@@ -38,9 +39,10 @@ const { stdout, stderr, exitCode } = await api(`/sandboxes/${id}/commands`, {
 });
 
 // Files (absolute paths)
-await api(`/sandboxes/${id}/files?path=/tmp/out.txt`, {
+// Write takes `path` in the body (reads/lists take it as ?path= instead)
+await api(`/sandboxes/${id}/files`, {
   method: 'POST',
-  body: JSON.stringify({ content: stdout }),
+  body: JSON.stringify({ path: '/tmp/out.txt', content: stdout }),
 });
 const listing = await api(`/sandboxes/${id}/files?path=/tmp`);
 
