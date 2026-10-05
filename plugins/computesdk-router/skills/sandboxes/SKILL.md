@@ -11,7 +11,7 @@ ComputeSDK places cloud sandboxes through the ComputeSDK gateway. All usage bill
 
 1. `create_sandbox` — returns a sandbox `id`. Args: `label`, `image`, `timeoutMs` (lifetime in ms; default 30 minutes, max 6 hours), and `providerOrder` (camelCase routing preference, e.g. `["market"]` for a live-bid market fill).
 2. Do the work: `write_file`, `read_file`, `make_directory`, `remove_path`; `run_command` or `start_process`; `sandbox_url` for anything that listens on a port. File tools take absolute paths; `read_file` on a directory lists its entries.
-3. `destroy_sandbox` when the task is finished — sandboxes bill for runtime, so always clean up unless the user wants it kept alive. If it fails with "provider did not destroy the sandbox; retry", retry once.
+3. `destroy_sandbox` when the task is finished — sandboxes bill for runtime, so always clean up unless the user wants it kept alive.
 
 `get_sandbox` fetches one sandbox's details; `list_sandboxes` lists the visible ones. `get_profile` returns the connection's identity — an opaque `id`, and `nickname`, which is the name of the billed org.
 
