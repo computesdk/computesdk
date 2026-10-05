@@ -186,6 +186,10 @@ const wsUrl = await sandbox.getUrl({ port: 443, protocol: 'wss' });
 // → "wss://<sandbox-id>.sandbox.tensorlake.ai"
 ```
 
+`getUrl` registers the port in the sandbox's `exposed_ports` and enables
+unauthenticated access, so the returned URL is publicly reachable — treat it
+as a public endpoint.
+
 ## Examples
 
 ### Agentic Code Execution
