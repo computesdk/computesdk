@@ -65,13 +65,56 @@ export interface SeedCloseStdinInput {
   requestId?: string;
 }
 
+/**
+ * Push a module's CJS source over the socket. The daemon writes it under its
+ * state dir (`modules/<name>.cjs`, name validated as `[A-Za-z0-9_-]+`) and
+ * replies with its path and sha256. Installs are content-defined: re-pushing
+ * the same name replaces the file.
+ */
+export interface SeedModuleInstallInput {
+  installModule: {
+    name: string;
+    /** Module source (utf8) or pre-encoded `sourceB64`; one is required. */
+    source?: string;
+    sourceB64?: string;
+  };
+  requestId?: string;
+}
+
+/**
+ * Run an installed module as a daemon job — `node <module>.cjs <argv...>`
+ * through the same job-control path as `exec` (detach/wait/status/kill/stdin
+ * and SSE output streaming all apply).
+ */
+export interface SeedModuleExecInput {
+  moduleExec: {
+    name: string;
+    argv?: string[];
+    cwd?: string;
+    env?: Record<string, string>;
+    timeoutMs?: number;
+    detach?: boolean;
+    stdin?: boolean;
+  };
+  requestId?: string;
+}
+
+/** List installed modules (names, sizes). Optional name prefix filter. */
+export interface SeedModuleListInput {
+  moduleList: true | { prefix?: string };
+  requestId?: string;
+}
+
 export type SeedInput =
   | SeedCommandInput
   | SeedWaitInput
   | SeedStatusInput
   | SeedKillInput
   | SeedStdinInput
-  | SeedCloseStdinInput;
+  | SeedCloseStdinInput
+  | SeedModuleInstallInput
+  | SeedModuleExecInput
+  | SeedModuleListInput;
 
 export type SeedJobStatus = "running" | "exited";
 
