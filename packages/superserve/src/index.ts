@@ -8,8 +8,10 @@ import { randomUUID } from 'node:crypto';
 import {
   AuthenticationError,
   Sandbox as SuperserveSandbox,
+  Snapshot as SuperserveSnapshot,
   Template as SuperserveTemplate,
 } from '@superserve/sdk';
+import type { SnapshotInfo } from '@superserve/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -25,9 +27,9 @@ import type {
 export interface SuperserveConfig {
   /** Superserve API key. Falls back to `SUPERSERVE_API_KEY` env var. */
   apiKey?: string;
-  /** API base URL. Falls back to `SUPERSERVE_BASE_URL` env var, then `https://api.superserve.ai`. */
+  /** API base URL. Falls back to `SUPERSERVE_BASE_URL` env var, then the `@superserve/sdk` default. */
   baseUrl?: string;
-  /** Default sandbox idle timeout in milliseconds. */
+  /** Default auto-pause timeout in milliseconds. */
   timeout?: number;
 }
 
@@ -43,8 +45,8 @@ function resolveApiKey(config: SuperserveConfig): string {
 
 function resolveBaseUrl(config: SuperserveConfig): string | undefined {
   // Returns undefined when unset on purpose: the SDK then applies its own
-  // resolution (SUPERSERVE_BASE_URL env var, then its https://api.superserve.ai
-  // default), so we don't duplicate that constant and risk it drifting.
+  // resolution (SUPERSERVE_BASE_URL env var, then its default endpoint), so
+  // we don't duplicate that default and risk it drifting.
   return config.baseUrl || process.env.SUPERSERVE_BASE_URL || undefined;
 }
 
@@ -121,6 +123,55 @@ function rethrowFriendly(error: unknown, fallbackPrefix: string): never {
   throw new Error(`${fallbackPrefix}: ${message}`);
 }
 
+// Also serves as `streamCommand`: the SDK streams output over its own exec API
+// when callbacks are passed, so no daemon or routable port is needed.
+const runCommand: CommandRunner = async (sandbox, command, options) => {
+  const startTime = Date.now();
+  try {
+    let fullCommand = command;
+    if (options?.background) {
+      // Run the whole command under `sh -c` so the trailing `&` backgrounds
+      // the entire command (not just its last statement), and escape it so
+      // the user's command can't break out of the nohup wrapper.
+      fullCommand = `nohup sh -c "${escapeShellArg(fullCommand)}" > /dev/null 2>&1 &`;
+    }
+    const result = await sandbox.commands.run(fullCommand, {
+      cwd: options?.cwd,
+      env: options?.env,
+      timeoutMs: options?.timeout,
+      onStdout: options?.onStdout,
+      onStderr: options?.onStderr,
+    });
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      durationMs: Date.now() - startTime,
+    };
+  } catch (error) {
+    return {
+      stdout: '',
+      stderr: error instanceof Error ? error.message : String(error),
+      exitCode: 127,
+      durationMs: Date.now() - startTime,
+    };
+  }
+};
+
+function toSnapshot(info: SnapshotInfo) {
+  return {
+    id: info.id,
+    provider: 'superserve',
+    createdAt: info.createdAt,
+    metadata: {
+      name: info.name,
+      sandboxId: info.sandboxId,
+      status: info.status,
+      sizeBytes: info.sizeBytes,
+    },
+  };
+}
+
 export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
   name: 'superserve',
   methods: {
@@ -135,10 +186,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
           name,
           metadata,
           templateId,
-          // Superserve has no snapshot resource — `snapshotId` is dropped here
-          // intentionally; use `templateId` (a Superserve template UUID or name)
-          // instead. See `snapshot` block below for context.
-          snapshotId: _snapshotId,
+          snapshotId,
           namespace: _namespace,
           directory: _directory,
           ...providerOptions
@@ -153,6 +201,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
             baseUrl,
             name: name ?? generateSandboxName(),
             ...(templateId ? { fromTemplate: templateId } : {}),
+            ...(snapshotId ? { fromSnapshot: snapshotId } : {}),
             ...(timeoutSeconds !== undefined ? { timeoutSeconds } : {}),
             ...(metadata ? { metadata: metadata as Record<string, string> } : {}),
             ...(envs ? { envVars: envs } : {}),
@@ -200,45 +249,13 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         }
       },
 
-      runCommand: async (
-        sandbox: SuperserveSandbox,
-        command: string,
-        options?: RunCommandOptions,
-      ): Promise<CommandResult> => {
-        const startTime = Date.now();
-        try {
-          let fullCommand = command;
-          if (options?.background) {
-            // Run the whole command under `sh -c` so the trailing `&` backgrounds
-            // the entire command (not just its last statement), and escape it so
-            // the user's command can't break out of the nohup wrapper.
-            fullCommand = `nohup sh -c "${escapeShellArg(fullCommand)}" > /dev/null 2>&1 &`;
-          }
-          const result = await sandbox.commands.run(fullCommand, {
-            cwd: options?.cwd,
-            env: options?.env,
-            timeoutMs: options?.timeout,
-          });
-          return {
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode,
-            durationMs: Date.now() - startTime,
-          };
-        } catch (error) {
-          return {
-            stdout: '',
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
-            durationMs: Date.now() - startTime,
-          };
-        }
-      },
+      runCommand,
+      streamCommand: runCommand,
 
       getInfo: async (sandbox: SuperserveSandbox): Promise<SandboxInfo> => {
         const info = await sandbox.getInfo();
         const status: SandboxInfo['status'] =
-          info.status === 'paused' ? 'stopped' :
+          info.status === 'paused' || info.status === 'deleted' ? 'stopped' :
           info.status === 'failed' ? 'error' :
           'running';
         return {
@@ -251,11 +268,12 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         };
       },
 
-      getUrl: async (_sandbox: SuperserveSandbox, _options: { port: number; protocol?: string }): Promise<string> => {
-        throw new Error(
-          'Superserve does not currently support arbitrary port forwarding via getUrl(). ' +
-            'Use sandbox.commands.run() to interact with services running inside the sandbox.',
-        );
+      getUrl: async (sandbox: SuperserveSandbox, options: { port: number; protocol?: string }): Promise<string> => {
+        // A preview URL only routes once its port is published. Publishing is
+        // idempotent and keeps the access mode of an already-published port.
+        await sandbox.publishPreviewPort(options.port);
+        const url = sandbox.getPreviewUrl(options.port);
+        return options.protocol ? url.replace(/^https/, options.protocol) : url;
       },
 
       filesystem: {
@@ -330,21 +348,31 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       getInstance: (sandbox: SuperserveSandbox): SuperserveSandbox => sandbox,
     },
 
-    // Superserve has no standalone snapshot resource — pause/resume is 1:1
-    // and not forkable. Templates are the closest analog (wired below).
     snapshot: {
-      create: async (_config: SuperserveConfig, _sandboxId: string, _options?: { name?: string }) => {
-        throw new Error(
-          'Superserve does not expose snapshots as a separate resource. ' +
-            'Use Template.create() with a build spec for reusable base images, ' +
-            'or sandbox.pause() / sandbox.resume() for in-place state preservation.',
-        );
+      create: async (config: SuperserveConfig, sandboxId: string, options?: { name?: string }) => {
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        try {
+          // connect() activates the sandbox, so a paused one is resumed first.
+          const sandbox = await SuperserveSandbox.connect(sandboxId, { apiKey, baseUrl });
+          return toSnapshot(await sandbox.snapshot({ name: options?.name }));
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to create Superserve snapshot');
+        }
       },
-      list: async (_config: SuperserveConfig) => {
-        return [];
+      list: async (config: SuperserveConfig, options?: { sandboxId?: string; limit?: number }) => {
+        if (!options?.sandboxId) {
+          throw new Error('Superserve snapshots are listed per sandbox: pass { sandboxId } to list().');
+        }
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        const infos = await SuperserveSnapshot.list(options.sandboxId, { apiKey, baseUrl, limit: options.limit });
+        return infos.map(toSnapshot);
       },
-      delete: async (_config: SuperserveConfig, _snapshotId: string) => {
-        /* no-op: snapshots are not a separate resource */
+      delete: async (config: SuperserveConfig, snapshotId: string) => {
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        await SuperserveSnapshot.deleteById(snapshotId, { apiKey, baseUrl });
       },
     },
 

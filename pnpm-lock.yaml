@@ -2374,8 +2374,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@superserve/sdk':
-        specifier: ^0.7.6
-        version: 0.7.6
+        specifier: ^0.9.3
+        version: 0.9.3
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -5325,8 +5325,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@superserve/sdk@0.7.6':
-    resolution: {integrity: sha512-ovJG1hIoOolhMeKUl/j0y8awaexvHFTjYjkk7/HnrN5olpqeHDyLQT++6SJmnL3/94XFd2g2DPvc8VWABlOBqw==}
+  '@superserve/sdk@0.9.3':
+    resolution: {integrity: sha512-JzGiaNFiaB/fMNnL+Zm6OdE7yGau5zkqPyESX3Sr3piisFwgbGyDnKT21cucW1iA3BEMg2XBIVsuXw6WF6dUIw==}
 
   '@tenkicloud/sandbox@1.4.0':
     resolution: {integrity: sha512-1fio6b1I+5gK9uw8UkHYkcdNU0EDzswL2I1/6RRQfC5cAqmO6YjIlvnbn2Ia5APhqufHvPrHVbKZfwq0gp8tXA==}
@@ -12494,7 +12494,7 @@ snapshots:
   '@superradcompany/microsandbox-win32-x64-msvc@0.6.18':
     optional: true
 
-  '@superserve/sdk@0.7.6': {}
+  '@superserve/sdk@0.9.3': {}
 
   '@tenkicloud/sandbox@1.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:

@@ -5,6 +5,6 @@ runProviderTestSuite({
   name: 'superserve',
   provider: superserve({}),
   supportsFilesystem: true,
-  supportsGetUrl: false,
+  supportsStreaming: true,
   skipIntegration: !process.env.SUPERSERVE_API_KEY,
 });
