@@ -1,5 +1,14 @@
 # @computesdk/workbench
 
+## 33.0.0
+
+### Patch Changes
+
+- Updated dependencies [e980b01]
+- Updated dependencies [80d1540]
+  - @computesdk/beam@0.3.10
+  - @computesdk/cloudflare@2.1.0
+
 ## 32.0.6
 
 ### Patch Changes
