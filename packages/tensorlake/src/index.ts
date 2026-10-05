@@ -6,7 +6,7 @@
  * Uses the official tensorlake npm SDK (0.5.7).
  */
 
-import { Sandbox, SandboxStatus, OutputMode } from "tensorlake";
+import { Sandbox, SandboxClient, SandboxStatus, OutputMode } from "tensorlake";
 import type { SandboxInfo } from "tensorlake";
 import { defineProvider } from "@computesdk/provider";
 import { streamTensorlakeCommand } from "./streaming";
@@ -331,26 +331,23 @@ export const tensorlake = defineProvider<
         // unauthenticated access is allowed — enable both before returning,
         // so the URL is usable immediately. This makes the port publicly
         // reachable to anyone who knows the URL.
-        let exposedPorts = [port];
+        // `exposePorts` adds to the allowlist server-side, so concurrent
+        // `getUrl` calls (across contexts and processes) can't clobber
+        // each other's ports the way a read-modify-write `update()` would.
+        const { apiKey, apiUrl } = resolveAuth(ctx.config);
+        const client = SandboxClient.forCloud({ apiKey, apiUrl });
         try {
-          const info = await ctx.sandbox.info();
-          exposedPorts = [...new Set([...(info.exposedPorts ?? []), port])];
-        } catch {
-          // info() is best-effort; update() below is authoritative anyway
+          await client.exposePorts(ctx.sandbox.sandboxId, [port], {
+            allowUnauthenticatedAccess: true,
+          });
+        } finally {
+          client.close();
         }
-        await ctx.sandbox.update({
-          exposedPorts,
-          allowUnauthenticatedAccess: true,
-        });
 
         // Preview URLs live on the sandbox proxy domain
         // (`<port>-<sandbox-id>.sandbox.tensorlake.ai`), which is the API
         // hostname with its `api.` prefix swapped for `sandbox.`.
-        const apiUrl =
-          ctx.config.apiUrl ||
-          (typeof process !== "undefined" && process.env?.TENSORLAKE_API_URL) ||
-          "https://api.tensorlake.ai";
-        const apiHost = new URL(apiUrl).hostname;
+        const apiHost = new URL(apiUrl ?? "https://api.tensorlake.ai").hostname;
         const proxyDomain = apiHost.startsWith("api.")
           ? `sandbox.${apiHost.slice(4)}`
           : apiHost;
