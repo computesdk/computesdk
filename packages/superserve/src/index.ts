@@ -269,8 +269,8 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       },
 
       getUrl: async (sandbox: SuperserveSandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        // A preview URL only routes once its port is published. Publishing is
-        // idempotent and keeps the access mode of an already-published port.
+        // A preview URL only routes once its port is published. A new port takes
+        // the sandbox's `previewAccess` default; a published one keeps its mode.
         await sandbox.publishPreviewPort(options.port);
         const url = sandbox.getPreviewUrl(options.port);
         return options.protocol ? url.replace(/^https/, options.protocol) : url;
@@ -361,9 +361,10 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         }
       },
       list: async (config: SuperserveConfig, options?: { sandboxId?: string; limit?: number }) => {
-        if (!options?.sandboxId) {
-          throw new Error('Superserve snapshots are listed per sandbox: pass { sandboxId } to list().');
-        }
+        // Snapshots are listed per sandbox. Callers that aggregate across
+        // providers pass no options, so an unscoped call returns nothing
+        // instead of throwing and failing their whole listing.
+        if (!options?.sandboxId) return [];
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         const infos = await SuperserveSnapshot.list(options.sandboxId, { apiKey, baseUrl, limit: options.limit });

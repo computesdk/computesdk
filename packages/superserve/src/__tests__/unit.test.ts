@@ -189,7 +189,9 @@ describe('superserve previews, streaming and snapshots', () => {
       metadata: { name: 'before-upgrade', sandboxId: 'sb-test' },
     });
 
-    await expect(provider.snapshot!.list()).rejects.toThrow('sandboxId');
+    // An unscoped list must not throw: compute.snapshot.list() calls every
+    // provider without options.
+    expect(await provider.snapshot!.list()).toEqual([]);
     expect(await provider.snapshot!.list({ sandboxId: 'sb-test' })).toHaveLength(1);
   });
 });

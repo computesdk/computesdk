@@ -197,9 +197,10 @@ await provider.snapshot!.delete(snapshot.id);
 ```
 
 A snapshot saves a sandbox's memory and disk and is kept until deleted, even
-after the original sandbox is gone. Snapshots are listed per sandbox, so
-`list()` requires `sandboxId`. `snapshot.create()` connects to the sandbox
-first, which resumes it if it is paused. See the
+after the original sandbox is gone. Snapshots are listed per sandbox: pass
+`sandboxId` to `list()`, which returns an empty list without it.
+`snapshot.create()` connects to the sandbox first, which resumes it if it is
+paused. See the
 [snapshots guide](https://docs.superserve.ai/sandbox/snapshots).
 
 ## Error Handling
