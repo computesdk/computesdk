@@ -1,5 +1,12 @@
 # @computesdk/tensorlake
 
+## 0.1.18
+
+### Patch Changes
+
+- 5c1fe5d: `getUrl` exposes the port via the SDK's additive `SandboxClient.exposePorts` instead of a read-modify-write `update()`, so concurrent calls can't clobber each other's ports and a failed `info()` read can no longer unexpose existing ports.
+- 5bdd15d: Fix `getUrl` returning unusable preview URLs: build the URL on `sandbox.tensorlake.ai` (swapping `api.` → `sandbox.` in the API hostname) instead of the API host, and register the port in `exposed_ports` with `allow_unauthenticated_access` before returning so the URL is publicly reachable.
+
 ## 0.1.17
 
 ### Patch Changes
