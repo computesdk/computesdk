@@ -10,9 +10,9 @@ OAuth discovery — nothing to configure client-side.
 ## Contents
 
 - `plugin.json` — Agent Plugins manifest (`computesdk-router`), with the
-  `com.openai.interface` block ChatGPT reads for the directory listing.
-  `@plugin-creator` adds the `com.openai.apps` mapping (`./.app.json`)
-  when you give it the registered connector ID.
+  `com.openai.interface` block ChatGPT reads for the directory listing
+  and `com.openai.apps` → `./.app.json`, which maps the registered
+  connector ID (`plugin_asdk_app…`).
 - `mcp.json` — maps the plugin to the platform MCP server
   (`streamable-http`). No `headers` — auth comes from OAuth.
 - `skills/sandboxes/` — workflow skill teaching the model the tool surface.

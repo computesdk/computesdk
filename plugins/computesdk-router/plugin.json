@@ -13,6 +13,7 @@
   "keywords": ["sandbox", "code-execution", "compute", "market"],
   "extensions": {
     "com.openai": {
+      "apps": "./.app.json",
       "interface": {
         "displayName": "ComputeSDK Router",
         "shortDescription": "Run code in cloud sandboxes",
