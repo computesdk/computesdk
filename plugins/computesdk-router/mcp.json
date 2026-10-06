@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "computesdk": { "type": "streamable-http", "url": "https://platform.computesdk.com/mcp" }
+  }
+}
