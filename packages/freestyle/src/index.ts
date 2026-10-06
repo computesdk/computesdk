@@ -58,6 +58,13 @@ export interface FreestyleConfig {
 }
 
 const DEFAULT_TIMEOUT_MS = 300_000;
+/**
+ * The Freestyle exec API rejects `timeoutMs` above five minutes
+ * (documented range 1–300000). Callers that carry a longer deadline — a job
+ * timeout, say — must get the cap, not a refused call, so every timeout the
+ * adapter sends is clamped here.
+ */
+const MAX_EXEC_TIMEOUT_MS = 300_000;
 const DEFAULT_IDLE_TIMEOUT_SECS = 300;
 /** Ephemeral VMs are deleted when they stop; `-1` keeps them. */
 const AUTO_DELETE_EPHEMERAL = 0;
@@ -367,7 +374,10 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
             command: buildCommand(command, options),
             linuxUser: RUNTIME_USER,
             env: options?.env,
-            timeoutMs: options?.timeout ?? DEFAULT_TIMEOUT_MS,
+            timeoutMs: Math.min(
+              options?.timeout ?? DEFAULT_TIMEOUT_MS,
+              MAX_EXEC_TIMEOUT_MS,
+            ),
           });
           return {
             stdout: result.stdout ?? '',
