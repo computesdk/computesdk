@@ -122,8 +122,8 @@ async function main(): Promise<void> {
     console.log(pc.bold('╠════════════════════════════════════════╣'));
     console.log(pc.bold('║                                        ║'));
     console.log(pc.bold('║  Quick start:                          ║'));
-    console.log(pc.bold('║    compute owner/repo                  ║'));
-    console.log(pc.bold('║    compute workspace                   ║'));
+    console.log(pc.bold('║    compute login                       ║'));
+    console.log(pc.bold('║    compute bench                       ║'));
     console.log(pc.bold('║    compute --help                      ║'));
     console.log(pc.bold('║                                        ║'));
     console.log(pc.bold('╚════════════════════════════════════════╝'));
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   // Pass through any arguments to the compute CLI
   const args = process.argv.slice(2);
   
-  // If no args provided, run compute interactively (which shows workspace picker)
+  // If no args provided, run compute interactively (which shows its help)
   if (args.length === 0) {
     p.log.info('Starting interactive mode...');
   }

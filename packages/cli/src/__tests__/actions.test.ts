@@ -816,15 +816,14 @@ describe('resolveActionsAuth', () => {
     expect(err).toBeInstanceOf(ActionsCliError);
     expect(err.code).toBe('no_credentials');
     expect(err.message).toContain('Your session has expired.');
-    expect(err.message).toContain('compute bench auth login');
-    expect(err.message).not.toContain('compute login');
+    expect(err.message).toContain('compute login');
 
     const nothingStored = async () => {
       throw new Error('No credentials found. Set BENCHMARKS_PLATFORM_API_KEY ... run `bench auth login`.');
     };
     const none = await failCode({}, nothingStored);
     expect(none.code).toBe('no_credentials');
-    expect(none.message).toBe('No API key. Set COMPUTE_API_KEY, pass --api-key, or run `compute bench auth login`.');
+    expect(none.message).toBe('No API key. Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.');
   });
 
   it('accepts the legacy BENCHMARKS_PLATFORM_* env vars as fallback', async () => {
@@ -855,7 +854,7 @@ describe('resolveActionsAuth', () => {
     const err = await failCode({});
     expect(err).toBeInstanceOf(ActionsCliError);
     expect(err.code).toBe('no_credentials');
-    expect(err.message).toContain('compute bench auth login');
+    expect(err.message).toContain('compute login');
   });
 
   it('requires https for any non-loopback host, trusted or not', async () => {

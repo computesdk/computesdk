@@ -736,14 +736,14 @@ export type StoredPlatformAuth = { apiKey?: string; token?: string };
 export type StoredPlatformAuthResolver = (opts: { baseUrl: string }) => Promise<StoredPlatformAuth>;
 
 const NO_CREDENTIALS_HINT =
-  'Set COMPUTE_API_KEY, pass --api-key, or run `compute bench auth login`.';
+  'Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.';
 
 /**
  * Precedence: `--api-key` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
- * (legacy) > platform OAuth credentials stored by `compute bench auth login`
+ * (legacy) > platform OAuth credentials stored by `compute login`
  * (`~/.benchsdk/credentials.json`, via `@benchsdk/cli`'s `resolveAuth`, which
- * refreshes an expired access token but never opens a browser). The gateway
- * key written by `compute login` is a different credential and is not used.
+ * refreshes an expired access token but never opens a browser). `compute
+ * login` writes the same store, so a platform login covers these commands.
  */
 export async function resolveActionsAuth(
   opts: {
