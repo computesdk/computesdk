@@ -51,7 +51,12 @@ program
 // once in ~/.benchsdk/credentials.json.
 async function runLogin(options?: { baseUrl?: string }): Promise<void> {
   const { oauthLogin } = await import('@benchsdk/cli');
-  await oauthLogin({ baseUrl: options?.baseUrl });
+  await oauthLogin({
+    baseUrl:
+      options?.baseUrl ??
+      process.env.COMPUTE_PLATFORM_URL ??
+      process.env.BENCHMARKS_PLATFORM_URL,
+  });
 }
 
 async function runLogout(): Promise<void> {
