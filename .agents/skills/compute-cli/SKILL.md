@@ -17,7 +17,7 @@ npm i -g @computesdk/cli                # or install once
 
 ## Command groups
 
-- `compute run <image> --provider <p>` / `compute providers` — ComputeSDK gateway sandbox runs. Auth: `COMPUTESDK_API_KEY` (Devin org secret, provisioned). Providers take their own creds (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`).
+- `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only. (The gateway `compute run` command and `COMPUTESDK_API_KEY` were removed in @computesdk/cli 2.0.)
 - `compute actions <sub>` — benchmarks-platform Actions API (dispatch/runs/run/logs/cancel/rerun/artifacts/vault). See the actions section below.
 - `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
 
