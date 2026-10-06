@@ -232,6 +232,66 @@ export interface VercelSandboxResources {
 }
 
 /**
+ * Egress routing options for sandbox creation.
+ *
+ * When set, the provider writes a self-contained forward-proxy shim into the
+ * sandbox and starts it via `startProcess`. The shim terminates TLS for
+ * `credentialedHosts` using a root CA it generates inside the sandbox, relays
+ * those decrypted requests to `injectorUrl` (which attaches real credentials
+ * off-box), and CONNECT-tunnels or denies everything else depending on
+ * `mode`. The shim never holds a credential value — only host rules, the
+ * injector URL, and the injector token.
+ *
+ * After creation, `sandbox.egress` carries `{ proxyUrl, caCertPath }` so the
+ * caller can export proxy/CA env vars (`HTTPS_PROXY`, `ALL_PROXY`,
+ * `GIT_SSL_CAINFO`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`,
+ * `SSL_CERT_FILE`) into job containers. See `sandboxEgressEnvVars`.
+ */
+export interface SandboxEgressOptions {
+  /** Endpoint the shim relays credentialed requests to. */
+  injectorUrl: string;
+  /** Token the shim presents to the injector. Not a credential. */
+  injectorToken?: string;
+  /**
+   * Hostnames whose TLS the shim terminates and relays. Exact hostnames or
+   * `"*.suffix.com"` wildcards (a wildcard also covers the bare suffix).
+   */
+  credentialedHosts: string[];
+  /**
+   * `'passthrough'` (default): non-credentialed hosts are CONNECT-tunneled
+   * directly upstream. `'allowlist'`: non-credentialed requests get a 403.
+   */
+  mode?: 'passthrough' | 'allowlist';
+  /**
+   * Loopback port the shim binds inside the sandbox. `0` (default) picks an
+   * ephemeral port; the bound port is reported on `sandbox.egress.port`.
+   */
+  port?: number;
+}
+
+/**
+ * Egress router state attached to a sandbox created with `egress`.
+ */
+export interface SandboxEgressInfo {
+  /** Loopback proxy URL to export as `HTTPS_PROXY`/`ALL_PROXY` (e.g. `http://127.0.0.1:43111`). */
+  proxyUrl: string;
+  /** Absolute path of the shim's generated root CA certificate (PEM). */
+  caCertPath: string;
+  /**
+   * Absolute path of a bundle containing the shim's CA prepended to the
+   * sandbox's public trust store — point CA env vars that REPLACE the
+   * default bundle at this so passthrough traffic still verifies.
+   */
+  caBundlePath?: string;
+  /** Bound port of the shim's loopback listener. */
+  port: number;
+  /** PID of the router process inside the sandbox (for liveness checks). */
+  pid?: number;
+  /** Daemon job ID of the running router process (`ProcessHandle.jobId`). */
+  processJobId: string;
+}
+
+/**
  * Options for creating a sandbox.
  *
  * Extends {@link SandboxResourceOptions} with the core lifecycle fields
@@ -282,6 +342,17 @@ export interface CreateSandboxOptions extends SandboxResourceOptions {
   runtime?: string;
   /** Container/VM image to boot from, overriding the provider default. */
   image?: string;
+  /**
+   * Egress routing: run the on-box router shim so credentialed hosts are
+   * MITM'd and relayed to an off-box credential injector. See
+   * {@link SandboxEgressOptions}. Providers that cannot host the shim throw
+   * an `egress:`-prefixed error instead of silently ignoring the option.
+   *
+   * The `string`/`string[]` forms are reserved for providers that used this
+   * option name before the router existed (givemeanode's `'open' | 'none'`,
+   * createos-sandbox's network allow-list); they do not activate the router.
+   */
+  egress?: SandboxEgressOptions | string | string[];
   // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
 }
@@ -334,4 +405,10 @@ export interface Sandbox {
   
   /** File system operations */
   readonly filesystem: SandboxFileSystem;
+
+  /**
+   * Egress router details, set when the sandbox was created with
+   * `CreateSandboxOptions.egress`. Undefined otherwise.
+   */
+  readonly egress?: SandboxEgressInfo;
 }

@@ -22,6 +22,9 @@ export type {
   DaemonConfig
 } from './infra-factory';
 
+// Export egress router setup
+export { setupSandboxEgress, readSandboxEgress, EGRESS_SHIM_DIR } from './egress';
+
 // Export direct mode compute API
 export { createCompute } from './compute';
 export type { CreateComputeConfig, ComputeAPI } from './compute';
