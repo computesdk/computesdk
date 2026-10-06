@@ -16,7 +16,7 @@ authenticated with an org API key:
 ```typescript
 const BASE = 'https://platform.computesdk.com/api/v1';
 const headers = {
-  authorization: `Bearer ${process.env.COMPUTESDK_API_KEY}`,
+  authorization: `Bearer ${process.env.COMPUTE_API_KEY}`,
   'content-type': 'application/json',
 };
 const api = (path: string, init?: RequestInit) =>
@@ -74,7 +74,8 @@ Other providers swap in the same way (`@computesdk/modal`,
 
 ## Rules for generated code
 
-- Read keys from the environment (`COMPUTESDK_API_KEY`, provider env vars) —
+- Read keys from the environment (`COMPUTE_API_KEY` — the same env var the
+  `compute` CLI uses — provider env vars) —
   never write a key, token, or secret into generated source.
 - Always destroy sandboxes — `DELETE /sandboxes/{id}` or `sandbox.destroy()`,
   in try/finally for real programs.
