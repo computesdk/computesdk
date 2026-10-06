@@ -554,8 +554,8 @@ importers:
   packages/cli:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.7.0
-        version: 0.7.0
+        specifier: ^0.7.1
+        version: 0.7.1
       '@benchsdk/runner':
         specifier: ^0.6.0
         version: 0.6.0
@@ -3072,6 +3072,10 @@ packages:
 
   '@benchsdk/cli@0.7.0':
     resolution: {integrity: sha512-UT26riKOPo33wG/B15Gghzzc2+SpE/RHaD+sTOOyP7Pig3Gqb6qk/iZXUGwih5ZoioggHamALqcVb67xV2msrQ==}
+    engines: {node: '>=18.0.0'}
+
+  '@benchsdk/cli@0.7.1':
+    resolution: {integrity: sha512-XHEPoVcKNQndsZw3uuA+3Vrm/3bUtTHzyiDUrak65U6nW0w7ULw/vP/aBma8BU+yUtWQvc9MXcr8jETpEehStA==}
     engines: {node: '>=18.0.0'}
 
   '@benchsdk/runner@0.6.0':
@@ -10068,6 +10072,10 @@ snapshots:
   '@benchsdk/api@0.7.1': {}
 
   '@benchsdk/cli@0.7.0':
+    dependencies:
+      '@benchsdk/api': 0.7.1
+
+  '@benchsdk/cli@0.7.1':
     dependencies:
       '@benchsdk/api': 0.7.1
 
