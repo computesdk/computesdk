@@ -79,17 +79,10 @@ export interface ProviderStatus {
 
 /**
  * Detect all available providers from environment variables
- * Only includes providers supported by the ComputeSDK gateway
  */
 export function detectAvailableProviders(): string[] {
   const available: string[] = [];
 
-  // Check for computesdk first (ComputeSDK native - just needs gateway key)
-  if (process.env.COMPUTESDK_API_KEY) {
-    available.push('computesdk');
-  }
-
-  // Then check for individual cloud providers (need their own creds)
   for (const provider of PROVIDER_NAMES) {
     if (isProviderAuthComplete(provider)) {
       available.push(provider);
@@ -101,20 +94,10 @@ export function detectAvailableProviders(): string[] {
 
 /**
  * Get status of all providers
- * Only includes providers supported by the ComputeSDK gateway
  */
 export function getProviderStatus(): ProviderStatus[] {
   const statuses: ProviderStatus[] = [];
 
-  // Add computesdk status (ComputeSDK native)
-  const hasGatewayKey = !!process.env.COMPUTESDK_API_KEY;
-  statuses.push({
-    name: 'computesdk',
-    ready: hasGatewayKey,
-    missing: hasGatewayKey ? [] : ['COMPUTESDK_API_KEY'],
-  });
-
-  // Add individual cloud providers (need their own creds)
   for (const provider of PROVIDER_NAMES) {
     statuses.push({
       name: provider,
@@ -124,44 +107,4 @@ export function getProviderStatus(): ProviderStatus[] {
   }
 
   return statuses;
-}
-
-/**
- * Check if gateway mode is available
- */
-export function isGatewayAvailable(): boolean {
-  return !!process.env.COMPUTESDK_API_KEY;
-}
-
-/**
- * Build the full compute config for a provider from env vars
- */
-export function buildProviderConfig(provider: string): Record<string, unknown> {
-  const config: Record<string, unknown> = {
-    provider,
-    apiKey: process.env.COMPUTESDK_API_KEY,  // Gateway API key (top-level)
-  };
-
-  // For 'computesdk' provider, nest the API key under the provider config too
-  if (provider === 'computesdk') {
-    config.computesdk = {
-      computesdk_api_key: process.env.COMPUTESDK_API_KEY,
-    };
-    return config;
-  }
-
-  // Add provider-specific config from env vars
-  const spec = PROVIDER_ENV[provider];
-  if (spec) {
-    const providerConfig: Record<string, string> = {};
-    for (const [envVar, key] of Object.entries(spec.configKeys)) {
-      const value = process.env[envVar];
-      if (value) providerConfig[key] = value;
-    }
-    if (Object.keys(providerConfig).length > 0) {
-      config[provider] = providerConfig;
-    }
-  }
-
-  return config;
 }
