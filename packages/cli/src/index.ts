@@ -63,7 +63,7 @@ async function printSessionLine(): Promise<void> {
     const who = me.user.email ?? me.user.name ?? me.user.id;
     if (active) {
       p.log.success(
-        `Logged in as ${who} — active org: ${active.slug} (change with \`compute org use <slug>\`)`,
+        `Logged in as ${who} — active org: ${active.slug}. Change with \`compute org use <slug>\`.`,
       );
     } else {
       p.log.success(`Logged in as ${who} — no active org`);
