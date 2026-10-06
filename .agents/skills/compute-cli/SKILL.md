@@ -1,11 +1,11 @@
 ---
 name: compute-cli
-description: Reference for the `compute` CLI published from this repo as @computesdk/cli — command groups (run/providers, actions, bench), provisioned secrets, gotchas, and how to test changes end-to-end.
+description: Reference for the `compute` CLI published from this repo as @computesdk/cli — command groups (sandboxes, actions, market, providers, bench), one shared login, and how to test changes end-to-end. Full user-facing guides live in computesdk/sandbox-skills (`compute-sandboxes-cli`, `compute-actions-cli`); keep them in sync when the CLI surface changes.
 ---
 
 # compute CLI (`@computesdk/cli`, bin: `compute`)
 
-Published on npm from `packages/cli/` in this repo. Any `compute` binary = this package.
+Published on npm from `packages/cli/` in this repo. Any `compute` binary = this package. Requires 2.x — if `compute --version` shows 1.0.x, an old standalone binary (`~/.local/bin/compute`) is shadowing the npm install; remove it.
 
 ## Run it
 
@@ -17,33 +17,52 @@ npm i -g @computesdk/cli                # or install once
 
 ## Command groups
 
-- `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only. (The gateway `compute run` command and `COMPUTESDK_API_KEY` were removed in @computesdk/cli 2.0.)
-- `compute actions <sub>` — benchmarks-platform Actions API (dispatch/runs/run/logs/cancel/rerun/artifacts/vault). See the actions section below.
-- `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
+- `compute login` / `compute logout` — OAuth device flow; one stored session covers every group below (`sandboxes`, `actions`, `market`, `bench`).
+- `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only.
+- `compute sandboxes|sbx <sub>` — hosted platform sandboxes over `/api/v1/sandboxes` (create/list/get/destroy, exec, spawn/ps/logs/wait/kill/stdin/close-stdin, ls/cat/write/mkdir/rm, url, snapshots/snapshot/snapshot-delete).
+- `compute actions|ci <sub>` — benchmarks-platform Actions API (dispatch/runs/history/run/summary/inspect/logs/cancel/rerun/artifacts, providers, repos, vault).
+- `compute market <sub>` — sell side of the compute market (asks/bids/fills, provider credential, settlements).
+- `compute bench <args>` — full bench CLI folded in; dispatched pre-commander to `@benchsdk/runner`'s `run()`.
 
-`--json` machine-readable output is available throughout the actions/bench surface.
+`--json` machine-readable output is available throughout the actions/sandboxes/market surface. Full command references: `compute-sandboxes-cli` and `compute-actions-cli` skills in https://github.com/computesdk/sandbox-skills.
 
-## Actions API quick reference
+## Auth
+
+Resolution order: `--api-key` → `COMPUTE_API_KEY` → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → the stored `compute login` session. `--base-url` or `COMPUTE_PLATFORM_URL`/`BENCHMARKS_PLATFORM_URL` selects the endpoint (default `https://platform.computesdk.com`). The bearer key is only sent to computesdk.com/localhost, and only over HTTPS (plain http for loopback only), unless `--allow-untrusted-host` — which applies to explicit keys only; stored `compute login` credentials are never sent to untrusted hosts (`untrusted_host_stored_auth`). `insufficient_scope`/401 → run `compute login` again.
+
+## Actions quick reference
 
 ```
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...] [--manual]
 compute actions runs <repo> [--status ...] [--branch ...]
 compute actions history <repo> --workflow <path|name> [--branch ...] [--job] [--limit n]
-compute actions run <run-id>
-compute actions inspect <run-id>
+compute actions run|summary|inspect <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
 compute actions cancel|rerun <run-id>
 compute actions artifacts <run-id> [--job] [--out <dir>]
+compute actions providers [configure|verify|remove <provider>]
+compute actions repos [connect <cloneUrl>|enable|disable <owner/repo>]
 compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|variable]
 ```
 
-- Auth envs (Devin org secrets already exist): `COMPUTE_API_KEY` (primary) with `BENCHMARKS_PLATFORM_API_KEY` as legacy fallback — both work; `COMPUTE_PLATFORM_URL`/`BENCHMARKS_PLATFORM_URL` or `--base-url` for the endpoint (default `https://platform.computesdk.com`).
-- Bearer key only sent to computesdk.com/localhost unless `--allow-untrusted-host`, and only over HTTPS (plain http only for loopback). With no key, Actions falls back to stored platform OAuth from `compute bench auth login` (`~/.benchsdk`), not the gateway `compute login` key — and only for computesdk.com/localhost hosts.
 - `--workflow` matches full path, display name, or workflow id — NOT basename.
 - `vault set NAME` reads the value from stdin (`printf %s "$V" |`, not `echo`) or `--from-file`, never argv; `--revealable` (secrets, fixed at creation) allows `vault get`. Needs an owner/admin key; API is `/api/v1/vault` in benchmarks-platform.
 - `logs --follow` uses resumable byte-offset cursors; reconnects resume from `nextOffset`.
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
 - Run dashboard URLs: `{base}/{orgSlug}/actions/runs/{runId}`.
+
+## Sandboxes quick reference
+
+```
+compute sandboxes create [--order market,blaxel,vercel] [--label] [--image]
+    [--snapshot-id] [--cpus] [--memory-mb] [--disk-mb] [--timeout-ms] [--secret <name>...]
+compute sandboxes list|get|destroy
+compute sandboxes exec <id> <command...>          # one-off, buffered (~290s max)
+compute sandboxes spawn|ps|logs|wait|kill|stdin|close-stdin   # detached processes
+compute sandboxes ls|cat|write|mkdir|rm <id> [path]
+compute sandboxes url <id> --port <n>
+compute sandboxes snapshots|snapshot|snapshot-delete
+```
 
 ## Testing against a PR preview deployment
 
@@ -55,7 +74,7 @@ compute actions dispatch computesdk/ci-test --workflow Smoke --ref main \
   --base-url "$PREV" --allow-untrusted-host
 ```
 
-- `--allow-untrusted-host` is required — the bearer key is only sent to computesdk.com/localhost otherwise. It only covers an explicit `--api-key`/`COMPUTE_API_KEY`; stored `bench auth login` credentials are refused for untrusted hosts (`untrusted_host_stored_auth`).
+- `--allow-untrusted-host` is required — the bearer key is only sent to computesdk.com/localhost otherwise. It only covers an explicit `--api-key`/`COMPUTE_API_KEY`; stored `compute login` credentials are refused for untrusted hosts (`untrusted_host_stored_auth`).
 - The preview has its own Neon branch DB, copied from production when the preview is built: runs dispatched at a preview don't show up in prod (`actions run <id>` returns 404 there). `actions vault set`/`get` refuse non-computesdk.com hosts even with `--allow-untrusted-host`, because a PR author controls the preview's code and could capture the value; test vault changes against localhost instead. Provider creds still resolve and jobs still land on real provider sandboxes.
 - `--provider <id>` on dispatch pins placement; a refusal is itself a useful signal (the job's `failureReason` says why).
 - Per-job logs: `GET /api/v1/actions/jobs/<jobId>/logs` (`compute actions logs` also works); job ids come from `compute actions run <run-id> --json`.
@@ -76,4 +95,4 @@ compute actions run <run-id>
 - vitest tests: `packages/cli/src/__tests__/actions.test.ts` (40 tests) — record-style API fixtures; run `pnpm vitest` in packages/cli.
 - Patch-only changesets: add a `.changeset/*.md` with `patch` bumps for touched packages.
 - `pnpm install` then `pnpm build` — build order matters (packages/cli builds its deps first).
-- Actions API counterpart: `app/api/v1/actions/**` in computesdk/benchmarks-platform.
+- Actions API counterpart: `app/api/v1/actions/**` in computesdk/benchmarks-platform; Sandboxes API counterpart: `app/api/v1/sandboxes/**`.
