@@ -284,7 +284,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.57)(@computesdk/modal@1.9.13)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.59)(@computesdk/modal@1.9.15)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -554,11 +554,11 @@ importers:
   packages/cli:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.7.0
+        version: 0.7.0
       '@benchsdk/runner':
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: ^0.6.0
+        version: 0.6.0
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
@@ -905,7 +905,7 @@ importers:
         version: link:../provider
       '@daytonaio/sdk':
         specifier: ^0.192.0
-        version: 0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+        version: 0.192.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -1709,7 +1709,7 @@ importers:
         version: link:../provider
       '@neevcloud/sdk':
         specifier: ^0.7.0-beta
-        version: 0.7.0-beta(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+        version: 0.7.0-beta(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3066,21 +3066,21 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@benchsdk/api@0.2.0':
-    resolution: {integrity: sha512-egHyhG3NET/XjqmfT7Pb2Oq77TYegP92jmbmu0cTX3MbHv6VA1bAH/mXOgPjU5naZj1G2CCng+qIPKZIEUrO2w==}
+  '@benchsdk/api@0.7.1':
+    resolution: {integrity: sha512-YqK5mX4QwWBVmkQgU83PSdoi+zMGhgr5A+aEBUD5kkTF0svWHHwKZSHpl36q4lFJUGvA3nCtjHUtvB/IrsaOtQ==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/cli@0.2.0':
-    resolution: {integrity: sha512-bLR2u7E6WEyUjM6hbMIpmp2xGo5Z38BNHJCTaHgT5bxQaR68Sp3ApTDFdamZfcD0hAkMF0iOOfbRgJePSSNRoQ==}
+  '@benchsdk/cli@0.7.0':
+    resolution: {integrity: sha512-UT26riKOPo33wG/B15Gghzzc2+SpE/RHaD+sTOOyP7Pig3Gqb6qk/iZXUGwih5ZoioggHamALqcVb67xV2msrQ==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/runner@0.3.0':
-    resolution: {integrity: sha512-OrglX8m+WKgcuJ0wEHyMK0poA4lIVNRw7k2YmHIS834S/IGSuYkm8GaKGDqpFjlOazbsCScXw9GkitbXn2qaeA==}
+  '@benchsdk/runner@0.6.0':
+    resolution: {integrity: sha512-oNBB6ZaZ2VNpF5FoXp1KmbrKIfWyCGlncjx/gbF6ZR0IlJONWZmk9L9jgX48ZU9ZL29Cf1fCMxZpwlap3eEhBg==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@benchsdk/worker@0.2.0':
-    resolution: {integrity: sha512-lPHh9su6Eohqwq2B/ABxqw8Q0gmq9cB2VTZqaHD5wwD8n00Ot2gw1IlO3mSAaMP9c0uF9VoQy27U6pfp2Z4I+Q==}
+  '@benchsdk/worker@0.3.2':
+    resolution: {integrity: sha512-gDSpxqnbHvWppuhdHFps3jb0Yn/dkkf0E+uPWs3RgwCggetbnr4m+QiGAd19qENxmTwhLQlYR1tM0MRGKc4Hpw==}
     engines: {node: '>=18.0.0'}
 
   '@blaxel/core@0.3.21':
@@ -3258,17 +3258,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.37':
-    resolution: {integrity: sha512-wfgbaAWEtaYtfoOitX72SmAsfIjg1bC6U87nfcjAigEbEVvBX1bw7FRgJEPdBqv/NphXJdqXi9x2AiOijZ7LQw==}
+  '@computesdk/daytona@1.7.39':
+    resolution: {integrity: sha512-chhxbklRNonXcOTvJE1qkozUBJQ46K7uM03+hOeWbF73eS1jQdJVi9EkoEw/ZvuF62RZMmPvxOWL7IfDnDkxEw==}
 
-  '@computesdk/e2b@1.7.57':
-    resolution: {integrity: sha512-kytzoJ+m9RVk1q4jx6s8qF0TEk2wJpjP0BhjxvSn2FtOjuhwxrImUyJxC/fRDtgJcm0DXNNg7dMCVZQ+mIsaUg==}
+  '@computesdk/e2b@1.7.59':
+    resolution: {integrity: sha512-eX0jq81QFPI9m3iO5fXwJ9dASyklnb1kGzWEnUoSOw8MIHN445KBmf1hs62F8AsagBCAUP5Jx93p20fTmkAy4g==}
 
-  '@computesdk/modal@1.9.13':
-    resolution: {integrity: sha512-WcSUEXG+aou9S3e2/CACSdHcxkwKql6GGB50Aaw1nSsduxDPnkkIz+9rMOvI2a8qKSsA6QsELWAtDlBq8VHCWA==}
+  '@computesdk/modal@1.9.15':
+    resolution: {integrity: sha512-ikwmTzsxsBwlDahyfFRQSPaVttLE9j1V3UaVwJ+FBwfzJuwLMgA6okKVEpPPIOhaLRDMPeo7zd15lvYnVRnWqg==}
 
-  '@computesdk/provider@2.1.9':
-    resolution: {integrity: sha512-Gw2V+LuxwUWwXGibcL7aG7ao1zv/xW88Ggt22Afna+62Br0yQmhDgpNQ+ans2UihcIBBAQjfgwMiE29pGNCB5Q==}
+  '@computesdk/provider@2.1.11':
+    resolution: {integrity: sha512-jgryilUaZ7TD8W37sXZzoiiiKr20PeykwWBkJxwMWL3m6nS88VWEfnMlUWyYVBwxAlgsMS1oog/fx/EZ9/xusA==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -6096,8 +6096,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.8:
-    resolution: {integrity: sha512-UhEPuh9EMsVuOFPKHrAllyACGm8UYKGsUklH8uFJ24mdLUT11PkU4NTCFmG0V1O8Oyhi8d2riaUoavTnGa8PSA==}
+  computesdk@4.1.10:
+    resolution: {integrity: sha512-I99mW+7BfB24ilVbCpTQ7pglda8sETuRsbedwGHDQx/DRTLLtDGHQVfME17gVPvBUCRttbEe/qjY5ZEHUn/eBA==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -6187,8 +6187,8 @@ packages:
     resolution: {integrity: sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg==}
     engines: {node: '>=18'}
 
-  daemond@0.1.6:
-    resolution: {integrity: sha512-vpYT4ToRHKRSIYmKG/ovUMNF6+7e1s3m/4eJ10AxmegIW7t0XcxSVzp3pYbz+X4rFeykyy02N7kFa6sHh1YZsA==}
+  daemond@0.1.8:
+    resolution: {integrity: sha512-hGk0lzT55g1vijr0Erfsb9m2cszofQnhmQFF88fv4xjJx9UKrGXIzrssad+D1iCk8TgRv4T50SapGQ+/9/T8Qg==}
     engines: {node: '>=18.0.0'}
     os: [linux, darwin]
 
@@ -9386,15 +9386,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.57)(@computesdk/modal@1.9.13)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.59)(@computesdk/modal@1.9.15)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@computesdk/e2b': 1.7.57
-      '@computesdk/modal': 1.9.13
+      '@computesdk/daytona': 1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@computesdk/e2b': 1.7.59
+      '@computesdk/modal': 1.9.15
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10065,21 +10065,21 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@benchsdk/api@0.2.0': {}
+  '@benchsdk/api@0.7.1': {}
 
-  '@benchsdk/cli@0.2.0':
+  '@benchsdk/cli@0.7.0':
     dependencies:
-      '@benchsdk/api': 0.2.0
+      '@benchsdk/api': 0.7.1
 
-  '@benchsdk/runner@0.3.0':
+  '@benchsdk/runner@0.6.0':
     dependencies:
-      '@benchsdk/api': 0.2.0
-      '@benchsdk/cli': 0.2.0
-      '@benchsdk/worker': 0.2.0
+      '@benchsdk/api': 0.7.1
+      '@benchsdk/cli': 0.7.0
+      '@benchsdk/worker': 0.3.2
 
-  '@benchsdk/worker@0.2.0':
+  '@benchsdk/worker@0.3.2':
     dependencies:
-      '@benchsdk/api': 0.2.0
+      '@benchsdk/api': 0.7.1
 
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
@@ -10368,11 +10368,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.37(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@computesdk/daytona@1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
-      '@computesdk/provider': 2.1.9
-      '@daytonaio/sdk': 0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      computesdk: 4.1.8
+      '@computesdk/provider': 2.1.11
+      '@daytonaio/sdk': 0.192.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      computesdk: 4.1.10
     transitivePeerDependencies:
       - aws-crt
       - debug
@@ -10380,25 +10380,25 @@ snapshots:
       - ws
     optional: true
 
-  '@computesdk/e2b@1.7.57':
+  '@computesdk/e2b@1.7.59':
     dependencies:
-      '@computesdk/provider': 2.1.9
-      computesdk: 4.1.8
+      '@computesdk/provider': 2.1.11
+      computesdk: 4.1.10
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.13':
+  '@computesdk/modal@1.9.15':
     dependencies:
-      '@computesdk/provider': 2.1.9
-      computesdk: 4.1.8
+      '@computesdk/provider': 2.1.11
+      computesdk: 4.1.10
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.9':
+  '@computesdk/provider@2.1.11':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.8
-      daemond: 0.1.6
+      computesdk: 4.1.10
+      daemond: 0.1.8
     optional: true
 
   '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
@@ -10486,7 +10486,7 @@ snapshots:
       - debug
       - supports-color
 
-  '@daytonaio/sdk@0.192.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@daytonaio/sdk@0.192.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
       '@aws-sdk/client-s3': 3.1045.0
       '@aws-sdk/lib-storage': 3.1045.0(@aws-sdk/client-s3@3.1045.0)
@@ -10507,7 +10507,7 @@ snapshots:
       expand-tilde: 2.0.2
       fast-glob: 3.3.3
       form-data: 4.0.5
-      isomorphic-ws: 5.0.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      isomorphic-ws: 5.0.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       pathe: 2.0.3
       shell-quote: 1.8.3
       tar: 7.5.16
@@ -11223,11 +11223,11 @@ snapshots:
       prebuild-install: 7.1.3
     optional: true
 
-  '@neevcloud/sdk@0.7.0-beta(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@neevcloud/sdk@0.7.0-beta(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
       openapi-fetch: 0.17.0
     optionalDependencies:
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   '@nodable/entities@2.1.0': {}
 
@@ -13510,10 +13510,10 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.8:
+  computesdk@4.1.10:
     dependencies:
       '@computesdk/cmd': 0.4.1
-      daemond: 0.1.6
+      daemond: 0.1.8
     optional: true
 
   concat-map@0.0.1: {}
@@ -13617,7 +13617,7 @@ snapshots:
       rrweb-cssom: 0.8.0
     optional: true
 
-  daemond@0.1.6:
+  daemond@0.1.8:
     optional: true
 
   data-urls@5.0.0:
@@ -14638,7 +14638,7 @@ snapshots:
       type-fest: 4.41.0
       widest-line: 5.0.0
       wrap-ansi: 9.0.0
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yoga-layout: 3.2.1
     transitivePeerDependencies:
       - bufferutil
@@ -14757,9 +14757,9 @@ snapshots:
     dependencies:
       ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  isomorphic-ws@5.0.0(ws@8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
+  isomorphic-ws@5.0.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
     dependencies:
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3):
     dependencies:
@@ -14844,7 +14844,7 @@ snapshots:
       whatwg-encoding: 3.1.1
       whatwg-mimetype: 4.0.0
       whatwg-url: 14.2.0
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - bufferutil
