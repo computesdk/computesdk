@@ -75,7 +75,7 @@ function makeMethods(state: FakeState) {
         }
         return {
           readFile: vi.fn(async (_s: unknown, path: string) => {
-            if (path.startsWith('/proc/')) return 'node\0'
+            if (path.startsWith('/proc/')) return 'node\0/tmp/computesdk-egress/abc/egress-shim.js\0'
             const content = fsState.written.get(path)
             if (content === undefined) throw new Error('ENOENT')
             return content
@@ -275,6 +275,31 @@ describe('egress router setup', () => {
     const filesystem = methods.filesystem!
     filesystem.readFile.mockImplementation(async (_s: unknown, path: string) => {
       if (path.startsWith('/proc/')) throw new Error('ENOENT')
+      const content = state.filesystem.written.get(path)
+      if (content === undefined) throw new Error('ENOENT')
+      return content
+    })
+    const sandbox = await provider.sandbox.getById('test-egress')
+    expect(sandbox?.egress).toBeUndefined()
+  })
+
+  it('rejects pointers whose pid was reused by an unrelated process', async () => {
+    const state = { job: freshJob(), filesystem: { written: new Map<string, string>() } }
+    const { methods, provider } = makeSandbox(state)
+    methods.getById.mockResolvedValue({ sandbox: { id: 'test-egress' }, sandboxId: 'test-egress' })
+    state.filesystem.written.set(
+      `${EGRESS_SHIM_DIR}/current.json`,
+      JSON.stringify({
+        proxyUrl: 'http://127.0.0.1:43111',
+        caCertPath: '/tmp/computesdk-egress/abc/ca.pem',
+        port: 43111,
+        pid: 4321,
+        processJobId: 'job-egress',
+      })
+    )
+    const filesystem = methods.filesystem!
+    filesystem.readFile.mockImplementation(async (_s: unknown, path: string) => {
+      if (path.startsWith('/proc/')) return 'sleep\x001000\x00' // pid recycled
       const content = state.filesystem.written.get(path)
       if (content === undefined) throw new Error('ENOENT')
       return content

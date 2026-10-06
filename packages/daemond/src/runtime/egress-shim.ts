@@ -253,6 +253,18 @@ class SocketReader {
       await this.wait();
     }
   }
+
+  /** Drain whatever is buffered, or wait for more; null at EOF. */
+  async readChunk(): Promise<Buffer | null> {
+    for (;;) {
+      if (this.buffered.length) return this.takeBuffered();
+      if (this.ended) {
+        if (this.failed) throw this.failed;
+        return null;
+      }
+      await this.wait();
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -688,130 +700,171 @@ function serializeRequest(head: HttpRequestHead, body: Buffer): Buffer {
   return Buffer.concat([Buffer.from(headText, "latin1"), body]);
 }
 
-/**
- * Serializes a request head for a RAW byte-forward: unlike serializeRequest
- * the body is passed through untouched downstream, so `Transfer-Encoding`/
- * `Content-Length` stay exactly as the client sent them. Still drops
- * hop-by-hop headers and forces `connection: close` so the response FIN
- * propagates and the next request gets fresh host routing.
- */
-const RAW_HEAD_DROP_HEADERS = new Set([
-  "connection", "proxy-connection", "keep-alive", "upgrade",
-  "proxy-authorization", "proxy-authenticate",
-]);
+/** Hop-by-hop headers stripped from a forwarded upstream response head. */
+const RESPONSE_DROP_HEADERS = new Set(["connection", "proxy-connection", "keep-alive"]);
 
-function serializeRawHead(head: HttpRequestHead): Buffer {
-  let target = head.target;
-  if (/^https?:\/\//i.test(target)) {
-    try {
-      const u = new URL(target);
-      target = u.pathname + u.search || "/";
-    } catch {
-      /* leave target as-is */
-    }
+function parseResponseHead(raw: Buffer): {
+  statusLine: string;
+  status: number;
+  headers: Array<[string, string]>;
+} {
+  const lines = raw.toString("latin1").split("\r\n");
+  const statusLine = lines[0];
+  const match = /^HTTP\/\S+\s+(\d{3})\b/i.exec(statusLine);
+  if (!match) throw new HttpError(502, "malformed upstream status line");
+  const headers: Array<[string, string]> = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
+    const colon = line.indexOf(":");
+    if (colon <= 0) throw new HttpError(502, "malformed upstream header line");
+    headers.push([line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()]);
   }
-  const outHeaders = head.headers.filter(([k]) => !RAW_HEAD_DROP_HEADERS.has(k.toLowerCase()));
-  outHeaders.push(["connection", "close"]);
-  const headText =
-    `${head.method} ${target} HTTP/1.1\r\n` +
-    outHeaders.map(([k, v]) => `${k}: ${v}`).join("\r\n") +
-    "\r\n\r\n";
-  return Buffer.from(headText, "latin1");
+  return { statusLine, status: parseInt(match[1], 10), headers };
+}
+
+/** Connect to an upstream, TLS-wrapping when `useTls` (public-CA verified). */
+function connectUpstream(host: string, port: number, useTls: boolean): Promise<SocketLike> {
+  return new Promise((resolve, reject) => {
+    const raw = net.connect({ host, port });
+    raw.setTimeout(CONNECT_UPSTREAM_TIMEOUT_MS);
+    const sock: SocketLike = useTls ? tls.connect({ socket: raw, servername: host }) : raw;
+    const fail = (error: HttpError): void => {
+      sock.destroy();
+      reject(error);
+    };
+    const onError = (err: Error): void =>
+      fail(new HttpError(502, `upstream ${host}:${port} failed: ${err.message}`));
+    raw.once("timeout", () => fail(new HttpError(504, `upstream ${host}:${port} timed out`)));
+    sock.once("error", onError);
+    if (useTls) raw.once("error", () => { /* reported on the TLS socket */ });
+    const begin = (): void => {
+      raw.setTimeout(0);
+      sock.removeListener("error", onError);
+      resolve(sock);
+    };
+    if (useTls) sock.once("secureConnect", begin);
+    else raw.once("connect", begin);
+  });
+}
+
+/** Copy exactly `count` bytes from `reader` to `socket` in bounded chunks. */
+async function pumpBytes(reader: SocketReader, socket: SocketLike, count: number): Promise<void> {
+  let remaining = count;
+  while (remaining > 0) {
+    const piece = await reader.readBytes(Math.min(remaining, 64 * 1024));
+    if (piece === null) throw new HttpError(502, "unexpected EOF in upstream body");
+    socket.write(piece);
+    remaining -= piece.length;
+  }
+}
+
+/** Forward a chunked upstream body verbatim through the terminal chunk + trailers. */
+async function pumpChunked(reader: SocketReader, socket: SocketLike): Promise<void> {
+  for (;;) {
+    const sizeLine = await reader.readLine();
+    if (sizeLine === null) throw new HttpError(502, "unexpected EOF in upstream chunked body");
+    socket.write(sizeLine);
+    const size = parseInt(sizeLine.toString("latin1").split(";")[0].trim(), 16);
+    if (!Number.isFinite(size) || size < 0) throw new HttpError(502, "invalid upstream chunk size");
+    if (size === 0) {
+      for (;;) {
+        const line = await reader.readLine();
+        if (line === null) break;
+        socket.write(line);
+        if (line.toString("latin1").trim() === "") break;
+      }
+      return;
+    }
+    await pumpBytes(reader, socket, size + 2);
+  }
 }
 
 /**
- * Splices `client` onto a fresh upstream connection: writes `initial`
- * (rewritten request head, buffered body bytes) first, then pipes both
- * directions. When `useTls`, the upstream is TLS-wrapped (public-CA
- * verified) for `https://` absolute-URI and mid-connection upgrades.
+ * Forwards one parsed request over a fresh upstream connection and streams
+ * the response back. The client connection stays in parsed-request mode,
+ * so the next request — whether keep-alive or pipelined — is routed by its
+ * own Host instead of being pinned to the first upstream. `connection:
+ * close` goes upstream only to delimit the response; the client-visible
+ * Connection header follows the client's own request (unless the body is
+ * close-delimited, where our own FIN must delimit it).
  *
- * Client->upstream bytes are captured by a data listener attached
- * immediately — before the upstream exists — so bytes arriving while the
- * connection/TLS handshake is in flight are queued in `pending`, never
- * dropped. Resolves once the splice is established or has failed; on
- * pre-splice failure an error response is flushed to the client before it
- * is destroyed.
+ * Returns "spliced" when the exchange switched protocols (101 or CONNECT)
+ * and both sockets are now raw-piped — the caller stops serving and must
+ * not close the client; "close" when the client connection must end after
+ * this response; "done" to keep serving.
  */
-function spliceToUpstream(
-  client: SocketLike,
+async function forwardPassthroughRequest(
+  socket: SocketLike,
+  reader: SocketReader,
+  head: HttpRequestHead,
+  body: Buffer,
   host: string,
   port: number,
   useTls: boolean,
-  initial: Buffer[]
-): Promise<void> {
-  return new Promise((resolve) => {
-    let established = false;
-    let upstream: SocketLike;
-    const pending: Buffer[] = [...initial];
-    let clientEnded = false;
-    const flush = (): void => {
-      if (!established) return;
-      while (pending.length) upstream.write(pending.shift()!);
-      if (clientEnded) upstream.end();
-    };
-    // Attached synchronously: anything the client sends from now on is
-    // either forwarded or queued for when the upstream comes up.
-    const onData = (chunk: Buffer): void => {
-      if (established) upstream.write(chunk);
-      else pending.push(chunk);
-    };
-    const onEnd = (): void => {
-      clientEnded = true;
-      if (established) upstream.end();
-    };
-    const onGone = (): void => {
-      upstream?.destroy();
-    };
-    client.on("data", onData);
-    client.once("end", onEnd);
-    client.once("close", onGone);
-    client.once("error", onGone);
-
-    const raw = net.connect({ host, port });
-    raw.setTimeout(CONNECT_UPSTREAM_TIMEOUT_MS);
-
-    upstream = useTls
-      ? tls.connect({ socket: raw, servername: host })
-      : raw;
-    if (useTls) raw.on("error", () => { /* surfaced on the TLS socket */ });
-
-    const fail = (status: number, message: string): void => {
-      client.removeListener("data", onData);
-      client.removeListener("end", onEnd);
-      upstream.destroy();
-      if (established) {
-        client.destroy();
-        resolve();
-        return;
-      }
-      // Destroy only after the error response has actually flushed, or the
-      // client gets a reset instead of the status line.
-      const body = Buffer.from(message, "utf8");
-      const payload = Buffer.from(
-        `HTTP/1.1 ${status} ${http.STATUS_CODES[status] ?? "Error"}\r\n` +
-          `Content-Length: ${body.length}\r\nConnection: close\r\n\r\n`,
-        "utf8"
-      );
-      client.write(payload);
-      client.write(body, () => client.destroy());
-      client.once("error", () => client.destroy());
-      resolve();
-    };
-    raw.once("timeout", () => fail(504, `egress router: upstream ${host}:${port} timed out`));
-    upstream.once("error", (err) =>
-      fail(502, `egress router: upstream ${host}:${port} failed: ${err.message}`)
+  clientClose: boolean
+): Promise<"done" | "close" | "spliced"> {
+  const upstream = await connectUpstream(host, port, useTls);
+  const ureader = new SocketReader(upstream);
+  try {
+    upstream.write(serializeRequest(head, body));
+    // Skip interim 1xx heads (103 Early Hints etc.); 101 switches protocols.
+    let res: ReturnType<typeof parseResponseHead>;
+    for (;;) {
+      const raw = await ureader.readUntil(HEAD_END, MAX_HEAD_BYTES);
+      if (raw === null) throw new HttpError(502, `upstream ${host}:${port} closed without a response`);
+      res = parseResponseHead(raw);
+      if (res.status !== 101 && res.status >= 100 && res.status < 200) continue;
+      break;
+    }
+    const resHeaders = res.headers.filter(([k]) => !RESPONSE_DROP_HEADERS.has(k));
+    const chunked = /chunked/i.test(headerValue(resHeaders, "transfer-encoding") ?? "");
+    const cl = headerValue(resHeaders, "content-length");
+    const noBody = head.method === "HEAD" || res.status === 204 || res.status === 304;
+    const switchProtocols = res.status === 101 || head.method === "CONNECT";
+    const closeDelimited = !noBody && !switchProtocols && cl === undefined && !chunked;
+    const replyClose = clientClose || closeDelimited;
+    resHeaders.push(["connection", replyClose ? "close" : "keep-alive"]);
+    socket.write(
+      res.statusLine + "\r\n" + resHeaders.map(([k, v]) => `${k}: ${v}`).join("\r\n") + "\r\n\r\n"
     );
 
-    const begin = (): void => {
-      established = true;
-      raw.setTimeout(0);
-      flush();
-      upstream.pipe(client);
-      resolve();
-    };
-    if (useTls) (upstream as tls.TLSSocket).once("secureConnect", begin);
-    else raw.once("connect", begin);
-  });
+    if (switchProtocols) {
+      const rest = ureader.takeBuffered();
+      ureader.unbind();
+      reader.unbind();
+      if (rest.length) socket.write(rest);
+      socket.pipe(upstream);
+      upstream.pipe(socket);
+      upstream.on("error", () => socket.destroy());
+      socket.on("error", () => upstream.destroy());
+      return "spliced";
+    }
+
+    if (!noBody) {
+      if (chunked) {
+        await pumpChunked(ureader, socket);
+      } else if (cl !== undefined) {
+        const length = Number(cl);
+        if (!Number.isInteger(length) || length < 0) {
+          throw new HttpError(502, "invalid upstream content-length");
+        }
+        await pumpBytes(ureader, socket, length);
+      } else {
+        for (;;) {
+          const piece = await ureader.readChunk();
+          if (piece === null) break;
+          socket.write(piece);
+        }
+      }
+    }
+    ureader.unbind();
+    upstream.destroy();
+    return replyClose ? "close" : "done";
+  } catch (error) {
+    upstream.destroy();
+    throw error;
+  }
 }
 
 export function buildRequestUrl(scheme: "http" | "https", hostHeader: string | undefined, defaultHost: string, target: string): string {
@@ -930,20 +983,26 @@ async function serveRelayed(
           writeErrorResponse(socket, 400, `egress router: invalid upstream host "${effectiveHost}"`);
           break;
         }
-        // Passthrough: splice the rest of this connection onto the real
-        // upstream rather than refusing — clients that reuse a proxy
-        // connection across hosts still get their response.
-        const buffered = reader.takeBuffered();
-        reader.unbind();
-        spliced = true;
-        await spliceToUpstream(
+        // Passthrough: forward this request over a fresh upstream
+        // connection, then keep parsing — a reused client connection
+        // routes each request by its own Host instead of pinning the
+        // whole connection to the first upstream.
+        const outcome = await forwardPassthroughRequest(
           socket,
+          reader,
+          head,
+          body,
           effectiveHost,
           tunnelPort ?? (tunnelTls ? 443 : 80),
           tunnelTls,
-          [serializeRequest(head, body), ...(buffered.length ? [buffered] : [])]
+          closeAfter
         );
-        break;
+        if (outcome === "spliced") {
+          spliced = true;
+          break;
+        }
+        if (outcome === "close") break;
+        continue;
       }
 
       const relayed = await relayToInjector(config, {
@@ -1063,9 +1122,10 @@ async function handleConnect(
 }
 
 /**
- * Non-CONNECT requests hitting the proxy port (plain-HTTP forward-proxy form).
- * Credentialed hosts are relayed; others are tunneled (passthrough) or denied
- * (allowlist).
+ * Non-CONNECT requests hitting the proxy port (plain-HTTP forward-proxy
+ * form) just validate the authority and hand off: serveRelayed resolves
+ * each request's effective host itself, so mixed-use connections route
+ * per request (credentialed hosts relay, others forward or deny).
  */
 async function handlePlainHttp(
   client: net.Socket,
@@ -1073,59 +1133,29 @@ async function handlePlainHttp(
   head: HttpRequestHead,
   config: EgressShimConfig
 ): Promise<void> {
-  let target = head.target;
-  let hostHeader = headerValue(head.headers, "host");
-  let upstreamTls = false;
+  let scheme: "http" | "https" = "http";
+  let defaultHost = headerValue(head.headers, "host");
 
-  if (/^https?:\/\//i.test(target)) {
+  if (/^https?:\/\//i.test(head.target)) {
     let parsed: URL;
     try {
-      parsed = new URL(target);
+      parsed = new URL(head.target);
     } catch {
       httpErrorCode(client, 400, "egress router: malformed absolute URI");
       client.end();
       return;
     }
-    hostHeader = parsed.host;
-    upstreamTls = parsed.protocol === "https:";
-    target = parsed.pathname + parsed.search || "/";
+    defaultHost = parsed.host;
+    scheme = parsed.protocol === "https:" ? "https" : "http";
   }
 
-  if (!hostHeader) {
+  if (!defaultHost) {
     httpErrorCode(client, 400, "egress router: request has no Host");
     client.end();
     return;
   }
 
-  const { host, port } = splitAuthority(hostHeader);
-  const upstreamPort = port ?? (upstreamTls ? 443 : 80);
-
-  if (matchCredentialedHost(host, config.credentialedHosts ?? [])) {
-    await serveRelayed(client, { scheme: upstreamTls ? "https" : "http", defaultHost: hostHeader, reader, firstHead: head }, config);
-    return;
-  }
-
-  if ((config.mode ?? "passthrough") === "allowlist") {
-    httpErrorCode(client, 403, `egress router: ${host} denied by allowlist policy`);
-    client.end();
-    return;
-  }
-
-  if (!validConnectHost(host)) {
-    httpErrorCode(client, 400, `egress router: invalid upstream host "${host}"`);
-    client.end();
-    return;
-  }
-
-  // Passthrough for plain HTTP: forward the request (origin-form target,
-  // framing preserved, connection: close) then tunnel the rest of the
-  // connection — body bytes and any pipelined requests stream raw.
-  const rest = reader.takeBuffered();
-  reader.unbind();
-  await spliceToUpstream(client, host, upstreamPort, upstreamTls, [
-    serializeRawHead(head),
-    ...(rest.length ? [rest] : []),
-  ]);
+  await serveRelayed(client, { scheme, defaultHost, reader, firstHead: head }, config);
 }
 
 async function handleConnection(

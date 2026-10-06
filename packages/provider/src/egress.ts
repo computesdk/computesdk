@@ -134,9 +134,11 @@ export async function readSandboxEgress(sandbox: EgressHost): Promise<SandboxEgr
       return undefined;
     }
     // Liveness: a dead router leaves a stale pointer, so only advertise the
-    // info while its process still exists on the box.
+    // info while its process still exists on the box — and is actually the
+    // shim, since the kernel can hand a dead router's pid to something else.
     if (typeof parsed.pid === 'number') {
-      await readSandboxFile(sandbox, `/proc/${parsed.pid}/cmdline`);
+      const cmdline = await readSandboxFile(sandbox, `/proc/${parsed.pid}/cmdline`);
+      if (!cmdline.includes('egress-shim')) return undefined;
     }
     return parsed as SandboxEgressInfo;
   } catch {
