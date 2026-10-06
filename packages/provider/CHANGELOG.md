@@ -1,5 +1,14 @@
 # @computesdk/provider
 
+## 2.1.11
+
+### Patch Changes
+
+- 7240d21: feat: sandbox egress router — `egress` option on `CreateSandboxOptions` plus a self-contained on-box MITM shim that terminates TLS for credentialed hosts and relays decrypted requests to an off-box credential injector; `sandbox.egress` reports `{ proxyUrl, caCertPath }` and `sandboxEgressEnvVars()` maps it to `HTTPS_PROXY`/`ALL_PROXY`/CA cert env vars
+- Updated dependencies [7240d21]
+  - computesdk@4.1.10
+  - daemond@0.1.8
+
 ## 2.1.10
 
 ### Patch Changes
