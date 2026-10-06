@@ -489,11 +489,21 @@ function errorDetails(body: unknown): Record<string, unknown> | undefined {
 export function toErrorEnvelope(error: unknown): ActionsErrorEnvelope {
   if (error instanceof ActionsApiError) {
     const details = errorDetails(error.body);
+    // The platform's OAuth layer answers 403 insufficient_scope when the
+    // stored login's grant doesn't cover the call — point at re-login rather
+    // than leaving the raw error.
+    const insufficientScope =
+      error.message.includes('insufficient_scope') ||
+      (typeof error.body === 'string' && error.body.includes('insufficient_scope')) ||
+      (typeof error.body === 'object' && error.body !== null &&
+        JSON.stringify(error.body).includes('insufficient_scope'));
     return {
       ok: false,
       error: {
         code: codeForStatus(error.status),
-        message: error.message,
+        message: insufficientScope
+          ? `${error.message} — run \`compute login\` to sign in again.`
+          : error.message,
         httpStatus: error.status,
         retryable: error.status === 429 || error.status === 502 || error.status === 503 || error.status === 504,
         ...(details !== undefined && { details }),
@@ -736,14 +746,14 @@ export type StoredPlatformAuth = { apiKey?: string; token?: string };
 export type StoredPlatformAuthResolver = (opts: { baseUrl: string }) => Promise<StoredPlatformAuth>;
 
 const NO_CREDENTIALS_HINT =
-  'Set COMPUTE_API_KEY, pass --api-key, or run `compute bench auth login`.';
+  'Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.';
 
 /**
  * Precedence: `--api-key` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
- * (legacy) > platform OAuth credentials stored by `compute bench auth login`
+ * (legacy) > platform OAuth credentials stored by `compute login`
  * (`~/.benchsdk/credentials.json`, via `@benchsdk/cli`'s `resolveAuth`, which
- * refreshes an expired access token but never opens a browser). The gateway
- * key written by `compute login` is a different credential and is not used.
+ * refreshes an expired access token but never opens a browser). `compute
+ * login` writes the same store, so a platform login covers these commands.
  */
 export async function resolveActionsAuth(
   opts: {

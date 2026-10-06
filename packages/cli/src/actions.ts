@@ -11,8 +11,8 @@ function sanitizePathPart(name: string): string {
  * manage artifacts.
  *
  * Auth: --api-key, else COMPUTE_API_KEY, else the platform OAuth credentials
- * `compute bench auth login` stored (refreshed silently, never prompts). The
- * gateway key from `compute login` is not used. --base-url overrides the
+ * `compute login` (or `compute bench auth login`) stored (refreshed silently,
+ * never prompts). --base-url overrides the
  * https://platform.computesdk.com default; a non-computesdk host needs
  * --allow-untrusted-host and an explicit key — stored OAuth is never sent there.
  * Every subcommand takes --json for machine-readable output — on success the

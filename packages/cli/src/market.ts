@@ -3,7 +3,7 @@
  * reprice/pause/resume/withdraw them, read the book, and read payouts.
  *
  * Auth: identical to `compute actions` — --api-key / COMPUTE_API_KEY / the
- * stored `compute bench auth login` session. The key must belong to an org
+ * stored `compute login` (or `compute bench auth login`) session. The key must belong to an org
  * the platform flags `market_provider`; the seller principal (which
  * executor provider these listings sell) is resolved server-side from the
  * key. Types mirror the wire shapes in benchmarks-platform `lib/market/*`

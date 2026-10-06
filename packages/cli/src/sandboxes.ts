@@ -5,7 +5,7 @@
  * URLs.
  *
  * Auth: identical to `compute actions`/`compute market` — --api-key /
- * COMPUTE_API_KEY / the stored `compute bench auth login` session. Types
+ * COMPUTE_API_KEY / the stored `compute login` session. Types
  * mirror the wire shapes in benchmarks-platform `lib/sandboxes/*` — keep
  * them in sync by hand; the API is the contract.
  */
