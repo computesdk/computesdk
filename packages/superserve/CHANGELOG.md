@@ -1,5 +1,14 @@
 # @computesdk/superserve
 
+## 0.2.9
+
+### Patch Changes
+
+- 0ba7fbf: Update `@superserve/sdk` to ^0.9.3. `getUrl` returns a preview URL for the port, snapshots can be created, listed and deleted and sandboxes can boot from one via `snapshotId`, and `onStdout`/`onStderr` stream output while a command runs.
+- Updated dependencies [7240d21]
+  - computesdk@4.1.10
+  - @computesdk/provider@2.1.11
+
 ## 0.2.8
 
 ### Patch Changes
