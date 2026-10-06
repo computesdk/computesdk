@@ -71,6 +71,8 @@ export interface CommonOpts extends JsonOpts {
   apiKey?: string;
   baseUrl?: string;
   allowUntrustedHost?: boolean;
+  /** One-off org override sent as X-Org-Slug (or set $COMPUTE_ORG). */
+  org?: string;
 }
 
 /** The platform API client behind both `compute actions` and `compute market`. */
@@ -713,6 +715,7 @@ export function registerActionsCommands(program: Command): void {
     cmd
       .option('--api-key <key>', 'API key (default: $COMPUTE_API_KEY)')
       .option('--base-url <url>', 'API base URL (default: https://platform.computesdk.com)')
+      .option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)')
       .option('--allow-untrusted-host', 'send an explicit --api-key/env key to a non-computesdk, non-localhost --base-url (stored login credentials are never sent)')
       .option('--json', 'print machine-readable JSON');
 
