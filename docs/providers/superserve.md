@@ -69,28 +69,29 @@ await sandbox.destroy();
 interface SuperserveConfig {
   /** Superserve API key. Falls back to `SUPERSERVE_API_KEY` env var. */
   apiKey?: string;
-  /** API base URL. Falls back to `SUPERSERVE_BASE_URL` env var, then `https://api.superserve.ai`. */
+  /** API base URL. Falls back to `SUPERSERVE_BASE_URL` env var, then the `@superserve/sdk` default. */
   baseUrl?: string;
-  /** Default sandbox idle timeout in milliseconds. */
+  /** Default auto-pause timeout in milliseconds. */
   timeout?: number;
 }
 ```
 
 ### Supported Operations
 
-| Method       | Supported | Notes                                                                                                                                  |
-| ------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `create`     | ✅         | Boots a Firecracker microVM; accepts `templateId` to boot from a template.                                                             |
-| `getById`    | ✅         | Connects to a sandbox by id (issues `POST /activate`, auto-resumes paused).                                                            |
-| `list`       | ✅         | Read-only — returns `SandboxInfo` stubs without opening a session.                                                                     |
-| `destroy`    | ✅         | Kills the sandbox by id.                                                                                                               |
-| `runCommand` | ✅         | Supports `cwd`, `env`, `timeout`, and `background`.                                                                                    |
-| `getInfo`    | ✅         | `paused` maps to `stopped`, `failed` to `error`, otherwise `running`.                                                                  |
-| `filesystem` | ✅         | `readFile`/`writeFile` use the data plane; `mkdir`/`readdir`/`exists`/`remove` are shell fallbacks.                                    |
-| `getUrl`     | ❌         | Throws — arbitrary port forwarding is not supported. Run a reverse-proxy inside the sandbox.                                           |
-| `snapshot`   | ❌         | Throws — Superserve has no standalone snapshot resource. Use templates, or SDK `pause()` / `resume()` for in-place state preservation. |
+| Method       | Supported | Notes                                                                                                         |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------------------- |
+| `create`     | ✅         | Boots a Firecracker microVM; accepts `templateId` to boot from a template or `snapshotId` to boot a snapshot. |
+| `getById`    | ✅         | Connects to a sandbox by id (issues `POST /activate`, auto-resumes paused).                                   |
+| `list`       | ✅         | Read-only — returns `SandboxInfo` stubs without opening a session.                                            |
+| `destroy`    | ✅         | Kills the sandbox by id.                                                                                      |
+| `runCommand` | ✅         | Supports `cwd`, `env`, `timeout`, `background`, and live output via `onStdout`/`onStderr`.                    |
+| `getInfo`    | ✅         | `paused` and `deleted` map to `stopped`, `failed` to `error`, otherwise `running`.                            |
+| `filesystem` | ✅         | `readFile`/`writeFile` use the data plane; `mkdir`/`readdir`/`exists`/`remove` are shell fallbacks.           |
+| `getUrl`     | ✅         | Publishes the port (1024–65535) and returns its preview URL. Published ports are public by default.           |
+| `snapshot`   | ✅         | `create`, `list` (per sandbox — pass `sandboxId`), and `delete`. Snapshots capture memory and disk.           |
 
 ### Notes
 
 * Templates are supported for listing and deletion. `template.create` throws — creating a template requires a build spec (`from` + `steps`), so use `@superserve/sdk` `Template.create()` directly.
+* `snapshot.create` connects to the sandbox first, which resumes it if it is paused.
 * Authentication failures (HTTP 401, missing key, SDK `AuthenticationError`) are normalized into a single user-facing message.

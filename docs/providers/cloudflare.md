@@ -135,6 +135,28 @@ const sandbox = await compute.sandbox.create({
 });
 ```
 
+### Sandbox Size and Image
+
+Choose the size and image of a new sandbox when you create it:
+
+```typescript
+const sandbox = await compute.sandbox.create({
+  vcpu: 2,
+  memoryMib: 6144,
+  diskMb: 12000,
+  image: 'builder',
+});
+```
+
+| Option      | Description                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `vcpu`      | vCPUs of a [custom instance type](https://developers.cloudflare.com/containers/platform/limits/#custom-instance-types) |
+| `memoryMib` | Memory of the custom instance type, in MiB                                                                               |
+| `diskMb`    | Disk of the custom instance type, in MB                                                                                  |
+| `image`     | Name of an image declared by the sandbox demo Worker. `builder` has Node.js 24 and common build tools.                   |
+
+Set `vcpu`, `memoryMib`, and `diskMb` together. Without them, the sandbox uses the Worker's default instance type. Without `image`, it uses the Worker's default image.
+
 ### Configuration Options
 
 ```typescript

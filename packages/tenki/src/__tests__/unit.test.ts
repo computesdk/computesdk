@@ -144,6 +144,7 @@ describe('tenki provider (mocked SDK)', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -189,6 +190,66 @@ describe('tenki provider (mocked SDK)', () => {
     const sandbox = await provider.sandbox.create();
     await sandbox.runCommand('ls', { cwd: '/work' });
     expect(lastExec?.args?.[1]).toBe("cd '/work' && ls");
+  });
+
+  it.each([0, 137])('reports a timed-out command as failure when its exit code is %i', async (exitCode) => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    const sandbox = await provider.sandbox.create();
+    const exec = vi.spyOn(sharedSession, 'exec').mockResolvedValueOnce({
+      status: 'TIMED_OUT',
+      stdout: enc.encode('partial stdout'),
+      stderr: enc.encode('partial stderr'),
+      exitCode,
+      durationMs: 100,
+    } as Awaited<ReturnType<FakeSession['exec']>>);
+
+    expect(await sandbox.runCommand('sleep 10', { timeout: 100 })).toEqual({
+      stdout: 'partial stdout',
+      stderr: 'partial stderr\nTenki command timed out.',
+      exitCode: 124,
+      durationMs: 100,
+    });
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(exec).toHaveBeenCalledWith('sh', expect.objectContaining({ timeoutMs: 100 }));
+  });
+
+  it('keeps normal nonzero exits and output unchanged', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    const sandbox = await provider.sandbox.create();
+    vi.spyOn(sharedSession, 'exec').mockResolvedValueOnce({
+      stdout: enc.encode('stdout'),
+      stderr: enc.encode('stderr'),
+      exitCode: 7,
+      durationMs: 12,
+    });
+    expect(await sandbox.runCommand('exit 7')).toEqual({
+      stdout: 'stdout', stderr: 'stderr', exitCode: 7, durationMs: 12,
+    });
+  });
+
+  it('explains a timeout even when the guest produced no stderr', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    const sandbox = await provider.sandbox.create();
+    vi.spyOn(sharedSession, 'exec').mockResolvedValueOnce({
+      status: 'TIMED_OUT',
+      stdout: new Uint8Array(),
+      stderr: new Uint8Array(),
+      exitCode: 0,
+      durationMs: 100,
+    } as Awaited<ReturnType<FakeSession['exec']>>);
+    const result = await sandbox.runCommand('sleep 10');
+    expect(result.exitCode).toBe(124);
+    expect(result.stderr).toBe('Tenki command timed out.');
+  });
+
+  it('passes the provider timeout through and lets a command override it', async () => {
+    const provider = tenki({ apiKey: 'tk_test', timeout: 300 });
+    const sandbox = await provider.sandbox.create();
+    const exec = vi.spyOn(sharedSession, 'exec');
+    await sandbox.runCommand('true');
+    expect(exec).toHaveBeenLastCalledWith('sh', expect.objectContaining({ timeoutMs: 300 }));
+    await sandbox.runCommand('true', { timeout: 50 });
+    expect(exec).toHaveBeenLastCalledWith('sh', expect.objectContaining({ timeoutMs: 50 }));
   });
 
   it('runCommand passes per-command env vars through to exec', async () => {

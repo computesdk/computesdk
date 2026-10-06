@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/gravixlayer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GravixLayer provider for ComputeSDK — cloud runtimes with a native filesystem, live command streaming, and snapshots",
   "author": "Gravix Layer",
   "license": "MIT",

@@ -1,5 +1,19 @@
 # @computesdk/cloudflare
 
+## 2.1.0
+
+### Minor Changes
+
+- 80d1540: Pass `vcpu`, `memoryMib`, `diskMb`, and `image` from `sandbox.create()` to the sandbox demo Worker to choose the size and image of a new sandbox.
+
+## 2.0.2
+
+### Patch Changes
+
+- Updated dependencies [f1a8578]
+  - @computesdk/provider@2.1.10
+  - computesdk@4.1.9
+
 ## 2.0.1
 
 ### Patch Changes

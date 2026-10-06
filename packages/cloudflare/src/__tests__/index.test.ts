@@ -94,8 +94,30 @@ describe('Cloudflare direct mode', () => {
     expect(binding.newUniqueId).toHaveBeenCalledOnce();
     expect(binding.get).toHaveBeenCalledOnce();
     expect(sandbox.start).toHaveBeenCalledOnce();
+    expect(sandbox.start).toHaveBeenCalledWith(undefined);
     expect(created.sandboxId).toBe('0'.repeat(64));
   });
+
+  it('passes the sandbox size and image to start', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
+
+    await provider.sandbox.create({
+      vcpu: 2,
+      memoryMib: 6144,
+      diskMb: 12000,
+      image: 'builder',
+    });
+
+    expect(sandbox.start).toHaveBeenCalledOnce();
+    expect(sandbox.start).toHaveBeenCalledWith({
+      vcpu: 2,
+      memoryMib: 6144,
+      diskMb: 12000,
+      image: 'builder',
+    });
+  });
+
 
   it('generates unique sandbox IDs under concurrency', async () => {
     const { binding } = createDirectBinding();
@@ -386,6 +408,7 @@ describe('Cloudflare remote bridge mode', () => {
         'https://example.com/v1/sandbox'
       );
       expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST');
+      expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
 
       const result = await created.runCommand('node -v');
       expect(result.exitCode).toBe(0);
@@ -398,6 +421,38 @@ describe('Cloudflare remote bridge mode', () => {
       expect(body).toEqual({
         argv: ['sh', '-lc', "export TEST_ENV='value'; node -v"],
         timeout_ms: 30_000,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('sends the sandbox size and image when creating a sandbox', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(bridgeCreateResponse());
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const provider = cloudflare({
+        sandboxUrl: 'https://example.com',
+        sandboxApiKey: 'secret',
+      });
+
+      await provider.sandbox.create({
+        vcpu: 2,
+        memoryMib: 6144,
+        diskMb: 12000,
+        image: 'builder',
+      });
+
+      const init = fetchMock.mock.calls[0]?.[1];
+      expect(init?.headers).toMatchObject({
+        'Content-Type': 'application/json',
+      });
+      expect(JSON.parse(init?.body as string)).toEqual({
+        vcpu: 2,
+        memoryMib: 6144,
+        diskMb: 12000,
+        image: 'builder',
       });
     } finally {
       vi.unstubAllGlobals();

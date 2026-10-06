@@ -1,7 +1,7 @@
 ---
 description: >-
   The ComputeSDK Platform REST API surface — every /api/v1 endpoint for
-  Actions, the vault, benchmarks, organizations, sandboxes, and the org feed.
+  Actions, the vault, benchmarks, organizations, and the org feed.
 ---
 
 # API reference
@@ -23,7 +23,7 @@ Base URL: `https://platform.computesdk.com/api/v1`. Authenticate every request w
 
 ## Actions (CI)
 
-All Actions routes require the `actions` product entitlement (`403` otherwise). See [Actions](actions.md) for semantics.
+Actions is available to every organization — no product entitlement required. See [Actions](actions.md) for semantics.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -85,11 +85,4 @@ Org keys see their own benchmarks plus subscribed (entitled) ones — never othe
 | GET | `.../participants/{slug}` · `.../participants/{slug}/logs` · `.../participants/{slug}/workers` · `.../workers/claim` | Participant state, logs, and worker fleet |
 | GET/POST | `.../runs/{runId}/workers/{workerId}` · `/events` · `/heartbeat` · `/complete` · `/fail` · `/release` · `/artifacts` | Worker lifecycle — for benchmark executors |
 
-## Sandboxes
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET/POST | `/sandboxes` | List / create the org's sandboxes |
-| GET | `/sandboxes/{sandboxId}` | Sandbox detail |
-| POST | `/sandboxes/{sandboxId}/commands` | Run a command in a sandbox |
-| GET | `/sandboxes/costs` | Per-sandbox cost rollup |

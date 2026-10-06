@@ -1,5 +1,23 @@
 # @computesdk/cli
 
+## 1.0.15
+
+### Patch Changes
+
+- bc6f23e: `compute sandboxes` covers the new `/v1` surface: `spawn --stdin` keeps a job's stdin pipe open, `stdin`/`close-stdin` write and close it (`--data`, `--file`, or piped; `--base64` for binary), `snapshots`/`snapshot`/`snapshot-delete` wrap the snapshot CRUD, and `get`/`list`/`attach` now show the effective image and attach region.
+
+## 1.0.14
+
+### Patch Changes
+
+- 9e17bee: `compute actions dispatch` gains `--max-bid <usd>` and `--max-bid-per <second|minute|hour>`: an optional per-dispatch market price ceiling sent as `maxPriceUsd`/`maxPricePer`. Jobs that can't be filled at the price fall through to the next provider-order entry.
+- 5cfe41c: cli(market): refuse `market credential connect` to untrusted hosts — the credential field metadata a host returns selects which local env vars get read and posted back, so `--allow-untrusted-host` no longer extends to it (same guard as vault values)
+- 68475a8: cli(market): `compute market replace <listing-id>` pauses a listing and evicts every live sale on it; `compute market replace --fill <fill-id>` evicts one sale. Evicted sales settle for seconds lived and an Actions job on the capacity re-places on the buyer's next provider. Replaced sales now show their state in `market book`.
+- abdaf3e: `compute market` — the sell side of the compute market, for orgs the platform flags `market_provider` (same org API key as `compute actions`). Post listings with `market sell --price` (`--per` defaults to second), manage them with `listings`/`price`/`pause`/`resume`/`withdraw`, read the book with `market book`, payouts with `market settlements`, seller identity with `market status`, and connect the executor credential listings fill under with `market credential connect` (fields resolved from `<PROVIDER>_<FIELD>` env vars, e.g. `TENSORLAKE_API_KEY`).
+- 0d238ab: `compute sandboxes` (`sbx`) — drive sandboxes through the platform's `/v1` API: create/list/get/destroy, `exec` one-shot commands, `spawn`/`ps`/`logs`/`wait`/`kill` detached daemon processes, `ls`/`cat`/`write`/`mkdir`/`rm` filesystem ops, and `url` port resolution.
+- Updated dependencies [f1a8578]
+  - computesdk@4.1.9
+
 ## 1.0.13
 
 ### Patch Changes
