@@ -46,33 +46,12 @@ program
   .enablePositionalOptions()
   .passThroughOptions();
 
-// `compute` fronts the Actions, Sandboxes and Market CLIs, so its login needs
-// the full first-party scope set on the `benchsdk-cli` OAuth client.
-const COMPUTE_OAUTH_CLIENT_ID = 'benchsdk-cli';
-const COMPUTE_OAUTH_SCOPE = [
-  'actions:read',
-  'actions:write',
-  'benchmarks:read',
-  'benchmarks:write',
-  'billing:read',
-  'market:read',
-  'market:write',
-  'org:read',
-  'org:admin',
-  'sandboxes:read',
-  'sandboxes:write',
-  'vault:read',
-  'vault:write',
-  'offline_access',
-].join(' ');
-
+// `compute login` and `bench auth login` are the same login: the
+// `benchsdk-cli` OAuth client with the full first-party scope set, stored
+// once in ~/.benchsdk/credentials.json.
 async function runLogin(options?: { baseUrl?: string }): Promise<void> {
   const { oauthLogin } = await import('@benchsdk/cli');
-  await oauthLogin({
-    clientId: COMPUTE_OAUTH_CLIENT_ID,
-    scope: COMPUTE_OAUTH_SCOPE,
-    baseUrl: options?.baseUrl,
-  });
+  await oauthLogin({ baseUrl: options?.baseUrl });
 }
 
 async function runLogout(): Promise<void> {
