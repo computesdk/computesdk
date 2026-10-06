@@ -563,6 +563,24 @@ describe('ActionsClient', () => {
       message: 'Not found',
     });
   });
+
+  it('sends X-Org-Slug only when an org override resolved', async () => {
+    const seen: Record<string, string>[] = [];
+    const fetchImpl = async (_input: unknown, init?: RequestInit) => {
+      seen.push(init?.headers as Record<string, string>);
+      return okJson({});
+    };
+    await new ActionsClient(
+      { apiKey: 'k', baseUrl: 'https://example.test', orgSlug: 'acme' },
+      fetchImpl as typeof fetch,
+    ).get('/api/v1/actions/runs');
+    await new ActionsClient(
+      { apiKey: 'k', baseUrl: 'https://example.test' },
+      fetchImpl as typeof fetch,
+    ).get('/api/v1/actions/runs');
+    expect(seen[0]['X-Org-Slug']).toBe('acme');
+    expect(seen[1]['X-Org-Slug']).toBeUndefined();
+  });
 });
 
 describe('dispatchBody', () => {
@@ -712,7 +730,7 @@ describe('toErrorEnvelope', () => {
 
 describe('resolveActionsAuth', () => {
   const noStored = async () => ({});
-  const ENV = ['COMPUTE_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_API_KEY', 'BENCHMARKS_PLATFORM_URL'];
+  const ENV = ['COMPUTE_API_KEY', 'COMPUTE_PLATFORM_URL', 'BENCHMARKS_PLATFORM_API_KEY', 'BENCHMARKS_PLATFORM_URL', 'COMPUTE_ORG'];
   const saved: Record<string, string | undefined> = {};
   beforeEach(() => {
     for (const k of ENV) {
@@ -768,6 +786,23 @@ describe('resolveActionsAuth', () => {
     expect(await key({}, stored)).toBe('oauth-access-token');
     // A stored API key wins over a stored token, matching @benchsdk/cli.
     expect(await key({}, async () => ({ apiKey: 'stored-key', token: 't' }))).toBe('stored-key');
+  });
+
+  it('resolves the org override as flag > COMPUTE_ORG > stored login org', async () => {
+    const stored = vi.fn(async () => ({ token: 't', orgSlug: 'stored-org' }));
+    // Stored login's org applies by default
+    expect((await resolveActionsAuth({}, stored)).orgSlug).toBe('stored-org');
+    // COMPUTE_ORG beats the stored org
+    process.env.COMPUTE_ORG = 'env-org';
+    expect((await resolveActionsAuth({}, stored)).orgSlug).toBe('env-org');
+    // --org flag beats the env var
+    expect((await resolveActionsAuth({ org: 'flag-org' }, stored)).orgSlug).toBe('flag-org');
+    delete process.env.COMPUTE_ORG;
+    // An explicit API key still carries the override (the platform ignores the
+    // header for org keys); the stored org is then not consulted.
+    process.env.COMPUTE_API_KEY = 'env-key';
+    expect((await resolveActionsAuth({}, stored)).orgSlug).toBeUndefined();
+    expect((await resolveActionsAuth({ org: 'flag-org' }, stored)).orgSlug).toBe('flag-org');
   });
 
   it('passes the resolved base URL to the stored resolver so refresh hits the same host', async () => {

@@ -46,16 +46,40 @@ program
   .enablePositionalOptions()
   .passThroughOptions();
 
+function envBaseUrl(): string | undefined {
+  return process.env.COMPUTE_PLATFORM_URL ?? process.env.BENCHMARKS_PLATFORM_URL;
+}
+
+async function benchAuth(opts: { baseUrl?: string } = {}) {
+  const { resolveAuth } = await import('@benchsdk/cli');
+  return resolveAuth({ baseUrl: opts.baseUrl ?? envBaseUrl() });
+}
+
+async function printSessionLine(): Promise<void> {
+  try {
+    const { getMe } = await import('@benchsdk/cli');
+    const me = await getMe(await benchAuth());
+    const active = me.organizations.find((o) => o.id === me.activeOrganizationId);
+    const who = me.user.email ?? me.user.name ?? me.user.id;
+    if (active) {
+      p.log.success(
+        `Logged in as ${who} — active org: ${active.slug} (change with \`compute org use <slug>\`)`,
+      );
+    } else {
+      p.log.success(`Logged in as ${who} — no active org`);
+    }
+  } catch {
+    p.log.warn('Logged in, but could not fetch session info.');
+  }
+}
+
 // `compute login` and `bench auth login` are the same login: the
 // `benchsdk-cli` OAuth client with the full first-party scope set, stored
 // once in ~/.benchsdk/credentials.json.
 async function runLogin(options?: { baseUrl?: string }): Promise<void> {
   const { oauthLogin } = await import('@benchsdk/cli');
   await oauthLogin({
-    baseUrl:
-      options?.baseUrl ??
-      process.env.COMPUTE_PLATFORM_URL ??
-      process.env.BENCHMARKS_PLATFORM_URL,
+    baseUrl: options?.baseUrl ?? envBaseUrl(),
   });
 }
 
@@ -69,6 +93,7 @@ async function runLogout(): Promise<void> {
 program
   .option('--login', 'force re-authentication')
   .option('--logout', 'clear stored credentials')
+  .option('--org <slug>', 'organization slug override for this invocation (or $COMPUTE_ORG)')
   .action(async (opts) => {
     if (opts.logout) {
       console.log();
@@ -83,6 +108,7 @@ program
       console.log();
       p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
       await runLogin();
+      await printSessionLine();
       p.outro(pc.green('Authenticated!'));
       process.exit(0);
     }
@@ -90,6 +116,14 @@ program
     // Show help by default
     program.help();
   });
+
+// `compute --org <slug> <group> …` (leading position): forward to the env the
+// client layer reads. A trailing --org on the subcommand still wins —
+// resolveActionsAuth reads opts.org before COMPUTE_ORG.
+program.hook('preAction', (thisCommand) => {
+  const org = thisCommand.opts().org;
+  if (org) process.env.COMPUTE_ORG = org;
+});
 
 // ─── providers ───────────────────────────────────────────────────────────────
 
@@ -124,6 +158,7 @@ program
     console.log();
     p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     await runLogin({ baseUrl: opts.baseUrl });
+    await printSessionLine();
     p.outro(pc.green('Authenticated!'));
   });
 
@@ -137,6 +172,77 @@ program
     p.log.success('Logged out. Stored credentials removed.');
     p.outro(pc.green('Done!'));
   });
+
+// ─── org ────────────────────────────────────────────────────────────────────
+// Mirrors `bench org` — same credential store and /api/v1/organizations calls
+// through @benchsdk/cli. The active org is per user+client, shared by every
+// CLI on every machine.
+
+async function printWhoami(): Promise<void> {
+  const { getMe } = await import('@benchsdk/cli');
+  const me = await getMe(await benchAuth());
+  const active = me.organizations.find((o) => o.id === me.activeOrganizationId);
+  console.log(me.user.email ?? me.user.name ?? me.user.id);
+  console.log(
+    `active org: ${active ? `${active.slug} (${active.id})` : '—'}${me.organizations.length > 1 ? '  — change with `compute org use <slug>`' : ''}`,
+  );
+}
+
+const org = program.command('org').description('Manage the active organization');
+
+org
+  .command('list')
+  .description('List your organizations')
+  .option('--json', 'print machine-readable JSON')
+  .action(async (opts) => {
+    const { listOrganizations, getMe } = await import('@benchsdk/cli');
+    const auth = await benchAuth();
+    const [organizations, me] = await Promise.all([listOrganizations(auth), getMe(auth)]);
+    if (opts.json) {
+      console.log(JSON.stringify(organizations, null, 2));
+      return;
+    }
+    for (const o of organizations) {
+      const marker = o.id === me.activeOrganizationId ? pc.green('*') : ' ';
+      console.log(`${marker} ${pc.cyan(o.slug)}  ${o.name ?? ''}  ${pc.dim(o.id)}`);
+    }
+  });
+
+org
+  .command('use <slug>')
+  .description('Set the active organization (persisted to the stored login)')
+  .action(async (slug: string) => {
+    const { loadCredentials, saveCredentials, createApiClient, setActiveOrganization } =
+      await import('@benchsdk/cli');
+    const credentials = (await loadCredentials()) ?? {};
+    const { auth } = await createApiClient({ baseUrl: envBaseUrl() });
+    const result = await setActiveOrganization(auth, slug);
+    if (!result.organization) {
+      throw new Error(`Could not set active organization to ${slug}`);
+    }
+    await saveCredentials({
+      ...credentials,
+      baseUrl: auth.baseUrl,
+      token: auth.token,
+      refreshToken: auth.refreshToken,
+      tokenExpiresAt: auth.tokenExpiresAt,
+      refreshExpiresAt: auth.refreshExpiresAt,
+      orgSlug: result.organization.slug,
+      orgId: result.organization.id,
+      kind: 'oauth',
+    });
+    console.log(`Active organization set to ${result.organization.slug} (${result.organization.id})`);
+  });
+
+org
+  .command('current')
+  .description('Show the current user and active organization')
+  .action(printWhoami);
+
+program
+  .command('whoami')
+  .description('Show the current user and active organization')
+  .action(printWhoami);
 
 // ─── actions ─────────────────────────────────────────────────────────────────
 

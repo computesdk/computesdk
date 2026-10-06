@@ -647,6 +647,11 @@ export function registerSandboxesCommands(program: Command): void {
         fail(e, opts);
       }
     });
+
+  // One-off org override on every subcommand — sent as X-Org-Slug.
+  for (const sub of cmd.commands) {
+    sub.option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)');
+  }
 }
 
 /** Streams a process's daemon-buffered output to the console until `exit`. */
