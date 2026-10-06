@@ -834,7 +834,10 @@ export async function resolveActionsAuth(
       throw new ActionsCliError('no_credentials', `${detail} ${NO_CREDENTIALS_HINT}`);
     }
     apiKey = stored.apiKey || stored.token || undefined;
-    orgSlug ??= stored.orgSlug;
+    // The stored orgSlug is only a cache of the last `org use` on this
+    // machine — the server's consent row is the source of truth, and
+    // sending it would pin this machine to a stale org after a switch
+    // elsewhere. Only --org/COMPUTE_ORG send X-Org-Slug.
   }
   if (!apiKey) {
     throw new ActionsCliError('no_credentials', `No API key. ${NO_CREDENTIALS_HINT}`);

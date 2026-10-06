@@ -788,18 +788,20 @@ describe('resolveActionsAuth', () => {
     expect(await key({}, async () => ({ apiKey: 'stored-key', token: 't' }))).toBe('stored-key');
   });
 
-  it('resolves the org override as flag > COMPUTE_ORG > stored login org', async () => {
+  it('sends X-Org-Slug only for --org or COMPUTE_ORG, never the stored login org', async () => {
+    // The stored orgSlug is a local cache of the last `org use` — the
+    // platform already knows the active org, and sending the cached slug
+    // would pin this machine after a switch made elsewhere.
     const stored = vi.fn(async () => ({ token: 't', orgSlug: 'stored-org' }));
-    // Stored login's org applies by default
-    expect((await resolveActionsAuth({}, stored)).orgSlug).toBe('stored-org');
-    // COMPUTE_ORG beats the stored org
+    expect((await resolveActionsAuth({}, stored)).orgSlug).toBeUndefined();
+    // COMPUTE_ORG sends the header
     process.env.COMPUTE_ORG = 'env-org';
     expect((await resolveActionsAuth({}, stored)).orgSlug).toBe('env-org');
     // --org flag beats the env var
     expect((await resolveActionsAuth({ org: 'flag-org' }, stored)).orgSlug).toBe('flag-org');
     delete process.env.COMPUTE_ORG;
     // An explicit API key still carries the override (the platform ignores the
-    // header for org keys); the stored org is then not consulted.
+    // header for org keys).
     process.env.COMPUTE_API_KEY = 'env-key';
     expect((await resolveActionsAuth({}, stored)).orgSlug).toBeUndefined();
     expect((await resolveActionsAuth({ org: 'flag-org' }, stored)).orgSlug).toBe('flag-org');

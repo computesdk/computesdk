@@ -55,10 +55,10 @@ async function benchAuth(opts: { baseUrl?: string } = {}) {
   return resolveAuth({ baseUrl: opts.baseUrl ?? envBaseUrl() });
 }
 
-async function printSessionLine(): Promise<void> {
+async function printSessionLine(options?: { baseUrl?: string }): Promise<void> {
   try {
     const { getMe } = await import('@benchsdk/cli');
-    const me = await getMe(await benchAuth());
+    const me = await getMe(await benchAuth({ baseUrl: options?.baseUrl }));
     const active = me.organizations.find((o) => o.id === me.activeOrganizationId);
     const who = me.user.email ?? me.user.name ?? me.user.id;
     if (active) {
@@ -158,7 +158,7 @@ program
     console.log();
     p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
     await runLogin({ baseUrl: opts.baseUrl });
-    await printSessionLine();
+    await printSessionLine({ baseUrl: opts.baseUrl });
     p.outro(pc.green('Authenticated!'));
   });
 
@@ -223,13 +223,20 @@ org
     await saveCredentials({
       ...credentials,
       baseUrl: auth.baseUrl,
-      token: auth.token,
-      refreshToken: auth.refreshToken,
-      tokenExpiresAt: auth.tokenExpiresAt,
-      refreshExpiresAt: auth.refreshExpiresAt,
+      // An API-key login must not be rewritten as an OAuth one — keep its
+      // key and kind, and only stamp token fields when this auth actually
+      // is a token session.
+      ...(auth.token
+        ? {
+            token: auth.token,
+            refreshToken: auth.refreshToken,
+            tokenExpiresAt: auth.tokenExpiresAt,
+            refreshExpiresAt: auth.refreshExpiresAt,
+            kind: 'oauth' as const,
+          }
+        : {}),
       orgSlug: result.organization.slug,
       orgId: result.organization.id,
-      kind: 'oauth',
     });
     console.log(`Active organization set to ${result.organization.slug} (${result.organization.id})`);
   });
