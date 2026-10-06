@@ -3,10 +3,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const files = new Map<string, string>();
 const dirs = new Set<string>();
 const runCalls: string[] = [];
+const createCalls: Array<Record<string, unknown>> = [];
+const publishedPorts: number[] = [];
 let pwdFails = false;
+
+const fakeSnapshot = {
+  id: 'snap-1',
+  sandboxId: 'sb-test',
+  status: 'ready',
+  sizeBytes: 1024,
+  createdAt: new Date(0),
+};
 
 class FakeSandbox {
   id = 'sb-test';
+  publishPreviewPort = async (port: number) => {
+    publishedPorts.push(port);
+  };
+  getPreviewUrl = (port: number) => `https://${port}-sb-test.sandbox.example.com`;
+  snapshot = async (options: { name?: string }) => ({ ...fakeSnapshot, name: options.name });
   files = {
     readText: async (path: string) => {
       const v = files.get(path);
@@ -18,8 +33,9 @@ class FakeSandbox {
     },
   };
   commands = {
-    run: async (command: string) => {
+    run: async (command: string, options?: { onStdout?: (data: string) => void }) => {
       runCalls.push(command);
+      options?.onStdout?.('streamed');
       if (command === 'pwd') {
         return pwdFails
           ? { stdout: '', stderr: 'boom', exitCode: 1 }
@@ -47,10 +63,17 @@ class FakeSandbox {
 vi.mock('@superserve/sdk', () => ({
   AuthenticationError: class extends Error {},
   Sandbox: class {
-    static create = async () => new FakeSandbox();
+    static create = async (options: Record<string, unknown>) => {
+      createCalls.push(options);
+      return new FakeSandbox();
+    };
     static connect = async () => new FakeSandbox();
     static list = async () => [];
     static killById = async () => {};
+  },
+  Snapshot: class {
+    static list = async () => [fakeSnapshot];
+    static deleteById = async () => {};
   },
   Template: class {
     static list = async () => [];
@@ -123,5 +146,52 @@ describe('superserve relative filesystem paths', () => {
     await sandbox.filesystem.writeFile('/abs/file.txt', 'x');
     expect(files.get('/abs/file.txt')).toBe('x');
     expect(runCalls.filter((c) => c === 'pwd')).toHaveLength(0);
+  });
+});
+
+describe('superserve previews, streaming and snapshots', () => {
+  beforeEach(() => {
+    runCalls.length = 0;
+    createCalls.length = 0;
+    publishedPorts.length = 0;
+  });
+
+  it('publishes the port before returning its preview URL', async () => {
+    const provider = superserve({ apiKey: 'test' });
+    const sandbox = await provider.sandbox.create();
+
+    expect(await sandbox.getUrl({ port: 3000 })).toBe('https://3000-sb-test.sandbox.example.com');
+    expect(await sandbox.getUrl({ port: 8080, protocol: 'wss' })).toBe('wss://8080-sb-test.sandbox.example.com');
+    expect(publishedPorts).toEqual([3000, 8080]);
+  });
+
+  it('streams output through the SDK instead of the daemon bridge', async () => {
+    const provider = superserve({ apiKey: 'test' });
+    const sandbox = await provider.sandbox.create();
+    const chunks: string[] = [];
+
+    await sandbox.runCommand('echo hi', { onStdout: (data) => chunks.push(data) });
+
+    expect(chunks).toEqual(['streamed']);
+    // The command reaches the sandbox as-is, not wrapped in a daemon bootstrap.
+    expect(runCalls).toEqual(['echo hi']);
+  });
+
+  it('creates sandboxes from snapshots and lists snapshots per sandbox', async () => {
+    const provider = superserve({ apiKey: 'test' });
+
+    await provider.sandbox.create({ snapshotId: 'snap-1' });
+    expect(createCalls[0]).toMatchObject({ fromSnapshot: 'snap-1' });
+
+    expect(await provider.snapshot!.create('sb-test', { name: 'before-upgrade' })).toMatchObject({
+      id: 'snap-1',
+      provider: 'superserve',
+      metadata: { name: 'before-upgrade', sandboxId: 'sb-test' },
+    });
+
+    // An unscoped list must not throw: compute.snapshot.list() calls every
+    // provider without options.
+    expect(await provider.snapshot!.list()).toEqual([]);
+    expect(await provider.snapshot!.list({ sandboxId: 'sb-test' })).toHaveLength(1);
   });
 });

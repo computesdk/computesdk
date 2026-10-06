@@ -42,7 +42,7 @@ Or call the provider factory directly:
 import { superserve } from '@computesdk/superserve';
 
 const provider = superserve({ apiKey: process.env.SUPERSERVE_API_KEY });
-const { sandbox } = await provider.sandbox.create();
+const sandbox = await provider.sandbox.create();
 ```
 
 ## Configuration
@@ -51,8 +51,8 @@ const { sandbox } = await provider.sandbox.create();
 superserve({
   apiKey: string,      // optional, falls back to SUPERSERVE_API_KEY
   baseUrl: string,     // optional, falls back to SUPERSERVE_BASE_URL,
-                       //   then 'https://api.superserve.ai'
-  timeout: number,     // optional default sandbox idle timeout (ms)
+                       //   then the @superserve/sdk default
+  timeout: number,     // optional default auto-pause timeout (ms)
 })
 ```
 
@@ -62,11 +62,12 @@ superserve({
 |---|---|
 | Sandbox lifecycle (create / connect / list / destroy) | ✅ |
 | Command execution with cwd, env, and timeout | ✅ |
+| Live command output (`onStdout` / `onStderr`) | ✅ |
 | Filesystem (read, write, mkdir, readdir, exists, remove) | ✅ |
 | Templates (boot from named template) | ✅ |
+| Snapshots (create, list, delete, boot from snapshot) | ✅ |
+| Preview URLs (`getUrl`) | ✅ |
 | Pause / resume (in-place state preservation) | ✅ via `@superserve/sdk` |
-| Snapshots as forkable resources | ❌ Use templates instead |
-| Arbitrary port forwarding (`getUrl`) | ❌ Run a reverse-proxy inside the sandbox |
 | Template build (`template.create`) | ❌ Use `@superserve/sdk` `Template.create` |
 
 ## API Reference
@@ -78,7 +79,7 @@ Boots a new microVM. Common options:
 ```typescript
 await compute.sandbox.create({
   templateId: 'superserve/python-3.11',    // optional, defaults to superserve/base
-  timeout: 60_000,                          // idle timeout in ms
+  timeout: 60_000,                          // auto-pause timeout in ms
   envs: { API_KEY: 'value' },
   name: 'my-sandbox',
   metadata: { source: 'ci' },
@@ -88,6 +89,9 @@ await compute.sandbox.create({
 Curated templates include `superserve/base`, `superserve/python-3.11`,
 `superserve/node-22`, and others — see the
 [Superserve docs](https://docs.superserve.ai) for the full list.
+
+Pass `snapshotId` instead of `templateId` to boot from a snapshot (see
+[Snapshots](#snapshots)).
 
 ### `sandbox.runCommand(command, options?)`
 
@@ -103,6 +107,28 @@ console.log(result.stdout);
 console.log(result.stderr);
 ```
 
+Pass `onStdout` / `onStderr` to receive output while the command runs:
+
+```typescript
+await sandbox.runCommand('npm test', {
+  onStdout: (data) => process.stdout.write(data),
+  onStderr: (data) => process.stderr.write(data),
+});
+```
+
+### `sandbox.getUrl({ port })`
+
+```typescript
+await sandbox.runCommand('python3 -m http.server 8000', { background: true });
+const url = await sandbox.getUrl({ port: 8000 });
+```
+
+`getUrl` publishes the port and returns its preview URL. Published ports are
+public by default. Ports must be between 1024 and 65535; port 49983 is
+reserved. For private previews and access tokens, use the preview API on
+`sandbox.getInstance()` — see the
+[preview URL guide](https://docs.superserve.ai/sandbox/preview-urls).
+
 ### `sandbox.filesystem`
 
 ```typescript
@@ -116,8 +142,7 @@ await sandbox.filesystem.remove('/app/config.json');
 
 `readFile` and `writeFile` go directly to the per-sandbox data plane.
 `mkdir`, `readdir`, `exists`, and `remove` are implemented via shell
-fallbacks against `sandbox.runCommand` until the data plane exposes
-native filesystem operations.
+commands run through `sandbox.runCommand`.
 
 ### `sandbox.getInfo()` / `sandbox.destroy()`
 
@@ -128,14 +153,15 @@ console.log(info.id, info.status);
 await sandbox.destroy();
 ```
 
-Status mapping: Superserve's `paused` state is reported as ComputeSDK's
-`stopped`, `failed` as `error`, and `active` / `resuming` as `running`.
+Status mapping: Superserve's `paused` and `deleted` states are reported as
+ComputeSDK's `stopped`, `failed` as `error`, and every other state as
+`running`.
 
 ### `provider.sandbox.list()` and `getById(id)`
 
 ```typescript
 const items = await provider.sandbox.list();      // read-only, no side effects
-const { sandbox } = await provider.sandbox.getById(items[0].sandboxId);
+const sandbox = await provider.sandbox.getById(items[0].sandboxId);
 ```
 
 `list()` is read-only — it returns `SandboxInfo` stubs without opening a
@@ -149,12 +175,33 @@ directly.
 ### Templates
 
 ```typescript
-const templates = await provider.template.list();
+const templates = await provider.template!.list();
 ```
 
 To **create** a template, use `@superserve/sdk` directly — templates
 require a build spec (`from` + `steps`), which the ComputeSDK
 `template.create({ name })` shape doesn't carry.
+
+### Snapshots
+
+```typescript
+const snapshot = await provider.snapshot!.create(sandbox.sandboxId, {
+  name: 'before-upgrade',
+});
+
+// Boot a new sandbox from it; processes that were running continue.
+const fork = await provider.sandbox.create({ snapshotId: snapshot.id });
+
+const snapshots = await provider.snapshot!.list({ sandboxId: sandbox.sandboxId });
+await provider.snapshot!.delete(snapshot.id);
+```
+
+A snapshot saves a sandbox's memory and disk and is kept until deleted, even
+after the original sandbox is gone. Snapshots are listed per sandbox: pass
+`sandboxId` to `list()`, which returns an empty list without it.
+`snapshot.create()` connects to the sandbox first, which resumes it if it is
+paused. See the
+[snapshots guide](https://docs.superserve.ai/sandbox/snapshots).
 
 ## Error Handling
 
