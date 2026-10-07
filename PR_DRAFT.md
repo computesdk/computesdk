@@ -35,12 +35,13 @@ runner, `create` only answers once the launch has completed (state
 "running", C2), so by the time `exec` runs there is nothing left to wait
 for. No `@miosa/sdk` type change needed.
 
-Blocked on: `@miosa/sdk` has not published a version containing
-`RunnerClient` (npm tops out at 3.2.5; the runner module is still on
-feat/sdk-soma-runner, PR #213, unreleased). This package's
-`dependencies."@miosa/sdk"` is pinned to `^3.3.0` in anticipation, so
-`pnpm install` cannot resolve it yet - that is why this PR stays unopened
-until the SDK publishes.
+Blocked on: `@miosa/sdk@3.3.0` (tagged sdks/typescript/v3.3.0 in
+Miosa-osa/miosa) is not yet resolvable on the npm registry. This package's
+`dependencies."@miosa/sdk"` is `^3.3.0`, so `pnpm install` cannot resolve it
+until the publish lands. `src/runner-sdk.d.ts` mirrors the published
+RunnerClient surface (runnerUrl, RunnerDestroyResult, execStream, get, stop,
+setTimeout, list, filesystem, terminal, fallbackCreate, RunnerError) and
+should be deleted once the real types install.
 
 Testing: new `src/__tests__/runner-transport.test.ts` mocks `@miosa/sdk`
 via `vi.mock` (the module need not exist on disk for this) and covers

@@ -97,7 +97,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     it("should route through the runner when runnerMode: true", async () => {
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: sandboxRecord().id,
-        runnerIp: "194.180.34.15",
+        runnerUrl: "https://3.run-us.miosa.ai",
         data: sandboxRecord(),
       });
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
@@ -113,7 +113,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
       process.env.MIOSA_RUNNER_MODE = "1";
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: sandboxRecord().id,
-        runnerIp: "194.180.34.15",
+        runnerUrl: "https://3.run-us.miosa.ai",
         data: sandboxRecord(),
       });
       const provider = miosa({ apiKey: API_KEY });
@@ -138,7 +138,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     it("should pass runnerBaseDomain through to the RunnerClient", async () => {
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: sandboxRecord().id,
-        runnerIp: "194.180.34.15",
+        runnerUrl: "https://3.run-us.miosa.ai",
         data: sandboxRecord(),
       });
       const provider = miosa({
@@ -160,7 +160,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
       const record = sandboxRecord();
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: record.id,
-        runnerIp: "194.180.34.15",
+        runnerUrl: "https://3.run-us.miosa.ai",
         data: { data: record }, // control-plane-shaped body, per C2
       });
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
@@ -177,7 +177,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     it("should throw when the runner's create response carries no id", async () => {
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: "",
-        runnerIp: "194.180.34.15",
+        runnerUrl: "https://3.run-us.miosa.ai",
         data: { state: "running" },
       });
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
@@ -190,7 +190,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     async function createRunnerSandbox() {
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: sandboxRecord().id,
-        runnerIp: "194.180.34.15",
+        runnerUrl: "https://3.run-us.miosa.ai",
         data: sandboxRecord(),
       });
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
@@ -295,7 +295,7 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
     it("should still expose a port over the control plane when runnerMode: true", async () => {
       runnerSpies.createSandbox.mockResolvedValueOnce({
         id: sandboxRecord().id,
-        runnerIp: "194.180.34.15",
+        runnerUrl: "https://3.run-us.miosa.ai",
         data: sandboxRecord(),
       });
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
