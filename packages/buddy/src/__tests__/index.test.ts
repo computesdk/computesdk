@@ -10,6 +10,7 @@ import {
   runCommand,
   usesExec,
   waitForExitCode,
+  withSandboxTimeout,
 } from '../commands';
 import {
   getClient,
@@ -376,6 +377,15 @@ describe('command execution via exec', () => {
     expect(usesExec({ background: true })).toBe(false);
     expect(usesExec({ onStdout: () => {} })).toBe(false);
     expect(usesExec({ onStderr: () => {} })).toBe(false);
+    expect(usesExec({ runtime: 'PYTHON' })).toBe(true);
+    expect(usesExec({ runtime: 'PYTHON', timeout: 1_000 })).toBe(false);
+  });
+
+  it('wraps the line in timeout(1) with the seconds left, rounded up', () => {
+    const line = buildShellCommand('echo "$HOME"', { cwd: '/w' });
+    const wrapped = withSandboxTimeout(line, Date.now() + 2_500);
+    expect(wrapped).toBe('timeout -k 5 3 bash -c "cd \\"/w\\" && echo \\"\\$HOME\\""');
+    expect(withSandboxTimeout('true', Date.now() - 1)).toBe('timeout -k 5 1 bash -c "true"');
   });
 
   it('runs a plain command in one request and never touches the commands resource', async () => {
@@ -394,11 +404,20 @@ describe('command execution via exec', () => {
     });
   });
 
-  it('treats a missing exit code as success', async () => {
+  it('rejects a response without an exit code instead of assuming success', async () => {
     const { sandbox, client } = fakeCommandClient([], []);
     fakeExec(client, [{ stdout: 'ok' }]);
-    const result = await runCommand(sandbox, 'true', {});
-    expect(result).toMatchObject({ stdout: 'ok', stderr: '', exitCode: 0 });
+    await expect(runCommand(sandbox, 'true', {})).rejects.toThrow(/no exit code/);
+  });
+
+  it('sends a timed call wrapped in timeout(1) so the sandbox stops it', async () => {
+    const { sandbox, client } = fakeCommandClient([], []);
+    const exec = fakeExec(client, [{ exit_code: TIMEOUT_EXIT_CODE, stdout: '', stderr: '' }]);
+
+    const result = await runCommand(sandbox, 'sleep 60', { timeout: 10_000 });
+
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+    expect(exec.mock.calls[0][0].body.command).toMatch(/^timeout -k 5 (9|10) bash -c "sleep 60"$/);
   });
 
   it('retries while the sandbox is still booting', async () => {
@@ -453,6 +472,16 @@ describe('command execution via exec', () => {
 
     const result = await runCommand(sandbox, 'sleep 100', { timeout: 120_000 });
     expect(result).toMatchObject({ stdout: 'long\n', exitCode: 0 });
+    expect(client.execCommand).not.toHaveBeenCalled();
+    expect(client.executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps timed calls on other runtimes on the commands resource', async () => {
+    const { sandbox, client } = fakeCommandClient([], [{ exit_code: 0, status: 'SUCCESSFUL' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {});
+
+    await runCommand(sandbox, 'print(1)', { runtime: 'PYTHON', timeout: 5_000 });
     expect(client.execCommand).not.toHaveBeenCalled();
     expect(client.executeCommand).toHaveBeenCalledTimes(1);
   });

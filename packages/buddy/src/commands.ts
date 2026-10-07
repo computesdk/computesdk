@@ -15,9 +15,10 @@
  *   once a second, which would add up to a second to every call.
  *
  * A foreground call without streaming callbacks and without a timeout above the
- * exec limit takes the first route (one request instead of three). Anything
- * that needs the stream — callbacks, `background`, a longer `timeout` — takes
- * the second.
+ * exec limit takes the first route (one request instead of three). Its timeout
+ * is enforced in the sandbox with `timeout(1)`, so it needs the `BASH` runtime.
+ * Anything else — callbacks, `background`, a longer `timeout`, a timeout on
+ * another runtime — takes the second.
  */
 
 import { Command, type SandboxCommandResultView } from '@buddy-works/sandbox-sdk';
@@ -117,10 +118,11 @@ export async function runCommand(
 
   if (usesExec(options)) {
     // The exec endpoint rejects a booting sandbox instead of queueing, so the
-    // 400 is retried until the deadline. Nothing can be killed on timeout:
-    // exec has no command id, and when the server gives up at its own limit
-    // the process is left running in the sandbox.
-    const call = retryBootRaces(() => execCommand(sandbox, payload, runtime), deadline);
+    // 400 is retried until the deadline. Exec has no command id to kill, so a
+    // caller's timeout is enforced in the sandbox instead; only when the
+    // server gives up at its own limit is the process left running.
+    const line = () => (deadline ? withSandboxTimeout(payload, deadline) : payload);
+    const call = retryBootRaces(() => execCommand(sandbox, line(), runtime), deadline);
     let result: SandboxCommandResultView | typeof DEADLINE_PASSED;
     try {
       result = deadline ? await raceDeadline(call, deadline) : await call;
@@ -132,10 +134,13 @@ export async function runCommand(
       call.catch(() => {});
       return timedOutResult();
     }
+    if (typeof result.exit_code !== 'number') {
+      throw new Error('Buddy ran the command but returned no exit code.');
+    }
     return {
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
-      exitCode: result.exit_code ?? 0,
+      exitCode: result.exit_code,
       durationMs: Date.now() - startedAt,
     };
   }
@@ -246,12 +251,24 @@ export function isExecTimeout(error: unknown): boolean {
 /**
  * Foreground, no streaming callbacks, and no timeout the exec endpoint could
  * not honour. Callbacks force the log stream because exec only has the output
- * once the command has finished.
+ * once the command has finished. A timeout also needs a shell runtime, since
+ * it is enforced by wrapping the line in `timeout(1)`.
  */
-export function usesExec(options: RunCommandOptions): boolean {
+export function usesExec(options: BuddyRunCommandOptions): boolean {
   if (options.background) return false;
   if (options.onStdout || options.onStderr) return false;
-  return options.timeout === undefined || options.timeout <= EXEC_LIMIT_MS;
+  if (options.timeout === undefined) return true;
+  return options.timeout <= EXEC_LIMIT_MS && (options.runtime ?? 'BASH') === 'BASH';
+}
+
+/**
+ * Wraps a shell line so the sandbox stops it, with its process group, once the
+ * time left before `deadline` runs out. `timeout(1)` then exits 124, the same
+ * code the client-side deadline reports.
+ */
+export function withSandboxTimeout(line: string, deadline: number): string {
+  const seconds = Math.max(1, Math.ceil((deadline - Date.now()) / 1000));
+  return `timeout -k 5 ${seconds} bash -c "${escapeShellArg(line)}"`;
 }
 
 /**
