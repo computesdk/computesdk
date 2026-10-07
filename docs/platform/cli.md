@@ -111,6 +111,23 @@ compute bench run           # execute a benchmark run
 compute bench check         # validate a benchmark definition
 ```
 
+## `compute sandboxes`
+
+```bash
+compute sandboxes create                       # place a sandbox
+compute sandboxes list                         # list sandboxes
+compute sandboxes exec <id> uname -a           # run a one-shot command
+compute sandboxes spawn <id> --cwd /app -e NODE_ENV=production -- npm run dev
+compute sandboxes ps <id>                      # detached processes
+compute sandboxes url <id> --port 3000         # public URL for an exposed port
+```
+
+For `exec` and `spawn`, everything after the command's first word goes to the
+sandbox untouched — flags like `uname -a` or `node -e` are not CLI options.
+Pass CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`,
+`--org`) before the command; a bare `--` before the command is optional but
+supported.
+
 ## `compute providers`
 
 ```bash

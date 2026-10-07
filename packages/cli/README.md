@@ -44,6 +44,17 @@ override, pass `--org <slug>` (on the root command or any `sandboxes` /
 on the request. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
 The platform ignores the header for org API keys.
 
+For `compute sandboxes exec` and `compute sandboxes spawn`, everything after
+the command's first word goes to the sandbox untouched — flags like `uname
+-a` or `node -e` are not CLI options. Pass CLI options (`--json`,
+`--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`) before the command;
+a bare `--` before the command is optional but supported.
+
+```bash
+compute sandboxes exec sb1 uname -a
+compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
+```
+
 ## Migrating from @computesdk/cli 1.x
 
 v2 removes the legacy console authentication and its commands:

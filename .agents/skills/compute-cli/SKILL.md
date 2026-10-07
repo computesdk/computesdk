@@ -20,6 +20,7 @@ npm i -g @computesdk/cli                # or install once
 - `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only. (The gateway `compute run` command and `COMPUTESDK_API_KEY` were removed in @computesdk/cli 2.0.)
 - `compute actions <sub>` — benchmarks-platform Actions API (dispatch/runs/run/logs/cancel/rerun/artifacts/vault). See the actions section below.
 - `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
+- `compute sandboxes exec|spawn <id> <command...>` — everything after the command's first word goes to the sandbox untouched (`uname -a`, `node -e …` are not CLI flags). CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`, `--api-key`, `--base-url`) go before the command; a bare `--` separator is optional but supported, e.g. `spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev`.
 
 `--json` machine-readable output is available throughout the actions/bench surface.
 
