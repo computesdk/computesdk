@@ -17,7 +17,8 @@ npm i -g @computesdk/cli                # or install once
 
 ## Command groups
 
-- `compute login` / `compute logout` — OAuth device flow; one stored session covers every group below (`sandboxes`, `actions`, `market`, `bench`).
+- `compute login` / `compute logout` — OAuth device flow (the approval screen shows an org picker); one stored session covers every group below (`sandboxes`, `actions`, `market`, `bench`).
+- `compute org list` / `compute org use <slug>` / `compute org current` / `compute whoami` — manage the persisted active org (2.1+). `--org <slug>` or `COMPUTE_ORG` overrides per command.
 - `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only.
 - `compute sandboxes|sbx <sub>` — hosted platform sandboxes over `/api/v1/sandboxes` (create/list/get/destroy, exec, spawn/ps/logs/wait/kill/stdin/close-stdin, ls/cat/write/mkdir/rm, url, snapshots/snapshot/snapshot-delete).
 - `compute actions|ci <sub>` — benchmarks-platform Actions API (dispatch/runs/history/run/summary/inspect/logs/cancel/rerun/artifacts, providers, repos, vault).
@@ -28,7 +29,7 @@ npm i -g @computesdk/cli                # or install once
 
 ## Auth
 
-Resolution order: `--api-key` → `COMPUTE_API_KEY` → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → the stored `compute login` session. `--base-url` or `COMPUTE_PLATFORM_URL`/`BENCHMARKS_PLATFORM_URL` selects the endpoint (default `https://platform.computesdk.com`). The bearer key is only sent to computesdk.com/localhost, and only over HTTPS (plain http for loopback only), unless `--allow-untrusted-host` — which applies to explicit keys only; stored `compute login` credentials are never sent to untrusted hosts (`untrusted_host_stored_auth`). `insufficient_scope`/401 → run `compute login` again.
+Resolution order: `--api-key` → `COMPUTE_API_KEY` → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → the stored `compute login` session. Org selection: `--org <slug>` → `COMPUTE_ORG` → the login's persisted org (`compute org use`). `--base-url` or `COMPUTE_PLATFORM_URL`/`BENCHMARKS_PLATFORM_URL` selects the endpoint (default `https://platform.computesdk.com`). The bearer key is only sent to computesdk.com/localhost, and only over HTTPS (plain http for loopback only), unless `--allow-untrusted-host` — which applies to explicit keys only; stored `compute login` credentials are never sent to untrusted hosts (`untrusted_host_stored_auth`). `insufficient_scope`/401 → run `compute login` again.
 
 ## Actions quick reference
 
@@ -45,7 +46,7 @@ compute actions repos [connect <cloneUrl>|enable|disable <owner/repo>]
 compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|variable]
 ```
 
-- `--workflow` matches full path, display name, or workflow id — NOT basename.
+- `--workflow` matches the workflow's full path (`.github/workflows/ci.yml`), display name, or id — a bare basename like `ci.yml` does not resolve.
 - `vault set NAME` reads the value from stdin (`printf %s "$V" |`, not `echo`) or `--from-file`, never argv; `--revealable` (secrets, fixed at creation) allows `vault get`. Needs an owner/admin key; API is `/api/v1/vault` in benchmarks-platform.
 - `logs --follow` uses resumable byte-offset cursors; reconnects resume from `nextOffset`.
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
@@ -63,6 +64,8 @@ compute sandboxes ls|cat|write|mkdir|rm <id> [path]
 compute sandboxes url <id> --port <n>
 compute sandboxes snapshots|snapshot|snapshot-delete
 ```
+
+REST: `POST /api/v1/sandboxes` → `{ sandbox: { id, … } }`; provider order (`provider[:region]`, `market` bids first) resolves per-request `providerOrder` → org sandbox order → Actions order → default; `GET/PATCH /api/v1/sandboxes/settings` holds `providerOrder`/`marketCap`/`providerResources`/`warmPool`; rates at `/api/v1/sandboxes/rates`; pool at `/api/v1/sandboxes/pool/fill`; `GET /api/v1/sandboxes/{id}` returns the BYOK `attach: {provider, providerSandboxId, region}` descriptor (null on market fills/ambient).
 
 ## Testing against a PR preview deployment
 
