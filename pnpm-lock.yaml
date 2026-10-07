@@ -517,8 +517,8 @@ importers:
   packages/buddy:
     dependencies:
       '@buddy-works/sandbox-sdk':
-        specifier: ^0.1.9
-        version: 0.1.9
+        specifier: ^0.1.10
+        version: 0.1.10
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -3097,8 +3097,8 @@ packages:
   '@browserbasehq/sdk@2.9.0':
     resolution: {integrity: sha512-Xzm1+6suzQypXjley4Phqer++pjnYyST6S7CArUn3kWyGA8aruXjAV5wkmqE21lgXo9K3/OQJvCu48bKEZFNDQ==}
 
-  '@buddy-works/sandbox-sdk@0.1.9':
-    resolution: {integrity: sha512-x9pGTSSRBtYtGwDLWHPAhyCDXnyFe8DQKoLOP9DiwNKBVXuHah8rROnoLW1lNp4USYgS6w8zrnHxjykF2jGIhw==}
+  '@buddy-works/sandbox-sdk@0.1.10':
+    resolution: {integrity: sha512-0ljIDEAPA6Qc+P8wWpHJzNsx/CXSdtb2Jsrum+4jhn5v0jrgPo4FcdzsIYQx4cTRjMPRBnN1rqIMuUQya3+UQg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@bufbuild/protobuf@2.12.1':
@@ -10126,7 +10126,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@buddy-works/sandbox-sdk@0.1.9':
+  '@buddy-works/sandbox-sdk@0.1.10':
     dependencies:
       p-retry: 7.1.1
       zod: 4.3.5

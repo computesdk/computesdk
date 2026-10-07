@@ -220,7 +220,7 @@ export function statusOf(error: unknown): number | undefined {
   return typeof status === 'number' && status > 0 ? status : undefined;
 }
 
-function messageOf(error: unknown): string {
+export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -245,10 +245,11 @@ export function isUnroutableId(error: unknown): boolean {
  * A sandbox that has not finished booting yet. Commands submitted to a
  * `STARTING` sandbox are queued by Buddy, but the `content/` and `download/`
  * endpoints reject outright with 400 "Instance is not running" — measured to
- * last up to ~8 s when the warm pool is drained.
+ * last up to ~8 s when the warm pool is drained. The synchronous `exec`
+ * endpoint words the same state as 400 "Sandbox must be running".
  */
 export function isInstanceNotRunning(error: unknown): boolean {
-  return statusOf(error) === 400 && /instance is not running/i.test(messageOf(error));
+  return statusOf(error) === 400 && /instance is not running|sandbox must be running/i.test(messageOf(error));
 }
 
 /**

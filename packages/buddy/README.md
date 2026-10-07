@@ -190,7 +190,7 @@ The handle's `fs` and `client` call the API directly, without the provider's fir
 | `getById`    | ✅        | Returns `null` when the sandbox no longer exists.                                             |
 | `list`       | ✅        | Lists the sandboxes in the configured project.                                                |
 | `destroy`    | ✅        | Retries on server errors; a no-op if the sandbox is already gone.                             |
-| `runCommand` | ✅        | Streams stdout/stderr separately as the command runs, with real exit codes.                   |
+| `runCommand` | ✅        | One round trip via `exec` for plain calls; streams stdout/stderr separately when callbacks are passed. Real exit codes either way. |
 | `getInfo`    | ✅        | Reports Buddy's own status and setup status, plus every tunnel, in `metadata`.                 |
 | `getUrl`     | ✅        | Opens a tunnel if the port has none yet, keeping the existing ones.                           |
 | `filesystem` | ✅        | Uses Buddy's native content endpoints, not the shell — no quoting or size limits of a command line, one round trip each. |
@@ -200,8 +200,10 @@ The handle's `fs` and `client` call the API directly, without the provider's fir
 ## Notes
 
 - `create` does not wait for the sandbox to reach `RUNNING`. Buddy queues commands submitted against a starting sandbox, so waiting would only add latency to the first command. For the same reason the provider calls the SDK's `BuddyApiClient` directly instead of `Sandbox.create()`, which polls for readiness once a second.
+- `runCommand(cmd)` without streaming callbacks runs through Buddy's synchronous `exec` endpoint: one request that returns stdout, stderr and the exit code together. Such a command leaves no entry in the sandbox's command history. The server waits at most 60 s for it; past that the call returns exit code 124 with the server's message in `stderr`, and the process keeps running in the sandbox. Pass `onStdout`/`onStderr` or a `timeout` above 60 s for commands that may run longer.
+- `runCommand(cmd, { onStdout, onStderr })`, `streamCommand`, `background: true` and `timeout` above 60 s use the asynchronous `commands` resource with its log stream instead, so output arrives as it is produced and the command shows up in the history.
 - `runCommand(cmd, { background: true })` returns as soon as Buddy has queued the command, without reading its output.
-- `runCommand(cmd, { timeout })` terminates the command when the timeout passes.
+- `runCommand(cmd, { timeout })` returns the timeout result when the timeout passes; on the streaming route the command is terminated as well.
 - Sandbox placement inside an installation is not selectable; `region` picks the installation and the tunnel location.
 
 ## License
