@@ -1,5 +1,11 @@
 # @computesdk/beam
 
+## 0.3.12
+
+### Patch Changes
+
+- c71d7c2: Require Beam JS SDK 1.0.22 to support Docker-enabled sandboxes and Docker-equipped images.
+
 ## 0.3.11
 
 ### Patch Changes
