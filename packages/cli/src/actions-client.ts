@@ -10,6 +10,8 @@ export const DEFAULT_BASE_URL = 'https://platform.computesdk.com';
 export interface ActionsAuth {
   apiKey: string;
   baseUrl: string;
+  /** Sent as `X-Org-Slug` when set (--org / COMPUTE_ORG / stored login org). */
+  orgSlug?: string;
 }
 
 export interface CiWorkflowInput {
@@ -653,7 +655,12 @@ export class ActionsClient {
   }
 
   private headers(): Record<string, string> {
-    return { authorization: `Bearer ${this.auth.apiKey}`, accept: 'application/json' };
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${this.auth.apiKey}`,
+      accept: 'application/json',
+    };
+    if (this.auth.orgSlug) headers['X-Org-Slug'] = this.auth.orgSlug;
+    return headers;
   }
 
   private async parse<T>(res: Response): Promise<T> {
@@ -742,7 +749,7 @@ export function encodeWatchCursor(
 }
 
 /** The subset of `@benchsdk/cli`'s `resolveAuth` result Actions needs. */
-export type StoredPlatformAuth = { apiKey?: string; token?: string };
+export type StoredPlatformAuth = { apiKey?: string; token?: string; orgSlug?: string; orgId?: string };
 export type StoredPlatformAuthResolver = (opts: { baseUrl: string }) => Promise<StoredPlatformAuth>;
 
 const NO_CREDENTIALS_HINT =
@@ -760,6 +767,8 @@ export async function resolveActionsAuth(
     apiKey?: string;
     baseUrl?: string;
     allowUntrustedHost?: boolean;
+    /** One-off org override: sent as X-Org-Slug (also settable via COMPUTE_ORG). */
+    org?: string;
   },
   resolveStored: StoredPlatformAuthResolver = resolveStoredPlatformAuth,
 ): Promise<ActionsAuth> {
@@ -769,6 +778,11 @@ export async function resolveActionsAuth(
     process.env.BENCHMARKS_PLATFORM_URL || // legacy name
     DEFAULT_BASE_URL
   ).replace(/\/+$/, '');
+
+  // One-off org override: --org flag or COMPUTE_ORG sends X-Org-Slug on every
+  // request. Falls back to the stored login's saved org. The platform ignores
+  // the header for org API keys (they are already org-scoped).
+  let orgSlug = opts.org || process.env.COMPUTE_ORG || undefined;
 
   // The bearer key is attached to every request, so an attacker-controlled
   // --base-url would exfiltrate it. Only trusted hosts are allowed silently;
@@ -820,17 +834,21 @@ export async function resolveActionsAuth(
       throw new ActionsCliError('no_credentials', `${detail} ${NO_CREDENTIALS_HINT}`);
     }
     apiKey = stored.apiKey || stored.token || undefined;
+    // The stored orgSlug is only a cache of the last `org use` on this
+    // machine — the server's consent row is the source of truth, and
+    // sending it would pin this machine to a stale org after a switch
+    // elsewhere. Only --org/COMPUTE_ORG send X-Org-Slug.
   }
   if (!apiKey) {
     throw new ActionsCliError('no_credentials', `No API key. ${NO_CREDENTIALS_HINT}`);
   }
-  return { apiKey, baseUrl };
+  return { apiKey, baseUrl, ...(orgSlug && { orgSlug }) };
 }
 
 async function resolveStoredPlatformAuth(opts: { baseUrl: string }): Promise<StoredPlatformAuth> {
   const { resolveAuth } = await import('@benchsdk/cli');
   const auth = await resolveAuth({ baseUrl: opts.baseUrl });
-  return { apiKey: auth.apiKey, token: auth.token };
+  return { apiKey: auth.apiKey, token: auth.token, orgSlug: auth.orgSlug, orgId: auth.orgId };
 }
 
 function isLoopbackHost(host: string): boolean {

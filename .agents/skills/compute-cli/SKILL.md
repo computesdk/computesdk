@@ -19,11 +19,11 @@ npm i -g @computesdk/cli                # or install once
 
 - `compute login` / `compute logout` — OAuth device flow (the approval screen shows an org picker); one stored session covers every group below (`sandboxes`, `actions`, `market`, `bench`).
 - `compute org list` / `compute org use <slug>` / `compute org current` / `compute whoami` — manage the persisted active org (2.1+). `--org <slug>` or `COMPUTE_ORG` overrides per command; org API keys are tied to one org, so `--org` doesn't apply to them.
-- `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only.
-- `compute sandboxes|sbx <sub>` — hosted platform sandboxes over `/api/v1/sandboxes` (create/list/get/destroy, exec, spawn/ps/logs/wait/kill/stdin/close-stdin, ls/cat/write/mkdir/rm, url, snapshots/snapshot/snapshot-delete).
+- `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only. (The gateway `compute run` command and `COMPUTESDK_API_KEY` were removed in @computesdk/cli 2.0.)
+- `compute sandboxes|sbx <sub>` — hosted platform sandboxes over `/api/v1/sandboxes` (create/list/get/destroy, exec, spawn/ps/logs/wait/kill/stdin/close-stdin, ls/cat/write/mkdir/rm, url, snapshots/snapshot/snapshot-delete). exec|spawn pass command flags through to the sandbox: everything after the command's first word goes through untouched (`uname -a`, `node -e …` are not CLI flags); CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`, `--api-key`, `--base-url`) go before the command; a bare `--` separator is optional but supported, e.g. `spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev`.
 - `compute actions|ci <sub>` — benchmarks-platform Actions API (dispatch/runs/history/run/summary/inspect/logs/cancel/rerun/artifacts, providers, repos, vault).
 - `compute market <sub>` — sell side of the compute market (asks/bids/fills, provider credential, settlements).
-- `compute bench <args>` — full bench CLI folded in; dispatched pre-commander to `@benchsdk/runner`'s `run()`.
+- `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
 
 `--json` machine-readable output is available throughout the actions/sandboxes/market surface. Full command references: `compute-sandboxes-cli` and `compute-actions-cli` skills in https://github.com/computesdk/sandbox-skills.
 
@@ -60,8 +60,6 @@ compute sandboxes create [--order market,blaxel,vercel] [--label] [--image]
 compute sandboxes list|get|destroy
 compute sandboxes exec <id> <command...>          # one-off, buffered (~290s max)
 compute sandboxes spawn|ps|logs|wait|kill|stdin|close-stdin   # detached processes
-# 2.1.1+: flags pass through to the sandbox command — `exec <id> uname -a`,
-# `spawn <id> --cwd /app npm run dev`; a bare `--` also works. Unknown leading flags error.
 compute sandboxes ls|cat|write|mkdir|rm <id> [path]
 compute sandboxes url <id> --port <n>
 compute sandboxes snapshots|snapshot|snapshot-delete

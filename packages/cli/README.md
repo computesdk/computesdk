@@ -29,10 +29,31 @@ compute market …                # sell side of the compute market
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
 compute providers               # sandbox provider credential status
+compute org list                # your organizations (* = active)
+compute org use <slug>          # switch the stored login's active org
+compute org current / whoami    # current user + active org
 ```
 
 All platform commands accept `--api-key` / `COMPUTE_API_KEY` and fall back to
 the stored OAuth credentials.
+
+The active org comes from the stored login (`compute org use` changes it —
+it's per user, so every CLI on every machine sees the switch). For a one-off
+override, pass `--org <slug>` (on the root command or any `sandboxes` /
+`actions` / `market` subcommand) or set `COMPUTE_ORG`; it sends `X-Org-Slug`
+on the request. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
+The platform ignores the header for org API keys.
+
+For `compute sandboxes exec` and `compute sandboxes spawn`, everything after
+the command's first word goes to the sandbox untouched — flags like `uname
+-a` or `node -e` are not CLI options. Pass CLI options (`--json`,
+`--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`) before the command;
+a bare `--` before the command is optional but supported.
+
+```bash
+compute sandboxes exec sb1 uname -a
+compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
+```
 
 ## Migrating from @computesdk/cli 1.x
 
