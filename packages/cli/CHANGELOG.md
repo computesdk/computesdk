@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.1.1
+
+### Patch Changes
+
+- a0b4dae: fix(cli): pass flags inside `sandboxes exec`/`spawn` commands through to the sandbox. `exec <id> uname -a` and `spawn <id> node -e "…"` no longer get eaten as CLI options; CLI options go before the command and `--` still works.
+
 ## 2.1.0
 
 ### Minor Changes
