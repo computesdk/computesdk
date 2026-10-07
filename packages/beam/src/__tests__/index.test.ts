@@ -159,4 +159,24 @@ describe('lazy sandbox readiness', () => {
 
     expect(fromRegistry).toHaveBeenCalledWith('node:24');
   });
+
+  test('forwards Docker enablement and keeps Docker and plain builders separate', async () => {
+    const instance = mockSandbox();
+    const builders: Sandbox[] = [];
+    vi.mocked(Sandbox.prototype.create).mockImplementation(async function (this: Sandbox) {
+      builders.push(this);
+      return instance;
+    });
+    const provider = beam({ token: 'token', workspaceId: 'workspace' });
+    const options = { name: 'docker-actions', dockerEnabled: true };
+
+    await provider.sandbox.create(options);
+    await provider.sandbox.create(options);
+    await provider.sandbox.create({ ...options, dockerEnabled: false });
+
+    expect(builders[0].stub.config.dockerEnabled).toBe(true);
+    expect(builders[1]).toBe(builders[0]);
+    expect(builders[2].stub.config.dockerEnabled).toBe(false);
+    expect(builders[2]).not.toBe(builders[0]);
+  });
 });
