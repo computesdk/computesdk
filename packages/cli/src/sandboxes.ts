@@ -151,11 +151,112 @@ function printSnapshot(s: SandboxSnapshot): void {
 
 // ─── Commands ────────────────────────────────────────────────────────────────
 
+interface LeadOptSpec {
+  /** Accepted spellings, e.g. ['-e', '--env']. */
+  aliases: string[];
+  /** Commander-style camelCase key merged into the parsed options. */
+  key: string;
+  /** 'bool' takes no value; 'value' takes one; 'repeat' collects repeated values. */
+  flag: 'bool' | 'value' | 'repeat';
+}
+
+const AUTH_LEAD_OPTS: LeadOptSpec[] = [
+  { aliases: ['--api-key'], key: 'apiKey', flag: 'value' },
+  { aliases: ['--base-url'], key: 'baseUrl', flag: 'value' },
+  { aliases: ['--allow-untrusted-host'], key: 'allowUntrustedHost', flag: 'bool' },
+  { aliases: ['--org'], key: 'org', flag: 'value' },
+  { aliases: ['--json'], key: 'json', flag: 'bool' },
+];
+
+const EXEC_LEAD_OPTS: LeadOptSpec[] = [
+  ...AUTH_LEAD_OPTS,
+  { aliases: ['--timeout-ms'], key: 'timeoutMs', flag: 'value' },
+];
+
+const SPAWN_LEAD_OPTS: LeadOptSpec[] = [
+  ...AUTH_LEAD_OPTS,
+  { aliases: ['--cwd'], key: 'cwd', flag: 'value' },
+  { aliases: ['-e', '--env'], key: 'env', flag: 'repeat' },
+  { aliases: ['--stdin'], key: 'stdin', flag: 'bool' },
+];
+
+/**
+ * `exec`/`spawn` run under `.passThroughOptions()`: everything after
+ * `<sandboxId>` arrives in the variadic `<command...>` untouched, so a flag
+ * like `uname -a` or `node -e …` reaches the sandbox instead of being eaten
+ * as a CLI option. CLI options still parse when placed *before* the sandbox
+ * id; this helper additionally accepts them between the id and the command —
+ * parse leading known options, stop at the first non-option word or `--`.
+ */
+export function takeLeadingOptions(
+  argv: string[],
+  specs: LeadOptSpec[],
+): { command: string[]; inline: Record<string, string | string[] | true> } {
+  const byAlias = new Map<string, LeadOptSpec>();
+  for (const spec of specs) for (const alias of spec.aliases) byAlias.set(alias, spec);
+  const inline: Record<string, string | string[] | true> = {};
+  let i = 0;
+  for (; i < argv.length; i++) {
+    const token = argv[i];
+    if (token === '--') {
+      i++;
+      break;
+    }
+    if (!token.startsWith('-') || token === '-') break;
+    const eq = token.indexOf('=');
+    const flag = eq === -1 ? token : token.slice(0, eq);
+    let spec = byAlias.get(flag);
+    // Attached short-option value, e.g. `-eFOO=bar` (commander accepts the
+    // same form before the sandbox id).
+    let attached: string | undefined;
+    if (!spec && !flag.startsWith('--') && flag.length > 2) {
+      const shortSpec = byAlias.get(flag.slice(0, 2));
+      if (shortSpec && shortSpec.flag !== 'bool') {
+        spec = shortSpec;
+        attached = flag.slice(2);
+        if (attached.startsWith('=')) attached = attached.slice(1);
+        if (eq !== -1) attached += token.slice(eq);
+      }
+    }
+    if (!spec) {
+      throw new Error(
+        `unknown option '${flag}' — pass CLI options before the command, or use -- to separate them`,
+      );
+    }
+    if (spec.flag === 'bool') {
+      if (eq !== -1) throw new Error(`option '${flag}' takes no value`);
+      inline[spec.key] = true;
+    } else {
+      const value = attached ?? (eq !== -1 ? token.slice(eq + 1) : argv[++i]);
+      if (value === undefined) throw new Error(`option '${flag}' requires a value`);
+      if (spec.flag === 'repeat') {
+        ((inline[spec.key] ??= []) as string[]).push(value);
+      } else {
+        inline[spec.key] = value;
+      }
+    }
+  }
+  return { command: argv.slice(i), inline };
+}
+
+function mergeLeadOpts<T>(opts: T, inline: Record<string, string | string[] | true>): T {
+  const merged = { ...opts } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(inline)) {
+    if (Array.isArray(value)) {
+      merged[key] = [...((merged[key] as string[] | undefined) ?? []), ...value];
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged as T;
+}
+
 export function registerSandboxesCommands(program: Command): void {
   const cmd = program
     .command('sandboxes')
     .alias('sbx')
     .description('Create and drive sandboxes through the platform')
+    .enablePositionalOptions()
     .configureOutput({ outputError: usageErrorOutput });
 
   cmd
@@ -256,12 +357,18 @@ export function registerSandboxesCommands(program: Command): void {
 
   cmd
     .command('exec <sandboxId> <command...>')
-    .description('Run a one-shot command and print its result')
+    .description('Run a one-shot command and print its result (options before the command; -- also works)')
     .option('--timeout-ms <ms>', 'command timeout in ms')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
-    .action(async (sandboxId: string, command: string[], opts: CommonOpts & { timeoutMs?: string }) => {
+    .passThroughOptions()
+    .action(async (sandboxId: string, rawCommand: string[], rawOpts: CommonOpts & { timeoutMs?: string }) => {
+      let opts = rawOpts;
       try {
+        const lead = takeLeadingOptions(rawCommand, EXEC_LEAD_OPTS);
+        opts = mergeLeadOpts(rawOpts, lead.inline);
+        const command = lead.command;
+        if (command.length === 0) throw new Error('missing command to run');
         const c = await client(opts);
         const res = await c.post<{ commandId: string } & CommandResult>(
           `/api/v1/sandboxes/${sandboxId}/commands`,
@@ -284,14 +391,20 @@ export function registerSandboxesCommands(program: Command): void {
 
   cmd
     .command('spawn <sandboxId> <command...>')
-    .description('Start a detached process that outlives this request')
+    .description('Start a detached process that outlives this request (options before the command; -- also works)')
     .option('--cwd <dir>', 'working directory')
     .option('-e, --env <key=value>', 'environment variable (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
     .option('--stdin', 'keep the process\'s stdin pipe open for `stdin`/`close-stdin`')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
-    .action(async (sandboxId: string, command: string[], opts: CommonOpts & { cwd?: string; env?: string[]; stdin?: boolean }) => {
+    .passThroughOptions()
+    .action(async (sandboxId: string, rawCommand: string[], rawOpts: CommonOpts & { cwd?: string; env?: string[]; stdin?: boolean }) => {
+      let opts = rawOpts;
       try {
+        const lead = takeLeadingOptions(rawCommand, SPAWN_LEAD_OPTS);
+        opts = mergeLeadOpts(rawOpts, lead.inline);
+        const command = lead.command;
+        if (command.length === 0) throw new Error('missing command to spawn');
         const c = await client(opts);
         const res = await c.post<{ process: SandboxProcess }>(
           `/api/v1/sandboxes/${sandboxId}/processes`,
