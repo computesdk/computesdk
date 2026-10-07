@@ -80,6 +80,35 @@ describe('exec/spawn pass-through command flags', () => {
       timeoutMs: 5000,
     });
   });
+
+  it('spawn <id> -eFOO=bar cmd accepts the attached short-option value', async () => {
+    await buildProgram().parseAsync(['sandboxes', 'spawn', 'sb1', '-eFOO=bar', 'cmd'], { from: 'user' });
+    expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/sb1/processes', {
+      command: `'cmd'`,
+      env: { FOO: 'bar' },
+    });
+  });
+
+  it('exec <id> -- --flaggy-command sends a dash-prefixed command through', async () => {
+    await buildProgram().parseAsync(['sandboxes', 'exec', 'sb1', '--', '-command'], { from: 'user' });
+    expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/sb1/commands', {
+      command: `'-command'`,
+    });
+  });
+
+  it('a --json after the sandbox id still yields a JSON error envelope', async () => {
+    post.mockRejectedValueOnce(new Error('boom'));
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'exec', 'sb1', '--json', 'uname'], { from: 'user' });
+    } finally {
+      const printed = write.mock.calls.map((c) => String(c[0])).join('');
+      write.mockRestore();
+      exit.mockRestore();
+      expect(printed.trim().startsWith('{')).toBe(true);
+    }
+  });
 });
 
 describe('takeLeadingOptions', () => {

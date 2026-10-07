@@ -205,7 +205,19 @@ export function takeLeadingOptions(
     if (!token.startsWith('-') || token === '-') break;
     const eq = token.indexOf('=');
     const flag = eq === -1 ? token : token.slice(0, eq);
-    const spec = byAlias.get(flag);
+    let spec = byAlias.get(flag);
+    // Attached short-option value, e.g. `-eFOO=bar` (commander accepts the
+    // same form before the sandbox id).
+    let attached: string | undefined;
+    if (!spec && !flag.startsWith('--') && flag.length > 2) {
+      const shortSpec = byAlias.get(flag.slice(0, 2));
+      if (shortSpec && shortSpec.flag !== 'bool') {
+        spec = shortSpec;
+        attached = flag.slice(2);
+        if (attached.startsWith('=')) attached = attached.slice(1);
+        if (eq !== -1) attached += token.slice(eq);
+      }
+    }
     if (!spec) {
       throw new Error(
         `unknown option '${flag}' — pass CLI options before the command, or use -- to separate them`,
@@ -215,7 +227,7 @@ export function takeLeadingOptions(
       if (eq !== -1) throw new Error(`option '${flag}' takes no value`);
       inline[spec.key] = true;
     } else {
-      const value = eq !== -1 ? token.slice(eq + 1) : argv[++i];
+      const value = attached ?? (eq !== -1 ? token.slice(eq + 1) : argv[++i]);
       if (value === undefined) throw new Error(`option '${flag}' requires a value`);
       if (spec.flag === 'repeat') {
         ((inline[spec.key] ??= []) as string[]).push(value);
@@ -351,9 +363,10 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .passThroughOptions()
     .action(async (sandboxId: string, rawCommand: string[], rawOpts: CommonOpts & { timeoutMs?: string }) => {
+      let opts = rawOpts;
       try {
         const lead = takeLeadingOptions(rawCommand, EXEC_LEAD_OPTS);
-        const opts = mergeLeadOpts(rawOpts, lead.inline);
+        opts = mergeLeadOpts(rawOpts, lead.inline);
         const command = lead.command;
         if (command.length === 0) throw new Error('missing command to run');
         const c = await client(opts);
@@ -372,7 +385,7 @@ export function registerSandboxesCommands(program: Command): void {
         // exitCode, not exit(): a piped stdout flushes before the CLI exits.
         if (res.exitCode !== 0) process.exitCode = res.exitCode;
       } catch (e) {
-        fail(e, rawOpts);
+        fail(e, opts);
       }
     });
 
@@ -386,9 +399,10 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .passThroughOptions()
     .action(async (sandboxId: string, rawCommand: string[], rawOpts: CommonOpts & { cwd?: string; env?: string[]; stdin?: boolean }) => {
+      let opts = rawOpts;
       try {
         const lead = takeLeadingOptions(rawCommand, SPAWN_LEAD_OPTS);
-        const opts = mergeLeadOpts(rawOpts, lead.inline);
+        opts = mergeLeadOpts(rawOpts, lead.inline);
         const command = lead.command;
         if (command.length === 0) throw new Error('missing command to spawn');
         const c = await client(opts);
@@ -403,7 +417,7 @@ export function registerSandboxesCommands(program: Command): void {
         );
         output(opts, res.process, printProcess);
       } catch (e) {
-        fail(e, rawOpts);
+        fail(e, opts);
       }
     });
 
