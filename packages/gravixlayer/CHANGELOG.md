@@ -1,5 +1,11 @@
 # @computesdk/gravixlayer
 
+## 1.0.3
+
+### Patch Changes
+
+- 1b608c6: Floor the `gravixlayer` SDK at ^0.1.30 so installs resolve the pooled HTTP/2 transport the provider documents.
+
 ## 1.0.2
 
 ### Patch Changes
