@@ -155,6 +155,9 @@ interface Http2SessionPool {
   // wait on this against a bound, so it is never worse than polling but never
   // sleeps the full bound when capacity frees up early.
   capacityEvents: import("node:events").EventEmitter;
+  // Most recent connection failure, kept so selectSession can reject with a
+  // real cause when every session has failed. Cleared on a successful connect.
+  lastError: Error | undefined;
 }
 
 // A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
@@ -212,7 +215,9 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
       import("node:http2").ClientHttp2Session,
       number
     >(),
-    capacityEvents: new EventEmitter(),
+    // Every concurrent request parks a listener here; the count is unbounded.
+    capacityEvents: new EventEmitter().setMaxListeners(0),
+    lastError: undefined,
   };
   // A fully-recycled pool (every session discarded) must re-arm the
   // cold-start gate: the original firstReady stays resolved forever, so a
@@ -240,11 +245,13 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
 
     session.once("connect", () => {
       pool.ready.add(session);
+      pool.lastError = undefined;
       pool.resolveFirstReady();
       pool.capacityEvents.emit("change");
     });
 
-    const discard = () => {
+    const discard = (cause?: unknown) => {
+      if (cause instanceof Error) pool.lastError = cause;
       pool.ready.delete(session);
       pool.sessions = pool.sessions.filter(
         (candidate) => candidate !== session,
@@ -272,7 +279,7 @@ function sessionStreamCapacity(
   session: import("node:http2").ClientHttp2Session,
 ): number {
   const advertised = session.remoteSettings?.maxConcurrentStreams;
-  return typeof advertised === "number" && advertised > 0
+  return typeof advertised === "number" && advertised >= 0
     ? advertised
     : DEFAULT_SESSION_STREAM_CAP;
 }
@@ -323,28 +330,41 @@ function waitForCapacityChange(
 const CAPACITY_WAIT_STEP_MS = 20;
 const CAPACITY_WAIT_BUDGET_MS = 200;
 
-// Picks a session to dispatch onto: the least-loaded ready session with room
-// under its own stream cap, waiting briefly only while every ready session is
-// saturated (or none is ready yet), and otherwise falling back to the
-// connecting pool so a request is never stalled indefinitely.
+// Picks a session to dispatch onto and reserves a stream slot on it: the
+// least-loaded ready session with room under its own stream cap, waiting
+// briefly only while every ready session is saturated (or none is ready yet),
+// and otherwise falling back to the connecting pool so a request is never
+// stalled indefinitely. Selection and reservation happen in one synchronous
+// step (no await between them), so a burst of concurrent callers each sees the
+// load the previous one just added instead of all picking the same session.
+// The caller releases the slot in its finally block. Rejects with the last
+// connection error once the wait budget is spent and no session remains.
 async function selectSession(
   pool: Http2SessionPool,
   waitBudgetMs: number,
 ): Promise<import("node:http2").ClientHttp2Session> {
+  const reserve = (session: import("node:http2").ClientHttp2Session) => {
+    pool.inFlightBySession.set(
+      session,
+      (pool.inFlightBySession.get(session) ?? 0) + 1,
+    );
+    return session;
+  };
   const deadline = Date.now() + waitBudgetMs;
   for (;;) {
     const pick = leastLoadedReady(pool);
     if (pick !== undefined && (pick.spare > 0 || Date.now() >= deadline)) {
-      return pick.session;
+      return reserve(pick.session);
     }
-    if (
-      pick === undefined &&
-      pool.sessions.length > 0 &&
-      Date.now() >= deadline
-    ) {
-      const candidate = pool.sessions[pool.next % pool.sessions.length]!;
-      pool.next = (pool.next + 1) % pool.sessions.length;
-      return candidate;
+    if (pick === undefined && Date.now() >= deadline) {
+      if (pool.sessions.length > 0) {
+        const candidate = pool.sessions[pool.next % pool.sessions.length]!;
+        pool.next = (pool.next + 1) % pool.sessions.length;
+        return reserve(candidate);
+      }
+      throw (
+        pool.lastError ?? new Error("MIOSA HTTP/2 connection failed")
+      );
     }
     await waitForCapacityChange(pool, CAPACITY_WAIT_STEP_MS);
   }
@@ -422,13 +442,22 @@ export async function nodeHttp2Request(
   // pool below and the request itself surfaces the connection error promptly.
   if (pool.ready.size === 0) {
     let firstReadyTimer: ReturnType<typeof setTimeout> | undefined;
+    let onChange: (() => void) | undefined;
     await Promise.race([
       pool.firstReady,
       new Promise<void>((resolve) => {
         firstReadyTimer = setTimeout(resolve, 1000);
       }),
+      // Every connection failed: stop waiting and let selectSession reject.
+      new Promise<void>((resolve) => {
+        onChange = () => {
+          if (pool.sessions.length === 0) resolve();
+        };
+        pool.capacityEvents.on("change", onChange);
+      }),
     ]);
     if (firstReadyTimer !== undefined) clearTimeout(firstReadyTimer);
+    if (onChange !== undefined) pool.capacityEvents.off("change", onChange);
   }
 
   // Dispatch to the least-loaded ready session, respecting its own advertised
@@ -437,20 +466,17 @@ export async function nodeHttp2Request(
   // requests, so holding the burst for more sessions to connect only adds
   // latency without avoiding anything. The wait above may have already used
   // its budget finding this session, so give it none left to spend here.
-  const session = await selectSession(
-    pool,
-    pool.ready.size === 0 ? 0 : CAPACITY_WAIT_BUDGET_MS,
-  );
-  pool.inFlightBySession.set(
-    session,
-    (pool.inFlightBySession.get(session) ?? 0) + 1,
-  );
-
+  let session: import("node:http2").ClientHttp2Session | undefined;
   try {
+    session = await selectSession(
+      pool,
+      pool.ready.size === 0 ? 0 : CAPACITY_WAIT_BUDGET_MS,
+    );
+    const reserved = session;
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
       let status = 0;
       const chunks: Buffer[] = [];
-      const request = session.request({
+      const request = reserved.request({
         ":method": method,
         ":path": `${url.pathname}${url.search}`,
         ...headers,
@@ -482,9 +508,11 @@ export async function nodeHttp2Request(
       pool.inFlight = 0;
       setPoolRef(pool, false);
     }
-    const remaining = (pool.inFlightBySession.get(session) ?? 1) - 1;
-    if (remaining > 0) pool.inFlightBySession.set(session, remaining);
-    else pool.inFlightBySession.delete(session);
+    if (session !== undefined) {
+      const remaining = (pool.inFlightBySession.get(session) ?? 1) - 1;
+      if (remaining > 0) pool.inFlightBySession.set(session, remaining);
+      else pool.inFlightBySession.delete(session);
+    }
     pool.capacityEvents.emit("change");
   }
 }

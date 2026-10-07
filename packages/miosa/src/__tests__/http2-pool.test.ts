@@ -14,6 +14,7 @@ interface TestServer {
   origin: string;
   streamsSeen: number;
   sessionsSeen: Set<http2.Http2Session>;
+  streamsPerSession: Map<http2.Http2Session, number>;
   close: () => Promise<void>;
 }
 
@@ -23,6 +24,7 @@ function startServer(
 ): Promise<TestServer> {
   return new Promise((resolve, reject) => {
     const sessionsSeen = new Set<http2.Http2Session>();
+    const streamsPerSession = new Map<http2.Http2Session, number>();
     let streamsSeen = 0;
     const server = http2.createServer({
       settings: { maxConcurrentStreams },
@@ -30,6 +32,10 @@ function startServer(
     server.on("session", (session) => sessionsSeen.add(session));
     server.on("stream", (stream) => {
       streamsSeen += 1;
+      streamsPerSession.set(
+        stream.session as http2.Http2Session,
+        (streamsPerSession.get(stream.session as http2.Http2Session) ?? 0) + 1,
+      );
       setTimeout(() => {
         stream.respond({ ":status": 200 });
         stream.end("ok");
@@ -48,6 +54,7 @@ function startServer(
           return streamsSeen;
         },
         sessionsSeen,
+        streamsPerSession,
         close: () =>
           new Promise((resolveClose) => server.close(() => resolveClose())),
       });
@@ -133,5 +140,45 @@ describe("http2 pool dispatch", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("should spread a synchronous burst across many sessions", async () => {
+    // 100 requests fired in a single turn: each must see the load the
+    // previous one reserved, so no session takes the whole burst.
+    const server = await startServer(250, 30);
+    try {
+      // Warm the pool so all 16 sessions are ready; at cold start only the
+      // first connected session is eligible, which is by design.
+      await burst(server.origin, 1);
+      while (server.sessionsSeen.size < 16) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      server.streamsPerSession.clear();
+      const results = await burst(server.origin, 100);
+      expect(results.every((r) => r.ok)).toBe(true);
+      const counts = [...server.streamsPerSession.values()];
+      expect(counts.length).toBe(16);
+      expect(Math.max(...counts)).toBeLessThanOrEqual(8);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("should reject promptly when every connection is refused", async () => {
+    const server = await startServer(250);
+    const origin = server.origin;
+    await server.close();
+    const timersBefore = process
+      .getActiveResourcesInfo()
+      .filter((r) => r === "Timeout").length;
+    const start = Date.now();
+    await expect(
+      nodeHttp2Request(new URL(`${origin}/`), "GET", {}),
+    ).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    expect(Date.now() - start).toBeLessThan(900);
+    expect(
+      process.getActiveResourcesInfo().filter((r) => r === "Timeout"),
+    ).toHaveLength(timersBefore);
   });
 });
