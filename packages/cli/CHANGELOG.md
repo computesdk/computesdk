@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.2.0
+
+### Minor Changes
+
+- 7c14764: `compute sandboxes`: add `quote` (`size`/resources, region, timeout, order type, max price) and `create --size <small|medium|large|xlarge>` plus `--max-price`/`--max-price-per`, `--order-type`/`--market`, mirroring the platform-sizes API.
+
 ## 2.1.1
 
 ### Patch Changes
