@@ -22,6 +22,10 @@ export type {
   DaemonConfig
 } from './infra-factory';
 
+// Export config gate for providers whose vendor SDK holds process-global state
+export { createConfigGate, createConfigStamp } from './config-gate';
+export type { ConfigGate, ConfigStamp, InstallConfig } from './config-gate';
+
 // Export egress router setup
 export { setupSandboxEgress, readSandboxEgress, EGRESS_SHIM_DIR } from './egress';
 

@@ -7,7 +7,7 @@
  */
 
 import beamClient, { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } from '@computesdk/provider';
 import type {
   CommandResult,
   SandboxInfo,
@@ -34,8 +34,8 @@ interface BeamOptsSnapshot {
 
 let configuredOpts: BeamOptsSnapshot | null = null;
 
-function configureBeamOpts(config: BeamConfig): void {
-  const next: BeamOptsSnapshot = {
+function resolveBeamOpts(config: BeamConfig): BeamOptsSnapshot {
+  return {
     token: config.token || (typeof process !== 'undefined' && process.env?.BEAM_TOKEN) || '',
     workspaceId: config.workspaceId || (typeof process !== 'undefined' && process.env?.BEAM_WORKSPACE_ID) || '',
     // beamOpts.gatewayUrl/timeout are not the fallbacks: an earlier
@@ -43,6 +43,10 @@ function configureBeamOpts(config: BeamConfig): void {
     gatewayUrl: config.gatewayUrl || 'https://app.beam.cloud',
     timeout: config.timeout || 30000,
   };
+}
+
+function configureBeamOpts(config: BeamConfig): void {
+  const next = resolveBeamOpts(config);
   beamOpts.token = next.token;
   beamOpts.workspaceId = next.workspaceId;
   beamOpts.gatewayUrl = next.gatewayUrl;
@@ -59,6 +63,40 @@ function configureBeamOpts(config: BeamConfig): void {
     (beamClient as unknown as { _client?: unknown })._client = undefined;
     configuredOpts = next;
   }
+}
+
+/**
+ * beamOpts and the singleton BeamClient are process-global: a different
+ * credential must serialize against in-flight calls, not interleave with
+ * them. The gate admits same-config calls concurrently; a different resolved
+ * config waits for the active calls to drain, then installs itself once.
+ */
+const beamGate = createConfigGate();
+
+/** Stamps created/connected instances so their instance ops re-enter the gate under their own config. */
+const beamStamp = createConfigStamp<BeamConfig>();
+
+function beamKey(config: BeamConfig): string {
+  return JSON.stringify(resolveBeamOpts(config));
+}
+
+async function withBeamConfig<T>(config: BeamConfig, fn: () => Promise<T>): Promise<T> {
+  return beamGate.withConfig(beamKey(config), () => configureBeamOpts(config), fn);
+}
+
+/**
+ * Instance ops use the config the instance was created under. An instance
+ * arriving without a stamp (constructed outside this adapter) joins whatever
+ * epoch is active without installing a config — the same best-effort
+ * semantics it always had.
+ */
+function withBeamInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): Promise<T> {
+  const config = beamStamp.config(sandbox);
+  if (config === undefined) {
+    const key = configuredOpts === null ? 'beam.unconfigured' : JSON.stringify(configuredOpts);
+    return beamGate.withConfig(key, undefined, fn);
+  }
+  return withBeamConfig(config, fn);
 }
 
 function shellEscape(arg: string): string {
@@ -146,9 +184,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
   methods: {
     sandbox: {
-      create: async (config: BeamConfig, options?: CreateSandboxOptions) => {
-        configureBeamOpts(config);
-
+      create: async (config: BeamConfig, options?: CreateSandboxOptions) =>
+        withBeamConfig(config, async () => {
         if (!beamOpts.token) {
           throw new Error(
             `Missing Beam token. Provide 'token' in config or set BEAM_TOKEN environment variable. Get your token from https://app.beam.cloud`
@@ -203,7 +240,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           cacheKey = sandboxCacheKey(sandboxConfig);
           const sandbox = getCachedSandbox(cacheKey, sandboxConfig);
           const instance = await sandbox.create({ waitForReady: false });
-          return { sandbox: instance, sandboxId: instance.containerId };
+          return { sandbox: beamStamp.stamp(instance, config), sandboxId: instance.containerId };
         } catch (error) {
           if (cacheKey) sandboxCache.delete(cacheKey);
           if (error instanceof Error && (error.message.includes('unauthorized') || error.message.includes('401'))) {
@@ -215,28 +252,29 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             `Failed to create Beam sandbox: ${error instanceof Error ? error.message : String(error)}`
           );
         }
-      },
+        }),
 
-      getById: async (config: BeamConfig, sandboxId: string) => {
-        configureBeamOpts(config);
-        if (!beamOpts.token) return null;
-        try {
-          const instance = await Sandbox.connect(sandboxId);
-          return { sandbox: instance, sandboxId: instance.containerId };
-        } catch { return null; }
-      },
+      getById: async (config: BeamConfig, sandboxId: string) =>
+        withBeamConfig(config, async () => {
+          if (!beamOpts.token) return null;
+          try {
+            const instance = await Sandbox.connect(sandboxId);
+            return { sandbox: beamStamp.stamp(instance, config), sandboxId: instance.containerId };
+          } catch { return null; }
+        }),
 
       list: async (_config: BeamConfig) => [],
 
-      destroy: async (config: BeamConfig, sandboxId: string) => {
-        configureBeamOpts(config);
-        if (!beamOpts.token) return;
-        try {
-          await Sandbox.terminate(sandboxId);
-        } catch { /* Sandbox might already be destroyed */ }
-      },
+      destroy: async (config: BeamConfig, sandboxId: string) =>
+        withBeamConfig(config, async () => {
+          if (!beamOpts.token) return;
+          try {
+            await Sandbox.terminate(sandboxId);
+          } catch { /* Sandbox might already be destroyed */ }
+        }),
 
-      runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+      runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> =>
+        withBeamInstance(sandbox, async () => {
         const startTime = Date.now();
         try {
           let fullCommand = command;
@@ -258,7 +296,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
-      },
+        }),
 
       getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
         let runtime = 'python';
@@ -286,46 +324,50 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         };
       },
 
-      getUrl: async (sandbox: SandboxInstance, options: { port: number; protocol?: string }): Promise<string> => {
-        try {
-          await ensureSandboxReady(sandbox);
-          return await sandbox.exposePort(options.port);
-        } catch (error) {
-          throw new Error(`Failed to get Beam URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      },
+      getUrl: async (sandbox: SandboxInstance, options: { port: number; protocol?: string }): Promise<string> =>
+        withBeamInstance(sandbox, async () => {
+          try {
+            await ensureSandboxReady(sandbox);
+            return await sandbox.exposePort(options.port);
+          } catch (error) {
+            throw new Error(`Failed to get Beam URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }),
 
       filesystem: {
-        readFile: async (sandbox: SandboxInstance, path: string, _runCommand: RunCommandFn): Promise<string> => {
-          await ensureSandboxReady(sandbox);
-          try {
-            return await sandbox.fs.readText(path);
-          } catch (error) {
-            throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        },
-        writeFile: async (sandbox: SandboxInstance, path: string, content: string, _runCommand: RunCommandFn): Promise<void> => {
-          await ensureSandboxReady(sandbox);
-          try {
-            await sandbox.fs.writeText(path, content);
-          } catch (error) {
-            throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        },
+        readFile: async (sandbox: SandboxInstance, path: string, _runCommand: RunCommandFn): Promise<string> =>
+          withBeamInstance(sandbox, async () => {
+            await ensureSandboxReady(sandbox);
+            try {
+              return await sandbox.fs.readText(path);
+            } catch (error) {
+              throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }),
+        writeFile: async (sandbox: SandboxInstance, path: string, content: string, _runCommand: RunCommandFn): Promise<void> =>
+          withBeamInstance(sandbox, async () => {
+            await ensureSandboxReady(sandbox);
+            try {
+              await sandbox.fs.writeText(path, content);
+            } catch (error) {
+              throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }),
         mkdir: async (sandbox: SandboxInstance, path: string, runCommand: RunCommandFn): Promise<void> => {
           const result = await runCommand(sandbox, `mkdir -p ${shellEscape(path)}`);
           if (result.exitCode !== 0) throw new Error(`Failed to create directory ${path}: ${result.stderr}`);
         },
-        readdir: async (sandbox: SandboxInstance, path: string, _runCommand: RunCommandFn): Promise<FileEntry[]> => {
-          await ensureSandboxReady(sandbox);
-          const files = await sandbox.fs.listFiles(path);
-          return files.map((file: any) => ({
+        readdir: async (sandbox: SandboxInstance, path: string, _runCommand: RunCommandFn): Promise<FileEntry[]> =>
+          withBeamInstance(sandbox, async () => {
+            await ensureSandboxReady(sandbox);
+            const files = await sandbox.fs.listFiles(path);
+            return files.map((file: any) => ({
             name: file.name,
             type: file.isDir ? 'directory' as const : 'file' as const,
             size: Number(file.size) || 0,
             modified: file.modTime ? new Date(file.modTime * 1000) : new Date(),
           }));
-        },
+          }),
         exists: async (sandbox: SandboxInstance, path: string, runCommand: RunCommandFn): Promise<boolean> => {
           const result = await runCommand(sandbox, `test -f ${shellEscape(path)} || test -d ${shellEscape(path)}`);
           return result.exitCode === 0;

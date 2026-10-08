@@ -10,7 +10,7 @@
  * is (re)applied from the provider config before every collection operation.
  */
 
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, createConfigGate, createConfigStamp } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
@@ -160,103 +160,45 @@ function resolveBaseUrl(config: LightningConfig): string | undefined {
 }
 
 /**
- * Per-config concurrency gate.
- *
  * The Lightning SDK keeps auth/base-url in process-global state
- * (`Sandbox.configure`) and reads it lazily on every HTTP request (including the
- * polling `get` calls issued inside `create`). If two provider instances used
- * DIFFERENT API keys, a concurrent `configure()` from one could clobber the
- * global before the other's request read it, sending a request with the wrong
- * key — a cross-tenant credential hazard.
- *
- * This gate installs exactly one config at a time and holds it for the *whole*
- * operation. Operations sharing the active config run concurrently (so the
- * common single-key case is never serialized), while an operation that needs a
- * different config waits until the active ones drain, then switches. New same-
- * key arrivals also queue once a switch is pending, so a waiting config can
- * never be starved.
+ * (`Sandbox.configure`) and reads it lazily on every HTTP request (including
+ * the polling `get` calls issued inside `create`). A different API key must
+ * serialize against in-flight calls — the gate admits same-config calls
+ * concurrently; a different resolved config waits for the active calls to
+ * drain, then installs itself once.
  */
-interface ConfigWaiter {
-  config: LightningConfig;
-  key: string;
-  resolve: (release: () => void) => void;
-}
-
-let _activeConfigKey: string | null = null;
-let _activeOps = 0;
-const _configWaiters: ConfigWaiter[] = [];
-
-/** Identity of a config for gating: resolved API key + base URL. Validates the key is present. */
-function configKey(config: LightningConfig): string {
-  return `${resolveApiKey(config)} ${resolveBaseUrl(config) ?? ''}`;
-}
+const lightningGate = createConfigGate();
 
 /** Install a config into the SDK's process-global state. `_SandboxClass` must be loaded. */
 function installConfig(config: LightningConfig): void {
   _SandboxClass!.configure({ apiKey: resolveApiKey(config), baseUrl: resolveBaseUrl(config) });
 }
 
-/** Release one held slot; when the active epoch drains, admit the next waiting config. */
-function releaseConfig(): void {
-  _activeOps--;
-  if (_activeOps > 0) return;
-  _activeConfigKey = null;
-  const next = _configWaiters.shift();
-  if (!next) return;
-  _activeConfigKey = next.key;
-  _activeOps = 1;
-  installConfig(next.config);
-  next.resolve(releaseConfig);
-}
-
-/** Acquire the gate for `config`, returning a release fn. */
-async function acquireConfig(config: LightningConfig): Promise<() => void> {
-  await loadSandbox(); // ensure the SDK class is available for installConfig
-  const key = configKey(config);
-  // Fast path: join the active epoch when it already matches and no switch is
-  // pending (preserves same-key concurrency without starving waiters).
-  if (_activeConfigKey === key && _configWaiters.length === 0) {
-    _activeOps++;
-    return releaseConfig;
-  }
-  // Claim an idle gate.
-  if (_activeConfigKey === null && _configWaiters.length === 0) {
-    _activeConfigKey = key;
-    _activeOps = 1;
-    installConfig(config);
-    return releaseConfig;
-  }
-  // Otherwise wait for our turn.
-  return new Promise<() => void>((resolve) => {
-    _configWaiters.push({ config, key, resolve });
-  });
+/** Identity of a config for gating: resolved API key + base URL. Validates the key is present. */
+function configKey(config: LightningConfig): string {
+  return `${resolveApiKey(config)} ${resolveBaseUrl(config) ?? ''}`;
 }
 
 /** Run `fn` with `config` installed and held for the whole operation. */
 async function withSandbox<T>(config: LightningConfig, fn: (Sandbox: LightningSandboxStatic) => Promise<T>): Promise<T> {
-  const release = await acquireConfig(config);
-  try {
-    return await fn(_SandboxClass!);
-  } finally {
-    release();
-  }
+  await loadSandbox(); // ensure the SDK class is available for installConfig
+  return lightningGate.withConfig(configKey(config), () => installConfig(config), () => fn(_SandboxClass!));
 }
 
-/** Non-enumerable stamp so instance ops (runCommand/filesystem) can re-apply their originating config under the gate. */
-const CONFIG_STAMP = Symbol('computesdk.lightning.config');
+/** Stamps created/connected sandboxes so their instance ops re-enter the gate under their own config. */
+const lightningStamp = createConfigStamp<LightningConfig>();
 
 function stampConfig(sandbox: LightningNativeSandbox, config: LightningConfig): LightningNativeSandbox {
-  Object.defineProperty(sandbox, CONFIG_STAMP, { value: config, enumerable: false, configurable: true, writable: true });
-  return sandbox;
-}
-
-function sandboxConfig(sandbox: LightningNativeSandbox): LightningConfig {
-  return (sandbox as unknown as Record<symbol, LightningConfig>)[CONFIG_STAMP] ?? {};
+  return lightningStamp.stamp(sandbox, config);
 }
 
 /** Run an instance operation under the gate using the sandbox's stamped config. */
 function withStamped<T>(sandbox: LightningNativeSandbox, fn: () => Promise<T>): Promise<T> {
-  return withSandbox(sandboxConfig(sandbox), () => fn());
+  const config = lightningStamp.config(sandbox);
+  if (config === undefined) {
+    return lightningGate.withConfig('lightning.unconfigured', undefined, fn);
+  }
+  return withSandbox(config, () => fn());
 }
 
 /** Map a Lightning sandbox status string onto the ComputeSDK status enum. */
