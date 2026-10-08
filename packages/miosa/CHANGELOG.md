@@ -1,5 +1,15 @@
 # @computesdk/miosa
 
+## 1.1.0
+
+### Minor Changes
+
+- fce7442: Route create/exec/destroy through `@miosa/sdk`'s SOMA one-hop runner transport (`run-<region>.miosa.ai`) instead of the control plane, for callers that opt in explicitly via `runnerMode`/`MIOSA_RUNNER_MODE` (no API key carries a region yet, so there is no key-based eligibility). Every other operation - list, getById, getInfo, getUrl/expose, filesystem, snapshots - keeps using the existing control-plane transport unchanged. Not released until `@miosa/sdk` publishes a version containing `RunnerClient`.
+
+### Patch Changes
+
+- fce7442: Dispatch each request to the least-loaded ready HTTP/2 session, honoring that session's own advertised concurrent-stream limit, instead of rotating blindly across every ready session. A burst now spreads across sessions as they come online rather than piling onto whichever session connected first, and only waits when every ready session is already at its own stream cap.
+
 ## 1.0.10
 
 ### Patch Changes
