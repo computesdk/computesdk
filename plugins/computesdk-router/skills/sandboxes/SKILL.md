@@ -9,7 +9,7 @@ ComputeSDK places cloud sandboxes through the ComputeSDK gateway. All usage bill
 
 ## Core workflow
 
-1. `create_sandbox` — returns a sandbox `id`. Args: `label`, `image`, `timeoutMs` (lifetime in ms; default 30 minutes, max 6 hours), and `providerOrder` (camelCase routing preference, e.g. `["market"]` for a live-bid market fill).
+1. `create_sandbox` — returns a sandbox `id`. Args: `size` (`small` 1 vCPU/2 GB through `xlarge` 8/16 GB; default `small`), `label`, `image`, `timeoutMs` (lifetime in ms; default 30 minutes, max 6 hours), `providerOrder` (camelCase routing preference, e.g. `["market"]` for a live-bid market fill), `orderType` (`market` or `limit`), and `maxPrice` (`{usd, per}` — a limit-order ceiling for a market fill). When the user asks what a sandbox will cost, or before long timeouts/large sizes, call `get_quote` first — same placement inputs, returns the provider, rate, caps, and credit balance without creating anything.
 2. Do the work: `write_file`, `read_file`, `make_directory`, `remove_path`; `run_command` or `start_process`; `sandbox_url` for anything that listens on a port. File tools take absolute paths; `read_file` on a directory lists its entries.
 3. `destroy_sandbox` when the task is finished — sandboxes bill for runtime, so always clean up unless the user wants it kept alive.
 
