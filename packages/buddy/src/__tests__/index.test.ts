@@ -372,6 +372,7 @@ describe('command execution via exec', () => {
   it('picks exec only for foreground calls without callbacks or a timeout', () => {
     expect(usesExec({})).toBe(true);
     expect(usesExec({ runtime: 'PYTHON' })).toBe(true);
+    expect(usesExec({ timeout: 0 })).toBe(true);
     expect(usesExec({ timeout: 1_000 })).toBe(false);
     expect(usesExec({ background: true })).toBe(false);
     expect(usesExec({ onStdout: () => {} })).toBe(false);

@@ -240,7 +240,7 @@ export function isExecTimeout(error: unknown): boolean {
  * timeout needs a command id to kill, which exec does not return.
  */
 export function usesExec(options: BuddyRunCommandOptions): boolean {
-  return !options.background && !options.onStdout && !options.onStderr && options.timeout === undefined;
+  return !options.background && !options.onStdout && !options.onStderr && !options.timeout;
 }
 
 /**
@@ -273,7 +273,7 @@ async function raceDeadline<T>(work: Promise<T>, deadline: number): Promise<T | 
   }
 }
 
-/** What a shell reports for a command killed by `timeout(1)`. */
+/** The exit code `timeout(1)` uses for a killed command; reported for every timeout. */
 export const TIMEOUT_EXIT_CODE = 124;
 
 const EXIT_CODE_WAIT_MS = 5_000;

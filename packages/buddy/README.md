@@ -203,7 +203,7 @@ The handle's `fs` and `client` call the API directly, without the provider's fir
 - `runCommand(cmd)` without streaming callbacks or a `timeout` runs through Buddy's synchronous `exec` endpoint: one request that returns stdout, stderr and the exit code together. Such a command leaves no entry in the sandbox's command history. The server waits at most 60 s for it; past that the call returns exit code 124 with the server's message in `stderr`, and the process keeps running in the sandbox. Pass a `timeout` for commands that may run longer or must be stopped.
 - `runCommand(cmd, { onStdout, onStderr })`, `streamCommand`, `background: true` and any `timeout` use the asynchronous `commands` resource with its log stream instead, so output arrives as it is produced, the command shows up in the history, and a timeout kills it.
 - `runCommand(cmd, { background: true })` returns as soon as Buddy has queued the command, without reading its output.
-- `runCommand(cmd, { timeout })` returns the timeout result when the timeout passes; on the streaming route the command is terminated as well.
+- `runCommand(cmd, { timeout })` returns the timeout result when the timeout passes and terminates the command.
 - Sandbox placement inside an installation is not selectable; `region` picks the installation and the tunnel location.
 
 ## License
