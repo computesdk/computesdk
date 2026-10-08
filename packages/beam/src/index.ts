@@ -192,8 +192,12 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
           if (runtime === 'node' && !sandboxConfig.image) {
             // Full image, not -slim: sandboxes are expected to run tooling
-            // like git that the slim variant strips.
-            sandboxConfig.image = Image.fromRegistry('node:24');
+            // like git that the slim variant strips. dockerEnabled alone
+            // cannot schedule a box — it must pair with a Docker-equipped
+            // image, so the default gets beam-js's withDocker() build steps.
+            sandboxConfig.image = sandboxConfig.dockerEnabled
+              ? Image.fromRegistry('node:24').withDocker()
+              : Image.fromRegistry('node:24');
           }
 
           if (envs) {

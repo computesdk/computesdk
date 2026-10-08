@@ -179,4 +179,21 @@ describe('lazy sandbox readiness', () => {
     expect(builders[2].stub.config.dockerEnabled).toBe(false);
     expect(builders[2]).not.toBe(builders[0]);
   });
+
+  test('dockerEnabled gives the default image the Docker install steps', async () => {
+    const instance = mockSandbox();
+    const builders: Sandbox[] = [];
+    vi.mocked(Sandbox.prototype.create).mockImplementation(async function (this: Sandbox) {
+      builders.push(this);
+      return instance;
+    });
+
+    await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create({
+      name: 'docker-default-image',
+      dockerEnabled: true,
+    });
+
+    const commands: string[] = builders[0].stub.config.image.config.commands;
+    expect(commands.some((c) => c.includes('docker-ce'))).toBe(true);
+  });
 });
