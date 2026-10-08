@@ -1,5 +1,12 @@
 # @computesdk/gravixlayer
 
+## 1.0.4
+
+### Patch Changes
+
+- d404179: Resolve a provider config object once in `getClient` — repeated calls on the same provider instance skip option resolution entirely, while instances with equivalent options still share one client and its session pool.
+- 8d8adf6: Floor the `gravixlayer` SDK at ^0.1.32 so installs resolve the current transport with the eager session pool and `connect()` pre-connect API.
+
 ## 1.0.3
 
 ### Patch Changes
