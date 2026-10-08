@@ -1565,6 +1565,9 @@ importers:
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
+      '@miosa/sdk':
+        specifier: ^3.3.1
+        version: 3.3.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -1863,7 +1866,7 @@ importers:
         version: link:../provider
       '@opencomputer/sdk':
         specifier: latest
-        version: 2.1.2
+        version: 2.3.1
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4319,6 +4322,10 @@ packages:
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
 
+  '@miosa/sdk@3.3.1':
+    resolution: {integrity: sha512-Wj6YUP59gQW/hTJ8G9MQgW9WxZThaQU+C7R9ZlGusmKu3PhD20qpSUxYt9p3675dho0z6LkjQWrDLlrtjUzGQg==}
+    engines: {node: '>=18.0.0'}
+
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
@@ -4371,8 +4378,8 @@ packages:
   '@onkernel/sdk@0.49.0':
     resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
-  '@opencomputer/sdk@2.1.2':
-    resolution: {integrity: sha512-Yd4R/OPFu0VnaB0ZXBN3gzB53g4Gg2pvF2gUG8y8H2D57bCn+KkwaQij3ZO72JSlhNR3z0rnp5FaEFALvNUlRg==}
+  '@opencomputer/sdk@2.3.1':
+    resolution: {integrity: sha512-1oCGDqsrsp7aJXNwvOzP7bAwQ3kKI05uxx7AbTpKRGYQ/4NgYidwFYmhf++lK+mjPlp19YHenKeZRniu2tqnjA==}
     engines: {node: '>=18'}
 
   '@opentelemetry/api-logs@0.214.0':
@@ -11201,6 +11208,14 @@ snapshots:
       globby: 11.1.0
       read-yaml-file: 1.1.0
 
+  '@miosa/sdk@3.3.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+    optionalDependencies:
+      undici: 7.29.1
+      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@mixmark-io/domino@2.2.0': {}
 
   '@modelcontextprotocol/sdk@1.26.0(zod@4.4.3)':
@@ -11271,7 +11286,7 @@ snapshots:
 
   '@onkernel/sdk@0.49.0': {}
 
-  '@opencomputer/sdk@2.1.2':
+  '@opencomputer/sdk@2.3.1':
     dependencies:
       undici: 7.28.0
 

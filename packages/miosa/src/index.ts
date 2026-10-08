@@ -29,6 +29,16 @@ export interface MiosaConfig {
   baseUrl?: string;
   /** Default sandbox lifetime in milliseconds (maps to MIOSA timeout_sec). */
   timeout?: number;
+  /**
+   * Opts create/exec/destroy into the SOMA one-hop runner transport
+   * (RUNNER-CONTRACTS-2026-10-02.md C5/C6) instead of the control plane.
+   * No API key carries a region this release (C5 decision, 2026-10-02), so
+   * this is the only way in - there is no automatic, key-based eligibility.
+   * Falls back to the MIOSA_RUNNER_MODE environment variable ("1"/"true").
+   */
+  runnerMode?: boolean;
+  /** Overrides `miosa.ai` for the runner transport - self-hosted / test deployments only. */
+  runnerBaseDomain?: string;
 }
 
 // ── MIOSA API response shapes (subset the adapter consumes) ────────────────
@@ -101,6 +111,15 @@ export interface MiosaSandbox {
   record: MiosaSandboxRecord;
   apiKey: string;
   baseUrl: string;
+  /**
+   * Set when this handle routes create/exec/destroy through the runner
+   * transport (see "SOMA one-hop runner transport" below). Carried on the
+   * handle, not re-derived per call, because runCommand/filesystem/getInfo
+   * only ever receive the handle - never the original MiosaConfig - so the
+   * routing decision made at create()/getById()/list() time has to travel
+   * with it.
+   */
+  runner?: RunnerRouting;
 }
 
 // ── HTTP client ─────────────────────────────────────────────────────────────
@@ -108,7 +127,7 @@ export interface MiosaSandbox {
 export const DEFAULT_BASE_URL = "https://api.miosa.ai/api/v1";
 const DEFAULT_TIMEOUT_MS = 300_000;
 
-interface MiosaHttpResponse {
+export interface MiosaHttpResponse {
   readonly ok: boolean;
   readonly status: number;
   text(): Promise<string>;
@@ -141,8 +160,23 @@ interface Http2SessionPool {
   ready: Set<import("node:http2").ClientHttp2Session>;
   firstReady: Promise<void>;
   resolveFirstReady: () => void;
+  // Round-robin cursor used only while no session has connected yet (see
+  // selectSession): once at least one session is ready, dispatch picks the
+  // least-loaded ready session instead of rotating blindly.
   next: number;
   inFlight: number;
+  // Open streams per session, used to find the least-loaded ready session and
+  // to tell whether a session still has room under its own advertised
+  // concurrent-stream limit. Cleared as streams finish or a session closes.
+  inFlightBySession: Map<import("node:http2").ClientHttp2Session, number>;
+  // Fires whenever dispatch-relevant state changes: a session joins `ready`,
+  // a stream finishes, or a session is discarded. selectSession races a short
+  // wait on this against a bound, so it is never worse than polling but never
+  // sleeps the full bound when capacity frees up early.
+  capacityEvents: import("node:events").EventEmitter;
+  // Most recent connection failure, kept so selectSession can reject with a
+  // real cause when every session has failed. Cleared on a successful connect.
+  lastError: Error | undefined;
 }
 
 // A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
@@ -184,6 +218,7 @@ function canUseNodeHttp2(url: URL): boolean {
 
 async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
   const http2 = await import("node:http2");
+  const { EventEmitter } = await import("node:events");
   let resolveFirstReady: () => void = () => {};
   const firstReady = new Promise<void>((resolve) => {
     resolveFirstReady = resolve;
@@ -195,6 +230,13 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     resolveFirstReady,
     next: 0,
     inFlight: 0,
+    inFlightBySession: new Map<
+      import("node:http2").ClientHttp2Session,
+      number
+    >(),
+    // Every concurrent request parks a listener here; the count is unbounded.
+    capacityEvents: new EventEmitter().setMaxListeners(0),
+    lastError: undefined,
   };
   // A fully-recycled pool (every session discarded) must re-arm the
   // cold-start gate: the original firstReady stays resolved forever, so a
@@ -222,14 +264,19 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
 
     session.once("connect", () => {
       pool.ready.add(session);
+      pool.lastError = undefined;
       pool.resolveFirstReady();
+      pool.capacityEvents.emit("change");
     });
 
-    const discard = () => {
+    const discard = (cause?: unknown) => {
+      if (cause instanceof Error) pool.lastError = cause;
       pool.ready.delete(session);
       pool.sessions = pool.sessions.filter(
         (candidate) => candidate !== session,
       );
+      pool.inFlightBySession.delete(session);
+      pool.capacityEvents.emit("change");
     };
     session.once("close", discard);
     session.once("error", discard);
@@ -237,6 +284,109 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
   }
 
   return pool;
+}
+
+// Node reports this as a session's maxConcurrentStreams before its SETTINGS
+// frame has arrived (verified against Node 20/22's http2 implementation): a
+// placeholder, not "unlimited". Treating it as the cap for a session we
+// haven't heard from yet is exactly as conservative as Node's own client
+// already is, so it adds no new risk - it only stops us from reading
+// "unlimited" into a session that may turn out to allow far fewer streams.
+const DEFAULT_SESSION_STREAM_CAP = 100;
+
+function sessionStreamCapacity(
+  session: import("node:http2").ClientHttp2Session,
+): number {
+  const advertised = session.remoteSettings?.maxConcurrentStreams;
+  return typeof advertised === "number" && advertised >= 0
+    ? advertised
+    : DEFAULT_SESSION_STREAM_CAP;
+}
+
+// Among the ready sessions, the one with the most spare capacity under its
+// own advertised stream limit - undefined only when `ready` is empty.
+function leastLoadedReady(pool: Http2SessionPool):
+  | {
+      session: import("node:http2").ClientHttp2Session;
+      spare: number;
+    }
+  | undefined {
+  let best: import("node:http2").ClientHttp2Session | undefined;
+  let bestSpare = -Infinity;
+  for (const session of pool.ready) {
+    const spare =
+      sessionStreamCapacity(session) -
+      (pool.inFlightBySession.get(session) ?? 0);
+    if (spare > bestSpare) {
+      bestSpare = spare;
+      best = session;
+    }
+  }
+  return best === undefined ? undefined : { session: best, spare: bestSpare };
+}
+
+function waitForCapacityChange(
+  pool: Http2SessionPool,
+  timeoutMs: number,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const onChange = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      pool.capacityEvents.off("change", onChange);
+      resolve();
+    }, timeoutMs);
+    pool.capacityEvents.once("change", onChange);
+  });
+}
+
+// How long to wait, in total, for a ready session to free up a stream slot
+// before dispatching onto whichever session is least bad anyway. This only
+// ever triggers when every ready session is already at its own advertised
+// cap - the common case (one ready session with room) returns immediately.
+const CAPACITY_WAIT_STEP_MS = 20;
+const CAPACITY_WAIT_BUDGET_MS = 200;
+
+// Picks a session to dispatch onto and reserves a stream slot on it: the
+// least-loaded ready session with room under its own stream cap, waiting
+// briefly only while every ready session is saturated (or none is ready yet),
+// and otherwise falling back to the connecting pool so a request is never
+// stalled indefinitely. Selection and reservation happen in one synchronous
+// step (no await between them), so a burst of concurrent callers each sees the
+// load the previous one just added instead of all picking the same session.
+// The caller releases the slot in its finally block. Rejects with the last
+// connection error once the wait budget is spent and no session remains.
+async function selectSession(
+  pool: Http2SessionPool,
+  waitBudgetMs: number,
+): Promise<import("node:http2").ClientHttp2Session> {
+  const reserve = (session: import("node:http2").ClientHttp2Session) => {
+    pool.inFlightBySession.set(
+      session,
+      (pool.inFlightBySession.get(session) ?? 0) + 1,
+    );
+    return session;
+  };
+  const deadline = Date.now() + waitBudgetMs;
+  for (;;) {
+    const pick = leastLoadedReady(pool);
+    if (pick !== undefined && (pick.spare > 0 || Date.now() >= deadline)) {
+      return reserve(pick.session);
+    }
+    if (pick === undefined && Date.now() >= deadline) {
+      if (pool.sessions.length > 0) {
+        const candidate = pool.sessions[pool.next % pool.sessions.length]!;
+        pool.next = (pool.next + 1) % pool.sessions.length;
+        return reserve(candidate);
+      }
+      throw (
+        pool.lastError ?? new Error("MIOSA HTTP/2 connection failed")
+      );
+    }
+    await waitForCapacityChange(pool, CAPACITY_WAIT_STEP_MS);
+  }
 }
 
 function hasUsableCredentials(config: MiosaConfig): boolean {
@@ -252,6 +402,18 @@ function preconnectMiosa(config: MiosaConfig): void {
   // misconfigured provider must not open a pool of TLS connections it can
   // never use. resolveAuth still raises the descriptive error on first call.
   if (!hasUsableCredentials(config)) return;
+
+  // list/getById/getUrl/filesystem/snapshots stay on the control-plane pool
+  // even when runnerMode is on (runner-sdk.d.ts), so both warm here when
+  // eligible - this is additive, never a replacement for the block below.
+  const apiKey =
+    config.apiKey ??
+    (typeof process !== "undefined" ? process.env?.MIOSA_API_KEY : undefined) ??
+    "";
+  const runner = resolveRunnerRouting(config);
+  if (runner) {
+    void getRunnerClient(apiKey, runner).catch(() => undefined);
+  }
 
   const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const url = new URL(baseUrl);
@@ -283,7 +445,14 @@ export function closeMiosaConnections(): void {
   http2SessionPools.clear();
 }
 
-async function nodeHttp2Request(
+/**
+ * The HTTP/2 pool transport used whenever `canUseNodeHttp2` allows it.
+ *
+ * Exported so the pool's dispatch and capacity handling can be covered
+ * directly against a real `node:http2` server; other provider tests stub
+ * `fetch` and never take this path (it is disabled under `NODE_ENV=test`).
+ */
+export async function nodeHttp2Request(
   url: URL,
   method: "GET" | "POST" | "PATCH" | "DELETE",
   headers: Record<string, string>,
@@ -295,42 +464,50 @@ async function nodeHttp2Request(
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
 
-  // Cold start: wait for the first connected session, then give the rest of
-  // the pool a short window (250ms cap) to reach a quorum so a concurrent
-  // burst spreads over warm connections instead of serializing behind
-  // handshakes. Steady state pays nothing: ready.size > 0 skips all of this.
-  // The first wait is BOUNDED (1s): if no session ever connects (unreachable
-  // or misconfigured endpoint), dispatch falls through to the legacy
-  // any-session path below and the request itself surfaces the connection
-  // error promptly, exactly as before this optimization - never a hang.
+  // Cold start: wait only for the first connected session. A single HTTP/2
+  // session multiplexes many concurrent streams, so there is no need to hold
+  // requests until more of the pool has connected; later sessions join the
+  // ready set as their handshakes finish and take a share of new requests.
+  // The wait is BOUNDED (1s): if no session ever connects (unreachable or
+  // misconfigured endpoint), selectSession falls through to the connecting
+  // pool below and the request itself surfaces the connection error promptly.
   if (pool.ready.size === 0) {
     let firstReadyTimer: ReturnType<typeof setTimeout> | undefined;
+    let onChange: (() => void) | undefined;
     await Promise.race([
       pool.firstReady,
       new Promise<void>((resolve) => {
         firstReadyTimer = setTimeout(resolve, 1000);
       }),
+      // Every connection failed: stop waiting and let selectSession reject.
+      new Promise<void>((resolve) => {
+        onChange = () => {
+          if (pool.sessions.length === 0) resolve();
+        };
+        pool.capacityEvents.on("change", onChange);
+      }),
     ]);
     if (firstReadyTimer !== undefined) clearTimeout(firstReadyTimer);
-    if (pool.ready.size > 0) {
-      const quorum = Math.min(8, pool.sessions.length);
-      const deadline = Date.now() + 250;
-      while (pool.ready.size < quorum && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-    }
+    if (onChange !== undefined) pool.capacityEvents.off("change", onChange);
   }
 
-  const candidates =
-    pool.ready.size > 0 ? Array.from(pool.ready) : pool.sessions;
-  const session = candidates[pool.next % candidates.length]!;
-  pool.next = (pool.next + 1) % candidates.length;
-
+  // Dispatch to the least-loaded ready session, respecting its own advertised
+  // stream cap, rather than a quorum wait at burst start: a single ready
+  // session already has room for its whole cap's worth of concurrent
+  // requests, so holding the burst for more sessions to connect only adds
+  // latency without avoiding anything. The wait above may have already used
+  // its budget finding this session, so give it none left to spend here.
+  let session: import("node:http2").ClientHttp2Session | undefined;
   try {
+    session = await selectSession(
+      pool,
+      pool.ready.size === 0 ? 0 : CAPACITY_WAIT_BUDGET_MS,
+    );
+    const reserved = session;
     return await new Promise<MiosaHttpResponse>((resolve, reject) => {
       let status = 0;
       const chunks: Buffer[] = [];
-      const request = session.request({
+      const request = reserved.request({
         ":method": method,
         ":path": `${url.pathname}${url.search}`,
         ...headers,
@@ -362,6 +539,12 @@ async function nodeHttp2Request(
       pool.inFlight = 0;
       setPoolRef(pool, false);
     }
+    if (session !== undefined) {
+      const remaining = (pool.inFlightBySession.get(session) ?? 1) - 1;
+      if (remaining > 0) pool.inFlightBySession.set(session, remaining);
+      else pool.inFlightBySession.delete(session);
+    }
+    pool.capacityEvents.emit("change");
   }
 }
 
@@ -379,7 +562,117 @@ async function sendMiosaRequest(
   return fetch(url, { method, headers, body });
 }
 
-function resolveAuth(config: MiosaConfig): { apiKey: string; baseUrl: string } {
+// ── SOMA one-hop runner transport (opt-in) ─────────────────────────────────
+//
+// RUNNER-CONTRACTS-2026-10-02.md (C5/C6) and ONE-HOP-RUNNER-DESIGN-2026-10-02.md
+// (section 6), both in the miosa repo's tasks/soma-speed/, describe the
+// contract this implements. When eligible, create/exec/destroy go straight
+// to run-<region>.miosa.ai via @miosa/sdk's RunnerClient instead of
+// api.miosa.ai: the control-plane fast lane, HostMode fence and Finch pool
+// never see the request. Every other operation (list, getById, getInfo,
+// getUrl/expose, filesystem, snapshots) keeps using the control-plane
+// transport above - RunnerClient does not expose those routes yet, and
+// expose/snapshots stay on the control plane regardless (design doc 5.5).
+//
+// No API key carries a region this release (C5 decision, 2026-10-02): a key
+// is eligible only when the caller opts in explicitly via `runnerMode` /
+// MIOSA_RUNNER_MODE. There is no key-shape detection - region defaults to
+// `us` (RunnerClient's own default) unless `runnerBaseDomain` overrides the
+// host entirely.
+
+function readBooleanEnv(name: string): boolean | undefined {
+  const raw = typeof process !== "undefined" ? process.env?.[name] : undefined;
+  if (raw === undefined) return undefined;
+  return raw === "1" || raw.toLowerCase() === "true";
+}
+
+export interface RunnerRouting {
+  /** Overrides `miosa.ai` - for self-hosted / test deployments (RunnerClientOptions.baseDomain). */
+  readonly baseDomain?: string;
+}
+
+function resolveRunnerRouting(config: MiosaConfig): RunnerRouting | undefined {
+  const explicitOptIn = config.runnerMode ?? readBooleanEnv("MIOSA_RUNNER_MODE");
+  if (explicitOptIn !== true) return undefined;
+  return config.runnerBaseDomain ? { baseDomain: config.runnerBaseDomain } : {};
+}
+
+/** `InstanceType<RunnerClient>` without a static import - see runner-sdk.d.ts. */
+type MiosaRunnerClient = InstanceType<
+  (typeof import("@miosa/sdk"))["RunnerClient"]
+>;
+
+const runnerClients = new Map<string, Promise<MiosaRunnerClient>>();
+
+function runnerClientCacheKey(apiKey: string, routing: RunnerRouting): string {
+  return `${apiKey}:${routing.baseDomain ?? ""}`;
+}
+
+async function getRunnerClient(
+  apiKey: string,
+  routing: RunnerRouting,
+): Promise<MiosaRunnerClient> {
+  const cacheKey = runnerClientCacheKey(apiKey, routing);
+  let pending = runnerClients.get(cacheKey);
+  if (!pending) {
+    pending = import("@miosa/sdk").then(
+      ({ RunnerClient }) =>
+        new RunnerClient({
+          apiKey,
+          ...(routing.baseDomain ? { baseDomain: routing.baseDomain } : {}),
+        }),
+    );
+    runnerClients.set(cacheKey, pending);
+    // A failed import (package not installed/published yet) must not poison
+    // the cache for a later retry.
+    pending.catch(() => runnerClients.delete(cacheKey));
+  }
+  return pending;
+}
+
+/**
+ * Closes every cached RunnerClient and forgets it. Mirrors
+ * closeMiosaConnections() for the control-plane pool; mainly for tests and
+ * long-lived hosts that want deterministic socket teardown.
+ */
+export async function closeMiosaRunnerConnections(): Promise<void> {
+  const pending = [...runnerClients.values()];
+  runnerClients.clear();
+  await Promise.all(
+    pending.map(async (clientPromise) => {
+      try {
+        const client = await clientPromise;
+        await client.close();
+      } catch {
+        // Construction itself failed - nothing to close.
+      }
+    }),
+  );
+}
+
+/** The runner's exec response body is the same shape as the control
+ * plane's (C2): either `{ data: {...} }` or a flat result. */
+function unwrapExecResult(raw: Record<string, unknown>): MiosaExecResult {
+  const data = raw["data"];
+  return data && typeof data === "object"
+    ? (data as MiosaExecResult)
+    : (raw as MiosaExecResult);
+}
+
+/** True for both MiosaApiError (control plane) and the runner's own error
+ * class - both carry a numeric `.status`, so this needs no instanceof
+ * against a class loaded via dynamic import. */
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { status?: unknown }).status === 404
+  );
+}
+
+function resolveAuth(
+  config: MiosaConfig,
+): { apiKey: string; baseUrl: string; runner?: RunnerRouting } {
   const apiKey =
     config.apiKey ??
     (typeof process !== "undefined" ? process.env?.MIOSA_API_KEY : undefined) ??
@@ -396,9 +689,12 @@ function resolveAuth(config: MiosaConfig): { apiKey: string; baseUrl: string } {
     );
   }
 
+  const runner = resolveRunnerRouting(config);
+
   return {
     apiKey,
     baseUrl: (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, ""),
+    ...(runner ? { runner } : {}),
   };
 }
 
@@ -524,13 +820,35 @@ async function execInSandbox(
     body.timeout = Math.ceil(options.timeout / 1000);
 
   try {
-    const response = await miosaRequest<{ data: MiosaExecResult }>(
-      sandbox,
-      "POST",
-      `/sandboxes/${sandbox.record.id}/exec`,
-      body,
-    );
-    const result = response.data ?? {};
+    let result: MiosaExecResult;
+    if (sandbox.runner) {
+      // wait/wait_timeout_ms (body, above) are accepted from the caller but
+      // intentionally dropped here, not forwarded: on the runner, create
+      // only answers once the launch has completed (state "running", C2),
+      // so by the time exec runs there is nothing left to wait for - unlike
+      // the control plane, where create/exec can return before the VM has
+      // finished booting. RunnerClient.exec's typed options (runner-sdk.d.ts)
+      // reflect that - they carry cwd/env/timeout only, no wait knob.
+      // Everything else about the request (path, auth, response body) is
+      // the same contract as the control plane (C2).
+      const client = await getRunnerClient(sandbox.apiKey, sandbox.runner);
+      const raw = await client.exec(sandbox.record.id, fullCommand, {
+        ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options?.env !== undefined ? { env: options.env } : {}),
+        ...(options?.timeout !== undefined
+          ? { timeout: Math.ceil(options.timeout / 1000) }
+          : {}),
+      });
+      result = unwrapExecResult(raw);
+    } else {
+      const response = await miosaRequest<{ data: MiosaExecResult }>(
+        sandbox,
+        "POST",
+        `/sandboxes/${sandbox.record.id}/exec`,
+        body,
+      );
+      result = response.data ?? {};
+    }
     return {
       stdout: result.stdout ?? "",
       stderr: result.stderr ?? "",
@@ -607,13 +925,14 @@ const createMiosaProvider = defineProvider<
         if (options?.envs !== undefined) body.env = options.envs;
         if (options?.metadata !== undefined) body.metadata = options.metadata;
 
-        const payload = await miosaRequest<unknown>(
-          auth,
-          "POST",
-          "/sandboxes",
-          body,
-        );
-        const record = unwrapSandbox(payload);
+        const record = auth.runner
+          ? unwrapSandbox(
+              (await (await getRunnerClient(auth.apiKey, auth.runner)).createSandbox(body))
+                .data,
+            )
+          : unwrapSandbox(
+              await miosaRequest<unknown>(auth, "POST", "/sandboxes", body),
+            );
         if (!record.id) {
           throw new Error(
             "MIOSA create sandbox returned a record without an id",
@@ -656,14 +975,20 @@ const createMiosaProvider = defineProvider<
       destroy: async (config: MiosaConfig, sandboxId: string) => {
         const auth = resolveAuth(config);
         try {
-          await miosaRequest<unknown>(
-            auth,
-            "DELETE",
-            `/sandboxes/${sandboxId}`,
-          );
+          if (auth.runner) {
+            await (await getRunnerClient(auth.apiKey, auth.runner)).destroySandbox(
+              sandboxId,
+            );
+          } else {
+            await miosaRequest<unknown>(
+              auth,
+              "DELETE",
+              `/sandboxes/${sandboxId}`,
+            );
+          }
         } catch (error) {
           // Destroying an already-destroyed sandbox is a no-op.
-          if (error instanceof MiosaApiError && error.status === 404) return;
+          if (isNotFoundError(error)) return;
           throw error;
         }
       },
