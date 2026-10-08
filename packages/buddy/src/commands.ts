@@ -14,11 +14,10 @@
  *   the command details. `Command.wait()` is deliberately unused — it polls
  *   once a second, which would add up to a second to every call.
  *
- * A foreground call without streaming callbacks and without a timeout above the
- * exec limit takes the first route (one request instead of three). Its timeout
- * is enforced in the sandbox with `timeout(1)`, so it needs the `BASH` runtime.
- * Anything else — callbacks, `background`, a longer `timeout`, a timeout on
- * another runtime — takes the second.
+ * A foreground call without streaming callbacks and without a `timeout` takes
+ * the first route (one request instead of three). Anything else — callbacks,
+ * `background`, any `timeout` — takes the second, where a timeout can kill the
+ * command by its id.
  */
 
 import { Command, type SandboxCommandResultView } from '@buddy-works/sandbox-sdk';
@@ -118,21 +117,15 @@ export async function runCommand(
 
   if (usesExec(options)) {
     // The exec endpoint rejects a booting sandbox instead of queueing, so the
-    // 400 is retried until the deadline. Exec has no command id to kill, so a
-    // caller's timeout is enforced in the sandbox instead; only when the
-    // server gives up at its own limit is the process left running.
-    const line = () => (deadline ? withSandboxTimeout(payload, deadline) : payload);
-    const call = retryBootRaces(() => execCommand(sandbox, line(), runtime), deadline);
-    let result: SandboxCommandResultView | typeof DEADLINE_PASSED;
+    // 400 is retried. Exec has no command id to kill, which is why only untimed
+    // calls come here; when the server gives up at its own limit, the process
+    // is left running.
+    let result: SandboxCommandResultView;
     try {
-      result = deadline ? await raceDeadline(call, deadline) : await call;
+      result = await retryBootRaces(() => execCommand(sandbox, payload, runtime));
     } catch (error) {
       if (isExecTimeout(error)) return timedOutResult('', `${messageOf(error)}\n`);
       throw error;
-    }
-    if (result === DEADLINE_PASSED) {
-      call.catch(() => {});
-      return timedOutResult();
     }
     if (typeof result.exit_code !== 'number') {
       throw new Error('Buddy ran the command but returned no exit code.');
@@ -236,41 +229,18 @@ export async function runCommand(
   };
 }
 
-/**
- * How long the server waits for an `exec` command before answering 400
- * ("command did not finish on instance … within 60s"). Longer timeouts need
- * the `commands` resource.
- */
-export const EXEC_LIMIT_MS = 60_000;
-
 /** The server gave up waiting for an `exec` command at its own limit. */
 export function isExecTimeout(error: unknown): boolean {
   return statusOf(error) === 400 && /did not finish on instance .* within \d+s/i.test(messageOf(error));
 }
 
 /**
- * Foreground, no streaming callbacks, and no timeout the exec endpoint could
- * not honour. Callbacks force the log stream because exec only has the output
- * once the command has finished. A timeout also needs a shell runtime, since
- * it is enforced by wrapping the line in `timeout(1)`.
+ * Foreground, no streaming callbacks and no `timeout`. Callbacks force the log
+ * stream because exec only has the output once the command has finished; a
+ * timeout needs a command id to kill, which exec does not return.
  */
 export function usesExec(options: BuddyRunCommandOptions): boolean {
-  if (options.background) return false;
-  if (options.onStdout || options.onStderr) return false;
-  if (options.timeout === undefined) return true;
-  return options.timeout <= EXEC_LIMIT_MS && (options.runtime ?? 'BASH') === 'BASH';
-}
-
-/**
- * Wraps a shell line so the sandbox stops it, with its process group, once the
- * time left before `deadline` runs out. `timeout(1)` takes fractional seconds,
- * so a sub-second deadline is not stretched; a duration of 0 would disable it,
- * hence the 1 ms floor. It then exits 124, the same code the client-side
- * deadline reports.
- */
-export function withSandboxTimeout(line: string, deadline: number, now = Date.now()): string {
-  const seconds = Math.max(1, deadline - now) / 1000;
-  return `timeout -k 5 ${seconds} bash -c "${escapeShellArg(line)}"`;
+  return !options.background && !options.onStdout && !options.onStderr && options.timeout === undefined;
 }
 
 /**

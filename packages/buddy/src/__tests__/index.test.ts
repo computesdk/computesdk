@@ -3,15 +3,14 @@ import { runProviderTestSuite } from '@computesdk/test-utils';
 
 import { buddy, ensureTimeout, toSeconds } from '../index';
 import {
-  EXEC_LIMIT_MS,
   TIMEOUT_EXIT_CODE,
   buildShellCommand,
   killCommand,
   runCommand,
   usesExec,
   waitForExitCode,
-  withSandboxTimeout,
 } from '../commands';
+import { retryBootRaces } from '../boot';
 import {
   getClient,
   isInstanceNotRunning,
@@ -370,34 +369,19 @@ describe('command execution', () => {
 });
 
 describe('command execution via exec', () => {
-  it('picks exec only for foreground calls without callbacks within the server limit', () => {
+  it('picks exec only for foreground calls without callbacks or a timeout', () => {
     expect(usesExec({})).toBe(true);
-    expect(usesExec({ timeout: EXEC_LIMIT_MS })).toBe(true);
-    expect(usesExec({ timeout: EXEC_LIMIT_MS + 1 })).toBe(false);
+    expect(usesExec({ runtime: 'PYTHON' })).toBe(true);
+    expect(usesExec({ timeout: 1_000 })).toBe(false);
     expect(usesExec({ background: true })).toBe(false);
     expect(usesExec({ onStdout: () => {} })).toBe(false);
     expect(usesExec({ onStderr: () => {} })).toBe(false);
-    expect(usesExec({ runtime: 'PYTHON' })).toBe(true);
-    expect(usesExec({ runtime: 'PYTHON', timeout: 1_000 })).toBe(false);
-  });
-
-  it('wraps the line in timeout(1) with the exact time left', () => {
-    const line = buildShellCommand('echo "$HOME"', { cwd: '/w' });
-    expect(withSandboxTimeout(line, 12_500, 10_000))
-      .toBe('timeout -k 5 2.5 bash -c "cd \\"/w\\" && echo \\"\\$HOME\\""');
-    expect(withSandboxTimeout('true', 10_020, 10_000)).toBe('timeout -k 5 0.02 bash -c "true"');
-    expect(withSandboxTimeout('true', 9_000, 10_000)).toBe('timeout -k 5 0.001 bash -c "true"');
   });
 
   it('never starts a boot retry past the deadline', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
-    const exec = fakeExec(client, [apiError(400, 'Sandbox must be running'), { exit_code: 0 }]);
-
-    const result = await runCommand(sandbox, 'true', { timeout: 100 });
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
-    expect(exec).toHaveBeenCalledTimes(1);
+    const operation = vi.fn().mockRejectedValue(apiError(400, 'Sandbox must be running'));
+    await expect(retryBootRaces(operation, Date.now() + 100)).rejects.toThrow(/must be running/);
+    expect(operation).toHaveBeenCalledTimes(1);
   });
 
   it('runs a plain command in one request and never touches the commands resource', async () => {
@@ -420,16 +404,6 @@ describe('command execution via exec', () => {
     const { sandbox, client } = fakeCommandClient([], []);
     fakeExec(client, [{ stdout: 'ok' }]);
     await expect(runCommand(sandbox, 'true', {})).rejects.toThrow(/no exit code/);
-  });
-
-  it('sends a timed call wrapped in timeout(1) so the sandbox stops it', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
-    const exec = fakeExec(client, [{ exit_code: TIMEOUT_EXIT_CODE, stdout: '', stderr: '' }]);
-
-    const result = await runCommand(sandbox, 'sleep 60', { timeout: 10_000 });
-
-    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
-    expect(exec.mock.calls[0][0].body.command).toMatch(/^timeout -k 5 (9\.9\d\d|10) bash -c "sleep 60"$/);
   });
 
   it('retries while the sandbox is still booting', async () => {
@@ -463,19 +437,7 @@ describe('command execution via exec', () => {
     expect(client.terminateCommand).not.toHaveBeenCalled();
   });
 
-  it('returns the timeout exit code when exec outlives the timeout, with nothing to kill', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
-    fakeExec(client, [() => new Promise(() => {})]);
-
-    const started = Date.now();
-    const result = await runCommand(sandbox, 'sleep 60', { timeout: 20 });
-
-    expect(Date.now() - started).toBeLessThan(1_000);
-    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
-    expect(client.terminateCommand).not.toHaveBeenCalled();
-  });
-
-  it('keeps timeouts above the exec limit on the commands resource', async () => {
+  it('streams a long timed call through the commands resource', async () => {
     const { sandbox, client } = fakeCommandClient([{ type: 'STDOUT', data: 'long' }], [{ exit_code: 0, status: 'SUCCESSFUL' }]);
     const { Command } = await import('@buddy-works/sandbox-sdk');
     vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
@@ -488,12 +450,12 @@ describe('command execution via exec', () => {
     expect(client.executeCommand).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps timed calls on other runtimes on the commands resource', async () => {
+  it('sends a timed call to the commands resource, where the timeout can kill it', async () => {
     const { sandbox, client } = fakeCommandClient([], [{ exit_code: 0, status: 'SUCCESSFUL' }]);
     const { Command } = await import('@buddy-works/sandbox-sdk');
     vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {});
 
-    await runCommand(sandbox, 'print(1)', { runtime: 'PYTHON', timeout: 5_000 });
+    await runCommand(sandbox, 'true', { timeout: 5_000 });
     expect(client.execCommand).not.toHaveBeenCalled();
     expect(client.executeCommand).toHaveBeenCalledTimes(1);
   });
