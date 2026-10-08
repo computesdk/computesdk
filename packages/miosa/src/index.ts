@@ -134,21 +134,23 @@ export interface MiosaHttpResponse {
 }
 
 // A bounded HTTP/2 pool prevents 100 independent TLS handshakes without
-// serializing the complete burst behind one connection. Production sweeps
-// found 16 sessions to be the best balance for the public endpoint. Keep the
+// serializing the complete burst behind one connection. Every handshake a cold
+// client opens is paid for before its first dispatch, and production sweeps
+// found 4-8 sessions beat 16-32 for that first burst, so 8 keeps the spreading
+// the pool exists for without buying handshakes it cannot use yet. Keep the
 // override private to the transport so operators can reproduce runner-specific
 // measurements without changing the ComputeSDK create contract.
 const HTTP2_SESSION_COUNT = (() => {
   const configured = Number.parseInt(
     (typeof process !== "undefined"
       ? process.env.MIOSA_HTTP2_SESSION_COUNT
-      : undefined) ?? "16",
+      : undefined) ?? "8",
     10,
   );
 
   return Number.isFinite(configured)
     ? Math.min(64, Math.max(1, configured))
-    : 16;
+    : 8;
 })();
 
 // A connect that neither succeeds nor fails - a blackholed route drops the
@@ -181,6 +183,41 @@ function http2ConnectTimeoutMs(): number {
   return Number.isFinite(configured) && configured > 0
     ? Math.min(configured, MAX_HTTP2_CONNECT_TIMEOUT_MS)
     : DEFAULT_HTTP2_CONNECT_TIMEOUT_MS;
+}
+
+// How long a cold client waits for the rest of its pool to connect before the
+// first dispatch on an origin. Once any session is ready the wait is skipped
+// entirely, so this is spent at most once per process per origin. It is
+// bounded so an endpoint that never connects still reaches the fail-fast path
+// below instead of stalling here.
+const COLD_START_WARMUP_MS = 50;
+
+/**
+ * Resolves once every session in the pool is ready, or the pool is empty, or
+ * `timeoutMs` elapses - whichever happens first.
+ */
+function waitForPoolWarm(
+  pool: Http2SessionPool,
+  timeoutMs: number,
+): Promise<void> {
+  const target = () => Math.min(HTTP2_SESSION_COUNT, pool.sessions.length);
+  const warm = () => pool.sessions.length === 0 || pool.ready.size >= target();
+  if (warm()) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let warmTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      if (warmTimer !== undefined) clearTimeout(warmTimer);
+      warmTimer = undefined;
+      pool.capacityEvents.off("change", onChange);
+      resolve();
+    };
+    const onChange = () => {
+      if (warm()) finish();
+    };
+    warmTimer = setTimeout(finish, timeoutMs);
+    pool.capacityEvents.on("change", onChange);
+  });
 }
 
 interface Http2SessionPool {
@@ -528,13 +565,16 @@ export async function nodeHttp2Request(
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
 
-  // Cold start: wait only for the first connected session. A single HTTP/2
-  // session multiplexes many concurrent streams, so there is no need to hold
-  // requests until more of the pool has connected; later sessions join the
-  // ready set as their handshakes finish and take a share of new requests.
-  // The wait is BOUNDED (1s): if no session ever connects (unreachable or
-  // misconfigured endpoint), selectSession falls through to the connecting
-  // pool below and the request itself surfaces the connection error promptly.
+  // Cold start: nothing on this origin has connected yet. Wait for the first
+  // session, then for the rest of the pool. One ready session can answer a
+  // single request, but a burst spreads only once its peers are ready too:
+  // dispatched any earlier, the requests concentrate on whichever session
+  // connected first and each pays a handshake on its critical path. Both waits
+  // are bounded (1s, then COLD_START_WARMUP_MS): if no session ever connects
+  // (unreachable or misconfigured endpoint), selectSession falls through to
+  // the connecting pool below and the request itself surfaces the connection
+  // error promptly. Once any session is ready this whole branch is skipped, so
+  // a warm client pays none of it.
   if (pool.ready.size === 0) {
     let firstReadyTimer: ReturnType<typeof setTimeout> | undefined;
     let onChange: (() => void) | undefined;
@@ -553,6 +593,8 @@ export async function nodeHttp2Request(
     ]);
     if (firstReadyTimer !== undefined) clearTimeout(firstReadyTimer);
     if (onChange !== undefined) pool.capacityEvents.off("change", onChange);
+
+    await waitForPoolWarm(pool, COLD_START_WARMUP_MS);
   }
 
   // Dispatch to the least-loaded ready session, respecting its own advertised

@@ -104,11 +104,16 @@ describe("http2 pool dispatch", () => {
     const server = await startServer(2);
     try {
       await burst(server.origin, 1);
-      const results = await burst(server.origin, 20);
+      server.streamsPerSession.clear();
+      // 8 requests at 2 streams each fit inside the 8-session pool, so nothing
+      // has to fall back onto a saturated session and the cap must hold.
+      const results = await burst(server.origin, 8);
       expect(results.every((r) => r.ok)).toBe(true);
-      expect(server.streamsSeen).toBe(21);
-      // 20 requests capped at 2 per session need at least 10 sessions.
-      expect(server.sessionsSeen.size).toBeGreaterThanOrEqual(10);
+      expect(server.streamsSeen).toBe(9);
+      expect(server.sessionsSeen.size).toBe(8);
+      expect(
+        Math.max(...server.streamsPerSession.values()),
+      ).toBeLessThanOrEqual(2);
     } finally {
       await server.close();
     }
@@ -131,11 +136,9 @@ describe("http2 pool dispatch", () => {
     try {
       const start = Date.now();
       await burst(server.origin, 1);
-      // No quorum of sessions is required before the first request can be
-      // dispatched: one ready session with room is enough, so this clears
-      // well under the old design's 250 ms quorum-polling ceiling - loopback
-      // connect plus the server's own 30 ms response delay, not 250 ms+ of
-      // polling on top of it.
+      // A cold client waits for its pool, but the wait is bounded and short:
+      // loopback connect plus the server's own 30 ms response delay, well under
+      // the old design's 250 ms quorum-polling ceiling.
       expect(Date.now() - start).toBeLessThan(150);
     } finally {
       await server.close();
@@ -150,7 +153,7 @@ describe("http2 pool dispatch", () => {
       // Warm the pool so all 16 sessions are ready; at cold start only the
       // first connected session is eligible, which is by design.
       await burst(server.origin, 1);
-      while (server.sessionsSeen.size < 16) {
+      while (server.sessionsSeen.size < 8) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -158,8 +161,27 @@ describe("http2 pool dispatch", () => {
       const results = await burst(server.origin, 100);
       expect(results.every((r) => r.ok)).toBe(true);
       const counts = [...server.streamsPerSession.values()];
-      expect(counts.length).toBe(16);
-      expect(Math.max(...counts)).toBeLessThanOrEqual(8);
+      expect(counts.length).toBe(8);
+      // 100 requests over 8 sessions: no session may take the whole burst.
+      expect(Math.max(...counts)).toBeLessThanOrEqual(20);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("should spread a cold burst across the whole pool instead of piling it on one session", async () => {
+    // A fresh client has nothing connected. If the burst dispatches as soon as
+    // the first session is ready, every request reserves its slot in the same
+    // turn, before any other session has connected, so all 100 land on that one
+    // session. Waiting for the pool, bounded, is what makes the burst spread.
+    const server = await startServer(250, 20);
+    try {
+      const results = await burst(server.origin, 100);
+
+      expect(results.every((r) => r.ok)).toBe(true);
+      const counts = [...server.streamsPerSession.values()];
+      expect(counts.length).toBe(8);
+      expect(Math.max(...counts)).toBeLessThanOrEqual(20);
     } finally {
       await server.close();
     }
