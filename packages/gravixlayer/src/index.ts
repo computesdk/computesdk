@@ -84,9 +84,30 @@ interface ResolvedClientOptions {
 
 const clients = new Map<string, GravixLayer>()
 
-/** Clear the module-level GravixLayer client cache. For tests only. */
+/**
+ * Fast path over `clients`: a provider instance's config object resolves once,
+ * and later calls on the same instance skip resolution and the identity string.
+ * The entry also snapshots the raw config fields and the env vars resolution
+ * consulted, so a mutated config object or a changed env var falls through to a
+ * fresh resolve — identical semantics to resolving on every call. `WeakMap`
+ * means the entry dies with the config; it cannot leak. Two provider instances
+ * with equivalent options still share one client through the `clients` map.
+ */
+interface CachedResolution {
+  client: GravixLayer
+  config: Pick<
+    GravixLayerConfig,
+    'apiKey' | 'baseUrl' | 'cloud' | 'region' | 'timeout' | 'maxRetries' | 'http2'
+  >
+  env: [string | undefined, string | undefined, string | undefined, string | undefined]
+}
+
+let clientsByConfig = new WeakMap<GravixLayerConfig, CachedResolution>()
+
+/** Clear the module-level GravixLayer client caches. For tests only. */
 export function clearGravixLayerClients(): void {
   clients.clear()
+  clientsByConfig = new WeakMap()
 }
 
 const createTimeoutMs = new WeakMap<object, number>()
@@ -201,6 +222,24 @@ function clientIdentity(options: ResolvedClientOptions): string {
 }
 
 function getClient(config: GravixLayerConfig): GravixLayer {
+  const cached = clientsByConfig.get(config)
+  if (
+    cached &&
+    cached.config.apiKey === config.apiKey &&
+    cached.config.baseUrl === config.baseUrl &&
+    cached.config.cloud === config.cloud &&
+    cached.config.region === config.region &&
+    cached.config.timeout === config.timeout &&
+    cached.config.maxRetries === config.maxRetries &&
+    cached.config.http2 === config.http2 &&
+    // env is only consulted when the matching config field is unset
+    (config.apiKey !== undefined || process.env.GRAVIXLAYER_API_KEY === cached.env[0]) &&
+    (config.baseUrl !== undefined || process.env.GRAVIXLAYER_BASE_URL === cached.env[1]) &&
+    (config.cloud !== undefined || process.env.GRAVIXLAYER_CLOUD === cached.env[2]) &&
+    (config.region !== undefined || process.env.GRAVIXLAYER_REGION === cached.env[3])
+  ) {
+    return cached.client
+  }
   const options = resolveClientOptions(config)
   const key = clientIdentity(options)
   let client = clients.get(key)
@@ -216,6 +255,24 @@ function getClient(config: GravixLayerConfig): GravixLayer {
     })
     clients.set(key, client)
   }
+  clientsByConfig.set(config, {
+    client,
+    config: {
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      cloud: config.cloud,
+      region: config.region,
+      timeout: config.timeout,
+      maxRetries: config.maxRetries,
+      http2: config.http2,
+    },
+    env: [
+      process.env.GRAVIXLAYER_API_KEY,
+      process.env.GRAVIXLAYER_BASE_URL,
+      process.env.GRAVIXLAYER_CLOUD,
+      process.env.GRAVIXLAYER_REGION,
+    ],
+  })
   return client
 }
 

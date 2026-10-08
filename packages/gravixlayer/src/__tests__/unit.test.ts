@@ -348,6 +348,31 @@ describe('client', () => {
     expect(h.state.clientOptions[1]).toMatchObject({ apiKey: 'gk_other' })
   })
 
+  it('re-resolves when the config object is mutated after first use', async () => {
+    const config: Parameters<typeof gravixlayer>[0] = { apiKey: 'gk_first' }
+    const p = gravixlayer(config)
+    await p.sandbox.create()
+    expect(h.state.clientOptions).toHaveLength(1)
+
+    config.apiKey = 'gk_second'
+    await p.sandbox.create()
+    expect(h.state.clientOptions).toHaveLength(2)
+    expect(h.state.clientOptions[1]).toMatchObject({ apiKey: 'gk_second' })
+  })
+
+  it('re-resolves when an env var changes while the config object is unchanged', async () => {
+    process.env.GRAVIXLAYER_API_KEY = 'gk_env_a'
+    const p = gravixlayer({})
+    await p.sandbox.create()
+    await p.sandbox.create()
+    expect(h.state.clientOptions).toHaveLength(1)
+
+    process.env.GRAVIXLAYER_API_KEY = 'gk_env_b'
+    await p.sandbox.create()
+    expect(h.state.clientOptions).toHaveLength(2)
+    expect(h.state.clientOptions[1]).toMatchObject({ apiKey: 'gk_env_b' })
+  })
+
   it('passes overridden maxRetries and http2 into the constructor', async () => {
     await gravixlayer({ apiKey: 'gk_test', maxRetries: 2, http2: false }).sandbox.create()
     expect(h.state.clientOptions[0]).toEqual({
