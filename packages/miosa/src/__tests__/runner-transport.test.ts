@@ -1,38 +1,57 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// `@miosa/sdk` has not published a version containing RunnerClient yet (see
-// runner-sdk.d.ts); vi.mock intercepts the specifier before module
-// resolution, so this works without the package existing on disk. The
-// spies live in vi.hoisted() because vi.mock's factory is hoisted above
-// every import in this file, including the one below.
+// vi.mock intercepts the `@miosa/sdk` specifier before module resolution so
+// these tests run without the package's real transport. The spies live in
+// vi.hoisted() because vi.mock's factory is hoisted above every import in
+// this file, including the one below.
+type FallbackCreate = (
+  params: Record<string, unknown>,
+) => Promise<{ id: string; runnerUrl: string; data: Record<string, unknown> }>;
+
 const runnerSpies = vi.hoisted(() => ({
   createSandbox: vi.fn(),
   exec: vi.fn(),
   destroySandbox: vi.fn(),
   close: vi.fn().mockResolvedValue(undefined),
-  constructed: [] as Array<{ apiKey: string; baseDomain?: string }>,
+  constructed: [] as Array<{
+    apiKey: string;
+    baseDomain?: string;
+    fallbackCreate?: FallbackCreate;
+  }>,
 }));
 
 vi.mock("@miosa/sdk", () => ({
   RunnerClient: vi
     .fn()
-    .mockImplementation((options: { apiKey: string; baseDomain?: string }) => {
-      runnerSpies.constructed.push(options);
-      return {
-        createSandbox: runnerSpies.createSandbox,
-        exec: runnerSpies.exec,
-        destroySandbox: runnerSpies.destroySandbox,
-        close: runnerSpies.close,
-      };
-    }),
+    .mockImplementation(
+      (options: {
+        apiKey: string;
+        baseDomain?: string;
+        fallbackCreate?: FallbackCreate;
+      }) => {
+        runnerSpies.constructed.push(options);
+        return {
+          createSandbox: runnerSpies.createSandbox,
+          exec: runnerSpies.exec,
+          destroySandbox: runnerSpies.destroySandbox,
+          close: runnerSpies.close,
+        };
+      },
+    ),
+  // Mirrors the SDK's own classifier closely enough for the fallback path:
+  // a transport-level failure means the request never landed.
+  isConnectFailure: (error: unknown) =>
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === "ECONNREFUSED",
 }));
 
 import { closeMiosaRunnerConnections, miosa, DEFAULT_BASE_URL } from "../index";
 import type { MiosaSandboxRecord } from "../index";
 
-// No API key carries a region this release (C5 decision, 2026-10-02), so
-// every key in this file is an ordinary key - the only thing that ever
-// turns the runner path on is `runnerMode` / MIOSA_RUNNER_MODE.
+// The regional endpoint is the default transport, so every test that does
+// not opt out reaches for the RunnerClient. Opting out is explicit:
+// `runnerMode: false` or MIOSA_RUNNER_MODE=0.
 const API_KEY = "msk_test_0123456789abcdef";
 
 function sandboxRecord(
@@ -84,7 +103,33 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
   });
 
   describe("eligibility", () => {
-    it("should stay on the control plane by default - no key-based routing", async () => {
+    it("should route through the regional endpoint by default", async () => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
+
+      await provider.sandbox.create();
+
+      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(runnerSpies.constructed[0]?.apiKey).toBe(API_KEY);
+    });
+
+    it("should opt out with runnerMode: false", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY, runnerMode: false });
+
+      await provider.sandbox.create();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(runnerSpies.createSandbox).not.toHaveBeenCalled();
+    });
+
+    it("should opt out with MIOSA_RUNNER_MODE=0", async () => {
+      process.env.MIOSA_RUNNER_MODE = "0";
       fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
       const provider = miosa({ apiKey: API_KEY });
 
@@ -92,6 +137,21 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(runnerSpies.createSandbox).not.toHaveBeenCalled();
+    });
+
+    it("should keep the default when MIOSA_RUNNER_MODE is set but unrecognised", async () => {
+      process.env.MIOSA_RUNNER_MODE = "";
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
+
+      await provider.sandbox.create();
+
+      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should route through the runner when runnerMode: true", async () => {
@@ -183,6 +243,86 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await expect(provider.sandbox.create()).rejects.toThrow(/without an id/);
+    });
+
+    it("should hand a shape the regional endpoint does not serve to the account API", async () => {
+      const record = sandboxRecord();
+      fetchMock.mockResolvedValueOnce(jsonResponse(record, 201));
+      // The SDK routes shapes the regional endpoint does not carry straight
+      // to fallbackCreate without reaching the network, so emulating that
+      // call is how the wiring is exercised here.
+      runnerSpies.createSandbox.mockImplementationOnce(async () => {
+        const fallback = runnerSpies.constructed[0]?.fallbackCreate;
+        if (!fallback) throw new Error("fallbackCreate was not wired");
+        return await fallback({ size: "large" });
+      });
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create({
+        vcpus: 8,
+        memory: 16384,
+      });
+
+      expect(sandbox.sandboxId).toBe(record.id);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toContain("/sandboxes");
+    });
+
+    it("should keep exec and destroy on the account API for a fallback-created sandbox", async () => {
+      const record = sandboxRecord();
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(record, 201))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            data: { stdout: "v20.20.2\n", stderr: "", exit_code: 0 },
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ data: {} }));
+      runnerSpies.createSandbox.mockImplementationOnce(async () => {
+        const fallback = runnerSpies.constructed[0]?.fallbackCreate;
+        if (!fallback) throw new Error("fallbackCreate was not wired");
+        return await fallback({ size: "large" });
+      });
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create({
+        vcpus: 8,
+        memory: 16384,
+      });
+      await sandbox.runCommand("node -v");
+      await sandbox.destroy();
+
+      // The sandbox lives on the account API, so nothing may address the
+      // regional endpoint for it.
+      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
+    });
+
+    it("should use the account API when the regional endpoint is unreachable", async () => {
+      const record = sandboxRecord();
+      fetchMock.mockResolvedValueOnce(jsonResponse(record, 201));
+      runnerSpies.createSandbox.mockRejectedValueOnce(
+        Object.assign(new Error("connect ECONNREFUSED"), {
+          code: "ECONNREFUSED",
+        }),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(sandbox.sandboxId).toBe(record.id);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not fall back after a sandbox exists - no double creates", async () => {
+      runnerSpies.createSandbox.mockRejectedValueOnce(
+        new Error("runner request failed with 503 runtime_busy"),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+
+      await expect(provider.sandbox.create()).rejects.toThrow(/runtime_busy/);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 
