@@ -55,8 +55,11 @@ compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|
 ## Sandboxes quick reference
 
 ```
-compute sandboxes create [--order market,blaxel,vercel] [--label] [--image]
-    [--snapshot-id] [--cpus] [--memory-mb] [--disk-mb] [--timeout-ms] [--secret <name>...]
+compute sandboxes create [--order market,blaxel,vercel] [--size small|medium|large|xlarge]
+    [--label] [--image] [--snapshot-id] [--cpus] [--memory-mb] [--disk-mb] [--timeout-ms]
+    [--max-price <usd>/<unit>] [--order-type market|limit|--market] [--secret <name>...]
+compute sandboxes quote [--size|--cpus/--memory-mb/--disk-mb] [--region] [--timeout-ms]
+    [--order-type|--market] [--max-price <usd>/<unit>]
 compute sandboxes list|get|destroy
 compute sandboxes exec <id> <command...>          # one-off, buffered (~290s max)
 compute sandboxes spawn|ps|logs|wait|kill|stdin|close-stdin   # detached processes
@@ -66,6 +69,10 @@ compute sandboxes snapshots|snapshot|snapshot-delete
 ```
 
 REST: `POST /api/v1/sandboxes` → `{ sandbox: { id, … } }`; provider order (`provider[:region]`, `market` bids first) resolves per-request `providerOrder` → org sandbox order → Actions order → default; `GET/PATCH /api/v1/sandboxes/settings` holds `providerOrder`/`marketCap`/`providerResources`/`warmPool`; rates at `/api/v1/sandboxes/rates`; pool at `/api/v1/sandboxes/pool/fill`; `GET /api/v1/sandboxes/{id}` returns the BYOK `attach: {provider, providerSandboxId, region}` descriptor (null on market fills/ambient).
+
+Buyer-side platform sizes: `small` 1 vCPU/2 GB, `medium` 2/4 GB, `large` 4/8 GB, `xlarge` 8/16 GB — `--size` is the normal way to say how big a box should be (default `medium`); raw `--cpus`/`--memory-mb`/`--disk-mb` stay for advanced use and are mutually exclusive with `--size`. Market fills report the requested `size` plus the seller's `box` (provider, the ask's `sizeName`, resources) in `placement`.
+
+Pricing flow: `compute sandboxes quote` first (prints provider/box, order type, rate/hour, est. cost, cap, protection limit, balance — `ok` or a reason code), then create. The default order type is `limit`: with no market cap configured and no `--max-price`, a create fails `market_cap_required` — so the normal flow is quote → create with `--max-price` at the quoted rate (unit required: `second|minute|hour`, e.g. `--max-price 0.12/hour`; `--max-price-per` is an alias for the unit). `--market` (or `--order-type market`) is the opt-in for filling at the live price, bounded by the protection ceiling (~3× the size's reference). Error codes: `market_cap_required` (limit order, no cap and no `--max-price`), `market_access_required` (org not approved for market buying — request access on the org's market page), `limit_not_met`, `above_protection_limit`, `insufficient_credits`, `no_market_capacity`.
 
 ## Testing against a PR preview deployment
 

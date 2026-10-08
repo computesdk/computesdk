@@ -9,7 +9,8 @@ ComputeSDK places cloud sandboxes through the ComputeSDK gateway. All usage bill
 
 ## Core workflow
 
-1. `create_sandbox` — returns a sandbox `id`. Args: `label`, `image`, `timeoutMs` (lifetime in ms; default 30 minutes, max 6 hours), and `providerOrder` (camelCase routing preference, e.g. `["market"]` for a live-bid market fill).
+1. `create_sandbox` — returns a sandbox `id`. Args: `size` (`small` 1 vCPU/2 GB, `medium` 2/4 GB, `large` 4/8 GB, `xlarge` 8/16 GB; default `medium`), `label`, `image`, `timeoutMs` (lifetime in ms; default 30 minutes, max 6 hours), `providerOrder` (camelCase routing preference, e.g. `["market"]` for a live-bid market fill), `orderType` (`market` or `limit`), and `maxPrice` (`{usd, per}` — a limit-order ceiling for a market fill).
+   **Pricing flow:** call `get_quote` first (same placement inputs — returns the provider, rate, caps, and credit balance without creating anything), tell the user the price, then `create_sandbox` with `maxPrice` set to that quoted price. The default order type is `limit`, so a create with no org market cap and no `maxPrice` fails `market_cap_required`. Pass `orderType: "market"` only when the user asks for the best available price — it fills at the live price, bounded by the platform's protection ceiling. If create fails `market_access_required`, the org isn't approved for market buying yet — send the user to the org's market page to request access; `insufficient_credits` means top up first (the quote's `topUpPath` points there).
 2. Do the work: `write_file`, `read_file`, `make_directory`, `remove_path`; `run_command` or `start_process`; `sandbox_url` for anything that listens on a port. File tools take absolute paths; `read_file` on a directory lists its entries.
 3. `destroy_sandbox` when the task is finished — sandboxes bill for runtime, so always clean up unless the user wants it kept alive.
 

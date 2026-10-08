@@ -23,6 +23,43 @@ import {
   type CommonOpts,
 } from './actions.js';
 
+/**
+ * `--max-price <usd>/<unit>` → the body's `maxPrice` / the quote's
+ * maxPriceUsd+maxPricePer params. The unit is required — either inside the
+ * value (`0.12/hour`) or via `--max-price-per` — so a bare `--max-price
+ * 0.12` never silently defaults to per-second pricing.
+ */
+function parseMaxPrice(
+  value: string | undefined,
+  per: string | undefined,
+): { usd: number; per: 'second' | 'minute' | 'hour' } | undefined {
+  if (value === undefined) {
+    if (per !== undefined) throw new Error('--max-price-per requires --max-price.');
+    return undefined;
+  }
+  let usdText = value;
+  let unit: string | undefined = per;
+  const slash = value.indexOf('/');
+  if (slash !== -1) {
+    usdText = value.slice(0, slash);
+    const inline = value.slice(slash + 1);
+    if (per !== undefined && per !== inline) {
+      throw new Error(`--max-price "${value}" conflicts with --max-price-per "${per}".`);
+    }
+    unit = inline;
+  }
+  const usd = Number(usdText);
+  if (!/^\d+(\.\d+)?([eE][+-]?\d+)?$/.test(usdText) || !Number.isFinite(usd) || usd <= 0) {
+    throw new Error(`Invalid --max-price "${value}". Expected a positive dollar amount like 0.12/hour.`);
+  }
+  if (unit !== 'second' && unit !== 'minute' && unit !== 'hour') {
+    throw new Error(
+      '--max-price needs a unit — write it as <usd>/<unit> (e.g. --max-price 0.12/hour) or pass --max-price-per hour.',
+    );
+  }
+  return { usd, per: unit };
+}
+
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
 
 export interface SandboxCost {
@@ -49,6 +86,20 @@ export interface SandboxSummary {
   lastCommandAt: string | null;
   destroyedAt: string | null;
   destroyError: string | null;
+  /** How the sandbox was placed — source, order type, rate, max price, the
+   * requested platform `size` and the seller's `box` on a market fill. */
+  placement: {
+    source: 'market' | 'own-key';
+    size?: string | null;
+    box?: {
+      provider: string;
+      sizeName: string | null;
+      resources?: { cpus: number | null; memoryMb: number | null; ephemeralDiskMb: number | null };
+    };
+    orderType?: 'market' | 'limit';
+    rate: { usd: number; per: string };
+    maxPrice?: { usd: number; per: string };
+  } | null;
   cost: SandboxCost;
 }
 
@@ -126,6 +177,16 @@ function printSandbox(s: SandboxSummary): void {
     console.log(`  image: ${s.image ?? '—'}${s.requestedImage !== null && s.requestedImage !== s.image ? `  ${pc.dim(`(requested: ${s.requestedImage})`)}` : ''}`);
   }
   if (s.destroyError) console.log(`  destroyError: ${pc.red(s.destroyError)}`);
+  if (s.placement) {
+    const p = s.placement;
+    const box = p.box
+      ? ` / ${p.box.sizeName ?? 'custom'}${p.box.resources ? ` (${p.box.resources.cpus ?? '?'} vCPU / ${p.box.resources.memoryMb ?? '?'} MB)` : ''}`
+      : '';
+    console.log(
+      `  provider: ${p.box?.provider ?? s.provider ?? '—'}${box}` +
+        `   size: ${p.size ?? '—'}   order: ${p.orderType ?? '—'}   rate: $${p.rate.usd}/${p.rate.per}`,
+    );
+  }
   if (attach !== undefined) {
     console.log(
       attach === null
@@ -133,6 +194,63 @@ function printSandbox(s: SandboxSummary): void {
         : `  attach: ${attach.provider} / ${attach.providerSandboxId}${attach.region ? ` (${attach.region})` : ''}`,
     );
   }
+}
+
+/** The GET /sandboxes/quote payload — mirrors SandboxQuote on the platform. */
+interface SandboxQuoteWire {
+  ok: boolean;
+  reason?: string;
+  providerOrder: string[];
+  orderType: 'market' | 'limit';
+  placement?: {
+    source: 'market' | 'own-key';
+    provider: string;
+    region: string | null;
+    size: string | null;
+    box?: {
+      provider: string;
+      sizeName: string | null;
+      resources?: { cpus: number | null; memoryMb: number | null; ephemeralDiskMb: number | null };
+    };
+  };
+  rate?: { usd: number; per: string };
+  rateUsd?: { perSecond: number; perMinute: number; perHour: number };
+  maxPrice?: { usd: number; per: string };
+  estimatedCostUsd?: number;
+  marketCapUsdPerHour?: number;
+  protectionLimitUsdPerHour?: number;
+  cheapestLiveUsdPerHour?: number;
+  referenceUsdPerHour?: number;
+  liveAskDepth?: number;
+  creditBalanceUsd: number;
+  requiredHoldUsd?: number;
+  topUpPath?: string;
+}
+
+const usd = (n: number | undefined, suffix = ''): string =>
+  n === undefined ? '—' : `$${n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '.00')}${suffix}`;
+
+function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
+  console.log(`quote: ${q.ok ? pc.green('ok') : pc.red(q.reason ?? 'unfillable')}`);
+  const box = q.placement?.box;
+  console.log(
+    `  size: ${q.placement?.size ?? '—'}   provider: ${q.placement?.provider ?? '—'}` +
+      (box ? `   box: ${box.sizeName ?? 'custom'} (${box.provider}${box.resources ? `, ${box.resources.cpus ?? '?'} vCPU / ${box.resources.memoryMb ?? '?'} MB` : ''})` : ''),
+  );
+  console.log(`  order type: ${q.orderType}   order: ${q.providerOrder.join(', ')}`);
+  if (q.rateUsd) {
+    console.log(`  rate: ${usd(q.rateUsd.perHour, '/hour')}   cheapest live: ${usd(q.cheapestLiveUsdPerHour, '/hr')}   reference: ${usd(q.referenceUsdPerHour, '/hr')}`);
+  } else if (q.rate) {
+    console.log(`  rate: $${q.rate.usd}/${q.rate.per}`);
+  }
+  const timeout = timeoutMs !== undefined ? ` for ${timeoutMs}ms` : '';
+  console.log(`  est. cost${timeout}: ${usd(q.estimatedCostUsd)}   required hold: ${usd(q.requiredHoldUsd)}`);
+  console.log(
+    `  cap: ${q.maxPrice ? `$${q.maxPrice.usd}/${q.maxPrice.per}` : usd(q.marketCapUsdPerHour, '/hr')}` +
+      `   protection limit: ${usd(q.protectionLimitUsdPerHour, '/hr')}   balance: ${usd(q.creditBalanceUsd)}`,
+  );
+  if (!q.ok && q.topUpPath) console.log(`  ${pc.dim(`→ ${q.topUpPath}`)}`);
+  if (q.liveAskDepth !== undefined) console.log(`  ${pc.dim(`live asks: ${q.liveAskDepth}`)}`);
 }
 
 function printProcess(p: SandboxProcess | SandboxProcessStatus): void {
@@ -263,12 +381,17 @@ export function registerSandboxesCommands(program: Command): void {
     .command('create')
     .description('Place a sandbox (provider order walks 1,2,3; "market" bids first)')
     .option('--order <providers>', 'provider order, comma-separated (e.g. "market,blaxel,vercel")')
+    .option('--size <size>', 'platform size: small (1 vCPU/2 GB), medium, large, xlarge (8/16 GB); default medium')
     .option('--label <label>', 'label for the sandbox')
     .option('--image <image>', 'container image to boot')
     .option('--snapshot-id <id>', 'provider snapshot to resume')
-    .option('--cpus <n>', 'CPU cores')
-    .option('--memory-mb <n>', 'memory in MB')
-    .option('--disk-mb <n>', 'ephemeral disk in MB')
+    .option('--cpus <n>', 'CPU cores (raw resources — mutually exclusive with --size)')
+    .option('--memory-mb <n>', 'memory in MB (raw resources)')
+    .option('--disk-mb <n>', 'ephemeral disk in MB (raw resources)')
+    .option('--max-price <usd/unit>', 'max price for a market fill (e.g. 0.12/hour); makes the create a limit order')
+    .option('--max-price-per <unit>', 'unit for a bare --max-price usd (second, minute, or hour)')
+    .option('--market', 'place the create on the compute market (order type "market")')
+    .option('--order-type <type>', 'explicit market order type: market or limit')
     .option('--timeout-ms <ms>', 'sandbox timeout in ms')
     .option('--secret <name>', 'vault secret name to inject (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
     .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
@@ -277,7 +400,8 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .action(async (opts: CommonOpts & {
       order?: string; label?: string; image?: string; snapshotId?: string;
-      cpus?: string; memoryMb?: string; diskMb?: string; timeoutMs?: string;
+      size?: string; cpus?: string; memoryMb?: string; diskMb?: string; timeoutMs?: string;
+      maxPrice?: string; maxPricePer?: string; market?: boolean; orderType?: string;
       secret?: string[];
     }) => {
       try {
@@ -288,14 +412,71 @@ export function registerSandboxesCommands(program: Command): void {
         if (opts.diskMb) resources.ephemeralDiskMb = Number(opts.diskMb);
         const body: Record<string, unknown> = {};
         if (opts.order) body.providerOrder = opts.order.split(',').map((s) => s.trim());
+        if (opts.size) body.size = opts.size;
         if (opts.label) body.label = opts.label;
         if (opts.image) body.image = opts.image;
         if (opts.snapshotId) body.snapshotId = opts.snapshotId;
         if (opts.timeoutMs) body.timeoutMs = Number(opts.timeoutMs);
         if (opts.secret && opts.secret.length > 0) body.secrets = opts.secret;
         if (Object.keys(resources).length > 0) body.resources = resources;
+        const maxPrice = parseMaxPrice(opts.maxPrice, opts.maxPricePer);
+        if (maxPrice) body.maxPrice = { usd: maxPrice.usd, per: maxPrice.per };
+        if (opts.orderType && opts.market) {
+          throw new Error('--market and --order-type are mutually exclusive.');
+        }
+        if (opts.orderType) body.orderType = opts.orderType;
+        if (opts.market) body.orderType = 'market';
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
         output(opts, res.sandbox, printSandbox);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('quote')
+    .description('Quote a sandbox create: placement, rate, caps and credits — creates nothing')
+    .option('--size <size>', 'platform size (or raw resource flags; default medium)')
+    .option('--cpus <n>', 'CPU cores')
+    .option('--memory-mb <n>', 'memory in MB')
+    .option('--disk-mb <n>', 'ephemeral disk in MB')
+    .option('--region <region>', 'pin the placement region')
+    .option('--timeout-ms <ms>', 'sandbox timeout in ms')
+    .option('--order-type <type>', 'market order type: market or limit')
+    .option('--market', 'quote a market order (fills at the live price, protection-bounded)')
+    .option('--max-price <usd/unit>', 'max price for a market fill (e.g. 0.12/hour)')
+    .option('--max-price-per <unit>', 'unit for a bare --max-price usd (second, minute, or hour)')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .action(async (opts: CommonOpts & {
+      size?: string; cpus?: string; memoryMb?: string; diskMb?: string;
+      region?: string; timeoutMs?: string; orderType?: string; market?: boolean;
+      maxPrice?: string; maxPricePer?: string;
+    }) => {
+      try {
+        const c = await client(opts);
+        const params: Record<string, string | undefined> = {
+          size: opts.size,
+          cpus: opts.cpus,
+          memoryMb: opts.memoryMb,
+          ephemeralDiskMb: opts.diskMb,
+          region: opts.region,
+          timeoutMs: opts.timeoutMs,
+          orderType: opts.market ? 'market' : opts.orderType,
+        };
+        if (opts.orderType && opts.market) {
+          throw new Error('--market and --order-type are mutually exclusive.');
+        }
+        const maxPrice = parseMaxPrice(opts.maxPrice, opts.maxPricePer);
+        if (maxPrice) {
+          params.maxPriceUsd = String(maxPrice.usd);
+          params.maxPricePer = maxPrice.per;
+        }
+        const res = await c.get<{ quote: SandboxQuoteWire }>(
+          '/api/v1/sandboxes/quote',
+          params,
+        );
+        output(opts, res.quote, (quote) => printQuote(quote, opts.timeoutMs));
       } catch (e) {
         fail(e, opts);
       }
