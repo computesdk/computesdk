@@ -64,15 +64,29 @@ export async function whenBooted<T>(
   operation: () => Promise<T>,
 ): Promise<T> {
   await untilSettled(sandbox);
+  return retryBootRaces(operation, Date.now() + BOOT_WAIT_TIMEOUT_MS);
+}
 
-  const deadline = Date.now() + BOOT_WAIT_TIMEOUT_MS;
+/**
+ * Retries `operation` while Buddy reports the sandbox as not running or busy,
+ * without first polling the sandbox for `RUNNING`. For an endpoint that
+ * answers in one round trip the failed attempt *is* the readiness check, so a
+ * warm sandbox costs no extra request.
+ */
+export async function retryBootRaces<T>(
+  operation: () => Promise<T>,
+  deadline = Date.now() + BOOT_WAIT_TIMEOUT_MS,
+): Promise<T> {
   for (;;) {
     try {
       return await operation();
     } catch (error) {
       const retryable = isInstanceNotRunning(error) || isOperationInProgress(error);
       if (!retryable || Date.now() >= deadline) throw error;
-      await sleep(BOOT_WAIT_POLL_MS);
+      // The caller may have given up at the deadline, so never start another
+      // attempt past it.
+      await sleep(Math.min(BOOT_WAIT_POLL_MS, deadline - Date.now()));
+      if (Date.now() >= deadline) throw error;
     }
   }
 }
