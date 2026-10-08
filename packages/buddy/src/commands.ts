@@ -263,11 +263,13 @@ export function usesExec(options: BuddyRunCommandOptions): boolean {
 
 /**
  * Wraps a shell line so the sandbox stops it, with its process group, once the
- * time left before `deadline` runs out. `timeout(1)` then exits 124, the same
- * code the client-side deadline reports.
+ * time left before `deadline` runs out. `timeout(1)` takes fractional seconds,
+ * so a sub-second deadline is not stretched; a duration of 0 would disable it,
+ * hence the 1 ms floor. It then exits 124, the same code the client-side
+ * deadline reports.
  */
-export function withSandboxTimeout(line: string, deadline: number): string {
-  const seconds = Math.max(1, Math.ceil((deadline - Date.now()) / 1000));
+export function withSandboxTimeout(line: string, deadline: number, now = Date.now()): string {
+  const seconds = Math.max(1, deadline - now) / 1000;
   return `timeout -k 5 ${seconds} bash -c "${escapeShellArg(line)}"`;
 }
 

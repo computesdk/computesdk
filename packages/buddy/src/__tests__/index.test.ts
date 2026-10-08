@@ -381,11 +381,23 @@ describe('command execution via exec', () => {
     expect(usesExec({ runtime: 'PYTHON', timeout: 1_000 })).toBe(false);
   });
 
-  it('wraps the line in timeout(1) with the seconds left, rounded up', () => {
+  it('wraps the line in timeout(1) with the exact time left', () => {
     const line = buildShellCommand('echo "$HOME"', { cwd: '/w' });
-    const wrapped = withSandboxTimeout(line, Date.now() + 2_500);
-    expect(wrapped).toBe('timeout -k 5 3 bash -c "cd \\"/w\\" && echo \\"\\$HOME\\""');
-    expect(withSandboxTimeout('true', Date.now() - 1)).toBe('timeout -k 5 1 bash -c "true"');
+    expect(withSandboxTimeout(line, 12_500, 10_000))
+      .toBe('timeout -k 5 2.5 bash -c "cd \\"/w\\" && echo \\"\\$HOME\\""');
+    expect(withSandboxTimeout('true', 10_020, 10_000)).toBe('timeout -k 5 0.02 bash -c "true"');
+    expect(withSandboxTimeout('true', 9_000, 10_000)).toBe('timeout -k 5 0.001 bash -c "true"');
+  });
+
+  it('never starts a boot retry past the deadline', async () => {
+    const { sandbox, client } = fakeCommandClient([], []);
+    const exec = fakeExec(client, [apiError(400, 'Sandbox must be running'), { exit_code: 0 }]);
+
+    const result = await runCommand(sandbox, 'true', { timeout: 100 });
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+    expect(exec).toHaveBeenCalledTimes(1);
   });
 
   it('runs a plain command in one request and never touches the commands resource', async () => {
@@ -417,7 +429,7 @@ describe('command execution via exec', () => {
     const result = await runCommand(sandbox, 'sleep 60', { timeout: 10_000 });
 
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
-    expect(exec.mock.calls[0][0].body.command).toMatch(/^timeout -k 5 (9|10) bash -c "sleep 60"$/);
+    expect(exec.mock.calls[0][0].body.command).toMatch(/^timeout -k 5 (9\.9\d\d|10) bash -c "sleep 60"$/);
   });
 
   it('retries while the sandbox is still booting', async () => {
