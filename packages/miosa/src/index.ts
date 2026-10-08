@@ -135,22 +135,24 @@ export interface MiosaHttpResponse {
 
 // A bounded HTTP/2 pool prevents 100 independent TLS handshakes without
 // serializing the complete burst behind one connection. Every handshake a cold
-// client opens is paid for before its first dispatch, and production sweeps
-// found 4-8 sessions beat 16-32 for that first burst, so 8 keeps the spreading
-// the pool exists for without buying handshakes it cannot use yet. Keep the
-// override private to the transport so operators can reproduce runner-specific
-// measurements without changing the ComputeSDK create contract.
+// client opens is paid for before its first dispatch, so the pool has to be no
+// larger than the burst can use before its first request is answered: measured
+// from a fresh process, 4 sessions beat 8, 16 and 32 for a 100-request first
+// burst, and 16 sessions cost a single request noticeably more than a small
+// pool. Keep the override private to the transport so operators can reproduce
+// runner-specific measurements without changing the ComputeSDK create
+// contract.
 const HTTP2_SESSION_COUNT = (() => {
   const configured = Number.parseInt(
     (typeof process !== "undefined"
       ? process.env.MIOSA_HTTP2_SESSION_COUNT
-      : undefined) ?? "8",
+      : undefined) ?? "4",
     10,
   );
 
   return Number.isFinite(configured)
     ? Math.min(64, Math.max(1, configured))
-    : 8;
+    : 4;
 })();
 
 // A connect that neither succeeds nor fails - a blackholed route drops the

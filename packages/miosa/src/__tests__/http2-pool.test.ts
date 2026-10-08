@@ -105,12 +105,12 @@ describe("http2 pool dispatch", () => {
     try {
       await burst(server.origin, 1);
       server.streamsPerSession.clear();
-      // 8 requests at 2 streams each fit inside the 8-session pool, so nothing
+      // 6 requests at 2 streams each fit inside the 4-session pool, so nothing
       // has to fall back onto a saturated session and the cap must hold.
-      const results = await burst(server.origin, 8);
+      const results = await burst(server.origin, 6);
       expect(results.every((r) => r.ok)).toBe(true);
-      expect(server.streamsSeen).toBe(9);
-      expect(server.sessionsSeen.size).toBe(8);
+      expect(server.streamsSeen).toBe(7);
+      expect(server.sessionsSeen.size).toBe(4);
       expect(
         Math.max(...server.streamsPerSession.values()),
       ).toBeLessThanOrEqual(2);
@@ -153,7 +153,7 @@ describe("http2 pool dispatch", () => {
       // Warm the pool so all 16 sessions are ready; at cold start only the
       // first connected session is eligible, which is by design.
       await burst(server.origin, 1);
-      while (server.sessionsSeen.size < 8) {
+      while (server.sessionsSeen.size < 4) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -161,9 +161,9 @@ describe("http2 pool dispatch", () => {
       const results = await burst(server.origin, 100);
       expect(results.every((r) => r.ok)).toBe(true);
       const counts = [...server.streamsPerSession.values()];
-      expect(counts.length).toBe(8);
-      // 100 requests over 8 sessions: no session may take the whole burst.
-      expect(Math.max(...counts)).toBeLessThanOrEqual(20);
+      expect(counts.length).toBe(4);
+      // 100 requests over 4 sessions: no session may take the whole burst.
+      expect(Math.max(...counts)).toBeLessThanOrEqual(40);
     } finally {
       await server.close();
     }
@@ -180,8 +180,8 @@ describe("http2 pool dispatch", () => {
 
       expect(results.every((r) => r.ok)).toBe(true);
       const counts = [...server.streamsPerSession.values()];
-      expect(counts.length).toBe(8);
-      expect(Math.max(...counts)).toBeLessThanOrEqual(20);
+      expect(counts.length).toBe(4);
+      expect(Math.max(...counts)).toBeLessThanOrEqual(40);
     } finally {
       await server.close();
     }
