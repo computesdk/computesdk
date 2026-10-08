@@ -16,6 +16,7 @@ import type { ActionsClient } from './actions-client.js';
 import {
   client,
   fail,
+  maxPriceFields,
   output,
   parseInputs,
   safeTerm,
@@ -49,6 +50,20 @@ export interface SandboxSummary {
   lastCommandAt: string | null;
   destroyedAt: string | null;
   destroyError: string | null;
+  /** How the sandbox was placed — source, order type, rate, max price, the
+   * requested platform `size` and the seller's `box` on a market fill. */
+  placement: {
+    source: 'market' | 'own-key';
+    size?: string | null;
+    box?: {
+      provider: string;
+      sizeName: string | null;
+      resources?: { cpus: number | null; memoryMb: number | null; ephemeralDiskMb: number | null };
+    };
+    orderType?: 'market' | 'limit';
+    rate: { usd: number; per: string };
+    maxPrice?: { usd: number; per: string };
+  } | null;
   cost: SandboxCost;
 }
 
@@ -263,12 +278,17 @@ export function registerSandboxesCommands(program: Command): void {
     .command('create')
     .description('Place a sandbox (provider order walks 1,2,3; "market" bids first)')
     .option('--order <providers>', 'provider order, comma-separated (e.g. "market,blaxel,vercel")')
+    .option('--size <size>', 'platform size: small (1 vCPU/2 GB), medium, large, xlarge (8/16 GB); default small')
     .option('--label <label>', 'label for the sandbox')
     .option('--image <image>', 'container image to boot')
     .option('--snapshot-id <id>', 'provider snapshot to resume')
-    .option('--cpus <n>', 'CPU cores')
-    .option('--memory-mb <n>', 'memory in MB')
-    .option('--disk-mb <n>', 'ephemeral disk in MB')
+    .option('--cpus <n>', 'CPU cores (raw resources — mutually exclusive with --size)')
+    .option('--memory-mb <n>', 'memory in MB (raw resources)')
+    .option('--disk-mb <n>', 'ephemeral disk in MB (raw resources)')
+    .option('--max-price <usd>', 'max price for a market fill (e.g. 0.12); makes the create a limit order')
+    .option('--max-price-per <unit>', 'time unit --max-price is priced in: second, minute, or hour (default: second)')
+    .option('--market', 'place the create on the compute market (order type "market")')
+    .option('--order-type <type>', 'explicit market order type: market or limit')
     .option('--timeout-ms <ms>', 'sandbox timeout in ms')
     .option('--secret <name>', 'vault secret name to inject (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
     .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
@@ -277,7 +297,8 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .action(async (opts: CommonOpts & {
       order?: string; label?: string; image?: string; snapshotId?: string;
-      cpus?: string; memoryMb?: string; diskMb?: string; timeoutMs?: string;
+      size?: string; cpus?: string; memoryMb?: string; diskMb?: string; timeoutMs?: string;
+      maxPrice?: string; maxPricePer?: string; market?: boolean; orderType?: string;
       secret?: string[];
     }) => {
       try {
@@ -288,14 +309,67 @@ export function registerSandboxesCommands(program: Command): void {
         if (opts.diskMb) resources.ephemeralDiskMb = Number(opts.diskMb);
         const body: Record<string, unknown> = {};
         if (opts.order) body.providerOrder = opts.order.split(',').map((s) => s.trim());
+        if (opts.size) body.size = opts.size;
         if (opts.label) body.label = opts.label;
         if (opts.image) body.image = opts.image;
         if (opts.snapshotId) body.snapshotId = opts.snapshotId;
         if (opts.timeoutMs) body.timeoutMs = Number(opts.timeoutMs);
         if (opts.secret && opts.secret.length > 0) body.secrets = opts.secret;
         if (Object.keys(resources).length > 0) body.resources = resources;
+        const maxPrice = maxPriceFields(opts.maxPrice, opts.maxPricePer);
+        if (maxPrice) body.maxPrice = { usd: maxPrice.maxPriceUsd, per: maxPrice.maxPricePer };
+        if (opts.orderType && opts.market) {
+          throw new Error('--market and --order-type are mutually exclusive.');
+        }
+        if (opts.orderType) body.orderType = opts.orderType;
+        if (opts.market) body.orderType = 'market';
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
         output(opts, res.sandbox, printSandbox);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('quote')
+    .description('Quote a sandbox create: placement, rate, caps and credits — creates nothing')
+    .option('--size <size>', 'platform size (or raw resource flags; default small)')
+    .option('--cpus <n>', 'CPU cores')
+    .option('--memory-mb <n>', 'memory in MB')
+    .option('--disk-mb <n>', 'ephemeral disk in MB')
+    .option('--region <region>', 'pin the placement region')
+    .option('--timeout-ms <ms>', 'sandbox timeout in ms')
+    .option('--order-type <type>', 'market order type: market or limit')
+    .option('--max-price <usd>', 'max price for a market fill')
+    .option('--max-price-per <unit>', 'time unit --max-price is priced in (default: second)')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .action(async (opts: CommonOpts & {
+      size?: string; cpus?: string; memoryMb?: string; diskMb?: string;
+      region?: string; timeoutMs?: string; orderType?: string;
+      maxPrice?: string; maxPricePer?: string;
+    }) => {
+      try {
+        const c = await client(opts);
+        const params: Record<string, string | undefined> = {
+          size: opts.size,
+          cpus: opts.cpus,
+          memoryMb: opts.memoryMb,
+          ephemeralDiskMb: opts.diskMb,
+          region: opts.region,
+          timeoutMs: opts.timeoutMs,
+          orderType: opts.orderType,
+        };
+        const maxPrice = maxPriceFields(opts.maxPrice, opts.maxPricePer);
+        if (maxPrice) {
+          params.maxPriceUsd = String(maxPrice.maxPriceUsd);
+          params.maxPricePer = maxPrice.maxPricePer;
+        }
+        const res = await c.get<{ quote: Record<string, unknown> }>(
+          '/api/v1/sandboxes/quote',
+          params,
+        );
+        output(opts, res.quote, (quote) => console.log(JSON.stringify(quote, null, 2)));
       } catch (e) {
         fail(e, opts);
       }
