@@ -186,28 +186,49 @@ export function parseMarketLane(value: string | undefined): MarketLane {
 }
 
 /**
- * `--price`/`--per` → the body's `usd`/`per`. Providers quote per-second, so
- * an absent --per is 'second', not an error.
+ * `--price <usd>/<unit>` → the body's `usd`/`per`. The unit is required —
+ * either inside the value (`0.12/hour`) or via `--per` — so a bare `--price
+ * 0.12` never silently defaults to per-second pricing (same rule as
+ * `sandboxes create --max-price`).
  */
 export function parseRate(
   price: string | undefined,
   per: string | undefined,
 ): { usd: number; per: MarketRatePer } {
   if (price === undefined) {
-    throw new ActionsCliError('invalid_argument', 'A price is required — pass --price <usd>.');
+    throw new ActionsCliError('invalid_argument', 'A price is required — pass --price <usd>/<unit>.');
   }
-  const usd = Number(price);
-  if (!USD_RE.test(price) || !Number.isFinite(usd) || usd <= 0) {
+  let usdText = price;
+  let unit: string | undefined = per;
+  const slash = price.indexOf('/');
+  if (slash !== -1) {
+    usdText = price.slice(0, slash);
+    const inline = price.slice(slash + 1);
+    if (per !== undefined && per !== inline) {
+      throw new ActionsCliError(
+        'invalid_argument',
+        `--price "${price}" conflicts with --per "${per}".`,
+      );
+    }
+    unit = inline;
+  }
+  const usd = Number(usdText);
+  if (!USD_RE.test(usdText) || !Number.isFinite(usd) || usd <= 0) {
     throw new ActionsCliError(
       'invalid_argument',
-      `Invalid --price "${price}". Expected a positive dollar amount (e.g. 0.12).`,
+      `Invalid --price "${price}". Expected a positive dollar amount (e.g. 0.12/hour).`,
     );
   }
-  const unit = per ?? 'second';
+  if (unit === undefined) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      '--price needs a unit — write it as <usd>/<unit> (e.g. --price 0.12/hour) or pass --per hour.',
+    );
+  }
   if (!RATE_UNITS.includes(unit as MarketRatePer)) {
     throw new ActionsCliError(
       'invalid_argument',
-      `--per must be second, minute, or hour, got "${per}".`,
+      `The unit must be second, minute, or hour, got "${unit}".`,
     );
   }
   return { usd, per: unit as MarketRatePer };
@@ -597,8 +618,8 @@ export function registerMarketCommands(program: Command): void {
     market
       .command('sell')
       .description('Post a listing: sell capacity at a price')
-      .requiredOption('--price <usd>', 'price per unit of time (e.g. 0.12)')
-      .option('--per <unit>', 'time unit the price is per: second, minute, or hour (default: second)')
+      .requiredOption('--price <usd/unit>', 'price per unit of time (e.g. 0.12/hour)')
+      .option('--per <unit>', 'unit for a bare --price usd (second, minute, or hour)')
       .option('--size <tier>', 'size tier to sell (default: medium, else the provider\'s first tier)')
       .option('--use-case <lane>', 'lane to sell into: actions or sandbox (default: actions)')
       .option('--region <region>', 'region to sell in (default: anywhere the provider runs)')
@@ -647,8 +668,8 @@ export function registerMarketCommands(program: Command): void {
       .command('price')
       .description('Reprice a listing')
       .argument('<listing-id>', 'listing ID')
-      .requiredOption('--price <usd>', 'new price per unit of time (e.g. 0.08)')
-      .option('--per <unit>', 'time unit the price is per: second, minute, or hour (default: second)'),
+      .requiredOption('--price <usd/unit>', 'new price per unit of time (e.g. 0.08/hour)')
+      .option('--per <unit>', 'unit for a bare --price usd (second, minute, or hour)'),
   ).action(async (listingId: string, opts: CommonOpts & { price: string; per?: string }) => {
     try {
       const result = await (await client(opts)).post<{ ask: MarketAsk }>(
