@@ -221,10 +221,21 @@ export async function runCommand(
     throw error;
   }
 
+  // The stream can close before Buddy records the result, so the deadline
+  // governs the exit-code poll as well: past it, the caller gets the timeout
+  // result and the command is stopped in case it is still running.
+  const exit = waitForExitCode(sandbox, commandId);
+  const exitCode = deadline ? await raceDeadline(exit, deadline) : await exit;
+  if (exitCode === DEADLINE_PASSED) {
+    exit.catch(() => {});
+    void killCommand(running);
+    return timedOutResult(stdout.join(''), stderr.join(''));
+  }
+
   return {
     stdout: stdout.join(''),
     stderr: stderr.join(''),
-    exitCode: await waitForExitCode(sandbox, commandId),
+    exitCode,
     durationMs: Date.now() - startedAt,
   };
 }

@@ -330,6 +330,22 @@ describe('command execution', () => {
     expect(result.stderr).toBe('warn\n');
   });
 
+  it('holds the exit-code poll to the deadline once the stream has closed', async () => {
+    const { sandbox, client } = fakeCommandClient([{ type: 'STDOUT', data: 'done' }], [{ status: 'INPROGRESS' }]);
+    const { Command } = await import('@buddy-works/sandbox-sdk');
+    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
+      yield { type: 'STDOUT', data: 'done' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
+
+    const started = Date.now();
+    const result = await runCommand(sandbox, 'true', { timeout: 100 });
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+    expect(result.stdout).toBe('done\n');
+    await vi.waitFor(() => expect(client.terminateCommand).toHaveBeenCalledTimes(1));
+  });
+
   it('retries a failed kill before giving up', async () => {
     const kill = vi.fn()
       .mockRejectedValueOnce(new Error('gateway timeout'))
