@@ -165,6 +165,33 @@ describe("http2 pool dispatch", () => {
     }
   });
 
+  it("should reject when a connect never completes instead of waiting on the OS", async () => {
+    // A blackholed route drops the SYN silently: the socket neither connects
+    // nor errors, and `http2.connect(origin, { timeout })` does not cover it.
+    // Unbounded, the session keeps its pool slot and the request waits out the
+    // OS connect timeout (over a minute) instead of failing fast.
+    const previous = process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS;
+    process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS = "250";
+    try {
+      const start = Date.now();
+      await expect(
+        nodeHttp2Request(new URL("https://10.255.255.1:443/"), "GET", {}),
+      ).rejects.toThrow();
+      // The bound is what matters, not which error arrives: the connect timer
+      // when the route blackholes, or the OS when it reports unreachable.
+      expect(Date.now() - start).toBeLessThan(5_000);
+      expect(
+        process.getActiveResourcesInfo().filter((r) => r === "Timeout"),
+      ).toHaveLength(0);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS;
+      } else {
+        process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
   it("should reject promptly when every connection is refused", async () => {
     const server = await startServer(250);
     const origin = server.origin;
