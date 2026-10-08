@@ -223,7 +223,7 @@ function getClient(config: GravixLayerConfig): GravixLayer {
  * The SDK keeps a small HTTP/2 session pool per origin: a burst spreads over
  * a handful of connections whose handshakes run in parallel, while a quiet
  * caller keeps one session. `maxRetries: 0` keeps a refused create from
- * sleeping inside the caller's timer. `warmup()` is intentionally not
+ * sleeping inside the caller's timer. `connect()` is intentionally not
  * called: it issues its own request and would compete with create.
  *
  * The client default HTTP timeout is 60s, which is shorter than a slow boot
