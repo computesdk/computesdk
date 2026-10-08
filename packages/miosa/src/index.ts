@@ -954,6 +954,22 @@ function resolveAuth(config: MiosaConfig): MiosaAuth {
   };
 }
 
+/**
+ * Routing for a handle built from a sandbox id alone. `getById` and `list`
+ * never see the handle a create returned, so they have to consult the origin
+ * recorded when that sandbox was created; handing back routing that
+ * contradicts it sends exec to an endpoint that does not own the sandbox.
+ * An id this process never created keeps the configured default (the regional
+ * endpoint when runnerMode is on), because guessing "account" for it would
+ * strand a regionally-created sandbox on an API that cannot serve it.
+ */
+function handleAuthFor(auth: MiosaAuth, sandboxId: string): MiosaAuth {
+  if (auth.runner === undefined) return auth;
+  return sandboxTransport.get(sandboxId) === "account"
+    ? { apiKey: auth.apiKey, baseUrl: auth.baseUrl }
+    : auth;
+}
+
 async function miosaRequest<T>(
   auth: { apiKey: string; baseUrl: string },
   method: "GET" | "POST" | "PATCH" | "DELETE",
@@ -1237,7 +1253,10 @@ const createMiosaProvider = defineProvider<
             `/sandboxes/${sandboxId}`,
           );
           const record = unwrapSandbox(payload);
-          return { sandbox: { record, ...auth }, sandboxId: record.id };
+          return {
+            sandbox: { record, ...handleAuthFor(auth, record.id) },
+            sandboxId: record.id,
+          };
         } catch (error) {
           if (error instanceof MiosaApiError && error.status === 404)
             return null;
@@ -1253,38 +1272,51 @@ const createMiosaProvider = defineProvider<
           "/sandboxes",
         );
         return (payload.data ?? []).map((record) => ({
-          sandbox: { record, ...auth },
+          sandbox: { record, ...handleAuthFor(auth, record.id) },
           sandboxId: record.id,
         }));
       },
 
       destroy: async (config: MiosaConfig, sandboxId: string) => {
         const auth = resolveAuth(config);
-        // Only address the regional endpoint for a sandbox it owns; anything
-        // created through the account API - or in another process, so absent
-        // here - has to be destroyed through the account API.
-        const useRegional =
-          auth.runner !== undefined &&
-          sandboxTransport.get(sandboxId) !== "account";
-        try {
-          if (useRegional) {
-            await (await getRunnerClient(auth)).destroySandbox(
-              sandboxId,
-            );
-          } else {
-            await miosaRequest<unknown>(
-              auth,
-              "DELETE",
-              `/sandboxes/${sandboxId}`,
-            );
+        const known = sandboxTransport.get(sandboxId);
+
+        const destroyOnAccountApi = () =>
+          miosaRequest<unknown>(auth, "DELETE", `/sandboxes/${sandboxId}`);
+        const destroyOnRegionalEndpoint = async (): Promise<void> => {
+          await (await getRunnerClient(auth)).destroySandbox(sandboxId);
+        };
+        // Resolves true only when the endpoint answered 404, meaning it never
+        // had this sandbox - which says nothing about the other endpoint.
+        const missing = async (run: () => Promise<unknown>): Promise<boolean> => {
+          try {
+            await run();
+            return false;
+          } catch (error) {
+            if (isNotFoundError(error)) return true;
+            throw error;
           }
-        } catch (error) {
-          // Destroying an already-destroyed sandbox is a no-op.
-          if (isNotFoundError(error)) return;
-          throw error;
-        } finally {
-          sandboxTransport.delete(sandboxId);
-        }
+        };
+
+        // Address only the endpoint recorded at create time. An id this
+        // process never created - one made in another process, or before a
+        // restart - has no entry, so a 404 from either endpoint is not
+        // conclusive on its own and both are tried; the account API goes
+        // first because it is the registry, and is the only transport
+        // available when runnerMode is off.
+        const gone =
+          known === "regional" && auth.runner !== undefined
+            ? await missing(destroyOnRegionalEndpoint)
+            : known === "account" || auth.runner === undefined
+              ? await missing(destroyOnAccountApi)
+              : (await missing(destroyOnAccountApi)) &&
+                (await missing(destroyOnRegionalEndpoint));
+
+        // Forget the recorded endpoint only once the sandbox is gone.
+        // Clearing it after a transient failure would send a retry to the
+        // other endpoint, where a 404 reads as "already destroyed" while the
+        // sandbox is still running.
+        if (gone) sandboxTransport.delete(sandboxId);
       },
 
       runCommand: execInSandbox,

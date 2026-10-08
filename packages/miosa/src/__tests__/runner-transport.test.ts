@@ -385,25 +385,39 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
   });
 
   describe("destroy", () => {
-    it("should destroy through the RunnerClient when runnerMode: true", async () => {
+    it("should destroy through the RunnerClient for a regionally-created sandbox", async () => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
       runnerSpies.destroySandbox.mockResolvedValueOnce(undefined);
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
+      const sandbox = await provider.sandbox.create();
 
-      await provider.sandbox.destroy("sb-1");
+      await provider.sandbox.destroy(sandbox.sandboxId);
 
-      expect(runnerSpies.destroySandbox).toHaveBeenCalledWith("sb-1");
+      expect(runnerSpies.destroySandbox).toHaveBeenCalledWith(
+        sandbox.sandboxId
+      );
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("should treat a 404-shaped runner error as already destroyed", async () => {
+    it("should treat a sandbox missing from both endpoints as already destroyed", async () => {
+      // Nothing this process created, and neither endpoint claims it: the
+      // account API's 404 alone would not settle it, because a regional 404 is
+      // what an account-owned sandbox looks like from the wrong endpoint.
       const notFound = Object.assign(
         new Error("runner request failed with 404"),
         { status: 404 }
       );
       runnerSpies.destroySandbox.mockRejectedValueOnce(notFound);
+      fetchMock.mockResolvedValueOnce(jsonResponse({ error: "not found" }, 404));
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await expect(provider.sandbox.destroy("gone")).resolves.toBeUndefined();
+
+      expect(runnerSpies.destroySandbox).toHaveBeenCalledWith("gone");
     });
 
     it("should propagate a non-404 runner error", async () => {
@@ -412,9 +426,118 @@ describe("runner transport (RUNNER-CONTRACTS-2026-10-02.md C5/C6)", () => {
         { status: 403 }
       );
       runnerSpies.destroySandbox.mockRejectedValueOnce(forbidden);
+      fetchMock.mockResolvedValueOnce(jsonResponse({ error: "not found" }, 404));
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await expect(provider.sandbox.destroy("sb-1")).rejects.toThrow(/403/);
+    });
+
+    it("should delete an untracked sandbox through the account API instead of trusting a regional 404", async () => {
+      // The sandbox was created in another process, so there is no recorded
+      // origin. The regional endpoint does not own it and answers 404 - which
+      // used to be reported as success while the sandbox kept running.
+      const notFound = Object.assign(
+        new Error("runner request failed with 404"),
+        { status: 404 }
+      );
+      runnerSpies.destroySandbox.mockRejectedValueOnce(notFound);
+      fetchMock.mockResolvedValueOnce(jsonResponse({ data: {} }));
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
+
+      await provider.sandbox.destroy("sb-untracked");
+
+      const [url, init] = fetchMock.mock.calls[0] as [string, { method: string }];
+      expect(url).toBe(`${DEFAULT_BASE_URL}/sandboxes/sb-untracked`);
+      expect(init.method).toBe("DELETE");
+      expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
+    });
+
+    it("should keep the recorded origin when a destroy fails transiently", async () => {
+      const record = sandboxRecord();
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(record, 201))
+        .mockResolvedValueOnce(jsonResponse({ error: "runtime_busy" }, 503))
+        .mockResolvedValueOnce(jsonResponse({ data: {} }));
+      runnerSpies.createSandbox.mockImplementationOnce(async () => {
+        const fallback = runnerSpies.constructed[0]?.fallbackCreate;
+        if (!fallback) throw new Error("fallbackCreate was not wired");
+        return await fallback({ size: "large" });
+      });
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create({ vcpus: 8, memory: 16384 });
+
+      await expect(provider.sandbox.destroy(sandbox.sandboxId)).rejects.toThrow(
+        /503/
+      );
+      await provider.sandbox.destroy(sandbox.sandboxId);
+
+      // Both attempts reached the account API. Forgetting the origin after the
+      // failure would have sent the retry to the regional endpoint, where a
+      // 404 reads as "already destroyed".
+      expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
+      const deleteUrls = fetchMock.mock.calls
+        .map((call) => String(call[0]))
+        .filter((url) => url.endsWith(`/sandboxes/${sandbox.sandboxId}`));
+      expect(deleteUrls).toHaveLength(2);
+    });
+  });
+
+  describe("reattaching a sandbox created through the account API", () => {
+    async function createFallbackSandbox(provider: ReturnType<typeof miosa>) {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      runnerSpies.createSandbox.mockImplementationOnce(async () => {
+        const fallback = runnerSpies.constructed[0]?.fallbackCreate;
+        if (!fallback) throw new Error("fallbackCreate was not wired");
+        return await fallback({ size: "large" });
+      });
+      return provider.sandbox.create({ vcpus: 8, memory: 16384 });
+    }
+
+    it("should keep a fallback-created sandbox on the account API when it is fetched by id", async () => {
+      const record = sandboxRecord();
+      const provider = miosa({ apiKey: API_KEY });
+      const created = await createFallbackSandbox(provider);
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(record))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            data: { stdout: "ok\n", stderr: "", exit_code: 0 },
+          })
+        );
+
+      const reattached = await provider.sandbox.getById(created.sandboxId);
+      expect(reattached).not.toBeNull();
+      await reattached!.runCommand("echo ok");
+
+      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      const [execUrl] = fetchMock.mock.calls.at(-1) as [string];
+      expect(execUrl).toBe(
+        `${DEFAULT_BASE_URL}/sandboxes/${record.id}/exec`
+      );
+    });
+
+    it("should keep a fallback-created sandbox on the account API when it is listed", async () => {
+      const record = sandboxRecord();
+      const provider = miosa({ apiKey: API_KEY });
+      await createFallbackSandbox(provider);
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ data: [record] }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            data: { stdout: "ok\n", stderr: "", exit_code: 0 },
+          })
+        );
+
+      const [listed] = await provider.sandbox.list();
+      await listed.runCommand("echo ok");
+
+      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      const [execUrl] = fetchMock.mock.calls.at(-1) as [string];
+      expect(execUrl).toBe(
+        `${DEFAULT_BASE_URL}/sandboxes/${record.id}/exec`
+      );
     });
   });
 
