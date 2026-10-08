@@ -8,7 +8,7 @@
 import { Sandboxes, pat, RequestError } from '@docker/sandboxes';
 import type { Sandbox } from '@docker/sandboxes';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import { http2Fetch, type Http2Fetch } from './http2-fetch';
+import { endpointHttp2Fetch, http2Fetch, type Http2Fetch } from './http2-fetch';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions } from '@computesdk/provider';
 
@@ -43,6 +43,27 @@ function apiTransport(): Http2Fetch | undefined {
   return api;
 }
 
+// Sandbox endpoints (`<id>.<domain>`) share a few HTTP/2 sessions opened at startup, so a sandbox's
+// first command doesn't open its own TCP+TLS connection. The domain has to be known before the first
+// create returns one, so it is derived from the API origin; DOCKER_SANDBOXES_ENDPOINT_DOMAIN
+// overrides it. A wrong domain costs only the warm-up: requests outside it use the global fetch.
+const ENDPOINT_SESSIONS = 8;
+const ENDPOINT_DOMAINS: Record<string, string> = { 'connect.docker.com': 'sbx.sandboxes-cloud.docker.com' };
+let endpoints: Http2Fetch | undefined;
+function endpointTransport(): Http2Fetch | undefined {
+  if (endpoints) return endpoints;
+  try {
+    const apiHost = new URL(env('SANDBOXES_API_URL') || 'https://connect.docker.com/sandboxes').hostname;
+    const domain =
+      env('DOCKER_SANDBOXES_ENDPOINT_DOMAIN') || ENDPOINT_DOMAINS[apiHost] || (apiHost.startsWith('api.') ? `sbx.${apiHost.slice(4)}` : '');
+    if (!domain) return undefined;
+    endpoints = endpointHttp2Fetch(domain, `https://prewarm.${domain}`, ENDPOINT_SESSIONS);
+  } catch {
+    return undefined;
+  }
+  return endpoints;
+}
+
 function clientFor(config: DockerSandboxesConfig): Sandboxes {
   const username = config.username || env('DOCKER_SANDBOXES_USERNAME');
   const personalAccessToken = config.token || env('DOCKER_SANDBOXES_TOKEN');
@@ -57,6 +78,7 @@ function clientFor(config: DockerSandboxesConfig): Sandboxes {
   if (!client) {
     const auth = pat({ username, personalAccessToken });
     const transport = apiTransport();
+    const sandboxTransport = endpointTransport();
     // Create also returns the first command's exec credential, saving a request.
     // transportRetries 'none' declares that the transport makes one attempt per request, which the
     // SDK requires of an injected fetch; the SDK still applies its own maxRetries.
@@ -64,11 +86,15 @@ function clientFor(config: DockerSandboxesConfig): Sandboxes {
       auth,
       prefetchExecCredential: true,
       ...(transport ? { fetch: transport.fetch, transportRetries: 'none' as const } : {}),
+      ...(sandboxTransport
+        ? { endpointClientFactory: () => ({ fetch: sandboxTransport.fetch, transportRetries: 'none' as const }) }
+        : {}),
     });
     clients.set(key, client);
     // Open the session now, sending nothing on it, so a burst of creates multiplexes on it instead
     // of each opening its own connection.
     transport?.preconnect();
+    sandboxTransport?.preconnect();
     // Start the token exchange now, so the first create doesn't wait for it.
     auth.getAccessToken().catch(() => {});
   }

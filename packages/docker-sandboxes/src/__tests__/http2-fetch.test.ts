@@ -1,19 +1,23 @@
-import { createServer as createH2Server, type Http2Server } from 'node:http2';
+import { createServer as createH2Server, createSecureServer, type Http2Server, type Http2SecureServer } from 'node:http2';
 import { createServer as createH1Server, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { http2Fetch } from '../http2-fetch';
+import { endpointHttp2Fetch, http2Fetch } from '../http2-fetch';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
-const servers: (Http2Server | Server)[] = [];
+const servers: (Http2Server | Http2SecureServer | Server)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(servers.splice(0).map((s) => new Promise((r) => s.close(r))));
 });
 
-async function listen<S extends Http2Server | Server>(server: S): Promise<string> {
+async function listen<S extends Http2Server | Http2SecureServer | Server>(server: S): Promise<string> {
   servers.push(server);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -105,6 +109,73 @@ describe('http2Fetch', () => {
     // can't exit is killed by the timeout, which rejects.
     const { stdout } = await promisify(execFile)(process.execPath, ['--import', 'tsx', script, origin], { timeout: 10_000 });
     expect(stdout.trim()).toBe('200');
+  });
+});
+
+// Answers with the :authority each request arrived with, counting sessions.
+function authorityServer(server: Http2Server | Http2SecureServer = createH2Server()) {
+  const stats = { sessions: 0 };
+  server.on('session', () => stats.sessions++);
+  server.on('stream', (stream, headers) => {
+    stream.respond({ ':status': 200 });
+    stream.end(String(headers[':authority']));
+  });
+  return { server, stats };
+}
+
+// A throwaway certificate for `names`, made with openssl at test time.
+function certificate(names: string[]) {
+  const dir = mkdtempSync(join(tmpdir(), 'h2cert-'));
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=test',
+    '-addext', `subjectAltName=${names.map((n) => `DNS:${n}`).join(',')}`, '-keyout', join(dir, 'key'), '-out', join(dir, 'cert')], { stdio: 'ignore' });
+  return { key: readFileSync(join(dir, 'key')), cert: readFileSync(join(dir, 'cert')) };
+}
+
+describe('endpointHttp2Fetch', () => {
+  it('sends every sandbox host over the shared sessions with its own authority', async () => {
+    const { server, stats } = authorityServer();
+    const origin = await listen(server);
+    const global = vi.spyOn(globalThis, 'fetch');
+    const pool = endpointHttp2Fetch('sbx.test', origin, 4);
+    pool.preconnect();
+
+    const port = new URL(origin).port;
+    const seen = await Promise.all(
+      Array.from({ length: 20 }, (_, i) => pool.fetch(new Request(`http://s${i}.sbx.test:${port}/v1/processes/exec`, { method: 'POST', body: 'x' })).then((r) => r.text())),
+    );
+
+    expect(seen[13]).toBe(`s13.sbx.test:${port}`);
+    expect(new Set(seen).size).toBe(20);
+    expect(stats.sessions).toBe(4);
+    expect(global).not.toHaveBeenCalled();
+  });
+
+  it('sends hosts outside the sandbox domain to the global fetch', async () => {
+    const origin = await listen(authorityServer().server);
+    const global = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('elsewhere'));
+    const pool = endpointHttp2Fetch('sbx.test', origin, 2);
+    for (const url of ['http://api.example.com/x', 'http://sbx.test/x', 'https://s1.sbx.test/x']) {
+      expect(await (await pool.fetch(new Request(url))).text()).toBe('elsewhere');
+    }
+    expect(global).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses a TLS session only when its certificate covers every sandbox host', async () => {
+    for (const [names, pooled] of [[['*.sbx.test'], true], [['prewarm.sbx.test'], false]] as const) {
+      const { server, stats } = authorityServer(createSecureServer(certificate([...names])));
+      const port = new URL(await listen(server)).port;
+      const global = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('fallback'));
+      vi.stubEnv('NODE_TLS_REJECT_UNAUTHORIZED', '0'); // self-signed; only the SAN check is under test
+      try {
+        const pool = endpointHttp2Fetch('sbx.test', `https://127.0.0.1:${port}`, 1);
+        const body = await (await pool.fetch(new Request(`https://s1.sbx.test:${port}/x`))).text();
+        expect(body).toBe(pooled ? `s1.sbx.test:${port}` : 'fallback');
+        expect(stats.sessions).toBe(1);
+      } finally {
+        vi.unstubAllEnvs();
+        global.mockRestore();
+      }
+    }
   });
 });
 

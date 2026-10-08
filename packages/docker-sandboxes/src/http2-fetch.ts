@@ -12,6 +12,7 @@
 
 import { connect, constants, type ClientHttp2Session, type ClientHttp2Stream, type OutgoingHttpHeaders } from 'node:http2';
 import { Readable } from 'node:stream';
+import type { TLSSocket } from 'node:tls';
 
 type Fetch = (request: Request) => Promise<Response>;
 
@@ -27,7 +28,13 @@ export interface Http2Fetch {
   preconnect(): void;
 }
 
-export function http2Fetch(origin: string): Http2Fetch {
+/**
+ * One HTTP/2 session to `connectOrigin`, opened on demand and replaced after it closes. `accept`
+ * decides whether a freshly negotiated session may carry requests; a refused session sends every
+ * later request to the global fetch. `authority`, when given, replaces the request's own host as
+ * `:authority`, which lets one session carry requests for several hosts the server serves.
+ */
+function h2Session(connectOrigin: string, accept: (session: ClientHttp2Session) => boolean) {
   let ready: Promise<ClientHttp2Session | undefined> | undefined;
   let fallback = false;
   let current: ClientHttp2Session | undefined;
@@ -45,7 +52,7 @@ export function http2Fetch(origin: string): Http2Fetch {
     if (fallback) return Promise.resolve(undefined);
     if (ready) return ready;
     const attempt: Promise<ClientHttp2Session | undefined> = new Promise((resolve) => {
-      const session = connect(origin);
+      const session = connect(connectOrigin);
       current = session;
       if (held === 0) session.unref();
       const fail = () => {
@@ -59,7 +66,7 @@ export function http2Fetch(origin: string): Http2Fetch {
       // refused; once SETTINGS are known, nghttp2 queues excess streams itself.
       session.once('remoteSettings', () => {
         clearTimeout(timer);
-        if (session.alpnProtocol !== 'h2' && session.alpnProtocol !== 'h2c') return fail();
+        if (!accept(session)) return fail();
         resolve(session);
       });
       // Kept for the session's life: an 'error' with no listener would crash the process. Streams
@@ -78,10 +85,11 @@ export function http2Fetch(origin: string): Http2Fetch {
     return attempt;
   };
 
-  const send = (session: ClientHttp2Session, request: Request, body: Buffer | undefined): Promise<Response> =>
+  const send = (session: ClientHttp2Session, request: Request, body: Buffer | undefined, authority?: string): Promise<Response> =>
     new Promise((resolve, reject) => {
       const url = new URL(request.url);
       const headers: OutgoingHttpHeaders = { ':method': request.method, ':path': url.pathname + url.search };
+      if (authority) headers[':authority'] = authority;
       request.headers.forEach((value, name) => {
         if (!HOP_BY_HOP.has(name)) headers[name] = value;
       });
@@ -131,20 +139,58 @@ export function http2Fetch(origin: string): Http2Fetch {
       if (body) stream.end(body);
     });
 
-  const fetchFn: Fetch = async (request) => {
-    if (new URL(request.url).origin !== origin) return globalThis.fetch(request);
-    // Read the body before waiting on the session: a Request body can be read only once, and the
-    // fallback needs it too.
-    const body = request.body ? Buffer.from(await request.arrayBuffer()) : undefined;
-    hold();
-    const session = await open();
-    if (session) return send(session, request, body);
-    drop();
-    return globalThis.fetch(new Request(request, { body }));
-  };
-
   return {
-    fetch: fetchFn,
     preconnect: () => void open(),
+    async fetch(request: Request, authority?: string): Promise<Response> {
+      // Read the body before waiting on the session: a Request body can be read only once, and the
+      // fallback needs it too.
+      const body = request.body ? Buffer.from(await request.arrayBuffer()) : undefined;
+      hold();
+      const session = await open();
+      if (session) return send(session, request, body, authority);
+      drop();
+      return globalThis.fetch(new Request(request, { body }));
+    },
+  };
+}
+
+const isH2 = (session: ClientHttp2Session) => session.alpnProtocol === 'h2' || session.alpnProtocol === 'h2c';
+
+export function http2Fetch(origin: string): Http2Fetch {
+  const session = h2Session(origin, isH2);
+  return {
+    fetch: (request) => (new URL(request.url).origin === origin ? session.fetch(request) : globalThis.fetch(request)),
+    preconnect: session.preconnect,
+  };
+}
+
+/**
+ * A fetch for sandbox endpoints (`<id>.<parent>`): their requests share `size` HTTP/2 sessions
+ * opened to `connectOrigin`, each request naming its own sandbox host as `:authority`. Without it,
+ * every sandbox's first command opens its own TCP+TLS connection, and a burst of N sandboxes pays N
+ * handshakes across the network.
+ *
+ * Over TLS a session carries requests only if it negotiated h2 and its certificate covers
+ * `*.<parent>`, so one connection may serve every sandbox host (RFC 9113 section 9.1.1). Any other
+ * session, and any request outside `<parent>`, goes to the global fetch.
+ */
+export function endpointHttp2Fetch(parent: string, connectOrigin: string, size: number): Http2Fetch {
+  const wildcard = `DNS:*.${parent}`;
+  const accept = (session: ClientHttp2Session) => {
+    if (!isH2(session)) return false;
+    const socket = session.socket as TLSSocket;
+    if (typeof socket.getPeerCertificate !== 'function') return true; // h2c: no certificate, local only
+    return (socket.getPeerCertificate().subjectaltname ?? '').split(', ').includes(wildcard);
+  };
+  const scheme = new URL(connectOrigin).protocol;
+  const sessions = Array.from({ length: size }, () => h2Session(connectOrigin, accept));
+  let next = 0;
+  return {
+    fetch: (request) => {
+      const url = new URL(request.url);
+      if (url.protocol !== scheme || !url.hostname.endsWith(`.${parent}`)) return globalThis.fetch(request);
+      return sessions[next++ % size].fetch(request, url.host);
+    },
+    preconnect: () => sessions.forEach((session) => session.preconnect()),
   };
 }
