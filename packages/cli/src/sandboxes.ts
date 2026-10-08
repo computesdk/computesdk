@@ -239,7 +239,7 @@ function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
   );
   console.log(`  order type: ${q.orderType}   order: ${q.providerOrder.join(', ')}`);
   if (q.rateUsd) {
-    console.log(`  rate: $${q.rateUsd.perHour}/hour   cheapest live: ${usd(q.cheapestLiveUsdPerHour, '/hr')}   reference: ${usd(q.referenceUsdPerHour, '/hr')}`);
+    console.log(`  rate: ${usd(q.rateUsd.perHour, '/hour')}   cheapest live: ${usd(q.cheapestLiveUsdPerHour, '/hr')}   reference: ${usd(q.referenceUsdPerHour, '/hr')}`);
   } else if (q.rate) {
     console.log(`  rate: $${q.rate.usd}/${q.rate.per}`);
   }
@@ -443,13 +443,14 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--region <region>', 'pin the placement region')
     .option('--timeout-ms <ms>', 'sandbox timeout in ms')
     .option('--order-type <type>', 'market order type: market or limit')
+    .option('--market', 'quote a market order (fills at the live price, protection-bounded)')
     .option('--max-price <usd/unit>', 'max price for a market fill (e.g. 0.12/hour)')
     .option('--max-price-per <unit>', 'unit for a bare --max-price usd (second, minute, or hour)')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
     .action(async (opts: CommonOpts & {
       size?: string; cpus?: string; memoryMb?: string; diskMb?: string;
-      region?: string; timeoutMs?: string; orderType?: string;
+      region?: string; timeoutMs?: string; orderType?: string; market?: boolean;
       maxPrice?: string; maxPricePer?: string;
     }) => {
       try {
@@ -461,8 +462,11 @@ export function registerSandboxesCommands(program: Command): void {
           ephemeralDiskMb: opts.diskMb,
           region: opts.region,
           timeoutMs: opts.timeoutMs,
-          orderType: opts.orderType,
+          orderType: opts.market ? 'market' : opts.orderType,
         };
+        if (opts.orderType && opts.market) {
+          throw new Error('--market and --order-type are mutually exclusive.');
+        }
         const maxPrice = parseMaxPrice(opts.maxPrice, opts.maxPricePer);
         if (maxPrice) {
           params.maxPriceUsd = String(maxPrice.usd);
