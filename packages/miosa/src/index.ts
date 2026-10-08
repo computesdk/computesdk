@@ -163,6 +163,13 @@ const HTTP2_SESSION_COUNT = (() => {
 // runner-specific measurements without changing the ComputeSDK contract.
 const DEFAULT_HTTP2_CONNECT_TIMEOUT_MS = 10_000;
 
+// Node stores a timer delay as a signed 32-bit integer, so a larger value does
+// not buy a longer wait: it warns and fires after about a millisecond, which
+// would destroy every session the moment it connects. Keep the override inside
+// a range a timer can actually represent, and well below an interval that
+// would make the bound meaningless.
+const MAX_HTTP2_CONNECT_TIMEOUT_MS = 120_000;
+
 function http2ConnectTimeoutMs(): number {
   const configured = Number.parseInt(
     (typeof process !== "undefined"
@@ -172,7 +179,7 @@ function http2ConnectTimeoutMs(): number {
   );
 
   return Number.isFinite(configured) && configured > 0
-    ? configured
+    ? Math.min(configured, MAX_HTTP2_CONNECT_TIMEOUT_MS)
     : DEFAULT_HTTP2_CONNECT_TIMEOUT_MS;
 }
 
