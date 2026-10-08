@@ -40,7 +40,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "@neevcloud/sdk": "^0.7.0-beta"
+    "@neevcloud/sdk": "^0.8.2"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
