@@ -1153,8 +1153,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       gravixlayer:
-        specifier: ^0.1.32
-        version: 0.1.32(@opentelemetry/api@1.9.1)
+        specifier: ^0.1.34
+        version: 0.1.34(@opentelemetry/api@1.9.1)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -6839,8 +6839,8 @@ packages:
     resolution: {integrity: sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
-  gravixlayer@0.1.32:
-    resolution: {integrity: sha512-IByqAIXhyP0BAss0V644m9NE9ljvqJGCaNqIMdBMQQMcSRY8atfpkvlQXYR8Mk7/D79V/2bis6JIweG+mnYwDg==}
+  gravixlayer@0.1.34:
+    resolution: {integrity: sha512-FlSk0tihWYDpAxm2wQP9LqE2iiue0MigWJ5xtvRmdbsRN5pr/21sJ3DDs27bCQvVnQ5nv9QV5RWcjShjV/FG1w==}
     engines: {node: '>=20'}
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
@@ -14463,7 +14463,7 @@ snapshots:
 
   graphql@16.14.2: {}
 
-  gravixlayer@0.1.32(@opentelemetry/api@1.9.1):
+  gravixlayer@0.1.34(@opentelemetry/api@1.9.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
 
