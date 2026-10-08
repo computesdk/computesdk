@@ -371,6 +371,7 @@ describe('formatBook', () => {
         providerName: 'Acme Compute',
         region: 'us-east-1',
         size: 'medium',
+        useCase: 'sandbox' as const,
         usd: 0.1,
         per: 'second',
         takeBps: 500,
@@ -416,6 +417,10 @@ describe('formatBook', () => {
     expect(out).toContain('Acme Compute');
     expect(out).toContain('$0.1/second');
     expect(out).toContain('pays up to $0.09/second');
+    // Mixed books label each entry's lane; pre-lane rows read as actions.
+    expect(out).toMatch(/sandbox\s+\$0\.1\/second/);
+    expect(out).toMatch(/actions\s+pays up to \$0\.09\/second/);
+    expect(out).toMatch(/actions\s+\$0\.1\/second/);
   });
 
   it('shows empty states', () => {

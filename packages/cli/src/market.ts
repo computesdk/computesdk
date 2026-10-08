@@ -93,6 +93,8 @@ export interface MarketOrderBook {
     providerName: string;
     region: string | null;
     size: string;
+    /** The lane the listing sells into — 'actions' on asks posted before lanes. */
+    useCase?: 'actions' | 'sandbox';
     usd: number;
     per: MarketRatePer;
     takeBps: number;
@@ -105,6 +107,8 @@ export interface MarketOrderBook {
     id: string;
     organizationId: string;
     size: string;
+    /** The lane the offer buys on — 'actions' on bids posted before lanes. */
+    useCase?: 'actions' | 'sandbox';
     region: string | null;
     maxUsd: number;
     per: MarketRatePer;
@@ -116,6 +120,8 @@ export interface MarketOrderBook {
     askId: string;
     provider: string;
     size: string;
+    /** The lane the sale cleared on — 'actions' on fills from before lanes. */
+    useCase?: 'actions' | 'sandbox';
     region: string | null;
     usd: number;
     per: MarketRatePer;
@@ -488,6 +494,8 @@ export function formatProviderStatus(p: MarketProvider): string {
 /** The live book, plainly labeled: who's selling, who's buying, what cleared. */
 export function formatBook(book: MarketOrderBook): string {
   const lines: string[] = [];
+  const lane = (useCase?: 'actions' | 'sandbox') =>
+    pc.dim(useCase === 'sandbox' ? 'sandbox' : 'actions');
   lines.push(pc.bold("sellers' asking prices"));
   if (book.asks.length === 0) lines.push(pc.dim('  no listings are live'));
   for (const ask of book.asks) {
@@ -496,7 +504,7 @@ export function formatBook(book: MarketOrderBook): string {
       ? pc.dim(ask.rollover ? `  renews ${ask.expiresAt}` : `  until ${ask.expiresAt}`)
       : '';
     lines.push(
-      `  ${formatRate(ask.usd, ask.per)}  ${safeTerm(ask.providerName)}  ${safeTerm(ask.size)}  ${where}  up to ${ask.maxConcurrent} at once${expiry}`,
+      `  ${lane(ask.useCase)}  ${formatRate(ask.usd, ask.per)}  ${safeTerm(ask.providerName)}  ${safeTerm(ask.size)}  ${where}  up to ${ask.maxConcurrent} at once${expiry}`,
     );
   }
   lines.push('');
@@ -505,7 +513,7 @@ export function formatBook(book: MarketOrderBook): string {
   for (const bid of book.bids) {
     const where = bid.region ? safeTerm(bid.region) : 'anywhere';
     lines.push(
-      `  pays up to ${formatRate(bid.maxUsd, bid.per)}  ${safeTerm(bid.size)}  ${where}  ${pc.dim(`posted ${bid.createdAt}`)}`,
+      `  ${lane(bid.useCase)}  pays up to ${formatRate(bid.maxUsd, bid.per)}  ${safeTerm(bid.size)}  ${where}  ${pc.dim(`posted ${bid.createdAt}`)}`,
     );
   }
   lines.push('');
@@ -519,7 +527,7 @@ export function formatBook(book: MarketOrderBook): string {
           ? pc.gray('  closed')
           : '';
     lines.push(
-      `  ${pc.dim(fill.id)}  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}${statusNote}`,
+      `  ${pc.dim(fill.id)}  ${lane(fill.useCase)}  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}${statusNote}`,
     );
   }
   return lines.join('\n');
