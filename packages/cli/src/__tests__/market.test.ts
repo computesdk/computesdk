@@ -14,6 +14,7 @@ import {
   listingPatchBody,
   parseCapacity,
   parseExpiresIn,
+  parseMarketLane,
   parseRate,
   replaceTarget,
   sellBody,
@@ -91,6 +92,18 @@ describe('parseRate', () => {
   });
 });
 
+describe('parseMarketLane', () => {
+  it('defaults to the actions lane', () => {
+    expect(parseMarketLane(undefined)).toBe('actions');
+  });
+
+  it('accepts actions and sandbox and rejects anything else', () => {
+    expect(parseMarketLane('actions')).toBe('actions');
+    expect(parseMarketLane('sandbox')).toBe('sandbox');
+    expect(() => parseMarketLane('everything')).toThrow('--use-case must be');
+  });
+});
+
 describe('parseCapacity', () => {
   it('is undefined when absent', () => {
     expect(parseCapacity(undefined)).toBeUndefined();
@@ -126,6 +139,7 @@ describe('sellBody', () => {
   it('builds a minimal create body with the per-second default', () => {
     expect(sellBody({ size: 'medium', price: '0.12' })).toEqual({
       size: 'medium',
+      useCase: 'actions',
       usd: 0.12,
       per: 'second',
     });
@@ -144,12 +158,24 @@ describe('sellBody', () => {
       }),
     ).toEqual({
       size: 'large',
+      useCase: 'actions',
       region: 'us-east-1',
       usd: 2,
       per: 'hour',
       maxConcurrent: 8,
       expiresInHours: 24,
       rollover: true,
+    });
+  });
+
+  it('posts to the sandbox lane when asked', () => {
+    expect(
+      sellBody({ size: 'large', price: '0.5', useCase: 'sandbox' }),
+    ).toEqual({
+      size: 'large',
+      useCase: 'sandbox',
+      usd: 0.5,
+      per: 'second',
     });
   });
 

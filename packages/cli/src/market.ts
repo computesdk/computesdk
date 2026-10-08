@@ -35,6 +35,8 @@ export interface MarketAsk {
   provider: string;
   region: string | null;
   size: string;
+  /** The lane the listing sells into — 'actions' on listings posted before lanes. */
+  useCase?: 'actions' | 'sandbox';
   resources: { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number };
   usd: number;
   per: MarketRatePer;
@@ -70,6 +72,8 @@ export interface MarketProvider {
   executorCredentialConnected: boolean;
   revokedAt: string | null;
   createdAt: string;
+  /** The lanes this principal is approved to sell into, e.g. ["actions", "sandbox"]. */
+  useCases?: string[];
   /** Size presets the bound executor sells, e.g. small/medium/large. */
   sizes: {
     name: string;
@@ -163,6 +167,23 @@ export interface MarketSettlement {
 
 const USD_RE = /^\d+(\.\d+)?([eE][+-]?\d+)?$/;
 const RATE_UNITS: MarketRatePer[] = ['second', 'minute', 'hour'];
+const MARKET_LANES = ['actions', 'sandbox'] as const;
+export type MarketLane = (typeof MARKET_LANES)[number];
+
+/**
+ * `--use-case` → the lane the listing sells into / the book filters to.
+ * Absent = 'actions', matching the API default.
+ */
+export function parseMarketLane(value: string | undefined): MarketLane {
+  if (value === undefined) return 'actions';
+  if (!MARKET_LANES.includes(value as MarketLane)) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `--use-case must be ${MARKET_LANES.join(' or ')}, got "${value}".`,
+    );
+  }
+  return value as MarketLane;
+}
 
 /**
  * `--price`/`--per` → the body's `usd`/`per`. Providers quote per-second, so
@@ -230,6 +251,7 @@ export function sellBody(opts: {
   capacity?: string;
   expiresIn?: string;
   renew?: boolean;
+  useCase?: string;
 }): Record<string, unknown> {
   const rate = parseRate(opts.price, opts.per);
   const maxConcurrent = parseCapacity(opts.capacity);
@@ -242,6 +264,7 @@ export function sellBody(opts: {
   }
   return {
     size: opts.size,
+    useCase: parseMarketLane(opts.useCase),
     ...(opts.region !== undefined && { region: opts.region }),
     usd: rate.usd,
     per: rate.per,
@@ -402,6 +425,7 @@ export function formatListingRow(ask: MarketAsk): string {
   return [
     ask.id,
     formatListingStatus(ask),
+    pc.dim(ask.useCase === 'sandbox' ? 'sandbox' : 'actions'),
     safeTerm(ask.size),
     safeTerm(ask.region ?? '-'),
     formatRate(ask.usd, ask.per),
@@ -422,6 +446,9 @@ export function formatProviderStatus(p: MarketProvider): string {
     }`,
   );
   if (p.revokedAt) lines.push(pc.red(`revoked:     ${p.revokedAt}`));
+  lines.push(
+    `lanes:       ${(p.useCases ?? ['actions']).join(', ')}`,
+  );
   lines.push(
     `sizes:       ${p.sizes.map((s) => `${s.name} (${s.label})`).join(', ') || '-'}`,
   );
@@ -573,13 +600,17 @@ export function registerMarketCommands(program: Command): void {
       .requiredOption('--price <usd>', 'price per unit of time (e.g. 0.12)')
       .option('--per <unit>', 'time unit the price is per: second, minute, or hour (default: second)')
       .option('--size <tier>', 'size tier to sell (default: medium, else the provider\'s first tier)')
+      .option('--use-case <lane>', 'lane to sell into: actions or sandbox (default: actions)')
       .option('--region <region>', 'region to sell in (default: anywhere the provider runs)')
       .option('--capacity <n>', 'max simultaneous fills (default: 1)')
       .option('--expires-in <hours>', 'delist after this many hours (default: standing)')
       .option('--renew', 're-list for the same window each time it expires (requires --expires-in)'),
-  ).action(async (opts: CommonOpts & { price: string; per?: string; size?: string; region?: string; capacity?: string; expiresIn?: string; renew?: boolean }) => {
+  ).action(async (opts: CommonOpts & { price: string; per?: string; size?: string; region?: string; capacity?: string; expiresIn?: string; renew?: boolean; useCase?: string }) => {
     try {
       const c = await client(opts);
+      // Validate the lane before any network writes — an unapproved lane
+      // still fails server-side with market_lane_not_approved.
+      const useCase = parseMarketLane(opts.useCase);
       let size = opts.size;
       if (size === undefined) {
         // The tier is required by the API; when the seller doesn't name one,
@@ -600,7 +631,7 @@ export function registerMarketCommands(program: Command): void {
       }
       const result = await c.post<{ ask: MarketAsk }>(
         '/api/v1/market/asks',
-        sellBody({ ...opts, size }),
+        sellBody({ ...opts, size, useCase }),
       );
       output(opts, result, (r) => {
         console.log(`listed  ${pc.cyan(r.ask.id)}`);
@@ -734,11 +765,13 @@ export function registerMarketCommands(program: Command): void {
   common(
     market
       .command('book')
-      .description("Live prices: sellers' asking prices, buyer offers, recent sales"),
-  ).action(async (opts: CommonOpts) => {
+      .description("Live prices: sellers' asking prices, buyer offers, recent sales")
+      .option('--use-case <lane>', 'only this lane: actions or sandbox (default: both)'),
+  ).action(async (opts: CommonOpts & { useCase?: string }) => {
     try {
+      const lane = opts.useCase === undefined ? undefined : parseMarketLane(opts.useCase);
       const book = await (await client(opts)).get<MarketOrderBook>(
-        '/api/v1/market/book',
+        `/api/v1/market/book${lane ? `?useCase=${lane}` : ''}`,
       );
       output(opts, book, (b) => console.log(formatBook(b)));
     } catch (e) {
