@@ -61,6 +61,12 @@ compute sandboxes create [--order market,blaxel,vercel] [--size small|medium|lar
 compute sandboxes quote [--size|--cpus/--memory-mb/--disk-mb] [--region] [--timeout-ms]
     [--order-type|--market] [--max-price <usd>/<unit>]
 compute sandboxes list|get|destroy
+compute sandboxes settings [--json]                     # org sandbox routing policy
+compute sandboxes settings set [--order market,blaxel|inherit] [--order-type limit|market|inherit]
+    [--general-cap <usd>/<unit>|none] [--cap <size>=<usd>/<unit>|<size>=none]…
+compute actions settings [--json]                       # org Actions routing policy
+compute actions settings set [--order market,blaxel|default] [--order-type limit|market]
+    [--general-cap <usd>/<unit>|none] [--cap <size>=<usd>/<unit>|<size>=none]…
 compute sandboxes exec <id> <command...>          # one-off, buffered (~290s max)
 compute sandboxes spawn|ps|logs|wait|kill|stdin|close-stdin   # detached processes
 compute sandboxes ls|cat|write|mkdir|rm <id> [path]
@@ -68,11 +74,13 @@ compute sandboxes url <id> --port <n>
 compute sandboxes snapshots|snapshot|snapshot-delete
 ```
 
-REST: `POST /api/v1/sandboxes` → `{ sandbox: { id, … } }`; provider order (`provider[:region]`, `market` bids first) resolves per-request `providerOrder` → org sandbox order → Actions order → default; `GET/PATCH /api/v1/sandboxes/settings` holds `providerOrder`/`marketCap`/`providerResources`/`warmPool`; rates at `/api/v1/sandboxes/rates`; pool at `/api/v1/sandboxes/pool/fill`; `GET /api/v1/sandboxes/{id}` returns the BYOK `attach: {provider, providerSandboxId, region}` descriptor (null on market fills/ambient).
+REST: `POST /api/v1/sandboxes` → `{ sandbox: { id, … } }`; provider order (`provider[:region]`, `market` bids first) resolves per-request `providerOrder` → org sandbox order → Actions order → default; `GET/PATCH /api/v1/sandboxes/settings` holds `providerOrder`/`marketCap`/`marketCaps`/`marketOrderType`/`providerResources`/`warmPool` (+ `actions*` inherit references, `referencePrices` per platform size); same shape on `/api/v1/actions/settings` for the Actions lane; rates at `/api/v1/sandboxes/rates`; pool at `/api/v1/sandboxes/pool/fill`; `GET /api/v1/sandboxes/{id}` returns the BYOK `attach: {provider, providerSandboxId, region}` descriptor (null on market fills/ambient).
 
 Buyer-side platform sizes: `small` 1 vCPU/2 GB, `medium` 2/4 GB, `large` 4/8 GB, `xlarge` 8/16 GB — `--size` is the normal way to say how big a box should be (default `medium`); raw `--cpus`/`--memory-mb`/`--disk-mb` stay for advanced use and are mutually exclusive with `--size`. Market fills report the requested `size` plus the seller's `box` (provider, the ask's `sizeName`, resources) in `placement`.
 
 Pricing flow: `compute sandboxes quote` first (prints provider/box, order type, rate/hour, est. cost, cap, protection limit, balance — `ok` or a reason code), then create. The default order type is `limit`: with no market cap configured and no `--max-price`, a create fails `market_cap_required` — so the normal flow is quote → create with `--max-price` at the quoted rate (unit required: `second|minute|hour`, e.g. `--max-price 0.12/hour`; `--max-price-per` is an alias for the unit). `--market` (or `--order-type market`) is the opt-in for filling at the live price, bounded by the protection ceiling (~3× the size's reference). Error codes: `market_cap_required` (limit order, no cap and no `--max-price`), `market_access_required` (org not approved for market buying — request access on the org's market page), `limit_not_met`, `above_protection_limit`, `insufficient_credits`, `no_market_capacity`.
+
+Org settings: `compute {sandboxes,actions} settings` prints the lane's routing policy — order type, general cap, per-size caps (`—` when unset, with the size's reference price), provider order, sizes, warm pool — and `settings set` PATCHes the same keys (admin credential required; non-admin → "Only org owners/admins can change … settings"). On the sandbox lane `inherit` restores the Actions value (`--order-type inherit`, `--order inherit`); on Actions the stored order type is just `limit|market` and `--order default` restores the platform default. `--cap` is repeatable (`--cap small=0.11/hour --cap large=none`); units are required, same parser as `--max-price`.
 
 ## Testing against a PR preview deployment
 

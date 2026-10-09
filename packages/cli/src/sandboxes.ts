@@ -22,43 +22,7 @@ import {
   usageErrorOutput,
   type CommonOpts,
 } from './actions.js';
-
-/**
- * `--max-price <usd>/<unit>` → the body's `maxPrice` / the quote's
- * maxPriceUsd+maxPricePer params. The unit is required — either inside the
- * value (`0.12/hour`) or via `--max-price-per` — so a bare `--max-price
- * 0.12` never silently defaults to per-second pricing.
- */
-function parseMaxPrice(
-  value: string | undefined,
-  per: string | undefined,
-): { usd: number; per: 'second' | 'minute' | 'hour' } | undefined {
-  if (value === undefined) {
-    if (per !== undefined) throw new Error('--max-price-per requires --max-price.');
-    return undefined;
-  }
-  let usdText = value;
-  let unit: string | undefined = per;
-  const slash = value.indexOf('/');
-  if (slash !== -1) {
-    usdText = value.slice(0, slash);
-    const inline = value.slice(slash + 1);
-    if (per !== undefined && per !== inline) {
-      throw new Error(`--max-price "${value}" conflicts with --max-price-per "${per}".`);
-    }
-    unit = inline;
-  }
-  const usd = Number(usdText);
-  if (!/^\d+(\.\d+)?([eE][+-]?\d+)?$/.test(usdText) || !Number.isFinite(usd) || usd <= 0) {
-    throw new Error(`Invalid --max-price "${value}". Expected a positive dollar amount like 0.12/hour.`);
-  }
-  if (unit !== 'second' && unit !== 'minute' && unit !== 'hour') {
-    throw new Error(
-      '--max-price needs a unit — write it as <usd>/<unit> (e.g. --max-price 0.12/hour) or pass --max-price-per hour.',
-    );
-  }
-  return { usd, per: unit };
-}
+import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
 
@@ -946,6 +910,18 @@ export function registerSandboxesCommands(program: Command): void {
   for (const sub of cmd.commands) {
     sub.option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)');
   }
+
+  // Registered after the --org pass so `settings`/`settings set` declare
+  // their own full option set (the loop above only covers direct children).
+  registerSettingsCommands(cmd, 'sandboxes', (sub) =>
+    sub
+      .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
+      .option('--base-url <url>', 'platform base URL')
+      .option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)')
+      .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
+      .option('--json', 'print the raw response'),
+    { client, fail, output, usageErrorOutput },
+  );
 }
 
 /** Streams a process's daemon-buffered output to the console until `exit`. */
