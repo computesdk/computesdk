@@ -125,6 +125,18 @@ export interface MiosaSandbox {
 // ── HTTP client ─────────────────────────────────────────────────────────────
 
 export const DEFAULT_BASE_URL = "https://api.miosa.ai/api/v1";
+
+/**
+ * The base URL to use when the caller did not pass one: `MIOSA_BASE_URL` if set,
+ * otherwise the public API. Read through process.env so a deployment can point
+ * a build at a regional or self-hosted endpoint without changing call sites.
+ */
+function baseUrlFromEnv(): string {
+  return (
+    (typeof process !== "undefined" ? process.env?.MIOSA_BASE_URL : undefined) ??
+    DEFAULT_BASE_URL
+  );
+}
 const DEFAULT_TIMEOUT_MS = 300_000;
 
 export interface MiosaHttpResponse {
@@ -518,7 +530,7 @@ function preconnectMiosa(config: MiosaConfig): void {
     void getRunnerClient(apiKey, runner).catch(() => undefined);
   }
 
-  const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const baseUrl = (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, "");
   const url = new URL(baseUrl);
 
   if (canUseNodeHttp2(url)) {
@@ -801,7 +813,7 @@ function resolveAuth(
 
   return {
     apiKey,
-    baseUrl: (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, ""),
+    baseUrl: (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, ""),
     ...(runner ? { runner } : {}),
   };
 }
@@ -1394,3 +1406,33 @@ export const miosa: typeof createMiosaProvider = (config) => {
 };
 
 export default miosa;
+
+/**
+ * Whether importing this module should open its connections.
+ *
+ * Only an explicit disable turns it off, matching MIOSA_RUNNER_MODE: an unset,
+ * empty or unrecognised value leaves the preconnect in place.
+ */
+function preconnectOnImport(): boolean {
+  const raw =
+    typeof process !== "undefined" ? process.env?.MIOSA_PRECONNECT : undefined;
+  if (raw === undefined) return true;
+  const normalised = raw.trim().toLowerCase();
+  return !(normalised === "0" || normalised === "false");
+}
+
+// A caller that constructs the provider inside its own timer - a benchmark
+// task, a request handler, a serverless invocation - gives the pool no lead
+// time, so the connection handshake lands on its first request. Opening the
+// pool when this module is imported moves that handshake ahead of the caller's
+// timer instead. This is best-effort and must never interfere with the import:
+// nothing connects without a usable key, a malformed base URL is swallowed
+// rather than thrown, and idle sessions stay unref'd so a script that imports
+// the provider still exits on its own. Opt out with MIOSA_PRECONNECT=0.
+if (preconnectOnImport()) {
+  try {
+    preconnectMiosa({ baseUrl: baseUrlFromEnv() });
+  } catch {
+    // Importing the provider must never fail because of preconnect.
+  }
+}
