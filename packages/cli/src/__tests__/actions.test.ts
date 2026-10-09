@@ -1075,6 +1075,9 @@ describe('vault helpers', () => {
       vaultDeliveryLabels({ proxy: true, hosts: ['api.github.com, *.githubusercontent.com', 'github.com'] }),
     ).toEqual(['hosts:api.github.com,*.githubusercontent.com,github.com']);
     expect(() => vaultDeliveryLabels({ proxy: true, inject: true })).toThrow(ActionsCliError);
+    expect(() => vaultDeliveryLabels({ inject: true, hosts: ['api.github.com'] })).toThrow(
+      ActionsCliError,
+    );
     expect(() => vaultDeliveryLabels({ proxy: true })).toThrow(ActionsCliError);
     expect(() => vaultDeliveryLabels({ hosts: ['api.github.com'] })).toThrow(ActionsCliError);
     expect(() => vaultDeliveryLabels({})).toThrow(ActionsCliError);

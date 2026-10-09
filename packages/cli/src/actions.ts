@@ -706,11 +706,19 @@ export function vaultDeliveryLabels(opts: {
   if (opts.proxy && opts.inject) {
     throw new ActionsCliError('invalid_argument', '--proxy and --inject are mutually exclusive.');
   }
-  if (opts.inject) return ['materialize'];
   const hosts = (opts.hosts ?? [])
     .flatMap((host) => host.split(/[\s,]+/))
     .map((host) => host.trim().toLowerCase())
     .filter((host) => host !== '');
+  if (opts.inject) {
+    if (hosts.length > 0) {
+      throw new ActionsCliError(
+        'invalid_argument',
+        '--inject takes no --hosts — host rules only apply to --proxy.',
+      );
+    }
+    return ['materialize'];
+  }
   if (!opts.proxy) {
     throw new ActionsCliError('invalid_argument', 'Pick a delivery: --proxy (with --hosts) or --inject.');
   }
@@ -742,7 +750,7 @@ export function formatVaultRow(item: CiVaultItem): string {
   const flags = [
     item.kind,
     ...(item.revealable && item.kind === 'secret' ? ['revealable'] : []),
-    ...item.labels,
+    ...item.labels.map(safeTerm),
     `v${item.version}`,
     ...(item.source === 'organization' ? ['inherited'] : []),
     ...(item.overridesOrganization ? ['overrides org'] : []),
