@@ -895,6 +895,37 @@ describe("regional sandbox endpoint", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it("should warm the runner client when the module is imported with a usable key", async () => {
+      vi.stubEnv("MIOSA_API_KEY", API_KEY);
+      vi.resetModules();
+      try {
+        const fresh = await import("../index");
+
+        // Importing is the only thing that has happened: no provider exists.
+        await vi.waitFor(() => expect(runnerSpies.constructed).toHaveLength(1));
+        expect(runnerSpies.constructed[0]?.apiKey).toBe(API_KEY);
+        await fresh.closeMiosaRunnerConnections();
+        fresh.closeMiosaConnections();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("should not warm a runner client on import when opted out", async () => {
+      vi.stubEnv("MIOSA_API_KEY", API_KEY);
+      vi.stubEnv("MIOSA_RUNNER_MODE", "0");
+      vi.resetModules();
+      try {
+        const fresh = await import("../index");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(runnerSpies.constructed).toHaveLength(0);
+        fresh.closeMiosaConnections();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("should not warm a runner client when opted out", async () => {
       miosa({ apiKey: API_KEY, runnerMode: false });
       process.env.MIOSA_RUNNER_MODE = "0";
