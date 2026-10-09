@@ -1,6 +1,6 @@
 import * as http2 from "node:http2";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { closeMiosaConnections, nodeHttp2Request } from "../index";
 
@@ -162,6 +162,72 @@ describe("http2 pool dispatch", () => {
       expect(Math.max(...counts)).toBeLessThanOrEqual(8);
     } finally {
       await server.close();
+    }
+  });
+
+  it("should clamp an unusable connect bound instead of disarming itself", async () => {
+    // Node clamps a timer delay above 2^31-1 to about a millisecond, which
+    // would destroy every session as it connects rather than bounding the
+    // wait, so the parser must never hand such a value to setTimeout.
+    const previous = process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS;
+    process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS = "2592000000";
+    const delays: number[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      delay?: number,
+      ...rest: unknown[]
+    ) => {
+      if (typeof delay === "number") delays.push(delay);
+      return realSetTimeout(
+        handler as never,
+        delay as never,
+        ...(rest as never[]),
+      );
+    }) as never);
+    try {
+      const server = await startServer(250);
+      try {
+        const results = await burst(server.origin, 1);
+        expect(results.every((r) => r.ok)).toBe(true);
+      } finally {
+        await server.close();
+      }
+      expect(Math.max(...delays)).toBeLessThanOrEqual(2_147_483_647);
+    } finally {
+      spy.mockRestore();
+      if (previous === undefined) {
+        delete process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS;
+      } else {
+        process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it("should reject when a connect never completes instead of waiting on the OS", async () => {
+    // A blackholed route drops the SYN silently: the socket neither connects
+    // nor errors, and `http2.connect(origin, { timeout })` does not cover it.
+    // Unbounded, the session keeps its pool slot and the request waits out the
+    // OS connect timeout (over a minute) instead of failing fast.
+    const previous = process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS;
+    process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS = "250";
+    try {
+      const start = Date.now();
+      await expect(
+        nodeHttp2Request(new URL("https://10.255.255.1:443/"), "GET", {}),
+      ).rejects.toThrow();
+      // The bound is what matters, not which error arrives: the connect timer
+      // when the route blackholes, or the OS when it reports unreachable.
+      expect(Date.now() - start).toBeLessThan(5_000);
+      expect(
+        process.getActiveResourcesInfo().filter((r) => r === "Timeout"),
+      ).toHaveLength(0);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS;
+      } else {
+        process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS = previous;
+      }
     }
   });
 

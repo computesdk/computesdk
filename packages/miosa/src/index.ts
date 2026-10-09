@@ -151,6 +151,38 @@ const HTTP2_SESSION_COUNT = (() => {
     : 16;
 })();
 
+// A connect that neither succeeds nor fails - a blackholed route drops the
+// SYN silently - never emits an event for the OS to time out on, and
+// `http2.connect(origin, { timeout })` is ignored for TLS sockets (verified
+// against Node 20/22). A session stuck in that state keeps its slot in the
+// pool, so a request dispatched onto it waits out the OS connect timeout
+// (over a minute) instead of failing fast, and the empty-pool rejection in
+// selectSession is never reached because the session is never discarded.
+// Bound the connect phase here instead. Keep the override private to the
+// transport, like MIOSA_HTTP2_SESSION_COUNT, so operators can reproduce
+// runner-specific measurements without changing the ComputeSDK contract.
+const DEFAULT_HTTP2_CONNECT_TIMEOUT_MS = 10_000;
+
+// Node stores a timer delay as a signed 32-bit integer, so a larger value does
+// not buy a longer wait: it warns and fires after about a millisecond, which
+// would destroy every session the moment it connects. Keep the override inside
+// a range a timer can actually represent, and well below an interval that
+// would make the bound meaningless.
+const MAX_HTTP2_CONNECT_TIMEOUT_MS = 120_000;
+
+function http2ConnectTimeoutMs(): number {
+  const configured = Number.parseInt(
+    (typeof process !== "undefined"
+      ? process.env.MIOSA_HTTP2_CONNECT_TIMEOUT_MS
+      : undefined) ?? "",
+    10,
+  );
+
+  return Number.isFinite(configured) && configured > 0
+    ? Math.min(configured, MAX_HTTP2_CONNECT_TIMEOUT_MS)
+    : DEFAULT_HTTP2_CONNECT_TIMEOUT_MS;
+}
+
 interface Http2SessionPool {
   sessions: import("node:http2").ClientHttp2Session[];
   // Sessions whose TLS + HTTP/2 handshake has completed. Dispatching onto a
@@ -262,7 +294,16 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     }
     pool.sessions.push(session);
 
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    const stopConnectTimer = () => {
+      if (connectTimer !== undefined) {
+        clearTimeout(connectTimer);
+        connectTimer = undefined;
+      }
+    };
+
     session.once("connect", () => {
+      stopConnectTimer();
       pool.ready.add(session);
       pool.lastError = undefined;
       pool.resolveFirstReady();
@@ -270,6 +311,7 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     });
 
     const discard = (cause?: unknown) => {
+      stopConnectTimer();
       if (cause instanceof Error) pool.lastError = cause;
       pool.ready.delete(session);
       pool.sessions = pool.sessions.filter(
@@ -281,6 +323,28 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     session.once("close", discard);
     session.once("error", discard);
     session.once("goaway", discard);
+
+    // Give up on a connect that has produced no event of its own, drop it from
+    // the pool, and record why: the pooled session is the only thing keeping a
+    // dispatched request pending, so this is what turns a silent blackhole into
+    // a connection error the caller can see.
+    const connectTimeoutMs = http2ConnectTimeoutMs();
+    connectTimer = setTimeout(() => {
+      connectTimer = undefined;
+      discard(
+        new Error(
+          `MIOSA HTTP/2 connect to ${origin} timed out after ${connectTimeoutMs} ms`,
+        ),
+      );
+      try {
+        session.destroy();
+      } catch {
+        // Session already closed.
+      }
+    }, connectTimeoutMs);
+    // A pending connect must not hold the process open by itself; a request
+    // already waiting on this session keeps the loop alive anyway.
+    connectTimer.unref?.();
   }
 
   return pool;
