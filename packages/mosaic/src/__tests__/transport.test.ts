@@ -101,10 +101,13 @@ describe.skipIf(nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 19))('Mosaic 
     let created = 0;
     let peak = 0;
     let active = 0;
+    let activePosts = 0;
+    let peakPosts = 0;
     const allocations = new Set<string>();
     const server = await gateway(async (request, response) => {
       active += 1;
       peak = Math.max(peak, active);
+      if (request.method === 'POST') peakPosts = Math.max(peakPosts, ++activePosts);
       await sleep(3);
       if (request.method === 'POST' && request.url === '/v1/sandboxes') {
         const options = await body(request);
@@ -121,6 +124,7 @@ describe.skipIf(nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 19))('Mosaic 
         response.end();
       }
       active -= 1;
+      if (request.method === 'POST') activePosts -= 1;
     });
     for (let burst = 0; burst < 2; burst += 1) {
       await Promise.all(Array.from({ length: 100 }, async (_, i) => {
@@ -142,6 +146,7 @@ describe.skipIf(nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 19))('Mosaic 
     expect(server.sessions.size).toBeGreaterThan(0);
     expect(server.sessions.size).toBeLessThanOrEqual(4);
     expect(peak).toBeGreaterThan(4);
+    expect(peakPosts).toBeGreaterThan(4);
   });
 
   it('keeps HTTP/1.1 fallback concurrency and sends no HTTP probe', async () => {

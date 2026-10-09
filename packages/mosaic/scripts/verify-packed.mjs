@@ -26,6 +26,8 @@ let attempts = 0;
 let created = 0;
 let active = 0;
 let peak = 0;
+let activePosts = 0;
+let peakPosts = 0;
 let tcpCount = 0;
 let nativeCalls = 0;
 const nativeFetch = globalThis.fetch;
@@ -49,6 +51,7 @@ server.on('request', async (request, response) => {
   versions.add(request.httpVersion);
   credentials.add(request.headers.authorization);
   peak = Math.max(peak, ++active);
+  if (request.method === 'POST') peakPosts = Math.max(peakPosts, ++activePosts);
   try {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -72,6 +75,7 @@ server.on('request', async (request, response) => {
     response.destroy(error);
   } finally {
     active -= 1;
+    if (request.method === 'POST') activePosts -= 1;
   }
 });
 await new Promise(done => server.listen(0, '127.0.0.1', done));
@@ -101,6 +105,7 @@ try {
   assert.equal(created, 200);
   assert.equal(credentials.size, 200);
   assert(peak > 4);
+  assert(peakPosts > 4);
   if (transport === 'h2') {
     assert.deepEqual([...versions], ['2.0']);
     assert(sessions.size <= 4);
@@ -111,7 +116,7 @@ try {
     entry, format, transport, node: process.version, attempts, created,
     remaining: allocations.size, credentials: credentials.size,
     protocols: [...versions], h2Sessions: sessions.size, tcpConnections: tcpCount,
-    peak, nativeCalls, burstMs,
+    peak, peakPosts, nativeCalls, burstMs,
   }));
 } finally {
   globalThis.fetch = nativeFetch;
