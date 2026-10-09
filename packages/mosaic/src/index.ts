@@ -1,4 +1,6 @@
 import { performance } from 'node:perf_hooks';
+import { acquireTransport } from './transport.js';
+import type { TransportLease } from './transport.js';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
@@ -41,11 +43,12 @@ export interface MosaicConfig {
   requestTimeoutMs?: number;
   /**
    * How many HTTP requests this client keeps in flight before it starts
-   * queueing. `fetch` opens a connection per in-flight request, so an
-   * unbounded client answers a burst of sandbox creates with a burst of TLS
-   * handshakes. Defaults to 32; Infinity restores the unbounded behaviour.
+   * queueing. Defaults to 32; Infinity restores the unbounded behaviour.
+   * This soft request gate is independent of HTTP/2 connection pooling.
    */
   maxConcurrentRequests?: number;
+  /** Share HTTP/2 connections on Node HTTPS endpoints. Defaults to true. */
+  http2?: boolean;
   /** Give sandboxes egress. On by default; installs and fetches need it. */
   networkEnabled?: boolean;
   /** How long a preview URL from getUrl stays valid. */
@@ -199,6 +202,7 @@ function resolvedConfig(config: MosaicConfig): Required<MosaicConfig> {
     vcpu: config.vcpu ?? 2,
     requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS,
     maxConcurrentRequests: config.maxConcurrentRequests ?? DEFAULT_MAX_CONCURRENT_REQUESTS,
+    http2: config.http2 ?? true,
     networkEnabled: config.networkEnabled ?? true,
     previewExpiresInSeconds: config.previewExpiresInSeconds ?? 3600,
   };
@@ -222,8 +226,12 @@ async function request<T>(
   const upstreamSignal = init.signal;
   const abort = () => controller.abort(upstreamSignal?.reason);
   upstreamSignal?.addEventListener('abort', abort, { once: true });
+  if (upstreamSignal?.aborted) abort();
+  let transport: TransportLease | undefined;
   try {
-    const response = await fetch(`${resolved.baseUrl}${path}`, {
+    const url = `${resolved.baseUrl}${path}`;
+    transport = await acquireTransport(url, resolved.http2, controller.signal);
+    const response = await (transport.fetch ?? fetch)(url, {
       ...init,
       signal: controller.signal,
       headers: {
@@ -246,6 +254,7 @@ async function request<T>(
     }
     return (body ? JSON.parse(body) : undefined) as T;
   } finally {
+    transport?.release();
     releaseRequestSlot();
     clearTimeout(timer);
     upstreamSignal?.removeEventListener('abort', abort);

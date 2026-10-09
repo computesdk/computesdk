@@ -5,6 +5,12 @@ import type { MosaicTemplateOptions } from '../index.js';
 
 const originalFetch = globalThis.fetch;
 
+// These are HTTP contract tests using a fake fetch. Real ALPN/session tests
+// live in transport.test.ts and must not negotiate against this fake host.
+vi.mock('../transport.js', () => ({
+  acquireTransport: async () => ({ release() {} }),
+}));
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();

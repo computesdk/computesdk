@@ -48,6 +48,9 @@
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
+  "optionalDependencies": {
+    "undici": "^8.11.2"
+  },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
