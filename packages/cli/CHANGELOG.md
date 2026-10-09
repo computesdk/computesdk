@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.3.2
+
+### Patch Changes
+
+- d15f73b: Market book privacy: the order book no longer exposes buyer org ids — `MarketBook` bids carry `mine` instead of `organizationId`, and `market book` prints "(yours)" on your own open offers.
+
 ## 2.3.1
 
 ### Patch Changes
