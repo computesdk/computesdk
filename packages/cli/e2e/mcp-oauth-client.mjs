@@ -12,7 +12,7 @@
 // Prints PASS/FAIL lines like the shell script. Exits non-zero on failure.
 
 import { createServer } from "node:http";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
@@ -29,7 +29,9 @@ const BASE = (process.env.MCP_URL ?? "https://platform.computesdk.com/mcp").repl
 const serverUrl = new URL(BASE);
 const REDIRECT_PORT = 3399;
 const REDIRECT = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
-const CODE_FILE = "/tmp/mcp_code.txt";
+// Per-run path (predictable /tmp names can be pre-populated by another local
+// user); only files owned by this uid are trusted.
+const CODE_FILE = `/tmp/mcp_code_${process.pid}.txt`;
 
 const results = [];
 const pass = (n, extra = "") => { results.push(`PASS ${n}`); console.log(`PASS ${n} ${extra}`); };
@@ -45,15 +47,22 @@ class LocalOAuthProvider {
     this._verifier = undefined;
     this._code = undefined;
     this._codeResolve = undefined;
+    this._state = undefined;
     this._server = createServer((req, res) => {
       const url = new URL(req.url, REDIRECT);
-      if (url.pathname === "/callback" && url.searchParams.get("code")) {
+      // The provider echoes the state we generated — reject forged callbacks
+      // carrying a code we never asked for.
+      if (
+        url.pathname === "/callback" &&
+        url.searchParams.get("code") &&
+        url.searchParams.get("state") === this._state
+      ) {
         this._code = url.searchParams.get("code");
         res.writeHead(200, { "content-type": "text/html" });
         res.end("<h1>Approved — you can close this tab.</h1>");
         this._codeResolve?.(this._code);
       } else {
-        res.writeHead(400); res.end("missing code");
+        res.writeHead(400); res.end("missing or mismatched code/state");
       }
     });
   }
@@ -72,7 +81,10 @@ class LocalOAuthProvider {
   saveClientInformation(info) { this._clientInfo = info; }
   tokens() { return this._tokens; }
   saveTokens(t) { this._tokens = t; }
-  async state() { return "e2e-" + Math.random().toString(36).slice(2); }
+  async state() {
+    this._state = "e2e-" + Math.random().toString(36).slice(2);
+    return this._state;
+  }
   saveCodeVerifier(v) { this._verifier = v; }
   codeVerifier() { return this._verifier; }
   async redirectToAuthorization(url) {
@@ -86,6 +98,10 @@ class LocalOAuthProvider {
       this._codeResolve = resolve;
       const poll = setInterval(() => {
         if (existsSync(CODE_FILE)) {
+          // Only a file this uid created is trusted — a foreign /tmp file is
+          // ignored rather than feeding us a planted code.
+          const st = statSync(CODE_FILE);
+          if (st.uid !== process.getuid() || !st.isFile()) return;
           const c = readFileSync(CODE_FILE, "utf8").trim();
           if (c) { clearInterval(poll); resolve(c.includes("code=") ? new URL(c).searchParams.get("code") : c); }
         }

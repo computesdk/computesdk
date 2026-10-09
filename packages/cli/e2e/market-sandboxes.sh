@@ -84,7 +84,7 @@ cleanup() {
   # destroy every e2e-<runid> sandbox (buyer + actions orgs)
   for key in "$E2E_BUYER_KEY" "$E2E_ACTIONS_KEY"; do
     ids=$("$COMPUTE" sandboxes list --api-key "$key" --base-url "$BASE_URL" --json 2>/dev/null \
-      | jq -r --arg p "e2e-$RUN_ID" '.sandboxes[]? | select(.label|startswith($p)) | .id') || true
+      | jq -r --arg p "e2e-$RUN_ID-" '.sandboxes[]? | select(.label|startswith($p)) | .id') || true
     for id in ${ids:-}; do
       echo "destroy $id"; destroy_id "$id" "$key"
     done
@@ -97,9 +97,11 @@ cleanup() {
   for a in "${POSTED_ASKS[@]:-}"; do
     [ -n "$a" ] && { echo "withdraw $a"; seller market withdraw "$a" >/dev/null 2>&1 || true; }
   done
-  # clear the medium cap if this run set it
+  # restore the medium cap to whatever it was before B8 (null only when it
+  # genuinely had none — never erase a pre-existing limit)
   if [ "$CAP_SET" = 1 ]; then
-    api "$E2E_BUYER_KEY" PATCH /api/v1/sandboxes/settings '{"marketCaps":{"medium":null}}' >/dev/null
+    api "$E2E_BUYER_KEY" PATCH /api/v1/sandboxes/settings \
+      "{\"marketCaps\":{\"medium\":${ORIG_MEDIUM_CAP:-null}}}" >/dev/null
   fi
 }
 trap cleanup EXIT
@@ -282,7 +284,10 @@ out=$(buyer sandboxes create --size medium --cpus 2 --label "e2e-$RUN_ID-b6" --t
 out=$(buyer sandboxes create --size medium --label "e2e-$RUN_ID-b7" --timeout-ms $TIMEOUT_MS --max-price 0.12 --json 2>&1); rc=$?
 [ $rc -ne 0 ] && pass "B7-unitless-max-price" || fail "B7-unitless-max-price" "rc=$rc $out"
 
-# B8 — cap medium at 0.15: default create fills; hold sized on cap not flag
+# B8 — cap medium at 0.15: default create fills; hold sized on cap not flag.
+# Save whatever cap the buyer already had so cleanup can restore it.
+ORIG_MEDIUM_CAP=$(api "$E2E_BUYER_KEY" GET /api/v1/sandboxes/settings \
+  | jq -c '.marketCaps.medium // null' 2>/dev/null)
 api "$E2E_BUYER_KEY" PATCH /api/v1/sandboxes/settings '{"marketCaps":{"medium":{"usd":0.15,"per":"hour"}}}' >/dev/null
 CAP_SET=1
 out=$(buyer sandboxes create --size medium --label "e2e-$RUN_ID-b8a" --timeout-ms $TIMEOUT_MS --json 2>&1)
@@ -318,8 +323,10 @@ else
 fi
 [ -n "$b8a" ] && destroy_id "$b8a"
 [ -n "$b8b" ] && destroy_id "$b8b"
-# clear the cap now — B9/B10 assume the hold comes from --max-price alone
-api "$E2E_BUYER_KEY" PATCH /api/v1/sandboxes/settings '{"marketCaps":{"medium":null}}' >/dev/null
+# clear the cap now — B9/B10 assume the hold comes from --max-price alone;
+# restore whatever the buyer had before so later steps see real settings
+api "$E2E_BUYER_KEY" PATCH /api/v1/sandboxes/settings \
+  "{\"marketCaps\":{\"medium\":${ORIG_MEDIUM_CAP:-null}}}" >/dev/null
 CAP_SET=0
 
 # B9 — with only a 0.60/hr ask eligible, a market order must refuse
