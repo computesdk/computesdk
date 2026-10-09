@@ -37,6 +37,15 @@ const isDevBuild = import.meta.url.includes('worktrees') ||
                    import.meta.url.includes('/packages/cli/');
 const VERSION = isDevBuild ? `${packageJson.version}-dev` : packageJson.version;
 
+// Exit quietly when a consumer closes the pipe early (e.g. `compute … | jq -r`);
+// rethrow anything else so real stream errors still surface.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') process.exit(0);
+    throw err;
+  });
+}
+
 const program = new Command();
 
 program
@@ -165,10 +174,16 @@ program
 program
   .command('logout')
   .description('Clear stored credentials')
-  .action(async () => {
+  .option('--base-url <url>', 'platform URL the stored login authenticates against')
+  .option('--json', 'print machine-readable JSON')
+  .action(async (opts) => {
+    await runLogout();
+    if (opts.json) {
+      console.log(JSON.stringify({ loggedOut: true }, null, 2));
+      return;
+    }
     console.log();
     p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
-    await runLogout();
     p.log.success('Logged out. Stored credentials removed.');
     p.outro(pc.green('Done!'));
   });
@@ -178,9 +193,13 @@ program
 // through @benchsdk/cli. The active org is per user+client, shared by every
 // CLI on every machine.
 
-async function printWhoami(): Promise<void> {
+async function printWhoami(options: { json?: boolean; baseUrl?: string } = {}): Promise<void> {
   const { getMe } = await import('@benchsdk/cli');
-  const me = await getMe(await benchAuth());
+  const me = await getMe(await benchAuth({ baseUrl: options.baseUrl }));
+  if (options.json) {
+    console.log(JSON.stringify(me, null, 2));
+    return;
+  }
   const active = me.organizations.find((o) => o.id === me.activeOrganizationId);
   console.log(me.user.email ?? me.user.name ?? me.user.id);
   console.log(
@@ -244,12 +263,16 @@ org
 org
   .command('current')
   .description('Show the current user and active organization')
-  .action(printWhoami);
+  .option('--base-url <url>', 'platform URL to query')
+  .option('--json', 'print machine-readable JSON')
+  .action((opts) => printWhoami(opts));
 
 program
   .command('whoami')
   .description('Show the current user and active organization')
-  .action(printWhoami);
+  .option('--base-url <url>', 'platform URL to query')
+  .option('--json', 'print machine-readable JSON')
+  .action((opts) => printWhoami(opts));
 
 // ─── actions ─────────────────────────────────────────────────────────────────
 
