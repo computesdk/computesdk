@@ -35,6 +35,8 @@ export interface MarketAsk {
   provider: string;
   region: string | null;
   size: string;
+  /** The lane the listing sells into — 'actions' on listings posted before lanes. */
+  useCase?: 'actions' | 'sandbox';
   resources: { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number };
   usd: number;
   per: MarketRatePer;
@@ -70,6 +72,8 @@ export interface MarketProvider {
   executorCredentialConnected: boolean;
   revokedAt: string | null;
   createdAt: string;
+  /** The lanes this principal is approved to sell into, e.g. ["actions", "sandbox"]. */
+  useCases?: string[];
   /** Size presets the bound executor sells, e.g. small/medium/large. */
   sizes: {
     name: string;
@@ -89,6 +93,8 @@ export interface MarketOrderBook {
     providerName: string;
     region: string | null;
     size: string;
+    /** The lane the listing sells into — 'actions' on asks posted before lanes. */
+    useCase?: 'actions' | 'sandbox';
     usd: number;
     per: MarketRatePer;
     takeBps: number;
@@ -101,6 +107,8 @@ export interface MarketOrderBook {
     id: string;
     organizationId: string;
     size: string;
+    /** The lane the offer buys on — 'actions' on bids posted before lanes. */
+    useCase?: 'actions' | 'sandbox';
     region: string | null;
     maxUsd: number;
     per: MarketRatePer;
@@ -112,6 +120,8 @@ export interface MarketOrderBook {
     askId: string;
     provider: string;
     size: string;
+    /** The lane the sale cleared on — 'actions' on fills from before lanes. */
+    useCase?: 'actions' | 'sandbox';
     region: string | null;
     usd: number;
     per: MarketRatePer;
@@ -163,30 +173,68 @@ export interface MarketSettlement {
 
 const USD_RE = /^\d+(\.\d+)?([eE][+-]?\d+)?$/;
 const RATE_UNITS: MarketRatePer[] = ['second', 'minute', 'hour'];
+const MARKET_LANES = ['actions', 'sandbox'] as const;
+export type MarketLane = (typeof MARKET_LANES)[number];
 
 /**
- * `--price`/`--per` → the body's `usd`/`per`. Providers quote per-second, so
- * an absent --per is 'second', not an error.
+ * `--use-case` → the lane the listing sells into / the book filters to.
+ * Absent = 'actions', matching the API default.
+ */
+export function parseMarketLane(value: string | undefined): MarketLane {
+  if (value === undefined) return 'actions';
+  if (!MARKET_LANES.includes(value as MarketLane)) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `--use-case must be ${MARKET_LANES.join(' or ')}, got "${value}".`,
+    );
+  }
+  return value as MarketLane;
+}
+
+/**
+ * `--price <usd>/<unit>` → the body's `usd`/`per`. The unit is required —
+ * either inside the value (`0.12/hour`) or via `--per` — so a bare `--price
+ * 0.12` never silently defaults to per-second pricing (same rule as
+ * `sandboxes create --max-price`).
  */
 export function parseRate(
   price: string | undefined,
   per: string | undefined,
 ): { usd: number; per: MarketRatePer } {
   if (price === undefined) {
-    throw new ActionsCliError('invalid_argument', 'A price is required — pass --price <usd>.');
+    throw new ActionsCliError('invalid_argument', 'A price is required — pass --price <usd>/<unit>.');
   }
-  const usd = Number(price);
-  if (!USD_RE.test(price) || !Number.isFinite(usd) || usd <= 0) {
+  let usdText = price;
+  let unit: string | undefined = per;
+  const slash = price.indexOf('/');
+  if (slash !== -1) {
+    usdText = price.slice(0, slash);
+    const inline = price.slice(slash + 1);
+    if (per !== undefined && per !== inline) {
+      throw new ActionsCliError(
+        'invalid_argument',
+        `--price "${price}" conflicts with --per "${per}".`,
+      );
+    }
+    unit = inline;
+  }
+  const usd = Number(usdText);
+  if (!USD_RE.test(usdText) || !Number.isFinite(usd) || usd <= 0) {
     throw new ActionsCliError(
       'invalid_argument',
-      `Invalid --price "${price}". Expected a positive dollar amount (e.g. 0.12).`,
+      `Invalid --price "${price}". Expected a positive dollar amount (e.g. 0.12/hour).`,
     );
   }
-  const unit = per ?? 'second';
+  if (unit === undefined) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      '--price needs a unit — write it as <usd>/<unit> (e.g. --price 0.12/hour) or pass --per hour.',
+    );
+  }
   if (!RATE_UNITS.includes(unit as MarketRatePer)) {
     throw new ActionsCliError(
       'invalid_argument',
-      `--per must be second, minute, or hour, got "${per}".`,
+      `The unit must be second, minute, or hour, got "${unit}".`,
     );
   }
   return { usd, per: unit as MarketRatePer };
@@ -230,6 +278,7 @@ export function sellBody(opts: {
   capacity?: string;
   expiresIn?: string;
   renew?: boolean;
+  useCase?: string;
 }): Record<string, unknown> {
   const rate = parseRate(opts.price, opts.per);
   const maxConcurrent = parseCapacity(opts.capacity);
@@ -242,6 +291,7 @@ export function sellBody(opts: {
   }
   return {
     size: opts.size,
+    useCase: parseMarketLane(opts.useCase),
     ...(opts.region !== undefined && { region: opts.region }),
     usd: rate.usd,
     per: rate.per,
@@ -402,6 +452,7 @@ export function formatListingRow(ask: MarketAsk): string {
   return [
     ask.id,
     formatListingStatus(ask),
+    pc.dim(ask.useCase === 'sandbox' ? 'sandbox' : 'actions'),
     safeTerm(ask.size),
     safeTerm(ask.region ?? '-'),
     formatRate(ask.usd, ask.per),
@@ -423,6 +474,9 @@ export function formatProviderStatus(p: MarketProvider): string {
   );
   if (p.revokedAt) lines.push(pc.red(`revoked:     ${p.revokedAt}`));
   lines.push(
+    `lanes:       ${(p.useCases ?? ['actions']).join(', ')}`,
+  );
+  lines.push(
     `sizes:       ${p.sizes.map((s) => `${s.name} (${s.label})`).join(', ') || '-'}`,
   );
   lines.push(`regions:     ${p.regions.join(', ') || '-'}`);
@@ -440,6 +494,8 @@ export function formatProviderStatus(p: MarketProvider): string {
 /** The live book, plainly labeled: who's selling, who's buying, what cleared. */
 export function formatBook(book: MarketOrderBook): string {
   const lines: string[] = [];
+  const lane = (useCase?: 'actions' | 'sandbox') =>
+    pc.dim(useCase === 'sandbox' ? 'sandbox' : 'actions');
   lines.push(pc.bold("sellers' asking prices"));
   if (book.asks.length === 0) lines.push(pc.dim('  no listings are live'));
   for (const ask of book.asks) {
@@ -448,7 +504,7 @@ export function formatBook(book: MarketOrderBook): string {
       ? pc.dim(ask.rollover ? `  renews ${ask.expiresAt}` : `  until ${ask.expiresAt}`)
       : '';
     lines.push(
-      `  ${formatRate(ask.usd, ask.per)}  ${safeTerm(ask.providerName)}  ${safeTerm(ask.size)}  ${where}  up to ${ask.maxConcurrent} at once${expiry}`,
+      `  ${lane(ask.useCase)}  ${formatRate(ask.usd, ask.per)}  ${safeTerm(ask.providerName)}  ${safeTerm(ask.size)}  ${where}  up to ${ask.maxConcurrent} at once${expiry}`,
     );
   }
   lines.push('');
@@ -457,7 +513,7 @@ export function formatBook(book: MarketOrderBook): string {
   for (const bid of book.bids) {
     const where = bid.region ? safeTerm(bid.region) : 'anywhere';
     lines.push(
-      `  pays up to ${formatRate(bid.maxUsd, bid.per)}  ${safeTerm(bid.size)}  ${where}  ${pc.dim(`posted ${bid.createdAt}`)}`,
+      `  ${lane(bid.useCase)}  pays up to ${formatRate(bid.maxUsd, bid.per)}  ${safeTerm(bid.size)}  ${where}  ${pc.dim(`posted ${bid.createdAt}`)}`,
     );
   }
   lines.push('');
@@ -471,7 +527,7 @@ export function formatBook(book: MarketOrderBook): string {
           ? pc.gray('  closed')
           : '';
     lines.push(
-      `  ${pc.dim(fill.id)}  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}${statusNote}`,
+      `  ${pc.dim(fill.id)}  ${lane(fill.useCase)}  ${formatRate(fill.usd, fill.per)}  ${safeTerm(fill.provider)}  ${safeTerm(fill.size)}  ${safeTerm(fill.region ?? '-')}  ${pc.dim(fill.createdAt)}${statusNote}`,
     );
   }
   return lines.join('\n');
@@ -570,16 +626,20 @@ export function registerMarketCommands(program: Command): void {
     market
       .command('sell')
       .description('Post a listing: sell capacity at a price')
-      .requiredOption('--price <usd>', 'price per unit of time (e.g. 0.12)')
-      .option('--per <unit>', 'time unit the price is per: second, minute, or hour (default: second)')
+      .requiredOption('--price <usd/unit>', 'price per unit of time (e.g. 0.12/hour)')
+      .option('--per <unit>', 'unit for a bare --price usd (second, minute, or hour)')
       .option('--size <tier>', 'size tier to sell (default: medium, else the provider\'s first tier)')
+      .option('--use-case <lane>', 'lane to sell into: actions or sandbox (default: actions)')
       .option('--region <region>', 'region to sell in (default: anywhere the provider runs)')
       .option('--capacity <n>', 'max simultaneous fills (default: 1)')
       .option('--expires-in <hours>', 'delist after this many hours (default: standing)')
       .option('--renew', 're-list for the same window each time it expires (requires --expires-in)'),
-  ).action(async (opts: CommonOpts & { price: string; per?: string; size?: string; region?: string; capacity?: string; expiresIn?: string; renew?: boolean }) => {
+  ).action(async (opts: CommonOpts & { price: string; per?: string; size?: string; region?: string; capacity?: string; expiresIn?: string; renew?: boolean; useCase?: string }) => {
     try {
       const c = await client(opts);
+      // Validate the lane before any network writes — an unapproved lane
+      // still fails server-side with market_lane_not_approved.
+      const useCase = parseMarketLane(opts.useCase);
       let size = opts.size;
       if (size === undefined) {
         // The tier is required by the API; when the seller doesn't name one,
@@ -600,7 +660,7 @@ export function registerMarketCommands(program: Command): void {
       }
       const result = await c.post<{ ask: MarketAsk }>(
         '/api/v1/market/asks',
-        sellBody({ ...opts, size }),
+        sellBody({ ...opts, size, useCase }),
       );
       output(opts, result, (r) => {
         console.log(`listed  ${pc.cyan(r.ask.id)}`);
@@ -616,8 +676,8 @@ export function registerMarketCommands(program: Command): void {
       .command('price')
       .description('Reprice a listing')
       .argument('<listing-id>', 'listing ID')
-      .requiredOption('--price <usd>', 'new price per unit of time (e.g. 0.08)')
-      .option('--per <unit>', 'time unit the price is per: second, minute, or hour (default: second)'),
+      .requiredOption('--price <usd/unit>', 'new price per unit of time (e.g. 0.08/hour)')
+      .option('--per <unit>', 'unit for a bare --price usd (second, minute, or hour)'),
   ).action(async (listingId: string, opts: CommonOpts & { price: string; per?: string }) => {
     try {
       const result = await (await client(opts)).post<{ ask: MarketAsk }>(
@@ -734,11 +794,13 @@ export function registerMarketCommands(program: Command): void {
   common(
     market
       .command('book')
-      .description("Live prices: sellers' asking prices, buyer offers, recent sales"),
-  ).action(async (opts: CommonOpts) => {
+      .description("Live prices: sellers' asking prices, buyer offers, recent sales")
+      .option('--use-case <lane>', 'only this lane: actions or sandbox (default: both)'),
+  ).action(async (opts: CommonOpts & { useCase?: string }) => {
     try {
+      const lane = opts.useCase === undefined ? undefined : parseMarketLane(opts.useCase);
       const book = await (await client(opts)).get<MarketOrderBook>(
-        '/api/v1/market/book',
+        `/api/v1/market/book${lane ? `?useCase=${lane}` : ''}`,
       );
       output(opts, book, (b) => console.log(formatBook(b)));
     } catch (e) {

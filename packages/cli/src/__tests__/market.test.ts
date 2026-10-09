@@ -14,6 +14,7 @@ import {
   listingPatchBody,
   parseCapacity,
   parseExpiresIn,
+  parseMarketLane,
   parseRate,
   replaceTarget,
   sellBody,
@@ -67,13 +68,21 @@ const PROVIDER: MarketProvider = {
 };
 
 describe('parseRate', () => {
-  it('defaults --per to second', () => {
-    expect(parseRate('0.12', undefined)).toEqual({ usd: 0.12, per: 'second' });
+  it('requires a unit — a bare usd is rejected', () => {
+    expect(() => parseRate('0.12', undefined)).toThrow('needs a unit');
+    expect(parseRate('0.12/second', undefined)).toEqual({ usd: 0.12, per: 'second' });
+    expect(parseRate('0.12/hour', undefined)).toEqual({ usd: 0.12, per: 'hour' });
+    expect(parseRate('0.12', 'second')).toEqual({ usd: 0.12, per: 'second' });
   });
 
   it('accepts minute and hour', () => {
     expect(parseRate('1.5', 'minute')).toEqual({ usd: 1.5, per: 'minute' });
     expect(parseRate('10', 'hour')).toEqual({ usd: 10, per: 'hour' });
+    expect(parseRate('10/minute', undefined)).toEqual({ usd: 10, per: 'minute' });
+  });
+
+  it('rejects a conflicting --per', () => {
+    expect(() => parseRate('1/hour', 'minute')).toThrow('conflicts');
   });
 
   it('requires a price', () => {
@@ -81,13 +90,26 @@ describe('parseRate', () => {
   });
 
   it('rejects non-positive and non-numeric prices', () => {
-    for (const bad of ['0', '-1', 'abc', '1.2.3', '']) {
+    for (const bad of ['0/hour', '-1/hour', 'abc/hour', '1.2.3/hour', '/hour']) {
       expect(() => parseRate(bad, undefined)).toThrow('Invalid --price');
     }
   });
 
   it('rejects an unknown unit', () => {
-    expect(() => parseRate('1', 'day')).toThrow('--per must be');
+    expect(() => parseRate('1/day', undefined)).toThrow('must be second, minute, or hour');
+    expect(() => parseRate('1', 'day')).toThrow('must be second, minute, or hour');
+  });
+});
+
+describe('parseMarketLane', () => {
+  it('defaults to the actions lane', () => {
+    expect(parseMarketLane(undefined)).toBe('actions');
+  });
+
+  it('accepts actions and sandbox and rejects anything else', () => {
+    expect(parseMarketLane('actions')).toBe('actions');
+    expect(parseMarketLane('sandbox')).toBe('sandbox');
+    expect(() => parseMarketLane('everything')).toThrow('--use-case must be');
   });
 });
 
@@ -123,9 +145,10 @@ describe('parseExpiresIn', () => {
 });
 
 describe('sellBody', () => {
-  it('builds a minimal create body with the per-second default', () => {
-    expect(sellBody({ size: 'medium', price: '0.12' })).toEqual({
+  it('builds a minimal create body', () => {
+    expect(sellBody({ size: 'medium', price: '0.12/second' })).toEqual({
       size: 'medium',
+      useCase: 'actions',
       usd: 0.12,
       per: 'second',
     });
@@ -144,6 +167,7 @@ describe('sellBody', () => {
       }),
     ).toEqual({
       size: 'large',
+      useCase: 'actions',
       region: 'us-east-1',
       usd: 2,
       per: 'hour',
@@ -153,8 +177,19 @@ describe('sellBody', () => {
     });
   });
 
+  it('posts to the sandbox lane when asked', () => {
+    expect(
+      sellBody({ size: 'large', price: '0.5/second', useCase: 'sandbox' }),
+    ).toEqual({
+      size: 'large',
+      useCase: 'sandbox',
+      usd: 0.5,
+      per: 'second',
+    });
+  });
+
   it('rejects --renew on a standing listing', () => {
-    expect(() => sellBody({ size: 'medium', price: '1', renew: true })).toThrow(
+    expect(() => sellBody({ size: 'medium', price: '1/second', renew: true })).toThrow(
       '--renew requires --expires-in',
     );
   });
@@ -162,7 +197,7 @@ describe('sellBody', () => {
 
 describe('listingPatchBody', () => {
   it('builds a reprice body', () => {
-    expect(listingPatchBody('a-1', { price: '0.08' })).toEqual({
+    expect(listingPatchBody('a-1', { price: '0.08/second' })).toEqual({
       askId: 'a-1',
       usd: 0.08,
       per: 'second',
@@ -336,6 +371,7 @@ describe('formatBook', () => {
         providerName: 'Acme Compute',
         region: 'us-east-1',
         size: 'medium',
+        useCase: 'sandbox' as const,
         usd: 0.1,
         per: 'second',
         takeBps: 500,
@@ -381,6 +417,10 @@ describe('formatBook', () => {
     expect(out).toContain('Acme Compute');
     expect(out).toContain('$0.1/second');
     expect(out).toContain('pays up to $0.09/second');
+    // Mixed books label each entry's lane; pre-lane rows read as actions.
+    expect(out).toMatch(/sandbox\s+\$0\.1\/second/);
+    expect(out).toMatch(/actions\s+pays up to \$0\.09\/second/);
+    expect(out).toMatch(/actions\s+\$0\.1\/second/);
   });
 
   it('shows empty states', () => {
