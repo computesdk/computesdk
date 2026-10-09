@@ -1,5 +1,12 @@
 # @computesdk/miosa
 
+## 1.1.1
+
+### Patch Changes
+
+- 162daa0: Establish HTTP/2 sessions before a cold client dispatches its first request, so the first burst spreads across the pool instead of queueing on a single session, and size the default pool at 4 sessions.
+- e328cec: Bound the HTTP/2 connect phase so an unreachable endpoint rejects within the connect timeout (default 10 s, `MIOSA_HTTP2_CONNECT_TIMEOUT_MS`) instead of waiting on the operating system, and clamp the override to Node's maximum timer delay.
+
 ## 1.1.0
 
 ### Minor Changes

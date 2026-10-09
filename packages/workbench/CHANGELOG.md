@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 33.0.4
+
+### Patch Changes
+
+- Updated dependencies [1d634cb]
+  - @computesdk/beam@0.3.13
+
 ## 33.0.3
 
 ### Patch Changes

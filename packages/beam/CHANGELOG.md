@@ -1,5 +1,11 @@
 # @computesdk/beam
 
+## 0.3.13
+
+### Patch Changes
+
+- 1d634cb: Boot the default `node:24` image with beam-js `withDocker()` when `dockerEnabled` is requested — `dockerEnabled` alone cannot schedule a sandbox on an image without Docker.
+
 ## 0.3.12
 
 ### Patch Changes
