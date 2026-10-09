@@ -37,6 +37,19 @@ const isDevBuild = import.meta.url.includes('worktrees') ||
                    import.meta.url.includes('/packages/cli/');
 const VERSION = isDevBuild ? `${packageJson.version}-dev` : packageJson.version;
 
+// stdout closed early (`compute … | jq -r`, `| head`): exit quietly — the
+// consumer already has what it wanted. stderr closed: swallow the write
+// error but let the command finish, so a failed command keeps its nonzero
+// exit instead of masking as success. Other stream errors still throw.
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') process.exit(0);
+  throw err;
+});
+process.stderr.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+  throw err;
+});
+
 const program = new Command();
 
 program
@@ -165,10 +178,15 @@ program
 program
   .command('logout')
   .description('Clear stored credentials')
-  .action(async () => {
+  .option('--json', 'print machine-readable JSON')
+  .action(async (opts) => {
+    await runLogout();
+    if (opts.json) {
+      console.log(JSON.stringify({ loggedOut: true }, null, 2));
+      return;
+    }
     console.log();
     p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
-    await runLogout();
     p.log.success('Logged out. Stored credentials removed.');
     p.outro(pc.green('Done!'));
   });
@@ -178,9 +196,13 @@ program
 // through @benchsdk/cli. The active org is per user+client, shared by every
 // CLI on every machine.
 
-async function printWhoami(): Promise<void> {
+async function printWhoami(options: { json?: boolean; baseUrl?: string } = {}): Promise<void> {
   const { getMe } = await import('@benchsdk/cli');
-  const me = await getMe(await benchAuth());
+  const me = await getMe(await benchAuth({ baseUrl: options.baseUrl }));
+  if (options.json) {
+    console.log(JSON.stringify(me, null, 2));
+    return;
+  }
   const active = me.organizations.find((o) => o.id === me.activeOrganizationId);
   console.log(me.user.email ?? me.user.name ?? me.user.id);
   console.log(
@@ -244,12 +266,16 @@ org
 org
   .command('current')
   .description('Show the current user and active organization')
-  .action(printWhoami);
+  .option('--base-url <url>', 'platform URL to query')
+  .option('--json', 'print machine-readable JSON')
+  .action((opts) => printWhoami(opts));
 
 program
   .command('whoami')
   .description('Show the current user and active organization')
-  .action(printWhoami);
+  .option('--base-url <url>', 'platform URL to query')
+  .option('--json', 'print machine-readable JSON')
+  .action((opts) => printWhoami(opts));
 
 // ─── actions ─────────────────────────────────────────────────────────────────
 
