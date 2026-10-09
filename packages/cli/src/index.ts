@@ -37,14 +37,18 @@ const isDevBuild = import.meta.url.includes('worktrees') ||
                    import.meta.url.includes('/packages/cli/');
 const VERSION = isDevBuild ? `${packageJson.version}-dev` : packageJson.version;
 
-// Exit quietly when a consumer closes the pipe early (e.g. `compute … | jq -r`);
-// rethrow anything else so real stream errors still surface.
-for (const stream of [process.stdout, process.stderr]) {
-  stream.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EPIPE') process.exit(0);
-    throw err;
-  });
-}
+// stdout closed early (`compute … | jq -r`, `| head`): exit quietly — the
+// consumer already has what it wanted. stderr closed: swallow the write
+// error but let the command finish, so a failed command keeps its nonzero
+// exit instead of masking as success. Other stream errors still throw.
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') process.exit(0);
+  throw err;
+});
+process.stderr.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+  throw err;
+});
 
 const program = new Command();
 
