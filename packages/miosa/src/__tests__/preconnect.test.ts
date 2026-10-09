@@ -18,14 +18,20 @@ async function importFresh(): Promise<typeof import("../index")> {
 interface CountingServer {
   url: string;
   connections: () => number;
+  open: () => number;
   close: () => Promise<void>;
 }
 
 function countingServer(): Promise<CountingServer> {
   return new Promise((resolve) => {
     let connections = 0;
+    let open = 0;
     const server = net.createServer((socket) => {
       connections += 1;
+      open += 1;
+      socket.on("close", () => {
+        open -= 1;
+      });
       socket.on("error", () => {});
       socket.on("data", () => {});
     });
@@ -38,6 +44,7 @@ function countingServer(): Promise<CountingServer> {
       resolve({
         url: `https://127.0.0.1:${address.port}/api/v1`,
         connections: () => connections,
+        open: () => open,
         close: () => new Promise((done) => server.close(() => done())),
       });
     });
@@ -100,6 +107,42 @@ describe("preconnect on import", () => {
     await settle(300);
 
     expect(server.connections()).toBe(0);
+  });
+
+  it("should open nothing when closed immediately after import", async () => {
+    vi.stubEnv("MIOSA_API_KEY", "msk_0123456789abcdefghijklmnop");
+
+    loaded = await importFresh();
+    loaded.closeMiosaConnections();
+    await settle(300);
+
+    expect(server.connections()).toBe(0);
+  });
+
+  it("should close a pool nothing used after the idle timeout", async () => {
+    vi.stubEnv("MIOSA_API_KEY", "msk_0123456789abcdefghijklmnop");
+    vi.stubEnv("MIOSA_PRECONNECT_IDLE_MS", "400");
+    vi.stubEnv("MIOSA_HTTP2_CONNECT_TIMEOUT_MS", "10000");
+
+    loaded = await importFresh();
+    await settle(150);
+    expect(server.open()).toBeGreaterThan(0);
+
+    await settle(700);
+    expect(server.open()).toBe(0);
+  });
+
+  it("should close an unused import-time pool when closeMiosaConnections is called", async () => {
+    vi.stubEnv("MIOSA_API_KEY", "msk_0123456789abcdefghijklmnop");
+    vi.stubEnv("MIOSA_HTTP2_CONNECT_TIMEOUT_MS", "10000");
+
+    loaded = await importFresh();
+    await settle(150);
+    expect(server.open()).toBeGreaterThan(0);
+
+    loaded.closeMiosaConnections();
+    await settle(200);
+    expect(server.open()).toBe(0);
   });
 
   it("should not hold the process open", () => {

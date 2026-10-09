@@ -260,6 +260,52 @@ interface Http2SessionPool {
   // Most recent connection failure, kept so selectSession can reject with a
   // real cause when every session has failed. Cleared on a successful connect.
   lastError: Error | undefined;
+  // Set once a request has been dispatched on this pool. A pool opened only
+  // by an import-time preconnect that never sees a request is closed after an
+  // idle timeout, so a guess at the endpoint costs nothing if it was wrong.
+  used?: boolean;
+  idleTimer?: ReturnType<typeof setTimeout>;
+}
+
+interface EnsureOptions {
+  // Returns true when the caller no longer wants the pool, checked after the
+  // module imports resolve and before any session is opened.
+  abandoned?: () => boolean;
+  // Close the pool after this long if no request has used it.
+  idleCloseMs?: number;
+}
+
+class PreconnectAbandoned extends Error {}
+
+// Bumped by every closeMiosaConnections() call. A preconnect still loading its
+// modules when the close happens compares against this and opens nothing.
+let closeEpoch = 0;
+
+// How long an import-time pool may sit unused before it is closed.
+const PRECONNECT_IDLE_CLOSE_MS = (() => {
+  const parsed = Number(
+    typeof process !== "undefined"
+      ? process.env?.MIOSA_PRECONNECT_IDLE_MS
+      : undefined,
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
+})();
+
+function closePool(origin: string, pool: Http2SessionPool): void {
+  if (pool.idleTimer !== undefined) {
+    clearTimeout(pool.idleTimer);
+    pool.idleTimer = undefined;
+  }
+  for (const session of pool.sessions) {
+    try {
+      session.close();
+    } catch {
+      // Session already closed.
+    }
+  }
+  pool.sessions = [];
+  pool.inFlight = 0;
+  if (http2SessionPools.get(origin) === pool) http2SessionPools.delete(origin);
 }
 
 // A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
@@ -299,9 +345,13 @@ function canUseNodeHttp2(url: URL): boolean {
   );
 }
 
-async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
+async function ensureHttp2Sessions(
+  origin: string,
+  options: EnsureOptions = {},
+): Promise<Http2SessionPool> {
   const http2 = await import("node:http2");
   const { EventEmitter } = await import("node:events");
+  if (options.abandoned?.()) throw new PreconnectAbandoned();
   let resolveFirstReady: () => void = () => {};
   const firstReady = new Promise<void>((resolve) => {
     resolveFirstReady = resolve;
@@ -332,6 +382,15 @@ async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
     (candidate) => !candidate.closed && !candidate.destroyed,
   );
   http2SessionPools.set(origin, pool);
+
+  const { idleCloseMs } = options;
+  if (idleCloseMs !== undefined && !pool.used && pool.idleTimer === undefined) {
+    pool.idleTimer = setTimeout(() => {
+      pool.idleTimer = undefined;
+      if (!pool.used && pool.inFlight === 0) closePool(origin, pool);
+    }, idleCloseMs);
+    pool.idleTimer.unref?.();
+  }
 
   while (pool.sessions.length < HTTP2_SESSION_COUNT) {
     const session = http2.connect(origin);
@@ -512,7 +571,10 @@ function hasUsableCredentials(config: MiosaConfig): boolean {
   return apiKey.startsWith("msk_");
 }
 
-function preconnectMiosa(config: MiosaConfig): void {
+function preconnectMiosa(
+  config: MiosaConfig,
+  options: { idleCloseMs?: number } = {},
+): void {
   // Preconnect runs before resolveAuth, so check credentials here too: a
   // misconfigured provider must not open a pool of TLS connections it can
   // never use. resolveAuth still raises the descriptive error on first call.
@@ -534,7 +596,11 @@ function preconnectMiosa(config: MiosaConfig): void {
   const url = new URL(baseUrl);
 
   if (canUseNodeHttp2(url)) {
-    void ensureHttp2Sessions(url.origin).catch(() => undefined);
+    const epoch = closeEpoch;
+    void ensureHttp2Sessions(url.origin, {
+      abandoned: () => epoch !== closeEpoch,
+      idleCloseMs: options.idleCloseMs,
+    }).catch(() => undefined);
   }
 }
 
@@ -546,17 +612,8 @@ function preconnectMiosa(config: MiosaConfig): void {
  * such as long-lived hosts creating providers for many different origins.
  */
 export function closeMiosaConnections(): void {
-  for (const pool of http2SessionPools.values()) {
-    for (const session of pool.sessions) {
-      try {
-        session.close();
-      } catch {
-        // Session already closed.
-      }
-    }
-    pool.sessions = [];
-    pool.inFlight = 0;
-  }
+  closeEpoch += 1;
+  for (const [origin, pool] of [...http2SessionPools]) closePool(origin, pool);
   http2SessionPools.clear();
 }
 
@@ -575,6 +632,11 @@ export async function nodeHttp2Request(
 ): Promise<MiosaHttpResponse> {
   const origin = url.origin;
   const pool = await ensureHttp2Sessions(origin);
+  pool.used = true;
+  if (pool.idleTimer !== undefined) {
+    clearTimeout(pool.idleTimer);
+    pool.idleTimer = undefined;
+  }
 
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
@@ -1428,10 +1490,15 @@ function preconnectOnImport(): boolean {
 // timer instead. This is best-effort and must never interfere with the import:
 // nothing connects without a usable key, a malformed base URL is swallowed
 // rather than thrown, and idle sessions stay unref'd so a script that imports
-// the provider still exits on its own. Opt out with MIOSA_PRECONNECT=0.
+// the provider still exits on its own. A pool no request ever uses, such as
+// one opened for the default origin when the provider is given another, is
+// closed after an idle timeout. Opt out with MIOSA_PRECONNECT=0.
 if (preconnectOnImport()) {
   try {
-    preconnectMiosa({ baseUrl: baseUrlFromEnv() });
+    preconnectMiosa(
+      { baseUrl: baseUrlFromEnv() },
+      { idleCloseMs: PRECONNECT_IDLE_CLOSE_MS },
+    );
   } catch {
     // Importing the provider must never fail because of preconnect.
   }
