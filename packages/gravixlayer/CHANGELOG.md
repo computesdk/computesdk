@@ -1,5 +1,11 @@
 # @computesdk/gravixlayer
 
+## 1.0.5
+
+### Patch Changes
+
+- e13a18e: Floor the `gravixlayer` SDK at ^0.1.34.
+
 ## 1.0.4
 
 ### Patch Changes
