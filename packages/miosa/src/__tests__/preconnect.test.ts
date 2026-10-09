@@ -119,17 +119,48 @@ describe("preconnect on import", () => {
     expect(server.connections()).toBe(0);
   });
 
-  it("should close a pool nothing used after the idle timeout", async () => {
+  it("should close the unused default pool when a provider is given another origin", async () => {
     vi.stubEnv("MIOSA_API_KEY", "msk_0123456789abcdefghijklmnop");
-    vi.stubEnv("MIOSA_PRECONNECT_IDLE_MS", "400");
+    vi.stubEnv("MIOSA_HTTP2_CONNECT_TIMEOUT_MS", "10000");
+    const other = await countingServer();
+
+    try {
+      loaded = await importFresh();
+      await settle(150);
+      expect(server.open()).toBeGreaterThan(0);
+
+      loaded.miosa({ baseUrl: other.url });
+      await settle(300);
+
+      expect(server.open()).toBe(0);
+      expect(other.open()).toBeGreaterThan(0);
+    } finally {
+      loaded?.closeMiosaConnections();
+      await other.close();
+    }
+  });
+
+  it("should keep the default pool open and warm for a same-origin provider long after import", async () => {
+    vi.stubEnv("MIOSA_API_KEY", "msk_0123456789abcdefghijklmnop");
     vi.stubEnv("MIOSA_HTTP2_CONNECT_TIMEOUT_MS", "10000");
 
     loaded = await importFresh();
     await settle(150);
-    expect(server.open()).toBeGreaterThan(0);
+    const opened = server.connections();
+    expect(opened).toBeGreaterThan(0);
 
-    await settle(700);
-    expect(server.open()).toBe(0);
+    // Ten minutes of setup before the first provider is constructed.
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(10 * 60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+    loaded.miosa({ baseUrl: server.url });
+    await settle(300);
+
+    expect(server.open()).toBe(opened);
+    expect(server.connections()).toBe(opened);
   });
 
   it("should close an unused import-time pool when closeMiosaConnections is called", async () => {
