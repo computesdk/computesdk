@@ -59,6 +59,15 @@ extra capacity on the book (yours or third-party) participates. `market
 price` only stages `pendingUsd` until rollover, so the protection-limit check
 pauses eligible asks and posts a temporary expensive one instead.
 
+Caveats:
+
+- Part B (`oauth`) runs `compute login` through a pseudo-TTY via `script`;
+  works on Linux and macOS (the flag difference is handled in the script).
+- B9 (the protection-limit check) pauses every medium-eligible ask it can
+  see and posts a temporary $0.60/hr ask. It assumes no third-party sellers
+  are live in the sandbox lane — it can only pause asks it can list, so a
+  foreign seller's cheap ask would still win fills and skew the checks.
+
 ## `mcp-oauth-client.mjs`
 
 Part C of the E2E: exercises the platform MCP endpoint

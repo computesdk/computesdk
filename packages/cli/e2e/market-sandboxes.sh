@@ -41,6 +41,7 @@ PARTS="${E2E_PARTS:-seller buyer actions}"
 RESULTS=()
 CREATED_IDS=()
 POSTED_ASKS=()
+PAUSED_ASKS=()
 CAP_SET=0
 
 pass() { RESULTS+=("PASS $1"); echo "PASS $1"; }
@@ -87,6 +88,10 @@ cleanup() {
     for id in ${ids:-}; do
       echo "destroy $id"; destroy_id "$id" "$key"
     done
+  done
+  # resume anything this run paused (e.g. B9 interrupted mid-step)
+  for a in "${PAUSED_ASKS[@]:-}"; do
+    [ -n "$a" ] && { echo "resume $a"; seller market resume "$a" >/dev/null 2>&1 || true; }
   done
   # withdraw every ask this run posted (leave any pre-existing asks alone)
   for a in "${POSTED_ASKS[@]:-}"; do
@@ -323,7 +328,7 @@ CAP_SET=0
 # medium-eligible ask and post a temporary 0.60 ask instead.
 PAUSED_IDS=$(seller market listings --json 2>/dev/null | jq -r '
   .[]? | select(.live == true and (.resources.cpus // 99) >= 2 and (.resources.memoryMb // 999999) >= 4096) | .id')
-for a in $PAUSED_IDS; do seller market pause "$a" >/dev/null 2>&1; done
+for a in $PAUSED_IDS; do seller market pause "$a" >/dev/null 2>&1 && PAUSED_ASKS+=("$a"); done
 out=$(seller market sell --use-case sandbox --capacity 1 --size medium --price 0.60/hour --json 2>&1)
 b9_ask=$(jqget "$out" '.id // .ask.id // .listing.id // empty')
 [ -n "$b9_ask" ] && POSTED_ASKS+=("$b9_ask")
@@ -334,7 +339,8 @@ out=$(buyer sandboxes create --size medium --label "e2e-$RUN_ID-b9b" --timeout-m
 b9=$(jqget "$out" '.sandbox.id // .id // empty')
 [ -n "$b9" ] && CREATED_IDS+=("$b9") && destroy_id "$b9" && pass "B9-limit-0.60" || fail "B9-limit-0.60" "$out"
 [ -n "$b9_ask" ] && seller market withdraw "$b9_ask" >/dev/null 2>&1
-for a in $PAUSED_IDS; do seller market resume "$a" >/dev/null 2>&1; done
+for a in "${PAUSED_ASKS[@]:-}"; do seller market resume "$a" >/dev/null 2>&1; done
+PAUSED_ASKS=()
 
 # B10 — hold = --max-price × timeout > balance → insufficient_credits + top-up path
 # (cap cleared above, so the hold is 5/hr × 6h = $30 >> $5)
@@ -406,7 +412,13 @@ oauth_login() { # oauth_login <home> <role-name>
   if [ ! -f "$h/.benchsdk/credentials.json" ]; then
     echo "  [$role] no stored login — starting 'compute login' (device flow)."
     echo "  [$role] approve the device code in your browser when the URL appears."
-    HOME="$h" script -qc "\"$COMPUTE\" login" /dev/null
+    # `script` differs across platforms: GNU/Linux takes -c <cmd>, macOS takes
+    # the command as positional args.
+    if [[ "$(uname)" = Darwin ]]; then
+      HOME="$h" script -q /dev/null "$COMPUTE" login
+    else
+      HOME="$h" script -qc "\"$COMPUTE\" login" /dev/null
+    fi
   fi
 }
 
