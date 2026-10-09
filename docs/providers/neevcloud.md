@@ -94,3 +94,39 @@ Start from a catalogue template, a raw OCI image, or the platform default (`temp
 await compute.sandbox.create({ templateId: 'sb-ubuntu-24-04-minimal' });
 await compute.sandbox.create({ image: 'docker.io/library/python:3.12' });
 ```
+
+### Sandbox Options
+
+Set a name, env vars, size and lifetime at create. `cpu` is cores, `memory` is MB, and `timeout` is the sandbox's lifetime in milliseconds; it is deleted when that elapses.
+
+```typescript
+await compute.sandbox.create({
+  name: 'build-42',
+  envs: { NODE_ENV: 'production' },
+  cpu: 2,
+  memory: 4096,
+  timeout: 30 * 60 * 1000,
+});
+```
+
+### Snapshots
+
+A snapshot saves a sandbox's memory and filesystem. `snapshot.create` resolves once it can be restored.
+
+```typescript
+const snapshot = await compute.snapshot.create(sandbox.sandboxId, { name: 'after-install' });
+const copy = await compute.sandbox.create({ snapshotId: snapshot.id });
+await compute.snapshot.delete(snapshot.id);
+```
+
+### Templates
+
+`template.list()` returns the sandbox template catalogue. The catalogue is managed by NeevCloud, so `template.create` and `template.delete` throw.
+
+### Paths
+
+A relative path is resolved from the workspace root (`/workspace`) and an absolute path is used as is, the same in `filesystem` calls and in `runCommand`.
+
+### Streaming and Timeouts
+
+`onStdout` / `onStderr` stream over the NeevCloud exec API, so no port inside the sandbox has to be reachable. A command that outruns its `timeout` returns exit code `124` with the output produced so far.

@@ -1,12 +1,22 @@
-import { type SandboxMethods, defineProvider } from "@computesdk/provider";
 import {
+  type SandboxMethods,
+  type SnapshotMethods,
+  type TemplateMethods,
+  defineProvider,
+} from "@computesdk/provider";
+import {
+  BadRequestError,
+  type CreateSandboxParams,
+  DeadlineExceededError,
   Neev,
   type FileEntry as NeevFileEntry,
   NotFoundError,
   type Sandbox,
   type SandboxPhase,
+  type SandboxTemplate,
+  type SnapshotData,
 } from "@neevcloud/sdk";
-import type { FileEntry } from "computesdk";
+import type { CommandResult, CreateSandboxOptions, FileEntry, RunCommandOptions } from "computesdk";
 
 // Provider config. Every field is optional; the Neev client reads the matching NEEV_* env
 // var when a field is omitted.
@@ -19,6 +29,14 @@ export interface NeevCloudConfig {
   projectId?: string;
   /** Request timeout in milliseconds. */
   timeout?: number;
+}
+
+/** A NeevCloud snapshot as returned by the snapshot methods. */
+export interface NeevCloudSnapshot {
+  id: string;
+  provider: "neevcloud";
+  createdAt: Date;
+  metadata: { name?: string; sandboxId: string; status: SnapshotData["status"]; sizeBytes?: number | null };
 }
 
 // Shared object used to key the client cache when the provider is created without a config.
@@ -40,10 +58,9 @@ function clientFor(config: NeevCloudConfig = DEFAULT_CONFIG): Neev {
   return client;
 }
 
-// Neev files.* take workspace-relative paths and reject absolute ones; strip a leading
-// slash so ComputeSDK's absolute paths resolve under the sandbox workspace root.
-function toWorkspacePath(path: string): string {
-  return path.replace(/^\/+/, "");
+// Single-quotes a value for a POSIX shell.
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // Neev distinguishes symlinks; ComputeSDK's FileEntry only has file|directory, so a
@@ -70,18 +87,129 @@ function phaseToStatus(phase: SandboxPhase): "running" | "stopped" | "error" {
   }
 }
 
+// Maps ComputeSDK create options to a Neev create request; a snapshot overrides image/template.
+function toCreateParams(options: CreateSandboxOptions = {}): CreateSandboxParams {
+  const params: CreateSandboxParams = options.snapshotId
+    ? { restore: options.snapshotId }
+    : options.image
+      ? { image: options.image }
+      : { sandbox_template_id: options.templateId };
+  if (options.name) params.name = options.name;
+  if (options.envs) {
+    params.env = Object.entries(options.envs).map(([name, value]) => ({ name, value }));
+  }
+  const cpu = options.cpu ?? options.cpus ?? options.vcpus;
+  const memoryMb = options.memory ?? options.memoryMb;
+  if (cpu !== undefined || memoryMb !== undefined) {
+    params.resources = {
+      ...(cpu !== undefined ? { cpu } : {}),
+      ...(memoryMb !== undefined ? { memory_gb: memoryMb / 1024 } : {}),
+    };
+  }
+  // timeout is the sandbox lifetime; it is deleted when it elapses.
+  if (options.timeout !== undefined && options.timeout > 0) {
+    params.lifecycle = { max_lifetime_seconds: Math.ceil(options.timeout / 1000), on_idle: "delete" };
+  }
+  return params;
+}
+
+// Exit code for a timed-out command, as timeout(1) reports.
+const TIMEOUT_EXIT_CODE = 124;
+
+// Result for a timed-out command: output so far plus a note.
+function timedOut(stdout: string, stderr: string, timeoutMs: number | undefined, started: number): CommandResult {
+  const note = timeoutMs === undefined ? "command timed out" : `command timed out after ${timeoutMs}ms`;
+  return { stdout, stderr: stderr ? `${stderr}\n${note}` : note, exitCode: TIMEOUT_EXIT_CODE, durationMs: Date.now() - started };
+}
+
+// sh -c argv; cwd via `cd` (exec cwd is workspace-only), and a failed cd exits.
+function shellArgv(command: string, cwd: string | undefined): string[] {
+  return ["sh", "-c", cwd === undefined ? command : `cd -- ${shellQuote(cwd)} || exit\n${command}`];
+}
+
+// True when the file API refused an absolute path outside the workspace.
+function outsideWorkspace(path: string, err: unknown): boolean {
+  return path.startsWith("/") && err instanceof BadRequestError;
+}
+
+type RunCommand = (sandbox: Sandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
+
+// Runs a file-op shell command; throws on non-zero exit.
+async function shell(run: RunCommand, sandbox: Sandbox, command: string): Promise<string> {
+  const result = await run(sandbox, command);
+  if (result.exitCode !== 0) throw new Error(result.stderr.trim() || `command failed: ${command}`);
+  return result.stdout;
+}
+
+// POSIX sh listing (GNU and BusyBox): "type<TAB>size mtime<TAB>base64 name" per line.
+const LIST_SCRIPT = [
+  'for f in * .[!.]* ..?*; do',
+  '  [ -e "$f" ] || [ -L "$f" ] || continue',
+  '  if [ -d "$f" ]; then t=d; else t=f; fi',
+  '  printf "%s\\t%s\\t" "$t" "$(stat -c "%s %Y" "./$f")"',
+  '  printf %s "$f" | base64 | tr -d "\\n"',
+  '  echo',
+  'done',
+].join("\n");
+
+// Lists a directory through the shell; names are base64 so any filename round-trips.
+async function readdirViaShell(run: RunCommand, sandbox: Sandbox, path: string): Promise<FileEntry[]> {
+  const out = await shell(run, sandbox, `cd -- ${shellQuote(path)} || exit\n${LIST_SCRIPT}`);
+  return out
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => {
+      const [kind, stat, name] = line.split("\t");
+      const [size, mtime] = stat.split(" ");
+      return {
+        name: Buffer.from(name, "base64").toString("utf8"),
+        type: kind === "d" ? "directory" : "file",
+        size: Number(size),
+        modified: new Date(Number(mtime) * 1000),
+      };
+    });
+}
+
+// Maps a Neev snapshot to the provider's snapshot shape.
+function mapSnapshot(snapshot: SnapshotData): NeevCloudSnapshot {
+  return {
+    id: snapshot.id,
+    provider: "neevcloud",
+    createdAt: new Date(snapshot.created_at),
+    metadata: {
+      name: snapshot.name,
+      sandboxId: snapshot.sandbox_id,
+      status: snapshot.status,
+      sizeBytes: snapshot.size_bytes,
+    },
+  };
+}
+
 const LIST_PAGE_SIZE = 100;
 
+// Collects all pages; stops at the total or an empty page.
+async function collectPages<T>(fetchPage: (page: number) => Promise<{ items: T[]; total: number }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let page = 1; ; page++) {
+    const res = await fetchPage(page);
+    out.push(...res.items);
+    if (res.items.length === 0 || out.length >= res.total) return out;
+  }
+}
+
 const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
-  // Create a sandbox and wait until Ready. Boot from a raw OCI image or a catalogue template
-  // (mutually exclusive; image wins, else templateId, else platform default). Name is left
-  // unset so the server generates one.
+  // Create and wait until Ready; an abort after the request deletes the sandbox.
   create: async (config, options) => {
-    const source = options?.image
-      ? { image: options.image }
-      : { sandbox_template_id: options?.templateId };
-    const sandbox = await clientFor(config).sandboxes.create(source);
-    await sandbox.waitUntilReady();
+    options?.signal?.throwIfAborted();
+    const sandbox = await clientFor(config).sandboxes.create(toCreateParams(options));
+    try {
+      options?.signal?.throwIfAborted();
+      await sandbox.waitUntilReady();
+      options?.signal?.throwIfAborted();
+    } catch (err) {
+      await sandbox.delete().catch(() => undefined);
+      throw err;
+    }
     return { sandbox, sandboxId: sandbox.id };
   },
 
@@ -96,40 +224,47 @@ const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
     }
   },
 
-  // Page through every sandbox; ComputeSDK's list returns the full set. Driven by the
-  // reported total, with an empty-page guard so it always terminates.
+  // ComputeSDK expects the full set, so read every page.
   list: async (config) => {
     const client = clientFor(config);
-    const out: Array<{ sandbox: Sandbox; sandboxId: string }> = [];
-    for (let page = 1; ; page++) {
-      const res = await client.sandboxes.list({ page, limit: LIST_PAGE_SIZE });
-      for (const sandbox of res.items) out.push({ sandbox, sandboxId: sandbox.id });
-      if (res.items.length === 0 || out.length >= res.total) break;
-    }
-    return out;
+    const sandboxes = await collectPages((page) => client.sandboxes.list({ page, limit: LIST_PAGE_SIZE }));
+    return sandboxes.map((sandbox) => ({ sandbox, sandboxId: sandbox.id }));
   },
 
   destroy: async (config, sandboxId) => {
     await clientFor(config).sandboxes.delete(sandboxId);
   },
 
-  // Run a command. ComputeSDK passes a shell string, so wrap it in `sh -c`; Neev exec runs
-  // a program. Buffered by default; stream only when output callbacks are supplied.
+  // Buffered sh -c; background starts a supervised process and returns at once.
   runCommand: async (sandbox, command, options) => {
-    const argv = ["sh", "-c", command];
-    // sandboxd requires a workspace-relative cwd, like file paths.
-    const cwd = options?.cwd === undefined ? undefined : toWorkspacePath(options.cwd);
+    const argv = shellArgv(command, options?.cwd);
     const started = Date.now();
     if (options?.background) {
-      await sandbox.processes.start(argv, { cwd, env: options.env });
+      await sandbox.processes.start(argv, { env: options.env });
       return { stdout: "", stderr: "", exitCode: 0, durationMs: Date.now() - started };
     }
-    const execOptions = { cwd, env: options?.env, timeoutMs: options?.timeout };
-    if (options?.onStdout || options?.onStderr) {
-      let stdout = "";
-      let stderr = "";
-      let exitCode = 0;
-      for await (const event of sandbox.execStream(argv, execOptions)) {
+    try {
+      const result = await sandbox.exec(argv, { env: options?.env, timeoutMs: options?.timeout });
+      return { ...result, durationMs: Date.now() - started };
+    } catch (err) {
+      if (err instanceof DeadlineExceededError) return timedOut("", "", options?.timeout, started);
+      throw err;
+    }
+  },
+
+  // Streams over the exec API, so no in-sandbox port is needed.
+  streamCommand: async (sandbox, command, options) => {
+    const started = Date.now();
+    let stdout = "";
+    let stderr = "";
+    let exitCode = -1;
+    const events = sandbox.exec(shellArgv(command, options.cwd), {
+      stream: true,
+      env: options.env,
+      timeoutMs: options.timeout,
+    });
+    try {
+      for await (const event of events) {
         if (event.type === "stdout") {
           stdout += event.data;
           options.onStdout?.(event.data);
@@ -140,47 +275,133 @@ const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
           exitCode = event.exitCode;
         }
       }
-      return { stdout, stderr, exitCode, durationMs: Date.now() - started };
+    } catch (err) {
+      if (err instanceof DeadlineExceededError) return timedOut(stdout, stderr, options.timeout, started);
+      throw err;
     }
-    const result = await sandbox.exec(argv, execOptions);
-    return { ...result, durationMs: Date.now() - started };
+    return { stdout, stderr, exitCode, durationMs: Date.now() - started };
   },
 
-  // Neev has no per-sandbox timeout, so report 0.
+  // timeout is the create-time lifetime, 0 if none.
   getInfo: async (sandbox) => ({
     id: sandbox.id,
     provider: "neevcloud",
     status: phaseToStatus(sandbox.phase),
     createdAt: new Date(sandbox.data.created_at),
-    timeout: 0,
+    timeout: (sandbox.data.max_lifetime_seconds ?? 0) * 1000,
+    metadata: {
+      name: sandbox.name,
+      region: sandbox.region,
+      templateId: sandbox.templateId,
+      phase: sandbox.phase,
+    },
   }),
 
   getUrl: async (sandbox, options) => sandbox.getUrl({ port: options.port }),
 
   getInstance: (sandbox) => sandbox,
 
-  // Workspace-rooted filesystem over the native sandboxd file endpoints. The `runCommand`
-  // helper is unused because Neev has real file APIs.
+  // File API inside the workspace; absolute paths outside it (e.g. /tmp) use the shell.
   filesystem: {
-    readFile: (sandbox, path) => sandbox.files.readText(toWorkspacePath(path)),
-    writeFile: async (sandbox, path, content) => {
-      await sandbox.files.write(toWorkspacePath(path), content);
+    readFile: async (sandbox, path, run) => {
+      try {
+        return await sandbox.files.readText(path);
+      } catch (err) {
+        if (!outsideWorkspace(path, err)) throw err;
+        return shell(run, sandbox, `cat ${shellQuote(path)}`);
+      }
     },
-    mkdir: async (sandbox, path) => {
-      await sandbox.files.mkdir(toWorkspacePath(path));
+    writeFile: async (sandbox, path, content, run) => {
+      try {
+        await sandbox.files.write(path, content);
+      } catch (err) {
+        if (!outsideWorkspace(path, err)) throw err;
+        const encoded = Buffer.from(content, "utf8").toString("base64");
+        await shell(run, sandbox, `mkdir -p "$(dirname ${shellQuote(path)})" && printf %s ${shellQuote(encoded)} | base64 -d > ${shellQuote(path)}`);
+      }
     },
-    readdir: async (sandbox, path) =>
-      (await sandbox.files.list(toWorkspacePath(path))).map(mapFileEntry),
-    exists: (sandbox, path) => sandbox.files.exists(toWorkspacePath(path)),
-    remove: async (sandbox, path) => {
-      await sandbox.files.remove(toWorkspacePath(path));
+    mkdir: async (sandbox, path, run) => {
+      try {
+        await sandbox.files.mkdir(path);
+      } catch (err) {
+        if (!outsideWorkspace(path, err)) throw err;
+        await shell(run, sandbox, `mkdir -p ${shellQuote(path)}`);
+      }
     },
+    readdir: async (sandbox, path, run) => {
+      try {
+        return (await sandbox.files.list(path)).map(mapFileEntry);
+      } catch (err) {
+        if (!outsideWorkspace(path, err)) throw err;
+        return readdirViaShell(run, sandbox, path);
+      }
+    },
+    exists: async (sandbox, path, run) => {
+      try {
+        return await sandbox.files.exists(path);
+      } catch (err) {
+        if (!outsideWorkspace(path, err)) throw err;
+        return (await run(sandbox, `test -e ${shellQuote(path)}`)).exitCode === 0;
+      }
+    },
+    // Recursive, matching the shell's rm -rf.
+    remove: async (sandbox, path, run) => {
+      try {
+        await sandbox.files.remove(path, { recursive: true });
+      } catch (err) {
+        if (!outsideWorkspace(path, err)) throw err;
+        await shell(run, sandbox, `rm -rf ${shellQuote(path)}`);
+      }
+    },
+  },
+};
+
+// Memory + filesystem snapshots; restore with create({ snapshotId }).
+const snapshotMethods: SnapshotMethods<NeevCloudSnapshot, NeevCloudConfig> = {
+  // Waits for Ready so the id is restorable at once.
+  create: async (config, sandboxId, options) => {
+    const client = clientFor(config);
+    const created = await client.sandboxes.createSnapshot(sandboxId, { name: options?.name });
+    return mapSnapshot(await client.sandboxes.waitForSnapshot(created.id));
+  },
+
+  // Listed per sandbox; with no sandboxId, every sandbox is read.
+  list: async (config, options) => {
+    const client = clientFor(config);
+    const sandboxIds = options?.sandboxId
+      ? [options.sandboxId]
+      : (await collectPages((page) => client.sandboxes.list({ page, limit: LIST_PAGE_SIZE }))).map((s) => s.id);
+    const snapshots: NeevCloudSnapshot[] = [];
+    for (const id of sandboxIds) {
+      const items = await collectPages((page) => client.sandboxes.listSnapshots(id, { page, limit: LIST_PAGE_SIZE }));
+      snapshots.push(...items.map(mapSnapshot));
+    }
+    return options?.limit !== undefined ? snapshots.slice(0, options.limit) : snapshots;
+  },
+
+  delete: async (config, snapshotId) => {
+    await clientFor(config).sandboxes.deleteSnapshot(snapshotId);
+  },
+};
+
+// Managed template catalogue: list only.
+const templateMethods: TemplateMethods<SandboxTemplate, NeevCloudConfig> = {
+  create: async () => {
+    throw new Error("NeevCloud sandbox templates are a managed catalogue and cannot be created through the API. Boot from a custom image with create({ image }) or save a sandbox with snapshot.create().");
+  },
+  list: async (config, options) => {
+    const client = clientFor(config);
+    const templates = await collectPages((page) => client.templates.list({ page, limit: LIST_PAGE_SIZE }));
+    return options?.limit !== undefined ? templates.slice(0, options.limit) : templates;
+  },
+  delete: async () => {
+    throw new Error("NeevCloud sandbox templates are a managed catalogue and cannot be deleted through the API.");
   },
 };
 
 // ComputeSDK provider for NeevCloud sandboxes.
 // Usage: `createCompute({ defaultProvider: neevcloud({ apiKey }) })`.
-export const neevcloud = defineProvider<Sandbox, NeevCloudConfig>({
+export const neevcloud = defineProvider<Sandbox, NeevCloudConfig, SandboxTemplate, NeevCloudSnapshot>({
   name: "neevcloud",
-  methods: { sandbox: sandboxMethods },
+  methods: { sandbox: sandboxMethods, snapshot: snapshotMethods, template: templateMethods },
 });
