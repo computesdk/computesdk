@@ -86,4 +86,4 @@ node mcp-oauth-client.mjs --actions  # actions-only org refusals (M4)
 The script prints `AUTH_URL` — open it, sign in as the account for the org
 under test, pick the org, approve the three permissions. The browser
 redirects to a localhost listener that hands the code back (or write the
-code to the per-run path it prints, `/tmp/mcp_code_<pid>.txt`).
+code to the per-run path it prints, inside a private `mcp-e2e-*` temp dir).

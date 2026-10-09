@@ -12,7 +12,9 @@
 // Prints PASS/FAIL lines like the shell script. Exits non-zero on failure.
 
 import { createServer } from "node:http";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
@@ -29,9 +31,11 @@ const BASE = (process.env.MCP_URL ?? "https://platform.computesdk.com/mcp").repl
 const serverUrl = new URL(BASE);
 const REDIRECT_PORT = 3399;
 const REDIRECT = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
-// Per-run path (predictable /tmp names can be pre-populated by another local
-// user); only files owned by this uid are trusted.
-const CODE_FILE = `/tmp/mcp_code_${process.pid}.txt`;
+// The code handoff file lives in a private per-run dir (mode 0700) so no other
+// local user can pre-create it; the file itself is also verified as a regular,
+// non-symlink file owned by this uid before it is read.
+const CODE_DIR = mkdtempSync(join(tmpdir(), "mcp-e2e-"));
+const CODE_FILE = join(CODE_DIR, "code.txt");
 
 const results = [];
 const pass = (n, extra = "") => { results.push(`PASS ${n}`); console.log(`PASS ${n} ${extra}`); };
@@ -97,13 +101,16 @@ class LocalOAuthProvider {
     return new Promise((resolve, reject) => {
       this._codeResolve = resolve;
       const poll = setInterval(() => {
-        if (existsSync(CODE_FILE)) {
-          // Only a file this uid created is trusted — a foreign /tmp file is
-          // ignored rather than feeding us a planted code.
-          const st = statSync(CODE_FILE);
-          if (st.uid !== process.getuid() || !st.isFile()) return;
-          const c = readFileSync(CODE_FILE, "utf8").trim();
-          if (c) { clearInterval(poll); resolve(c.includes("code=") ? new URL(c).searchParams.get("code") : c); }
+        if (!existsSync(CODE_FILE)) return;
+        // lstat (not stat): a symlink or foreign-owned file is ignored rather
+        // than followed into contents we never asked for.
+        const st = lstatSync(CODE_FILE);
+        if (st.uid !== process.getuid() || !st.isFile() || st.isSymbolicLink()) return;
+        const c = readFileSync(CODE_FILE, "utf8").trim();
+        if (c) {
+          clearInterval(poll);
+          try { unlinkSync(CODE_FILE); } catch {}
+          resolve(c.includes("code=") ? new URL(c).searchParams.get("code") : c);
         }
       }, 500);
       setTimeout(() => { clearInterval(poll); reject(new Error("timed out waiting for OAuth code")); }, timeoutMs);
