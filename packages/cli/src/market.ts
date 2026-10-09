@@ -105,7 +105,8 @@ export interface MarketOrderBook {
   }[];
   bids: {
     id: string;
-    organizationId: string;
+    /** Buyer org ids are never exposed — `mine` marks this org's own offer. */
+    mine: boolean;
     size: string;
     /** The lane the offer buys on — 'actions' on bids posted before lanes. */
     useCase?: 'actions' | 'sandbox';
@@ -512,8 +513,9 @@ export function formatBook(book: MarketOrderBook): string {
   if (book.bids.length === 0) lines.push(pc.dim('  no open offers'));
   for (const bid of book.bids) {
     const where = bid.region ? safeTerm(bid.region) : 'anywhere';
+    const yours = bid.mine ? pc.cyan(' (yours)') : '';
     lines.push(
-      `  ${lane(bid.useCase)}  pays up to ${formatRate(bid.maxUsd, bid.per)}  ${safeTerm(bid.size)}  ${where}  ${pc.dim(`posted ${bid.createdAt}`)}`,
+      `  ${lane(bid.useCase)}  pays up to ${formatRate(bid.maxUsd, bid.per)}  ${safeTerm(bid.size)}  ${where}  ${pc.dim(`posted ${bid.createdAt}`)}${yours}`,
     );
   }
   lines.push('');

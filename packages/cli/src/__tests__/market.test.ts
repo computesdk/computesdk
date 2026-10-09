@@ -384,7 +384,7 @@ describe('formatBook', () => {
     bids: [
       {
         id: 'b-1',
-        organizationId: 'org-9',
+        mine: true,
         size: 'medium',
         region: null,
         maxUsd: 0.09,
@@ -421,6 +421,8 @@ describe('formatBook', () => {
     expect(out).toMatch(/sandbox\s+\$0\.1\/second/);
     expect(out).toMatch(/actions\s+pays up to \$0\.09\/second/);
     expect(out).toMatch(/actions\s+\$0\.1\/second/);
+    // A bid flagged `mine` prints "(yours)" — the API never exposes org ids.
+    expect(out).toContain('(yours)');
   });
 
   it('shows empty states', () => {
