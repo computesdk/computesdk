@@ -311,8 +311,8 @@ describe('formatUsd / formatRate', () => {
     expect(formatUsd(0.00005)).toBe('$0.00005');
   });
 
-  it('renders a rate', () => {
-    expect(formatRate(0.12, 'second')).toBe('$0.12/second');
+  it('renders a rate in all three units, per hour first', () => {
+    expect(formatRate(0.12, 'second')).toBe('$432/hr · $7.2/min · $0.12/s');
   });
 });
 
@@ -329,7 +329,7 @@ describe('formatListingStatus', () => {
 
   it('shows a queued rate for the next window', () => {
     const s = formatListingStatus({ ...ASK, pendingUsd: 0.08, pendingPer: 'second' });
-    expect(s).toContain('$0.08/second');
+    expect(s).toContain('$288/hr · $4.8/min · $0.08/s');
   });
 });
 
@@ -339,7 +339,7 @@ describe('formatListingRow', () => {
     expect(row).toContain('a-1');
     expect(row).toContain('medium');
     expect(row).toContain('us-east-1');
-    expect(row).toContain('$0.12/second');
+    expect(row).toContain('$432/hr · $7.2/min · $0.12/s');
     expect(row).toContain('×4');
     expect(row).toContain('standing');
   });
@@ -415,12 +415,12 @@ describe('formatBook', () => {
     expect(out).toContain('buyer offers');
     expect(out).toContain('recent sales');
     expect(out).toContain('Acme Compute');
-    expect(out).toContain('$0.1/second');
-    expect(out).toContain('pays up to $0.09/second');
+    expect(out).toContain('$360/hr · $6/min · $0.1/s');
+    expect(out).toContain('pays up to $324/hr · $5.4/min · $0.09/s');
     // Mixed books label each entry's lane; pre-lane rows read as actions.
-    expect(out).toMatch(/sandbox\s+\$0\.1\/second/);
-    expect(out).toMatch(/actions\s+pays up to \$0\.09\/second/);
-    expect(out).toMatch(/actions\s+\$0\.1\/second/);
+    expect(out).toMatch(/sandbox\s+\$360\/hr/);
+    expect(out).toMatch(/actions\s+pays up to \$324\/hr/);
+    expect(out).toMatch(/actions\s+\$360\/hr/);
     // A bid flagged `mine` prints "(yours)" — the API never exposes org ids.
     expect(out).toContain('(yours)');
   });

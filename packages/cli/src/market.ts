@@ -23,6 +23,7 @@ import {
   usageErrorOutput,
   type CommonOpts,
 } from './actions.js';
+import { formatUsdPer } from './rate-display.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/market describes) ───────────
 
@@ -426,9 +427,9 @@ export function formatUsd(usd: number): string {
   return `$${usd.toFixed(6).replace(/\.?0+$/, '')}`;
 }
 
-/** `$0.12/second` — how a listing (or offer, or sale) is priced. */
-export function formatRate(usd: number, per: string): string {
-  return `${formatUsd(usd)}/${per}`;
+/** How a listing (or offer, or sale) is priced — all three units, per hour first. */
+export function formatRate(usd: number, per: MarketRatePer): string {
+  return formatUsdPer({ usd, per });
 }
 
 /** The human status: withdrawn > paused > expired > live. */

@@ -22,6 +22,7 @@ import {
   usageErrorOutput,
   type CommonOpts,
 } from './actions.js';
+import { formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
 
 /**
  * `--max-price <usd>/<unit>` → the body's `maxPrice` / the quote's
@@ -184,7 +185,8 @@ function printSandbox(s: SandboxSummary): void {
       : '';
     console.log(
       `  provider: ${p.box?.provider ?? s.provider ?? '—'}${box}` +
-        `   size: ${p.size ?? '—'}   order: ${p.orderType ?? '—'}   rate: $${p.rate.usd}/${p.rate.per}`,
+        `   size: ${p.size ?? '—'}   order: ${p.orderType ?? '—'}   rate: ${formatUsdPer(p.rate)}` +
+        `${p.maxPrice ? `   max price: ${formatUsdPer(p.maxPrice)}` : ''}`,
     );
   }
   if (attach !== undefined) {
@@ -227,8 +229,11 @@ interface SandboxQuoteWire {
   topUpPath?: string;
 }
 
-const usd = (n: number | undefined, suffix = ''): string =>
-  n === undefined ? '—' : `$${n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '.00')}${suffix}`;
+/** A per-hour dollar field off the wire → all-units display (`—` when absent). */
+const perHour = (n: number | undefined): string =>
+  n === undefined ? '—' : formatRateAllUnits(rateAllUnits({ usd: n, per: 'hour' }));
+
+const usdAmount = (n: number | undefined): string => (n === undefined ? '—' : formatUsd(n));
 
 function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
   console.log(`quote: ${q.ok ? pc.green('ok') : pc.red(q.reason ?? 'unfillable')}`);
@@ -239,15 +244,15 @@ function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
   );
   console.log(`  order type: ${q.orderType}   order: ${q.providerOrder.join(', ')}`);
   if (q.rateUsd) {
-    console.log(`  rate: ${usd(q.rateUsd.perHour, '/hour')}   cheapest live: ${usd(q.cheapestLiveUsdPerHour, '/hr')}   reference: ${usd(q.referenceUsdPerHour, '/hr')}`);
+    console.log(`  rate: ${formatRateAllUnits(q.rateUsd)}   cheapest live: ${perHour(q.cheapestLiveUsdPerHour)}   reference: ${perHour(q.referenceUsdPerHour)}`);
   } else if (q.rate) {
-    console.log(`  rate: $${q.rate.usd}/${q.rate.per}`);
+    console.log(`  rate: ${formatUsdPer(q.rate)}`);
   }
   const timeout = timeoutMs !== undefined ? ` for ${timeoutMs}ms` : '';
-  console.log(`  est. cost${timeout}: ${usd(q.estimatedCostUsd)}   required hold: ${usd(q.requiredHoldUsd)}`);
+  console.log(`  est. cost${timeout}: ${usdAmount(q.estimatedCostUsd)}   required hold: ${usdAmount(q.requiredHoldUsd)}`);
   console.log(
-    `  cap: ${q.maxPrice ? `$${q.maxPrice.usd}/${q.maxPrice.per}` : usd(q.marketCapUsdPerHour, '/hr')}` +
-      `   protection limit: ${usd(q.protectionLimitUsdPerHour, '/hr')}   balance: ${usd(q.creditBalanceUsd)}`,
+    `  cap: ${q.maxPrice ? formatUsdPer(q.maxPrice) : perHour(q.marketCapUsdPerHour)}` +
+      `   protection limit: ${perHour(q.protectionLimitUsdPerHour)}   balance: ${usdAmount(q.creditBalanceUsd)}`,
   );
   if (!q.ok && q.topUpPath) console.log(`  ${pc.dim(`→ ${q.topUpPath}`)}`);
   if (q.liveAskDepth !== undefined) console.log(`  ${pc.dim(`live asks: ${q.liveAskDepth}`)}`);
